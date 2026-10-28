@@ -1,5 +1,5 @@
 import React from 'react';
-import { ICON_STROKE } from '../../ui/icons/iconTokens';
+import { ICON_STROKE } from '@/components/ui/icons';
 
 export interface IconProps extends React.SVGAttributes<SVGElement> {
   size?: number;
@@ -13,7 +13,11 @@ export interface IconProps extends React.SVGAttributes<SVGElement> {
  */
 const STROKE = ICON_STROKE.ui;
 
-export const SearchIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const SearchIcon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}
@@ -32,7 +36,11 @@ export const SearchIcon: React.FC<IconProps> = ({ size = 14, className, ...props
   </svg>
 );
 
-export const HardDriveIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const HardDriveIcon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}
@@ -53,7 +61,11 @@ export const HardDriveIcon: React.FC<IconProps> = ({ size = 14, className, ...pr
   </svg>
 );
 
-export const RotateCcwIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const RotateCcwIcon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}
@@ -72,7 +84,11 @@ export const RotateCcwIcon: React.FC<IconProps> = ({ size = 14, className, ...pr
   </svg>
 );
 
-export const CheckIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const CheckIcon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}
@@ -90,7 +106,11 @@ export const CheckIcon: React.FC<IconProps> = ({ size = 14, className, ...props 
   </svg>
 );
 
-export const Loader2Icon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const Loader2Icon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}
@@ -108,7 +128,11 @@ export const Loader2Icon: React.FC<IconProps> = ({ size = 14, className, ...prop
   </svg>
 );
 
-export const ChevronDownIcon: React.FC<IconProps> = ({ size = 14, className, ...props }) => (
+export const ChevronDownIcon: React.FC<IconProps> = ({
+  size = 14,
+  className,
+  ...props
+}) => (
   <svg
     width={size}
     height={size}

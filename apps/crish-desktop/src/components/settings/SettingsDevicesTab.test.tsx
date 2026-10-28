@@ -37,6 +37,13 @@ const IDLE_STATUS = {
   code_remaining_ms: null,
   failed_attempts: 0,
   token_count: 0,
+  service_enabled: false,
+};
+
+/** 服务已开启、尚未进入配对（R1-11 真值来自后端） */
+const SERVICE_ON_STATUS = {
+  ...IDLE_STATUS,
+  service_enabled: true,
 };
 
 const ACTIVE_STATUS = {
@@ -46,6 +53,7 @@ const ACTIVE_STATUS = {
   code_remaining_ms: 600_000,
   failed_attempts: 0,
   token_count: 1,
+  service_enabled: true,
 };
 
 const PAIR_RESULT = {
@@ -84,7 +92,12 @@ beforeEach(() => {
   revokeDevice.mockResolvedValue(true);
   renameDevice.mockResolvedValue(true);
   networkEnvInfo.mockResolvedValue(PRIVATE_NET_ENV);
-  setMultiDeviceEnabled.mockResolvedValue(true);
+  // 服务开关真值由后端 pair_status 回填：mock 同步切换状态，
+  // 模拟真实「开/关服务 → 轮询恢复到真值」链路。
+  setMultiDeviceEnabled.mockImplementation(async (enabled: boolean) => {
+    pairStatus.mockResolvedValue(enabled ? SERVICE_ON_STATUS : IDLE_STATUS);
+    return true;
+  });
 });
 
 function renderTab() {
@@ -261,7 +274,7 @@ describe('SettingsDevicesTab', () => {
   it('配对开启时显示网络环境卡片：配置文件类别 + AP 隔离提示（极简直连设计）', async () => {
     pairStatus.mockResolvedValue(ACTIVE_STATUS);
     renderTab();
-    await enableService();
+    // ACTIVE_STATUS 已含 service_enabled=true（后端真值），无需再点开启服务
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('专用网络');
     expect(card.textContent).toContain('关闭路由器客户端隔离');
@@ -277,7 +290,6 @@ describe('SettingsDevicesTab', () => {
       hint: '当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
     });
     renderTab();
-    await enableService();
     expect(await screen.findByTestId('network-public-hint')).toBeTruthy();
     expect(screen.getByTestId('network-public-hint').textContent).toContain(
       '请切换到专用网络'
@@ -293,7 +305,6 @@ describe('SettingsDevicesTab', () => {
       hint: '未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙放行与路由器客户端隔离设置。',
     });
     renderTab();
-    await enableService();
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('未知');
     expect(card.textContent).toContain('未能识别当前网络类型');
@@ -306,7 +317,8 @@ describe('SettingsDevicesTab', () => {
   });
 
   it('服务未开启时即使服务端配对态为真也不显示配对面（R1-11 守卫兜底）', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
+    // 后端真值：配对态残留为真但服务开关已关闭 → 不展示配对面
+    pairStatus.mockResolvedValue({ ...ACTIVE_STATUS, service_enabled: false });
     renderTab();
     await waitFor(() => expect(pairStatus).toHaveBeenCalled());
     expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();

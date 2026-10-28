@@ -24,8 +24,8 @@ import { getWorkspacePath } from '../../api/projectStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';
 import styles from './ScheduledTasksPanel.module.css';
-import { Button, Tooltip, Menu } from '../ui';
-import type { SelectOptionItem } from '../ui';
+import { Button, Tooltip, Menu } from '@/components/ui';
+import type { SelectOptionItem } from '@/components/ui';
 import {
   ensureScheduledSession,
   draftFromWorkflow,
@@ -34,7 +34,7 @@ import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
 import { RunHistoryList } from './RunHistoryList';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type Props = {
   onBackToChat?: () => void;

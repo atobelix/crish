@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppIcon } from '../ui/icons';
+import { AppIcon } from '@/components/ui/icons';
 import type {
   CatalogEntry,
   InstalledExtension,
@@ -10,11 +10,12 @@ import styles from './ExtensionsMainSurface.module.css';
 
 export interface ExtensionsCatalogGridProps {
   catalogItems: UnifiedExtensionItem[];
-  sidebarNav: 'explore' | 'featured';
+  sidebarNav: 'explore' | 'featured' | 'installed';
   categoryFilter: 'plugins' | 'skills' | 'mcp';
   searchQuery: string;
   busyId: string | null;
   onSelectDetail: (item: CatalogEntry | InstalledExtension) => void;
+  onSelectInstalled?: (item: UnifiedExtensionItem) => void;
   onInstall: (item: UnifiedExtensionItem) => void;
   onUninstall: (item: UnifiedExtensionItem) => void;
 }
@@ -22,55 +23,58 @@ export interface ExtensionsCatalogGridProps {
 export const ExtensionsCatalogGrid: React.FC<ExtensionsCatalogGridProps> = ({
   catalogItems,
   sidebarNav,
-  categoryFilter,
+  categoryFilter: _categoryFilter,
   searchQuery,
   busyId,
   onSelectDetail,
+  onSelectInstalled,
   onInstall,
   onUninstall,
 }) => {
   return (
     <div className={styles.catalogGridContainer}>
-      <div className={styles.catalogGridHeader}>
-        <div>
-          <div className={styles.catalogGridTitle}>
-            {sidebarNav === 'featured' ? '精选推荐' : '发现生态'}
-          </div>
-          <div className={styles.catalogGridDesc}>
-            {categoryFilter === 'plugins'
-              ? '浏览并一键配置社区与官方扩展插件'
-              : categoryFilter === 'skills'
-                ? '发现预设提示词工作流与专业技能包'
-                : '连接外部工具与 Model Context Protocol 服务'}
-          </div>
-        </div>
-      </div>
-
       {catalogItems.length === 0 ? (
         <div className={styles.emptyWorkbenchState}>
           <AppIcon name="package" size={26} />
-          <div className={styles.emptyTitle}>暂无相关扩展</div>
           <div className={styles.emptyDesc}>
             {searchQuery
               ? '未找到匹配搜索条件的扩展'
-              : '当前分类下暂无发现条目'}
+              : sidebarNav === 'installed'
+                ? '当前分类下暂无已安装条目'
+                : '当前分类下暂无发现条目'}
           </div>
         </div>
       ) : (
         <div className={styles.cardsGrid}>
           {catalogItems.map((item) => {
             const isInstalled = Boolean(item.isInstalled);
+            const badge = item.isOfficial
+              ? '官方'
+              : item.source &&
+                  !['community', 'local', 'official'].includes(item.source)
+                ? item.source
+                : item.source === 'local' || item.scope === 'installed'
+                  ? '本地'
+                  : '精选';
             return (
               <ExtensionActionCard
                 key={item.id}
                 name={item.name}
                 description={item.description}
-                badge={item.isOfficial ? '官方' : '精选'}
+                badge={badge}
                 icon={item.icon}
-                placement="catalog"
+                placement={
+                  item.id.startsWith('custom-plugin:') ? 'custom' : 'catalog'
+                }
                 installed={isInstalled}
                 busy={busyId === item.id}
-                onOpen={() => onSelectDetail(item.nativeItem)}
+                onOpen={() => {
+                  if (isInstalled && onSelectInstalled) {
+                    onSelectInstalled(item);
+                  } else {
+                    onSelectDetail(item.nativeItem);
+                  }
+                }}
                 onAction={() => {
                   if (isInstalled) onUninstall(item);
                   else onInstall(item);

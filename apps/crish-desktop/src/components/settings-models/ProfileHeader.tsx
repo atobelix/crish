@@ -7,8 +7,8 @@ import {
   type ProviderProfile,
 } from '../../api/providerProfiles';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
-import { Button, Input, Switch, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Input, Switch, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { prepareCatalogWrite } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 
@@ -113,7 +113,6 @@ export const ProfileHeader: React.FC<{
                 setEditingName(false);
               }
             }}
-            
           />
         ) : (
           <Tooltip content="点击重命名服务商">
@@ -132,43 +131,43 @@ export const ProfileHeader: React.FC<{
 
       <div className={styles.mrdHeadRight}>
         <div className={styles.mrdDeleteAnchor}>
-            {confirmDeleteId === selected.id ? (
-              <div className={styles.confirmDeleteBubble}>
-                <span className={styles.confirmDeletePrompt}>确定删除？</span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={styles.confirmDeleteBtn}
-                  onClick={() => {
-                    void applyRemove();
-                  }}
-                >
-                  确认
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.confirmDeleteBtn}
-                  onClick={() => setConfirmDeleteId(null)}
-                >
-                  取消
-                </Button>
-              </div>
-            ) : (
-              <Tooltip content={`删除「${selectedLabel}」`}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.deleteTriggerBtn}
-                  onClick={() => setConfirmDeleteId(selected.id)}
-                  icon={<AppIcon name="trash" size={14} />}
-                />
-              </Tooltip>
-            )}
-          </div>
+          {confirmDeleteId === selected.id ? (
+            <div className={styles.confirmDeleteBubble}>
+              <span className={styles.confirmDeletePrompt}>确定删除？</span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className={styles.confirmDeleteBtn}
+                onClick={() => {
+                  void applyRemove();
+                }}
+              >
+                确认
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.confirmDeleteBtn}
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                取消
+              </Button>
+            </div>
+          ) : (
+            <Tooltip content={`删除「${selectedLabel}」`}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.deleteTriggerBtn}
+                onClick={() => setConfirmDeleteId(selected.id)}
+                icon={<AppIcon name="trash" size={14} />}
+              />
+            </Tooltip>
+          )}
+        </div>
 
         <Tooltip
           content={
@@ -180,7 +179,9 @@ export const ProfileHeader: React.FC<{
           <Switch
             size="sm"
             checked={selected.enabled !== false}
-            aria-label={selected.enabled !== false ? '停用服务商' : '启用服务商'}
+            aria-label={
+              selected.enabled !== false ? '停用服务商' : '启用服务商'
+            }
             onCheckedChange={(checked) => {
               void applyEnabled(checked);
             }}

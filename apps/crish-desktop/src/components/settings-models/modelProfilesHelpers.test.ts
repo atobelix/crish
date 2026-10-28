@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProviderProfile } from '../../api/providerProfiles';
 import { mockTauriCommand } from '../../test-setup';
-import {
-  modelsCatalogStore,
-  selectModel,
-} from '../../api/modelsCatalogStore';
+import { modelsCatalogStore, selectModel } from '../../api/modelsCatalogStore';
 import type { ModelSpec, ProviderSpec } from '../../api/modelsCatalogTypes';
 import {
   modelSpecRevision,
@@ -61,18 +58,18 @@ describe('modelProfilesHelpers 设置页选中项（唯一真源 = 统一树 pro
       'opencode-zen',
       'off',
     ]);
-    expect(
-      providers.filter((p) => p.name === 'OpenCode Go 订阅')
-    ).toHaveLength(2);
+    expect(providers.filter((p) => p.name === 'OpenCode Go 订阅')).toHaveLength(
+      2
+    );
   });
 
   it('树里不存在的旧 id 一律丢弃，不按展示名改绑', () => {
     const providers = [seed, zen];
     // 旧档案轨里的 `preset-opencode-go` 与 `seed` 同展示名——旧实现会把它
     // 改绑到 `opencode-go`（按展示名认亲），新实现必须丢弃并按记忆/首行回落。
-    expect(
-      pickSettingsSelectedId(providers, 'preset-opencode-go', null)
-    ).toBe('opencode-go');
+    expect(pickSettingsSelectedId(providers, 'preset-opencode-go', null)).toBe(
+      'opencode-go'
+    );
     expect(
       pickSettingsSelectedId(providers, 'preset-opencode-go', 'opencode-zen')
     ).toBe('opencode-zen');
@@ -80,9 +77,9 @@ describe('modelProfilesHelpers 设置页选中项（唯一真源 = 统一树 pro
 
   it('pickSettingsSelectedId：已选 → 会话记忆 → 树首行；三者都必须在树里', () => {
     const providers = [seed, zen];
-    expect(pickSettingsSelectedId(providers, 'opencode-zen', 'opencode-go')).toBe(
-      'opencode-zen'
-    );
+    expect(
+      pickSettingsSelectedId(providers, 'opencode-zen', 'opencode-go')
+    ).toBe('opencode-zen');
     expect(pickSettingsSelectedId(providers, null, 'opencode-zen')).toBe(
       'opencode-zen'
     );
@@ -91,7 +88,9 @@ describe('modelProfilesHelpers 设置页选中项（唯一真源 = 统一树 pro
   });
 
   it('settingsObjectId 为二元组 JSON 键：跨 provider 隔离且无分隔符碰撞', () => {
-    expect(settingsObjectId('a::b', 'c')).not.toBe(settingsObjectId('a', 'b::c'));
+    expect(settingsObjectId('a::b', 'c')).not.toBe(
+      settingsObjectId('a', 'b::c')
+    );
     expect(settingsObjectId('ollama', 'ornith')).toBe(
       settingsObjectId('ollama', 'ornith')
     );
@@ -146,7 +145,11 @@ describe('modelSpecRevision（CT-01 签 ModelSpec 全字段）', () => {
       revision: 'revision-0',
       credentialStates: {},
       parseError: null,
-      tree: { version: 2, activeModel: null, providers: structuredClone(PROVIDERS) },
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: structuredClone(PROVIDERS),
+      },
     }));
     mockTauriCommand('workbench_apply_models_config', (args) => {
       const { tree } = args as { tree: unknown };

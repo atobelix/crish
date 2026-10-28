@@ -95,7 +95,7 @@
   justify-content: center;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-normal) var(--ease-standard);
 }
 
 .filterTab:hover {
@@ -155,12 +155,12 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 8px);
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--duration-normal, 150ms) var(--ease-standard),
+    background-color var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .sessionCard:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--state-hover);
   border-color: var(--border-subtle);
 }
 
@@ -323,7 +323,7 @@
   padding: 4px 12px;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-normal) var(--ease-standard);
   display: flex;
   align-items: center;
   gap: 6px;

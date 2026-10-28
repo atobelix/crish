@@ -5,9 +5,9 @@
 
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
-import { Button, Input, SegmentedControl, Tooltip } from '../ui';
+import { Button, Input, SegmentedControl, Tooltip } from '@/components/ui';
 import type { SortMode } from './types';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type McpServerToolbarProps = {
   demo: boolean;
@@ -49,9 +49,12 @@ export const McpServerToolbar: React.FC<McpServerToolbarProps> = ({
         aria-label={loading ? '刷新中' : '刷新列表'}
         aria-busy={loading || undefined}
         icon={
-          <AppIcon name="refresh" size={14}
+          <AppIcon
+            name="refresh"
+            size={14}
             className={loading ? 'spin' : undefined}
-            aria-hidden />
+            aria-hidden
+          />
         }
       />
     </Tooltip>

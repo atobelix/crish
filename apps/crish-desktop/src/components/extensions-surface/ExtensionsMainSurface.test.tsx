@@ -132,7 +132,6 @@ describe('ExtensionsMainSurface', () => {
     fireEvent.click(customPluginRow);
 
     // Verifies the in-situ workbench is rendered without popups
-    expect(screen.getByText(/我的自定义插件 专属工作台/)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /分享插件/ })
     ).toBeInTheDocument();
@@ -171,7 +170,7 @@ describe('ExtensionsMainSurface', () => {
   it('displays canonical import plugin in 发现 market with 卸载 when installed', () => {
     localStorage.removeItem('crish_official_plugins_uninstalled_v1');
     render(<ExtensionsMainSurface />);
-    expect(screen.getByText('发现生态')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /发现/ })).toBeInTheDocument();
     expect(
       screen.getAllByText('外部历史对话接续与导入').length
     ).toBeGreaterThanOrEqual(1);
@@ -193,7 +192,7 @@ describe('ExtensionsMainSurface', () => {
     render(<ExtensionsMainSurface />);
     const featuredNav = screen.getByRole('button', { name: /精选/ });
     fireEvent.click(featuredNav);
-    expect(screen.getByText('精选推荐')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /精选/ })).toBeInTheDocument();
     expect(
       screen.getAllByText('外部历史对话接续与导入').length
     ).toBeGreaterThanOrEqual(1);
@@ -210,7 +209,7 @@ describe('ExtensionsMainSurface', () => {
       JSON.stringify(['@crish/plugin-import-claude-codex'])
     );
     render(<ExtensionsMainSurface />);
-    expect(screen.getByText('发现生态')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /发现/ })).toBeInTheDocument();
     const installBtn = screen.getByRole('button', {
       name: '安装 外部历史对话接续与导入',
     });
@@ -260,5 +259,31 @@ describe('ExtensionsMainSurface', () => {
     expect(
       screen.getByText(/点击选择文件，或将插件文件拖拽至此处/)
     ).toBeInTheDocument();
+  });
+
+  it('filters installed cards via second-row 已安装 button and supports returning from detail workbench', () => {
+    render(<ExtensionsMainSurface />);
+
+    const installedNavBtn = screen.getByRole('button', { name: /已安装/ });
+    fireEvent.click(installedNavBtn);
+
+    expect(screen.getByText('我的自定义插件')).toBeInTheDocument();
+    const deleteBtn = screen.getByRole('button', {
+      name: '删除 我的自定义插件',
+    });
+    expect(deleteBtn).toHaveAttribute('data-verb', 'delete');
+
+    // Open installed item workbench and return via second-row back button
+    fireEvent.click(screen.getByText('我的自定义插件'));
+    expect(
+      screen.getByRole('button', { name: /分享插件/ })
+    ).toBeInTheDocument();
+
+    const backBtn = screen.getByRole('button', { name: '返回卡片列表' });
+    fireEvent.click(backBtn);
+    expect(
+      screen.queryByRole('button', { name: /分享插件/ })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('我的自定义插件')).toBeInTheDocument();
   });
 });

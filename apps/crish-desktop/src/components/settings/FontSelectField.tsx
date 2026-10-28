@@ -2,10 +2,17 @@
  * 现代字体选择器：内嵌搜索过滤框 + 极简操作栏 + WAI-ARIA 1.2 + IME 组合锁
  */
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './FontSelectField.module.css';
-import { Button, Input, Menu, Tooltip } from '../ui';
-import type { SelectOptionItem } from '../ui';
+import { Button, Input, Menu, Tooltip } from '@/components/ui';
+import type { SelectOptionItem } from '@/components/ui';
 import {
   filterAndSortIndexedOptions,
   indexFontOptions,
@@ -158,7 +165,8 @@ export const FontSelectField: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return;
     window.addEventListener('app:window-resize-settled', measureWidth);
-    return () => window.removeEventListener('app:window-resize-settled', measureWidth);
+    return () =>
+      window.removeEventListener('app:window-resize-settled', measureWidth);
   }, [open, measureWidth]);
 
   const menuOptions: SelectOptionItem[] = useMemo(
@@ -209,13 +217,16 @@ export const FontSelectField: React.FC<Props> = ({
                   valuePreviewFamily
                     ? { fontFamily: valuePreviewFamily }
                     : selected?.previewFamily
-                    ? { fontFamily: selected.previewFamily }
-                    : undefined
+                      ? { fontFamily: selected.previewFamily }
+                      : undefined
                 }
               >
                 {label}
               </span>
-              <ChevronDownIcon size={14} className={styles.settingsSelectChev} />
+              <ChevronDownIcon
+                size={14}
+                className={styles.settingsSelectChev}
+              />
             </Button>
           }
         >
@@ -300,7 +311,10 @@ export const FontSelectField: React.FC<Props> = ({
           </div>
 
           {header ? (
-            <div className={styles.headerArea} onWheel={(e) => e.stopPropagation()}>
+            <div
+              className={styles.headerArea}
+              onWheel={(e) => e.stopPropagation()}
+            >
               {header}
             </div>
           ) : null}
@@ -341,11 +355,17 @@ export const FontSelectField: React.FC<Props> = ({
                     >
                       <span
                         className={styles.settingsSelectItemLabel}
-                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                        style={
+                          opt.previewFamily
+                            ? { fontFamily: opt.previewFamily }
+                            : undefined
+                        }
                       >
                         {opt.label}
                       </span>
-                      {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
+                      {isSelected && (
+                        <CheckIcon size={13} className={styles.checkIcon} />
+                      )}
                     </Button>
                   );
                 })}
@@ -379,11 +399,17 @@ export const FontSelectField: React.FC<Props> = ({
                     >
                       <span
                         className={styles.settingsSelectItemLabel}
-                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                        style={
+                          opt.previewFamily
+                            ? { fontFamily: opt.previewFamily }
+                            : undefined
+                        }
                       >
                         {opt.label}
                       </span>
-                      {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
+                      {isSelected && (
+                        <CheckIcon size={13} className={styles.checkIcon} />
+                      )}
                     </Button>
                   );
                 })}
@@ -393,13 +419,18 @@ export const FontSelectField: React.FC<Props> = ({
             {filteredOptions.length === 0 && (
               <div className={styles.emptyState}>
                 <span>未找到匹配字体</span>
-                <span className={styles.emptySub}>按 Enter 或点击对勾直接应用为自定义字体</span>
+                <span className={styles.emptySub}>
+                  按 Enter 或点击对勾直接应用为自定义字体
+                </span>
               </div>
             )}
           </div>
 
           {footer ? (
-            <div className={styles.footerArea} onWheel={(e) => e.stopPropagation()}>
+            <div
+              className={styles.footerArea}
+              onWheel={(e) => e.stopPropagation()}
+            >
               {footer}
             </div>
           ) : null}

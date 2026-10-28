@@ -5,8 +5,8 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import { Dialog, Button, Tooltip, Input, Switch } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Dialog, Button, Tooltip, Input, Switch } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/storeAccess';
 import {
@@ -84,6 +84,7 @@ export const ExternalSessionImportModal: React.FC<
       setScanIssues(result.issues);
     } catch (err) {
       if (requestId !== scanRequestIdRef.current) return;
+      setDetected([]);
       setScanIssues([
         {
           source: 'claude-code',
@@ -183,6 +184,16 @@ export const ExternalSessionImportModal: React.FC<
       return true;
     });
   }, [detected, filterTab, searchQuery, isMatchingWorkspace]);
+
+  const failedSources = new Set(
+    scanIssues
+      .filter((issue) => issue.kind === 'error')
+      .map((issue) => issue.source)
+  );
+  const allSourcesFailed =
+    detected.length === 0 &&
+    failedSources.has('claude-code') &&
+    failedSources.has('codex');
 
   // 导入单条
   const handleImportSingle = async (item: DetectedExternalSession) => {
@@ -449,7 +460,9 @@ export const ExternalSessionImportModal: React.FC<
                 >
                   <strong>
                     {scanIssues.some((issue) => issue.kind === 'error')
-                      ? /* i18n-allow */ '扫描未能完整完成，结果可能遗漏会话。'
+                      ? allSourcesFailed
+                        ? /* i18n-allow */ '全部来源扫描失败，无法确认是否存在外部会话。'
+                        : /* i18n-allow */ '部分来源扫描失败，结果可能遗漏会话。'
                       : /* i18n-allow */ '部分目录或文件未能读取，结果可能不完整。'}
                   </strong>
                   <ul>
@@ -494,7 +507,7 @@ export const ExternalSessionImportModal: React.FC<
 
                   return (
                     <div
-                      key={item.id}
+                      key={makeExternalImportKey(item.source, item.id)}
                       className={`${styles.sessionCard} ${isMatch ? styles.sessionCardMatching : ''}`}
                     >
                       <div className={styles.cardMain}>

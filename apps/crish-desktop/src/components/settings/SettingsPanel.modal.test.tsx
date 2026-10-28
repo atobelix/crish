@@ -78,7 +78,7 @@ import {
   openSettings,
   DEFAULT_SETTINGS_TAB,
 } from '../../store/settingsUiStore';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
 
 function Harness() {
   const show = useSettingsUiStore((s) => s.showSettingsOverlay);
@@ -324,7 +324,7 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     'utf8'
   );
   const tokens = readFileSync(
-    resolve(__dirname, '../../styles/tokens.css'),
+    resolve(__dirname, '../../styles/tokens-space.css'),
     'utf8'
   );
   const rule = (selector: string) => {
@@ -406,7 +406,7 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     );
   });
 
-  it('导航项选中态与主侧栏一致：--sidebar-active 叠加、字号 base、文字 --text-primary，无白底边框阴影', () => {
+  it('导航项选中态与主侧栏一致：--state-strong 叠加、字号 base、文字 --text-primary，无白底边框阴影', () => {
     const base = rule('.sidebarTab');
     expect(base).toMatch(/font-size:\s*var\(--font-size-base\);/);
     expect(base).toMatch(/color:\s*var\(--text-primary\);/);
@@ -414,7 +414,7 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
       css.match(
         /\.sidebarTab\.active,\s*\n\.sidebarTab\.active:hover\s*\{[\s\S]*?\n\}/
       )?.[0] ?? '';
-    expect(active).toMatch(/background:\s*var\(--sidebar-active\);/);
+    expect(active).toMatch(/background:\s*var\(--state-strong\);/);
     expect(active).not.toMatch(/tab-active-bg|border:|box-shadow/);
   });
 

@@ -43,21 +43,21 @@
   justify-content: space-between;
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  border-bottom: var(--hairline-width) solid var(--tint-divider);
+  border-bottom: var(--hairline-width) solid var(--border-color);
   transition: background var(--transition-micro);
   font-family: var(--font-sans);
 }
 
 .modelRow:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .modelRowSelected {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .modelRowSelected:hover {
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
 .modelRowLeft {

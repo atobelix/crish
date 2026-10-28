@@ -4,11 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ModelThinkingSection } from './ModelThinkingSection';
 
-function Harness({
-  seedMap,
-}: {
-  seedMap?: Record<string, string>;
-}) {
+function Harness({ seedMap }: { seedMap?: Record<string, string> }) {
   const [enabled, setEnabled] = useState(false);
   const [thinkingMap, setThinkingMap] = useState<Record<string, string>>();
 
@@ -27,9 +23,7 @@ function Harness({
 
 describe('ModelThinkingSection', () => {
   it('关闭后再打开会保留已经填过的档位，而不是改回标准表', () => {
-    render(
-      <Harness seedMap={{ Low: 'low', High: 'high' }} />
-    );
+    render(<Harness seedMap={{ Low: 'low', High: 'high' }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '配置思考档位' }));
     expect(screen.getByDisplayValue('Low')).toBeInTheDocument();

@@ -4,7 +4,7 @@ import type { McpServerInfo } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
 import styles from './McpSettingsTab.module.css';
-import { Button, Switch, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '@/components/ui';
 import {
   EMPTY_DEMO_HINT,
   EMPTY_LIVE_HINT_CONFIGURED,
@@ -21,7 +21,7 @@ import type {
   McpUiGroup,
   McpActionsGroup,
 } from './useMcpServerListState';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 const kindClassMap: Record<'ok' | 'warn' | 'err' | 'idle', string | undefined> =
   {

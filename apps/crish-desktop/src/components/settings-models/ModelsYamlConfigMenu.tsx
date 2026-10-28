@@ -14,10 +14,10 @@ import {
 } from '../../api/hostOpenersApi';
 import styles from './ModelsSettingsTab.module.css';
 import yamlStyles from './YamlConfigEditorModal.module.css';
-import { Button, Menu } from '../ui';
-import type { SelectOptionItem } from '../ui';
+import { Button, Menu } from '@/components/ui';
+import type { SelectOptionItem } from '@/components/ui';
 import { getOpenerIcon } from '../files/FileActions';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 type Props = {
@@ -193,7 +193,7 @@ export const ModelsYamlConfigMenu: React.FC<Props> = ({
           />
         }
       >
-        <div role="menu" aria-label={t('settings.models.yaml.menuAria')}>
+        <div aria-label={t('settings.models.yaml.menuAria')}>
           <div className={yamlStyles.menuSectionTitle}>
             {t('settings.models.yaml.configFile')}
           </div>

@@ -29,7 +29,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, ConfirmDialog, Switch } from '../ui';
+import { Button, ConfirmDialog, Switch } from '@/components/ui';
 import {
   pairStatus,
   listDevices,
@@ -42,7 +42,7 @@ import { useDevicePairing } from './useDevicePairing';
 import { useDeviceRename } from './useDeviceRename';
 import { SettingsDevicesNetworkEnv } from './SettingsDevicesNetworkEnv';
 import { SettingsDevicesList } from './SettingsDevicesList';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 type Props = {

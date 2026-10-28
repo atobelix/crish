@@ -29,7 +29,9 @@ describe('快捷键设置页单源契约（T2-5）', () => {
     for (const item of items) {
       const meta = registryById.get(item.id);
       expect(meta, `展示项 ${item.id} 在注册表不存在`).toBeDefined();
-      expect(item.binding, `${item.id} binding 漂移`).toBe(meta!.defaultBinding);
+      expect(item.binding, `${item.id} binding 漂移`).toBe(
+        meta!.defaultBinding
+      );
       expect(item.label, `${item.id} label 漂移`).toBe(meta!.label);
     }
   });
@@ -39,10 +41,15 @@ describe('快捷键设置页单源契约（T2-5）', () => {
     const registryIds = new Set(BUILTIN_SHORTCUTS.map((m) => m.id));
 
     const missing = [...registryIds].filter((id) => !displayIds.has(id));
-    expect(missing, `注册表 id 未在设置页展示：${missing.join(', ')}`).toEqual([]);
+    expect(missing, `注册表 id 未在设置页展示：${missing.join(', ')}`).toEqual(
+      []
+    );
 
     const orphans = [...displayIds].filter((id) => !registryIds.has(id));
-    expect(orphans, `设置页展示注册表外的幽灵行：${orphans.join(', ')}`).toEqual([]);
+    expect(
+      orphans,
+      `设置页展示注册表外的幽灵行：${orphans.join(', ')}`
+    ).toEqual([]);
   });
 
   it('export_logs 在设置页可见（注册表有、旧静态副本无的行已补上）', () => {
@@ -52,7 +59,9 @@ describe('快捷键设置页单源契约（T2-5）', () => {
   it('已退役 id（toggle_runtime / command_palette / close_tab）不出现在设置页', () => {
     const displayIds = new Set(items.map((i) => i.id));
     for (const retired of ['toggle_runtime', 'command_palette', 'close_tab']) {
-      expect(displayIds.has(retired), `${retired} 应已从设置页移除`).toBe(false);
+      expect(displayIds.has(retired), `${retired} 应已从设置页移除`).toBe(
+        false
+      );
     }
   });
 
@@ -73,7 +82,7 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
   it('搜索走 ui/Input variant=search，不再挂裸 type=search / settings-field-input', () => {
     const src = readSrc('components/settings/SettingsShortcutsTab.tsx');
     expect(src).toContain('variant="search"');
-    expect(src).toContain('from \'../ui\'');
+    expect(src).toMatch(/from '(?:\.\.\/ui|@\/components\/ui)'/);
     expect(src).toMatch(/<\s*Input[\s\S]*variant="search"/);
     expect(src).not.toMatch(/<input[^>]*type=["']search["']/);
     expect(src).not.toContain('settings-field-input');
@@ -101,7 +110,9 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
     expect(inputTsx).not.toMatch(/variant === 'search'\s*\n\s*\? 'search'/);
     expect(inputCss).toContain('appearance: none');
     expect(inputCss).toContain('-webkit-appearance: none');
-    expect(inputCss).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
+    expect(inputCss).toMatch(
+      /var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/
+    );
     expect(inputCss).toContain('::-webkit-search-decoration');
     expect(inputCss).toContain('::-webkit-search-cancel-button');
     expect(inputCss).not.toMatch(/box-shadow:\s*0\s+4px/);
@@ -123,7 +134,9 @@ describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）',
     expect(overlay).not.toMatch(/(?:^|\n)\*\s*\{[^}]*scrollbar-width/);
     expect(panel).not.toMatch(/scrollbar-width\s*:/);
     expect(panel).toContain('.coverContent');
-    expect(uiCss).toMatch(/var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/);
+    expect(uiCss).toMatch(
+      /var\(--(?:button-radius|radius-lg)(?:,\s*[78]px)?\)/
+    );
     expect(uiCss).toContain('appearance: none');
   });
 });

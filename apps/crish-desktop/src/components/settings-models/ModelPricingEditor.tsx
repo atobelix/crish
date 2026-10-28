@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { Button, Input } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Button, Input } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import styles from './ModelsSettingsTab.module.css';
 
 export interface ModelPricingDraft {
@@ -53,7 +53,11 @@ export const ModelPricingEditor: React.FC<ModelPricingEditorProps> = ({
     <div className={styles.mrdSubSection}>
       <div className={styles.mrdSubSectionHeader}>
         <span className={styles.mrdSubSectionTitle}>
-          <AppIcon name="circle-dollar" size={13} className={styles.mrdPricingIcon} />
+          <AppIcon
+            name="circle-dollar"
+            size={13}
+            className={styles.mrdPricingIcon}
+          />
           四维计费 (选填 · 留空优雅静默)
         </span>
         <div className={styles.mrdCurrencyToggle}>

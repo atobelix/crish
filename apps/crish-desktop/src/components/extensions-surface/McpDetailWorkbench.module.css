@@ -19,10 +19,10 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--button-radius);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  background: var(--state-hover);
+  border: none;
+  border-radius: var(--radius-2xl, 20px);
   flex-shrink: 0;
 }
 
@@ -37,10 +37,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background-color: var(--tint-active);
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  background: var(--state-hover);
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -93,7 +93,7 @@
   border-radius: var(--radius-sm);
   line-height: 1.4;
   user-select: none;
-  animation: fadeIn 150ms ease forwards;
+  animation: fadeIn var(--duration-normal, 150ms) var(--ease-standard) forwards;
 }
 
 .probeFailedDot {
@@ -124,7 +124,7 @@
 }
 
 .spinning {
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin, 1s linear) infinite;
 }
 
 @keyframes spin {
@@ -181,12 +181,12 @@
 .toolsStatsBadge {
   display: inline-flex;
   align-items: center;
-  padding: 1px var(--space-2);
+  padding: 2px var(--space-2_5, 10px);
   font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  background-color: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  background-color: var(--state-subtle);
+  border: none;
+  border-radius: var(--radius-md, 8px);
 }
 
 .toolsHeaderActions {
@@ -202,26 +202,26 @@
 }
 
 .toolItemCard {
-  background: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--button-radius);
-  padding: var(--space-3_5);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2xl, 20px);
+  padding: var(--space-4, 16px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: var(--space-3);
   transition:
-    border-color var(--transition-micro),
+    background-color var(--transition-micro),
     opacity var(--transition-micro);
 }
 
 .toolItemCard:hover {
-  border-color: var(--border-color);
+  background: var(--state-hover);
 }
 
 .toolItemCardDisabled {
-  opacity: 0.7;
-  background-color: var(--bg-card);
+  opacity: 0.65;
+  background: transparent;
 }
 
 .toolCardTop {
@@ -274,7 +274,7 @@
   align-items: center;
   justify-content: space-between;
   padding-top: var(--space-2);
-  border-top: var(--hairline-width) solid var(--border-subtle);
+  border-top: none;
 }
 
 .toolStateLabel {
@@ -334,9 +334,9 @@
 }
 
 .probeOffline {
-  background-color: var(--bg-card);
+  background-color: var(--bg-secondary);
   color: var(--text-tertiary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
 }
 
 .probeFailed {
@@ -361,7 +361,7 @@
 
 .toolSearchBar:hover,
 .toolSearchBar:focus-within {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .toolSearchIcon {
@@ -427,18 +427,11 @@
 
 .toolSchemaBox {
   margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-2_5);
-  background: var(--tint-hover);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  padding: var(--space-2_5) var(--space-3);
+  background: var(--state-active);
+  border: none;
+  border-radius: var(--radius-l, 12px);
   font-size: 11px;
-}
-
-.toolSchemaTitle {
-  font-size: 11px;
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  margin-bottom: var(--space-1);
 }
 
 .toolSchemaParams {

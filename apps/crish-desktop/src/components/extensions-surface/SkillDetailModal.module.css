@@ -129,7 +129,7 @@
   gap: 4px;
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-secondary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   padding: 2px 8px;
   border-radius: var(--radius-md, 8px);
   border: none;

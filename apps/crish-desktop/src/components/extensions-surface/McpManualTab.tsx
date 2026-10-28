@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Button, Select, Textarea } from '../ui';
+import { Input, Button, Select, Textarea } from '@/components/ui';
 import { PRESET_TEMPLATES, type PresetItem } from './mcpConnectTypes';
 import styles from './McpConnectModal.module.css';
 
@@ -90,7 +90,6 @@ export const McpManualTab: React.FC<McpManualTabProps> = ({
             <div className={styles.formField}>
               <label className={styles.fieldLabel}>
                 <span>运行参数 (args)</span>
-                <span className={styles.fieldHint}>空格或逗号分隔</span>
               </label>
               <Input
                 size="sm"
@@ -103,9 +102,6 @@ export const McpManualTab: React.FC<McpManualTabProps> = ({
             <div className={styles.formFieldFull}>
               <label className={styles.fieldLabel}>
                 <span>环境变量 (env)</span>
-                <span className={styles.fieldHint}>
-                  KEY=VALUE 格式，每行一个
-                </span>
               </label>
               <Textarea
                 className={styles.textareaField}

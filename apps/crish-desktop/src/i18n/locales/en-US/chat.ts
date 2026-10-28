@@ -85,33 +85,34 @@ export const chat: ChatTranslations = {
   'plusMenu.noSkills': 'No enabled skills available',
   'plusMenu.manageSkills': 'Manage skills...',
 
-  // ── 3. Permission Mode Switcher (permission.*) ──
-  'permission.title': 'Execution Permission Mode',
-  'permission.currentMode': 'Current permission: {mode}',
-  'permission.switchMode': 'Switch Permission Mode',
-  'permission.ask.label': 'Ask Before Running',
-  'permission.ask.shortLabel': 'Ask',
-  'permission.ask.description':
-    'Ask before editing files or executing commands',
-  'permission.ask.matrixHint': 'Default',
-  'permission.deep.label': 'Deep Analysis',
-  'permission.deep.shortLabel': 'Deep',
-  'permission.deep.description': 'Explore thoroughly; ask before editing files',
-  'permission.deep.matrixHint': 'Same as Ask',
-  'permission.plan.label': 'Plan Only',
-  'permission.plan.shortLabel': 'Plan',
-  'permission.plan.description': 'Generate plan only without modifying project',
-  'permission.plan.matrixHint': 'Read-only',
-  'permission.full.label': 'Full Access',
-  'permission.full.shortLabel': 'Full',
-  'permission.full.description':
-    'Autonomous edits and runs; ask only on critical risks',
-  'permission.full.matrixHint': 'Low interruption',
-  'permission.planModeBadge': 'Plan Mode',
-  'permission.planApprovedBadge': 'Plan Approved',
+  // ── 3. Permission Mode Switcher (chat.permission.*) ──
   'permission.tooltip': 'Current permission mode: {mode} · {hint}',
   'permission.ariaLabel': 'Current permission mode: {mode}',
-  'permission.modeNoteAria': '{mode} Note: {desc}',
+
+  // ── 3.1 Approval Card (chat.approval.*) ──
+  'approval.confirmRequired': 'Confirmation required',
+  'approval.autoAllowLabel': 'Auto-Allow: approved after countdown',
+  'approval.autoAllowHint':
+    'Unattended mode: non-destructive operations are approved automatically after the countdown to keep the run going',
+  'approval.manualLabel': 'Manual-Only: human approval required',
+  'approval.manualHint':
+    'Human approval only: key or restricted operations wait for a manual decision',
+  'approval.autoDenyLabel': 'Auto-Deny: denied after countdown',
+  'approval.autoDenyHint':
+    'Timeout safety: automatically denied after the countdown',
+  'approval.countdownExpired': 'Countdown finished',
+  'approval.countdownExpiredDecision':
+    'Countdown finished, waiting for the system policy decision…',
+  'approval.countdownPaused': 'Countdown paused, waiting for human input',
+  'approval.countdownAutoAllow':
+    'Without input, approved automatically in {seconds}s',
+  'approval.countdownAutoDeny':
+    'Without approval, denied automatically in {seconds}s',
+  'approval.reasonPrefix': 'Reason: ',
+
+  // ── 3.2 Goal Mode Ribbon (chat.goal.*) ──
+  'goal.modeLabel': 'Goal Mode',
+  'goal.stop': 'Stop goal',
 
   // ── 4. Slash Commands and Quick Hints (slash.*) ──
   'slash.menuTitle': 'Quick Slash Commands',
@@ -228,6 +229,28 @@ export const chat: ChatTranslations = {
     'Select a model or enter a message to begin',
   'emptyState.createSessionBtn': 'New Session',
   'emptyState.clearFilterBtn': 'Clear Filter',
+  // ── Subagent browse / detail (AgentBrowsePad / AgentCardHeader) ──
+  'agentBrowse.modeValue': 'Mode {mode}',
+  'agentBrowse.readOnly': 'Read-only',
+  'agentBrowse.modelValue': 'Model {model}',
+  'agentBrowse.resumable': 'Resumable',
+  'agentBrowse.pendingCount': '{count} pending',
+  'agentBrowse.pendingBadge': 'Pending',
+  'agentBrowse.resumeHint':
+    'Interrupted by app restart; resumable or re-dispatch from the list',
+  'agentCard.readOnlyHint': 'Read-only subagent: read and search tools only',
+  'agentCard.readOnly': 'Read-only',
+  'agentCard.modelBound': 'Bound model: {model}',
+  'agentCard.resumeHint':
+    'Interrupted by app restart; resume or re-dispatch from the subagent list',
+  'agentCard.resumable': 'Resumable',
+  'agentCard.failureReason': 'Failure reason: {reason}',
+  'agentCard.unknown': 'Unknown',
+  'agentCard.retries': ' · {count} retries',
+  'agentCard.pendingTools': '{count} tools awaiting approval',
+  'agentCard.pendingBadge': 'Pending',
+  untitledSession: 'New chat',
+  browserTabTitle: 'Browser',
   goalChipLabel: 'goal',
   inlineTagRemove: 'Remove {name}',
 };

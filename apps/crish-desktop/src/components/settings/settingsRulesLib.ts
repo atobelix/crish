@@ -44,14 +44,16 @@ export function dedupeRuleLines(lines: string[]): string[] {
 export function resolveScopeLabel(
   isGlobal: boolean,
   activeProject: { name?: string } | null,
-  scopeKey: string,
+  scopeKey: string
 ): string {
   if (isGlobal) return '全局';
   return activeProject?.name || projectFolderLabel(scopeKey);
 }
 
 /** 作用域下拉选项（全局 + 已打开项目） */
-export function buildScopeOptions(scopeProjects: { path: string; name?: string }[]): {
+export function buildScopeOptions(
+  scopeProjects: { path: string; name?: string }[]
+): {
   value: string;
   label: string;
   hint?: string;

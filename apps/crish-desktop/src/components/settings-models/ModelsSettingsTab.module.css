@@ -92,12 +92,12 @@
 }
 
 .mrlItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 /* 选中态：对齐系统一级侧边栏 .sidebarTab.active 实体白卡微浮起质感 */
 .mrlItem.isActive {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   border-color: transparent;
   box-shadow: none;
 }
@@ -240,7 +240,7 @@
 }
 
 .mrdModelRow:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdModelRow.isExpanded,
@@ -260,7 +260,7 @@
 }
 
 .mrdModelRow.isExpanded .mrdModelRowInner:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdModelRow.isOff,
@@ -316,7 +316,7 @@
   align-items: center;
   border-radius: var(--radius-sm);
   border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--tint-subtle);
+  background: var(--state-subtle);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -339,7 +339,7 @@
 
 .mrdCapTag:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdModelActions {
@@ -467,11 +467,11 @@
 }
 
 .mrdAddSuggestItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdAddSuggestItemActive {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdAddSuggestMeta {
@@ -667,13 +667,13 @@
 .cascadeRow:hover,
 .cascadeOption:hover,
 .cascadeSubRow:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .cascadeOption.isOn,
 .cascadeOption.isSelected,
 .cascadeSubRowActive {
-  background: var(--tint-active);
+  background: var(--state-active);
   font-weight: var(--font-weight-medium);
 }
 
@@ -709,7 +709,7 @@
 
 .cascadeSelectTrigger:hover,
 .cascadeTrigger:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--border-color);
 }
 
@@ -751,7 +751,7 @@
 }
 
 .loadingSpinner {
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin) infinite;
 }
 
 @keyframes spin {
@@ -792,7 +792,7 @@
 }
 
 .credentialsHeader:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .credentialsHeaderLeft {
@@ -936,7 +936,7 @@
   border: none;
   outline: none;
   box-shadow: none;
-  background: var(--tint-subtle);
+  background: var(--state-subtle);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
@@ -946,7 +946,7 @@
 }
 
 .mrdModalityChip:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -1025,7 +1025,7 @@
 
 .mrdCurrencyBtn:hover:not(.mrdCurrencyBtnActive) {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .mrdCurrencyBtnActive {

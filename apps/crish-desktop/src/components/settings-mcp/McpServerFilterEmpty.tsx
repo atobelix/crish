@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { EMPTY_FILTER_HINT } from './types';
 
 /** MCP 服务器列表筛选空态渲染（加载中 / 无匹配 / 清除筛选按钮）。 */

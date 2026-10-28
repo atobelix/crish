@@ -11,7 +11,7 @@ import React, { useMemo } from 'react';
 import { listLiveProviders, providerHasKey } from '../../api/modelsCatalogLive';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import styles from './ModelsSettingsTab.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { useI18n } from '../../i18n';
 
 export { ModelsCascadeSelect } from './ModelsCascadeSelect';

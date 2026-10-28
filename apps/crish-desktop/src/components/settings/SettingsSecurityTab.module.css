@@ -1,124 +1,116 @@
-.wlRow {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2_5) var(--space-3_5);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  align-items: center;
-}
-
-.wlRowNoBorder {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2_5) var(--space-3_5);
-  align-items: center;
-}
-
-.labelCol {
-  width: 120px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.labelTitle {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-}
-
-.labelDesc {
+.sectionDesc {
+  margin: 0 0 var(--space-3) 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
+  line-height: var(--line-height-normal);
 }
 
-.inputGroup {
-  flex: 1;
+.modeCardGroup {
   display: flex;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-2_5);
+  width: 100%;
+}
+
+.modeCard {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-micro),
+    background-color var(--transition-micro);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.modeCard:hover {
+  background: var(--state-hover);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+.modeCard:focus-visible {
+  border-color: var(--accent-primary);
+}
+
+.modeCard.isSelected {
+  border-color: var(--accent-primary);
+  background: var(--surface-card);
+}
+
+.cardHeader {
+  display: flex;
   align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
-.inputGroup :global(.inputWrap),
-.inputGroup :global(.inputShell) {
-  flex: 1;
-}
-
-.inputGrow,
-.cmdInput {
-  flex: 1;
-  height: 28px;
-  min-height: 28px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-
-.actionBtn,
-.addBtn {
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  --btn-radius: var(--radius-md);
-  height: 28px;
-  min-height: 28px;
-  --btn-h: 28px;
-}
-
-.presetGroup {
-  flex: 1;
+.iconBox {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.presetChip {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  padding: 0 var(--space-2_5);
-  border-radius: var(--radius-md);
-  border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
-.presetChip:hover:not(:disabled) {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.presetChip:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.cmdSpan {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-}
-
-.morePathsWrapper {
-  padding: var(--space-2) var(--space-5);
-}
-
-.confirmClearGroup {
-  display: inline-flex;
+.cardTitleRow {
+  display: flex;
   align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
 }
 
-.confirmClearPrompt {
+.cardTitle {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.recommendTag {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.radioCircle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.modeCard.isSelected .radioCircle {
+  border-color: var(--accent-primary);
+}
+
+.radioDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.cardDesc {
+  margin: 0;
+  padding-left: 36px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.4;
 }

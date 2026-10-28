@@ -1,9 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ConfiguredPriceRow } from '../../api/modelPricingSource';
 import type { PricingConfig } from '../../api/modelsCatalogTypes';
-import { IconButton, Tooltip, Input } from '../ui';
+import { IconButton, Tooltip, Input } from '@/components/ui';
 import styles from './PriceConfigModal.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 编辑即保存的防抖窗口（毫秒）。导出供用例以假定时器对齐。 */
 export const AUTO_SAVE_DEBOUNCE_MS = 500;
@@ -227,7 +233,10 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
       {/* 1. 模型 */}
       <div className={styles.colCell}>
         <Tooltip content={`模型 ID：${row.modelId}`}>
-          <span className={styles.identityText} data-testid={`price-row-model-${rowKey}`}>
+          <span
+            className={styles.identityText}
+            data-testid={`price-row-model-${rowKey}`}
+          >
             {row.displayName}
           </span>
         </Tooltip>
@@ -321,7 +330,10 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
           {saving && <span className={styles.rowStatus}>保存中…</span>}
           {!saving && saved && <span className={styles.rowStatus}>已保存</span>}
           {!saving && error && (
-            <span className={styles.rowStatusError} data-testid={`price-row-error-${rowKey}`}>
+            <span
+              className={styles.rowStatusError}
+              data-testid={`price-row-error-${rowKey}`}
+            >
               {error}
             </span>
           )}

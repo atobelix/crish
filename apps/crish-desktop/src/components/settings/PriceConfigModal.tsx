@@ -9,7 +9,7 @@ import type { PricingConfig } from '../../api/modelsCatalogTypes';
 import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { toast } from '../../services/toast/ToastContext';
-import { Button, Input, Dialog, SegmentedControl } from '../ui';
+import { Button, Input, Dialog, SegmentedControl } from '@/components/ui';
 import { EditablePriceRow } from './EditablePriceRow';
 import styles from './PriceConfigModal.module.css';
 
@@ -69,10 +69,15 @@ export const PriceConfigModal: React.FC<{
 
   /** 编辑即保存的落盘点（行内防抖后调用；失败显式提示，不静默降级）。 */
   const handleSave = useCallback(
-    async (row: ConfiguredPriceRow, pricing: PricingConfig): Promise<SaveResult> => {
+    async (
+      row: ConfiguredPriceRow,
+      pricing: PricingConfig
+    ): Promise<SaveResult> => {
       const result = await setModelPrice(row.ref, pricing);
       if (!result.ok) {
-        toast.show(`保存失败（${row.providerId}/${row.modelId}）：${result.error}`);
+        toast.show(
+          `保存失败（${row.providerId}/${row.modelId}）：${result.error}`
+        );
         return { ok: false, error: result.error };
       }
       return { ok: true };
@@ -84,7 +89,9 @@ export const PriceConfigModal: React.FC<{
     async (row: ConfiguredPriceRow): Promise<SaveResult> => {
       const result = await setModelPrice(row.ref, undefined);
       if (!result.ok) {
-        toast.show(`清除失败（${row.providerId}/${row.modelId}）：${result.error}`);
+        toast.show(
+          `清除失败（${row.providerId}/${row.modelId}）：${result.error}`
+        );
         return { ok: false, error: result.error };
       }
       return { ok: true };
@@ -140,9 +147,15 @@ export const PriceConfigModal: React.FC<{
         <div className={styles.tableHeader}>
           <div data-testid="price-header-model">模型</div>
           <div data-testid="price-header-provider">服务商</div>
-          <div data-testid="price-header-input">提示输入 ({currencySymbol}/1M)</div>
-          <div data-testid="price-header-output">生成补全 ({currencySymbol}/1M)</div>
-          <div data-testid="price-header-cache">缓存命中 ({currencySymbol}/1M)</div>
+          <div data-testid="price-header-input">
+            提示输入 ({currencySymbol}/1M)
+          </div>
+          <div data-testid="price-header-output">
+            生成补全 ({currencySymbol}/1M)
+          </div>
+          <div data-testid="price-header-cache">
+            缓存命中 ({currencySymbol}/1M)
+          </div>
           <div data-testid="price-header-billing">计费方式</div>
           <div className={styles.headerColAction}>操作</div>
         </div>
@@ -168,11 +181,8 @@ export const PriceConfigModal: React.FC<{
           )}
         </div>
 
-        {/* 计费方式为派生量，此处一次性说明来源，避免逐行重复解释 */}
-        <div className={styles.footHint}>
-          计费方式随模型能力自动判定：在「模型配置」把输出模态勾选「图片」即为生图模型，
-          此处自动按张计费；其余按 Token 计费。改动即自动保存，无需手动提交。
-        </div>
+        {/* 底部自动保存说明 */}
+        <div className={styles.footHint}>改动实时自动保存。</div>
       </div>
     </Dialog>
   );

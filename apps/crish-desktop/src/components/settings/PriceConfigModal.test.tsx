@@ -22,7 +22,10 @@ vi.mock('../../services/toast/ToastContext', () => ({
 vi.mock('../../api/modelsCatalogStore', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../api/modelsCatalogStore')>();
-  return { ...actual, ensureModelsCatalogLoaded: vi.fn(async () => ({ ok: true })) };
+  return {
+    ...actual,
+    ensureModelsCatalogLoaded: vi.fn(async () => ({ ok: true })),
+  };
 });
 
 // setModelPrice 打桩为可观测写入面；listConfiguredPrices / resolveEffectivePrice 保持真实现
@@ -60,7 +63,12 @@ function treeFixture(): ModelsYamlTree {
             displayName: 'Ornith 1.5 9B',
             enabled: true,
             contextWindow: 262144,
-            pricing: { currency: 'CNY', unit: 'per_1m_tokens', input: 3, output: 12 },
+            pricing: {
+              currency: 'CNY',
+              unit: 'per_1m_tokens',
+              input: 3,
+              output: 12,
+            },
           },
           { id: 'estimate-only', displayName: '仅预估模型', enabled: true },
           { id: 'nothing', displayName: '未收录模型', enabled: true },
@@ -72,7 +80,11 @@ function treeFixture(): ModelsYamlTree {
         protocol: 'openai/chat',
         order: 2,
         models: [
-          { id: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro', enabled: true },
+          {
+            id: 'deepseek-v4-pro',
+            displayName: 'DeepSeek V4 Pro',
+            enabled: true,
+          },
         ],
       },
       openai: {
@@ -174,9 +186,15 @@ describe('PriceConfigModal（名单真源 = 统一树）', () => {
     render(<PriceConfigModal open={true} onClose={vi.fn()} />);
 
     expect(screen.getByLabelText('清除 ollama/ornith 自定义单价')).toBeTruthy();
-    expect(screen.queryByLabelText('清除 ollama/estimate-only 自定义单价')).toBeNull();
-    expect(screen.queryByLabelText('清除 ollama/nothing 自定义单价')).toBeNull();
-    expect(screen.queryByLabelText('清除 openai/gpt-image-1 自定义单价')).toBeNull();
+    expect(
+      screen.queryByLabelText('清除 ollama/estimate-only 自定义单价')
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText('清除 ollama/nothing 自定义单价')
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText('清除 openai/gpt-image-1 自定义单价')
+    ).toBeNull();
   });
 
   it('用户声明价权威：输入框初值取树声明，而非字典预估', () => {
@@ -186,9 +204,10 @@ describe('PriceConfigModal（名单真源 = 统一树）', () => {
     expect(
       screen.getByLabelText('ollama/ornith 提示词输入单价')
     ).toHaveProperty('value', '3');
-    expect(
-      screen.getByLabelText('ollama/ornith 生成补全单价')
-    ).toHaveProperty('value', '12');
+    expect(screen.getByLabelText('ollama/ornith 生成补全单价')).toHaveProperty(
+      'value',
+      '12'
+    );
   });
 
   it('字典预估作为编辑初值预填（需求：先根据字典生成预估价格）', () => {
@@ -224,9 +243,9 @@ describe('PriceConfigModal（名单真源 = 统一树）', () => {
       screen.getByTestId('price-row-billing-ollama/ornith').textContent
     ).toBe('按 Token');
     expect(
-      screen.getByTestId('price-row-billing-ollama/ornith').getAttribute(
-        'data-billing'
-      )
+      screen
+        .getByTestId('price-row-billing-ollama/ornith')
+        .getAttribute('data-billing')
     ).toBe('per_1m_tokens');
   });
 
@@ -280,9 +299,12 @@ describe('PriceConfigModal（名单真源 = 统一树）', () => {
     expect(screen.queryByText('保存')).toBeNull();
 
     fireEvent.click(screen.getByText('CNY (¥)'));
-    fireEvent.change(screen.getByLabelText('ollama/estimate-only 提示词输入单价'), {
-      target: { value: '9' },
-    });
+    fireEvent.change(
+      screen.getByLabelText('ollama/estimate-only 提示词输入单价'),
+      {
+        target: { value: '9' },
+      }
+    );
     fireEvent.change(
       screen.getByLabelText('ollama/estimate-only 生成补全单价'),
       { target: { value: '36' } }

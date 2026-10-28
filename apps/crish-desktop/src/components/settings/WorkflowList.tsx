@@ -10,10 +10,10 @@ import {
   type WorkflowDefinition,
 } from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
-import { Button, Switch, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '@/components/ui';
 import styles from './ScheduledTasksPanel.module.css';
 import settingsStyles from './SettingsScheduleTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type WorkflowListProps = {
   variant: 'settings' | 'chat';

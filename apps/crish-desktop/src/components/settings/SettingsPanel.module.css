@@ -151,7 +151,7 @@
 }
 
 .settingsClose:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -192,7 +192,7 @@
 
 .searchWrap:hover,
 .searchWrap:focus-within {
-  background: var(--sidebar-hover);
+  background: var(--state-hover);
   border: none;
   box-shadow: none;
 }
@@ -266,7 +266,7 @@
 }
 
 .searchClear:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -336,7 +336,7 @@
 }
 
 /* 5. 导航项：与主侧栏 SidebarNav .navItem 同规格（字号 base、高 control-height、
- * 选中态 = --sidebar-active 叠加，无白底 / 边框 / 阴影） */
+ * 选中态 = --state-strong 叠加，无白底 / 边框 / 阴影） */
 .sidebarTab {
   display: flex;
   align-items: center;
@@ -364,13 +364,13 @@
 }
 
 .sidebarTab:hover {
-  background: var(--sidebar-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .sidebarTab.active,
 .sidebarTab.active:hover {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
 }
 

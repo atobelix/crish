@@ -348,6 +348,22 @@ export const settings: SettingsTranslations = {
   'devtools.dumpStateTree': 'Dump Memory State Tree',
   'devtools.probeStatus': 'Run Full Health Probe',
 
+  // ── 13. Browser Settings (browser.*) ──
+  'browser.preferences': 'Preferences',
+  'browser.defaultSearchEngine': 'Default Search Engine',
+  'browser.homepage': 'Homepage',
+  'browser.ephemeralMode': 'Incognito Sandbox Mode',
+  'browser.defaultMuted': 'Muted by Default',
+  'browser.dataCleanup': 'Data Cleanup',
+  'browser.browsingHistory': 'Browsing History',
+  'browser.bookmarks': 'Bookmarks',
+  'browser.clearHistory': 'Clear',
+  'browser.emptyBookmarks': 'Empty',
+  'browser.historyCleared': 'Browsing history cleared',
+  'browser.bookmarksCleared': 'Bookmarks emptied',
+  'workflow.permissionLabel': 'Execution permission',
+  'workflow.permissionAria': 'Execution permission mode',
+
   ...settingsPartRest,
   ...settingsPartModels,
 };

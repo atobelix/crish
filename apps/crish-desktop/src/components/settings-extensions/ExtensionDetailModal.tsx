@@ -5,8 +5,8 @@ import {
   type InstalledExtension,
   kindLabel,
 } from '../../api/extensionCatalog';
-import { Badge, Button, Dialog, Tooltip } from '../ui';
-import { AppIcon, type IconName } from '../ui/icons/index';
+import { Badge, Button, Dialog, Tooltip } from '@/components/ui';
+import { AppIcon, type IconName } from '@/components/ui/icons';
 import { isPluginCardItem } from './ExtensionCardIdentity';
 import {
   McpToolsSection,
@@ -192,27 +192,17 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
         <div className={`${styles.bodyCoverContent} coverContent`}>
           {isImportPlugin ? (
             <div className={styles.featureCard}>
-              <div className={styles.featureCardTitle}>
-                <AppIcon name="refresh" size={16} />
-                <span>外部对话无损导入与同步</span>
-              </div>
-              <div className={styles.featureCardDesc}>
-                自动检测 Claude Code 与 OpenAI Codex
-                的本地对话记录，一键无损同步至 Crish，无需繁琐导出或格式迁移。
-              </div>
-              <div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    onClose();
-                    onOpenExternalSync?.();
-                  }}
-                >
-                  进入导入与管理
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onOpenExternalSync?.();
+                }}
+              >
+                进入导入与管理
+              </Button>
             </div>
           ) : null}
 

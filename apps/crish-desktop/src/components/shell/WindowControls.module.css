@@ -29,8 +29,9 @@
   align-items: center;
   justify-content: center;
   cursor: default;
-  transition: background-color var(--transition-micro),
-              color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
   -webkit-app-region: no-drag;
   app-region: no-drag;
   pointer-events: auto;
@@ -43,13 +44,13 @@
 
 .winBtn:hover,
 .winBtn[data-pointer='hover'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .winBtn:active,
 .winBtn[data-pointer='pressed'] {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 

@@ -63,7 +63,7 @@
 }
 
 .badgeTrigger {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-secondary);
   border: none;
 }
@@ -111,7 +111,7 @@
 .idCode {
   font-family: var(--font-mono);
   font-size: 11px;
-  background: var(--bg-hover);
+  background: var(--state-hover);
   padding: 1px 4px;
   border-radius: var(--radius-xs);
   color: var(--text-secondary);

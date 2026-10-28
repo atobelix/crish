@@ -18,19 +18,19 @@ import { useSessionStore } from '../../store/storeAccess';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { closeSettings, navigateToChatSession } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
-import { Button, SegmentedControl } from '../ui';
+import { Button, SegmentedControl } from '@/components/ui';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
 import {
   FILTER_OPTIONS,
-  draftFromWorkflow,
   ensureScheduledSession,
   type ScheduleFilter,
 } from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
+import { WorkflowEditModal } from './WorkflowEditModal';
 import { RunHistoryList } from './RunHistoryList';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 type Props = {
@@ -53,8 +53,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({
     busy,
     togglingIds,
     triggeringIds,
-    error,
-    ok,
     setError,
     setOk,
     filter,
@@ -119,15 +117,20 @@ export const SettingsScheduleTab: React.FC<Props> = ({
 
   const handleEditClick = (w: WorkflowDefinition) => {
     setEditingWorkflow(w);
-    setCreateMode('form');
-    setError('');
-    setOk('');
-    setWfDraft(draftFromWorkflow(w));
-    requestAnimationFrame(() => {
-      document
-        .getElementById('sched-settings-form')
-        ?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-    });
+  };
+
+  const closeEditModal = () => {
+    setEditingWorkflow(null);
+  };
+
+  const handleEditModalSave = async (
+    draft: WorkflowScheduleDraft,
+    targetWf: WorkflowDefinition
+  ) => {
+    const saved = await handleSave(draft, targetWf);
+    if (!saved) return false;
+    setEditingWorkflow(null);
+    return true;
   };
 
   const handleOpenRunSession = (run: WorkflowRunEntry) => {
@@ -188,14 +191,11 @@ export const SettingsScheduleTab: React.FC<Props> = ({
     setTimeout(() => emitUiEvent('open-chat'), 100);
   };
 
-  const isEditing = editingWorkflow !== null;
-
   const handleFormSave = async () => {
-    const saved = await handleSave(wfDraft, editingWorkflow);
+    const saved = await handleSave(wfDraft, null);
     if (!saved) return;
     setCreateMode('none');
     resetDraft();
-    setEditingWorkflow(null);
   };
 
   const onNameBlur = () => {
@@ -249,32 +249,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           </Button>
         </div>
 
-        {(error || ok) && (
-          <div
-            className="sched-settings-status"
-            aria-live="polite"
-            aria-relevant="additions text"
-          >
-            {error ? (
-              <span
-                className="settings-list-sub settings-list-sub--force"
-                role="alert"
-              >
-                {error}
-              </span>
-            ) : null}
-            {ok && !error ? (
-              <span
-                className="settings-list-sub settings-list-sub--force"
-                role="status"
-              >
-                {ok}
-              </span>
-            ) : null}
-          </div>
-        )}
-
-        {createMode !== 'none' && !isEditing ? (
+        {createMode !== 'none' ? (
           <div
             className={styles.createSeg}
             id={createMode === 'paths' ? 'sched-settings-form' : undefined}
@@ -306,7 +281,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             formId="sched-settings-form"
             draft={wfDraft}
             busy={busy}
-            isEditing={isEditing}
+            isEditing={false}
             workspacePath={workspacePath}
             onDraftChange={setWfDraft}
             onApplyPreset={applyPreset}
@@ -377,6 +352,15 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             />
           </SettingsCard>
         </SettingsSection>
+
+        <WorkflowEditModal
+          open={editingWorkflow !== null}
+          workflow={editingWorkflow}
+          busy={busy}
+          workspacePath={workspacePath}
+          onClose={closeEditModal}
+          onSave={handleEditModalSave}
+        />
       </div>
     </SettingsPage>
   );

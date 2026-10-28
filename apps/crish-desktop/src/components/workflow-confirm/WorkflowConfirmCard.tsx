@@ -8,7 +8,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import styles from './WorkflowConfirmCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { useSessionStore } from '../../store/storeAccess';
@@ -21,7 +21,7 @@ import {
   getConfirmedBucket,
   getPayloadSignature,
 } from '../../api/workflow-api/workflowConfirmSignatures';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export { clearWorkflowConfirmSignaturesForSession };
 
@@ -109,48 +109,51 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
           <span className={styles.iconSlot} aria-hidden>
             <AppIcon name="clock" size={14} />
           </span>
-          <span className={styles.kindBadge}>任务确认</span>
           <span className={styles.titleText}>定时任务配置确认</span>
           {result === 'ok' ? (
             <Tooltip content="已成功创建">
-              <AppIcon name="check-circle" size={14}
+              <AppIcon
+                name="check-circle"
+                size={14}
                 className={styles.okIcon}
-                data-testid="confirm-ok" />
+                data-testid="confirm-ok"
+              />
             </Tooltip>
           ) : null}
           {result === 'error' ? (
             <Tooltip content={errorMsg || '创建失败'}>
-              <AppIcon name="alert-circle" size={14}
+              <AppIcon
+                name="alert-circle"
+                size={14}
                 className={styles.failIcon}
-                data-testid="confirm-error" />
+                data-testid="confirm-error"
+              />
             </Tooltip>
           ) : null}
         </div>
         <div className={styles.confirmBody}>
-          <div className={styles.confirmRow}>
-            <span className={styles.confirmLabel}>任务名称</span>
-            <span className={styles.confirmValue}>{payload.name}</span>
+          <div className={styles.confirmTaskName}>{payload.name}</div>
+          <div className={styles.confirmScheduleRow}>
+            <AppIcon
+              name="calendar-clock"
+              size={13}
+              className={styles.scheduleIcon}
+              aria-hidden
+            />
+            <span>{scheduleSummary(payload)}</span>
           </div>
-          <div className={styles.confirmRow}>
-            <span className={styles.confirmLabel}>执行周期</span>
-            <span className={styles.confirmValue}>
-              {scheduleSummary(payload)}
-            </span>
-          </div>
-          <div className={styles.confirmRow}>
-            <span className={styles.confirmLabel}>执行指令</span>
-            <span className={styles.confirmValue} style={{ flex: 1 }}>
-              <pre className={styles.confirmPromptBlock}>
-                {payload.prompt}
-              </pre>
-            </span>
-          </div>
+          <pre className={styles.confirmPromptBlock} aria-label="执行指令">
+            {payload.prompt}
+          </pre>
           {payload.cwd ? (
-            <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>工作目录</span>
-              <span className={styles.confirmValue}>
-                {payload.cwd}
-              </span>
+            <div className={styles.confirmCwdRow}>
+              <AppIcon
+                name="folder"
+                size={13}
+                className={styles.folderIcon}
+                aria-hidden
+              />
+              <span className={styles.confirmCwdPath}>{payload.cwd}</span>
             </div>
           ) : null}
           <div className={styles.confirmActions}>

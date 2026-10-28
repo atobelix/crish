@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import {
   ModelThinkingEditor,
   STANDARD_THINKING_PRESET,
@@ -52,7 +52,7 @@ export const ModelThinkingSection: React.FC<ModelThinkingSectionProps> = ({
               thinkingMap: { ...activeMap },
             })
           }
-          icon={<AppIcon name="plus" size={11} />}
+          icon={<AppIcon name="plus" size={14} />}
         >
           配置思考档位
         </Button>

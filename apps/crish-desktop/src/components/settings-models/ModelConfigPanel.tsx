@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Input } from '../ui';
+import { Input } from '@/components/ui';
 import { findAutofillModel } from '../../services/modelsAutofillBaseline';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import { ModelThinkingSection } from './ModelThinkingSection';

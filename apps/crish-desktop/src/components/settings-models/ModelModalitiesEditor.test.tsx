@@ -15,10 +15,7 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       output: ['text'],
     };
     render(
-      <ModelModalitiesEditor
-        modalities={modalities}
-        onChange={vi.fn()}
-      />
+      <ModelModalitiesEditor modalities={modalities} onChange={vi.fn()} />
     );
 
     expect(screen.getByText(/多模态支持/)).toBeInTheDocument();
@@ -34,10 +31,14 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       file: '文档/文件',
     };
     for (const mod of ALL_INPUT_MODALITIES) {
-      expect(screen.getAllByText(new RegExp(labelMap[mod])).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(new RegExp(labelMap[mod])).length
+      ).toBeGreaterThan(0);
     }
     for (const mod of ALL_OUTPUT_MODALITIES) {
-      expect(screen.getAllByText(new RegExp(labelMap[mod])).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(new RegExp(labelMap[mod])).length
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -48,10 +49,7 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       output: ['text'],
     };
     render(
-      <ModelModalitiesEditor
-        modalities={modalities}
-        onChange={onChange}
-      />
+      <ModelModalitiesEditor modalities={modalities} onChange={onChange} />
     );
 
     const inputSection = screen.getByText('输入模态:').parentElement!;
@@ -95,10 +93,7 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       output: ['text'],
     };
     render(
-      <ModelModalitiesEditor
-        modalities={modalities}
-        onChange={onChange}
-      />
+      <ModelModalitiesEditor modalities={modalities} onChange={onChange} />
     );
 
     const outputSection = screen.getByText('输出模态:').parentElement!;
@@ -118,10 +113,7 @@ describe('ModelModalitiesEditor (多模态矩阵一等公民)', () => {
       output: ['text'],
     };
     render(
-      <ModelModalitiesEditor
-        modalities={modalities}
-        onChange={onChange}
-      />
+      <ModelModalitiesEditor modalities={modalities} onChange={onChange} />
     );
 
     const inputSection = screen.getByText('输入模态:').parentElement!;

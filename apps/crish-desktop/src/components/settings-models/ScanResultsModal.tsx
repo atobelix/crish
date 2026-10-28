@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Button, Dialog, Input, Tooltip } from '../ui';
+import { Button, Dialog, Input, Tooltip } from '@/components/ui';
 import styles from './ScanResultsModal.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ScanResultsModalProps {
   open: boolean;
@@ -80,7 +80,11 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
   };
 
   // 鼠标点击逻辑（支持 Shift 范围多选、Ctrl / Cmd 单选切换）
-  const handleRowMouseDown = (e: React.MouseEvent, index: number, modelId: string) => {
+  const handleRowMouseDown = (
+    e: React.MouseEvent,
+    index: number,
+    modelId: string
+  ) => {
     if (e.button !== 0) return; // 仅限鼠标左键
 
     // 1. Shift 范围选择 (Range Select)
@@ -152,7 +156,12 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
             共 {scannedModels.length} 个模型 · 已选 {selectedSet.size} 项
           </span>
           <div className={styles.footerActions}>
-            <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+            >
               取消
             </Button>
             <Button
@@ -182,13 +191,28 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
             className={styles.searchInputWrapper}
           />
           <div className={styles.quickActions}>
-            <Button type="button" variant="plain" size="xs" onClick={handleSelectAll}>
+            <Button
+              type="button"
+              variant="plain"
+              size="xs"
+              onClick={handleSelectAll}
+            >
               全选
             </Button>
-            <Button type="button" variant="plain" size="xs" onClick={handleSelectNewOnly}>
+            <Button
+              type="button"
+              variant="plain"
+              size="xs"
+              onClick={handleSelectNewOnly}
+            >
               仅选新增
             </Button>
-            <Button type="button" variant="plain" size="xs" onClick={handleClearAll}>
+            <Button
+              type="button"
+              variant="plain"
+              size="xs"
+              onClick={handleClearAll}
+            >
               清空
             </Button>
           </div>
@@ -233,7 +257,10 @@ export const ScanResultsModal: React.FC<ScanResultsModalProps> = ({
                   <div className={styles.modelRowRight}>
                     {isExisting && (
                       <Tooltip content="当前服务商中已存在该模型">
-                        <span className={styles.existingIcon} aria-label="已存在">
+                        <span
+                          className={styles.existingIcon}
+                          aria-label="已存在"
+                        >
                           <AppIcon name="check" size={14} />
                         </span>
                       </Tooltip>

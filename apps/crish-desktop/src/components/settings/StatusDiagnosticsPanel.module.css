@@ -201,7 +201,7 @@
 
 .diagLevel_debug {
   color: var(--text-tertiary);
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
 .diagLevel_info {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, Button, Textarea } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Dialog, Button, Textarea } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/storeAccess';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
@@ -90,7 +90,6 @@ export const SkillCreateModal: React.FC<SkillCreateModalProps> = ({
       open={open}
       onClose={onClose}
       title="添加技能"
-      description="创建或导入技能，赋予 AI 助手更专业的领域能力"
       classNames={{
         panel: styles.modalPanel,
         body: styles.modalBody,
@@ -104,24 +103,19 @@ export const SkillCreateModal: React.FC<SkillCreateModalProps> = ({
       }
     >
       <div className={styles.cardsContainer}>
-        {/* 方式一：AI 智能对话创建 */}
+        {/* AI 智能对话创建 */}
         <div className={styles.methodCard}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIconWrapper}>
               <AppIcon name="sparkles" size={16} />
             </div>
             <div className={styles.cardHeaderText}>
-              <div className={styles.cardTitle}>方式一：AI 智能对话创建</div>
-              <div className={styles.cardDescription}>
-                简要描述您的需求或任务目标，在对话中由 AI 全自动规划并生成规范的
-                SKILL.md
-              </div>
+              <div className={styles.cardTitle}>AI 智能对话创建</div>
             </div>
           </div>
 
           <Textarea
             label="技能需求描述"
-            hint="点击下方按钮后，将自动把该需求作为提示词模版注入活跃会话草稿，并跳转到对话窗口。"
             rows={3}
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
@@ -140,20 +134,14 @@ export const SkillCreateModal: React.FC<SkillCreateModalProps> = ({
           </div>
         </div>
 
-        {/* 方式二：导入本地已有技能目录 */}
+        {/* 导入本地已有技能目录 */}
         <div className={styles.methodCard}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIconWrapper}>
               <AppIcon name="folder-open" size={16} />
             </div>
             <div className={styles.cardHeaderText}>
-              <div className={styles.cardTitle}>
-                方式二：导入本地已有技能目录
-              </div>
-              <div className={styles.cardDescription}>
-                直接选择本机已有技能文件夹（包含
-                SKILL.md），快速接入并复用现有技能资产
-              </div>
+              <div className={styles.cardTitle}>导入本地已有技能目录</div>
             </div>
           </div>
 

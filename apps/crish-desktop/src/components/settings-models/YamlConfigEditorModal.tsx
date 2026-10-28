@@ -11,9 +11,16 @@
  */
 
 import React from 'react';
-import { Button, ConfirmDialog, Dialog, Input, Textarea, Tooltip } from '../ui';
+import {
+  Button,
+  ConfirmDialog,
+  Dialog,
+  Input,
+  Textarea,
+  Tooltip,
+} from '@/components/ui';
 import styles from './YamlConfigEditorModal.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useYamlConfigEditor } from './useYamlConfigEditor';
 
 export interface YamlConfigEditorModalProps {

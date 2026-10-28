@@ -7,6 +7,7 @@ export const common: CommonTranslations = {
   delete: '删除',
   confirm: '确认',
   close: '关闭',
+  closeDialog: '关闭弹窗',
   copy: '复制',
   copied: '已复制',
   retry: '重试',
@@ -60,6 +61,8 @@ export const common: CommonTranslations = {
   confirmDelete: '确认删除',
   feedback: '反馈',
   closeNotice: '关闭提示',
+  copyDetail: '复制详情',
+  copiedDetail: '已复制详情',
 };
 
 export default common;

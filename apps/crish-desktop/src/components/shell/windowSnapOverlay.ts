@@ -22,7 +22,7 @@
  */
 import { invokeTyped } from '../../api/tauriInvoke';
 import { logger, toErrMeta } from '../../services/LoggerService';
-import { layerStackManager } from '../ui/internal/layer-stack/LayerStackManager';
+import { layerStackManager } from '@/components/ui';
 
 export const SNAP_OVERLAY_COMMAND = 'workbench_set_snap_overlay_rect';
 /** 与 Rust `window_snap_overlay::SNAP_OVERLAY_EVENT` 同值 */

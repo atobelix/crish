@@ -28,10 +28,21 @@ export type PairingAction =
   | { type: 'setServiceEnabled'; enabled: boolean }
   | { type: 'clearPairing' };
 
-function pairingReducer(state: PairingState, action: PairingAction): PairingState {
+function pairingReducer(
+  state: PairingState,
+  action: PairingAction
+): PairingState {
   switch (action.type) {
     case 'setStatus':
-      return { ...state, status: action.status };
+      // 服务开关真值随状态快照同步：切页/重挂载后由后端恢复，
+      // 不再依赖组件生命周期内的本地记忆。
+      // ?? 兜底：前端 HMR 可能先于 Rust 重编译生效（旧二进制无该字段），
+      // 此时保留本地开关记忆，避免开发期把运行中的服务显示成关闭。
+      return {
+        ...state,
+        status: action.status,
+        serviceEnabled: action.status?.service_enabled ?? state.serviceEnabled,
+      };
     case 'setPairResult':
       return { ...state, pairResult: action.pairResult };
     case 'setBusy':
@@ -52,9 +63,7 @@ const INITIAL_PAIRING: PairingState = {
   pairResult: null,
   busy: false,
   confirmClosePairing: false,
-  // 多端服务总开关（R1-11）：Rust 侧无独立查询命令（pair_status 不含
-  // enabled 字段），本地跟踪；初始 false 与服务默认关闭语义一致
-  // （config.rs multi_device_enabled=false，应用启动即关闭态）。
+  // 首帧（尚未拿到 pair_status）按关闭态渲染；首次轮询即由后端真值覆盖。
   serviceEnabled: false,
 };
 
@@ -105,7 +114,8 @@ export function useDevicePairing({
         }
         await load();
       } finally {
-        if (mountedRef.current) dispatchPairing({ type: 'setBusy', busy: false });
+        if (mountedRef.current)
+          dispatchPairing({ type: 'setBusy', busy: false });
       }
     },
     [pairing.busy, load, showToast, mountedRef]

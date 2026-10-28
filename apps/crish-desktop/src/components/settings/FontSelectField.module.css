@@ -45,14 +45,14 @@
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--border-color);
 }
 
 .settingsSelectTrigger:active:not(:disabled),
 .settingsSelectTrigger:focus-visible,
 .settingsSelectTrigger[aria-expanded='true'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--focus-border-color);
   outline: none;
 }
@@ -163,7 +163,7 @@
 }
 
 .customApplyBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .actionBtn,
@@ -186,7 +186,7 @@
 }
 
 .actionBtn:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -253,11 +253,11 @@
 
 .settingsSelectItem:hover,
 .settingsSelectItem.isFocused {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .settingsSelectItem.isActive {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
@@ -293,7 +293,7 @@
 }
 
 .highlightMark {
-  background: var(--tint-highlight);
+  background: var(--state-highlight);
   color: var(--text-primary);
   border-radius: var(--radius-xs);
   padding: 0 1px; /* 刻度外裸值：1px 无既有档，授权保留 */

@@ -1,4 +1,5 @@
 import { toast } from '../../services/toast/ToastContext';
+import { coercePermissionMode } from '../../api/permissionModes';
 /**
  * 定时任务共享状态 hook：SettingsScheduleTab 与 ScheduledTasksPanel 双面复用。
  * 收拢：加载（settings 12s 超时 / chat 本地缓存优先）、筛选、行级乐观启停、行级立即执行、
@@ -289,11 +290,11 @@ export function useWorkflowsState(
     if (hint) setOk(hint);
   };
 
-  /** 失败：行内 + toast；成功路径禁止调用 */
+  /** 操作拦截与失败使用警告色 toast。 */
   const fail = (msg: string) => {
     setError(msg);
     setOk('');
-    toast.show(msg);
+    toast.warning(msg);
   };
 
   /**
@@ -335,6 +336,7 @@ export function useWorkflowsState(
           prompt: draft.prompt.trim(),
           schedule: schedGuard.schedule,
           cwd: patchCwd,
+          permissionMode: coercePermissionMode(extDraft.permissionMode),
           ...(patchTargetSessionId !== undefined
             ? { targetSessionId: patchTargetSessionId }
             : {}),
@@ -371,6 +373,7 @@ export function useWorkflowsState(
           name: draft.name.trim(),
           prompt: draft.prompt.trim(),
           schedule: schedGuard.schedule,
+          permissionMode: coercePermissionMode(extDraft.permissionMode),
           ...(targetCwd ? { cwd: targetCwd } : {}),
           ...(targetSessionId !== undefined ? { targetSessionId } : {}),
           enabled: true,

@@ -67,14 +67,18 @@ export type UseRulesStateResult = {
 export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
   const { onBlockingOverlayChange } = opts;
   /** 已打开过的项目 + 当前 cwd（文件夹名） */
-  const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
+  const [scopeProjects, setScopeProjects] = useState(() =>
+    listSettingsScopeProjects()
+  );
 
   const [scopeKey, setScopeKey] = useState<ScopeKey>(() => {
     const projects = listSettingsScopeProjects();
     const cwd = getWorkspacePath() || '';
     if (cwd) {
       const hit = projects.find(
-        (p) => p.path.replace(/\\/g, '/').toLowerCase() === cwd.replace(/\\/g, '/').toLowerCase(),
+        (p) =>
+          p.path.replace(/\\/g, '/').toLowerCase() ===
+          cwd.replace(/\\/g, '/').toLowerCase()
       );
       return hit?.path || cwd || SCOPE_GLOBAL;
     }
@@ -95,15 +99,18 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
         ? scopeProjects.find(
             (p) =>
               p.path.replace(/\\/g, '/').toLowerCase() ===
-              scopeKey.replace(/\\/g, '/').toLowerCase(),
+              scopeKey.replace(/\\/g, '/').toLowerCase()
           ) || null
         : null,
-    [isGlobal, scopeKey, scopeProjects],
+    [isGlobal, scopeKey, scopeProjects]
   );
   const scopeLabel = resolveScopeLabel(isGlobal, activeProject, scopeKey);
   const storagePath = isGlobal ? '全局设置' : scopeKey;
 
-  const scopeOptions = useMemo(() => buildScopeOptions(scopeProjects), [scopeProjects]);
+  const scopeOptions = useMemo(
+    () => buildScopeOptions(scopeProjects),
+    [scopeProjects]
+  );
 
   const ruleCount = customRules.length;
 
@@ -133,10 +140,13 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
         setCustomRules(lines);
         setEditorText(
           lines.length > 0
-            ? rulesLinesToText(lines, isGlobal ? '# 全局规则' : `# ${scopeLabel} 规则`)
+            ? rulesLinesToText(
+                lines,
+                isGlobal ? '# 全局规则' : `# ${scopeLabel} 规则`
+              )
             : isGlobal
               ? EMPTY_GLOBAL_TEMPLATE
-              : EMPTY_PROJECT_TEMPLATE,
+              : EMPTY_PROJECT_TEMPLATE
         );
         setLoadError(null);
         setLoaded(true);
@@ -163,7 +173,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
    * 本机写入当前作用域 customRules；成功静默。
    * @returns 合并后的行；失败已 toast 并返回 null
    */
-  const persistCustomRules = async (rules: string[]): Promise<string[] | null> => {
+  const persistCustomRules = async (
+    rules: string[]
+  ): Promise<string[] | null> => {
     const safe = dedupeRuleLines(normalizeCustomRules(rules));
     try {
       if (isGlobal) {
@@ -171,14 +183,14 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
           customRules: safe,
         } as Partial<Settings>);
         const next = dedupeRuleLines(
-          normalizeCustomRules(merged.customRules ?? safe),
+          normalizeCustomRules(merged.customRules ?? safe)
         );
         setCustomRules(next);
         getSettingsState().setAppSettings(merged);
         setEditorText(
           next.length > 0
             ? rulesLinesToText(next, '# 全局规则')
-            : EMPTY_GLOBAL_TEMPLATE,
+            : EMPTY_GLOBAL_TEMPLATE
         );
         return next;
       }
@@ -189,7 +201,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
       setEditorText(
         safe.length > 0
           ? rulesLinesToText(safe, `# ${scopeLabel} 规则`)
-          : EMPTY_PROJECT_TEMPLATE,
+          : EMPTY_PROJECT_TEMPLATE
       );
       return safe;
     } catch (err) {
@@ -235,7 +247,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
               const g = await clientApi.getSettingsEx('__global__');
               const gl = dedupeRuleLines(normalizeCustomRules(g.customRules));
               globalText =
-                gl.length > 0 ? rulesLinesToText(gl, '# 全局规则') : EMPTY_GLOBAL_TEMPLATE;
+                gl.length > 0
+                  ? rulesLinesToText(gl, '# 全局规则')
+                  : EMPTY_GLOBAL_TEMPLATE;
             } catch {
               /* keep empty template */
             }

@@ -2,7 +2,10 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ModelPricingEditor, type ModelPricingDraft } from './ModelPricingEditor';
+import {
+  ModelPricingEditor,
+  type ModelPricingDraft,
+} from './ModelPricingEditor';
 
 describe('ModelPricingEditor (四维双币价格选填与静默)', () => {
   it('渲染 4 项价格输入框，占位符为选填，支持双币切换按钮', () => {
@@ -15,7 +18,9 @@ describe('ModelPricingEditor (四维双币价格选填与静默)', () => {
     };
     render(<ModelPricingEditor pricing={pricing} onChange={vi.fn()} />);
 
-    expect(screen.getByText(/四维计费 \(选填 · 留空优雅静默\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/四维计费 \(选填 · 留空优雅静默\)/)
+    ).toBeInTheDocument();
     expect(screen.getByText('¥ CNY')).toBeInTheDocument();
     expect(screen.getByText('$ USD')).toBeInTheDocument();
 

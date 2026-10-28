@@ -23,7 +23,7 @@ import { scanSystemFonts } from './internal/fontStoreScan';
 import { sanitizeFontFamilyNameStrict } from './internal/fontPinyinMatcher';
 import { FontSelectField, type FontSelectOption } from './FontSelectField';
 import { SettingsRow } from './SettingsUI';
-import { Input } from '../ui';
+import { Input } from '@/components/ui';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {
@@ -33,7 +33,8 @@ interface Props {
 function prefsEqual(a: FontPreferences, b: Partial<FontPreferences>): boolean {
   if (b.uiFont !== undefined && a.uiFont !== b.uiFont) return false;
   if (b.monoFont !== undefined && a.monoFont !== b.monoFont) return false;
-  if (b.monoLigatures !== undefined && a.monoLigatures !== b.monoLigatures) return false;
+  if (b.monoLigatures !== undefined && a.monoLigatures !== b.monoLigatures)
+    return false;
   return true;
 }
 
@@ -124,7 +125,11 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
       label: o.label,
       group: '预设',
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
-      ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
+      ...(o.kind === 'embedded'
+        ? { hint: '内嵌' }
+        : o.kind === 'auto'
+          ? { hint: platformLabel() }
+          : {}),
     }));
 
     const locals: FontSelectOption[] = localFonts.map((f) => ({
@@ -155,7 +160,11 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
       label: o.label,
       group: '预设',
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
-      ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
+      ...(o.kind === 'embedded'
+        ? { hint: '内嵌' }
+        : o.kind === 'auto'
+          ? { hint: platformLabel() }
+          : {}),
     }));
 
     const locals: FontSelectOption[] = localFonts.map((f) => ({
@@ -204,10 +213,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
             options={uiOptions}
             disabled={busy}
             onChange={(v) => void apply({ uiFont: v as UiFontChoice })}
-            {...(uiPreviewFamily !== undefined && { valuePreviewFamily: uiPreviewFamily })}
+            {...(uiPreviewFamily !== undefined && {
+              valuePreviewFamily: uiPreviewFamily,
+            })}
             onScanLocal={handleScanLocal}
             isScanning={scanning}
-            onResetDefault={() => void apply({ uiFont: DEFAULT_FONT_PREFS.uiFont })}
+            onResetDefault={() =>
+              void apply({ uiFont: DEFAULT_FONT_PREFS.uiFont })
+            }
             isDefault={prefs.uiFont === DEFAULT_FONT_PREFS.uiFont}
             onApplyCustom={(name) => handleApplyCustom('ui', name)}
             maxHeight={340}
@@ -219,13 +232,18 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
         title="代码字体"
         control={
           <div className={styles.monoControlRow}>
-            <label className={styles.settingsRowCheck} aria-label="启用代码连字（liga / calt）">
+            <label
+              className={styles.settingsRowCheck}
+              aria-label="启用代码连字（liga / calt）"
+            >
               <Input
                 bare
                 type="checkbox"
                 checked={!!prefs.monoLigatures}
                 disabled={busy}
-                onChange={(e) => void apply({ monoLigatures: e.target.checked })}
+                onChange={(e) =>
+                  void apply({ monoLigatures: e.target.checked })
+                }
               />
               <span>连字</span>
             </label>
@@ -234,10 +252,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
               options={monoOptions}
               disabled={busy}
               onChange={(v) => void apply({ monoFont: v as MonoFontChoice })}
-              {...(monoPreviewFamily !== undefined && { valuePreviewFamily: monoPreviewFamily })}
+              {...(monoPreviewFamily !== undefined && {
+                valuePreviewFamily: monoPreviewFamily,
+              })}
               onScanLocal={handleScanLocal}
               isScanning={scanning}
-              onResetDefault={() => void apply({ monoFont: DEFAULT_FONT_PREFS.monoFont })}
+              onResetDefault={() =>
+                void apply({ monoFont: DEFAULT_FONT_PREFS.monoFont })
+              }
               isDefault={prefs.monoFont === DEFAULT_FONT_PREFS.monoFont}
               onApplyCustom={(name) => handleApplyCustom('mono', name)}
               maxHeight={340}

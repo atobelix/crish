@@ -65,6 +65,9 @@ vi.mock('../../../services/toast/ToastContext', () => ({
   }),
   toast: {
     show: (...args: unknown[]) => showToastMock(...args),
+    warning: (...args: unknown[]) => showToastMock(...args),
+    error: (...args: unknown[]) => showToastMock(...args),
+    success: (...args: unknown[]) => showToastMock(...args),
   },
 }));
 

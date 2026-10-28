@@ -45,7 +45,7 @@ describe('ExtensionsCatalogGrid', () => {
     },
   };
 
-  it('renders header title and description based on sidebarNav and categoryFilter', () => {
+  it('renders empty description based on sidebarNav and searchQuery', () => {
     const { rerender } = render(
       <ExtensionsCatalogGrid
         catalogItems={[]}
@@ -59,10 +59,6 @@ describe('ExtensionsCatalogGrid', () => {
       />
     );
 
-    expect(screen.getByText('发现生态')).toBeInTheDocument();
-    expect(
-      screen.getByText('浏览并一键配置社区与官方扩展插件')
-    ).toBeInTheDocument();
     expect(screen.getByText('当前分类下暂无发现条目')).toBeInTheDocument();
 
     rerender(
@@ -78,10 +74,6 @@ describe('ExtensionsCatalogGrid', () => {
       />
     );
 
-    expect(screen.getByText('精选推荐')).toBeInTheDocument();
-    expect(
-      screen.getByText('发现预设提示词工作流与专业技能包')
-    ).toBeInTheDocument();
     expect(screen.getByText('未找到匹配搜索条件的扩展')).toBeInTheDocument();
   });
 

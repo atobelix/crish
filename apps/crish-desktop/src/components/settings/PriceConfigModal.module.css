@@ -60,13 +60,13 @@
 /* 价格行：默认透明，hover 柔和高光 */
 .tableRow {
   background: transparent;
-  border-bottom: var(--hairline-width) solid var(--tint-divider);
+  border-bottom: var(--hairline-width) solid var(--border-color);
   font-variant-numeric: tabular-nums;
   transition: background var(--transition-fast);
 }
 
 .tableRow:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .colCell {

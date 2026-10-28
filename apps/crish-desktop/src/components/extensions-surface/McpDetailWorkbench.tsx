@@ -192,9 +192,14 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
     if (!isOnline) {
       setProbeResult({
         status: 'offline',
-        message: t('tools.mcp.serviceDisabled', '服务未启用'),
+        message: t('tool.mcp.serviceDisabled', '服务未启用'),
       });
-      showToast('服务未启用：请先开启上方运行状态开关');
+      showToast(
+        t(
+          'tool.mcp.serviceDisabledHint',
+          '服务未启用：请先开启上方运行状态开关'
+        )
+      );
       return;
     }
     setTestingConn(true);
@@ -205,12 +210,23 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
       setProbeResult({
         status: 'success',
         latencyMs: latency,
-        message: `连通正常 (${latency}ms)`,
+        message: t('tool.mcp.latencyNormal', '连通正常，延迟 {latency}ms', {
+          latency,
+        }),
       });
-      showToast(`连通性测试成功：服务响应正常（${latency}ms）`);
+      showToast(
+        t(
+          'tool.mcp.testSuccess',
+          '连通性测试成功：服务响应正常（{latency}ms）',
+          { latency }
+        )
+      );
     } catch {
-      setProbeResult({ status: 'failed', message: '连通性测试异常' });
-      showToast('连通性测试异常');
+      setProbeResult({
+        status: 'failed',
+        message: t('tool.mcp.testFailed', '连通性测试异常'),
+      });
+      showToast(t('tool.mcp.testFailed', '连通性测试异常'));
     } finally {
       setTestingConn(false);
     }

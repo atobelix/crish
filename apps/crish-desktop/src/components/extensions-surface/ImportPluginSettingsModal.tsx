@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Dialog, Button, Input, Switch } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Dialog, Button, Input, Switch } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/storeAccess';
 import { cleanAllImportedExternalSessions } from '../../api/import/importSessions';
@@ -116,7 +116,6 @@ export const ImportPluginSettingsModal: React.FC<
           <span>外部对话导入设置</span>
         </div>
       }
-      description="配置 Claude Code 与 OpenAI Codex 的本地扫描根目录与自动接续策略"
       classNames={{
         panel: styles.modalPanel,
         body: styles.modalBody,
@@ -163,9 +162,6 @@ export const ImportPluginSettingsModal: React.FC<
       <div className={`${styles.settingCard} ${styles.settingFieldCard}`}>
         <div className={styles.settingHeader}>
           <span className={styles.settingTitle}>Claude 配置根目录</span>
-          <span className={styles.settingHint}>
-            留空则自动检测 ~/.claude/ 或 %USERPROFILE%\.claude
-          </span>
         </div>
         <div className={styles.inputActionRow}>
           <Input
@@ -187,9 +183,6 @@ export const ImportPluginSettingsModal: React.FC<
       <div className={`${styles.settingCard} ${styles.settingFieldCard}`}>
         <div className={styles.settingHeader}>
           <span className={styles.settingTitle}>Codex 主目录</span>
-          <span className={styles.settingHint}>
-            留空则自动检测 ~/.codex/ 或 %USERPROFILE%\.codex
-          </span>
         </div>
         <div className={styles.inputActionRow}>
           <Input
@@ -213,8 +206,7 @@ export const ImportPluginSettingsModal: React.FC<
           <div className={styles.settingMain}>
             <div className={styles.settingTitle}>已导入外部对话管理</div>
             <div className={styles.settingDesc}>
-              当前系统内共有 {importedCount}{' '}
-              个已导入的外部对话。若早期版本曾误导入大量无用空记录，可在此一键彻底清空并加入防静默墓碑。
+              当前系统内共有 {importedCount} 个已导入的外部对话。
             </div>
           </div>
         </div>

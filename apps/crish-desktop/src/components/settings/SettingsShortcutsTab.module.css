@@ -47,7 +47,7 @@
 }
 
 .shortcutKeyBtn:hover:not(:disabled) {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   border-color: var(--border-color);
 }
 

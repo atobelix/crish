@@ -5,8 +5,8 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/storeAccess';
 import {
@@ -17,6 +17,7 @@ import {
   type DetectedExternalSession,
   type ExternalSessionScanIssue,
   type ExternalSessionSource,
+  makeExternalImportKey,
 } from '../../api/import/types';
 import { externalImportKeyAliases } from '../../api/import/externalSessionTombstone';
 import { getWorkspacePath } from '../../api/workspaceFsApi';
@@ -30,6 +31,13 @@ import { SessionPreviewPane } from './SessionPreviewPane';
 import styles from './ExternalSessionsWorkbench.module.css';
 
 type FilterSource = 'workspace' | 'all' | 'claude' | 'codex';
+
+const FILTER_TABS: Array<{ id: FilterSource; label: string }> = [
+  { id: 'workspace', label: '当前工作区' },
+  { id: 'all', label: '全部' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+];
 
 export interface ExternalSessionsWorkbenchProps {
   onBackToChat?: () => void;
@@ -50,11 +58,11 @@ export const ExternalSessionsWorkbench: React.FC<
   const [scanIssues, setScanIssues] = useState<ExternalSessionScanIssue[]>([]);
   const scanRequestIdRef = useRef(0);
   const initialScanCompletedRef = useRef(false);
-  const [importingId, setImportingId] = useState<string | null>(null);
+  const [importingKey, setImportingKey] = useState<string | null>(null);
   const [filterSource, setFilterSource] = useState<FilterSource>('workspace');
   const [onlyWithContent, setOnlyWithContent] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+  const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(
     null
   );
 
@@ -161,6 +169,7 @@ export const ExternalSessionsWorkbench: React.FC<
       } catch (err) {
         if (requestId !== scanRequestIdRef.current) return;
         initialScanCompletedRef.current = true;
+        setDetected([]);
         setScanIssues([
           {
             source: 'claude-code',
@@ -189,10 +198,10 @@ export const ExternalSessionsWorkbench: React.FC<
   );
 
   useEffect(() => {
-    if (detected.length === 0 && !initialScanCompletedRef.current) {
+    if (!initialScanCompletedRef.current) {
       void handleScan(false);
     }
-  }, [detected.length, handleScan]);
+  }, [handleScan]);
 
   const isMatchingWorkspace = useCallback(
     (s: DetectedExternalSession) => {
@@ -220,16 +229,18 @@ export const ExternalSessionsWorkbench: React.FC<
 
   // 自动选中有且仅有的首项，或者如果选中项不在当前过滤集中时保持同步
   const activeSession = useMemo(() => {
-    if (selectedSessionId) {
-      const found = filteredSessions.find((s) => s.id === selectedSessionId);
+    if (selectedSessionKey) {
+      const found = filteredSessions.find(
+        (s) => makeExternalImportKey(s.source, s.id) === selectedSessionKey
+      );
       if (found) return found;
     }
     return filteredSessions[0] || null;
-  }, [filteredSessions, selectedSessionId]);
+  }, [filteredSessions, selectedSessionKey]);
 
   // 一键导入并打开该会话进入对话界面
   const handleImportAndResume = async (item: DetectedExternalSession) => {
-    setImportingId(item.id);
+    setImportingKey(makeExternalImportKey(item.source, item.id));
     try {
       const res = await importDetectedSessions([item]);
       if (res.imported > 0 && res.sessionIds[0]) {
@@ -242,7 +253,7 @@ export const ExternalSessionsWorkbench: React.FC<
     } catch (err) {
       showToast('导入失败: ' + String(err));
     } finally {
-      setImportingId(null);
+      setImportingKey(null);
     }
   };
 
@@ -270,6 +281,16 @@ export const ExternalSessionsWorkbench: React.FC<
     }
   };
 
+  const failedSources = new Set(
+    scanIssues
+      .filter((issue) => issue.kind === 'error')
+      .map((issue) => issue.source)
+  );
+  const allSourcesFailed =
+    detected.length === 0 &&
+    failedSources.has('claude-code') &&
+    failedSources.has('codex');
+
   return (
     <div className={styles.workbenchContent}>
       {/* 头部摘要：纯净文字排版，大圆角容器，解耦二级设置 */}
@@ -277,10 +298,6 @@ export const ExternalSessionsWorkbench: React.FC<
         <div className={styles.detailTitleRow}>
           <div className={styles.detailTitleInfo}>
             <div className={styles.detailTitle}>外部对话导入与接续</div>
-            <div className={styles.detailSubtitle}>
-              接续本机 Claude 与 Codex
-              中的历史对话与任务，核验解析内容后一键导入并继续聊天
-            </div>
           </div>
           <div className={styles.headerActions}>
             <Tooltip content="重新探测外部软件会话目录">
@@ -319,7 +336,9 @@ export const ExternalSessionsWorkbench: React.FC<
               /* i18n-allow */ scanIssues.some(
                 (issue) => issue.kind === 'error'
               )
-                ? '扫描未能完整完成，结果可能遗漏会话。'
+                ? allSourcesFailed
+                  ? '全部来源扫描失败，无法确认是否存在外部会话。'
+                  : '部分来源扫描失败，结果可能遗漏会话。'
                 : '部分目录或文件未能读取，结果可能不完整。'
             }
           </strong>
@@ -345,55 +364,35 @@ export const ExternalSessionsWorkbench: React.FC<
         <div className={styles.sessionListPane}>
           <div className={styles.sessionFilterBar}>
             <div className={styles.filterTabs}>
-              <Button
-                size="xs"
-                variant={filterSource === 'workspace' ? 'secondary' : 'ghost'}
-                className={`${styles.filterTabBtn} ${filterSource === 'workspace' ? styles.activeTab : ''}`}
-                onClick={() => setFilterSource('workspace')}
-              >
-                当前工作区
-              </Button>
-              <Button
-                size="xs"
-                variant={filterSource === 'all' ? 'secondary' : 'ghost'}
-                className={`${styles.filterTabBtn} ${filterSource === 'all' ? styles.activeTab : ''}`}
-                onClick={() => setFilterSource('all')}
-              >
-                全部
-              </Button>
-              <Button
-                size="xs"
-                variant={filterSource === 'claude' ? 'secondary' : 'ghost'}
-                className={`${styles.filterTabBtn} ${filterSource === 'claude' ? styles.activeTab : ''}`}
-                onClick={() => setFilterSource('claude')}
-              >
-                Claude
-              </Button>
-              <Button
-                size="xs"
-                variant={filterSource === 'codex' ? 'secondary' : 'ghost'}
-                className={`${styles.filterTabBtn} ${filterSource === 'codex' ? styles.activeTab : ''}`}
-                onClick={() => setFilterSource('codex')}
-              >
-                Codex
-              </Button>
+              {FILTER_TABS.map((tab) => (
+                <Button
+                  key={tab.id}
+                  size="xs"
+                  variant={filterSource === tab.id ? 'secondary' : 'ghost'}
+                  className={`${styles.filterTabBtn} ${filterSource === tab.id ? styles.activeTab : ''}`}
+                  onClick={() => setFilterSource(tab.id)}
+                >
+                  {tab.label}
+                </Button>
+              ))}
             </div>
 
             <div className={styles.filterRightSlot}>
-              <Button
-                size="xs"
-                variant={onlyWithContent ? 'secondary' : 'ghost'}
-                className={`${styles.filterTabBtn} ${onlyWithContent ? styles.activeTab : ''}`}
-                onClick={() => setOnlyWithContent((v) => !v)}
-                title={
-                  onlyWithContent
-                    ? '当前仅显示有真实内容的对话，点击显示全部'
-                    : '过滤隐藏空对话'
+              <Tooltip
+                content={
+                  onlyWithContent ? '当前仅显示有内容对话' : '过滤空对话'
                 }
               >
-                <AppIcon name="sliders" size={11} />
-                <span>{onlyWithContent ? '仅有内容' : '全部会话'}</span>
-              </Button>
+                <Button
+                  size="xs"
+                  variant={onlyWithContent ? 'secondary' : 'ghost'}
+                  className={`${styles.filterTabBtn} ${onlyWithContent ? styles.activeTab : ''}`}
+                  onClick={() => setOnlyWithContent((v) => !v)}
+                >
+                  <AppIcon name="sliders" size={11} />
+                  <span>{onlyWithContent ? '仅有内容' : '全部会话'}</span>
+                </Button>
+              </Tooltip>
               <span className={styles.sessionCountText}>
                 共 {filteredSessions.length} 条
               </span>
@@ -418,37 +417,37 @@ export const ExternalSessionsWorkbench: React.FC<
                         : '未发现匹配记录'
                   }
                 </div>
-                <div className={styles.emptyDesc}>
-                  {
-                    /* i18n-allow */ scanIssues.length > 0
-                      ? '请检查上方扫描状态或配置路径后重试。'
-                      : detected.length === 0
-                        ? '可检查外部软件目录设置或重新扫描。'
-                        : filterSource === 'workspace'
-                          ? '当前工作区未找到，可切换到「全部」'
-                          : '可检查外部软件目录设置'
-                  }
-                </div>
               </div>
             ) : (
               filteredSessions.map((item) => {
                 const existingId = getExistingSessionId(item);
                 const isImported = Boolean(existingId);
                 const isEmpty = !item.messageCount || item.messageCount <= 0;
-                const isSelected = activeSession?.id === item.id;
+                const isSelected =
+                  activeSession != null &&
+                  makeExternalImportKey(
+                    activeSession.source,
+                    activeSession.id
+                  ) === makeExternalImportKey(item.source, item.id);
                 const isMatch = isMatchingWorkspace(item);
 
                 return (
                   <div
-                    key={item.id}
+                    key={makeExternalImportKey(item.source, item.id)}
                     className={`${styles.sessionCard} ${isSelected ? styles.selectedCard : ''} ${isImported ? styles.cardImported : ''} ${isEmpty ? styles.cardEmpty : ''}`}
-                    onClick={() => setSelectedSessionId(item.id)}
+                    onClick={() =>
+                      setSelectedSessionKey(
+                        makeExternalImportKey(item.source, item.id)
+                      )
+                    }
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        setSelectedSessionId(item.id);
+                        setSelectedSessionKey(
+                          makeExternalImportKey(item.source, item.id)
+                        );
                       }
                     }}
                   >
@@ -514,7 +513,12 @@ export const ExternalSessionsWorkbench: React.FC<
             existingSessionId={
               activeSession ? getExistingSessionId(activeSession) : undefined
             }
-            isBusy={activeSession ? importingId === activeSession.id : false}
+            isBusy={
+              loading ||
+              (activeSession != null &&
+                importingKey ===
+                  makeExternalImportKey(activeSession.source, activeSession.id))
+            }
           />
         </div>
       </div>

@@ -47,7 +47,11 @@ vi.mock('../../api/openAgentPanel', () => ({
 }));
 
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
-import { triggerWorkflow, deleteWorkflow, listWorkflows } from '../../api/workflowApi';
+import {
+  triggerWorkflow,
+  deleteWorkflow,
+  listWorkflows,
+} from '../../api/workflowApi';
 
 describe('ScheduledTasksPanel', () => {
   const onBackToChat = vi.fn();
@@ -129,7 +133,10 @@ describe('ScheduledTasksPanel', () => {
 
   it('嵌入主面对齐拉伸，不用 margin:0 auto 把主布局改成居中列', () => {
     const css = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), 'ScheduledTasksPanel.module.css'),
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'ScheduledTasksPanel.module.css'
+      ),
       'utf8'
     );
     expect(css).not.toMatch(/margin:\s*0 auto/);

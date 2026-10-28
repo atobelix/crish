@@ -1,4 +1,4 @@
-import type { IconName } from '../ui/icons/index';
+import type { IconName } from '@/components/ui/icons';
 import type { McpServer } from '../../api/clientApi';
 import {
   EXTENSION_CATALOG,

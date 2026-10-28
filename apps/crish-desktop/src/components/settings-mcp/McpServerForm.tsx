@@ -1,8 +1,8 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
-import { Button, Input, Select, Tooltip } from '../ui';
-import { isDemoTransport, transportTitle, type DemoTransport } from './types';
+import { Button, Input, Select, Tooltip } from '@/components/ui';
+import { isDemoTransport, type DemoTransport } from './types';
 
 export type McpServerFormProps = {
   newName: string;
@@ -32,11 +32,17 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
   setNewUrl,
   setShowAdd,
   onAddDemo,
-  }) => {
+}) => {
   const { showToast } = useToast();
   return (
-    <div className={`${styles.mcpAddBox} mcp-add-box`} role="form" aria-label="注册演示服务">
-      <div className={`${styles.mcpAddRow} ${styles.mcpAddRowCoverContent} mcp-add-row`}>
+    <div
+      className={`${styles.mcpAddBox} mcp-add-box`}
+      role="form"
+      aria-label="注册演示服务"
+    >
+      <div
+        className={`${styles.mcpAddRow} ${styles.mcpAddRowCoverContent} mcp-add-row`}
+      >
         <div className={styles.mcpAddField}>
           <Input
             size="sm"
@@ -52,16 +58,8 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
           className="mcp-add-type-select"
           value={newType}
           options={[
-            {
-              id: 'stdio',
-              label: 'stdio',
-              ...(transportTitle('stdio') !== undefined ? { hint: transportTitle('stdio') } : {}),
-            },
-            {
-              id: 'sse',
-              label: 'sse',
-              ...(transportTitle('sse') !== undefined ? { hint: transportTitle('sse') } : {}),
-            },
+            { id: 'stdio', label: 'stdio' },
+            { id: 'sse', label: 'sse' },
           ]}
           onChange={(v) => {
             if (isDemoTransport(v)) {
@@ -118,7 +116,9 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
         >
           取消
         </Button>
-        <Tooltip content={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}>
+        <Tooltip
+          content={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}
+        >
           <Button
             type="button"
             variant="secondary"

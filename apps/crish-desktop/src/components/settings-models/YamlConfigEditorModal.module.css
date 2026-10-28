@@ -66,7 +66,7 @@
 }
 
 .menuItemBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .openerName {
@@ -151,7 +151,7 @@
 /* 鼠标悬停但未聚焦时，给出极柔和底色，不突兀 */
 .editorToolbar .searchBar:hover:not(:focus),
 .searchBar:hover:not(:focus) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
 }
 
@@ -215,7 +215,7 @@
 
 .searchNavBtn:hover:not(:disabled) {
   color: var(--text-primary);
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .searchNavBtn:disabled {

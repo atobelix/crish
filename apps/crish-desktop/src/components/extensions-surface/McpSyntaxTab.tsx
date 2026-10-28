@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Textarea } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Textarea } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import styles from './McpConnectModal.module.css';
 
 export interface McpSyntaxTabProps {

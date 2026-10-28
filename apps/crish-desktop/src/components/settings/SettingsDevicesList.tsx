@@ -4,15 +4,12 @@
  */
 import React from 'react';
 import styles from './SettingsDevicesTab.module.css';
-import {
-  SettingsSection,
-  SettingsCard,
-} from './SettingsUI';
-import { Button, Input, Tooltip } from '../ui';
+import { SettingsSection, SettingsCard } from './SettingsUI';
+import { Button, Input, Tooltip } from '@/components/ui';
 import type { DeviceInfo } from '../../api/multiDevice';
 import type { RenameState } from './useDeviceRename';
 import type { RenameAction } from './useDeviceRename';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface SettingsDevicesListProps {
   devices: DeviceInfo[];
@@ -38,7 +35,9 @@ export const SettingsDevicesList: React.FC<SettingsDevicesListProps> = ({
           <div className={styles.emptyState} data-testid="devices-empty">
             <AppIcon name="smartphone" size={24} aria-hidden />
             <p className={styles.emptyTitle}>暂无已配对设备</p>
-            <p className={styles.emptySub}>开启配对模式后，手机端扫码即可加入</p>
+            <p className={styles.emptySub}>
+              开启配对模式后，手机端扫码即可加入
+            </p>
           </div>
         ) : (
           <ul className={styles.deviceList} data-testid="device-list">

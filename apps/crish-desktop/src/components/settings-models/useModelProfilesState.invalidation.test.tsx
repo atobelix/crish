@@ -46,7 +46,8 @@ vi.mock('../../api/chat-bridge/editSessionConsumer', () => ({
 }));
 
 vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/providerProfiles')>();
+  const actual =
+    await importOriginal<typeof import('../../api/providerProfiles')>();
   return {
     ...actual,
     addModelToProfile: vi.fn(),
@@ -114,19 +115,17 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { tree?: unknown }
-    | undefined;
+    { tree?: unknown } | undefined;
   return JSON.stringify(last?.tree ?? null);
 }
 
 function parseGpt4o(content: string): Record<string, unknown> | undefined {
   const doc = parseYaml(content) as {
-    providers?: Record<
-      string,
-      { models?: Array<Record<string, unknown>> }
-    >;
+    providers?: Record<string, { models?: Array<Record<string, unknown>> }>;
   };
-  return doc.providers?.['preset-openai']?.models?.find((m) => m.id === 'gpt-4o');
+  return doc.providers?.['preset-openai']?.models?.find(
+    (m) => m.id === 'gpt-4o'
+  );
 }
 
 async function awaitSave(fn: () => unknown): Promise<void> {
@@ -168,7 +167,11 @@ describe('useModelProfilesState 失效订阅（R2-a ④ / T2-7）', () => {
       revision: 'revision-0',
       credentialStates: {},
       parseError: null,
-      tree: { version: 2, activeModel: null, providers: structuredClone(CATALOG_PROVIDERS) },
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: structuredClone(CATALOG_PROVIDERS),
+      },
     }));
     saveImpl = vi.fn((args: unknown) => {
       const { tree } = args as { tree: unknown };

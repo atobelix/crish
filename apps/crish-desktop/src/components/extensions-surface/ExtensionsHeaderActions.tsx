@@ -4,8 +4,8 @@
  */
 
 import React from 'react';
-import { Button, Input, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Input, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 import styles from './ExtensionsMainSurface.module.css';
 

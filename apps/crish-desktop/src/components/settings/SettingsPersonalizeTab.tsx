@@ -17,7 +17,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from './SettingsUI';
-import { Button, Switch } from '../ui';
+import { Button, Switch } from '@/components/ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import {
@@ -156,7 +156,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             key: 'sendShortcut',
             type: 'toggle-group',
             title: t('settings.personalize.sendShortcutTitle'),
-            desc: t('settings.personalize.sendShortcutDesc'),
             toggleOptions: [
               {
                 value: 'enter',
@@ -172,7 +171,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             key: 'maxRetryAttempts',
             type: 'number',
             title: t('settings.personalize.maxRetryTitle'),
-            desc: t('settings.personalize.maxRetryDesc'),
             min: 1,
             max: 50,
             step: 1,
@@ -182,7 +180,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             key: 'hideThinkingBlock',
             type: 'boolean',
             title: t('settings.personalize.hideThinkingTitle'),
-            desc: t('settings.personalize.hideThinkingDesc'),
           },
         ],
       },
@@ -199,7 +196,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             key: 'collapseChangelog',
             type: 'boolean',
             title: t('settings.personalize.collapseChangelogTitle'),
-            desc: t('settings.personalize.collapseChangelogDesc'),
           },
         ],
       },
@@ -317,7 +313,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
         <SettingsCard>
           <SettingsRow
             title={t('settings.personalize.showOnboardingTitle')}
-            desc={t('settings.personalize.showOnboardingDesc')}
             control={
               <Switch
                 aria-label={t('settings.personalize.showOnboardingTitle')}
@@ -328,7 +323,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
           />
           <SettingsRow
             title={t('settings.personalize.openWizardTitle')}
-            desc={t('settings.personalize.openWizardDesc')}
             control={
               <Button
                 type="button"
@@ -345,7 +339,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
           <SettingsRow
             vertical
             title={t('settings.personalize.previewStepsTitle')}
-            desc={
+            control={
               <div
                 style={{
                   display: 'flex',

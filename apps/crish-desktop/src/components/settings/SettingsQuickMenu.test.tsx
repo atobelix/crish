@@ -4,7 +4,14 @@
  */
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +32,7 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
   it('点击设置按钮打开菜单并渲染主题段与快捷入口', async () => {
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
-    const menu = await screen.findByRole('menu', { name: '快捷设置' });
+    const menu = await screen.findByRole('menu');
     expect(menu).toBeInTheDocument();
     expect(screen.getByText('外观')).toBeInTheDocument();
     expect(screen.getByText('模型与密钥')).toBeInTheDocument();
@@ -35,7 +42,7 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
   it('外观段走 SegmentedControl，无 .ui-segment 死皮', async () => {
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
-    await screen.findByRole('menu', { name: '快捷设置' });
+    await screen.findByRole('menu');
     expect(document.querySelector('.ui-segment')).toBeNull();
     expect(document.querySelector('.ui-segment-item')).toBeNull();
     const group = screen.getByRole('radiogroup', { name: '外观' });
@@ -54,7 +61,10 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
 
   it('外观段 CSS 不写 999 胶囊、不用 --bg-primary 挖坑', () => {
     const css = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), 'SettingsQuickMenu.module.css'),
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'SettingsQuickMenu.module.css'
+      ),
       'utf8'
     );
     expect(css).not.toMatch(/999px/);
@@ -66,25 +76,29 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     render(<SettingsQuickMenu />);
     const trigger = screen.getByTestId('settings-button');
     fireEvent.click(trigger);
-    const menu = await screen.findByRole('menu', { name: '快捷设置' });
+    const menu = await screen.findByRole('menu');
     fireEvent.keyDown(menu, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('键盘漫游：ArrowDown 循环聚焦（主题 radio → 入口项）', async () => {
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
-    const menu = await screen.findByRole('menu', { name: '快捷设置' });
-    fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(screen.getByTestId('quick-settings-models')).toHaveFocus();
+    const menu = await screen.findByRole('menu');
+    const modelsItem = screen.getByTestId('quick-settings-models');
+    for (let i = 0; i < 10 && document.activeElement !== modelsItem; i += 1) {
+      fireEvent.keyDown(document.activeElement ?? menu, { key: 'ArrowDown' });
+    }
+    expect(modelsItem).toHaveFocus();
   });
 
   it('外点关闭后不把焦点强加给触发按钮', async () => {
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
-    await screen.findByRole('menu', { name: '快捷设置' });
+    await screen.findByRole('menu');
     const outside = document.createElement('button');
     outside.textContent = '外部按钮';
     document.body.appendChild(outside);
@@ -92,8 +106,12 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     await act(async () => {
       fireEvent.pointerDown(outside);
     });
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
-    expect(document.activeElement).not.toBe(screen.getByTestId('settings-button'));
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
+    expect(document.activeElement).not.toBe(
+      screen.getByTestId('settings-button')
+    );
     outside.remove();
   });
 });

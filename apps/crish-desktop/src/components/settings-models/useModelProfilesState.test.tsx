@@ -24,11 +24,13 @@ const profileMocks = vi.hoisted(() => {
     models: ['gpt-4o'],
   };
   const loadProfiles = vi.fn(() => [OPENAI]);
-  const createCustomProfile = vi.fn((opts: { name: string; baseUrl?: string; protocol?: string }) => {
-    const p = { id: 'custom-123', models: [], hasKey: false, ...opts };
-    loadProfiles.mockReturnValue([OPENAI, p]);
-    return p;
-  });
+  const createCustomProfile = vi.fn(
+    (opts: { name: string; baseUrl?: string; protocol?: string }) => {
+      const p = { id: 'custom-123', models: [], hasKey: false, ...opts };
+      loadProfiles.mockReturnValue([OPENAI, p]);
+      return p;
+    }
+  );
   return {
     OPENAI,
     createCustomProfile,
@@ -40,7 +42,8 @@ vi.mock('../../services/toast/ToastContext', () => ({
 }));
 
 vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/providerProfiles')>();
+  const actual =
+    await importOriginal<typeof import('../../api/providerProfiles')>();
   return {
     ...actual,
     addModelToProfile: vi.fn(),
@@ -63,14 +66,21 @@ vi.mock('../../api/providerProfiles', async (importOriginal) => {
 });
 
 vi.mock('../../api/modelCatalog', () => ({
-  getModelMeta: vi.fn(() => ({ displayName: 'GPT-4o', contextLength: 128000, capabilities: { tools: true } })),
+  getModelMeta: vi.fn(() => ({
+    displayName: 'GPT-4o',
+    contextLength: 128000,
+    capabilities: { tools: true },
+  })),
   MODEL_CAPABILITY_OPTIONS: [
     { key: 'tools', label: '工具调用' },
     { key: 'image', label: '图片' },
     { key: 'video', label: '视频' },
     { key: 'reasoning', label: '思考' },
   ],
-  scanProviderModels: vi.fn(async () => ({ ok: true, models: ['gpt-4o-mini'] })),
+  scanProviderModels: vi.fn(async () => ({
+    ok: true,
+    models: ['gpt-4o-mini'],
+  })),
   testProviderModel: vi.fn(async () => ({ ok: true, latencyMs: 120 })),
   // 旧岛 setter 仅作 no-op 防当前过渡期 throw；禁止当作保存成功断言
   setModelCapability: vi.fn(),
@@ -125,8 +135,7 @@ const CATALOG_PROVIDERS: Record<string, ProviderSpec> = {
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { tree?: unknown }
-    | undefined;
+    { tree?: unknown } | undefined;
   return JSON.stringify(last?.tree ?? null);
 }
 
@@ -149,7 +158,11 @@ describe('useModelProfilesState', () => {
       revision: 'revision-0',
       credentialStates: {},
       parseError: null,
-      tree: { version: 2, activeModel: null, providers: structuredClone(CATALOG_PROVIDERS) },
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: structuredClone(CATALOG_PROVIDERS),
+      },
     }));
     saveImpl = vi.fn((args: unknown) => {
       const { tree } = args as { tree: unknown };

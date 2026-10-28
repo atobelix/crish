@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import styles from './ModelsSettingsTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export const STANDARD_THINKING_PRESET: Record<string, string> = {
   Off: 'off',

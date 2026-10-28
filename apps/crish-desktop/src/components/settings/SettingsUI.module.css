@@ -263,7 +263,7 @@
 }
 
 .settingsUiRowClickable:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .settingsUiRowIcon {

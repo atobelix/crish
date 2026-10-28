@@ -55,7 +55,6 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
     );
 
     expect(screen.getByText('chrome-devtools-mcp')).toBeInTheDocument();
-    expect(screen.getByText('可用工具清单 (3)')).toBeInTheDocument();
     expect(
       screen.getByText('已允许 Agent 调用: 3 / 3 个工具')
     ).toBeInTheDocument();
@@ -283,7 +282,6 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
     expect(screen.getByText('read_file')).toBeInTheDocument();
     expect(screen.getByText('write_file')).toBeInTheDocument();
     expect(screen.getByText('读取本地文件内容')).toBeInTheDocument();
-    expect(screen.getByText('入参 Schema')).toBeInTheDocument();
     expect(screen.getByText('path')).toBeInTheDocument();
   });
 
@@ -470,7 +468,6 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
 
     expect(screen.getByText('extreme_tool')).toBeInTheDocument();
     expect(screen.getByText('malformed_tool')).toBeInTheDocument();
-    expect(screen.getByText('入参 Schema')).toBeInTheDocument();
     expect(
       screen.getByText(
         'param_ultra_long_name_abcdefghijklmnopqrstuvwxyz_123456789'

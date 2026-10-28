@@ -28,14 +28,17 @@ import {
 import { PROTOCOL_TEMPLATES } from './modelsPresets';
 import { onUiEvent } from '../../api/uiEvents';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
-import { pickSettingsSelectedId, settingsObjectId } from './modelProfilesHelpers';
+import {
+  pickSettingsSelectedId,
+  settingsObjectId,
+} from './modelProfilesHelpers';
 import { useModelConfigSession } from './useModelConfigSession';
 import { useModelProviderActions } from './useModelProviderActions';
+import { addDraftToModelInput, ensureProviderShell } from './catalogWriteGate';
 import {
-  addDraftToModelInput,
-  ensureProviderShell,
-} from './catalogWriteGate';
-import { DEFAULT_PROTOCOL, thinkingVocabularyDiagnostic } from '../../api/modelsNormalize';
+  DEFAULT_PROTOCOL,
+  thinkingVocabularyDiagnostic,
+} from '../../api/modelsNormalize';
 
 export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
@@ -150,13 +153,10 @@ export function useModelProfilesState() {
   );
 
   /** 成功静默（含「已自动获取 N 个模型」）；失败才进 Toast，并带 error 皮。 */
-  const notify = useCallback(
-    (ok: boolean, msg: string) => {
-      if (ok) return;
-      toast.show(msg, undefined, { type: 'error' });
-    },
-    [],
-  );
+  const notify = useCallback((ok: boolean, msg: string) => {
+    if (ok) return;
+    toast.show(msg, undefined, { type: 'error' });
+  }, []);
 
   /** 写盘回执后重读统一树，把失效的选中项收敛掉（树是唯一名单源）。 */
   const refresh = useCallback(() => {
@@ -325,7 +325,8 @@ export function useModelProfilesState() {
           ...(params.baseUrl?.trim() ? { baseUrl: params.baseUrl.trim() } : {}),
           models: [],
           protocol:
-            (params.protocol as ProviderProfile['protocol']) || DEFAULT_PROTOCOL,
+            (params.protocol as ProviderProfile['protocol']) ||
+            DEFAULT_PROTOCOL,
         });
         refresh();
         setSelectedIdState(p.id);

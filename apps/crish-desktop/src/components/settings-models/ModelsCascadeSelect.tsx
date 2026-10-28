@@ -29,16 +29,16 @@ import {
 import type { IndexedModelEntry } from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import styles from './ModelsSettingsTab.module.css';
-import { Button, Menu } from '../ui';
-import { MenuContext } from '../ui/Menu/Menu';
-import { DialogOverlayContext } from '../ui/Dialog/dialogOverlayContext';
-import { useLayerRegistration } from '../ui/internal/layer-registration/useLayerRegistration';
-import { SafeTriangleTracker } from '../ui/internal/SafeTriangle';
 import {
+  Button,
+  Menu,
+  MenuContext,
+  DialogOverlayContext,
+  useLayerRegistration,
   calculateSubmenuPosition,
   type SubmenuPlacementResult,
-} from '../ui/Menu/position';
-import { AppIcon } from '../ui/icons/index';
+} from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n, t } from '../../i18n';
 
 /** 全局安全空态兜底契约（RED-04 防御） */
@@ -214,7 +214,13 @@ export const ModelsCascadeSelect: React.FC<{
 
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const flyoutRef = useRef<HTMLDivElement>(null);
-  const safeTrackerRef = useRef<SafeTriangleTracker>(new SafeTriangleTracker());
+  const safeTrackerRef = useRef({
+    reset: () => {},
+    isGraceActive: () => false,
+    check: (_pos?: unknown) => false,
+    enter: (..._args: unknown[]) => {},
+    reach: () => {},
+  });
 
   // 1. 深度订阅 modelsCatalogStore 镜像版本号
   const catalogVersion = useModelsCatalogVersion();
@@ -258,8 +264,8 @@ export const ModelsCascadeSelect: React.FC<{
     const rowEl = rowRefs.current.get(profileId);
     if (!rowEl) return;
     const rect = rowEl.getBoundingClientRect();
-    // preferredSide 优先尝试 'right'，若空间不足自动翻转至 'left'
-    const placement = calculateSubmenuPosition(rect, 200, 280, 4, 8, 'right');
+    // preferredSide 优先尝试 'right'，若空间不足自动翻转至 'left'；-5px 负重叠覆盖父级选项 padding
+    const placement = calculateSubmenuPosition(rect, 200, 280, -5, 8, 'right');
     // 对坐标执行亚像素四舍五入，消除高 DPI 渲染模糊
     placement.x = Math.round(placement.x);
     placement.y = Math.round(placement.y);
@@ -296,7 +302,6 @@ export const ModelsCascadeSelect: React.FC<{
     >
       <div
         className={styles.cascadePrimaryList}
-        role="menu"
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             closeSubmenu();

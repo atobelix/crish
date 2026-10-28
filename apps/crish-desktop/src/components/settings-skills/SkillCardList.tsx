@@ -1,14 +1,14 @@
 import React, { useId } from 'react';
 
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import styles from './SkillsSettingsTab.module.css';
 import {
   ACTIVATION_LABEL,
   EMPTY_FILTER_HINT,
   scopeGroupLabel,
 } from './useSkillsSettingsState';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface SkillCardListProps {
   skills: DesktopSkill[];

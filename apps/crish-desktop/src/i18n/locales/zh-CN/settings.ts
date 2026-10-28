@@ -297,6 +297,22 @@ export const settings: SettingsTranslations = {
   'devtools.dumpStateTree': '导出内存状态快照',
   'devtools.probeStatus': '执行全量自检探测',
 
+  // ── 13. 浏览器设置 (browser.*) ──
+  'browser.preferences': '偏好设置',
+  'browser.defaultSearchEngine': '默认搜索引擎',
+  'browser.homepage': '主页',
+  'browser.ephemeralMode': '无痕沙箱模式',
+  'browser.defaultMuted': '默认静音',
+  'browser.dataCleanup': '数据清理',
+  'browser.browsingHistory': '浏览历史',
+  'browser.bookmarks': '书签',
+  'browser.clearHistory': '清除',
+  'browser.emptyBookmarks': '清空',
+  'browser.historyCleared': '历史记录已清除',
+  'browser.bookmarksCleared': '书签已清空',
+  'workflow.permissionLabel': '执行权限',
+  'workflow.permissionAria': '执行权限模式',
+
   ...settingsPartRest,
   ...settingsPartModels,
 };

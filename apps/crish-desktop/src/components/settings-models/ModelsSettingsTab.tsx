@@ -14,7 +14,7 @@ import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
 import { ensureLsImported } from '../../api/modelsLsImport';
 import styles from './ModelsSettingsTab.module.css';
 import yamlStyles from './YamlConfigEditorModal.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import {
   SettingsCard,
   SettingsPage,
@@ -156,11 +156,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({
     >
       {/* Default model */}
       <div className={styles.mrdDefaultSection}>
-        <SettingsSection title={t('settings.models.defaultModel')}>
+        <SettingsSection>
           <SettingsCard>
             <SettingsRow
               title={t('settings.models.globalDefaultModel')}
-              desc={t('settings.models.globalDefaultModelDesc')}
               control={
                 <ModelsCascadeSelect
                   activeProfileId={activeProfileId || ''}

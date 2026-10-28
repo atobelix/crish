@@ -82,9 +82,9 @@ describe('智能预填：参考价只作提示', () => {
     const next = calculateAutofillDraft(HIT_ID, HIT_VENDOR, declared);
 
     expect(next.pricingExplicit).toBe(false);
-    expect(
-      Object.hasOwn(addDraftToModelInput(HIT_ID, next), 'pricing')
-    ).toBe(false);
+    expect(Object.hasOwn(addDraftToModelInput(HIT_ID, next), 'pricing')).toBe(
+      false
+    );
   });
 });
 

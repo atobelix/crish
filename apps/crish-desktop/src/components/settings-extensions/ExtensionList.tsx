@@ -4,7 +4,7 @@ import type {
   InstalledExtension,
 } from '../../api/extensionCatalog';
 import { ExtensionCard } from './ExtensionCard';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import type {
   ExpandMode,
   ExpandTarget,

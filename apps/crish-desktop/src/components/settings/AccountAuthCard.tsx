@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthField } from '../../store/storeAccess';
 import { SettingsCard } from './SettingsUI';
-import { Button, Tooltip, Input } from '../ui';
+import { Button, Tooltip, Input } from '@/components/ui';
 import styles from './AccountAuthCard.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export const AccountAuthCard: React.FC = () => {
   const {
@@ -105,9 +105,6 @@ export const AccountAuthCard: React.FC = () => {
             {error ? <div className={styles.errorText}>{error}</div> : null}
 
             <div className={styles.formActions}>
-              <span className={styles.loginHint}>
-                登录后手机端开箱即见本机并可一键免扫码直连；未登录时可使用本地配对。
-              </span>
               <Button
                 type="submit"
                 variant="primary"

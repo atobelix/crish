@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import styles from './SettingsRulesTab.module.css';
-import { Button, Dialog, Textarea } from '../ui';
+import { Button, Dialog, Textarea } from '@/components/ui';
 
 export type RulesEditorDialogProps = {
   open: boolean;
@@ -38,9 +38,14 @@ export const RulesEditorDialog: React.FC<RulesEditorDialogProps> = ({
       }}
       title={`编辑${scopeLabel}规则`}
       description={
-        <span style={{ display: 'none' }}>{`保存后写入 ${storagePath} · 成功不提示`}</span>
+        <span
+          style={{ display: 'none' }}
+        >{`保存后写入 ${storagePath} · 成功不提示`}</span>
       }
-      classNames={{ panel: styles.rulesEditorDialog, overlay: styles.rulesEditorOverlay }}
+      classNames={{
+        panel: styles.rulesEditorDialog,
+        overlay: styles.rulesEditorOverlay,
+      }}
       initialFocusRef={initialFocusRef}
       footer={
         <div className={styles.rulesEditorFoot}>

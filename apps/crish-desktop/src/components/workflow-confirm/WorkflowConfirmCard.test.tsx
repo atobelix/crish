@@ -52,6 +52,13 @@ describe('WorkflowConfirmCard', () => {
     expect(screen.getByText('定时任务配置确认')).toBeInTheDocument();
     expect(screen.getByText('每日巡检')).toBeInTheDocument();
     expect(screen.getByText('每日 09:00')).toBeInTheDocument();
+    expect(screen.getByText('git status')).toBeInTheDocument();
+
+    // 次要标签与徽标已精简，由布局与图标表达
+    expect(screen.queryByText('任务确认')).toBeNull();
+    expect(screen.queryByText('任务名称')).toBeNull();
+    expect(screen.queryByText('执行周期')).toBeNull();
+    expect(screen.queryByText('执行指令')).toBeNull();
 
     const confirmBtn = screen.getByRole('button', { name: '确认创建并激活' });
     expect(confirmBtn).toBeInTheDocument();

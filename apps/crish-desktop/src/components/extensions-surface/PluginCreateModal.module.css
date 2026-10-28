@@ -109,13 +109,13 @@
   text-align: center;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+    border-color var(--duration-normal, 150ms) var(--ease-standard),
+    background var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .dropZone:hover {
   border-color: var(--accent-color);
-  background: var(--bg-hover, var(--bg-secondary));
+  background: var(--state-hover, var(--bg-secondary));
 }
 
 .dropZoneDragging {
@@ -130,7 +130,7 @@
   width: 38px;
   height: 38px;
   border-radius: var(--radius-sm, 6px);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   margin-bottom: var(--space-2, 8px);
@@ -142,7 +142,7 @@
 }
 
 .dropZone:hover .dropzoneIconWrapper {
-  background: var(--tint-active, var(--bg-hover));
+  background: var(--state-active, var(--state-hover));
   border-color: color-mix(
     in srgb,
     var(--border-subtle) 95%,

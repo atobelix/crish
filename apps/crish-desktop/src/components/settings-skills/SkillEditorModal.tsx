@@ -9,7 +9,7 @@
  */
 import React, { useId } from 'react';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Button, Dialog, Input, Switch, Tooltip } from '../ui';
+import { Button, Dialog, Input, Switch, Tooltip } from '@/components/ui';
 import styles from './SkillEditorModal.module.css';
 
 /** 发现导入域（T4-9c Props 收敛） */
@@ -17,14 +17,18 @@ export type SkillDiscoverDomain = {
   discoverCandidates: DesktopSkill[] | null;
   discoverPick: Record<string, boolean>;
   discoverBusy: boolean;
-  setDiscoverPick: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setDiscoverPick: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >;
   applyDiscoverImport: (mode: 'selected' | 'all' | 'skip') => Promise<void>;
 };
 
 /** 新建技能域（T4-9c Props 收敛） */
 export type SkillCreateDomain = {
   createMode: 'none' | 'paths' | 'manual';
-  setCreateMode: React.Dispatch<React.SetStateAction<'none' | 'paths' | 'manual'>>;
+  setCreateMode: React.Dispatch<
+    React.SetStateAction<'none' | 'paths' | 'manual'>
+  >;
   createName: string;
   setCreateName: (name: string) => void;
   createDesc: string;
@@ -67,7 +71,8 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
   const createNameId = useId();
   const createDescId = useId();
 
-  const showDiscover = discoverCandidates != null && discoverCandidates.length > 0;
+  const showDiscover =
+    discoverCandidates != null && discoverCandidates.length > 0;
 
   return (
     <>
@@ -165,9 +170,6 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
             >
               AI 创建
             </Button>
-            <p className={styles.createHint}>
-              浏览本机技能目录导入，或打开对话由 AI 写 SKILL.md
-            </p>
           </div>
           <Button
             type="button"

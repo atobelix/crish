@@ -9,23 +9,23 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { useId } from 'react';
 
-import { Button, Input, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '@/components/ui';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
-import {
-  useSkillsSettingsState,
-} from './useSkillsSettingsState';
+import { useSkillsSettingsState } from './useSkillsSettingsState';
 import { SkillCardList as SkillList } from './SkillCardList';
 import { SkillDetailPreview as SkillDetailPanel } from './SkillDetailPreview';
 import { SkillEditorModal } from './SkillEditorModal';
 import { SkillsMoreMenu } from './SkillsMoreMenu';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBlockingOverlayChange }) => {
+export const SkillsSettingsTab: React.FC<Props> = ({
+  onBlockingOverlayChange: _onBlockingOverlayChange,
+}) => {
   const { showToast: _showToast } = useToast();
   const {
     skills,
@@ -95,7 +95,11 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
     <SettingsPage
       title="技能"
       meta={
-        <div className={`${styles.skillsTabActions} skills-tab-actions`} role="toolbar" aria-label="技能操作">
+        <div
+          className={`${styles.skillsTabActions} skills-tab-actions`}
+          role="toolbar"
+          aria-label="技能操作"
+        >
           <Tooltip content="导入本机技能 or AI">
             <Button
               type="button"
@@ -176,7 +180,11 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
         }}
       />
 
-      <div className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`} role="group" aria-label="筛选">
+      <div
+        className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`}
+        role="group"
+        aria-label="筛选"
+      >
         <Select
           className={`${styles.skillsScopeSelect} skills-scope-select`}
           value={scopeFilter}

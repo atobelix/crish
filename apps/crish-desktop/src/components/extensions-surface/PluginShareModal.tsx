@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Dialog, Button } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Dialog, Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   generatePluginSharePayload,
@@ -72,7 +72,6 @@ export const PluginShareModal: React.FC<PluginShareModalProps> = ({
       open={open}
       onClose={onClose}
       title="分享插件"
-      description="导出或复制标准插件规格定义，便于在其他设备与工作区共享"
       classNames={{
         panel: styles.modalPanel,
         body: styles.modalBody,

@@ -151,10 +151,6 @@ describe('RunHistoryList', () => {
       />
     );
 
-    expect(
-      screen.getByText(
-        /暂无历史运行记录。创建并触发定时任务后，将在此展示详细执行记录。/
-      )
-    ).toBeTruthy();
+    expect(screen.getByText('暂无历史运行记录')).toBeTruthy();
   });
 });

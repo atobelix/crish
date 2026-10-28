@@ -7,6 +7,7 @@ export const common: CommonTranslations = {
   delete: 'Delete',
   confirm: 'Confirm',
   close: 'Close',
+  closeDialog: 'Close Dialog',
   copy: 'Copy',
   copied: 'Copied',
   retry: 'Retry',
@@ -60,6 +61,8 @@ export const common: CommonTranslations = {
   confirmDelete: 'Confirm Delete',
   feedback: 'Feedback',
   closeNotice: 'Dismiss Notice',
+  copyDetail: 'Copy Details',
+  copiedDetail: 'Details Copied',
 };
 
 export default common;

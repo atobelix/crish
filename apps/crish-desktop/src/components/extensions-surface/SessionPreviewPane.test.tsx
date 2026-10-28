@@ -86,7 +86,6 @@ describe('SessionPreviewPane', () => {
     );
 
     expect(screen.getByText('请在左侧选择对话记录')).toBeDefined();
-    expect(screen.getByText(/选中后将直接展示对话内容/)).toBeDefined();
   });
 
   it('renders header with title and subtitle without redundant badges or status banners', async () => {

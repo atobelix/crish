@@ -1,5 +1,12 @@
 import React from 'react';
-import { Button, Input, SegmentedControl, Select, Slider, Switch } from '../ui';
+import {
+  Button,
+  Input,
+  SegmentedControl,
+  Select,
+  Slider,
+  Switch,
+} from '@/components/ui';
 import { SettingsSection, SettingsCard, SettingsRow } from './SettingsUI';
 import { useI18n } from '../../i18n';
 import uiStyles from './SettingsUI.module.css';

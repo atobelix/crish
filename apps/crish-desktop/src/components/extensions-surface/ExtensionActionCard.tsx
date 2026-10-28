@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Switch, Tooltip } from '../ui';
-import { AppIcon, type IconName } from '../ui/icons';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon, type IconName } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 import {
   extensionVerbLabelKey,
@@ -17,10 +17,8 @@ export interface ExtensionActionCardProps {
   icon: IconName;
   placement: ExtensionPlacement;
   installed: boolean;
-  enabled?: boolean;
   busy?: boolean;
   onAction: () => void;
-  onToggleEnabled?: (checked: boolean) => void;
   onOpen?: () => void;
 }
 
@@ -37,10 +35,8 @@ export const ExtensionActionCard: React.FC<ExtensionActionCardProps> = ({
   icon,
   placement,
   installed,
-  enabled,
   busy = false,
   onAction,
-  onToggleEnabled,
   onOpen,
 }) => {
   const { t } = useI18n();
@@ -68,7 +64,7 @@ export const ExtensionActionCard: React.FC<ExtensionActionCardProps> = ({
       <div className={styles.header}>
         <div className={styles.identity}>
           <div className={styles.icon}>
-            <AppIcon name={icon} size={16} />
+            <AppIcon name={icon} size={17} />
           </div>
           <div className={styles.titles}>
             <Tooltip content={name}>
@@ -86,25 +82,6 @@ export const ExtensionActionCard: React.FC<ExtensionActionCardProps> = ({
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
-          {installed && onToggleEnabled !== undefined && (
-            <Tooltip
-              content={
-                enabled
-                  ? t('extensions.card.enabled', '已启用（点击停用）')
-                  : t('extensions.card.disabled', '已停用（点击启用）')
-              }
-            >
-              <div className={styles.switchSlot}>
-                <Switch
-                  checked={Boolean(enabled)}
-                  onCheckedChange={onToggleEnabled}
-                  aria-label={t('extensions.card.toggle', '切换 {name}', {
-                    name,
-                  })}
-                />
-              </div>
-            </Tooltip>
-          )}
           <Tooltip content={verbLabel}>
             <Button
               type="button"

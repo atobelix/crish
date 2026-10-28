@@ -15,8 +15,8 @@ import {
   type WorkflowDefinition,
   type WorkflowRunEntry,
 } from '../../api/workflowApi';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { RunDetailDialog } from './RunDetailDialog';
 
 export type RunHistoryEntryItem = WorkflowRunEntry & {
@@ -82,11 +82,7 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
 
   if (displayRuns.length === 0) {
     if (variant === 'settings') {
-      return (
-        <div className={styles.emptyRuns}>
-          暂无历史运行记录。创建并触发定时任务后，将在此展示详细执行记录。
-        </div>
-      );
+      return <div className={styles.emptyRuns}>暂无历史运行记录</div>;
     }
     return null;
   }

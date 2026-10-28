@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import styles from './ModelsSettingsTab.module.css';
 
 export const ALL_INPUT_MODALITIES = [

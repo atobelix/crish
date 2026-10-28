@@ -19,7 +19,8 @@ vi.mock('../../api/workflowApi', async (importOriginal) => {
 });
 
 vi.mock('../../api/projectStore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/projectStore')>();
+  const actual =
+    await importOriginal<typeof import('../../api/projectStore')>();
   return {
     ...actual,
     getWorkspacePath: () => '',
@@ -27,7 +28,8 @@ vi.mock('../../api/projectStore', async (importOriginal) => {
 });
 
 vi.mock('../../store/storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../store/storeAccess')>();
+  const actual =
+    await importOriginal<typeof import('../../store/storeAccess')>();
   return {
     ...actual,
     closeSettings: (...args: unknown[]) => closeSettingsMock(...args),
@@ -35,9 +37,8 @@ vi.mock('../../store/storeAccess', async (importOriginal) => {
 });
 
 vi.mock('../../store/sessionStore', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../store/sessionStore')
-  >();
+  const actual =
+    await importOriginal<typeof import('../../store/sessionStore')>();
   return {
     ...actual,
     useSessionStore: {
@@ -65,10 +66,16 @@ vi.mock('../../api/uiEvents', () => ({
   emitUiEvent: (...args: unknown[]) => emitUiEventMock(...args),
 }));
 
-
 vi.mock('../../services/toast/ToastContext', () => ({
-  useToast: () => ({ showToast: (...args: unknown[]) => showToastMock(...args) }),
-  toast: { show: (...args: unknown[]) => showToastMock(...args) },
+  useToast: () => ({
+    showToast: (...args: unknown[]) => showToastMock(...args),
+  }),
+  toast: {
+    show: (...args: unknown[]) => showToastMock(...args),
+    warning: (...args: unknown[]) => showToastMock(...args),
+    error: (...args: unknown[]) => showToastMock(...args),
+    success: (...args: unknown[]) => showToastMock(...args),
+  },
 }));
 
 import { SettingsScheduleTab } from './SettingsScheduleTab';
@@ -178,5 +185,43 @@ describe('SettingsScheduleTab I4 死皮拉回', () => {
     expect(injectSeedMock).not.toHaveBeenCalled();
     expect(showToastMock).toHaveBeenCalled();
     expect(String(showToastMock.mock.calls[0]?.[0])).toMatch(/无活跃会话/);
+  });
+
+  it('点击任务行的编辑按钮时弹出悬浮面板 Dialog，而非在页内展开', async () => {
+    const mockWorkflow = {
+      id: 'wf-1',
+      name: '每日代码体检',
+      prompt: '运行测试并生成摘要',
+      enabled: true,
+      schedule: { type: 'daily', time: '09:00' },
+      createdAt: '2026-10-25T00:00:00Z',
+      updatedAt: '2026-10-25T00:00:00Z',
+    };
+    listWorkflowsMock.mockResolvedValue([mockWorkflow]);
+
+    render(<SettingsScheduleTab />);
+
+    const editBtn = await screen.findByRole('button', {
+      name: '编辑 每日代码体检',
+    });
+    expect(editBtn).toBeTruthy();
+
+    fireEvent.click(editBtn);
+
+    // 应该弹出编辑定时任务的悬浮面板 Dialog
+    const modalDialog = await screen.findByRole('dialog', {
+      name: '编辑定时任务',
+    });
+    expect(modalDialog).toBeTruthy();
+    expect(screen.getByRole('form', { name: '编辑定时任务表单' })).toBeTruthy();
+    expect(screen.getByDisplayValue('每日代码体检')).toBeTruthy();
+
+    // 点击取消应关闭悬浮面板
+    const cancelBtn = screen.getByRole('button', { name: '取消' });
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '编辑定时任务' })).toBeNull();
+    });
   });
 });

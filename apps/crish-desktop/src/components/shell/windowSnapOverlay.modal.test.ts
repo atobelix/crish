@@ -22,7 +22,7 @@ import {
   __resetSnapOverlayForTests,
   registerSnapOverlayTarget,
 } from './windowSnapOverlay';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
 
 function makeButton(x: number): HTMLElement {
   const el = document.createElement('div');

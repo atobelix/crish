@@ -29,7 +29,10 @@ export function useFontKeyboardNav({
     const activeEl = scrollContainerRef.current.querySelector(
       `[data-opt-index="${focusedIndex}"]`
     );
-    if (activeEl && typeof (activeEl as HTMLElement).scrollIntoView === 'function') {
+    if (
+      activeEl &&
+      typeof (activeEl as HTMLElement).scrollIntoView === 'function'
+    ) {
       (activeEl as HTMLElement).scrollIntoView({ block: 'nearest' });
     }
   }, [focusedIndex]);
@@ -88,7 +91,10 @@ export function useFontKeyboardNav({
         e.preventDefault();
         e.stopPropagation();
         if (filteredCount > 0) {
-          const safeIdx = focusedIndex >= 0 && focusedIndex < filteredCount ? focusedIndex : 0;
+          const safeIdx =
+            focusedIndex >= 0 && focusedIndex < filteredCount
+              ? focusedIndex
+              : 0;
           onSelectCurrent(safeIdx);
         } else {
           onApplyCustom();

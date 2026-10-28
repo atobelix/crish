@@ -25,6 +25,7 @@ export interface CommonTranslations {
   delete: string;
   confirm: string;
   close: string;
+  closeDialog: string;
   copy: string;
   copied: string;
   retry: string;

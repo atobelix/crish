@@ -8,7 +8,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useId, useRef, useState } from 'react';
 
 import styles from './SettingsRulesTab.module.css';
-import { Button, Input, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '@/components/ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -18,7 +18,7 @@ import {
 import { useRulesState } from './useRulesState';
 import { RULE_PRESETS, normalizeRuleLine } from './settingsRulesLib';
 import { RulesEditorDialog } from './RulesEditorDialog';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 type Props = {
@@ -251,9 +251,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
               <label htmlFor={addInputId} className={styles.labelTitle}>
                 {t('settings.rules.customTitle', '自定义')}
               </label>
-              <span className={styles.labelDesc}>
-                {t('settings.rules.customDesc', '输入后添加')}
-              </span>
             </div>
             <div className={styles.inputGroup}>
               <Input
@@ -300,9 +297,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
             <div className={styles.labelCol}>
               <span className={styles.labelTitle}>
                 {t('settings.rules.presetsTitle', '常用')}
-              </span>
-              <span className={styles.labelDesc}>
-                {t('settings.rules.presetsDesc', '一键加入')}
               </span>
             </div>
             <div className={styles.presetGroup}>

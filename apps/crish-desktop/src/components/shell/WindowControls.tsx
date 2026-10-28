@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Window as TauriWindow } from '@tauri-apps/api/window';
 
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from './WindowControls.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { logger, toErrMeta } from '../../services/LoggerService';
 import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import {
@@ -143,9 +143,9 @@ export const WindowControls: React.FC = React.memo(() => {
           onClick={handleToggleMaximize}
         >
           {isMaximized ? (
-            <AppIcon name="copy" size={13} aria-hidden />
+            <AppIcon name="copy" size={15} aria-hidden />
           ) : (
-            <AppIcon name="square" size={13} aria-hidden />
+            <AppIcon name="square" size={15} aria-hidden />
           )}
         </Button>
       </Tooltip>

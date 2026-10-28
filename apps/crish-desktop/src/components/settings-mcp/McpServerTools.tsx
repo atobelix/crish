@@ -7,8 +7,8 @@ import React from 'react';
 
 import type { McpServerInfo } from '../../api/mcpApi';
 import styles from './McpSettingsTab.module.css';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export type McpServerToolsProps = {
   srv: McpServerInfo;

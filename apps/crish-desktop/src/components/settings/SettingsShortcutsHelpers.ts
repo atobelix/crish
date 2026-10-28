@@ -9,28 +9,29 @@
 import { BUILTIN_SHORTCUTS } from '../../services/ShortcutRegistry';
 import { configService } from '../../services/ConfigService';
 
-export const SHORTCUT_DISPLAY: Record<string, { group: string; desc: string }> =
-  {
-    toggle_settings: { group: '系统', desc: '打开或关闭' },
-    open_models: { group: '系统', desc: '打开模型设置' },
-    open_usage: { group: '系统', desc: '打开用量' },
-    open_security: { group: '系统', desc: '权限与白名单' },
-    open_shortcuts: { group: '系统', desc: '打开本页' },
-    open_extensions: { group: '系统', desc: '插件、MCP、技能' },
-    open_schedule: { group: '系统', desc: '打开定时任务' },
-    export_logs: { group: '系统', desc: '导出诊断日志' },
-    new_session: { group: '会话', desc: '开始新会话' },
-    focus_composer: { group: '会话', desc: '定位到输入框' },
-    branch_session: { group: '会话', desc: '从当前对话分出一支' },
-    stop_generation: { group: '会话', desc: '中断输出' },
-    toggle_plan_mode: { group: '会话', desc: '切换计划权限' },
-    toggle_sidebar: { group: '工作区', desc: '展开或收起' },
-  };
+export const SHORTCUT_DISPLAY: Record<
+  string,
+  { group: string; desc?: string }
+> = {
+  toggle_settings: { group: '系统' },
+  open_models: { group: '系统' },
+  open_usage: { group: '系统' },
+  open_security: { group: '系统' },
+  open_shortcuts: { group: '系统' },
+  open_extensions: { group: '系统' },
+  open_schedule: { group: '系统' },
+  export_logs: { group: '系统' },
+  new_session: { group: '会话' },
+  focus_composer: { group: '会话' },
+  branch_session: { group: '会话' },
+  stop_generation: { group: '会话' },
+  toggle_sidebar: { group: '工作区' },
+};
 
 export type ShortcutItem = {
   id: string;
   label: string;
-  desc: string;
+  desc?: string;
   group: string;
   binding: string;
 };
@@ -38,7 +39,7 @@ export type ShortcutItem = {
 /** 从注册表派生展示行：行顺序 = 注册表顺序，label/binding 单一真源（T2-3） */
 export function buildShortcutItems(): ShortcutItem[] {
   return BUILTIN_SHORTCUTS.map((meta) => {
-    const display = SHORTCUT_DISPLAY[meta.id] ?? { group: '其他', desc: '' };
+    const display = SHORTCUT_DISPLAY[meta.id] ?? { group: '其他' };
     return {
       id: meta.id,
       label: meta.label,
@@ -174,7 +175,6 @@ export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
   focus_composer: 'session',
   branch_session: 'session',
   stop_generation: 'session',
-  toggle_plan_mode: 'session',
   toggle_sidebar: 'workspace',
 };
 

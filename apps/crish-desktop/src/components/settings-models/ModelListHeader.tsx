@@ -1,9 +1,9 @@
 import React from 'react';
 
-import { Button, Tooltip, Input } from '../ui';
+import { Button, Tooltip, Input } from '@/components/ui';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 模型列表头部：连通性检查 / 自动获取 / 搜索 / 手动添加 */
 export const ModelListHeader: React.FC<{

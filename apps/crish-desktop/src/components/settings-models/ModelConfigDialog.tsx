@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog } from '@/components/ui';
 import { ModelConfigPanel } from './ModelConfigPanel';
 import type { CfgDraft } from './useModelProfilesState';
 
@@ -29,9 +29,7 @@ export const ModelConfigDialog: React.FC<{
   const shown = cfgDraft ?? lastDraft.current;
   const title = shown?.displayName?.trim() || modelId || '模型配置';
   const description =
-    shown && modelId && title !== modelId
-      ? modelId
-      : '展示名、上下文、多模态与思考档位';
+    shown && modelId && title !== modelId ? modelId : undefined;
 
   return (
     <Dialog

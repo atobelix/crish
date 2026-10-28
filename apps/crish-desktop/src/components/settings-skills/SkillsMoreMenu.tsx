@@ -11,10 +11,10 @@ import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { getSettingsState } from '../../store/storeAccess';
 import styles from './SkillsSettingsTab.module.css';
-import { Button, Menu, Tooltip } from '../ui';
+import { Button, Menu, Tooltip } from '@/components/ui';
 import { errText } from './useSkillsSettingsState';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 批量启用/禁用域状态（T4-9c Props 收敛：6 字段 → 1 对象） */
 export type SkillsBatchState = {
@@ -157,10 +157,12 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
         options={options}
         panel={{ contentClassName: styles.skillsMoreMenuBase }}
       >
-        <div id={moreMenuId} role="menu" aria-label="更多技能操作">
+        <div id={moreMenuId} aria-label="更多技能操作">
           {options.map((opt) => {
-            const isConfirmEnabled = opt.id === 'enable-all' && batchConfirm === 'enabled';
-            const isConfirmDisabled = opt.id === 'disable-all' && batchConfirm === 'disabled';
+            const isConfirmEnabled =
+              opt.id === 'enable-all' && batchConfirm === 'enabled';
+            const isConfirmDisabled =
+              opt.id === 'disable-all' && batchConfirm === 'disabled';
             return (
               <Button
                 bare
@@ -168,7 +170,9 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
                 type="button"
                 role="menuitem"
                 className={`${styles.skillsMoreItem} skills-more-item ${
-                  isConfirmEnabled || isConfirmDisabled ? styles.isActive + ' is-active' : ''
+                  isConfirmEnabled || isConfirmDisabled
+                    ? styles.isActive + ' is-active'
+                    : ''
                 }`}
                 disabled={opt.disabled}
                 onClick={(e) => {

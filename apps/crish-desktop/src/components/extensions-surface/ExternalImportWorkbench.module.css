@@ -16,8 +16,8 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4) var(--space-6);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
-  background-color: var(--bg-card);
+  border-bottom: none;
+  background-color: var(--bg-primary);
   gap: var(--space-4);
   flex-shrink: 0;
 }
@@ -52,9 +52,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
-  background-color: var(--bg-card);
+  padding: 0 var(--space-6) var(--space-3);
+  border-bottom: none;
+  background-color: var(--bg-primary);
   flex-shrink: 0;
 }
 
@@ -71,7 +71,7 @@
 .content {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: var(--space-6);
+  padding: var(--space-2) var(--space-6) var(--space-6);
 }
 
 .emptyState {
@@ -91,26 +91,21 @@
   gap: var(--space-3_5, 14px);
 }
 
-/* 卡片视觉对齐 ExtensionsCatalogGrid 中的成熟卡片视觉（.compactExtCard） */
 .card {
-  background: var(--surface-main);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-lg, 7px);
-  padding: var(--space-3_5, 14px);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2xl, 20px);
+  padding: var(--space-4, 16px)
+    calc(var(--space-4, 16px) + var(--space-0_5, 2px));
   display: flex;
   flex-direction: column;
   gap: var(--space-2_5, 10px);
   box-sizing: border-box;
-  transition:
-    background-color var(--duration-fast, 150ms) ease,
-    border-color var(--duration-fast, 150ms) ease;
+  transition: background-color var(--duration-fast, 150ms) ease;
 }
 
-/* 严禁任何 translateY 位移漂浮！严禁任何花哨扩大的 box-shadow！稳重克制 */
 .card:hover {
-  background:
-    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--bg-card);
-  border-color: var(--border-subtle);
+  background: var(--state-hover);
 }
 
 .clickableSkillCard {
@@ -132,19 +127,17 @@
   flex: 1;
 }
 
-/* 28x28 圆角 7px 的图标容器 */
 .cardIcon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(var(--tint-active), var(--tint-active)), var(--bg-card);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg, 10px);
+  background: var(--state-hover);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-primary);
   flex-shrink: 0;
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: none;
 }
 
 .cardTitleGroup {
@@ -274,7 +267,7 @@
 }
 
 .spinning {
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin, 1s linear) infinite;
 }
 
 @keyframes spin {

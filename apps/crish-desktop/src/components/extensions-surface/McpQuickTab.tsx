@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import type { DetectedExternalMcpServer } from './detectExternalMcpServers';
 import styles from './McpConnectModal.module.css';
 

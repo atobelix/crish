@@ -15,7 +15,8 @@ import { ProviderProfileForm } from './ProviderProfileForm';
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/providerProfiles')>();
+  const actual =
+    await importOriginal<typeof import('../../api/providerProfiles')>();
   return {
     ...actual,
     saveProfileBaseUrl: vi.fn(async () => ({ ok: true })),
@@ -34,8 +35,7 @@ const SELECTED: ProviderProfile = {
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { tree?: unknown }
-    | undefined;
+    { tree?: unknown } | undefined;
   return JSON.stringify(last?.tree ?? null);
 }
 
@@ -61,12 +61,12 @@ describe('ProviderProfileForm 协议写 yaml', () => {
         version: 2,
         activeModel: null,
         providers: {
-        acme: {
-          displayName: 'Acme',
-          baseUrl: 'https://example.invalid/v1',
-          protocol: 'openai/chat',
-          models: [{ id: 'acme-think', displayName: 'Acme Think' }],
-        },
+          acme: {
+            displayName: 'Acme',
+            baseUrl: 'https://example.invalid/v1',
+            protocol: 'openai/chat',
+            models: [{ id: 'acme-think', displayName: 'Acme Think' }],
+          },
         },
       },
     }));
@@ -194,12 +194,14 @@ describe('ProviderProfileForm 协议写 yaml', () => {
     // 未配置服务商默认展开
     expect(screen.getByText(/厂商名称/)).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText('例如: senseNova、SiliconFlow、Ollama（必填）')
+      screen.getByPlaceholderText('例如: senseNova、SiliconFlow、Ollama')
     ).toBeInTheDocument();
 
     // 首要通信协议标签无 (Default Protocol) 或继承提示
     expect(screen.getByText('首要通信协议')).toBeInTheDocument();
     expect(screen.queryByText(/Default Protocol/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/该服务商下属模型默认继承此协议/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/该服务商下属模型默认继承此协议/)
+    ).not.toBeInTheDocument();
   });
 });

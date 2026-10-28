@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ProviderProfile } from '../../api/providerProfiles';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog } from '@/components/ui';
 import styles from './ModelsSettingsTab.module.css';
 import { ModelList } from './ModelList';
 import { ModelListHeader } from './ModelListHeader';
@@ -152,7 +152,6 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             onClose={() => mc.setManualOpen(false)}
             size="lg"
             title="添加模型"
-            description="填写模型标识。已知模型会带出上下文与思考档位，没有带出的可以在这里补上。"
             footer={
               <>
                 <Button

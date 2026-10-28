@@ -8,12 +8,12 @@ import {
 } from '../../api/modelsCatalogStore';
 import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { getLiveModel } from '../../api/modelsCatalogLive';
-import { Button, Switch, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '@/components/ui';
 import { ModelConfigDialog } from './ModelConfigDialog';
 import type { CfgDraft } from './useModelProfilesState';
 import { defaultLocalMutation, prepareCatalogWrite } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
-import { AppIcon } from '../ui/icons';
+import { AppIcon } from '@/components/ui/icons';
 
 const CONFIGURE_LABEL = '配置';
 const DELETE_LABEL = '删除';
@@ -123,7 +123,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持工具调用"
                     >
-                      <AppIcon name="wrench" size={10} />
+                      <AppIcon name="wrench" size={12} />
                     </span>
                   )}
                   {hasImage && (
@@ -131,7 +131,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持图片理解"
                     >
-                      <AppIcon name="image" size={10} />
+                      <AppIcon name="image" size={12} />
                     </span>
                   )}
                   {hasVideo && (
@@ -139,7 +139,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持视频理解"
                     >
-                      <AppIcon name="video" size={10} />
+                      <AppIcon name="video" size={12} />
                     </span>
                   )}
                   {hasReasoning && (
@@ -147,7 +147,7 @@ export const ModelList: React.FC<{
                       className={`${styles.mrdCapTag} mrd-cap-tag`}
                       aria-label="支持思考"
                     >
-                      <AppIcon name="brain-circuit" size={10} />
+                      <AppIcon name="brain-circuit" size={12} />
                     </span>
                   )}
                 </div>

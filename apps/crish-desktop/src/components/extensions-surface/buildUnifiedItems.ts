@@ -1,4 +1,4 @@
-import type { IconName } from '../ui/icons/index';
+import type { IconName } from '@/components/ui/icons';
 import {
   CANONICAL_IMPORT_PLUGIN_ID,
   isImportClaudeCodexPlugin,

@@ -1,6 +1,4 @@
 import React from 'react';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
 import type { DesktopSkill } from '../../api/skillsApi';
 import type { McpServerInfo } from '../../api/mcpApi';
 import { ExternalSessionsWorkbench } from './ExternalSessionsWorkbench';
@@ -13,7 +11,6 @@ import {
 import { isImportClaudeCodexPlugin } from './extensionIdentity';
 import type { UnifiedExtensionItem } from './buildUnifiedItems';
 import type { CustomPluginItem } from './customPluginStorage';
-import styles from './ExtensionsMainSurface.module.css';
 
 export interface ExtensionsInstalledWorkbenchProps {
   item: UnifiedExtensionItem;
@@ -66,49 +63,31 @@ export const ExtensionsInstalledWorkbench: React.FC<
   }
 
   return (
-    <>
-      <div className={styles.workbenchTopBar}>
-        <span className={styles.workbenchTopBarTitle}>
-          <AppIcon name={item.icon} size={14} />
-          <span>{item.name} 专属工作台</span>
-        </span>
-        <div className={styles.workbenchTopBarActions}>
-          <Button
-            variant="secondary"
-            size="sm"
-            className={styles.headerActionBtn}
-            onClick={() => {
-              onSharePlugin({
-                id: item.id.replace('custom-plugin:', ''),
-                name: item.name,
-                description: item.description,
-                version:
-                  (item.installedItem as unknown as { version?: string })
-                    ?.version || '1.0.0',
-              });
-            }}
-          >
-            <AppIcon name="upload" size={13} />
-            <span>分享插件</span>
-          </Button>
-        </div>
-      </div>
-      <ExtensionGeneralWorkbench
-        item={{
-          id: item.id,
-          kind: item.kind,
+    <ExtensionGeneralWorkbench
+      item={{
+        id: item.id,
+        kind: item.kind,
+        name: item.name,
+        description: item.description,
+        icon: item.icon,
+        isOfficial: item.isOfficial,
+        isEnabled: item.isEnabled,
+        installRef: item.installRef,
+        version:
+          (item.installedItem as unknown as { version?: string })?.version ||
+          '1.0.0',
+      }}
+      onToggleEnabled={onToggleGeneral}
+      onSharePlugin={() => {
+        onSharePlugin({
+          id: item.id.replace('custom-plugin:', ''),
           name: item.name,
           description: item.description,
-          icon: item.icon,
-          isOfficial: item.isOfficial,
-          isEnabled: item.isEnabled,
-          installRef: item.installRef,
           version:
             (item.installedItem as unknown as { version?: string })?.version ||
             '1.0.0',
-        }}
-        onToggleEnabled={onToggleGeneral}
-      />
-    </>
+        });
+      }}
+    />
   );
 };

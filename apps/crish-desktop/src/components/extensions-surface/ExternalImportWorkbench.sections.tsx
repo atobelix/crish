@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, SegmentedControl } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, SegmentedControl } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import type { DetectedExternalMcpServer } from './detectExternalMcpServers';
 import type { DetectedExternalSkill } from './detectExternalSkills';
 import type {

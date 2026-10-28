@@ -17,8 +17,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { copyTextToClipboard } from '@crish/shared-utils';
 import { useToast } from '../../services/toast/ToastContext';
-import { Button, Dialog, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Dialog, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import {
   SettingsCard,
   SettingsPage,
@@ -268,7 +268,6 @@ export const SettingsAboutTab: React.FC<Props> = ({
 
           <SettingsRow
             title={t('about.kernelVersion', '内核版本')}
-            desc={t('about.kernelDesc', 'Rust 内核会话引擎与调度编排核心')}
             control={
               <span className={styles.monoBadge} data-testid="kernel-version">
                 Conex Kernel {systemInfo.kernelVersion}
@@ -312,10 +311,6 @@ export const SettingsAboutTab: React.FC<Props> = ({
           {/* 检查更新（RUN-03：真实 updater 链路的用户入口；结果如实透出） */}
           <SettingsRow
             title={t('about.checkUpdates', '检查更新')}
-            desc={t(
-              'about.checkUpdatesDesc',
-              '通过 Minisign 签名验证的更新通道检查新版本，发现后可在侧栏一键安装'
-            )}
             control={
               <Button
                 type="button"
@@ -349,7 +344,6 @@ export const SettingsAboutTab: React.FC<Props> = ({
         <SettingsCard>
           <SettingsRow
             title={t('about.primaryLicense', '主许可证 (Primary License)')}
-            desc="MIT License"
             control={<span className={styles.licenseBadge}>MIT</span>}
           />
           <div
@@ -445,10 +439,6 @@ export const SettingsAboutTab: React.FC<Props> = ({
 
           <SettingsRow
             title={t('about.securityReport', '安全漏洞报告')}
-            desc={t(
-              'about.securityReportDesc',
-              '如发现安全隐患或漏洞，请通过 GitHub Security Advisory 报告'
-            )}
             control={
               <a
                 href={SECURITY_ADVISORY_URL}

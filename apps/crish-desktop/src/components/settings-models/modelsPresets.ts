@@ -4,9 +4,7 @@
  * 产品不绑定任何官方或第三方预置域名。
  */
 export type ProviderProtocolTemplateId =
-  | 'openai/chat'
-  | 'openai/responses'
-  | 'anthropic/messages';
+  'openai/chat' | 'openai/responses' | 'anthropic/messages';
 
 export interface ProtocolTemplate {
   id: string;

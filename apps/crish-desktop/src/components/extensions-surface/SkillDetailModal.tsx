@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Dialog, Button, Switch, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Dialog, Button, Switch, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { MarkdownDocumentView } from '../markdown/MarkdownDocumentView';
 import { useSessionStore } from '../../store/storeAccess';
 import { navigateToChatSession } from '../../store/storeAccess';
@@ -223,11 +223,11 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
               </span>
               {version && <span className={styles.metaBadge}>v{version}</span>}
             </div>
-            <span className={styles.skillSubtitle}>
-              {skill.description ||
-                frontmatter.description ||
-                '自定义提示词与工作流技能'}
-            </span>
+            {(skill.description || frontmatter.description) && (
+              <span className={styles.skillSubtitle}>
+                {skill.description || frontmatter.description}
+              </span>
+            )}
           </div>
         </div>
 
@@ -246,14 +246,18 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
       </div>
 
       {/* YAML 元数据条目栏（若存在有效元数据） */}
-      {Object.keys(frontmatter).length > 0 && (
+      {Object.entries(frontmatter).filter(
+        ([k]) => k !== 'name' && k !== 'description'
+      ).length > 0 && (
         <div className={styles.yamlMetaBar}>
-          {Object.entries(frontmatter).map(([k, v]) => (
-            <span key={k} className={styles.yamlPill}>
-              <span className={styles.yamlPillKey}>{k}:</span>
-              <span>{v}</span>
-            </span>
-          ))}
+          {Object.entries(frontmatter)
+            .filter(([k]) => k !== 'name' && k !== 'description')
+            .map(([k, v]) => (
+              <span key={k} className={styles.yamlPill}>
+                <span className={styles.yamlPillKey}>{k}:</span>
+                <span>{v}</span>
+              </span>
+            ))}
         </div>
       )}
 
@@ -302,9 +306,6 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                 }
                 aria-label={`启用 ${skill.name}`}
               />
-              <span className={styles.toggleLabel}>
-                {isEnabled ? '已启用' : '已停用'}
-              </span>
             </div>
           )}
         </div>

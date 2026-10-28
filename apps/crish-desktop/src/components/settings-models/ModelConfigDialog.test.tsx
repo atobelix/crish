@@ -37,7 +37,9 @@ describe('ModelConfigDialog', () => {
     render(<DialogHarness />);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'DeepSeek V4 Pro' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'DeepSeek V4 Pro' })
+    ).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-pro')).toBeInTheDocument();
     expect(screen.queryByText('界面档位名称')).not.toBeInTheDocument();
 

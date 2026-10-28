@@ -2,8 +2,8 @@
   width: 290px;
   min-width: 280px;
   max-width: 320px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--shadow-lg);
   padding: 6px;
@@ -148,13 +148,13 @@
 
 .modelItem:hover,
 .modelItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .modelItem.isSelected,
 .modelItem.isSelected {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   font-weight: 500;
 }
@@ -162,7 +162,7 @@
 .modelItem:focus-visible,
 .modelItem:focus-visible {
   outline: none;
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .modelName {
@@ -215,16 +215,10 @@
   color: var(--text-primary);
 }
 
-.thinkingValue {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
 .thinkingTrack {
   display: flex;
   align-items: center;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-m);
   padding: 2px;
@@ -293,7 +287,7 @@
 
 .advancedTrigger:hover,
 .advancedTrigger:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -337,7 +331,7 @@
 
 .advancedItem:hover,
 .advancedItem:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

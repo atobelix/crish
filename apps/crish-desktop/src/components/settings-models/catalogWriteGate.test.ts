@@ -102,7 +102,9 @@ describe('catalogWriteGate 协议 SSOT 派生', () => {
     expect(res.ok).toBe(true);
     expect(selectProvider('custom-x')?.protocol).toBe(DEFAULT_PROTOCOL);
     // 提交给内核事务的规范树亦为 SSOT 默认协议（序列化在内核）
-    const tree = submittedTree as { providers: Record<string, { protocol: string }> } | null;
+    const tree = submittedTree as {
+      providers: Record<string, { protocol: string }>;
+    } | null;
     expect(tree?.providers['custom-x']?.protocol).toBe(DEFAULT_PROTOCOL);
   });
 });
@@ -141,7 +143,8 @@ describe('addDraftToModelInput 价格闸门（默认拒收参考价）', () => {
         tree: submitted,
       };
     });
-    return () => submitted as { providers: Record<string, { models: unknown[] }> } | null;
+    return () =>
+      submitted as { providers: Record<string, { models: unknown[] }> } | null;
   }
 
   it('负向断言：手动新增 + 未编辑价格 → 落树补丁与持久化树都不含 pricing', async () => {
@@ -178,9 +181,9 @@ describe('addDraftToModelInput 价格闸门（默认拒收参考价）', () => {
     expect(Object.hasOwn(model!, 'pricing')).toBe(false);
     expect(model!['displayName']).toBe('DeepSeek V4 Pro');
     // 内存镜像同样不得有 pricing
-    expect(Object.hasOwn(selectModel('deepseek', 'deepseek-v4-pro')!, 'pricing')).toBe(
-      false
-    );
+    expect(
+      Object.hasOwn(selectModel('deepseek', 'deepseek-v4-pro')!, 'pricing')
+    ).toBe(false);
   });
 
   it('正向断言：用户显式声明价格 → 落树补丁与持久化树都含正确 pricing', async () => {
@@ -268,10 +271,8 @@ describe('addDraftToModelInput 价格闸门（默认拒收参考价）', () => {
     );
     expect(res.ok).toBe(true);
 
-    const persisted = getSubmitted()?.providers['deepseek']?.models[0] as Record<
-      string,
-      unknown
-    >;
+    const persisted = getSubmitted()?.providers['deepseek']
+      ?.models[0] as Record<string, unknown>;
     expect(persisted!['pricing']).toEqual(existingPricing);
     expect(persisted!['enabled']).toBe(false);
     // 内存镜像同步保持

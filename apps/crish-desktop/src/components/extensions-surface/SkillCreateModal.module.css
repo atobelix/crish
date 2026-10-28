@@ -48,7 +48,7 @@
 }
 
 .methodCard:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   border-color: var(--border-subtle);
 }
 
@@ -81,12 +81,6 @@
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
-}
-
-.cardDescription {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary);
-  line-height: 1.45;
 }
 
 .cardAction {

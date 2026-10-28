@@ -16,7 +16,7 @@ import {
 import { listAvailableModelPickerEntries } from '../../api/modelPickerAvailability';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { openSettings } from '../../api/storeAccess';
-import { Menu, Tooltip, Button, Input } from '../ui';
+import { Menu, Tooltip, Button, Input } from '@/components/ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
 import {
   setSessionThinkingTitle,
@@ -25,7 +25,7 @@ import {
 } from '../../api/SessionRuntimeRegistry';
 import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { useI18n } from '../../i18n';
 
@@ -186,7 +186,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       position={{ side, align: 'end', sideOffset: 8 }}
       panel={{ contentClassName: styles.mbMenu }}
     >
-      <div ref={panelRef} className={styles.mbInner} role="menu">
+      <div ref={panelRef} className={styles.mbInner}>
         <div className={styles.searchHeader}>
           <AppIcon name="search" size={14} className={styles.searchIcon} />
           <Input
@@ -260,7 +260,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     width: '36px',
                     height: '36px',
                     borderRadius: '50%',
-                    background: 'var(--tint-hover)',
+                    background: 'var(--state-hover)',
                     border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',

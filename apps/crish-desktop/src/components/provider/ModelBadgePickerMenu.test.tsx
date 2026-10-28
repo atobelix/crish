@@ -19,8 +19,7 @@ import {
   act,
 } from '@testing-library/react';
 import { ModelBadgePickerMenu } from './ModelBadgePickerMenu';
-import { toggleExclusiveMenu } from '../ui/Menu';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { toggleExclusiveMenu, layerStackService } from '@/components/ui';
 import { MockPhysicalGeometryEngine } from '../../test-utils/MockPhysicalGeometryEngine';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useSessionStore } from '../../store/sessionStore';
@@ -57,7 +56,7 @@ const CATALOG_PATH = 'C:\\tmp\\models.yaml';
 function specProvider(
   displayName: string,
   models: ModelSpec[],
-  patch?: Partial<ProviderSpec>,
+  patch?: Partial<ProviderSpec>
 ): ProviderSpec {
   return {
     displayName,
@@ -72,7 +71,7 @@ function specProvider(
 }
 
 async function seedCatalog(
-  providers: Record<string, ProviderSpec>,
+  providers: Record<string, ProviderSpec>
 ): Promise<void> {
   mockTauriCommand('workbench_read_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -90,9 +89,7 @@ async function seedCatalog(
   expect(res.ok).toBe(true);
 }
 
-async function seedDefaultCatalog(
-  extra?: Partial<ModelSpec>,
-): Promise<void> {
+async function seedDefaultCatalog(extra?: Partial<ModelSpec>): Promise<void> {
   await seedCatalog({
     p1: specProvider('测试服务商', [
       { id: 'model-a', ...extra },
@@ -187,7 +184,7 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
     expect(screen.getAllByText('OpenCode Go 订阅')).toHaveLength(2);
     expect(screen.getByTestId('profile-item-opencode-go')).toBeInTheDocument();
     expect(
-      screen.getByTestId('profile-item-custom-preset-copy'),
+      screen.getByTestId('profile-item-custom-preset-copy')
     ).toBeInTheDocument();
   });
 
@@ -201,16 +198,14 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
 
   it('全部服务商停用 → 空态提示（不渲染组）', async () => {
     await seedCatalog({
-      'p-disabled': specProvider(
-        '已停用服务商',
-        [{ id: 'model-a' }],
-        { enabled: false },
-      ),
+      'p-disabled': specProvider('已停用服务商', [{ id: 'model-a' }], {
+        enabled: false,
+      }),
     });
     render(<Wrapper />);
     expect(screen.getByText('未找到匹配的模型或厂商')).toBeInTheDocument();
     expect(
-      screen.queryByTestId('profile-item-p-disabled'),
+      screen.queryByTestId('profile-item-p-disabled')
     ).not.toBeInTheDocument();
   });
 
@@ -219,7 +214,9 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
       'p-empty': specProvider('无模型服务商', []),
     });
     render(<Wrapper />);
-    expect(screen.queryByTestId('profile-item-p-empty')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('profile-item-p-empty')
+    ).not.toBeInTheDocument();
     expect(screen.getByText('未找到匹配的模型或厂商')).toBeInTheDocument();
   });
 
@@ -233,7 +230,9 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
     setActiveProfileId('p1');
     render(<Wrapper />);
     expect(screen.getByTestId('model-option-model-a')).toBeInTheDocument();
-    expect(screen.queryByTestId('model-option-model-b')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('model-option-model-b')
+    ).not.toBeInTheDocument();
   });
 
   it('未加载 catalog 不回落 LS 种子，显示空态', () => {
@@ -264,8 +263,8 @@ describe('模型选择与搜索过滤', () => {
     await waitFor(() =>
       expect(providerProfiles.activateProfileModel).toHaveBeenCalledWith(
         'p1',
-        'model-b',
-      ),
+        'model-b'
+      )
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -276,7 +275,9 @@ describe('模型选择与搜索过滤', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索模型或厂商...'), {
       target: { value: 'model-b' },
     });
-    expect(screen.queryByTestId('model-option-model-a')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('model-option-model-a')
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId('model-option-model-b')).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('搜索模型或厂商...'), {
@@ -308,7 +309,7 @@ describe('catalog 刷新（models-catalog-changed）', () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByTestId('model-option-model-a'),
+        screen.queryByTestId('model-option-model-a')
       ).not.toBeInTheDocument();
       expect(screen.getByTestId('model-option-model-new')).toBeInTheDocument();
     });
@@ -342,7 +343,7 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     expect(screen.getByRole('button', { name: '低' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '高' })).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: '默认' }),
+      screen.queryByRole('button', { name: '默认' })
     ).not.toBeInTheDocument();
   });
 
@@ -355,10 +356,10 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     fireEvent.click(screen.getByRole('button', { name: '高' }));
 
     await waitFor(() =>
-      expect(getSessionThinkingTitle(SESSION_ID)).toBe('High'),
+      expect(getSessionThinkingTitle(SESSION_ID)).toBe('High')
     );
     expect(
-      useSettingsStore.getState().appSettings?.defaultThinkingLevel,
+      useSettingsStore.getState().appSettings?.defaultThinkingLevel
     ).toBeUndefined();
   });
 
@@ -380,18 +381,18 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     fireEvent.click(screen.getByText('高级选项'));
 
     // 引导重选，而不是把 'XHigh' 静默降级成 'Low'/'High'
-    expect(screen.getByTestId('thinking-value').textContent).toBe(
-      '请选择思考档位',
-    );
+    // 布局自解释：所有档位按钮均非激活态（不再渲染 thinking-value 冗余副文本）
     for (const title of ['Low', 'Medium', 'High']) {
       expect(
-        screen.getByTestId(`thinking-option-${title}`).getAttribute('data-active'),
+        screen
+          .getByTestId(`thinking-option-${title}`)
+          .getAttribute('data-active')
       ).toBe('false');
     }
     // 档位存档不被解析结果反向覆写
-    expect(
-      localStorage.getItem('conex:model-thinking-pref:p1:model-a'),
-    ).toBe('XHigh');
+    expect(localStorage.getItem('conex:model-thinking-pref:p1:model-a')).toBe(
+      'XHigh'
+    );
   });
 
   it('共同档位跨模型保留（精确命中才保留）', async () => {
@@ -403,12 +404,12 @@ describe('高级选项（思考档位 = listThinkingOptions）', () => {
     render(<Wrapper />);
     fireEvent.click(screen.getByText('高级选项'));
 
-    expect(screen.getByTestId('thinking-value').textContent).toBe('High');
+    // thinking-value text removed in favor of layout自解释 (active pill)
     expect(
-      screen.getByTestId('thinking-option-High').getAttribute('data-active'),
+      screen.getByTestId('thinking-option-High').getAttribute('data-active')
     ).toBe('true');
     expect(
-      screen.getByTestId('thinking-option-Low').getAttribute('data-active'),
+      screen.getByTestId('thinking-option-Low').getAttribute('data-active')
     ).toBe('false');
   });
 });
@@ -443,8 +444,8 @@ describe('Anchor 模式与二次点击防重开（Double Toggle 免疫）', () =
     fireEvent.click(trigger);
     await waitFor(() =>
       expect(
-        screen.queryByTestId('model-option-model-a'),
-      ).not.toBeInTheDocument(),
+        screen.queryByTestId('model-option-model-a')
+      ).not.toBeInTheDocument()
     );
   });
 });
@@ -454,15 +455,15 @@ describe('源码形状（旧岛读路径清零）', () => {
     const dir = path.dirname(fileURLToPath(import.meta.url));
     const tsx = fs.readFileSync(
       path.join(dir, 'ModelBadgePickerMenu.tsx'),
-      'utf8',
+      'utf8'
     );
     const data = fs.readFileSync(
       path.join(dir, 'ModelBadgePickerMenu.data.ts'),
-      'utf8',
+      'utf8'
     );
     const availability = fs.readFileSync(
       path.resolve(dir, '../../api/modelPickerAvailability.ts'),
-      'utf8',
+      'utf8'
     );
     const blob = `${tsx}\n${data}\n${availability}`;
     expect(blob).not.toMatch(/listPickerProfiles/);

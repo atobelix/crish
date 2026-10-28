@@ -15,10 +15,10 @@ import type {
   CatalogEntry,
   InstalledExtension,
 } from '../../api/extensionCatalog';
-import { Button, Input, SegmentedControl } from '../ui';
+import { Button, Input, SegmentedControl } from '@/components/ui';
 import type { KindFilter, MainView } from './types';
 import styles from './SettingsExtensionsTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 const SkillsSettingsTab = lazy(() =>
   import('../settings-skills/SkillsSettingsTab').then((m) => ({

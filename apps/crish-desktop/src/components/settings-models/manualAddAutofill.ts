@@ -35,16 +35,12 @@ export function calculateAutofillDraft(
   const live = getLiveModel(providerVendor ?? '', id);
   const autofill = findAutofillModel(id, providerVendor);
 
-  const inputMods =
-    live?.modalities?.input ??
+  const inputMods = live?.modalities?.input ??
     autofill?.modalities?.input ??
-    prev.modalities?.input ??
-    ['text'];
-  const outputMods =
-    live?.modalities?.output ??
+    prev.modalities?.input ?? ['text'];
+  const outputMods = live?.modalities?.output ??
     autofill?.modalities?.output ??
-    prev.modalities?.output ??
-    ['text'];
+    prev.modalities?.output ?? ['text'];
   const hasThinking = Boolean(
     (live?.thinking && Object.keys(live.thinking).length > 0) ||
     (autofill?.thinking && Object.keys(autofill.thinking).length > 0)
@@ -63,19 +59,19 @@ export function calculateAutofillDraft(
     modelId: id,
     displayName: isCustomName
       ? prev.displayName
-      : live?.displayName ?? autofill?.displayName ?? id,
+      : (live?.displayName ?? autofill?.displayName ?? id),
     contextWindow:
       live?.contextWindow != null
         ? String(live.contextWindow)
         : autofill?.contextWindow != null
-        ? String(autofill.contextWindow)
-        : prev.contextWindow,
+          ? String(autofill.contextWindow)
+          : prev.contextWindow,
     maxOutputTokens:
       live?.maxOutputTokens != null
         ? String(live.maxOutputTokens)
         : autofill?.maxOutputTokens != null
-        ? String(autofill.maxOutputTokens)
-        : prev.maxOutputTokens,
+          ? String(autofill.maxOutputTokens)
+          : prev.maxOutputTokens,
     modalities: {
       input: [...inputMods],
       output: [...outputMods],
@@ -91,8 +87,8 @@ export function calculateAutofillDraft(
     protocol: live?.protocol
       ? normalizeProtocol(live.protocol)
       : autofill?.protocol
-      ? normalizeProtocol(autofill.protocol)
-      : prev.protocol,
+        ? normalizeProtocol(autofill.protocol)
+        : prev.protocol,
   };
   // 参考价只作界面提示：探针/字典命中则覆盖为参考值，否则沿用上一轮草稿值；
   // 完全没有来源时不留 `pricing: undefined` 自有键（自有 undefined 键在补丁里

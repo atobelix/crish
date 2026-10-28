@@ -14,8 +14,8 @@ import {
   refreshProductCapabilities,
 } from '../../api/capabilitiesStore';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Button, Dialog, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Dialog, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import {
   normalizeSettingsTabId,
   allowedTabIds,

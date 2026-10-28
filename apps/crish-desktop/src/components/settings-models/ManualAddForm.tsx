@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Button, Input } from '../ui';
+import { Button, Input } from '@/components/ui';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import { ModelThinkingSection } from './ModelThinkingSection';
 import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
@@ -17,7 +17,7 @@ import { formatContextLabel } from '../../api/modelCatalogPure';
 import { calculateAutofillDraft } from './manualAddAutofill';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /**
  * 手动添加模型表单，字段与已有模型配置弹窗一致。

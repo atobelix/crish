@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Dialog, Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Dialog, Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { clientApi, type McpServer, type Settings } from '../../api/clientApi';
 import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
@@ -136,16 +136,14 @@ export const McpConnectModal: React.FC<McpConnectModalProps> = ({
       if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
         const keys = Object.keys(parsed.mcpServers);
         setSyntaxInfo(
-          `✓ JSON 语法校验通过：检测到标准 mcpServers 配置 (${keys.join(', ') || '空列表'})`
+          `JSON 语法校验通过：检测到标准 mcpServers 配置 (${keys.join(', ') || '空列表'})`
         );
       } else if (parsed.command || parsed.url) {
         setSyntaxInfo(
-          `✓ JSON 语法校验通过：单服务配置「${parsed.name || '自定义'}」(${parsed.url ? 'sse' : 'stdio'})`
+          `JSON 语法校验通过：单服务配置「${parsed.name || '自定义'}」(${parsed.url ? 'sse' : 'stdio'})`
         );
       } else {
-        setSyntaxInfo(
-          '⚠️ JSON 格式正确，但需包含 command/url 或 mcpServers 结构'
-        );
+        setSyntaxInfo('JSON 格式正确，但需包含 command/url 或 mcpServers 结构');
       }
     } catch (e: any) {
       setSyntaxError(e?.message || 'JSON 语法错误');

@@ -26,10 +26,14 @@ describe('SettingsPanel 左右滚动解耦与独立性守卫', () => {
   });
 
   it('SettingsPanel.module.css 中 .navScroll 声明 overscroll-behavior: contain', () => {
-    expect(cssSrc).toMatch(/\.navScroll\s*\{[^}]*overscroll-behavior:\s*contain/);
+    expect(cssSrc).toMatch(
+      /\.navScroll\s*\{[^}]*overscroll-behavior:\s*contain/
+    );
   });
 
   it('SettingsPanel.module.css 中 .coverContent 声明 overscroll-behavior: contain', () => {
-    expect(cssSrc).toMatch(/\.coverContent\s*\{[^}]*overscroll-behavior:\s*contain/);
+    expect(cssSrc).toMatch(
+      /\.coverContent\s*\{[^}]*overscroll-behavior:\s*contain/
+    );
   });
 });

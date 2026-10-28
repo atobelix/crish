@@ -24,13 +24,13 @@
 }
 
 .sidebarFooterSettings:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .sidebarFooterSettings:active,
 .sidebarFooterSettings.isOpen {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -133,12 +133,12 @@
 }
 
 .sbQuickItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .sbQuickItem:active {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 

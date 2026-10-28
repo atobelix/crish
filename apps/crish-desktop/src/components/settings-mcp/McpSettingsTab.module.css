@@ -31,7 +31,7 @@
   border-radius: var(--radius-sm);
   border: none;
   color: var(--text-tertiary);
-  background: var(--tint-subtle);
+  background: var(--state-subtle);
   line-height: 1.5;
   white-space: nowrap;
   height: 20px;
@@ -163,7 +163,7 @@
   padding: 0 var(--space-1_5);
   border-radius: var(--radius-sm);
   border: none;
-  background: var(--tint-subtle);
+  background: var(--state-subtle);
   color: var(--text-tertiary);
   line-height: 1.5;
   flex-shrink: 0;
@@ -187,7 +187,7 @@
 
 .mcpStateBadge.kindIdle {
   color: var(--text-tertiary);
-  background: var(--tint-subtle);
+  background: var(--state-subtle);
 }
 
 .mcpRowMeta {

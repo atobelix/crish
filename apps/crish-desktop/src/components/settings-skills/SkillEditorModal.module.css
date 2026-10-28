@@ -47,7 +47,7 @@
 }
 
 .skillsDiscoverItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--border-color);
 }
 
@@ -130,14 +130,6 @@
   min-height: 34px;
 }
 
-.createHint {
-  flex: 1 1 100%;
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  line-height: var(--line-height-body);
-}
-
 .skillsDiscoverDialogBody {
   min-height: 0;
 }
@@ -148,6 +140,6 @@
 .codeBlock {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-code, var(--bg-card-subtle));
+  background: var(--bg-card-subtle);
   padding: var(--space-3) var(--space-4);
 }

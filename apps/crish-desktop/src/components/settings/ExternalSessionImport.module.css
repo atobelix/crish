@@ -45,7 +45,7 @@
   font-weight: var(--font-weight-medium);
   padding: 1px var(--space-1_5);
   border-radius: var(--radius-sm);
-  background: var(--tint-divider);
+  background: var(--border-color);
   color: var(--text-primary);
 }
 
@@ -143,7 +143,7 @@
 }
 
 .importItem:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .importItem:last-child {

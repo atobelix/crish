@@ -22,7 +22,12 @@ import {
   Select,
   Textarea,
   Tooltip,
-} from '../ui';
+} from '@/components/ui';
+import {
+  PERMISSION_MODES,
+  coercePermissionMode,
+} from '../../api/permissionModes';
+import { useI18n } from '../../i18n';
 import styles from './ScheduledTasksPanel.module.css';
 import scheduleStyles from './SettingsScheduleTab.module.css';
 
@@ -122,6 +127,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   onClose,
 }) => {
   const settingsVariant = variant === 'settings';
+  const { t } = useI18n();
   const extDraft = draft as ExtendedWorkflowScheduleDraft;
   const resolvedActiveSessionId = getActiveSessionIdSafe(activeSessionId);
 
@@ -166,6 +172,17 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     }
     return opts;
   }, []);
+
+  // 执行权限模式下拉选项：三态 SSOT（ask / smart / full）
+  const permissionOptions = React.useMemo(
+    () =>
+      PERMISSION_MODES.map((m) => ({
+        id: m.id,
+        label: m.label,
+        hint: m.description,
+      })),
+    []
+  );
 
   const currentExecutionTarget: WorkflowExecutionTarget =
     extDraft.executionTarget ??
@@ -372,6 +389,27 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     </div>
   );
 
+  const permissionSection = (
+    <div
+      className={styles.schedField}
+      data-testid="workflow-permission-mode-section"
+    >
+      <span className={styles.schedFieldLabel}>
+        {t('settings.workflow.permissionLabel')}
+      </span>
+      <Select
+        {...selectClassProps}
+        value={coercePermissionMode(extDraft.permissionMode)}
+        disabled={busy}
+        options={permissionOptions}
+        onChange={(v) =>
+          updateDraft({ permissionMode: coercePermissionMode(v) })
+        }
+        aria-label={t('settings.workflow.permissionAria')}
+      />
+    </div>
+  );
+
   if (settingsVariant) {
     return (
       <div
@@ -450,6 +488,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
         </div>
         {cronSection}
         {sessionBindingSection}
+        {permissionSection}
         {workspacePath ? (
           <Tooltip content={workspacePath}>
             <div className="sched-settings-path">{workspacePath}</div>
@@ -517,6 +556,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
       </div>
       {cronSection}
       {sessionBindingSection}
+      {permissionSection}
       <div className={styles.schedFormActions}>
         <Button
           type="button"

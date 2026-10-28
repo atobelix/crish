@@ -113,7 +113,7 @@
   justify-content: space-between;
   gap: var(--space-2, 8px);
   padding: var(--space-2, 8px) var(--space-2_5, 10px);
-  background: var(--bg-hover);
+  background: var(--state-hover);
   border-radius: var(--radius-m, 8px);
   border: var(--hairline-width, 1px) solid var(--border-color);
   margin-top: var(--space-1, 4px);

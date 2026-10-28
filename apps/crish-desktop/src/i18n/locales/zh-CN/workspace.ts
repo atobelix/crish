@@ -90,6 +90,63 @@ export const workspace: WorkspaceTranslations = {
   'preview.runningService': '运行中的本地服务: localhost:{port}',
   'preview.recentPages': '最近访问',
   'preview.openRecent': '打开最近网页 {host}',
+  'launcher.newBrowser': '新建浏览器',
+  'browser.syncFailed': '原生浏览器同步失败：{reason}',
+  'browser.navigationFailed': '原生浏览器导航失败：{reason}',
+  'browser.unsupportedScheme':
+    '仅支持 http/https 网页预览；本地文件路径无法在此处打开',
+  'browser.enterInspector': '进入元素审查模式',
+  'browser.exitInspector': '退出元素审查模式',
+  'browser.errorUnknown': '页面加载遇到未知问题',
+  'browser.errorNetwork': '网络连接失败，请检查网址或网络',
+  'browser.errorTimeout': '页面加载超时，请稍后重试',
+  'browser.errorInvalidUrl': '网址格式无效或受安全限制',
+  'browser.errorEngineUnavailable': '桌面端浏览器引擎暂未就绪',
+  'browser.errorTabClosed': '标签页已关闭',
+  'browser.errorGeneric': '网页加载失败，请检查网址或稍后重试',
+  'inspector.startFailed': '页面元素拾取启动失败：{reason}',
+  'inspector.stopFailed': '页面元素拾取停止失败：{reason}',
+  'inspector.resumeFailed': '页面重新加载后无法恢复元素拾取：{reason}',
+  'inspector.listenerFailed': '页面元素拾取事件监听失败：{reason}',
+  'inspector.optimizeElementPrompt':
+    '请分析并优化这个元素 [@DOM: {label} ({dim})]，选择器：{bestSelector}',
+  'inspector.optimizeElementHeader': '请分析并优化以下网页元素。',
+
+  // ── 分屏窗格与内部分割线 (Dock Split & Panes) ───────────────────────────
+  'dock.emptyTitle': '分屏窗格暂无工具',
+  'dock.emptyDesc': '点击下方工具快速加载，或从其他窗格拖入标签',
+  'dock.toolTerminal': '终端',
+  'dock.toolPreview': '网页预览',
+  'dock.toolFiles': '文件',
+  'dock.toolDiff': '代码比对',
+  'dock.renderError': '工具渲染异常',
+  'dock.loading': '加载中…',
+  'dock.loadFailed': '未能加载工具: {name}',
+  'dock.adjustHorizontalRatio': '调整左右分屏比例（当前 {ratio}%）',
+  'dock.adjustVerticalRatio': '调整上下分屏比例（当前 {ratio}%）',
+  'dock.workspaceEmptyTitle': '暂无打开的工具窗格',
+  'dock.workspaceEmptyDesc': '在左侧会话或工具栏中打开工具以在此处分屏协同',
+
+  // ── 窗格标签栏 (LeafToolTabStrip) ─────────────────────────────────────────
+  'pane.restorePane': '还原窗格',
+  'pane.maximizePane': '最大化窗格',
+  'pane.restorePanel': '恢复面板',
+  'pane.maximizePanel': '最大化面板',
+  'pane.restoreSplitTooltip': '还原分屏布局 (Alt+M)',
+  'pane.maximizePaneTooltip': '最大化当前窗格 (Alt+M)',
+  'pane.restoreDockTooltip': '还原右坞宽度 (Alt+M)',
+  'pane.maximizePanelTooltip': '最大化面板 (Alt+M)',
+  'pane.tablistAria': '工具窗格标签栏',
+  'pane.closeTabWithLabel': '关闭 {label}',
+  'pane.splitRight': '向右分屏',
+  'pane.splitRightTooltip': '向右分屏 (Ctrl+Shift+\\)',
+  'pane.splitRightDisabledTooltip':
+    '窗格宽度过窄（<240px），无法继续向右分屏。建议拉宽右坞或向下分屏',
+  'pane.splitDown': '向下分屏',
+  'pane.splitDownTooltip': '向下分屏 (Ctrl+Shift+-)',
+  'pane.splitDownDisabledTooltip':
+    '窗格高度过矮（<160px），无法继续向下分屏。建议拉高窗口或向右分屏',
+  'pane.closePane': '关闭分屏窗格',
 };
 
 export default workspace;

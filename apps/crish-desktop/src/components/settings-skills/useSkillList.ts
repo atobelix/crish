@@ -73,15 +73,12 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
   api.setSelectedId = setSelectedId;
   api.setBusyId = setBusyId;
 
-  const resolveDiscoverWorkspace = useCallback(
-    (scope: ScopeFilter): string => {
-      if (scope === SCOPE_ALL || scope === SCOPE_GLOBAL) {
-        return getWorkspacePath() || '';
-      }
-      return scope;
-    },
-    []
-  );
+  const resolveDiscoverWorkspace = useCallback((scope: ScopeFilter): string => {
+    if (scope === SCOPE_ALL || scope === SCOPE_GLOBAL) {
+      return getWorkspacePath() || '';
+    }
+    return scope;
+  }, []);
 
   const refresh = useCallback(
     async (opts?: { promptNew?: boolean; scope?: ScopeFilter }) => {
@@ -159,8 +156,8 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
 
   const scopeSelectOptions = useMemo(() => {
     const opts: { value: string; label: string; hint?: string }[] = [
-      { value: SCOPE_ALL, label: '全部', hint: '当前工作区 + 全局' },
-      { value: SCOPE_GLOBAL, label: '全局', hint: '用户目录技能' },
+      { value: SCOPE_ALL, label: '全部' },
+      { value: SCOPE_GLOBAL, label: '全局' },
     ];
     for (const p of scopeProjects) {
       opts.push({

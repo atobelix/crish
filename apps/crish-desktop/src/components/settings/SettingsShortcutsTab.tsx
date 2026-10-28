@@ -20,7 +20,7 @@ import {
   SettingsHeadTools,
 } from './SettingsUI';
 import uiStyles from './SettingsUI.module.css';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { useI18n } from '../../i18n';
 import {
@@ -67,7 +67,7 @@ export const SettingsShortcutsTab: React.FC = () => {
       const keyZh = formatShortcutLabel(keyRaw);
       return (
         sh.label.toLowerCase().includes(q) ||
-        sh.desc.toLowerCase().includes(q) ||
+        (sh.desc ? sh.desc.toLowerCase().includes(q) : false) ||
         sh.group.toLowerCase().includes(q) ||
         sh.id.toLowerCase().includes(q) ||
         keyRaw.toLowerCase().includes(q) ||
@@ -407,7 +407,6 @@ export const SettingsShortcutsTab: React.FC = () => {
                       <SettingsRow
                         key={sh.id}
                         title={sh.label}
-                        desc={sh.desc}
                         control={
                           <div
                             className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}

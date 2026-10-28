@@ -1,9 +1,13 @@
-import React, { useState, useMemo } from 'react';
-import { Button, Tooltip, Switch } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Button, Tooltip, Switch } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { MarkdownDocumentView } from '../markdown/MarkdownDocumentView';
 import { useToast } from '../../services/toast/ToastContext';
-import { revealSkillPath, type DesktopSkill } from '../../api/skillsApi';
+import {
+  readTextAny,
+  revealSkillPath,
+  type DesktopSkill,
+} from '../../api/skillsApi';
 import { SkillDetailModal, parseSkillMarkdown } from './SkillDetailModal';
 import modalStyles from './SkillDetailModal.module.css';
 import styles from './ExtensionsMainSurface.module.css';
@@ -21,6 +25,31 @@ export const SkillDetailWorkbench: React.FC<SkillDetailWorkbenchProps> = ({
 }) => {
   const { showToast } = useToast();
   const [showModal, setShowModal] = useState(false);
+  const [loadedRaw, setLoadedRaw] = useState('');
+
+  useEffect(() => {
+    const direct = skill.content || skill.raw;
+    if (direct) {
+      setLoadedRaw(direct);
+      return;
+    }
+    if (!skill.filePath) {
+      setLoadedRaw('');
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const text = await readTextAny(skill.filePath!);
+        if (!cancelled) setLoadedRaw(text || '');
+      } catch {
+        if (!cancelled) setLoadedRaw('');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [skill.content, skill.raw, skill.filePath]);
 
   const handleReveal = async () => {
     if (!skill.filePath) {
@@ -45,101 +74,105 @@ export const SkillDetailWorkbench: React.FC<SkillDetailWorkbenchProps> = ({
     skill.activation === 'enabled' || skill.activation === 'recommended';
 
   const { frontmatter, markdownBody } = useMemo(() => {
-    const raw = skill.content || skill.raw || '';
+    const raw = loadedRaw || skill.content || skill.raw || '';
     if (raw.trim()) {
       return parseSkillMarkdown(raw);
     }
     const fallback = `# ${skill.name}\n\n${skill.description || '该技能为预设工作流，可在对话中通过快捷指令触发使用。'}\n\n### 指令语法\n\`\`\`bash\n/skill:${skill.name}\n\`\`\``;
     return { frontmatter: {}, markdownBody: fallback };
-  }, [skill]);
+  }, [loadedRaw, skill]);
+
+  const extraMetaEntries = useMemo(
+    () =>
+      Object.entries(frontmatter).filter(
+        ([k]) => k !== 'name' && k !== 'description'
+      ),
+    [frontmatter]
+  );
 
   return (
     <div className={styles.workbenchContent}>
-      <div className={styles.detailHeader}>
-        <div className={styles.detailTitleRow}>
-          <div className={styles.detailTitleInfo}>
-            <div className={styles.detailTitle}>{skill.name}</div>
-            <div className={styles.detailSubtitle}>
-              {skill.description || '自定义提示词与自动化流程技能'}
-            </div>
+      <div className={styles.skillUnifiedHeader}>
+        <div className={styles.skillHeaderMain}>
+          <div className={styles.skillHeaderIconBox}>
+            <AppIcon name="sparkles" size={18} />
           </div>
-          <div className={styles.headerActions}>
-            <Tooltip content="弹窗查看完整渲染文档与快捷指令">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowModal(true)}
-              >
-                <AppIcon name="external-link" size={13} />
-                <span>弹窗详情</span>
-              </Button>
-            </Tooltip>
-            <Tooltip content="在系统文件管理器中定位技能目录">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleReveal()}
-              >
-                <AppIcon name="folder" size={13} />
-                <span>定位技能目录</span>
-              </Button>
-            </Tooltip>
+          <div className={styles.detailTitleInfo}>
+            <div className={styles.skillHeaderTitleLine}>
+              <span className={styles.detailTitle}>{skill.name}</span>
+              <span className={styles.metaPill}>
+                {skill.scope === 'project' ? '当前项目' : '全局技能'}
+              </span>
+              <Tooltip content="点击复制快捷指令">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyCommand}
+                  className={styles.copyCmdBtn}
+                  aria-label={`复制快捷指令 /skill:${skill.name}`}
+                >
+                  <AppIcon name="copy" size={12} />
+                  <span>/skill:{skill.name}</span>
+                </Button>
+              </Tooltip>
+              {extraMetaEntries.map(([k, v]) => (
+                <span key={k} className={modalStyles.yamlPill}>
+                  <span className={modalStyles.yamlPillKey}>{k}:</span>
+                  <span>{v}</span>
+                </span>
+              ))}
+            </div>
+            {skill.description || frontmatter.description ? (
+              <div className={styles.detailSubtitle}>
+                {skill.description || frontmatter.description}
+              </div>
+            ) : null}
           </div>
         </div>
 
-        <div className={styles.pluginSettingsRow}>
-          <div className={styles.settingItem}>
-            <div className={styles.settingLabelGroup}>
-              <span className={styles.settingTitle}>启用状态</span>
-              <span className={styles.settingDesc}>
-                {isEnabled
-                  ? '技能已启用，可在输入框中通过快捷指令触发'
-                  : '技能已禁用'}
-              </span>
-            </div>
-            {onToggleActivation && (
-              <Switch
-                checked={isEnabled}
-                onCheckedChange={() => onToggleActivation(skill)}
-                aria-label={`启用 ${skill.name}`}
-              />
-            )}
-          </div>
-          <div className={styles.metaPillGroup}>
-            <span className={styles.metaPill}>
-              {skill.scope === 'project' ? '当前项目' : '全局技能'}
-            </span>
+        <div className={styles.headerActions}>
+          {onToggleActivation && (
+            <Tooltip
+              content={
+                isEnabled ? '技能已启用（点击停用）' : '技能已停用（点击启用）'
+              }
+            >
+              <div className={styles.switchSlot}>
+                <Switch
+                  checked={isEnabled}
+                  onCheckedChange={() => onToggleActivation(skill)}
+                  aria-label={`启用 ${skill.name}`}
+                />
+              </div>
+            </Tooltip>
+          )}
+          <Tooltip content="在系统文件管理器中定位技能目录">
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleCopyCommand}
-              className={styles.copyCmdBtn}
+              className={styles.iconActionBtn}
+              onClick={() => void handleReveal()}
+              aria-label="定位技能目录"
             >
-              <AppIcon name="copy" size={11} />
-              <span>/skill:{skill.name}</span>
+              <AppIcon name="folder-open" size={16} />
             </Button>
-          </div>
+          </Tooltip>
+          <Tooltip content="弹窗查看完整渲染文档与快捷指令">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.iconActionBtn}
+              onClick={() => setShowModal(true)}
+              aria-label="弹窗详情"
+            >
+              <AppIcon name="maximize" size={15} />
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
-      <div className={styles.detailBodySection}>
-        <div className={styles.sectionHeader}>
-          <AppIcon name="file-text" size={14} />
-          <span>技能指令定义（Prompt Instructions）</span>
-        </div>
-
-        {Object.keys(frontmatter).length > 0 && (
-          <div className={modalStyles.yamlMetaBar}>
-            {Object.entries(frontmatter).map(([k, v]) => (
-              <span key={k} className={modalStyles.yamlPill}>
-                <span className={modalStyles.yamlPillKey}>{k}:</span>
-                <span>{v}</span>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className={styles.codePreviewCard}>
+      <div className={styles.skillDocSection}>
+        <div className={styles.skillDocSurface}>
           <MarkdownDocumentView
             content={markdownBody}
             filePath={skill.filePath}
@@ -162,8 +195,8 @@ export const SkillDetailWorkbench: React.FC<SkillDetailWorkbenchProps> = ({
               ? '当前项目'
               : '全局技能',
           filePath: skill.filePath,
-          content: skill.content,
-          raw: skill.raw,
+          content: loadedRaw || skill.content,
+          raw: loadedRaw || skill.raw,
           isInstalled: true,
           isEnabled,
           isOfficial: Boolean(skill.system),

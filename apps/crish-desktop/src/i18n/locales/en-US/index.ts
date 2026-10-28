@@ -8,7 +8,7 @@ import about from './about';
 import error from './error';
 import action from './action';
 import sidebar from './sidebar';
-import tools from './tools';
+import tool from './tools';
 import units from './units';
 import extensions from './extensions';
 
@@ -22,7 +22,8 @@ export const enUS: I18nDictionary = {
   error,
   action,
   sidebar,
-  tools,
+  tool,
+  cluster: tool,
   units,
   extensions,
 };

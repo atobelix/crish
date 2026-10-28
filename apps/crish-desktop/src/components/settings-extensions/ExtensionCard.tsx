@@ -4,7 +4,7 @@ import {
   type InstalledExtension,
 } from '../../api/extensionCatalog';
 import type { ExpandMode, ManageKind } from './types';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import { isPluginCardItem } from './ExtensionCardIdentity';
 import styles from './SettingsExtensionsTab.module.css';
 
@@ -58,7 +58,7 @@ export type ExtensionCardProps = {
   actions: ExtensionCardActionsProps;
 };
 
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { getExtensionIcon } from './ExtensionDetailModal';
 
 export const ExtensionCard: React.FC<ExtensionCardProps> = ({

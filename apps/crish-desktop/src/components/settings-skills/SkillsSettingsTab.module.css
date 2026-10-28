@@ -159,7 +159,7 @@
 }
 
 .skillsMoreItem:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .skillsMoreItem:disabled {
@@ -441,7 +441,7 @@
 }
 
 .skillsRailItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -619,7 +619,7 @@
   padding: var(--space-0_5) var(--space-1_5);
   border-radius: var(--radius-sm);
   border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--control-soft-bg);
+  background: var(--state-hover);
   color: var(--text-secondary);
 }
 

@@ -8,8 +8,8 @@ import {
   SettingsRow,
   SettingsHeadTools,
 } from './SettingsUI';
-import { Button, ConfirmDialog, Input, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, ConfirmDialog, Input, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import {
   closeSettings,
   deleteSessionCascade,

@@ -39,10 +39,8 @@ describe('SkillCreateModal', () => {
     );
 
     // 界面展示两大核心方式
-    expect(screen.getByText('方式一：AI 智能对话创建')).toBeInTheDocument();
-    expect(
-      screen.getByText('方式二：导入本地已有技能目录')
-    ).toBeInTheDocument();
+    expect(screen.getByText('AI 智能对话创建')).toBeInTheDocument();
+    expect(screen.getByText('导入本地已有技能目录')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: '在对话中由 AI 创建' })
     ).toBeInTheDocument();

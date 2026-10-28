@@ -7,14 +7,8 @@
  * 依赖项由主 hub 注入，保持纯结构性拆分、无重复状态源。
  */
 import { useCallback, useState } from 'react';
-import {
-  scanProviderModels,
-  testProviderModel,
-} from '../../api/modelCatalog';
-import {
-  loadProfiles,
-  type ProviderProfile,
-} from '../../api/providerProfiles';
+import { scanProviderModels, testProviderModel } from '../../api/modelCatalog';
+import { loadProfiles, type ProviderProfile } from '../../api/providerProfiles';
 import {
   modelsCatalogStore,
   selectProvider,
@@ -56,31 +50,28 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
         setTestBusy(null);
       }
     },
-    [selected, refresh, notify],
+    [selected, refresh, notify]
   );
 
-  const runScan = useCallback(
-    async () => {
-      if (!selected) return;
-      setScanBusy(true);
-      try {
-        const fresh =
-          loadProfiles().find((p) => p.id === selected.id) || selected;
-        const r = await scanProviderModels(fresh);
-        if (r.ok && r.models?.length) {
-          setScannedModelsList(r.models);
-          setScanModalOpen(true);
-        } else {
-          notify(false, r.error || '未能检测到服务器可用模型');
-        }
-      } catch (e) {
-        notify(false, e instanceof Error ? e.message : String(e));
-      } finally {
-        setScanBusy(false);
+  const runScan = useCallback(async () => {
+    if (!selected) return;
+    setScanBusy(true);
+    try {
+      const fresh =
+        loadProfiles().find((p) => p.id === selected.id) || selected;
+      const r = await scanProviderModels(fresh);
+      if (r.ok && r.models?.length) {
+        setScannedModelsList(r.models);
+        setScanModalOpen(true);
+      } else {
+        notify(false, r.error || '未能检测到服务器可用模型');
       }
-    },
-    [selected, notify],
-  );
+    } catch (e) {
+      notify(false, e instanceof Error ? e.message : String(e));
+    } finally {
+      setScanBusy(false);
+    }
+  }, [selected, notify]);
 
   const confirmScannedModels = useCallback(
     (selectedModels: string[]) => {
@@ -110,34 +101,29 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
         }
       });
     },
-    [selected, runAsLocalMutation, notify],
+    [selected, runAsLocalMutation, notify]
   );
 
-  const runCheck = useCallback(
-    async () => {
-      if (!selected) return;
-      setCheckBusy(true);
-      try {
-        const fresh =
-          loadProfiles().find((p) => p.id === selected.id) || selected;
-        const firstModel =
-          selectProvider(selected.id)?.models[0]?.id ||
-          fresh.models[0] ||
-          '';
-        const r = await testProviderModel(fresh, firstModel);
-        if (r.ok) {
-          notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
-        } else {
-          notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
-        }
-      } catch (e) {
-        notify(false, e instanceof Error ? e.message : String(e));
-      } finally {
-        setCheckBusy(false);
+  const runCheck = useCallback(async () => {
+    if (!selected) return;
+    setCheckBusy(true);
+    try {
+      const fresh =
+        loadProfiles().find((p) => p.id === selected.id) || selected;
+      const firstModel =
+        selectProvider(selected.id)?.models[0]?.id || fresh.models[0] || '';
+      const r = await testProviderModel(fresh, firstModel);
+      if (r.ok) {
+        notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
+      } else {
+        notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
       }
-    },
-    [selected, notify],
-  );
+    } catch (e) {
+      notify(false, e instanceof Error ? e.message : String(e));
+    } finally {
+      setCheckBusy(false);
+    }
+  }, [selected, notify]);
 
   return {
     testBusy,

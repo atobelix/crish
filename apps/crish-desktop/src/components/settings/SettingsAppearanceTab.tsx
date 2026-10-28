@@ -3,7 +3,7 @@
  * 状态与副作用逻辑已提取到 useAppearanceSettings；本组件仅负责渲染。
  */
 import React from 'react';
-import { Button, Select } from '../ui';
+import { Button, Select } from '@/components/ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -83,11 +83,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
     <div ref={visibilityRef}>
       <SettingsPage title={t('nav.appearance', '外观')}>
         {/* 语言设置 / Language setting */}
-        <SettingsSection title={t('settings.general.language')}>
+        <SettingsSection>
           <SettingsCard>
             <SettingsRow
               title={t('settings.general.language')}
-              desc={t('settings.general.languageDesc')}
               control={
                 <Select
                   size="sm"

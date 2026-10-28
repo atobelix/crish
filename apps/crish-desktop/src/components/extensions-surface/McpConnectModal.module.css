@@ -46,7 +46,7 @@
 
 .tabBtn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 .tabBtnActive {
   color: var(--text-primary);
@@ -276,7 +276,7 @@
 
 .serverCard:hover {
   border-color: var(--border-subtle);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 .cardLeft {
   display: flex;
@@ -311,15 +311,15 @@
 }
 
 .sourceAntigravity {
-  background: var(--tint-hover, var(--bg-secondary));
+  background: var(--state-hover, var(--bg-secondary));
   color: var(--accent-color);
 }
 .sourceClaude {
-  background: var(--tint-hover, var(--bg-secondary));
+  background: var(--state-hover, var(--bg-secondary));
   color: var(--accent-orange, var(--text-primary));
 }
 .sourceCursor {
-  background: var(--tint-hover, var(--bg-secondary));
+  background: var(--state-hover, var(--bg-secondary));
   color: var(--accent-blue, var(--text-primary));
 }
 
@@ -376,7 +376,7 @@
   border-radius: var(--button-radius, 7px);
 }
 .spinning {
-  animation: spin 1s linear infinite;
+  animation: spin var(--transition-spin, 1s linear) infinite;
 }
 
 @keyframes spin {

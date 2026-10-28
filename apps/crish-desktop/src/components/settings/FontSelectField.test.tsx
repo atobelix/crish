@@ -21,11 +21,36 @@ import {
 const MOCK_OPTIONS: FontSelectOption[] = [
   { value: 'auto', label: '自动（系统优化）', group: '预设' },
   { value: 'system-ui', label: '系统 UI', group: '预设' },
-  { value: 'inter', label: 'Inter（内嵌）', group: '预设', previewFamily: 'Inter' },
-  { value: 'local:Microsoft YaHei', label: 'Microsoft YaHei', group: '本机', previewFamily: 'Microsoft YaHei' },
-  { value: 'local:PingFang SC', label: 'PingFang SC', group: '本机', previewFamily: 'PingFang SC' },
-  { value: 'local:JetBrains Mono', label: 'JetBrains Mono', group: '本机', previewFamily: 'JetBrains Mono' },
-  { value: 'local:Cascadia Code', label: 'Cascadia Code', group: '本机', previewFamily: 'Cascadia Code' },
+  {
+    value: 'inter',
+    label: 'Inter（内嵌）',
+    group: '预设',
+    previewFamily: 'Inter',
+  },
+  {
+    value: 'local:Microsoft YaHei',
+    label: 'Microsoft YaHei',
+    group: '本机',
+    previewFamily: 'Microsoft YaHei',
+  },
+  {
+    value: 'local:PingFang SC',
+    label: 'PingFang SC',
+    group: '本机',
+    previewFamily: 'PingFang SC',
+  },
+  {
+    value: 'local:JetBrains Mono',
+    label: 'JetBrains Mono',
+    group: '本机',
+    previewFamily: 'JetBrains Mono',
+  },
+  {
+    value: 'local:Cascadia Code',
+    label: 'Cascadia Code',
+    group: '本机',
+    previewFamily: 'Cascadia Code',
+  },
 ];
 
 describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
@@ -74,9 +99,15 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
     });
 
     it('严苛净化 CSS 注入与危险字符', () => {
-      expect(sanitizeFontFamily('Segoe UI; color: red;')).toBe('Segoe UI color: red');
-      expect(sanitizeFontFamily('Foo<script>alert(1)</script>')).toBe('Fooscriptalert1/script');
-      expect(sanitizeFontFamily("Font'Name\"With\\Escapes")).toBe('FontNameWithEscapes');
+      expect(sanitizeFontFamily('Segoe UI; color: red;')).toBe(
+        'Segoe UI color: red'
+      );
+      expect(sanitizeFontFamily('Foo<script>alert(1)</script>')).toBe(
+        'Fooscriptalert1/script'
+      );
+      expect(sanitizeFontFamily('Font\'Name"With\\Escapes')).toBe(
+        'FontNameWithEscapes'
+      );
 
       // strict 模式校验
       const valid = sanitizeFontFamilyNameStrict('Fira Code');
@@ -99,19 +130,25 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
 
   describe('2. 双引擎字体扫描与缓存机制测试', () => {
     it('在不支持 queryLocalFonts 时 canQueryLocalFonts 返回 false', async () => {
-      const orig = (window as unknown as { queryLocalFonts?: unknown }).queryLocalFonts;
-      delete (window as unknown as { queryLocalFonts?: unknown }).queryLocalFonts;
+      const orig = (window as unknown as { queryLocalFonts?: unknown })
+        .queryLocalFonts;
+      delete (window as unknown as { queryLocalFonts?: unknown })
+        .queryLocalFonts;
 
       const can = await canQueryLocalFonts();
       expect(can).toBe(false);
 
       if (orig) {
-        (window as unknown as { queryLocalFonts?: unknown }).queryLocalFonts = orig;
+        (window as unknown as { queryLocalFonts?: unknown }).queryLocalFonts =
+          orig;
       }
     });
 
     it('Canvas 分片测宽降级探测执行并让出主线程', async () => {
-      const fonts = await scanViaCanvasChunked(['Segoe UI', 'Consolas', 'NonExistentFont123'], 2);
+      const fonts = await scanViaCanvasChunked(
+        ['Segoe UI', 'Consolas', 'NonExistentFont123'],
+        2
+      );
       expect(Array.isArray(fonts)).toBe(true);
     });
 
@@ -128,7 +165,9 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
 
       const res = await scanSystemFonts(false);
       expect(res.engine).toBe('none');
-      expect(res.fonts.some((f) => f.family === 'Custom Cached Font SC')).toBe(true);
+      expect(res.fonts.some((f) => f.family === 'Custom Cached Font SC')).toBe(
+        true
+      );
       expect(res.durationMs).toBe(0);
     });
   });
@@ -143,7 +182,9 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
         />
       );
 
-      expect(screen.getByRole('button', { name: 'Microsoft YaHei' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Microsoft YaHei' })
+      ).toBeInTheDocument();
     });
 
     it('展开下拉面板并显示内嵌搜索输入框与操作栏', async () => {
@@ -162,23 +203,28 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
       );
 
       const trigger = screen.getByRole('button', { name: '自动（系统优化）' });
-      await user.click(trigger);
+      fireEvent.click(trigger);
 
-      const searchInput = screen.getByRole('combobox', { name: '搜索或输入自定义字体名称' });
+      const searchInput = screen.getByRole('combobox', {
+        name: '搜索或输入自定义字体名称',
+      });
       expect(searchInput).toBeInTheDocument();
 
       // 点击扫描与重置按钮
-      const scanBtn = screen.getByRole('button', { name: '全量扫描本机系统字体' });
+      const scanBtn = screen.getByRole('button', {
+        name: '全量扫描本机系统字体',
+      });
       await user.click(scanBtn);
       expect(onScan).toHaveBeenCalledTimes(1);
 
-      const resetBtn = screen.getByRole('button', { name: '恢复系统优化默认字体' });
+      const resetBtn = screen.getByRole('button', {
+        name: '恢复系统优化默认字体',
+      });
       await user.click(resetBtn);
       expect(onReset).toHaveBeenCalledTimes(1);
     });
 
     it('在内嵌搜索框键入拼音实时过滤并在 Enter 时选择匹配项', async () => {
-      const user = userEvent.setup();
       const onChange = vi.fn();
 
       render(
@@ -190,13 +236,15 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
       );
 
       const trigger = screen.getByRole('button', { name: '自动（系统优化）' });
-      await user.click(trigger);
+      fireEvent.click(trigger);
 
-      const searchInput = screen.getByRole('combobox', { name: '搜索或输入自定义字体名称' });
-      await user.type(searchInput, 'wryh');
+      const searchInput = screen.getByRole('combobox', {
+        name: '搜索或输入自定义字体名称',
+      });
+      fireEvent.change(searchInput, { target: { value: 'wryh' } });
 
       // 回车选择当前高亮首项 (Microsoft YaHei)
-      await user.keyboard('{Enter}');
+      fireEvent.keyDown(searchInput, { key: 'Enter', keyCode: 13 });
       expect(onChange).toHaveBeenCalledWith('local:Microsoft YaHei');
     });
 
@@ -213,9 +261,11 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
       );
 
       const trigger = screen.getByRole('button', { name: '自动（系统优化）' });
-      await user.click(trigger);
+      fireEvent.click(trigger);
 
-      const searchInput = screen.getByRole('combobox', { name: '搜索或输入自定义字体名称' });
+      const searchInput = screen.getByRole('combobox', {
+        name: '搜索或输入自定义字体名称',
+      });
       // 向下漫游一次并回车
       await user.type(searchInput, '{arrowdown}{enter}');
       expect(onChange).toHaveBeenCalled();
@@ -237,7 +287,9 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
       const trigger = screen.getByRole('button', { name: '自动（系统优化）' });
       fireEvent.click(trigger);
 
-      const searchInput = screen.getByRole('combobox', { name: '搜索或输入自定义字体名称' });
+      const searchInput = screen.getByRole('combobox', {
+        name: '搜索或输入自定义字体名称',
+      });
 
       // 触发 compositionstart
       fireEvent.compositionStart(searchInput);
@@ -258,7 +310,6 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
     });
 
     it('当搜索无匹配时按 Enter 触发 onApplyCustom 自定义字体应用', async () => {
-      const user = userEvent.setup();
       const onApplyCustom = vi.fn();
 
       render(
@@ -271,12 +322,16 @@ describe('FontSelectField & Pinyin / Scan Infrastructure', () => {
       );
 
       const trigger = screen.getByRole('button', { name: '自动（系统优化）' });
-      await user.click(trigger);
+      fireEvent.click(trigger);
 
-      const searchInput = screen.getByRole('combobox', { name: '搜索或输入自定义字体名称' });
-      await user.type(searchInput, 'MyCustomSpecialFont');
+      const searchInput = screen.getByRole('combobox', {
+        name: '搜索或输入自定义字体名称',
+      });
+      fireEvent.change(searchInput, {
+        target: { value: 'MyCustomSpecialFont' },
+      });
 
-      await user.keyboard('{Enter}');
+      fireEvent.keyDown(searchInput, { key: 'Enter', keyCode: 13 });
       expect(onApplyCustom).toHaveBeenCalledWith('MyCustomSpecialFont');
     });
   });

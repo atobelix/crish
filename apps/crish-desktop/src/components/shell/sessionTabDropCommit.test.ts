@@ -12,6 +12,7 @@ import {
   listChatLeaves,
   useLayoutTreeStore,
 } from '../../store/layout-tree';
+import { collectSpatialLeaves } from '../../store/layout-tree/dockLayoutModel';
 import {
   createBranch,
   isBranch,
@@ -124,9 +125,12 @@ describe('commitSessionTabDrop', () => {
     const b = chats[0]!;
     expect(b.tabs.map((t) => t.tabId)).toEqual(['tab-s2', 'tab-s1']);
     expect(b.tabs.find((t) => t.tabId === s1.tabId)).toBe(s1);
-    expect(b.tabs.find((t) => t.tabId === s1.tabId)?.dock.openPanelIds).toEqual([
-      'files',
-    ]);
+    const movedDock = b.tabs.find((t) => t.tabId === s1.tabId)?.dock;
+    expect(movedDock?.tree).toBeDefined();
+    if (movedDock?.tree) {
+      const leaves = collectSpatialLeaves(movedDock.tree.root);
+      expect(leaves[0]!.tabs.map((t) => t.viewId)).toEqual(['files']);
+    }
     expect(b.activeTabId).toBe(s1.tabId);
     expect(findNodeById(tree.root, leafA.id)).toBeNull();
   });
@@ -323,5 +327,29 @@ describe('commitSessionTabDrop', () => {
     expect((left as LayoutLeaf).tabs.map((t) => t.tabId)).toEqual(['a']);
     expect(isLeaf(right)).toBe(true);
     expect((right as LayoutLeaf).tabs).toEqual([b]);
+  });
+
+  it('拦截右坞工具面板 ID 逃逸至顶栏布局树 (通过 assertIsSessionLevelTab 守卫)', () => {
+    const a = mintTab('a', 'sa', 'A');
+    const leaf = chatLeaf('leaf-a', [a], a.tabId);
+    resetTree({ version: 3, root: leaf }, leaf.id);
+    const { moveTab, splitTab } = spyCommands();
+    const before = useLayoutTreeStore.getState().tree;
+
+    commitSessionTabDrop({
+      sourceLeafId: leaf.id,
+      tabId: 'terminal',
+      target: { kind: 'strip', targetLeafId: leaf.id, insertIdx: 0 },
+    });
+
+    commitSessionTabDrop({
+      sourceLeafId: leaf.id,
+      tabId: 'dtab_tool_1',
+      target: { kind: 'pane', targetLeafId: leaf.id, region: 'right' },
+    });
+
+    expect(moveTab).not.toHaveBeenCalled();
+    expect(splitTab).not.toHaveBeenCalled();
+    expect(useLayoutTreeStore.getState().tree).toBe(before);
   });
 });

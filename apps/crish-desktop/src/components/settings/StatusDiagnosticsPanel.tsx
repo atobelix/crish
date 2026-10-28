@@ -27,9 +27,9 @@ import {
   SettingsRow,
   SettingsSection,
 } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from './StatusDiagnosticsPanel.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { copyTextToClipboard } from '@crish/shared-utils';
 
 type Props = {
@@ -72,7 +72,6 @@ function SubsystemRow({
   return (
     <SettingsRow
       title={label}
-      desc={known ? (ready ? '已就绪' : '未就绪（可能影响功能）') : '状态未知'}
       control={
         <span
           className={known && ready ? styles.badgeOk : styles.badgeBad}
@@ -284,7 +283,6 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
           {status?.searchIndexReady === false ? (
             <SettingsRow
               title="重建索引"
-              desc="索引未就绪时触发重建（core_rebuild_search_index）"
               control={
                 <Button
                   type="button"
@@ -308,7 +306,6 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
           <SettingsRow
             icon={<AppIcon name="activity" size={18} />}
             title="当前日志级别"
-            desc="日志文件与状态面板共用的过滤级别"
             control={
               <span
                 className={styles.monoBadge}
@@ -321,7 +318,6 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
           />
           <SettingsRow
             title="日志目录"
-            desc="日志文件落盘位置（可在文件管理器中查看）"
             control={
               <div className={styles.logDirControl}>
                 <Tooltip content={status?.logDir ?? '未知'}>

@@ -3,10 +3,7 @@
  * 封装改名状态 reducer（renamingHash / renameDraft）与改名处理器。
  */
 import { useCallback, useReducer } from 'react';
-import {
-  renameDevice,
-  type DeviceInfo,
-} from '../../api/multiDevice';
+import { renameDevice, type DeviceInfo } from '../../api/multiDevice';
 
 export interface RenameState {
   renamingHash: string | null;
@@ -57,10 +54,7 @@ export function useDeviceRename({
   load,
   showToast,
 }: UseDeviceRenameArgs): UseDeviceRenameResult {
-  const [rename, dispatchRename] = useReducer(
-    renameReducer,
-    INITIAL_RENAME
-  );
+  const [rename, dispatchRename] = useReducer(renameReducer, INITIAL_RENAME);
 
   const startRename = useCallback((device: DeviceInfo) => {
     dispatchRename({ type: 'startRename', device });

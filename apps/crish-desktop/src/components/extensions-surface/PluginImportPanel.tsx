@@ -3,9 +3,9 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import { t } from '../../i18n';
-import { AppIcon } from '../ui/icons';
+import { AppIcon } from '@/components/ui/icons';
 import { ExtensionActionCard } from './ExtensionActionCard';
 import { useToast } from '../../services/toast/ToastContext';
 import { CANONICAL_IMPORT_PLUGIN_ID } from './extensionIdentity';
@@ -72,9 +72,6 @@ export const PluginImportPanel: React.FC<PluginImportPanelProps> = ({
           <div className={styles.headerTitle}>
             <AppIcon name="puzzle" size={18} />
             <span>{t('extensions.panel.title')}</span>
-          </div>
-          <div className={styles.headerSubtitle}>
-            {t('extensions.panel.description')}
           </div>
         </div>
         <div className={styles.headerActions}>

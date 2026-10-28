@@ -27,6 +27,6 @@ describe('useAppearanceSchema', () => {
     const micaProp = allProps.find((p) => p.key === 'enableMicaEffect');
     expect(micaProp).toBeDefined();
     expect(micaProp?.titleKey).toBe('appearance.micaTitle');
-    expect(micaProp?.descKey).toBe('appearance.micaDesc');
+    expect(micaProp?.descKey).toBeUndefined();
   });
 });

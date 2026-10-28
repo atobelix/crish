@@ -14,7 +14,7 @@
   align-items: center;
   gap: var(--space-2, 8px);
   padding: 8px 12px;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs, 12px);
 }
@@ -26,16 +26,6 @@
   width: 16px;
   height: 16px;
   color: var(--text-tertiary);
-}
-
-.kindBadge {
-  font-size: var(--font-size-nano, 10px);
-  font-weight: var(--font-weight-medium, 500);
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  background: var(--tint-hover);
-  color: var(--text-tertiary);
-  white-space: nowrap;
 }
 
 .titleText {
@@ -57,28 +47,32 @@
   font-size: var(--font-size-xs, 12px);
 }
 
-.confirmRow {
-  display: flex;
+.confirmTaskName {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
   margin-bottom: var(--space-1_5, 6px);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
-.confirmLabel {
-  width: 72px;
+.confirmScheduleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.scheduleIcon {
   color: var(--text-tertiary);
   flex-shrink: 0;
-}
-
-.confirmValue {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500);
-  word-break: break-word;
 }
 
 .confirmPromptBlock {
   font-family: var(--font-mono);
   font-size: var(--font-size-micro, 11px);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
@@ -87,6 +81,27 @@
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-secondary);
+  margin-bottom: var(--space-1_5, 6px);
+}
+
+.confirmCwdRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-micro, 11px);
+  font-family: var(--font-mono);
+  margin-bottom: var(--space-1_5, 6px);
+}
+
+.folderIcon {
+  flex-shrink: 0;
+}
+
+.confirmCwdPath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .confirmActions {

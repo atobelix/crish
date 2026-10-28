@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Input, Select } from '../ui';
+import { Button, Input, Select } from '@/components/ui';
 import {
   saveProfileBaseUrl,
   upsertProfile,
@@ -18,7 +18,7 @@ import {
   toYamlProtocol,
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { DEFAULT_PROTOCOL } from '../../api/modelsNormalize';
 
 /** 凭据区：厂商名称/Base URL/API Key/协议。配置完成后支持优雅人机工程折叠。 */
@@ -72,7 +72,9 @@ export const ProviderProfileForm: React.FC<{
   useEffect(() => {
     if (prevSelectedIdRef.current !== selected.id) {
       prevSelectedIdRef.current = selected.id;
-      setIsCollapsed(defaultCollapsed !== undefined ? defaultCollapsed : isConfigured);
+      setIsCollapsed(
+        defaultCollapsed !== undefined ? defaultCollapsed : isConfigured
+      );
     }
   }, [selected.id, isConfigured, defaultCollapsed]);
 
@@ -99,7 +101,8 @@ export const ProviderProfileForm: React.FC<{
           providerId: selected.id,
           displayName: selected.name,
           baseUrl: patch.baseUrl ?? storeBaseUrl ?? selected.baseUrl,
-          protocol: patch.protocol ?? storeProvider?.protocol ?? selected.protocol,
+          protocol:
+            patch.protocol ?? storeProvider?.protocol ?? selected.protocol,
         });
         if (!shell.ok) {
           notify(false, shell.error || '写入服务商失败');
@@ -140,13 +143,19 @@ export const ProviderProfileForm: React.FC<{
       >
         <div className={styles.credentialsHeaderLeft}>
           {isCollapsed ? (
-            <AppIcon name="chevron-right" size={13}
+            <AppIcon
+              name="chevron-right"
+              size={13}
               className={styles.credentialsChevron}
-              aria-hidden />
+              aria-hidden
+            />
           ) : (
-            <AppIcon name="chevron-down" size={13}
+            <AppIcon
+              name="chevron-down"
+              size={13}
               className={styles.credentialsChevron}
-              aria-hidden />
+              aria-hidden
+            />
           )}
           <span className={styles.credentialsTitle}>连接与凭据</span>
         </div>
@@ -175,18 +184,18 @@ export const ProviderProfileForm: React.FC<{
         <div className={styles.credentialsBody}>
           {/* 服务商厂商名称输入（所有服务商均可改名——不与厂商 id 绑定） */}
           <div className={styles.mrdField}>
-              <label className={styles.mrdFieldLabel}>
-                厂商名称 <span className={styles.mrdRequiredStar}>*</span>
-              </label>
-              <Input
-                size="sm"
-                value={vendorNameDraft}
-                placeholder="例如: senseNova、SiliconFlow、Ollama（必填）"
-                spellCheck={false}
-                onChange={(e) => setVendorNameDraft(e.target.value)}
-                onBlur={handleSaveVendorName}
-                onEnter={handleSaveVendorName}
-              />
+            <label className={styles.mrdFieldLabel}>
+              厂商名称 <span className={styles.mrdRequiredStar}>*</span>
+            </label>
+            <Input
+              size="sm"
+              value={vendorNameDraft}
+              placeholder="例如: senseNova、SiliconFlow、Ollama"
+              spellCheck={false}
+              onChange={(e) => setVendorNameDraft(e.target.value)}
+              onBlur={handleSaveVendorName}
+              onEnter={handleSaveVendorName}
+            />
           </div>
 
           {/* Base URL */}

@@ -5,7 +5,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 遵循设计系统规范：使用扁平化设计，无双边框，统一悬浮与焦点。
  */
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import styles from './McpSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
 import { mcpStateLabel, mcpStateKind } from '../../api/mcpApi';

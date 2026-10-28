@@ -7,7 +7,7 @@ import {
 } from '../../api/extensionCatalog';
 import { mcpStateLabel } from '../../api/mcpApi';
 import type { ExpandMode } from './types';
-import { Button, Switch, Tooltip } from '../ui';
+import { Button, Switch, Tooltip } from '@/components/ui';
 
 /** MCP 工具区展示态（与 ExtensionCardMcpProps 同源，子组件按需消费）。 */
 export interface McpToolsSectionStateProps {
@@ -51,9 +51,7 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
   } = actions;
 
   const installedItem =
-    'mcpId' in item || 'mcpTools' in item
-      ? (item as InstalledExtension)
-      : null;
+    'mcpId' in item || 'mcpTools' in item ? (item as InstalledExtension) : null;
   const entry = !installedItem ? (item as CatalogEntry) : null;
 
   if (mode === 'detail') {
@@ -84,10 +82,7 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
         {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
           <ul className={styles.toolPreviewCoverContent}>
             {installedItem.mcpTools
-              .slice(
-                0,
-                expandedMcpTools.has(installedItem.id) ? undefined : 12
-              )
+              .slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12)
               .map((t) => (
                 <li key={t}>{t}</li>
               ))}
@@ -129,7 +124,9 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
             variant="ghost"
             size="sm"
             disabled={mcpServerBusy}
-            onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, false)}
+            onClick={() =>
+              void onToggleMcpServer?.(installedItem.mcpId!, false)
+            }
           >
             停止服务
           </Button>
@@ -162,14 +159,9 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
                   role="listitem"
                 >
                   <Tooltip content={tool}>
-                    <span className={styles.toolName}>
-                      {tool}
-                    </span>
+                    <span className={styles.toolName}>{tool}</span>
                   </Tooltip>
                   <div className={styles.toolControl}>
-                    <span className={styles.detailMeta}>
-                      {off ? '禁用' : '启用'}
-                    </span>
                     <Switch
                       checked={!off}
                       disabled={mcpToolBusy}

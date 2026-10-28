@@ -5,7 +5,11 @@
  * 空源 prune 由维 02 命令负责；本模块不补锚、不改树。
  */
 
-import { findNodeById, useLayoutTreeStore } from '../../store/storeAccess';
+import {
+  findNodeById,
+  useLayoutTreeStore,
+  assertIsSessionLevelTab,
+} from '../../store/storeAccess';
 import type { PaneDropRegion } from './sessionTabDragFeel';
 
 export type SessionTabDropTarget =
@@ -27,6 +31,17 @@ export function commitSessionTabDrop(input: {
 }): void {
   const { sourceLeafId, tabId, target } = input;
   if (!sourceLeafId || !tabId) return;
+
+  // 🔒 顶层大窗口合法标签类型断言守卫：严禁任何右坞内部微观工具逃逸进入顶栏大窗口布局树
+  try {
+    assertIsSessionLevelTab(tabId);
+  } catch (error) {
+    console.error(
+      `[SECURITY_VIOLATION] 拦截右坞内部工具非法逃逸至顶栏: tabId=${tabId}`,
+      error
+    );
+    return;
+  }
 
   const tree = useLayoutTreeStore.getState();
 

@@ -6,7 +6,7 @@ import React from 'react';
 import styles from './SettingsDevicesTab.module.css';
 import { SettingsSection, SettingsCard, SettingsRow } from './SettingsUI';
 import type { NetworkEnvInfo } from '../../api/multiDevice';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
 const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import type {
   DetectedExternalSession,
   MappedImportSession,
@@ -69,9 +69,6 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
           <AppIcon name="history" size={28} />
         </div>
         <div className={styles.previewEmptyTitle}>请在左侧选择对话记录</div>
-        <div className={styles.previewEmptyDesc}>
-          选中后将直接展示对话内容并可一键导入接续
-        </div>
       </div>
     );
   }

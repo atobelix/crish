@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Switch } from '../ui';
-import { AppIcon, type IconName } from '../ui/icons/index';
+import { Button, Switch, Tooltip } from '@/components/ui';
+import { AppIcon, type IconName } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import styles from './ExtensionsMainSurface.module.css';
 
@@ -21,11 +21,12 @@ export interface GeneralExtensionItem {
 interface ExtensionGeneralWorkbenchProps {
   item: GeneralExtensionItem;
   onToggleEnabled?: (item: GeneralExtensionItem) => void;
+  onSharePlugin?: () => void;
 }
 
 export const ExtensionGeneralWorkbench: React.FC<
   ExtensionGeneralWorkbenchProps
-> = ({ item, onToggleEnabled }) => {
+> = ({ item, onToggleEnabled, onSharePlugin }) => {
   const { showToast } = useToast();
 
   const handleCopyInstallRef = () => {
@@ -34,71 +35,70 @@ export const ExtensionGeneralWorkbench: React.FC<
     showToast(`已复制引用命令: ${item.installRef}`);
   };
 
-  const kindText =
-    item.kind === 'plugin'
-      ? '插件'
-      : item.kind === 'skill'
-        ? '技能'
-        : 'MCP 服务';
-
   return (
     <div className={styles.workbenchContent}>
-      {/* 头部标题与操作 */}
-      <div className={styles.detailHeader}>
-        <div className={styles.detailTitleRow}>
-          <div className={styles.detailTitleInfo}>
-            <div className={styles.detailTitle}>{item.name}</div>
-            <div className={styles.detailSubtitle}>
-              {item.description || '功能扩展模块'}
-            </div>
+      <div className={styles.skillUnifiedHeader}>
+        <div className={styles.skillHeaderMain}>
+          <div className={styles.skillHeaderIconBox}>
+            <AppIcon name={item.icon} size={18} />
           </div>
-          <div className={styles.headerActions}>
-            <span
-              className={`${styles.statusBadge} ${item.isEnabled ? styles.statusOnline : styles.statusOffline}`}
-            >
-              {item.isEnabled ? '已启用' : '未启用'}
-            </span>
+          <div className={styles.detailTitleInfo}>
+            <div className={styles.skillHeaderTitleLine}>
+              <span className={styles.detailTitle}>{item.name}</span>
+              <span className={styles.metaPill}>
+                {item.isOfficial ? '官方扩展' : '社区生态'}
+              </span>
+              {item.version && (
+                <span className={styles.metaPill}>v{item.version}</span>
+              )}
+              {item.installRef && (
+                <Tooltip content="复制引用命令">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyInstallRef}
+                    className={styles.copyCmdBtn}
+                  >
+                    <AppIcon name="copy" size={12} />
+                    <span>复制引用</span>
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
+            {item.description ? (
+              <div className={styles.detailSubtitle}>{item.description}</div>
+            ) : null}
           </div>
         </div>
-
-        {/* 状态与控制条（大圆角面板） */}
-        <div className={styles.pluginSettingsRow}>
-          <div className={styles.settingItem}>
-            <div className={styles.settingLabelGroup}>
-              <span className={styles.settingTitle}>启用扩展</span>
-              <span className={styles.settingDesc}>
-                {item.isEnabled
-                  ? `${kindText}已就绪并在对应环境中生效`
-                  : `${kindText}当前处于禁用状态`}
-              </span>
-            </div>
-            {onToggleEnabled && (
-              <Switch
-                checked={item.isEnabled}
-                onCheckedChange={() => onToggleEnabled(item)}
-                aria-label={`切换 ${item.name} 启用状态`}
-              />
-            )}
-          </div>
-          <div className={styles.metaPillGroup}>
-            <span className={styles.metaPill}>
-              {item.isOfficial ? '官方扩展' : '社区生态'}
-            </span>
-            {item.version && (
-              <span className={styles.metaPill}>v{item.version}</span>
-            )}
-            {item.installRef && (
+        <div className={styles.headerActions}>
+          {onSharePlugin && (
+            <Tooltip content="导出或复制插件配置">
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
-                onClick={handleCopyInstallRef}
-                className={styles.copyCmdBtn}
+                className={styles.headerActionBtn}
+                onClick={onSharePlugin}
               >
-                <AppIcon name="copy" size={12} />
-                <span>复制引用</span>
+                <AppIcon name="upload" size={13} />
+                <span>分享插件</span>
               </Button>
-            )}
-          </div>
+            </Tooltip>
+          )}
+          {onToggleEnabled && (
+            <Tooltip
+              content={
+                item.isEnabled ? '已启用（点击停用）' : '已停用（点击启用）'
+              }
+            >
+              <div className={styles.switchSlot}>
+                <Switch
+                  checked={item.isEnabled}
+                  onCheckedChange={() => onToggleEnabled(item)}
+                  aria-label={`切换 ${item.name} 启用状态`}
+                />
+              </div>
+            </Tooltip>
+          )}
         </div>
       </div>
 

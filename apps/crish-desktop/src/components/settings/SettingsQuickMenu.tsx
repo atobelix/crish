@@ -15,8 +15,8 @@ import { openSettings } from '../../store/storeAccess';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
-import { Button, Menu, SegmentedControl, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Menu, SegmentedControl, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface SettingsQuickMenuProps {
   trigger?: React.ReactNode;
@@ -244,9 +244,12 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
       >
         <AppIcon name="settings" size={16} aria-hidden />
         <span>设置</span>
-        <AppIcon name="chevron-up" size={14}
+        <AppIcon
+          name="chevron-up"
+          size={14}
           className={styles.sbQuickChev}
-          aria-hidden />
+          aria-hidden
+        />
       </Button>
     </Tooltip>
   );
@@ -279,7 +282,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
           id={menuId}
           ref={menuRef}
           className="sb-quick-menu"
-          role="menu"
           aria-label="快捷设置"
           aria-orientation="vertical"
           onKeyDownCapture={onMenuKeyDown}

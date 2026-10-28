@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Dialog, Button, Input } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Dialog, Button, Input } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   saveCustomPlugin,
@@ -190,7 +190,6 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
       open={open}
       onClose={onClose}
       title="导入插件"
-      description="选择插件压缩包 (.zip)、配置文件 (manifest.json / package.json) 或插件目录，智能自动解析元数据"
       classNames={{
         panel: styles.modalPanel,
         body: styles.modalBody,

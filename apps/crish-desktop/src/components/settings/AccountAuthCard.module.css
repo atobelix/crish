@@ -26,14 +26,8 @@
 .formActions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: var(--space-1);
-}
-
-.loginHint {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  line-height: 1.4;
 }
 
 .errorText {
@@ -65,7 +59,7 @@
   width: 36px; /* 刻度外裸值：无既有档，授权保留 */
   height: 36px; /* 刻度外裸值：无既有档，授权保留 */
   border-radius: 50%;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   display: flex;
   align-items: center;
@@ -135,7 +129,7 @@
   border-radius: 0;
   background: transparent;
   border: none;
-  border-bottom: var(--hairline-width) solid var(--tint-divider);
+  border-bottom: var(--hairline-width) solid var(--border-color);
 }
 
 .deviceItem:last-child {

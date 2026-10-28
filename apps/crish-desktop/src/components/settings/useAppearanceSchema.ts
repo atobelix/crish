@@ -93,7 +93,6 @@ export function useAppearanceSchema({
             key: 'theme',
             type: 'toggle-group' as const,
             title: '主题模式',
-            desc: '切换浅色/深色主题',
             toggleOptions: [
               {
                 value: 'default',
@@ -114,8 +113,6 @@ export function useAppearanceSchema({
                   type: 'boolean' as const,
                   title: 'Mica Effect (Windows 11)',
                   titleKey: 'appearance.micaTitle',
-                  desc: 'Enable Windows 11 system Mica backdrop translucency effect (default off)',
-                  descKey: 'appearance.micaDesc',
                 },
               ]
             : []),
@@ -123,7 +120,6 @@ export function useAppearanceSchema({
             key: 'uiSize',
             type: 'toggle-group' as const,
             title: 'UI 密度',
-            desc: '控制界面元素的紧凑程度',
             toggleOptions: [
               { value: 'small', label: '紧凑' },
               { value: 'medium', label: '默认' },
@@ -134,7 +130,6 @@ export function useAppearanceSchema({
             key: 'shellChrome',
             type: 'select' as const,
             title: '窗口风格',
-            desc: '选择应用窗口的边框样式',
             options: [
               { value: 'classic', label: '经典' },
               { value: 'inset', label: '工作台' },
@@ -144,7 +139,6 @@ export function useAppearanceSchema({
             key: 'codeIndent',
             type: 'select' as const,
             title: '代码缩进',
-            desc: '设置代码块中的缩进宽度',
             options: [
               { value: '  ', label: '2 空格' },
               { value: '    ', label: '4 空格' },
@@ -160,10 +154,6 @@ export function useAppearanceSchema({
             key: 'skinPreset',
             type: 'select' as const,
             title: '皮肤预设',
-            desc:
-              activeTheme === 'dark'
-                ? '深色模式下可选的高阶主题预设'
-                : '浅色模式下可选的高阶主题预设',
             options: skinOptions,
           },
           ...(skinPreset === 'custom'
@@ -172,13 +162,11 @@ export function useAppearanceSchema({
                   key: 'accentColor',
                   type: 'color' as const,
                   title: '自定义背景色',
-                  desc: '自定义高阶背景颜色',
                 },
                 {
                   key: 'customFgColor',
                   type: 'color' as const,
                   title: '自定义文本色',
-                  desc: '自适应计算副文本、边框与悬浮文本色',
                 },
               ]
             : []),
@@ -186,7 +174,6 @@ export function useAppearanceSchema({
             key: 'brightness',
             type: 'range' as const,
             title: '亮度微调',
-            desc: '调整界面整体亮度',
             min: -4,
             max: 4,
             step: 1,
@@ -196,7 +183,6 @@ export function useAppearanceSchema({
             key: 'fontSize',
             type: 'range' as const,
             title: '界面字号',
-            desc: '调整界面基础字号',
             min: 12,
             max: 18,
             step: 1,
@@ -224,7 +210,7 @@ export function useAppearanceSchema({
             key: 'restoreLastWorkspace',
             type: 'boolean' as const,
             title: '启动时恢复上次工作台',
-            desc: '默认关闭：每次启动为干净单对话。开启后尝试恢复标签与多 unit 分屏（布局损坏时仍回落干净启动；会话消息始终保留）',
+            desc: '开启后尝试恢复标签与多 unit 分屏',
           },
         ],
       },

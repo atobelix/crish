@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 import styles from './SettingsPanel.module.css';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 export interface SettingsSidebarAria {

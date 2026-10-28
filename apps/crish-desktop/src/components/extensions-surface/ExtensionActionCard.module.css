@@ -1,10 +1,14 @@
-/* 扩展卡片：无描边、大圆角，通过柔和底色与 hover 背景变化区分层级，安装/导入/卸载按钮采用语义色彩区分 */
+/* 扩展卡片：
+   - 初始态无灰度背景（transparent），仅在 hover 时浮现轻柔浅灰底色
+   - 大圆角（20px）、零描边、精简卡片信息（启停与深度配置收敛至点击后的详情卡片）
+   - 安装 / 导入 / 卸载动作按钮采用柔和语义色彩区分 */
 
 .card {
-  background: var(--bg-secondary);
+  background: transparent;
   border: none;
-  border-radius: var(--radius-xl, 16px);
-  padding: var(--space-4, 16px);
+  border-radius: var(--radius-2xl, 20px);
+  padding: var(--space-4, 16px)
+    calc(var(--space-4, 16px) + var(--space-0_5, 2px));
   display: flex;
   flex-direction: column;
   gap: var(--space-2_5, 10px);
@@ -19,31 +23,29 @@
 }
 
 .card:hover {
-  background:
-    linear-gradient(var(--bg-card-hover), var(--bg-card-hover)),
-    var(--bg-secondary);
+  background: var(--state-hover);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2_5, 10px);
+  gap: var(--space-3, 12px);
 }
 
 .identity {
   display: flex;
   align-items: center;
-  gap: var(--space-2_5, 10px);
+  gap: var(--space-3, 12px);
   min-width: 0;
   flex: 1;
 }
 
 .icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-lg, 10px);
-  background: var(--tint-hover);
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  background: var(--state-hover);
   border: none;
   display: flex;
   align-items: center;
@@ -54,8 +56,8 @@
 
 .titles {
   display: flex;
-  align-items: center;
-  gap: var(--space-1_5, 6px);
+  align-items: baseline;
+  gap: var(--space-2, 8px);
   min-width: 0;
   flex: 1;
 }
@@ -69,63 +71,53 @@
   text-overflow: ellipsis;
 }
 
+/* 来源标记：去盒化纯文字轻标签，减少卡片视觉噪点 */
 .badge {
   flex-shrink: 0;
   font-size: 11px;
   line-height: 1.4;
-  padding: 2px 7px;
-  border-radius: var(--radius-sm, 6px);
+  padding: 0;
   border: none;
+  background: transparent;
   color: var(--text-tertiary);
-  background: var(--tint-subtle);
   white-space: nowrap;
 }
 
 .badge[data-source='官方'] {
   color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
 .badge[data-source='Claude Code'],
 .badge[data-source='Claude Desktop'] {
   color: var(--color-warning);
-  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 .badge[data-source='Codex'] {
   color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
 
 .badge[data-source='Antigravity'] {
   color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
 .badge[data-source='Cursor'] {
   color: var(--color-info);
-  background: color-mix(in srgb, var(--color-info) 12%, transparent);
 }
 
 .actionsGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-1_5, 6px);
   flex-shrink: 0;
-}
-
-.switchSlot {
-  display: inline-flex;
-  align-items: center;
 }
 
 .action {
   height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-md, 8px);
+  padding: 0 11px;
+  border-radius: var(--radius-l, 12px);
   border: none;
   color: var(--text-secondary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium, 500);
   display: inline-flex;
@@ -137,44 +129,44 @@
     color var(--duration-fast, 150ms) ease;
 }
 
-/* 安装：翡翠绿品牌色，醒目正向引导 */
+/* 安装：翡翠绿品牌色 */
 .action[data-verb='install'] {
   color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 
 .action[data-verb='install']:hover:not(:disabled) {
   color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
 }
 
-/* 导入：科技蓝信息色，与直接安装清晰区分 */
+/* 导入：科技蓝信息色 */
 .action[data-verb='import'] {
   color: var(--color-info);
-  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  background: color-mix(in srgb, var(--color-info) 8%, transparent);
 }
 
 .action[data-verb='import']:hover:not(:disabled) {
   color: var(--color-info);
-  background: color-mix(in srgb, var(--color-info) 20%, transparent);
+  background: color-mix(in srgb, var(--color-info) 15%, transparent);
 }
 
-/* 卸载 / 删除：柔和珊瑚红警示色，一眼识别移除动作 */
+/* 卸载 / 删除：柔和珊瑚红警示色 */
 .action[data-verb='uninstall'],
 .action[data-verb='delete'] {
   color: var(--danger-color);
-  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 7%, transparent);
 }
 
 .action[data-verb='uninstall']:hover:not(:disabled),
 .action[data-verb='delete']:hover:not(:disabled) {
   color: var(--danger-color);
-  background: color-mix(in srgb, var(--danger-color) 18%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 14%, transparent);
 }
 
 .description {
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;

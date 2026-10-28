@@ -1,6 +1,6 @@
 import React from 'react';
-import { Switch, Button, Tooltip, Input } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Switch, Button, Tooltip, Input } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import type { McpServerInfo, McpToolDefinitionDto } from '../../api/mcpApi';
 import { useI18n } from '../../i18n';
 import {
@@ -147,11 +147,10 @@ export const McpToolsHeader: React.FC<McpToolsHeaderProps> = ({
     <div className={styles.toolsHeaderLeft}>
       <div className={styles.sectionHeaderTitle}>
         <AppIcon name="wrench" size={14} />
-        <span>可用工具清单 ({toolsCount})</span>
+        <span className={styles.toolsStatsBadge}>
+          已允许 Agent 调用: {enabledCount} / {toolsCount} 个工具
+        </span>
       </div>
-      <span className={styles.toolsStatsBadge}>
-        已允许 Agent 调用: {enabledCount} / {toolsCount} 个工具
-      </span>
     </div>
 
     <div className={styles.toolsHeaderActions}>
@@ -311,9 +310,6 @@ export const McpToolCard: React.FC<McpToolCardProps> = ({
       {desc ? <div className={styles.toolDesc}>{desc}</div> : null}
       {hasSchemaProps && schema ? (
         <div className={styles.toolSchemaBox}>
-          <div className={styles.toolSchemaTitle}>
-            {t('tools.mcp.inputSchema', '入参 Schema')}
-          </div>
           <div className={styles.toolSchemaParams}>
             {Object.entries(
               schema.properties as Record<string, Record<string, unknown>>

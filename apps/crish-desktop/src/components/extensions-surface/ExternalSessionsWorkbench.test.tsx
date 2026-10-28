@@ -1,11 +1,28 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import { ExternalSessionsWorkbench } from './ExternalSessionsWorkbench';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import * as externalSessionCache from '../../api/import/externalSessionCache';
-import type { DetectedExternalSession } from '../../api/import/types';
+import type {
+  DetectedExternalSession,
+  ExternalSessionScanBatch,
+} from '../../api/import/types';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 describe('ExternalSessionsWorkbench', () => {
   const mockSessions: DetectedExternalSession[] = [
@@ -43,18 +60,18 @@ describe('ExternalSessionsWorkbench', () => {
     vi.spyOn(
       externalSessionCache,
       'loadExternalSessionsFromCache'
-    ).mockReturnValue(mockSessions);
+    ).mockReturnValue({ sessions: mockSessions, issues: [] });
     vi.spyOn(
       externalSessionCache,
       'getOrScanExternalSessions'
-    ).mockResolvedValue(mockSessions);
+    ).mockResolvedValue({ sessions: mockSessions, issues: [] });
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it('renders title, rescan button, and configure settings button', () => {
+  it('renders title, rescan button, and configure settings button', async () => {
     render(
       <ToastProvider>
         <ExternalSessionsWorkbench />
@@ -62,8 +79,206 @@ describe('ExternalSessionsWorkbench', () => {
     );
 
     expect(screen.getByText('外部对话导入与接续')).toBeDefined();
-    expect(screen.getByText('重新扫描')).toBeDefined();
+    expect(await screen.findByText('重新扫描')).toBeDefined();
     expect(screen.getByText('配置设置')).toBeDefined();
+  });
+
+  it('distinguishes unreadable scans from a successful empty result', async () => {
+    vi.mocked(externalSessionCache.getOrScanExternalSessions).mockResolvedValue(
+      {
+        sessions: [],
+        issues: [
+          {
+            source: 'codex',
+            kind: 'error',
+            message: 'Codex sessions dir not readable',
+          },
+        ],
+      }
+    );
+
+    render(
+      <ToastProvider>
+        <ExternalSessionsWorkbench />
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText('暂时无法确认是否存在会话')).toBeDefined();
+    expect(screen.getByText(/Codex 扫描失败/)).toBeDefined();
+    expect(
+      externalSessionCache.getOrScanExternalSessions
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports when both sources fail and keeps each source diagnostic', async () => {
+    vi.mocked(externalSessionCache.getOrScanExternalSessions).mockResolvedValue(
+      {
+        sessions: [],
+        issues: [
+          {
+            source: 'claude-code',
+            kind: 'error',
+            message: 'Claude root denied',
+          },
+          {
+            source: 'codex',
+            kind: 'error',
+            message: 'Codex root denied',
+          },
+        ],
+      }
+    );
+
+    render(
+      <ToastProvider>
+        <ExternalSessionsWorkbench />
+      </ToastProvider>
+    );
+
+    expect(
+      await screen.findByText(/全部来源扫描失败，无法确认是否存在外部会话/)
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Claude Code 扫描失败：Claude root denied/)
+    ).toBeDefined();
+    expect(screen.getByText(/Codex 扫描失败：Codex root denied/)).toBeDefined();
+    expect(screen.queryByText(/扫描完成，未发现外部会话/)).toBeNull();
+  });
+
+  it('keeps hydrated rows visible but disables import during refresh', async () => {
+    const previousSession: DetectedExternalSession = {
+      ...mockSessions[0]!,
+      id: 'previous-refresh-result',
+      title: 'Previous refresh result',
+    };
+    const nextSession: DetectedExternalSession = {
+      ...mockSessions[1]!,
+      id: 'next-refresh-result',
+      title: 'Next refresh result',
+    };
+    const refresh = deferred<ExternalSessionScanBatch>();
+    vi.mocked(externalSessionCache.getOrScanExternalSessions)
+      .mockResolvedValueOnce({ sessions: [previousSession], issues: [] })
+      .mockReturnValueOnce(refresh.promise);
+
+    render(
+      <ToastProvider>
+        <ExternalSessionsWorkbench />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    await screen.findByText(previousSession.title);
+    fireEvent.click(screen.getAllByText(previousSession.title)[0]!);
+
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole('button', {
+            name: '导入并接续对话',
+          }) as HTMLButtonElement
+        ).disabled
+      ).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '重新扫描' }));
+
+    expect(screen.getAllByText(previousSession.title).length).toBeGreaterThan(
+      0
+    );
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '正在接续…',
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+
+    refresh.resolve({ sessions: [nextSession], issues: [] });
+
+    await screen.findByText(nextSession.title);
+    await waitFor(() => {
+      expect(screen.queryAllByText(previousSession.title)).toHaveLength(0);
+      expect(
+        (
+          screen.getByRole('button', {
+            name: '导入并接续对话',
+          }) as HTMLButtonElement
+        ).disabled
+      ).toBe(false);
+    });
+  });
+
+  it('does not restore stale rows after a failed latest scan and late response', async () => {
+    const previousSession: DetectedExternalSession = {
+      ...mockSessions[0]!,
+      id: 'previous-failed-result',
+      title: 'Previous failed result',
+    };
+    const oldRefresh = deferred<ExternalSessionScanBatch>();
+    const latestRefresh = deferred<ExternalSessionScanBatch>();
+    vi.mocked(externalSessionCache.getOrScanExternalSessions)
+      .mockResolvedValueOnce({ sessions: [previousSession], issues: [] })
+      .mockReturnValueOnce(oldRefresh.promise)
+      .mockReturnValueOnce(latestRefresh.promise);
+
+    render(
+      <ToastProvider>
+        <ExternalSessionsWorkbench />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    await screen.findByText(previousSession.title);
+    fireEvent.click(screen.getAllByText(previousSession.title)[0]!);
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole('button', {
+            name: '导入并接续对话',
+          }) as HTMLButtonElement
+        ).disabled
+      ).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '重新扫描' }));
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '正在接续…',
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '配置设置' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '保存' })[0]!);
+    expect(
+      externalSessionCache.getOrScanExternalSessions
+    ).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole('button', { name: '完成' }));
+
+    latestRefresh.resolve({
+      sessions: [],
+      issues: [
+        {
+          source: 'codex',
+          kind: 'error',
+          message: 'Refresh failed',
+        },
+      ],
+    });
+
+    await screen.findByText(/部分来源扫描失败，结果可能遗漏会话/);
+    expect(screen.queryAllByText(previousSession.title)).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '导入并接续对话' })).toBeNull();
+
+    oldRefresh.resolve({ sessions: [previousSession], issues: [] });
+    await waitFor(() => {
+      expect(screen.queryAllByText(previousSession.title)).toHaveLength(0);
+      expect(
+        screen.queryByRole('button', { name: '导入并接续对话' })
+      ).toBeNull();
+    });
   });
 
   it('opens secondary settings modal when clicking 配置设置 button', () => {
@@ -194,11 +409,11 @@ describe('ExternalSessionsWorkbench', () => {
     vi.spyOn(
       externalSessionCache,
       'loadExternalSessionsFromCache'
-    ).mockReturnValue(collisionMockSessions);
+    ).mockReturnValue({ sessions: collisionMockSessions, issues: [] });
     vi.spyOn(
       externalSessionCache,
       'getOrScanExternalSessions'
-    ).mockResolvedValue(collisionMockSessions);
+    ).mockResolvedValue({ sessions: collisionMockSessions, issues: [] });
 
     const sessionStoreModule = await import('../../store/sessionStore');
     vi.spyOn(sessionStoreModule, 'useSessionStore').mockImplementation(((
@@ -226,6 +441,7 @@ describe('ExternalSessionsWorkbench', () => {
       </ToastProvider>
     );
 
+    await screen.findByText('重新扫描');
     const allTab = screen.getByRole('button', { name: '全部' });
     fireEvent.click(allTab);
 
