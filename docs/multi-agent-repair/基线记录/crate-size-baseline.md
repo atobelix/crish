@@ -413,8 +413,8 @@ crates/conex-run/src/run/run_idle.rs 2264
 crates/conex-run/src/run/run_launch.rs 2097
 crates/conex-run/src/run/run_resume.rs 938
 crates/conex-run/src/run/run_snapshot.rs 650
-crates/conex-run/src/run/tests.rs 11049
-crates/conex-run/src/wake_watcher.rs 943
+crates/conex-run/src/run/tests.rs 11062
+crates/conex-run/src/wake_watcher.rs 1045
 crates/conex-run/src/workflow/backend.rs 819
 crates/conex-run/src/workflow/tests.rs 1433
 crates/conex-sandbox/src/semantics.rs 2659
