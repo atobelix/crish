@@ -8,7 +8,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import attachStyles from './ComposerAttachmentBar.module.css';
 import styles from './AnnotationChipItem.module.css';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { Button, Textarea } from '@/components/ui';
 import {

@@ -176,7 +176,6 @@ const SURF03_SCAN_DIRS: string[] = [
 
 /** 单文件热路径（行级流式 / 会话消息） */
 const SURF03_SCAN_FILES: string[] = [
-  'hooks/useChatStream.ts',
   'hooks/useAgentStream.ts',
   'hooks/useChatPanelSync.ts',
   'hooks/useAgentToolApproval.ts',

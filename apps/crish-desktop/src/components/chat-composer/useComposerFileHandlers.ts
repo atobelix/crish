@@ -9,7 +9,7 @@
 import type React from 'react';
 import { useCallback } from 'react';
 
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { useComposerHiddenFileInputProps } from '../../api/modelVisionSupport';
 import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
 

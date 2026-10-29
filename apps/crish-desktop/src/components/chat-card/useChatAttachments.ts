@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { sessionRuntimeRegistry } from '../../api/SessionRuntimeRegistry';
 import type { Attachment } from '../../api/SessionRuntimeRegistry';
 import { toast } from '../../services/toast/ToastContext';

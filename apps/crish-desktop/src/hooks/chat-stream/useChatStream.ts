@@ -10,19 +10,19 @@ import { useSlashSend } from './useSlashSend';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { sessionStreams } from '../../api/sessionStreamManager';
 
-export interface ScopedUseChatStreamOptions extends UseChatStreamOptions {
-  sessionId?: string | null;
-}
-
 /**
- * 主对话流式门面（子窗口作用域增强版）。
- * 显式接收并使用分屏 scopedSessionId，不再隐式回退全局 activeSessionId。
+ * 主对话流式门面（ChatCard / Composer 唯一入口，唯一实现）。
+ *
+ * - 会话作用域：显式 `options.sessionId` → LeafScope → 全局活跃会话（useScopedSessionId）。
+ * - 通知通道：全局 toast；会话运行状态：SessionRuntimeStatusStore（按 sessionId 隔离）。
+ * - 与子 Agent 面板（hooks/useAgentStream.ts → useAgentPanel）互斥；协议终止统一经
+ *   sessionStreams.cancel → compositionRoot.runControl。
  */
 export function useChatStream(
-  options: ScopedUseChatStreamOptions
+  options: UseChatStreamOptions
 ): UseChatStreamResult {
   const scopedSessionId = useScopedSessionId(options.sessionId);
-  const optionsWithSession: ScopedUseChatStreamOptions = {
+  const optionsWithSession: UseChatStreamOptions = {
     ...options,
     sessionId: scopedSessionId,
   };
@@ -33,6 +33,8 @@ export function useChatStream(
   const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
   const upsertSessionAgent = useSessionStore((s) => s.upsertSessionAgent);
 
+  // 「恢复即消失」：transport 恢复 → 所有会话的 network 类失败自动清空
+  //（含非活跃会话，否则切回时残留过期红条）；其余终态错误保留至用户处理。
   useEffect(() => {
     const transport = getTransport();
     const unsub = transport.onStatus((s) => {
@@ -77,16 +79,3 @@ export function useChatStream(
     handleForceCancelGeneration,
   };
 }
-
-export { useSlashSend } from './useSlashSend';
-export * from './slashSendDraftManager';
-export * from './slashSendQueueHelper';
-export * from './slashSendPreflight';
-export type {
-  ChatAttachment,
-  QueuedMessage,
-  UseChatStreamOptions,
-  UseChatStreamResult,
-  TerminalToolReason,
-  TerminalToolPatch,
-} from './types';

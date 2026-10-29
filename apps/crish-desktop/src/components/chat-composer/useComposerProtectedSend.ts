@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 
 export interface UseComposerProtectedSendOptions {
   chatInput: string;

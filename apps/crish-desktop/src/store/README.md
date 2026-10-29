@@ -166,7 +166,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 | `TerminalCard.tsx` | 已用 `getSessionStoreState`（既有） |
 | `hooks/useTabDrag.ts` | dropPreview / draggedTab → workspace facade get*/set* |
 | `hooks/useAgentToolApproval.ts` | getSessionById / getSessionAgent / addCommandPermission |
-| `hooks/useChatStream.ts` | updateMessageThinking / getActiveSessionId / setPermissionMode |
+| `hooks/chat-stream/useChatStream.ts` | updateMessageThinking / getActiveSessionId / setPermissionMode |
 | `api/chat-bridge/ConnectionLifecycle.ts`、`handlers/approvalHandlers.ts` | getPermissionMode / getCommandPermissions（经 `api/storeAccess`） |
 | `SettingsPanel.tsx` | setAppSettings → storeAccess |
 
@@ -174,7 +174,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 
 | 位置 | 原因 |
 |------|------|
-| `hooks/useChatStream.ts` | 部分已迁（thinking / permission / activeSessionId）；其余 setState 仍可续迁 |
+| `hooks/chat-stream/useChatStream.ts` | 部分已迁（thinking / permission / activeSessionId）；其余 setState 仍可续迁 |
 | `components/Sidebar.tsx` | sidebarCollapsed 拖拽折叠；壳层 chrome，非三域 facade |
 | `components/AgentCard.tsx` / `InlineAgentPanel.tsx` | 局部 immer setState 写 agent 消息 |
 | `components/Settings*Tab.tsx` | 部分合并写；SettingsPanel 已用 storeAccess.setAppSettings |

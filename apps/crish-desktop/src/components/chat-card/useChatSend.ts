@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import {
-  useChatStream,
-  type ChatAttachment,
-} from '../../hooks/chat-stream/useChatStream';
+import { useChatStream, type ChatAttachment } from '../../hooks/chat-stream';
 
 export interface UseChatSendOptions {
   sessionId?: string | null;

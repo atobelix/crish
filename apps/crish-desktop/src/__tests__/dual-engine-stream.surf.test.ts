@@ -33,7 +33,7 @@ import {
 import { resetCompositionRoot } from '../app/compositionRoot';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
-import { useChatStream } from '../hooks/useChatStream';
+import { useChatStream } from '../hooks/chat-stream';
 import { useAgentPanel } from '../hooks/useAgentStream';
 import type { UseChatStreamOptions } from '../hooks/chat-stream/types';
 

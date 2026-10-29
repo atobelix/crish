@@ -8,7 +8,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useChatStream } from './index';
+import { useChatStream } from './useChatStream';
 import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
 import { sessionStreams } from '../../api/sessionStreamManager';
 import type { UseChatStreamOptions } from './types';

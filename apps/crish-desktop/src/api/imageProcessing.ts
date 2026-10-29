@@ -3,7 +3,7 @@
  * 从 ChatCard 抽出，便于单测与复用。
  */
 
-import type { ChatAttachment } from '../hooks/useChatStream';
+import type { ChatAttachment } from '../hooks/chat-stream';
 
 /** 图片 dataUrl 体积上限（约 1.5MB 原始字节） */
 export const IMAGE_DATAURL_CAP = 1.5 * 1024 * 1024;
@@ -26,7 +26,7 @@ export function readBlobAsDataURL(blob: Blob): Promise<string> {
 /** 过大时用 canvas 缩到最长边 1600，并降质量，避免 prompt 爆炸 */
 export async function downscaleDataUrlIfNeeded(
   dataUrl: string,
-  mime: string,
+  mime: string
 ): Promise<string> {
   if (approxDataUrlBytes(dataUrl) <= IMAGE_DATAURL_CAP) return dataUrl;
 
@@ -52,7 +52,9 @@ export async function downscaleDataUrlIfNeeded(
         return;
       }
       const outMime =
-        mime === 'image/png' || mime === 'image/webp' || !mime ? 'image/jpeg' : mime;
+        mime === 'image/png' || mime === 'image/webp' || !mime
+          ? 'image/jpeg'
+          : mime;
       let quality = 0.85;
       const draw = () => {
         canvas.width = w;
@@ -66,7 +68,11 @@ export async function downscaleDataUrlIfNeeded(
         out = draw();
       }
       let guard = 0;
-      while (approxDataUrlBytes(out) > IMAGE_DATAURL_CAP && w > 400 && guard < 6) {
+      while (
+        approxDataUrlBytes(out) > IMAGE_DATAURL_CAP &&
+        w > 400 &&
+        guard < 6
+      ) {
         w = Math.max(1, Math.round(w * 0.7));
         h = Math.max(1, Math.round(h * 0.7));
         out = draw();
@@ -88,7 +94,7 @@ export function mimeToExt(mime: string): string {
 }
 
 export async function parseImageDimensions(
-  dataUrl: string,
+  dataUrl: string
 ): Promise<{ width: number; height: number }> {
   if (typeof document === 'undefined') return { width: 0, height: 0 };
   return new Promise((resolve) => {
@@ -109,7 +115,7 @@ export async function parseImageDimensions(
  */
 export async function generateSquareThumbnail(
   dataUrl: string,
-  targetSize = 116,
+  targetSize = 116
 ): Promise<string> {
   if (typeof document === 'undefined') return dataUrl;
 
@@ -139,7 +145,17 @@ export async function generateSquareThumbnail(
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, sx, sy, minEdge, minEdge, 0, 0, targetSize, targetSize);
+      ctx.drawImage(
+        img,
+        sx,
+        sy,
+        minEdge,
+        minEdge,
+        0,
+        0,
+        targetSize,
+        targetSize
+      );
 
       try {
         const thumb = canvas.toDataURL('image/webp', 0.82);
@@ -155,7 +171,7 @@ export async function generateSquareThumbnail(
 
 export async function blobToImageAttachment(
   blob: Blob,
-  preferredName?: string,
+  preferredName?: string
 ): Promise<ChatAttachment> {
   const mime = blob.type || 'image/png';
   const name =
@@ -182,5 +198,8 @@ export async function blobToImageAttachment(
 }
 
 export function isImageFile(f: File): boolean {
-  return f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name);
+  return (
+    f.type.startsWith('image/') ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)
+  );
 }

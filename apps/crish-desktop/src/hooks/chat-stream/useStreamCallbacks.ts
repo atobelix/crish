@@ -180,7 +180,7 @@ export function commitStreamWithDualLatch(
 }
 
 export function useStreamCallbacks(
-  options: UseChatStreamOptions & { sessionId?: string | null },
+  options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
   queryHelpers: StreamRunQueryHelpers
 ): {

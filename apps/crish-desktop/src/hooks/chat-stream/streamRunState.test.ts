@@ -1,9 +1,9 @@
 /**
- * useChatStream pure helpers — cancel / live-run / empty-session /
+ * chat-stream pure helpers (streamRunState / helpers) — cancel / live-run / empty-session /
  * terminal tool patches. No React render required.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { SessionMessage } from '../store/layoutStore';
+import type { SessionMessage } from '../../store/layoutStore';
 import {
   canStreamLocalSession,
   decideSendWhileRunning,
@@ -13,11 +13,8 @@ import {
   resolveStreamSessionId,
   safeCancelStream,
   stopAssistantPlaceholderText,
-} from './chat-stream/streamRunState';
-import {
-  buildTerminalToolPatches,
-  resolveTerminalDurationMs,
-} from './chat-stream/helpers';
+} from './streamRunState';
+import { buildTerminalToolPatches, resolveTerminalDurationMs } from './helpers';
 
 describe('resolveStreamSessionId (empty session — no invent remote)', () => {
   it('prefers override over active', () => {

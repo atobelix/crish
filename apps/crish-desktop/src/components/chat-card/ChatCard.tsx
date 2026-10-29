@@ -16,7 +16,7 @@ import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { DURATION_LANDING_SETTLE_MS } from '../../utils/motionTokens';
 
 const ScheduledTasksPanel = lazy(() =>
