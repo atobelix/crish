@@ -132,7 +132,7 @@ use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
     BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
-use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
+use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{
@@ -1604,7 +1604,7 @@ mod tests {
     /// 不触碰端点状态；未显式授权不向外部 MCP 暴露受管端点，34 §5.2 E-1）。
     #[tokio::test]
     async fn mcp_attach_guard_default_off_zero_exposure() {
-        use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
+        use conex_types::error::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
         // 注入 manager 的槽：即便进程存在，开关关闭仍拒绝（零暴露）
         let manager = Arc::new(BrowserManager::new(
             std::env::temp_dir().join("browser-slot-mcp-attach-off-test"),

@@ -28,8 +28,6 @@ use crate::definition::ToolError;
 use crate::tools::subagent::{SubagentCapabilityMode, SubagentRole};
 use conex_types::error::codes;
 use std::sync::Arc;
-#[cfg(any(test, feature = "test-support"))]
-use std::sync::Mutex;
 
 /// 配额键：可配上限（默认 [DEFAULT_EXPLORE_DOCS_QUOTA]）
 pub const SESSION_META_KEY_EXPLORE_DOCS_QUOTA: &str = "explore_docs_quota";
@@ -371,6 +369,7 @@ mod tests {
     use crate::poison::{poison_recovery_count, poison_test_guard};
     use crate::tools::subagent::SubagentState;
     use conex_test_utils::TempWorkspace;
+    use std::sync::Mutex;
 
     // ── 日志捕获（B1-4 毒化测三要素用）──
     //
