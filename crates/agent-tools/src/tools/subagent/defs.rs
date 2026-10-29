@@ -51,7 +51,7 @@ pub enum DefaultCommandPolicy {
     /// 无命令（analysis/design/review/organization）
     None,
     /// 构建/测试类命令（implementation：语义层 CommandClass 过滤，
-    /// 复用 permission.rs:119-121 的 semantics::analyze 分类）
+    /// 复用 permission.rs 的 assess 分类）
     BuildTest,
     /// 仅 git 前缀命令（commit，T-D-08 细化）
     GitOnly,

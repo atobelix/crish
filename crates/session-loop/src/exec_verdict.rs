@@ -8,7 +8,6 @@
 
 use super::*;
 use agent_tools::permission::{decide_verdict, PermissionMode, PermissionVerdict};
-use conex_sandbox::SmartClassifier;
 
 /// 裁决详情：判点结果 + 需审批原因（审批卡片展示与审计共用）
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,15 +160,7 @@ impl ToolExecutor {
         VerdictDecision { verdict, reason }
     }
 
-    /// 全系统唯一的法定工具审查判点（SSOT）
-    ///
-    /// 所有工具调用在派发执行前必须经过本裁决，且后续环节绝不再进行任何二次审查：
-    /// 1. 工具未启用 → Deny；超任务类型命令白名单 → Deny；
-    /// 2. Full 模式：除物理红线（Redline）外全部放行——红线是"不可授权底线"，
-    ///    任何模式不得豁免（防提示词注入抹盘）；其余命令 0 延迟直通；
-    /// 3. Shell 命令审查：SmartClassifier 统一分析（重定向/命令替换/换行等复杂形态
-    ///    保守升级审批），Smart 放行安全命令、Ask 仅放行严格只读；
-    /// 4. 常规非命令工具审查：根据 dangerous 标记和权限模式判定。
+    /// 工具审查判点。Shell 只分析一次；红线在任何模式下都拒绝。
     pub(crate) fn call_verdict(
         &self,
         call: &ToolBatchCall,
@@ -178,81 +169,78 @@ impl ToolExecutor {
         self.call_verdict_detailed(call, options).verdict
     }
 
-    /// Shell 命令复合语义审查（两层分类矩阵）
+    /// Shell 命令审查。这里是唯一的 assess 调用点。
     fn call_command_verdict_detailed(
         &self,
         command: &str,
         mode: PermissionMode,
     ) -> VerdictDecision {
-        let analysis = SmartClassifier::analyze(command);
+        let analysis = conex_sandbox::assess(command);
+        self.decide_from_assessment(&analysis, command, mode)
+    }
 
-        // 红线：任何模式（含 Full）一律刚性拒绝
-        if let conex_sandbox::SmartVerdict::Deny { reason } = analysis.verdict {
+    /// 只消费已经算好的分析。测试注入分析结果，证明这里不会再分析一次。
+    pub(crate) fn decide_from_assessment(
+        &self,
+        analysis: &conex_sandbox::Assessment,
+        command: &str,
+        mode: PermissionMode,
+    ) -> VerdictDecision {
+        if let conex_sandbox::verdict::PermissionVerdict::Deny(reason) =
+            analysis.permission_verdict()
+        {
+            let reason_text = conex_sandbox::gatekeeper::audit_reason(reason.as_str());
             tracing::warn!(
                 target: "security.audit",
                 mode = mode.as_str(),
                 command,
-                reason,
+                reason = reason_text.as_str(),
                 "Redline 命令被硬阻断"
             );
-            return VerdictDecision::deny(reason.to_string());
+            return VerdictDecision::deny(reason_text);
         }
-
         if mode == PermissionMode::Full {
             return VerdictDecision::allow();
         }
-
-        match mode {
-            PermissionMode::Smart => {
-                // C3 大回退护栏检查（大面积回退弹窗确认）
-                let semantic = conex_sandbox::semantics::analyze(command);
-                if let Some(revert_verdict) = self.revert_policy.gate_verdict(&semantic, mode) {
-                    let reason = (revert_verdict == PermissionVerdict::NeedsApproval)
-                        .then(|| "检测到大面积回退操作，需确认".to_string());
-                    return VerdictDecision {
-                        verdict: revert_verdict,
-                        reason,
-                    };
-                }
-                match analysis.verdict {
-                    conex_sandbox::SmartVerdict::Allow => VerdictDecision::allow(),
-                    conex_sandbox::SmartVerdict::RequireApproval { reason } => {
-                        let summary = reason.summary();
-                        tracing::info!(
-                            target: "security.audit",
-                            mode = mode.as_str(),
-                            command,
-                            approval_reason = %summary,
-                            "Smart 模式升级审批"
-                        );
-                        VerdictDecision {
-                            verdict: PermissionVerdict::NeedsApproval,
-                            reason: Some(summary),
-                        }
-                    }
-                    conex_sandbox::SmartVerdict::Deny { reason } => {
-                        VerdictDecision::deny(reason.to_string())
-                    }
-                }
+        if mode == PermissionMode::Smart {
+            if let Some(revert_verdict) = self.revert_policy.gate_verdict(analysis, mode) {
+                let reason = (revert_verdict == PermissionVerdict::NeedsApproval)
+                    .then(|| "检测到大面积回退操作，需确认".to_string());
+                return VerdictDecision { verdict: revert_verdict, reason };
             }
-            // Ask（Full 已在上面早退；其余未知同样按 Ask 兜底）
-            _ => {
-                // Ask 模式：仅严格只读命令放行，其余均需审批
-                if analysis.pure_read_only {
-                    VerdictDecision::allow()
-                } else {
+            return match analysis.permission_verdict() {
+                conex_sandbox::verdict::PermissionVerdict::Allow => VerdictDecision::allow(),
+                conex_sandbox::verdict::PermissionVerdict::RequireApproval(reason) => {
+                    let summary = reason.summary();
                     tracing::info!(
                         target: "security.audit",
                         mode = mode.as_str(),
                         command,
-                        "Ask 模式升级审批（非严格只读）"
+                        approval_reason = %summary,
+                        "Smart 模式升级审批"
                     );
                     VerdictDecision {
                         verdict: PermissionVerdict::NeedsApproval,
-                        reason: Some("每次询问模式：非严格只读命令需确认".to_string()),
+                        reason: Some(summary),
                     }
                 }
-            }
+                conex_sandbox::verdict::PermissionVerdict::Deny(reason) => {
+                    VerdictDecision::deny(conex_sandbox::gatekeeper::audit_reason(reason.as_str()))
+                }
+            };
+        }
+        if analysis.pure_read_only {
+            return VerdictDecision::allow();
+        }
+        tracing::info!(
+            target: "security.audit",
+            mode = mode.as_str(),
+            command,
+            "Ask 模式升级审批（非严格只读）"
+        );
+        VerdictDecision {
+            verdict: PermissionVerdict::NeedsApproval,
+            reason: Some("每次询问模式：非严格只读命令需确认".to_string()),
         }
     }
 
@@ -663,5 +651,16 @@ mod tests {
             exec.call_verdict(&disabled_call, &full_options),
             PermissionVerdict::Deny
         );
+    }
+
+    #[test]
+    fn smart_mode_uses_the_injected_assessment() {
+        let mut reg = ToolRegistry::new();
+        assert!(reg.register(Arc::new(DummyShellTool)).is_ok());
+        let exec = ToolExecutor::new(Arc::new(reg));
+        let benign = conex_sandbox::assess("git status");
+        let decision =
+            exec.decide_from_assessment(&benign, "rm -rf /", PermissionMode::Smart);
+        assert_eq!(decision.verdict, PermissionVerdict::Allow);
     }
 }
