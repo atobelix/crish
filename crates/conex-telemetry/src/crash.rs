@@ -30,7 +30,7 @@
 
 use std::panic::{self, UnwindSafe};
 
-use conex_types::error::{CrishErrorCategory, CrishErrorPayload};
+use conex_types::error::{codes, error_info, CrishErrorPayload};
 
 /// Wrap `f` so that a panic inside it becomes a structured error payload.
 ///
@@ -70,13 +70,14 @@ fn payload_to_panic_error(payload: &Box<dyn std::any::Any + Send>) -> CrishError
         .map(str::to_string)
         .unwrap_or_else(|| "<unnamed>".to_string());
 
+    let info = error_info(codes::COMMON_PANIC).expect("common.panic 必须登记在错误码目录");
     CrishErrorPayload {
-        code: "common.panic".to_string(),
+        code: info.code.to_string(),
         message: format!("panic: {}", message),
-        category: CrishErrorCategory::Permanent,
-        retryable: false,
-        is_public: false,
-        action: "action.common.report_bug".to_string(),
+        category: info.category,
+        retryable: info.retryable,
+        is_public: info.is_public,
+        action: info.action.to_string(),
         params: None,
         metadata: Some(serde_json::json!({ "thread": thread })),
         cause: None,

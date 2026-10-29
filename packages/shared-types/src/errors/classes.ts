@@ -1,7 +1,10 @@
 // packages/shared-types/src/errors/classes.ts
 import type { JsonObject } from '../primitive-types';
-import type { CrishErrorCode, CrishErrorCategory } from './codes';
-import { CRISH_ERROR_REGISTRY } from './info';
+import type {
+  CrishErrorCode,
+  CrishErrorCategory,
+} from '../generated/errors/codes';
+import { CRISH_ERROR_REGISTRY } from '../generated/errors/info';
 
 /**
  * Crish 错误基类（扩展版）。

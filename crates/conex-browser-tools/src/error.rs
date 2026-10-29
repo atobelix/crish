@@ -8,7 +8,7 @@
 //! - `CdpError` → `ToolError`（会话命令面，连接层错误归 not_ready/取消类）；
 //! - `SnapshotError`（13 文档采集错误）→ `ToolError`（超时/版本竞态/采集失败）。
 
-use crate::codes as browser_codes;
+use conex_types::error::codes as browser_codes;
 use agent_tools::definition::ToolError;
 use conex_browser::action::{ActionError, ActionErrorKind};
 use conex_browser::cdp::error::CdpError;

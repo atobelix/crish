@@ -1,8 +1,11 @@
 // packages/shared-types/src/errors/serialize.ts
 // 权威定义：./03-ERROR-MIGRATION.md §6.1
 import type { JsonObject } from '../primitive-types';
-import type { CrishErrorCode, CrishErrorCategory } from './codes';
-import { isCrishErrorCode } from './codes';
+import type {
+  CrishErrorCode,
+  CrishErrorCategory,
+} from '../generated/errors/codes';
+import { isCrishErrorCode } from '../generated/errors/codes';
 import { CrishError } from './classes';
 
 /** 跨进程序列化的错误负载（TS ↔ Rust ↔ 前端） */

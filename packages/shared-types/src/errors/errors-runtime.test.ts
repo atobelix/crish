@@ -132,9 +132,11 @@ describe('codes 辅助函数', () => {
     expect(domainOf('tool.browser.timeout' as never)).toBe('tool');
   });
 
-  it('isCrishErrorCode 只接受小写点分两段及以上', () => {
+  it('isCrishErrorCode 只接受已注册的小写点分码（多段合法）', () => {
     expect(isCrishErrorCode('tool.path_escape')).toBe(true);
-    expect(isCrishErrorCode('tool.browser.nav_timeout')).toBe(true);
+    expect(isCrishErrorCode('tool.browser.not_ready')).toBe(true);
+    // 形态合法但未注册（契约外）不再放行：集合判断，杜绝幽灵码
+    expect(isCrishErrorCode('tool.browser.nav_timeout')).toBe(false);
     expect(isCrishErrorCode('TOOL_ERROR')).toBe(false);
     expect(isCrishErrorCode('tool')).toBe(false);
     expect(isCrishErrorCode('Tool.Path')).toBe(false);

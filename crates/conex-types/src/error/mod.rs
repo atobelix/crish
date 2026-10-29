@@ -18,8 +18,39 @@ mod core_map;
 mod crish_error;
 mod migrate;
 mod provider_kind;
-mod registry;
 mod run_terminal;
+
+/// 错误码元信息声明宏：目录即唯一声明处。
+///
+/// 每个条目仍以 `m.insert(codes::X, CrishErrorInfo { ... })` 的形状书写，
+/// 便于从旧注册表逐字搬迁；宏只负责展开为静态 `ENTRIES`，不再生成运行期
+/// 插入样板。码字符串真源仍是 `error::codes`（现有正式 API）。
+macro_rules! error_catalog_table {
+    ($( m.insert(
+        codes::$konst:ident,
+        CrishErrorInfo {
+            code: $code:path,
+            title: $title:literal,
+            category: CrishErrorCategory::$cat:ident,
+            retryable: $retry:literal,
+            is_public: $public:literal,
+            action: $action:literal,
+        },
+    ); )*) => {
+        pub(super) const ENTRIES: &[CrishErrorInfo] = &[
+            $( CrishErrorInfo {
+                code: $code,
+                title: $title,
+                category: CrishErrorCategory::$cat,
+                retryable: $retry,
+                is_public: $public,
+                action: $action,
+            }, )*
+        ];
+    };
+}
+
+mod catalog;
 
 pub use core_map::{core_error_code, from_core_error_with_context};
 pub use crish_error::{CrishError, CrishErrorPayload};
@@ -27,7 +58,7 @@ pub use migrate::{migrate_error_code, MigrateErrorContext};
 pub use provider_kind::ProviderErrorKind;
 pub use run_terminal::{RunTerminal, RunTerminalError};
 
-use registry::CRISH_ERROR_REGISTRY;
+use catalog::CRISH_ERROR_REGISTRY;
 
 /// cause 链递归深度上限（TS 端 CRISH_ERROR_CAUSE_MAX_DEPTH = 8 同值）
 pub const CRISH_ERROR_CAUSE_MAX_DEPTH: u8 = 8;
@@ -63,10 +94,21 @@ pub struct CrishErrorInfo {
 /// 权威：03-ERROR-MIGRATION.md §2.2
 pub mod codes;
 
+/// 查询错误码元信息；未知码返回 `None`。
+pub fn error_info(code: &str) -> Option<&'static CrishErrorInfo> {
+    CRISH_ERROR_REGISTRY.get(code)
+}
+
+/// 遍历全部错误码元信息（声明顺序：agent_runtime → tool → infra）。
+///
+/// 供契约生成与漂移测试使用；运行期查询请用 [`error_info`]。
+pub fn error_catalog() -> impl Iterator<Item = &'static CrishErrorInfo> {
+    catalog::entries()
+}
+
 /// 查询错误码元信息，未知码回退到 common.unknown（TS 端 getErrorInfo 同构）
 pub fn info(code: &str) -> CrishErrorInfo {
-    CRISH_ERROR_REGISTRY
-        .get(code)
+    error_info(code)
         .cloned()
         .unwrap_or(CrishErrorInfo {
             code: codes::COMMON_UNKNOWN,

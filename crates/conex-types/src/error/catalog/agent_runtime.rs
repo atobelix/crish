@@ -1,9 +1,8 @@
 //! config / session / agent / runtime / provider / context 域注册条目
 
 use crate::error::{codes, CrishErrorCategory, CrishErrorInfo};
-use std::collections::HashMap;
 
-pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
+error_catalog_table! {
     // ── config 域 ──
     m.insert(
         codes::CONFIG_INVALID,
@@ -150,6 +149,84 @@ pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
             retryable: false,
             is_public: true,
             action: "action.agent.review",
+        },
+    );
+    // ── agent 运行时故障（conex-agents fault codes，X04 P2 补登）──
+    m.insert(
+        codes::AGENT_CAPACITY_PRESSURE,
+        CrishErrorInfo {
+            code: codes::AGENT_CAPACITY_PRESSURE,
+            title: "代理容量压力",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.agent.wait_capacity",
+        },
+    );
+    m.insert(
+        codes::AGENT_CAPABILITY_DENIED,
+        CrishErrorInfo {
+            code: codes::AGENT_CAPABILITY_DENIED,
+            title: "代理能力受限",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.agent.request_capability",
+        },
+    );
+    m.insert(
+        codes::AGENT_MODEL_UNAVAILABLE,
+        CrishErrorInfo {
+            code: codes::AGENT_MODEL_UNAVAILABLE,
+            title: "模型不可用",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.agent.configure_model",
+        },
+    );
+    m.insert(
+        codes::AGENT_COMM_THROTTLED,
+        CrishErrorInfo {
+            code: codes::AGENT_COMM_THROTTLED,
+            title: "代理通信被限流",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.agent.retry_later",
+        },
+    );
+    m.insert(
+        codes::AGENT_CONFIG_INVALID,
+        CrishErrorInfo {
+            code: codes::AGENT_CONFIG_INVALID,
+            title: "代理配置非法",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.agent.fix_config",
+        },
+    );
+    m.insert(
+        codes::AGENT_INTERRUPTED,
+        CrishErrorInfo {
+            code: codes::AGENT_INTERRUPTED,
+            title: "代理执行被中断",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.agent.resume",
+        },
+    );
+    m.insert(
+        codes::AGENT_SPAWN_FAILED,
+        CrishErrorInfo {
+            code: codes::AGENT_SPAWN_FAILED,
+            title: "代理派发失败",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.agent.retry_spawn",
         },
     );
     // ── runtime 域 ──
