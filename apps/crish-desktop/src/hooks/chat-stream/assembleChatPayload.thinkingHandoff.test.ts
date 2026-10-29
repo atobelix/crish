@@ -33,16 +33,6 @@ vi.mock('../../services/toast/ToastContext', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../api/providerProfiles')>();
-  return {
-    ...actual,
-    getActiveModelId: () => 'flash',
-    getActiveProfileId: () => 'gemini',
-  };
-});
-
 vi.mock('../../api/workspaceFsApi', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../api/workspaceFsApi')>();
@@ -77,7 +67,7 @@ async function loadGeminiFlash(): Promise<void> {
     parseError: null,
     tree: {
       version: 2,
-      activeModel: null,
+      activeModel: { providerId: 'gemini', modelId: 'flash' },
       providers: {
         gemini: {
           displayName: 'Gemini',
@@ -95,8 +85,6 @@ async function loadGeminiFlash(): Promise<void> {
   }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
-  localStorage.setItem('crish_active_profile_id', 'gemini');
-  localStorage.setItem('crish_active_model_id', 'flash');
 }
 
 describe('assembleChatPayload thinking handoff', () => {

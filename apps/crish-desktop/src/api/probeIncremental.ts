@@ -8,9 +8,13 @@
  * 4. 用户手工调整的上下文、展示名、思考档位与自谈费率受到 100% 绝对物理保护。
  */
 
-import type { ModelsYamlTree, ModelSpec, ProviderSpec } from './modelsCatalogTypes';
+import type {
+  ModelsYamlTree,
+  ModelSpec,
+  ProviderSpec,
+} from './modelsCatalogTypes';
 import { modelsCatalogStore } from './modelsCatalogStore';
-import { findAutofillModel } from './modelsAutofillBaseline';
+import { findAutofillModel } from '../services/modelsAutofillBaseline';
 
 export interface IncrementalProbeResult {
   providerId: string;
@@ -125,7 +129,11 @@ export async function applyIncrementalProbe(
     throw new Error(`无法对未配置的供应商执行探测追加: ${providerId}`);
   }
 
-  const { updatedProvider, result } = pureIncrementalProbe(provider, probedRawIds, normPId);
+  const { updatedProvider, result } = pureIncrementalProbe(
+    provider,
+    probedRawIds,
+    normPId
+  );
 
   if (result.newAppended === 0) {
     return result;

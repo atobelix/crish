@@ -8,7 +8,6 @@
  * - `hydrate_prune` — hydrate/list 剪掉的幽灵空壳数
  * - `shell_empty_assert` — dev 空壳不变量失败次数
  * - `silent_complete` — run 完成但无用户可见正文/工具（仅 hidden thinking 或全空）
- * - `transport_degraded_direct_fetch` — inventory #10：daemon WS 不可达时自动降级 HTTP SSE
  *
  * 仅进程内累加，无 IO；供 dev assert / 单测 / 未来 health hook 读取。
  *
@@ -29,9 +28,7 @@ export type ControlMetricKey =
   | 'message_upsert'
   | 'hydrate_prune'
   | 'shell_empty_assert'
-  | 'silent_complete'
-  /** inventory #10: auto fallback to streamViaDirectFetch when daemon WS down */
-  | 'transport_degraded_direct_fetch';
+  | 'silent_complete';
 
 const counters: Record<ControlMetricKey, number> = {
   run_control_L1: 0,
@@ -43,7 +40,6 @@ const counters: Record<ControlMetricKey, number> = {
   hydrate_prune: 0,
   shell_empty_assert: 0,
   silent_complete: 0,
-  transport_degraded_direct_fetch: 0,
 };
 
 /** 原子 +1（或 +n，n≥1） */
@@ -133,12 +129,4 @@ export function recordShellEmptyAssert(count = 1): void {
  */
 export function recordSilentComplete(count = 1): void {
   incControlMetric('silent_complete', count);
-}
-
-/**
- * inventory #10：`ALLOW_AUTO_DIRECT_FETCH_FALLBACK` 路径启动 HTTP SSE。
- * 每次降级 +1；不改变 transport 语义。
- */
-export function recordTransportDegradedDirectFetch(count = 1): void {
-  incControlMetric('transport_degraded_direct_fetch', count);
 }

@@ -16,10 +16,6 @@ import {
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
-  setActiveModelId,
-  setActiveProfileId,
-} from '../../api/providerProfiles';
-import {
   resolveHeaderModelFromCatalog,
   useModelSelection,
 } from './ChatHeaderControls';
@@ -40,7 +36,10 @@ vi.mock('../../api/engineConfig', () => ({
   })),
 }));
 
-function workbenchReadOk(providers: Record<string, ProviderSpec>) {
+function workbenchReadOk(
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
+) {
   return {
     path: CATALOG_PATH,
     content: '',
@@ -48,13 +47,16 @@ function workbenchReadOk(providers: Record<string, ProviderSpec>) {
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers },
+    tree: { version: 2, activeModel, providers },
   };
 }
 
-function mockReadOk(providers: Record<string, ProviderSpec>): void {
+function mockReadOk(
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
+): void {
   mockTauriCommand('workbench_read_models_yaml', () =>
-    workbenchReadOk(providers)
+    workbenchReadOk(providers, activeModel)
   );
 }
 
@@ -76,9 +78,10 @@ function spec(
 }
 
 async function loadProviders(
-  providers: Record<string, ProviderSpec>
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
 ): Promise<void> {
-  mockReadOk(providers);
+  mockReadOk(providers, activeModel);
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,
   }));
@@ -110,9 +113,7 @@ describe('resolveHeaderModelFromCatalog', () => {
     localStorage.clear();
   });
 
-  it('未加载时不回落 LS 种子 id', async () => {
-    setActiveProfileId('opencode-go');
-    setActiveModelId('deepseek-v4-flash');
+  it('未加载时不回落种子 id', async () => {
     expect(
       resolveHeaderModelFromCatalog({
         profileId: 'opencode-go',
@@ -177,8 +178,6 @@ describe('useModelSelection catalog-changed', () => {
   beforeEach(() => {
     localStorage.clear();
     resetModelsCatalogMirror();
-    setActiveProfileId('acme');
-    setActiveModelId('old-id');
   });
 
   afterEach(() => {
@@ -187,18 +186,24 @@ describe('useModelSelection catalog-changed', () => {
   });
 
   it('emit models-catalog-changed 后删除旧 id：徽标自愈到同厂商剩余项', async () => {
-    await loadProviders({
-      acme: spec([{ id: 'old-id' }, { id: 'keep-id' }]),
-    });
+    await loadProviders(
+      {
+        acme: spec([{ id: 'old-id' }, { id: 'keep-id' }]),
+      },
+      { providerId: 'acme', modelId: 'old-id' }
+    );
     const { result } = renderHook(() => useModelSelection(undefined, 0));
     await waitFor(() => {
       expect(result.current.engineModel).toBe('old-id');
     });
 
     await act(async () => {
-      await loadProviders({
-        acme: spec([{ id: 'keep-id' }]),
-      });
+      await loadProviders(
+        {
+          acme: spec([{ id: 'keep-id' }]),
+        },
+        { providerId: 'acme', modelId: 'keep-id' }
+      );
     });
     await waitFor(() => {
       expect(result.current.engineModel).toBe('keep-id');
@@ -207,9 +212,12 @@ describe('useModelSelection catalog-changed', () => {
   });
 
   it('只 emit model-meta-changed 不足以重解析（负例）', async () => {
-    await loadProviders({
-      acme: spec([{ id: 'old-id' }]),
-    });
+    await loadProviders(
+      {
+        acme: spec([{ id: 'old-id' }]),
+      },
+      { providerId: 'acme', modelId: 'old-id' }
+    );
     const { result } = renderHook(() => useModelSelection(undefined, 0));
     await waitFor(() => {
       expect(result.current.engineModel).toBe('old-id');
@@ -226,9 +234,7 @@ describe('useModelSelection catalog-changed', () => {
     expect(result.current.engineModel).toBe('old-id');
   });
 
-  it('加载失败时空标签，不展示 LS 种子', async () => {
-    setActiveProfileId('opencode-go');
-    setActiveModelId('deepseek-v4-flash');
+  it('加载失败时空标签，不展示种子', async () => {
     const { result } = renderHook(() => useModelSelection(undefined, 0));
     await waitFor(() => {
       expect(result.current.engineModel).toBe('');

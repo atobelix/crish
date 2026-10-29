@@ -326,19 +326,20 @@ export const modelsCatalogStore = {
   },
 
   addProvider(providerId: string, provider: ProviderSpec) {
-    const input = structuredClone(provider);
-    return mutate((tree) => addProvider(tree, providerId, input));
+    return mutate((tree) =>
+      addProvider(tree, providerId, structuredClone(provider))
+    );
   },
   updateProvider(providerId: string, patch: Partial<ProviderSpec>) {
-    const input = structuredClone(patch);
-    return mutate((tree) => updateProvider(tree, providerId, input));
+    return mutate((tree) =>
+      updateProvider(tree, providerId, structuredClone(patch))
+    );
   },
   removeProvider(providerId: string) {
     return mutate((tree) => removeProvider(tree, providerId));
   },
   addModel(providerId: string, model: Partial<ModelSpec> & { id: string }) {
-    const input = structuredClone(model);
-    return mutate((tree) => addModel(tree, providerId, input));
+    return mutate((tree) => addModel(tree, providerId, structuredClone(model)));
   },
   updateModel(
     providerId: string,
@@ -346,9 +347,8 @@ export const modelsCatalogStore = {
     patch: Partial<ModelSpec>,
     expectedRevision?: string
   ) {
-    const input = structuredClone(patch);
     return mutate(
-      (tree) => updateModel(tree, providerId, modelId, input),
+      (tree) => updateModel(tree, providerId, modelId, structuredClone(patch)),
       expectedRevision
     );
   },
@@ -356,8 +356,9 @@ export const modelsCatalogStore = {
     return mutate((tree) => removeModel(tree, providerId, modelId));
   },
   setActiveModel(ref: ModelRef | null) {
-    const input = ref === null ? null : { ...ref };
-    return mutate((tree) => setActiveModel(tree, input));
+    return mutate((tree) =>
+      setActiveModel(tree, ref === null ? null : { ...ref })
+    );
   },
   async probeAndAppendModels(providerId: string, modelIds: string[]) {
     const id = providerId.trim();
@@ -391,31 +392,27 @@ export const modelsCatalogStore = {
 };
 
 const selectors = createSelectors(() => state);
-export const selectProvider = selectors.selectProvider;
-export const selectModel = selectors.selectModel;
-export const listCatalogProviders = selectors.listProviders;
-export const selectEffectiveProtocol = selectors.selectEffectiveProtocol;
-export const selectEffectiveContextWindow =
-  selectors.selectEffectiveContextWindow;
-export const selectEffectiveCompat = selectors.selectEffectiveCompat;
-export const selectSupportsThinking = selectors.selectSupportsThinking;
-export const selectThinkingLevelsMap = selectors.selectThinkingLevelsMap;
-export const getActiveModelRef = selectors.getActiveModelRef;
+export const {
+  selectProvider,
+  selectModel,
+  listProviders: listCatalogProviders,
+  selectEffectiveProtocol,
+  selectEffectiveContextWindow,
+  selectEffectiveCompat,
+  selectSupportsThinking,
+  selectThinkingLevelsMap,
+  getActiveModelRef,
+} = selectors;
 
 const queries = createCatalogQueries(() => state);
-export const listCatalogModels = queries.listCatalogModels;
-export const findCatalogModel = queries.findCatalogModel;
-export const searchCatalogModels = queries.searchCatalogModels;
+export const { listCatalogModels, findCatalogModel, searchCatalogModels } =
+  queries;
 
-export function getModelsCatalogPath(): string {
-  return state.filePath;
-}
-export function getModelsCatalogVersion(): number {
-  return state.version;
-}
-export function resetModelsCatalogMirror(): void {
+export const getModelsCatalogPath = (): string => state.filePath;
+export const getModelsCatalogVersion = (): number => state.version;
+export const resetModelsCatalogMirror = (): void => {
   modelsCatalogStore.resetForTesting();
-}
+};
 
 export async function ensureModelsCatalogLoaded(
   force = false

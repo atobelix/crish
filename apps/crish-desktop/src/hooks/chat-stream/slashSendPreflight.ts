@@ -31,10 +31,7 @@ import {
 } from '../../api/workflow-api/workflowAssistantCard';
 import { buildMultimodalFromAttachments } from './multimodal';
 import { isModelVisionSupported } from '../../api/modelVisionSupport';
-import {
-  getActiveModelId,
-  getActiveProfileId,
-} from '../../api/providerProfiles';
+import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import { routeReadinessFailure } from './readinessPreflight';
 import { getSessionById } from '../../store/sessionStore';
 import { invokeTyped } from '../../api/tauriInvoke';
@@ -122,8 +119,9 @@ export async function runPreflightChecks(
   }
 
   // 多模态输入刚性拦截守卫：当前模型若不支持视觉输入且存在图片附件，坚决阻断发送
-  const activeModel = (getActiveModelId() || '').trim();
-  const activeProfileId = getActiveProfileId();
+  const activeRef = getActiveModelRef();
+  const activeModel = activeRef?.modelId ?? '';
+  const activeProfileId = activeRef?.providerId ?? '';
   const hasImage = attachments.some((a) =>
     Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
   );
@@ -367,8 +365,9 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     }
   }
 
-  const activeModel = (getActiveModelId() || '').trim();
-  const activeProfileId = getActiveProfileId();
+  const activeRef = getActiveModelRef();
+  const activeModel = activeRef?.modelId ?? '';
+  const activeProfileId = activeRef?.providerId ?? '';
   const isVisionSupported = checkModelVisionSupport(
     activeModel,
     activeProfileId

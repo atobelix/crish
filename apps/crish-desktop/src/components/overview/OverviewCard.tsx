@@ -11,10 +11,7 @@ import {
   selectScheduledTasks,
   selectTokenUsage,
 } from '../../store/storeAccess';
-import {
-  getActiveModelId,
-  resolveDisplayModelId,
-} from '../../api/providerProfiles';
+import { resolveDisplayModelId } from '../../api/providerProfiles';
 import { useEngineState } from '../../hooks/useEngineState';
 import { listProjects, getWorkspacePath } from '../../api/projectStore';
 import { filterWorkflowsByWorkspace } from '../../api/workflowApi';
@@ -80,7 +77,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
 
   const toggle = (k: SecKey) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
-  const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
+  const modelId = resolveDisplayModelId() || 'unknown';
   // plans/05 T5.4：费用只渲染引擎三态，禁止 JS 估算
   const estimated =
     tokenUsage.costStatus === 'priced'

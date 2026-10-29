@@ -1,15 +1,16 @@
 /**
- * 模型目录 IPC 面（拆自 modelCatalog.ts）：扫描 / 上送 / 快照拉取 / 连通测试 /
- * Picker 列表。含网络与 Tauri 副作用，调用 invokeResult 与 providerProbe*。
+ * 模型探测与出厂能力字典 IPC 面。
+ *
+ * 单轨口径：探测命令只认供应商 id（baseUrl/apiKey 由内核从统一树与
+ * DPAPI 凭据槽解析）；扫描到的上下文长度批量写回统一树（一次 CAS 提交），
+ * 连通测试结果写入探测结果面（modelCatalogMeta）。
+ * 出厂数据（定价/上下文字典）唯一来源 = `workbench_read_capability_dictionary`。
  */
 
-import { loadProfiles, type ProviderProfile } from './providerProfiles';
-import { foldProfilesByDisplayName } from './provider-profiles/profileValidation';
 import { invokeResult } from './tauriInvoke';
 import {
   providerProbePing,
   providerProbeScanModels,
-  type ScannedModel as WireScannedModel,
 } from './provider-profiles/rustProfileStore';
 import { applyCatalogCacheSnapshot } from './pricingResolver';
 import type {
@@ -19,38 +20,42 @@ import type {
 } from './pricingTypes';
 import { logger } from '../services/LoggerService';
 import { errorStore } from '../services/ErrorStore';
+import { t } from '../i18n';
 import { normalizeModelIdText } from './modelCatalogPure';
-import { upsertModelMetaExport, getModelMeta } from './modelCatalogMeta';
+import { recordProbeResult } from './modelCatalogMeta';
+import { modelsCatalogStore } from './modelsCatalogStore';
+import type { ScannedModel } from './provider-profiles/rustProfileStore';
 import type {
-  CatalogModelEntry,
   CatalogSnapshotEntryWire,
   CatalogSnapshotWire,
-  ScannedModelCapabilities,
-} from './modelCatalogTypes';
-import {
-  buildCatalogEntriesFromProfiles,
-  pickDefaultCatalogEntry,
-} from './modelCatalogPure';
-import type { PickDefaultCatalogOpts } from './modelCatalogTypes';
+} from './pricingTypes';
 
-/** 扫描提供商模型列表（OpenAI 兼容 /models） */
+/**
+ * 扫描能力位（引擎 wire 契约：Rust `ScannedCapabilities` camelCase 镜像）。
+ * 注意与本地 meta 域的 `ModelCapabilities`（tools/image/video/reasoning）是
+ * 两个不同的契约域：引擎 catalog 契约键为 `vision`（→ supports_vision）。
+ */
+export type ScannedModelCapabilities = {
+  tools?: boolean;
+  vision?: boolean;
+  reasoning?: boolean;
+};
+
+/**
+ * 扫描供应商可用模型（OpenAI 兼容 /models）。
+ * 扫描到的 contextWindow 只填树中缺省的模型（已有值不覆盖），一次 updateTree 提交。
+ */
 export async function scanProviderModels(
-  profile: ProviderProfile
+  providerId: string
 ): Promise<{ ok: boolean; models: string[]; error?: string }> {
-  const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
+  const id = providerId.trim();
   try {
-    const res = await providerProbeScanModels(fresh.id);
+    const res = await providerProbeScanModels(id);
     if (res.status === 'ok') {
       const data = res.data;
       if (data.ok && data.models.length > 0) {
-        const modelNames = data.models.map((m: WireScannedModel) => m.model);
-        for (const m of data.models) {
-          if (m.contextWindow && m.contextWindow > 0) {
-            upsertModelMetaExport(fresh.id, m.model, {
-              contextLength: m.contextWindow,
-            });
-          }
-        }
+        const modelNames = data.models.map((m: ScannedModel) => m.model);
+        await mergeScannedContextWindows(id, data.models);
         return { ok: true, models: modelNames };
       }
       return {
@@ -69,7 +74,40 @@ export async function scanProviderModels(
   return { ok: false, models: [], error: '扫描服务未就绪' };
 }
 
-export type { ScannedModelCapabilities };
+/** 扫描到的上下文长度批量并入统一树：只填洞，一次 CAS 提交；失败显式告警不打断扫描。 */
+async function mergeScannedContextWindows(
+  providerId: string,
+  models: ScannedModel[]
+): Promise<void> {
+  const withCtx = models.filter(
+    (m) => typeof m.contextWindow === 'number' && m.contextWindow > 0
+  );
+  if (withCtx.length === 0) return;
+  const state = modelsCatalogStore.getState();
+  const provider = state.tree.providers[providerId];
+  if (!state.loaded || !provider) return;
+
+  const tree = structuredClone(state.tree);
+  const target = tree.providers[providerId]!;
+  let changed = false;
+  for (const m of withCtx) {
+    const spec = target.models.find((x) => x.id === m.model);
+    if (spec && !spec.contextWindow) {
+      spec.contextWindow = m.contextWindow;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const result = await modelsCatalogStore.updateTree(tree);
+  if (!result.ok) {
+    logger.warn(
+      t('models.probe.contextWindowWriteFailed', { error: result.error }),
+      {
+        module: 'modelCatalogIpc',
+      }
+    );
+  }
+}
 
 /** 条目 tiered 档映射（Rust TieredPriceTier camelCase → 前端 CatalogTier） */
 function toCatalogTierWire(
@@ -279,23 +317,21 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
   }
 }
 
-/** 轻量连通测试：发极短 completion */
+/** 轻量连通测试：发极短 completion（结果写入探测结果面）。 */
 export async function testProviderModel(
-  profile: ProviderProfile,
+  providerId: string,
   model: string
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
-  const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
+  const id = providerId.trim();
   try {
-    const res = await providerProbePing(fresh.id, model || undefined);
+    const res = await providerProbePing(id, model || undefined);
     if (res.status === 'ok') {
       const data = res.data;
-      upsertModelMetaExport(fresh.id, model, {
-        lastTest: {
-          ok: data.ok,
-          latencyMs: data.latencyMs,
-          at: Date.now(),
-          error: data.error,
-        },
+      recordProbeResult(id, model, {
+        ok: data.ok,
+        latencyMs: data.latencyMs,
+        at: Date.now(),
+        error: data.error,
       });
       return { ok: data.ok, latencyMs: data.latencyMs, error: data.error };
     }
@@ -307,44 +343,4 @@ export async function testProviderModel(
     return { ok: false, error };
   }
   return { ok: false, error: '探活服务未就绪' };
-}
-
-/** 启用中的提供商；同展示名只留一行（I8：opencode-go 与 custom 拷贝不并列）。 */
-export function listPickerProfiles(): ProviderProfile[] {
-  return foldProfilesByDisplayName(
-    loadProfiles().filter((p) => p.enabled !== false)
-  );
-}
-
-/**
- * 设置页服务商列表：含停用，同展示名只留一行。
- * 折叠函数与 picker 相同（foldProfilesByDisplayName）；不过滤 enabled。
- */
-export function listSettingsProfiles(): ProviderProfile[] {
-  return foldProfilesByDisplayName(loadProfiles());
-}
-
-/**
- * Picker 用：仅返回真实配置在 profile 中、且 meta 未禁用的模型。
- * 经 normalize → dedupe → usable 管道；不写死 vendor 演示表。
- * 空列表时返回 []（调用方不得回落 mimo 等硬编码默认）。
- */
-export function listAvailablePickerModels(): CatalogModelEntry[] {
-  return buildCatalogEntriesFromProfiles(
-    listPickerProfiles(),
-    (profileId, model) => {
-      const meta = getModelMeta(profileId, model);
-      return meta.enabled !== false;
-    }
-  );
-}
-
-/**
- * 从当前本机目录挑选默认模型（读 LS，无副作用）。
- * 空 catalog → null，**不**发明远程 vendor 默认。
- */
-export function pickDefaultFromLocalCatalog(
-  opts?: PickDefaultCatalogOpts
-): CatalogModelEntry | null {
-  return pickDefaultCatalogEntry(listAvailablePickerModels(), opts);
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { formatContextLabel } from '../../api/modelCatalogPure';
-import { getModelMeta } from '../../api/modelCatalog';
+import { getProbeResult } from '../../api/modelCatalogMeta';
 import {
   getActiveModelRef,
   modelsCatalogStore,
@@ -62,7 +62,7 @@ export const ModelList: React.FC<{
       {modelsList.map((m) => {
         const model = getLiveModel(providerId, m);
         // lastTest 是连通性探测结果，不是 modalities/thinking/pricing 真源
-        const lastTest = getModelMeta(providerId, m).lastTest;
+        const lastTest = getProbeResult(providerId, m);
         const off = model?.enabled === false;
         const isLive =
           activeRef?.providerId === providerId && activeRef?.modelId === m;

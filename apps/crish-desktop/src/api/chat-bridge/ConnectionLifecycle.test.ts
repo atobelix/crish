@@ -503,7 +503,8 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
 const CATALOG_PATH = 'C:\\tmp\\models.yaml';
 
 async function loadLiveCatalog(
-  providers: Record<string, ProviderSpec>
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
 ): Promise<void> {
   resetModelsCatalogMirror();
   mockTauriCommand('workbench_read_models_yaml', () => ({
@@ -513,7 +514,7 @@ async function loadLiveCatalog(
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers },
+    tree: { version: 2, activeModel, providers },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -524,24 +525,29 @@ async function loadLiveCatalog(
 
 describe('resolveContextWindow（live contextWindow；禁止 128000 假上限）', () => {
   afterEach(() => {
-    localStorage.removeItem('crish_active_profile_id');
-    localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('crish_model_meta_v1');
     resetModelsCatalogMirror();
     sessionRuntimeRegistry.clearAll();
   });
 
   it('settings / LS meta 不是规格源（不读 contextWindow 键，不读 contextLength）', async () => {
-    localStorage.setItem('crish_active_profile_id', 'p1');
-    localStorage.setItem('crish_active_model_id', 'deepseek-chat');
+    // 树活跃模型无 contextWindow 声明；LS meta 的 contextLength 一律不参与
+    await loadLiveCatalog(
+      {
+        p1: {
+          displayName: 'P1',
+          baseUrl: 'https://example.invalid/v1',
+          protocol: 'openai/chat',
+          models: [{ id: 'deepseek-chat' }],
+        },
+      },
+      { providerId: 'p1', modelId: 'deepseek-chat' }
+    );
     localStorage.setItem(
       'crish_model_meta_v1',
       JSON.stringify({
-        'p1::deepseek-chat': {
-          profileId: 'p1',
-          model: 'deepseek-chat',
-          enabled: true,
-          contextLength: 131_072,
+        [JSON.stringify(['p1', 'deepseek-chat'])]: {
+          lastTest: { ok: true, at: 1 },
         },
       })
     );
@@ -552,33 +558,36 @@ describe('resolveContextWindow（live contextWindow；禁止 128000 假上限）
   });
 
   it('live contextWindow 正数 → 原样取整；缺省 undefined，不发明 128000', async () => {
-    localStorage.setItem('crish_active_profile_id', 'p1');
-    localStorage.setItem('crish_active_model_id', 'deepseek-chat');
-    await loadLiveCatalog({
-      p1: {
-        displayName: 'P1',
-        baseUrl: 'https://example.invalid/v1',
-        protocol: 'openai/chat',
-        models: [
-          {
-            id: 'deepseek-chat',
-            contextWindow: 131_072,
-            thinking: { High: 'HIGH', Low: 'low' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        p1: {
+          displayName: 'P1',
+          baseUrl: 'https://example.invalid/v1',
+          protocol: 'openai/chat',
+          models: [
+            {
+              id: 'deepseek-chat',
+              contextWindow: 131_072,
+              thinking: { High: 'HIGH', Low: 'low' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'p1', modelId: 'deepseek-chat' }
+    );
     expect(resolveContextWindow()).toBe(131_072);
 
-    localStorage.setItem('crish_active_model_id', 'no-window');
-    await loadLiveCatalog({
-      p1: {
-        displayName: 'P1',
-        baseUrl: 'https://example.invalid/v1',
-        protocol: 'openai/chat',
-        models: [{ id: 'no-window' }],
+    await loadLiveCatalog(
+      {
+        p1: {
+          displayName: 'P1',
+          baseUrl: 'https://example.invalid/v1',
+          protocol: 'openai/chat',
+          models: [{ id: 'no-window' }],
+        },
       },
-    });
+      { providerId: 'p1', modelId: 'no-window' }
+    );
     expect(resolveContextWindow()).toBeUndefined();
     expect(resolveContextWindow()).not.toBe(128_000);
   });
@@ -591,8 +600,6 @@ describe('resolveContextWindow（live contextWindow；禁止 128000 假上限）
 
 describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   afterEach(() => {
-    localStorage.removeItem('crish_active_profile_id');
-    localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('conex:model-thinking-pref:gemini:gpt-4o');
     localStorage.removeItem('conex:global-thinking-pref');
     resetModelsCatalogMirror();
@@ -600,21 +607,22 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   });
 
   it('会话 High → wire HIGH；不读 settings 小写标签', async () => {
-    localStorage.setItem('crish_active_profile_id', 'gemini');
-    localStorage.setItem('crish_active_model_id', 'gpt-4o');
-    await loadLiveCatalog({
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          {
-            id: 'gpt-4o',
-            thinking: { Off: 'disabled', High: 'HIGH' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            {
+              id: 'gpt-4o',
+              thinking: { Off: 'disabled', High: 'HIGH' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'gemini', modelId: 'gpt-4o' }
+    );
     setSessionThinkingTitle('sess-a', 'High');
     expect(resolveSendThinkingFields('sess-a')).toEqual({
       thinkingTitle: 'High',
@@ -623,21 +631,22 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   });
 
   it('显式 Off → 仍交出字典 value（disabled），不省略', async () => {
-    localStorage.setItem('crish_active_profile_id', 'gemini');
-    localStorage.setItem('crish_active_model_id', 'gpt-4o');
-    await loadLiveCatalog({
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          {
-            id: 'gpt-4o',
-            thinking: { Off: 'disabled', High: 'HIGH' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            {
+              id: 'gpt-4o',
+              thinking: { Off: 'disabled', High: 'HIGH' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'gemini', modelId: 'gpt-4o' }
+    );
     setSessionThinkingTitle('sess-a', 'Off');
     expect(resolveSendThinkingFields('sess-a')).toEqual({
       thinkingTitle: 'Off',
@@ -646,57 +655,60 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   });
 
   it('非思考模型 → 省略，不伪造 Off', async () => {
-    localStorage.setItem('crish_active_profile_id', 'p1');
-    localStorage.setItem('crish_active_model_id', 'plain');
-    await loadLiveCatalog({
-      p1: {
-        displayName: 'P1',
-        baseUrl: 'https://example.invalid/v1',
-        protocol: 'openai/chat',
-        models: [{ id: 'plain' }],
+    await loadLiveCatalog(
+      {
+        p1: {
+          displayName: 'P1',
+          baseUrl: 'https://example.invalid/v1',
+          protocol: 'openai/chat',
+          models: [{ id: 'plain' }],
+        },
       },
-    });
+      { providerId: 'p1', modelId: 'plain' }
+    );
     setSessionThinkingTitle('sess-a', 'High');
     expect(resolveSendThinkingFields('sess-a')).toEqual({});
   });
 
   it('原选档位不在当前模型声明中 → 省略（视为未选，不降级到 Off/High）', async () => {
-    localStorage.setItem('crish_active_profile_id', 'gemini');
-    localStorage.setItem('crish_active_model_id', 'gpt-4o');
-    await loadLiveCatalog({
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          {
-            id: 'gpt-4o',
-            thinking: { Off: 'disabled', High: 'HIGH' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            {
+              id: 'gpt-4o',
+              thinking: { Off: 'disabled', High: 'HIGH' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'gemini', modelId: 'gpt-4o' }
+    );
     // 'Medium' 不在 {Off, High} 中：旧行为是回落首项 'Off'，现行为省略
     setSessionThinkingTitle('sess-a', 'Medium');
     expect(resolveSendThinkingFields('sess-a')).toEqual({});
   });
 
   it('无会话 Title 但该模型有持久偏好 → 沿用（与档位面板同一解析源）', async () => {
-    localStorage.setItem('crish_active_profile_id', 'gemini');
-    localStorage.setItem('crish_active_model_id', 'gpt-4o');
-    await loadLiveCatalog({
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          {
-            id: 'gpt-4o',
-            thinking: { Off: 'disabled', High: 'HIGH' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            {
+              id: 'gpt-4o',
+              thinking: { Off: 'disabled', High: 'HIGH' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'gemini', modelId: 'gpt-4o' }
+    );
     localStorage.setItem('conex:model-thinking-pref:gemini:gpt-4o', 'High');
     expect(resolveSendThinkingFields('sess-a')).toEqual({
       thinkingTitle: 'High',
@@ -705,21 +717,22 @@ describe('resolveSendThinkingFields（会话 Title → live wire）', () => {
   });
 
   it('全局偏好档位不在当前模型声明中 → 省略（视为未选，不降级）', async () => {
-    localStorage.setItem('crish_active_profile_id', 'gemini');
-    localStorage.setItem('crish_active_model_id', 'gpt-4o');
-    await loadLiveCatalog({
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          {
-            id: 'gpt-4o',
-            thinking: { Off: 'disabled', High: 'HIGH' },
-          },
-        ],
+    await loadLiveCatalog(
+      {
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            {
+              id: 'gpt-4o',
+              thinking: { Off: 'disabled', High: 'HIGH' },
+            },
+          ],
+        },
       },
-    });
+      { providerId: 'gemini', modelId: 'gpt-4o' }
+    );
     localStorage.setItem('conex:global-thinking-pref', 'Medium');
     expect(resolveSendThinkingFields('sess-a')).toEqual({});
   });

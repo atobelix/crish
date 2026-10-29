@@ -115,6 +115,7 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
     runStreamingAssistant: send.runStreamingAssistant,
     handleSendChat: send.handleSendChat,
     handleStopGeneration: send.handleStopGeneration,
+    handleSilentStopGeneration: send.handleSilentStopGeneration,
     handleForceCancelGeneration: send.handleForceCancelGeneration,
     onSend,
   };

@@ -8,7 +8,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
 import {
-  configProfileApply,
   configSecretClear,
   configSecretGet,
   configSecretHas,
@@ -85,12 +84,15 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
     });
   });
 
-  it('config_profile_apply：旧命令已退役，本模块不再产出该字面量', async () => {
-    // 期 1（迁移方案 03）：`config_profile_apply` 已退役，`configProfileApply`
-    // 内部改走统一树（读树/写树由 applyTree.test.ts 覆盖）。本用例只钉住
-    // 「模块不再以旧命令为出口」这一事实，防止回潮。
+  it('config_profile_apply 路径已物理清退：模块不再导出该出口', async () => {
+    // 单轨收口（2026-10-29）：激活走 modelsCatalogStore.setActiveModel（树 CAS），
+    // 凭据走 config_secret_set（DPAPI + 快照回装）。本用例钉住
+    // 「configProfileApply / applySelectionToTree 不再存在」，防止双轨回潮。
     const mod = await import('./rustProfileStore');
-    expect(typeof mod.configProfileApply).toBe('function');
+    expect((mod as Record<string, unknown>).configProfileApply).toBeUndefined();
+    expect(
+      (mod as Record<string, unknown>).applySelectionToTree
+    ).toBeUndefined();
   });
 
   it('error 三态：CoreError 形状透传（kind/message）', async () => {

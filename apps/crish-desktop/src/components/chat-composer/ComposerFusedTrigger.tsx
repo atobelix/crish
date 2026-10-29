@@ -17,10 +17,7 @@ import React, {
 import styles from './ComposerFusedTrigger.module.css';
 import { Button, Menu, Tooltip } from '@/components/ui';
 import { toggleExclusiveMenu } from '@/components/ui';
-import {
-  getActiveModelId,
-  getActiveProfileId,
-} from '../../api/provider-profiles/profileActiveSelection';
+import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import { onUiEvent } from '../../api/uiEvents';
 import {
   getLiveModel,
@@ -50,10 +47,10 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
   const catalogVersion = useModelsCatalogVersion();
   const sessionId = useScopedSessionId(sessionIdProp);
   const [open, setOpen] = useState(false);
-  const [identity, setIdentity] = useState(() => ({
-    providerId: (getActiveProfileId() ?? '').trim(),
-    modelId: (getActiveModelId() ?? '').trim(),
-  }));
+  const [identity, setIdentity] = useState(() => {
+    const ref = getActiveModelRef();
+    return { providerId: ref?.providerId ?? '', modelId: ref?.modelId ?? '' };
+  });
   // titleEpoch：SessionRuntimeRegistry 的 thinkingTitle 存在模块级可变内存中，
   // 不是 React 状态源——外部写入口（Picker / 跨会话恢复）改档后本组件无法感知。
   // 用递增计数器作为「外部状态已变」的显式 re-read 信号（比强行把 registry
@@ -64,17 +61,16 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
 
   useEffect(() => {
     const update = (detail?: { profileId?: string; model?: string }) => {
+      const ref = getActiveModelRef();
       setIdentity({
-        providerId: (detail?.profileId || getActiveProfileId() || '').trim(),
-        modelId: (detail?.model || getActiveModelId() || '').trim(),
+        providerId: (detail?.profileId || ref?.providerId || '').trim(),
+        modelId: (detail?.model || ref?.modelId || '').trim(),
       });
     };
     const offModel = onUiEvent('model-changed', update);
-    const offProfiles = onUiEvent('profiles-changed', () => update());
     update();
     return () => {
       offModel();
-      offProfiles();
     };
   }, [catalogVersion]);
 

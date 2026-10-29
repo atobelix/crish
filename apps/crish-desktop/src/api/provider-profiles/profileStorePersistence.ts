@@ -1,35 +1,27 @@
 /**
- * Profile 列表持久化与迁移守卫。
+ * OAuth 档案轨（LS）：统一树无法表达的供应商身份信息（authType、
+ * oauthConfig、oauthToken、subscriptionPlan）持久化在这里。
  *
- * 从 profileStore.ts 拆出（T4-11 SR-06-R3）：localStorage 读写、
- * 默认种子、明文迁移守卫（PE-07 T07.4-B），以及 profile 增删改。
+ * 单轨口径：
+ * - 供应商/模型目录、启用态、活跃模型、apiKey 凭据状态 → 统一树
+ *   （modelsCatalogStore，models.yaml）。本模块不存储、不镜像这些字段。
+ * - localStorage `crish_provider_profiles_v1` 仅承载 OAuth/订阅档案；
+ *   明文密钥迁移守卫（PE-07 T07.4-B）保留——迁移完成前禁止写回，
+ *   防止「剥离明文时未落 DPAPI」造成密钥丢失。
  */
 
 import { emitUiEvent } from '../uiEvents';
 import type { ProviderProfile } from './profileCatalog';
 import {
-  isEmptyModelCatalog,
-  normalizeModelIds,
   normalizeProviderProfile,
   normalizeProviderProfiles,
-  profileHasKey,
   stripLegacySeedModels,
-  mergeModelIds,
 } from './profileValidation';
 import {
   ensureLegacyProfilesMigration,
   LEGACY_MIGRATION_FLAG_KEY,
 } from './migrateLegacyProfiles';
 import { recordPendingContextState } from './contextStatePending';
-import { purgeMetaForProfile, purgeOrphanMetaKeys } from '../modelCatalogMeta';
-import {
-  getActiveProfileId,
-  clearActiveProfileId,
-  clearActiveModelId,
-  getActiveModelId,
-  setActiveModelId,
-  sanitizeGhostActiveModel,
-} from './profileActiveSelection';
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 
@@ -73,40 +65,18 @@ export function loadProfiles(): ProviderProfile[] {
 
   try {
     const raw = localStorage.getItem(PROFILES_KEY);
-    if (!raw) {
-      // 中立产品：空库不种第三方壳，由向导/设置自建
-      saveProfiles([]);
-      sanitizeGhostActiveModel([]);
-      return [];
-    }
+    if (!raw) return [];
     const arr = JSON.parse(raw);
-    if (!Array.isArray(arr) || arr.length === 0) {
-      sanitizeGhostActiveModel([]);
-      return [];
-    }
+    if (!Array.isArray(arr) || arr.length === 0) return [];
     const normalized = normalizeProviderProfiles(arr);
-    if (normalized.length === 0) {
-      sanitizeGhostActiveModel([]);
-      return [];
-    }
-    let changed = false;
-    if (normalized.length !== arr.length) changed = true;
-    const migrated = normalized.map((p) => {
-      const next = stripLegacySeedModels(p);
-      if (next.models.length !== p.models.length) changed = true;
-      return next;
-    });
-    if (!changed) {
-      for (let i = 0; i < arr.length; i++) {
-        const rawModels = (arr[i] as { models?: unknown })?.models;
-        if (Array.isArray(rawModels)) {
-          const cleaned = normalizeModelIds(rawModels);
-          if (cleaned.length !== rawModels.length) {
-            changed = true;
-            break;
-          }
-        }
-      }
+    if (normalized.length === 0) return [];
+
+    let changed = normalized.length !== arr.length;
+    const migrated = normalized.map((p) => stripLegacySeedModels(p));
+    if (
+      migrated.some((p, i) => p.models.length !== normalized[i]!.models.length)
+    ) {
+      changed = true;
     }
     if (changed) {
       // 明文迁移守卫：存量仍含 apiKey 且未置幂等标记 → 本次写回交给迁移负责
@@ -123,39 +93,10 @@ export function loadProfiles(): ProviderProfile[] {
         }
       }
     }
-    sanitizeGhostActiveModel(migrated);
-    // 孤儿 meta 清扫：档案已删除的 meta 键（profileId::model 前缀）一次性收敛
-    purgeOrphanMetaKeys(new Set(migrated.map((p) => p.id)));
     return migrated;
   } catch {
-    sanitizeGhostActiveModel([]);
     return [];
   }
-}
-
-export function getActiveProfile(): ProviderProfile | null {
-  const id = getActiveProfileId();
-  if (!id) return null;
-  return loadProfiles().find((p) => p.id === id) || null;
-}
-
-/** 是否至少有一个服务商已配置密钥（用于首次引导） */
-/**
- * 该供应商是否已配置凭据（凭据壳 hasKey / apiKey 字面）。
- * 对话选择器用它判定「可用」：未配置的 yaml 预置壳不占列表，
- * 避免选择后 activateProfileModel 报 profile_not_found。
- */
-export function profileHasConfiguredKey(providerId: string): boolean {
-  return loadProfiles().some((p) => p.id === providerId && profileHasKey(p));
-}
-
-export function anyProfileHasKey(): boolean {
-  return loadProfiles().some((p) => profileHasKey(p));
-}
-
-/** 任一启用供应商在本地列表中有模型 id（扫描或手填） */
-export function anyProfileHasModel(): boolean {
-  return !isEmptyModelCatalog(loadProfiles());
 }
 
 export function upsertProfile(profile: ProviderProfile) {
@@ -168,120 +109,9 @@ export function upsertProfile(profile: ProviderProfile) {
   return list;
 }
 
-export function createCustomProfile(input: {
-  name: string;
-  baseUrl?: string;
-  models?: string[];
-  protocol?: ProviderProfile['protocol'];
-}): ProviderProfile {
-  const name = input.name.trim() || '自定义服务商';
-  const id = `custom-${Date.now().toString(36)}`;
-  const entry = normalizeProviderProfile({
-    id,
-    name,
-    // 中立：不预填任何官方/第三方 URL；由用户填写
-    baseUrl: (input.baseUrl || '').trim(),
-    models: input.models?.length ? input.models : [],
-    hasKey: false,
-    ...(input.protocol ? { protocol: input.protocol } : {}),
-  });
-  upsertProfile(entry);
-  return entry;
-}
-
+/** 删除 OAuth 档案记录（供应商本体的删除走统一树 removeProvider）。 */
 export function removeProfile(profileId: string): ProviderProfile[] {
-  const list = loadProfiles().filter((p) => p.id !== profileId);
-  // 删空后保持空列表，不回种第三方默认壳
-  const next = list;
+  const next = loadProfiles().filter((p) => p.id !== profileId);
   saveProfiles(next);
-  if (getActiveProfileId() === profileId) {
-    clearActiveProfileId();
-    clearActiveModelId();
-  }
-  // 档案删除即 GC：该档案的模型元数据键一并清扫（避免孤儿残留）
-  purgeMetaForProfile(profileId);
   return next;
-}
-
-/**
- * 启用/禁用供应商。禁用当前活动供应商时清空活动选择，避免幽灵 id。
- */
-export function setProfileEnabled(
-  profileId: string,
-  enabled: boolean
-): ProviderProfile[] {
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
-  p.enabled = enabled;
-  saveProfiles(list);
-  if (!enabled && getActiveProfileId() === profileId) {
-    clearActiveProfileId();
-    clearActiveModelId();
-  }
-  return loadProfiles();
-}
-
-export function addModelToProfile(profileId: string, model: string) {
-  const m = String(model ?? '').trim();
-  if (!m) return loadProfiles();
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
-  const next = mergeModelIds(p.models, [m]);
-  if (next.length === p.models.length && p.models.includes(m)) return list;
-  p.models = next;
-  saveProfiles(list);
-  return list;
-}
-
-export function removeModelFromProfile(profileId: string, model: string) {
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
-  p.models = p.models.filter((x) => x !== model);
-  saveProfiles(list);
-  if (getActiveProfileId() === profileId && getActiveModelId() === model) {
-    clearActiveModelId();
-  }
-  return list;
-}
-
-/**
- * 重命名 profile 内模型 id（保序）。
- * 新 id 已存在则合并去重；活动模型一并迁移。
- */
-export function renameModelInProfile(
-  profileId: string,
-  oldModel: string,
-  newModel: string
-): ProviderProfile[] {
-  const from = String(oldModel ?? '').trim();
-  const to = String(newModel ?? '').trim();
-  if (!from || !to || from === to) return loadProfiles();
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
-  const models = normalizeModelIds(p.models);
-  const idx = models.indexOf(from);
-  if (idx < 0) return list;
-  const next = models.slice();
-  next[idx] = to;
-  p.models = normalizeModelIds(next);
-  saveProfiles(list);
-  if (getActiveProfileId() === profileId && getActiveModelId() === from) {
-    setActiveModelId(to);
-  }
-  return list;
-}
-
-export function renameProfile(profileId: string, name: string) {
-  const n = name.trim();
-  if (!n) return loadProfiles();
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
-  p.name = n;
-  saveProfiles(list);
-  return list;
 }

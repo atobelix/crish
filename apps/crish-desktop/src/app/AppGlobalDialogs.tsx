@@ -90,12 +90,14 @@ export function AppGlobalDialogs({
                 : {})}
               onDone={async () => {
                 setShowFirstRun(false);
-                const { getActiveModelId, getActiveProfileId } =
-                  await import('../api/providerProfiles');
-                const model = getActiveModelId();
-                const profileId = getActiveProfileId();
-                if (model && profileId) {
-                  emitUiEvent('model-changed', { profileId, model });
+                const { getActiveModelRef } =
+                  await import('../api/modelsCatalogStore');
+                const ref = getActiveModelRef();
+                if (ref) {
+                  emitUiEvent('model-changed', {
+                    profileId: ref.providerId,
+                    model: ref.modelId,
+                  });
                 }
               }}
               onOpenSettings={() => {

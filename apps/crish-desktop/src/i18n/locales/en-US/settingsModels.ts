@@ -68,4 +68,6 @@ export const settingsPartModels = {
   'models.probe.handshakeOk':
     'Provider handshake successful (URL and credentials verified, click "Fetch" to add models)',
   'models.probe.checkFailed': 'Connection check failed: {error}',
+  'models.probe.contextWindowWriteFailed':
+    'Failed to merge scanned context windows into the unified tree: {error}',
 };

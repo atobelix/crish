@@ -1,99 +1,23 @@
 /**
- * 引擎同步与模型激活（K-01 DPAPI）。
+ * 激活模型与展示解析：唯一真源 = 统一树 activeModel（modelsCatalogStore）。
  *
- * 从 profileStore.ts 拆出（T4-11 SR-06-R3）：将指定 profile + 模型
- * 应用到引擎的 activateProfileModel，以及保存 Base URL 后的引擎同步。
+ * - 活跃模型只有一条写路径：modelsCatalogStore.setActiveModel（CAS 提交，
+ *   内核落盘后自动 reload_provider，引擎侧无需再单独 apply）。
+ * - 本模块不再读写任何「本机活跃选择」标记；OAuth 档案轨（LS）只承载身份，
+ *   不承载选择。
+ * - 密钥状态权威源 = 树快照 credentialStates（DPAPI 凭据槽回执）。
  */
 
 import { pushRecentModel } from '../engineConfig';
 import { emitUiEvent } from '../uiEvents';
-import { configProfileApply } from './rustProfileStore';
+import { modelsCatalogStore, getActiveModelRef } from '../modelsCatalogStore';
 import {
-  type FlatModelChoice,
-  type ResolvedModelSelection,
-} from './profileCatalog';
-import {
-  flattenModelChoicesFrom,
-  pickDefaultModelSelection,
-} from './profileValidation';
+  getLiveModel,
+  getLiveProvider,
+  listLivePickerEntries,
+  providerHasKey,
+} from '../modelsCatalogLive';
 import { recordPendingContextState } from './contextStatePending';
-import {
-  loadProfiles,
-  saveProfiles,
-  addModelToProfile,
-  anyProfileHasKey,
-  anyProfileHasModel,
-} from './profileStorePersistence';
-import {
-  getActiveProfileId,
-  setActiveProfileId,
-  getActiveModelId,
-  setActiveModelId,
-} from './profileActiveSelection';
-import { getLiveProvider } from '../modelsCatalogLive';
-import { modelsCatalogStore } from '../modelsCatalogStore';
-
-/**
- * 保存 Base URL；若该 profile 为当前活动项，同步到引擎（保存即生效）。
- * K-01：同步走 config_profile_apply（密钥由 Rust 从 DPAPI 槽读取），
- * 不再携带明文 key。
- */
-export async function saveProfileBaseUrl(
-  profileId: string,
-  baseUrl: string
-): Promise<{ ok: boolean; error?: string; synced: boolean }> {
-  const list = loadProfiles();
-  const p = list.find((x) => x.id === profileId);
-  if (!p) return { ok: false, error: 'profile_not_found', synced: false };
-
-  p.baseUrl = baseUrl.trim();
-  saveProfiles(list);
-
-  if (getActiveProfileId() !== profileId) {
-    return { ok: true, synced: false };
-  }
-
-  const model = (getActiveModelId() || p.models[0] || '').trim();
-  const res = await configProfileApply({
-    profileId,
-    ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
-    ...(model ? { model } : {}),
-  });
-  if (res.status !== 'ok' || res.data?.ok !== true) {
-    const error =
-      res.status === 'missing'
-        ? 'engine_unavailable'
-        : res.status === 'error'
-          ? res.message
-          : 'apply_failed';
-    return { ok: false, ...(error ? { error } : {}), synced: false };
-  }
-  return { ok: true, synced: true };
-}
-
-/**
- * 本地优先的活动模型解析（对话底栏 / 启动同步共用）。
- */
-export function resolvePreferredModelSelection(opts?: {
-  engineModel?: string | null;
-  requireInList?: boolean;
-}): ResolvedModelSelection | null {
-  return pickDefaultModelSelection(loadProfiles(), {
-    storedProfileId: getActiveProfileId(),
-    storedModel: getActiveModelId(),
-    engineModel: opts?.engineModel,
-    requireInList: opts?.requireInList,
-  });
-}
-
-/** 展示用：本机活动模型 id（解析后），无则空串 */
-export function resolveDisplayModelId(engineModel?: string | null): string {
-  const resolved = resolvePreferredModelSelection(
-    engineModel !== undefined ? { engineModel } : {}
-  );
-  if (resolved) return resolved.model;
-  return (getActiveModelId() || '').trim();
-}
 
 function notifyModelChanged(profileId: string, model: string) {
   try {
@@ -107,9 +31,8 @@ function notifyModelChanged(profileId: string, model: string) {
 }
 
 /**
- * 将指定 profile + 模型应用到引擎。
- * K-01：密钥由 Rust 从 DPAPI 槽读取（config_profile_apply），
- * webview 不再持有明文（hasLocalKey 仅由 hasKey 标记判定）。
+ * 将指定供应商的模型置为全局活跃模型（树 CAS，一次冲突重试）。
+ * 修订冲突先重读真源再重试一次，仍失败则显式报错，绝不静默吞掉。
  */
 export async function activateProfileModel(
   profileId: string,
@@ -120,77 +43,46 @@ export async function activateProfileModel(
   warning?: 'no_local_key' | 'model_mismatch';
 }> {
   const m = model.trim();
+  const id = profileId.trim();
   if (!m) return { ok: false, error: 'empty_model' };
+  if (!getLiveProvider(id)) return { ok: false, error: 'profile_not_found' };
+  if (!getLiveModel(id, m)) return { ok: false, error: 'model_not_found' };
 
-  const p = loadProfiles().find((x) => x.id === profileId);
-  // 身份合一（总方案 §3）：yaml live provider 可无 LS 凭据壳（凭据在 DPAPI /
-  // yaml apiKey）。选择器只列「可用」供应商后仍可能遇到仅 yaml 带 key 的供应商，
-  // 这里从 live catalog 兜底 baseUrl，禁止把未配置的预置壳当真配置。
-  const live = getLiveProvider(profileId);
-  if (!p && !live) return { ok: false, error: 'profile_not_found' };
-
-  if (p && !p.models.includes(m)) {
-    addModelToProfile(profileId, m);
+  const ref = { providerId: id, modelId: m };
+  const first = await modelsCatalogStore.setActiveModel(ref);
+  if (!first.ok) {
+    const reloaded = await modelsCatalogStore.ensureLoaded(true);
+    if (!reloaded) return { ok: false, error: first.error };
+    const retry = await modelsCatalogStore.setActiveModel(ref);
+    if (!retry.ok) return { ok: false, error: retry.error };
   }
 
-  const fresh = loadProfiles().find((x) => x.id === profileId) || p;
-  // 凭据不在前端明文持有：权威来源 = 统一树 credentialStates[*].hasKey
-  // （密钥落 DPAPI 槽；config_secret_set / config_profile_apply 回执写回树镜像）。
-  const hasLocalKey =
-    modelsCatalogStore.getState().credentialStates[profileId]?.hasKey === true;
+  pushRecentModel(m, id);
+  notifyModelChanged(id, m);
 
-  const effectiveBaseUrl = live?.baseUrl || fresh?.baseUrl;
-  const res = await configProfileApply({
-    profileId,
-    ...(effectiveBaseUrl ? { baseUrl: effectiveBaseUrl } : {}),
-    model: m,
-  });
-  if (res.status !== 'ok' || res.data?.ok !== true) {
-    const error =
-      res.status === 'missing'
-        ? 'engine_unavailable'
-        : res.status === 'error'
-          ? res.message
-          : 'apply_failed';
-    return { ok: false, ...(error ? { error } : {}) };
-  }
-  const applied = res.data;
-
-  setActiveProfileId(profileId);
-  setActiveModelId(m);
-  pushRecentModel(m, profileId);
-  notifyModelChanged(profileId, m);
   try {
     const { fetchEngineStatus } = await import('../engineConfig');
     const status = await fetchEngineStatus();
     if (status.ok && status.model && status.model !== m) {
       return { ok: true, warning: 'model_mismatch' };
     }
-    if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
-      return {
-        ok: true,
-        ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
-      };
-    }
   } catch {
     /* swallow-ok: 引擎状态核验失败时按乐观路径返回，不阻断切换 */
   }
   return {
     ok: true,
-    ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
-    ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
+    ...(!providerHasKey(id) ? { warning: 'no_local_key' as const } : {}),
   };
 }
 
-/**
- * 扁平化「真实配置过的」模型。
- */
-export function flattenModelChoices(): FlatModelChoice[] {
-  return flattenModelChoicesFrom(loadProfiles());
+/** 展示用：本机活动模型 id（树 activeModel），无则回落引擎模型，再无则空串 */
+export function resolveDisplayModelId(engineModel?: string | null): string {
+  return (getActiveModelRef()?.modelId || engineModel || '').trim();
 }
 
 /**
- * 首次 / 底栏共用的配置就绪态（本地优先）。
+ * 首次 / 底栏共用的配置就绪态。
+ * 密钥与名单只读统一树；引擎状态由调用方注入（engineOk / hasApiKey / model）。
  */
 export type ProviderSetupStatus = {
   hasLocalKey: boolean;
@@ -210,29 +102,26 @@ export function getProviderSetupStatus(opts?: {
   engineModel?: string | null;
   engineOk?: boolean | null;
 }): ProviderSetupStatus {
-  const hasLocalKey = anyProfileHasKey();
+  const available = listLivePickerEntries();
+  const hasLocalKey = available.some(({ providerId }) =>
+    providerHasKey(providerId)
+  );
   const engineOk = opts?.engineOk !== false;
   const hasEngineKey = Boolean(engineOk && opts?.engineHasApiKey === true);
   const hasKey = hasLocalKey || hasEngineKey;
-  const hasLocalModel = anyProfileHasModel();
-  const resolved = resolvePreferredModelSelection({
-    ...(opts?.engineModel !== undefined
-      ? { engineModel: opts.engineModel }
-      : {}),
-  });
-  const resolvedModel = resolved?.model || null;
-  const resolvedProfileId = resolved?.profileId || null;
+  const hasLocalModel = available.length > 0;
+  const activeRef = getActiveModelRef();
 
   const needsKeySetup = !hasKey;
-  const needsModelSetup = hasKey && !resolvedModel && !hasLocalModel;
+  const needsModelSetup = hasKey && !activeRef && !hasLocalModel;
 
   return {
     hasLocalKey,
     hasEngineKey,
     hasKey,
     hasLocalModel,
-    resolvedModel,
-    resolvedProfileId,
+    resolvedModel: activeRef?.modelId ?? null,
+    resolvedProfileId: activeRef?.providerId ?? null,
     needsKeySetup,
     needsModelSetup,
     // 模型选择器作为输入坞核心第一公民，100% 恒定渲染，不随未配 Key 而消失

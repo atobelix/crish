@@ -46,7 +46,8 @@ export function parseModelRefKey(raw: unknown): ModelRef | null {
   }
   if (!Array.isArray(parsed) || parsed.length !== 2) return null;
   const [providerId, modelId] = parsed as unknown[];
-  if (typeof providerId !== 'string' || typeof modelId !== 'string') return null;
+  if (typeof providerId !== 'string' || typeof modelId !== 'string')
+    return null;
   const provider = providerId.trim();
   const model = modelId.trim();
   if (!provider || !model) return null;
@@ -55,6 +56,24 @@ export function parseModelRefKey(raw: unknown): ModelRef | null {
 
 export function sameModelRef(a: ModelRef, b: ModelRef): boolean {
   return modelRefKey(a) === modelRefKey(b);
+}
+
+/**
+ * 模型 id 列表规范化（纯）：trim、丢弃空项、保序去重。
+ * 非法入参 → []；不发明演示 id。
+ */
+export function normalizeModelIds(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of models) {
+    if (raw == null) continue;
+    const m = String(raw).trim();
+    if (!m || seen.has(m)) continue;
+    seen.add(m);
+    out.push(m);
+  }
+  return out;
 }
 
 export type ThinkingLevelTitle = ThinkingVocabularyLevel;

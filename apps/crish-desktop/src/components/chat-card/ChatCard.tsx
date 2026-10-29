@@ -11,7 +11,7 @@ import { ChatLandingBrand } from './ChatLandingBrand';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
-import { anyProfileHasKey } from '../../api/providerProfiles';
+import { anyProviderHasKey } from '../../api/modelsCatalogLive';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
@@ -279,7 +279,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           needsKeySetup: state.needsKeySetup,
           needsModelSetup: state.needsModelSetup,
           onEmptySurface: state.onEmptySurface,
-          localHasKey: anyProfileHasKey(),
+          localHasKey: anyProviderHasKey(),
           onOpenModelSettings: () => openSettings('models'),
           onOpenModelDropdown: () => state.setShowModelDropdown(true),
         },

@@ -13,7 +13,6 @@ import {
   recordSessionMaterialize,
   recordShellEmptyAssert,
   recordSilentComplete,
-  recordTransportDegradedDirectFetch,
   reset,
   resetControlMetrics,
 } from './controlMetrics';
@@ -35,7 +34,6 @@ describe('controlMetrics (D2 lite)', () => {
       hydrate_prune: 0,
       shell_empty_assert: 0,
       silent_complete: 0,
-      transport_degraded_direct_fetch: 0,
     });
   });
 
@@ -87,13 +85,6 @@ describe('controlMetrics (D2 lite)', () => {
     expect(m.hydrate_prune).toBe(3);
     expect(m.shell_empty_assert).toBe(2);
     expect(m.silent_complete).toBe(3);
-  });
-
-  it('recordTransportDegradedDirectFetch (inventory #10 / OPT-F7)', () => {
-    recordTransportDegradedDirectFetch();
-    record('transport_degraded_direct_fetch');
-    recordTransportDegradedDirectFetch(2);
-    expect(getControlMetrics().transport_degraded_direct_fetch).toBe(4);
   });
 
   it('getControlMetrics / getSnapshot return independent copies', () => {

@@ -3,12 +3,14 @@
  *
  * 职责：runTest（单模型连通测试）、runScan（扫描服务器可用模型）、
  * runCheck（服务商握手连通检查）。扫描确认走 probeAndAppendModels（ID 差集）。
- *
- * 依赖项由主 hub 注入，保持纯结构性拆分、无重复状态源。
+ * 探测面单轨：命令只认供应商 id（baseUrl/密钥由内核从统一树与 DPAPI 解析）。
  */
 import { useCallback, useState } from 'react';
-import { scanProviderModels, testProviderModel } from '../../api/modelCatalog';
-import { loadProfiles, type ProviderProfile } from '../../api/providerProfiles';
+import {
+  scanProviderModels,
+  testProviderModel,
+} from '../../api/modelCatalogIpc';
+import type { ProviderProfile } from '../../api/providerProfiles';
 import {
   modelsCatalogStore,
   selectProvider,
@@ -32,6 +34,9 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
   const [checkBusy, setCheckBusy] = useState(false);
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [scannedModelsList, setScannedModelsList] = useState<string[]>([]);
+  const [scannedProviderId, setScannedProviderId] = useState<string | null>(
+    null
+  );
 
   const runTest = useCallback(
     async (model: string) => {
@@ -39,9 +44,7 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
       setTestBusy(modelRefKey({ providerId: selected.id, modelId: model }));
 
       try {
-        const fresh =
-          loadProfiles().find((p) => p.id === selected.id) || selected;
-        const r = await testProviderModel(fresh, model);
+        const r = await testProviderModel(selected.id, model);
         refresh();
         if (!r.ok) {
           notify(false, `连通失败 · ${model}：${r.error || '未知错误'}`);
@@ -58,10 +61,9 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
   const runScan = useCallback(async () => {
     if (!selected) return;
     setScanBusy(true);
+    setScannedProviderId(selected.id);
     try {
-      const fresh =
-        loadProfiles().find((p) => p.id === selected.id) || selected;
-      const r = await scanProviderModels(fresh);
+      const r = await scanProviderModels(selected.id);
       if (r.ok && r.models?.length) {
         setScannedModelsList(r.models);
         setScanModalOpen(true);
@@ -77,21 +79,23 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
 
   const confirmScannedModels = useCallback(
     (selectedModels: string[]) => {
-      if (!selected) return;
+      const targetId = scannedProviderId || selected?.id;
+      if (!targetId || !selected) return;
       void runAsLocalMutation(async () => {
         try {
+          const entry = selectProvider(targetId);
           const shell = await ensureProviderShell({
-            providerId: selected.id,
-            displayName: selected.name,
-            baseUrl: selected.baseUrl,
-            protocol: selected.protocol,
+            providerId: targetId,
+            displayName: entry?.displayName || selected.name,
+            baseUrl: entry?.baseUrl || selected.baseUrl,
+            protocol: entry?.protocol || selected.protocol,
           });
           if (!shell.ok) {
             notify(false, shell.error || '写入服务商失败');
             return;
           }
           const result = await modelsCatalogStore.probeAndAppendModels(
-            selected.id,
+            targetId,
             selectedModels
           );
           notify(
@@ -103,20 +107,18 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
         }
       });
     },
-    [selected, runAsLocalMutation, notify]
+    [selected, scannedProviderId, runAsLocalMutation, notify]
   );
 
   const runCheck = useCallback(async () => {
     if (!selected) return;
     setCheckBusy(true);
     try {
-      const fresh =
-        loadProfiles().find((p) => p.id === selected.id) || selected;
       const firstModel =
-        selectProvider(selected.id)?.models[0]?.id || fresh.models[0] || '';
+        selectProvider(selected.id)?.models[0]?.id || selected.models[0] || '';
       if (firstModel) {
         // 有模型：执行实际模型轻量短文本对话探活
-        const r = await testProviderModel(fresh, firstModel);
+        const r = await testProviderModel(selected.id, firstModel);
         if (r.ok) {
           notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
         } else {
@@ -124,15 +126,15 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
         }
       } else {
         // 无模型：自动降级为调用 /models 握手探活端点（验证 Base URL 与 Key 有效性），打破死锁
-        const r = await providerProbeScanModels(fresh.id);
+        const r = await providerProbeScanModels(selected.id);
         if (r.status === 'ok' && r.data.ok) {
-          notify(true, t('models.probe.handshakeOk'));
+          notify(true, t('settings.models.probe.handshakeOk'));
         } else {
           const err =
             r.status === 'error'
               ? r.message
               : (r.status === 'ok' && r.data.error) || 'Failed';
-          notify(false, t('models.probe.checkFailed', { error: err }));
+          notify(false, t('settings.models.probe.checkFailed', { error: err }));
         }
       }
     } catch (e) {

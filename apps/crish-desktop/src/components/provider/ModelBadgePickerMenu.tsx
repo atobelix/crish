@@ -17,7 +17,7 @@ import { listAvailableModelPickerEntries } from '../../api/modelPickerAvailabili
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { openSettings } from '../../api/storeAccess';
 import { Menu, Tooltip, Button, Input } from '@/components/ui';
-import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
+import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import {
   setSessionThinkingTitle,
   resolveEffectiveThinkingTitle,
@@ -59,7 +59,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   const catalogVersion = useModelsCatalogVersion();
   const sessionId = useScopedSessionId(sessionIdProp);
 
-  const providerId = getActiveProfileId() ?? '';
+  const providerId = getActiveModelRef()?.providerId ?? '';
   const modelId = activeModel || '';
 
   // 只列「可用」供应商：镜像凭据状态带 key 或凭据壳带 key（未配置的预置壳不占列表，

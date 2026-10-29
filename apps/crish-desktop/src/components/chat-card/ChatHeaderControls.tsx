@@ -10,11 +10,7 @@ import React, {
 import styles from './ChatCard.module.css';
 import { Button, Tooltip } from '@/components/ui';
 import { toggleExclusiveMenu } from '@/components/ui';
-import {
-  getActiveModelId,
-  getActiveProfile,
-  getActiveProfileId,
-} from '../../api/providerProfiles';
+import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import { openSettings } from '../../api/storeAccess';
 import {
   getLiveModel,
@@ -25,7 +21,7 @@ import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import type { AppSettings } from '../../store/types';
-import { abbreviateModel } from '../../api/modelAbbreviation';
+import { abbreviateModel } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
@@ -106,9 +102,10 @@ export function useModelSelection(
   const [engineHint, setEngineHint] = useState<EngineStatus | null>(null);
 
   const applyResolvedModelLabel = (engineHintModel?: string | null) => {
+    const activeRef = getActiveModelRef();
     const next = resolveHeaderModelFromCatalog({
-      profileId: getActiveProfileId(),
-      storedModel: getActiveModelId(),
+      profileId: activeRef?.providerId ?? null,
+      storedModel: activeRef?.modelId ?? null,
       engineModel: engineHintModel,
       settingsDefault: appSettings?.defaultModel,
     });
@@ -238,9 +235,18 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   };
 
   const tooltipText = useMemo(() => {
-    const activeProf = getActiveProfile();
-    if (activeProf && engineModel && !needsKeySetup && !needsModelSetup) {
-      return `${activeProf.name} · ${engineModel}`;
+    const activeRef = getActiveModelRef();
+    const activeProvider = activeRef
+      ? getLiveProvider(activeRef.providerId)
+      : null;
+    if (
+      activeRef &&
+      activeProvider &&
+      engineModel &&
+      !needsKeySetup &&
+      !needsModelSetup
+    ) {
+      return `${activeProvider.displayName?.trim() || activeRef.providerId} · ${engineModel}`;
     }
     if (isUnconfigured) {
       return t(

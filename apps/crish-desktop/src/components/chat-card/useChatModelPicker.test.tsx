@@ -15,16 +15,11 @@ import {
   resetModelsCatalogMirror,
 } from '../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
-import {
-  setActiveModelId,
-  setActiveProfileId,
-} from '../../api/providerProfiles';
 import { useChatModelPicker } from './useChatModelPicker';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(resolve(__dirname, './useChatModelPicker.ts'), 'utf8');
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
-const PROFILES_KEY = 'crish_provider_profiles_v1';
 
 vi.mock('../../api/engineConfig', () => ({
   fetchEngineStatus: vi.fn(async () => ({
@@ -39,7 +34,10 @@ vi.mock('../../services/toast/ToastContext', () => ({
   toast: { show: vi.fn() },
 }));
 
-function workbenchReadOk(providers: Record<string, ProviderSpec>) {
+function workbenchReadOk(
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
+) {
   return {
     path: CATALOG_PATH,
     content: '',
@@ -47,7 +45,7 @@ function workbenchReadOk(providers: Record<string, ProviderSpec>) {
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers },
+    tree: { version: 2, activeModel, providers },
   };
 }
 
@@ -61,32 +59,20 @@ function spec(models: Array<{ id: string }>): ProviderSpec {
 }
 
 async function loadProviders(
-  providers: Record<string, ProviderSpec>
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = {
+    providerId: 'acme',
+    modelId: 'old-id',
+  }
 ): Promise<void> {
   mockTauriCommand('workbench_read_models_yaml', () =>
-    workbenchReadOk(providers)
+    workbenchReadOk(providers, activeModel)
   );
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,
   }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
-}
-
-function seedLsKeyedProfile(models: string[]): void {
-  localStorage.setItem(
-    PROFILES_KEY,
-    JSON.stringify([
-      {
-        id: 'acme',
-        name: 'Acme',
-        baseUrl: 'https://example.invalid/v1',
-        hasKey: true,
-        enabled: true,
-        models,
-      },
-    ])
-  );
 }
 
 describe('useChatModelPicker 源码形状（§3.6#4）', () => {
@@ -104,9 +90,6 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
   beforeEach(() => {
     localStorage.clear();
     resetModelsCatalogMirror();
-    setActiveProfileId('acme');
-    setActiveModelId('old-id');
-    seedLsKeyedProfile(['ls-seed-model', 'old-id']);
   });
 
   afterEach(() => {
@@ -114,7 +97,7 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
     localStorage.clear();
   });
 
-  it('yaml 未加载时即使 LS 有种子模型，needsModelSetup 仍为 true', async () => {
+  it('yaml 未加载时即使树外有种子模型，needsModelSetup 仍为 true', async () => {
     const { result } = renderHook(() => useChatModelPicker({ projectTick: 0 }));
     await waitFor(() => {
       expect(result.current.engineHint).not.toBeNull();
@@ -127,7 +110,10 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
     const Wrapper = ({ children }: { children: ReactNode }) => {
       useLayoutEffect(() => {
         modelsCatalogStore.acceptSnapshot(
-          workbenchReadOk({ acme: spec([{ id: 'old-id' }]) })
+          workbenchReadOk(
+            { acme: spec([{ id: 'old-id' }]) },
+            { providerId: 'acme', modelId: 'old-id' }
+          )
         );
       }, []);
       return children;
@@ -171,7 +157,8 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
     });
 
     await act(async () => {
-      await loadProviders({ acme: spec([]) });
+      // 全部模型删除 → 树规范化把 activeModel 置空（挂失效活动项会被拒收）
+      await loadProviders({ acme: spec([]) }, null);
     });
     await waitFor(() => {
       expect(result.current.needsModelSetup).toBe(true);

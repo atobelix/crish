@@ -31,7 +31,6 @@ import {
 import type { ModelSpec, ProviderSpec } from '../../api/modelsCatalogTypes';
 import { mockTauriCommand } from '../../test-setup';
 import { emitUiEvent } from '../../api/uiEvents';
-import { setActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
 import {
   getSessionThinkingTitle,
   sessionRuntimeRegistry,
@@ -71,7 +70,8 @@ function specProvider(
 }
 
 async function seedCatalog(
-  providers: Record<string, ProviderSpec>
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = null
 ): Promise<void> {
   mockTauriCommand('workbench_read_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -83,20 +83,22 @@ async function seedCatalog(
       Object.keys(providers).map((id) => [id, { hasKey: true }])
     ),
     parseError: null,
-    tree: { version: 2, activeModel: null, providers },
+    tree: { version: 2, activeModel, providers },
   }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }
 
 async function seedDefaultCatalog(extra?: Partial<ModelSpec>): Promise<void> {
-  await seedCatalog({
-    p1: specProvider('测试服务商', [
-      { id: 'model-a', ...extra },
-      { id: 'model-b' },
-    ]),
-  });
-  setActiveProfileId('p1');
+  await seedCatalog(
+    {
+      p1: specProvider('测试服务商', [
+        { id: 'model-a', ...extra },
+        { id: 'model-b' },
+      ]),
+    },
+    { providerId: 'p1', modelId: 'model-a' }
+  );
 }
 
 interface WrapperProps {
@@ -221,13 +223,15 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
   });
 
   it('live enabled=false 的模型被过滤：model-b 不渲染', async () => {
-    await seedCatalog({
-      p1: specProvider('测试服务商', [
-        { id: 'model-a' },
-        { id: 'model-b', enabled: false },
-      ]),
-    });
-    setActiveProfileId('p1');
+    await seedCatalog(
+      {
+        p1: specProvider('测试服务商', [
+          { id: 'model-a' },
+          { id: 'model-b', enabled: false },
+        ]),
+      },
+      { providerId: 'p1', modelId: 'model-a' }
+    );
     render(<Wrapper />);
     expect(screen.getByTestId('model-option-model-a')).toBeInTheDocument();
     expect(
@@ -242,13 +246,15 @@ describe('ModelBadgePickerMenu（扁平单层菜单 · 基础渲染）', () => {
   });
 
   it('展示名读 getLiveModel.displayName', async () => {
-    await seedCatalog({
-      p1: specProvider('测试服务商', [
-        { id: 'model-a', displayName: '模型甲' },
-        { id: 'model-b' },
-      ]),
-    });
-    setActiveProfileId('p1');
+    await seedCatalog(
+      {
+        p1: specProvider('测试服务商', [
+          { id: 'model-a', displayName: '模型甲' },
+          { id: 'model-b' },
+        ]),
+      },
+      { providerId: 'p1', modelId: 'model-a' }
+    );
     render(<Wrapper />);
     expect(screen.getByText('模型甲')).toBeInTheDocument();
   });
@@ -477,7 +483,8 @@ describe('源码形状（旧岛读路径清零）', () => {
     expect(tsx).toMatch(/listAvailableModelPickerEntries/);
     expect(availability).toMatch(/listLivePickerEntries/);
     expect(availability).toMatch(/providerHasKey/);
-    expect(availability).toMatch(/profileHasConfiguredKey/);
+    // 单轨收口：密钥可用性只读树 credentialStates，LS 岛读路径已清退
+    expect(availability).not.toMatch(/profileHasConfiguredKey/);
     expect(tsx).toMatch(/getLiveModel/);
     expect(tsx).toMatch(/useModelsCatalogVersion/);
     expect(tsx).toMatch(/listThinkingOptions/);

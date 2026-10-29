@@ -55,11 +55,19 @@ import {
   type WizardStep,
 } from '../firstRunWizardLib';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import {
-  getDefaultProviderProfiles,
-  saveProfiles,
-  setProfileKey,
-} from '../../api/providerProfiles';
+import { saveProfileKey } from '../../api/providerProfiles';
+import { anyProviderHasKey } from '../../api/modelsCatalogLive';
+
+vi.mock('../../api/modelsCatalogLive', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/modelsCatalogLive')>();
+  return {
+    ...actual,
+    anyProviderHasKey: vi.fn(() => liveKeyState.hasKey),
+  };
+});
+
+const liveKeyState = vi.hoisted(() => ({ hasKey: false }));
 
 const DONE_KEY = 'crish_first_run_done_v1';
 
@@ -68,25 +76,18 @@ describe('FirstRunWizard gate', () => {
     localStorage.clear();
   });
 
+  beforeEach(() => {
+    liveKeyState.hasKey = false;
+  });
+
   it('shows when not done and no local keys', () => {
-    saveProfiles(getDefaultProviderProfiles());
+    expect(anyProviderHasKey()).toBe(false);
     expect(isFirstRunDone()).toBe(false);
     expect(shouldShowFirstRunWizard()).toBe(true);
   });
 
-  it('hides and marks done when any profile has key', async () => {
-    saveProfiles([
-      {
-        id: 'custom-demo',
-        name: '演示服务',
-        baseUrl: 'https://api.example.com/v1',
-        models: [],
-        hasKey: false,
-      },
-    ]);
-    // PE-07 T07.4：setProfileKey 已改异步（config_secret_set 落 DPAPI；
-    // 非 Tauri 环境降级为本地 hasKey 草稿标记，不落明文）
-    await setProfileKey('custom-demo', 'sk-test');
+  it('hides and marks done when any provider has key (DPAPI)', async () => {
+    liveKeyState.hasKey = true;
     expect(shouldShowFirstRunWizard()).toBe(false);
     expect(localStorage.getItem(DONE_KEY)).toBe('1');
     expect(isFirstRunDone()).toBe(true);
@@ -94,21 +95,11 @@ describe('FirstRunWizard gate', () => {
 
   it('hides when already marked done even without keys', () => {
     markFirstRunDone();
-    saveProfiles(getDefaultProviderProfiles());
     expect(shouldShowFirstRunWizard()).toBe(false);
   });
 
-  it('respects setShowOnboardingOnStartup toggle even when marked done or profile has key', async () => {
-    saveProfiles([
-      {
-        id: 'custom-demo',
-        name: '演示服务',
-        baseUrl: 'https://api.example.com/v1',
-        models: [],
-        hasKey: false,
-      },
-    ]);
-    await setProfileKey('custom-demo', 'sk-test');
+  it('respects setShowOnboardingOnStartup toggle even when marked done or provider has key', async () => {
+    liveKeyState.hasKey = true;
     markFirstRunDone();
     expect(shouldShowFirstRunWizard()).toBe(false);
 
@@ -127,8 +118,8 @@ describe('FirstRunWizard gate', () => {
   });
 
   it('default seeds: empty (neutral product, no third-party shells)', () => {
-    // 中立产品：DEFAULT_PROFILES 恒为空；用户在向导/设置自建服务商
-    expect(getDefaultProviderProfiles()).toEqual([]);
+    // 中立产品：树空 + 无密钥 → 向导常驻入口
+    expect(liveKeyState.hasKey).toBe(false);
     expect(shouldShowFirstRunWizard()).toBe(true);
   });
 

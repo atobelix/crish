@@ -266,8 +266,6 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     });
 
     it('P4 T-31：history 经 startRunTask 透传（loadSessionBody 数据源；完成态过滤 + 排除当前消息 + camelCase 字段）', async () => {
-      localStorage.setItem('crish_active_profile_id', 'p1');
-      localStorage.setItem('crish_active_model_id', 'deepseek-chat');
       resetModelsCatalogMirror();
       mockTauriCommand('workbench_read_models_yaml', () => ({
         path: 'C:\\tmp\\models.yaml',
@@ -278,7 +276,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         parseError: null,
         tree: {
           version: 2,
-          activeModel: null,
+          activeModel: { providerId: 'p1', modelId: 'deepseek-chat' },
           providers: {
             p1: {
               displayName: 'P1',
@@ -415,8 +413,6 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     });
 
     it('会话 Title + live 字典 → reasoningEffort 为 yaml value', async () => {
-      localStorage.setItem('crish_active_profile_id', 'gemini');
-      localStorage.setItem('crish_active_model_id', 'flash');
       resetModelsCatalogMirror();
       mockTauriCommand('workbench_read_models_yaml', () => ({
         path: 'C:\\tmp\\models.yaml',
@@ -427,7 +423,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         parseError: null,
         tree: {
           version: 2,
-          activeModel: null,
+          activeModel: { providerId: 'gemini', modelId: 'flash' },
           providers: {
             gemini: {
               displayName: 'Gemini',

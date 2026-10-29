@@ -1,5 +1,10 @@
 /**
- * 默认服务商配置模板与预置目录类型与常量。
+ * OAuth 档案轨类型与展示常量。
+ *
+ * 单轨口径：统一树（modelsCatalogStore）承载供应商/模型目录；本文件类型只
+ * 描述 LS 档案记录（OAuth/订阅身份）与它的 UI 投影（见 modelsCatalogLive
+ * 的 toProviderView）。旧种子数据结构保留给一次性剥离逻辑
+ * （profileValidation.stripLegacySeedModels）。
  */
 
 import type { ModelProtocol } from '../modelsNormalize';
@@ -41,54 +46,18 @@ export type ProviderProfile = {
   /**
    * @deprecated legacy 明文字段（PE-07 T07.4 / K-01）：明文 key 下线后
    * 规范化输出不再携带本字段（normalizeProviderProfile 剥离并丢弃）；
-   * 明文只存 DPAPI 凭据槽（config_secret_set / config_profile_apply）。
+   * 明文只存 DPAPI 凭据槽（config_secret_set）。
    * 本字段仅用于读取旧数据 / hasKey 判定 / 一次性迁移。
-   * @see config_secret_set / config_profile_apply（DPAPI 凭据槽）
+   * @see config_secret_set（DPAPI 凭据槽）
+   * @removeWhen migrateLegacyProfiles 迁移完成标记全量覆盖后
    */
   apiKey?: string | undefined;
   oauthConfig?: OAuthConfig | undefined;
   oauthToken?: OAuthTokenData | undefined;
-  subscriptionPlan?: 'free' | 'go' | 'zen' | 'copilot_pro' | 'custom' | undefined;
+  subscriptionPlan?:
+    'free' | 'go' | 'zen' | 'copilot_pro' | 'custom' | undefined;
   enabled?: boolean | undefined;
 };
-
-export type FlatModelChoice = {
-  profileId: string;
-  profileName: string;
-  model: string;
-  hasKey: boolean;
-};
-
-export type ResolvedModelSelection = {
-  profileId: string;
-  model: string;
-  source:
-    | 'stored_active'
-    | 'stored_model_match'
-    | 'active_profile_first'
-    | 'first_available'
-    | 'engine_match';
-};
-
-export type PickDefaultModelOptions = {
-  storedProfileId?: string | null | undefined;
-  storedModel?: string | null | undefined;
-  engineModel?: string | null | undefined;
-  /** 为 true 时要求 model 必须在 profile.models 中 */
-  requireInList?: boolean | undefined;
-};
-
-/**
- * 首次空库种子：**空列表**。
- * 产品中立——不预置任何第三方服务商壳；用户在向导或设置中自填
- * 名称 / Base URL / 密钥 / 协议。协议层只做 openai|anthropic 兼容。
- */
-export const DEFAULT_PROFILES: ProviderProfile[] = [];
-
-/** 导出只读默认壳，便于单测断言契约（恒为 []） */
-export function getDefaultProviderProfiles(): ProviderProfile[] {
-  return DEFAULT_PROFILES.map((p) => ({ ...p, models: [...p.models] }));
-}
 
 /**
  * 历史壳 id → 中文/产品展示名（仅兼容存量用户 LS 数据；不再种子化）。
@@ -118,8 +87,3 @@ export const LEGACY_SEED_MODELS: Readonly<Record<string, readonly string[]>> = {
   deepseek: ['deepseek-chat', 'deepseek-v4-flash'],
   anthropic: ['claude-sonnet-4-5', 'claude-opus-4'],
 };
-
-/** 所有旧种子/演示 model id（跨壳扁平；用于幽灵 active 与 pick 守卫） */
-export const LEGACY_SEED_MODEL_ID_SET: ReadonlySet<string> = new Set(
-  Object.values(LEGACY_SEED_MODELS).flatMap((ids) => [...ids])
-);

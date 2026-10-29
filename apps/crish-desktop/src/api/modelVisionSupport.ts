@@ -10,7 +10,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { modelAcceptsInput } from './modelsCatalogLive';
 import { modelsCatalogStore } from './modelsCatalogStore';
-import { getActiveModelId, getActiveProfileId } from './providerProfiles';
+import { getActiveModelRef } from './modelsCatalogStore';
 import { onUiEvent } from './uiEvents';
 import { toast } from '../services/toast/ToastContext';
 
@@ -37,17 +37,14 @@ export function isModelVisionSupported(
 }
 
 export function activeModelAcceptsImage(): boolean {
-  return isModelVisionSupported(
-    getActiveModelId() || '',
-    getActiveProfileId()
-  );
+  const ref = getActiveModelRef();
+  return isModelVisionSupported(ref?.modelId ?? '', ref?.providerId);
 }
 
 /** catalog 已加载且当前模型不接受 image 时，才剥已挂图片（避免水合前误删） */
 export function shouldStripImagesForActiveModel(): boolean {
   return (
-    modelsCatalogStore.getState().loaded === true &&
-    !activeModelAcceptsImage()
+    modelsCatalogStore.getState().loaded === true && !activeModelAcceptsImage()
   );
 }
 
@@ -57,7 +54,8 @@ export function notifyImageIntakeBlocked(): void {
 
 export function isImageIntakeFile(file: File): boolean {
   return (
-    (file.type || '').startsWith('image/') || IMAGE_NAME_RE.test(file.name || '')
+    (file.type || '').startsWith('image/') ||
+    IMAGE_NAME_RE.test(file.name || '')
   );
 }
 
@@ -112,9 +110,10 @@ export type AttachmentLike = {
 /**
  * 检测附件列表中是否含有图片或复杂文档
  */
-export function hasVisionOrDocumentAttachments(
-  attachments: AttachmentLike[]
-): { hasImage: boolean; hasComplexDoc: boolean } {
+export function hasVisionOrDocumentAttachments(attachments: AttachmentLike[]): {
+  hasImage: boolean;
+  hasComplexDoc: boolean;
+} {
   let hasImage = false;
   let hasComplexDoc = false;
   for (const a of attachments) {
@@ -146,9 +145,10 @@ export function getModelVisionWarning(
 ): string | null {
   if (!attachments || attachments.length === 0) return null;
 
-  const targetModelId = modelId !== undefined ? modelId : getActiveModelId();
+  const activeRef = getActiveModelRef();
+  const targetModelId = modelId !== undefined ? modelId : activeRef?.modelId;
   const targetProviderId =
-    providerId !== undefined ? providerId : getActiveProfileId();
+    providerId !== undefined ? providerId : activeRef?.providerId;
 
   if (isModelVisionSupported(targetModelId || '', targetProviderId)) {
     return null;

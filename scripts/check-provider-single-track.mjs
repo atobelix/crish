@@ -324,11 +324,9 @@ if (GUIDE_INDEX >= 0) printGuide(process.argv[GUIDE_INDEX + 1]);
 // 门禁已升级为「身份形状黑名单」：插值含 provider/model/profile 语义变量的
 // :: 拼接一律 FAIL（模型身份必须走 modelRefKey）；会话/消息/窗格/子代理等
 // 运行时复合键自动合法（推荐引用 api/compositeSessionKeys.ts 唯一权威）。
-// 本清单仅保留「历史 LS 存储形状」文件（profileId::model 已落盘的存量数据
-// 键，迁移会破坏兼容性）——允许维持现状，但严禁新增此类形状。
+// 2026-10-29 单轨收口：探测结果面（modelCatalogMeta）键形已统一为 modelRefKey，
+// 历史 `profileId::model` 键空间清退，本清单仅保留一次性 LS 导入边界。
 const D5_WHITELIST = new Map([
-  ['apps/crish-desktop/src/api/modelCatalogMeta.ts', '历史 LS meta 存储形状（profileId::model，localStorage 元数据；存量兼容，禁新增）'],
-  ['apps/crish-desktop/src/api/modelCatalogPure.ts', '历史 LS meta 存储形状（纯函数面；存量兼容，禁新增）'],
   ['apps/crish-desktop/src/api/modelsLsImport.ts', '历史 LS meta 读侧（一次性导入边界；存量兼容，禁新增）'],
 ]);
 {

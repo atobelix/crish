@@ -4,14 +4,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   activateProfileModel,
-  createCustomProfile,
-  loadProfiles,
   saveProfileKey,
-  upsertProfile,
   type ProviderProfile,
 } from '../api/providerProfiles';
-import { scanProviderModels } from '../api/modelCatalog';
+import { scanProviderModels } from '../api/modelCatalogIpc';
 import { modelsCatalogStore } from '../api/modelsCatalogStore';
+import { listLiveProviders, toProviderView } from '../api/modelsCatalogLive';
+import { useModelsCatalogVersion } from '../hooks/useModelsCatalogVersion';
 import { thinkingVocabularyDiagnostic } from '../api/modelsNormalize';
 import {
   addDraftToModelInput,
@@ -100,13 +99,6 @@ export function useFirstRunWizard(
       ? opts.initialStep
       : 0
   );
-  const [profiles, setProfiles] = useState<ProviderProfile[]>(() => {
-    try {
-      return loadProfiles();
-    } catch {
-      return [];
-    }
-  });
   const [createdProfileId, setCreatedProfileId] = useState('');
   const [vendorName, setVendorName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -127,6 +119,13 @@ export function useFirstRunWizard(
   const setModelId = useCallback((v: string) => {
     setAddDraft((prev) => ({ ...prev, modelId: v }));
   }, []);
+
+  // 服务商名单唯一来源 = 统一树（含空树：向导第一步自建供应商）。
+  const catalogVersion = useModelsCatalogVersion();
+  const profiles = useMemo<ProviderProfile[]>(
+    () => listLiveProviders().map(toProviderView),
+    [catalogVersion]
+  );
 
   useEffect(() => {
     setFirstRunOverlayOpen(true);
@@ -180,27 +179,20 @@ export function useFirstRunWizard(
     getActiveProject()?.name || getWorkspacePath() || '';
 
   const runScan = useCallback(async () => {
-    const freshProfiles = (() => {
-      try {
-        return loadProfiles();
-      } catch {
-        return profiles;
-      }
-    })();
-    const target =
-      (createdProfileId
-        ? freshProfiles.find((p) => p.id === createdProfileId)
-        : undefined) ||
-      activeProfile ||
-      freshProfiles[0];
-    if (!target) {
+    const targetId = (
+      createdProfileId ||
+      activeProfile?.id ||
+      profiles[0]?.id ||
+      ''
+    ).trim();
+    if (!targetId) {
       setError('请先在上一步配置服务商与 API 密钥，再在线获取模型');
       return;
     }
     setScanBusy(true);
     setError('');
     try {
-      const r = await scanProviderModels(target);
+      const r = await scanProviderModels(targetId);
       if (r.ok && r.models?.length) {
         setScannedModels(r.models);
       } else {
@@ -260,42 +252,21 @@ export function useFirstRunWizard(
       setBusy(true);
       try {
         const protocolCast = checked.protocol as ProviderProfile['protocol'];
-        let profile: ProviderProfile;
-        const existing = createdProfileId
-          ? loadProfiles().find((p) => p.id === createdProfileId)
-          : undefined;
-        if (existing) {
-          profile = {
-            ...existing,
-            name: checked.name,
-            baseUrl: checked.baseUrl,
-            protocol: protocolCast,
-          };
-          upsertProfile(profile);
-        } else {
-          profile = createCustomProfile({
-            name: checked.name,
-            baseUrl: checked.baseUrl,
-            protocol: protocolCast,
-          });
-        }
-        setCreatedProfileId(profile.id);
+        // 单轨：供应商只写统一树（重复提交 = 更新同一 shell，幂等）。
+        const profileId =
+          createdProfileId || `custom-${Date.now().toString(36)}`;
         const shell = await ensureProviderShell({
-          providerId: profile.id,
-          displayName: profile.name,
-          baseUrl: profile.baseUrl,
-          protocol: profile.protocol,
+          providerId: profileId,
+          displayName: checked.name,
+          baseUrl: checked.baseUrl,
+          protocol: protocolCast,
         });
         if (!shell.ok) {
           setError(shell.error || '写入服务商失败');
           return;
         }
-        const res = await saveProfileKey(profile.id, checked.apiKey);
-        try {
-          setProfiles(loadProfiles());
-        } catch {
-          /* keep previous */
-        }
+        setCreatedProfileId(profileId);
+        const res = await saveProfileKey(profileId, checked.apiKey);
         const decision = decideWizardKeySave(res);
         if (decision.action === 'block') {
           setError(decision.error);
@@ -305,7 +276,7 @@ export function useFirstRunWizard(
         setScannedModels([]);
         setStep(nextWizardStep(0));
         // 保存密钥后后台自动探测在线模型列表，供下一步下拉选择
-        void scanProviderModels({ ...profile, hasKey: true })
+        void scanProviderModels(profileId)
           .then((r) => {
             if (r.ok && r.models?.length) {
               setScannedModels(r.models);
@@ -354,20 +325,18 @@ export function useFirstRunWizard(
             profileId,
             addDraftToModelInput(checked.modelId, resolvedDraft)
           );
-          if (isDefaultModel) {
-            await modelsCatalogStore.setActiveModel({
-              providerId: profileId,
-              modelId: checked.modelId,
-            });
-          }
         } catch {
-          /* 单元测试或非 Tauri 环境下由 activateProfileModel 兜底同步 */
+          /* 非法草稿由 addModel 显式报错；此处吞异常会导致下一步无模型可选 */
         }
-        const res = await activateProfileModel(profileId, checked.modelId);
-        const pageErr = wizardActivatePageError(res);
-        if (pageErr) {
-          setError(pageErr);
-          return;
+        // 激活即树 CAS 提交（内核落盘后自动 reload_provider）；「设为默认」
+        // 与激活是同一动作，禁止再写第二份活跃标记。
+        if (isDefaultModel) {
+          const res = await activateProfileModel(profileId, checked.modelId);
+          const pageErr = wizardActivatePageError(res);
+          if (pageErr) {
+            setError(pageErr);
+            return;
+          }
         }
         void fetchEngineStatus();
         setStep(nextWizardStep(1));

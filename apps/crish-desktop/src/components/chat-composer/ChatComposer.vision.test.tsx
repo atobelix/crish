@@ -13,16 +13,6 @@ import {
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import type { ChatComposerProps } from './ChatComposer';
 
-vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../api/providerProfiles')>();
-  return {
-    ...actual,
-    getActiveModelId: () => 'gpt-4o',
-    getActiveProfileId: () => 'openai',
-  };
-});
-
 vi.mock('../../app/compositionRoot', () => ({
   getCompositionRoot: () => ({
     session: {
@@ -64,9 +54,15 @@ async function loadCatalog(input: string[]): Promise<void> {
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers: providers(input) },
+    tree: {
+      version: 2,
+      activeModel: { providerId: 'openai', modelId: 'gpt-4o' },
+      providers: providers(input),
+    },
   }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }
