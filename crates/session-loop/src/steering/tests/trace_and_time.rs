@@ -1,7 +1,7 @@
 //! 时间戳格式、evaluate_traced 观测轨迹与 steering-evaluated 事件组装。
 
 use super::*;
-use conex_shared::time::{civil_from_days, now_iso_utc, unix_millis};
+use conex_shared::time::{civil_from_days, format_iso_utc_ms, now_iso_utc, Clock, SystemClock};
 use conex_types::events::AgentEvent;
 
 /// 时间戳格式：UTC ISO8601 毫秒精度
@@ -168,12 +168,12 @@ fn steering_evaluated_event_carries_trace_and_reset_flag() {
     }
 }
 
-/// EV-09（D-03）：iso_from_epoch_ms 与 now_iso_utc 同格式同精度
+/// EV-09（D-03）：format_iso_utc_ms 与 now_iso_utc 同格式同精度
 /// （YYYY-MM-DDTHH:MM:SS.mmmZ；occurred_at 打点回填 tool 域事件）
 #[test]
-fn iso_from_epoch_ms_matches_now_format() {
+fn format_iso_utc_ms_matches_now_format() {
     // 格式形状（与 now_iso_utc 同布局，确定性断言不依赖墙钟跳动）
-    let iso = iso_from_epoch_ms(unix_millis() as u64);
+    let iso = format_iso_utc_ms(SystemClock.now_ms());
     assert_eq!(iso.len(), 24, "含毫秒与 Z 后缀");
     assert!(iso.ends_with('Z'));
     let mid = &iso[..iso.len() - 1];
@@ -184,9 +184,9 @@ fn iso_from_epoch_ms_matches_now_format() {
     assert_eq!(&mid[16..17], ":");
     assert_eq!(&mid[19..20], ".");
     // 已知锚点：0 → 1970-01-01T00:00:00.000Z；2026-08-01 10:30:45.123
-    assert_eq!(iso_from_epoch_ms(0), "1970-01-01T00:00:00.000Z");
+    assert_eq!(format_iso_utc_ms(0), "1970-01-01T00:00:00.000Z");
     assert_eq!(
-        iso_from_epoch_ms(20_666 * 86_400_000 + 10 * 3_600_000 + 30 * 60_000 + 45_123),
+        format_iso_utc_ms(20_666 * 86_400_000 + 10 * 3_600_000 + 30 * 60_000 + 45_123),
         "2026-08-01T10:30:45.123Z"
     );
 }

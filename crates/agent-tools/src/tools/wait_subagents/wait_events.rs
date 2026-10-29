@@ -4,15 +4,15 @@
 //! （wait_for_terminal_events，yield 语义：单次返回 + 状态摘要，主 agent
 //! 串起后续行动）。消费 subagent-ended 事件流直到全部指定子代理终态或
 //! 超时；重复终态事件忽略（幂等）、非等待名单子代理忽略、流关闭 fail-open。
-//! 时间助手 now_millis 位于 wait_defs（共享）。
 //! 诚实边界：仅结构拆分，语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
 use crate::tools::subagent::SubagentState;
+use conex_shared::time::{Clock, SystemClock};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use super::wait_defs::{now_millis, SubagentWaitResult, SubagentWaitStatus};
+use super::wait_defs::{SubagentWaitResult, SubagentWaitStatus};
 
 // ── 终态事件（引擎侧把 subagent-ended 事件流映射后灌入 mpsc）──────
 
@@ -88,7 +88,7 @@ pub async fn wait_for_terminal_events(
         }
     }
 
-    let now_ms = now_millis();
+    let now_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
     let agents = ids
         .iter()
         .map(|id| {

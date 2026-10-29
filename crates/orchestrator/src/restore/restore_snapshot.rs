@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use conex_db::{PendingInput, StoredRun};
 use serde::{Deserialize, Serialize};
 
-use crate::now_ms;
 use crate::session::SessionRecord;
+use conex_shared::time::{Clock, SystemClock};
 
 /// 快照顶层 type（对齐 TS orchestrator-state-snapshot）
 pub const SNAPSHOT_TYPE: &str = "orchestrator-state-snapshot";
@@ -157,7 +157,7 @@ impl StateSnapshot {
             generation,
             last_sequence,
             session_last_sequence,
-            written_at: now_ms(),
+            written_at: SystemClock.now_ms(),
             sessions,
             runs: runs.iter().map(SnapshotRun::from).collect(),
             pending_inputs: pending_inputs

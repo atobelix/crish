@@ -9,11 +9,12 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use conex_shared::time::Clock;
 
 use crate::cdp::error::CdpError;
 use crate::gate::formal::FormalDomainGate;
 use crate::gate::transport::SetBlockedSender;
-use crate::gate::types::{GateClock, HostResolver};
+use crate::gate::types::HostResolver;
 
 /// 假 resolver：任何主机名解析到公网地址（确定性——不依赖 CI 真实 DNS）。
 #[derive(Debug, Clone, Copy)]
@@ -89,9 +90,9 @@ impl MockClock {
     }
 }
 
-impl GateClock for MockClock {
-    fn now_ms(&self) -> u64 {
-        self.now.load(Ordering::SeqCst)
+impl Clock for MockClock {
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.now.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
     }
 }
 

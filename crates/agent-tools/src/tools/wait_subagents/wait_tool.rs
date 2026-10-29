@@ -14,9 +14,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use conex_shared::time::{Clock, SystemClock};
+
 use super::wait_defs::{
-    collect_subagent_output_files, now_millis, DispatchDeclaration, SubagentOutput,
-    SubagentWaitChannel, SubagentWaitResult, WaitMode, DEFAULT_TIMER_WAIT_MS, MAX_WAIT_TIMEOUT_MS,
+    collect_subagent_output_files, DispatchDeclaration, SubagentOutput, SubagentWaitChannel,
+    SubagentWaitResult, WaitMode, DEFAULT_TIMER_WAIT_MS, MAX_WAIT_TIMEOUT_MS,
 };
 
 /// wait_subagents 工具：三模式调度等待（await-all / timer / parallel-work）
@@ -167,7 +169,7 @@ impl Tool for WaitSubagentsTool {
         };
 
         // 调度声明持久化（dispatch_* 键，重启可恢复「等待什么」）
-        let dispatched_at_ms = now_millis();
+        let dispatched_at_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
         let declaration = DispatchDeclaration {
             mode,
             wait_ms: effective_timeout_ms,

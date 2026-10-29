@@ -14,6 +14,8 @@ workspace = true
 # 域类型叶子 crate：断言助手按 AgentEvent/AgentMessage 签名（T11.7.1，
 # 仅依赖 conex-types，不依赖 session-loop/orchestrator 等业务 crate）
 conex-types = { path = "../conex-types" }
+# 时间单一真源：TestClock 实现 conex_shared::time::Clock，ISO 格式化复用真源
+conex-shared = { path = "../conex-shared" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # TimePauseGuard（tokio::time::pause/advance）需要 test-util feature；

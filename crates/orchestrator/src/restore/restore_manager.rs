@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use conex_db::RunStatus;
+use conex_shared::time::{format_iso_utc_ms, Clock, SystemClock};
 use conex_types::events::AgentEvent;
 
 use super::{
@@ -13,7 +14,6 @@ use super::{
     CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, INTERRUPTED_SUBAGENT_SUMMARY,
     RUN_INTERRUPTED_EVENT,
 };
-use crate::now_ms;
 use crate::persist::{PersistedEvent, RecoveryForkTreeEntry, Store, StoreError};
 use crate::recovery::{fork_node_payload, ForkRecord, RECOVER_FORK_EVENT};
 use crate::session::{
@@ -119,7 +119,7 @@ impl RestoreManager {
                         .await?;
 
                     run.status = authoritative_status;
-                    run.updated_at = now_ms();
+                    run.updated_at = SystemClock.now_ms();
                 }
                 // 关键断言：绝对不打断！绝对不写 run-interrupted 虚假审计事件！
                 continue;
@@ -145,7 +145,7 @@ impl RestoreManager {
                     status: db_status.as_str().to_string(),
                     reason: INTERRUPTED_REASON.to_string(),
                     error: error.to_string(),
-                    timestamp: now_ms(),
+                    timestamp: SystemClock.now_ms(),
                 };
                 // DM-05：payload 补顶层 type 键——run-interrupted 非 AgentEvent
                 // 枚举成员（不扩枚举，保持自定义审计事件形态），读侧 D8
@@ -187,7 +187,7 @@ impl RestoreManager {
                 run.status = db_status;
                 run.end_reason = Some(INTERRUPTED_REASON.to_string());
                 run.cursor = cursor as i64;
-                run.updated_at = now_ms();
+                run.updated_at = SystemClock.now_ms();
                 interrupted.push(record);
             } else if run.status == RunStatus::Completed {
                 // 反向脑裂修正：物化表声称 completed，但 events 表无任何终态事件！
@@ -207,7 +207,7 @@ impl RestoreManager {
                     .await?;
                 run.status = RunStatus::Failed;
                 run.end_reason = Some("unbacked-completed".to_string());
-                run.updated_at = now_ms();
+                run.updated_at = SystemClock.now_ms();
             } else if let RunStatus::Unknown(literal) = &run.status {
                 // D3 裁决：未知字面量保真透传
                 tracing::warn!(
@@ -234,7 +234,7 @@ impl RestoreManager {
                 .load_running_session_agent_rows()
                 .map_err(|e| RestoreError::new("load_running_agent_rows", e.to_string()))?;
             if !running_rows.is_empty() {
-                let ended_at = now_ms();
+                let ended_at = SystemClock.now_ms();
                 for row in &running_rows {
                     let affected = db
                         .mark_session_agent_interrupted(
@@ -951,7 +951,7 @@ async fn heal_one_orphan(
         .any(|e| extract_call_id(&e.payload, true).as_deref() == Some(call_id));
     let mut synthesized_start = false;
     if need_tool_start && !has_tool_start {
-        let healed_at = now_ms();
+        let healed_at = SystemClock.now_ms();
         let batch_id = format!("healed-batch-{}", run_id.unwrap_or("unknown"));
         let seq = store.reserve_sequence(session_id).await?;
         let tool_start = AgentEvent::ToolStart {
@@ -965,7 +965,7 @@ async fn heal_one_orphan(
                 category: conex_types::ToolCategory::Internal,
                 concurrency: conex_types::ToolConcurrency::Sequential,
             },
-            timestamp: chrono_like_iso8601(healed_at),
+            timestamp: format_iso_utc_ms(healed_at),
             turn_index: None,
         };
         let payload = serde_json::to_string(&tool_start)
@@ -984,7 +984,7 @@ async fn heal_one_orphan(
     }
 
     // 补齐 ToolEnd（ToolOutcomeUnknown）——统一尾步
-    let healed_at = now_ms();
+    let healed_at = SystemClock.now_ms();
     let batch_id = format!("healed-batch-{}", run_id.unwrap_or("unknown"));
     let seq = store.reserve_sequence(session_id).await?;
     let tool_end = AgentEvent::ToolEnd {
@@ -1003,14 +1003,14 @@ async fn heal_one_orphan(
                     "code": "ToolOutcomeUnknown",
                     "reason": "process-crash-interrupted",
                     "orphanCallId": call_id,
-                    "healedAt": chrono_like_iso8601(healed_at),
+                    "healedAt": format_iso_utc_ms(healed_at),
                 })),
                 artifacts: None,
             },
             is_error: true,
             duration_ms: 0,
         },
-        timestamp: chrono_like_iso8601(healed_at),
+        timestamp: format_iso_utc_ms(healed_at),
         attempt: Some(1),
         deduplicated: None,
         executed_input: None,
@@ -1109,28 +1109,6 @@ fn write_healed_result_to_messages(
             "自愈结果已回写 session_messages.tool_call_results_json"
         );
     }
-}
-
-/// epoch ms → UTC ISO8601（轻量格式化，避免引入 chrono）。
-fn chrono_like_iso8601(ms: i64) -> String {
-    // 用 UTC 简化：只做毫秒→秒转换与格式化（恢复自愈载荷可读即可）
-    let secs = ms.div_euclid(1_000);
-    let millis = ms.rem_euclid(1_000);
-    // Civil from days (Howard Hinnant algorithm)
-    let days = secs.div_euclid(86_400);
-    let sod = secs.rem_euclid(86_400);
-    let (h, m, s) = (sod / 3600, (sod % 3600) / 60, sod % 60);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if mo <= 2 { y + 1 } else { y };
-    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}.{millis:03}Z")
 }
 
 /// blocked 类终态 reason（B4.5 goal 语义：goal-blocked / goal-max-rounds /

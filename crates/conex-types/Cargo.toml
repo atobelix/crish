@@ -17,3 +17,5 @@ serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 once_cell = { workspace = true }
+# 时间真源（X-03）：cron 公历换算与错误时间戳统一走 conex_shared::time，禁止本地副本
+conex-shared = { path = "../conex-shared" }

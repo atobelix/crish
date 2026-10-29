@@ -14,6 +14,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use conex_shared::time::{format_iso_utc_ms, Clock};
+
 /// 可手动推进的确定性时钟（T11.7.2 / AA-01 Q41）
 ///
 /// 以虚拟 Unix 毫秒为时间源：`now_ms` / `now_iso_utc` 完全由测试驱动，
@@ -46,23 +48,17 @@ impl TestClock {
     }
 
     /// 当前虚拟 Unix 毫秒
-    pub fn now_ms(&self) -> u64 {
-        self.inner.millis.load(Ordering::Relaxed)
+    ///
+    /// 实现 `conex_shared::time::Clock` 的 i64 读取面（超出 i64 范围饱和）。
+    pub fn now_ms(&self) -> i64 {
+        i64::try_from(self.inner.millis.load(Ordering::Relaxed)).unwrap_or(i64::MAX)
     }
 
     /// 当前虚拟时间 ISO8601 字符串（毫秒精度，`1970-01-01T00:00:00.000Z` 起步）
     ///
-    /// 与 `conex-shared::time` 同算法（Howard Hinnant
-    /// civil-from-days 换算），无 chrono 依赖。
+    /// 格式化与 `conex-shared::time` 同一实现（唯一真源），无 chrono 依赖。
     pub fn now_iso_utc(&self) -> String {
-        let millis = self.now_ms();
-        let secs = millis / 1000;
-        let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-        let (year, month, day) = civil_from_days((secs / 86400) as i64);
-        format!(
-            "{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{:03}Z",
-            millis % 1000
-        )
+        format_iso_utc_ms(self.now_ms())
     }
 
     /// 手动推进虚拟时间（毫秒）
@@ -82,18 +78,10 @@ impl Default for TestClock {
     }
 }
 
-/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法，与 conex-shared::time 同算法）
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
+impl Clock for TestClock {
+    fn now_ms(&self) -> i64 {
+        TestClock::now_ms(self)
+    }
 }
 
 /// tokio 虚拟时间 RAII 护栏（Q41：消除真实 sleep 的测试脆弱性）

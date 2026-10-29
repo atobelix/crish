@@ -35,8 +35,8 @@ use async_trait::async_trait;
 use conex_db::{DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun};
 use conex_types::{codes, CrishError};
 
-use crate::now_ms;
 use crate::session::SessionTreeEntry;
+use conex_shared::time::{Clock, SystemClock};
 
 /// 存储层错误（kind 为操作名，message 为详情；cause 保留底层 DbFailure
 /// 上下文，T06.5.8：From<StoreError> for CrishError 时 cause 链不丢失）
@@ -553,7 +553,7 @@ impl Store for InMemoryStore {
         end_reason: Option<&str>,
         cursor: i64,
     ) -> StoreResult<()> {
-        let now = now_ms();
+        let now = SystemClock.now_ms();
         let run = StoredRun {
             run_id: run_id.to_string(),
             session_id: session_id.to_string(),
@@ -595,7 +595,7 @@ impl Store for InMemoryStore {
         if cursor.is_some() {
             run.cursor = cursor.unwrap_or_default();
         }
-        run.updated_at = now_ms();
+        run.updated_at = SystemClock.now_ms();
         Ok(())
     }
 
@@ -687,7 +687,7 @@ impl Store for InMemoryStore {
             event_type: event_type.to_string(),
             payload: payload.to_string(),
             run_id: run_id.map(str::to_string),
-            created_at: now_ms().to_string(),
+            created_at: SystemClock.now_ms().to_string(),
         });
         Ok(())
     }
@@ -826,7 +826,7 @@ impl Store for InMemoryStore {
             session_id: session_id.to_string(),
             run_id: run_id.map(str::to_string),
             payload: payload.to_string(),
-            created_at: now_ms(),
+            created_at: SystemClock.now_ms(),
         };
         guard.pending_inputs.retain(|p| p.id != id);
         guard.pending_inputs.push(input);

@@ -25,6 +25,7 @@
 //!    达 max_stalled_rounds → Blocked(goal-stalled)，否则 NoProgress；
 //! 6. 默认 → Continue（needs-continuation）。
 
+use conex_shared::time::{Clock, SystemClock};
 use conex_types::session::AgentEndReason;
 use serde::{Deserialize, Serialize};
 
@@ -231,7 +232,7 @@ impl GoalState {
             next.progress_signature = Some(sig.clone());
         }
         next.stopped_reason = Some(assessment.reason_detail.clone());
-        next.updated_at_ms = crate::now_ms();
+        next.updated_at_ms = SystemClock.now_ms();
         next
     }
 }

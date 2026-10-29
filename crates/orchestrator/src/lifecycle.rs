@@ -39,11 +39,11 @@ use conex_types::{HistoryMessage, SessionAgent, SessionMessage};
 use serde::Serialize;
 
 use crate::normalize::normalize_envelope;
-use crate::now_ms;
 use crate::recovery::{
     ForkRecord, RecoveryAction, RecoveryCoordinator, RecoveryError, RunFailureContext, UserReport,
 };
 use crate::subagent_events::{build_subagent_ended, SubagentEmitContext, SubagentEndedInfo};
+use conex_shared::time::{Clock, SystemClock};
 
 /// L3 强停投递抽象（引擎侧实现：按 subagent_run_id 定位该 run 的控制总线，
 /// 调 [session_loop::control::ControlBus::request_force_cancel]——control.rs:319
@@ -288,7 +288,7 @@ impl SubagentLifecycleService {
         // 终态统一归一 failed（单行定点写：只动 targets 快照中的目标行，
         // 非目标行与 messages 原样保留；kill_all 期间引擎并发 spawn 的
         // 新行不再被全量先删后插覆写删除——11-T3 N05 根因收束）
-        let now = now_ms();
+        let now = SystemClock.now_ms();
         for agent in &targets {
             // 缺行静默成功（affected=0 不报错：目标行在投递期间被删时
             // 宽容跳过，与 save 面语义一致）
@@ -534,7 +534,12 @@ impl SubagentLifecycleService {
     ) -> Result<(), LifecycleError> {
         let affected = self
             .db
-            .update_session_agent_status(session_id, subagent_run_id, "failed", Some(now_ms()))
+            .update_session_agent_status(
+                session_id,
+                subagent_run_id,
+                "failed",
+                Some(SystemClock.now_ms()),
+            )
             .map_err(db_err)?;
         if affected == 0 {
             return Err(LifecycleError::NotFound {

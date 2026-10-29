@@ -9,9 +9,9 @@
 //! - [CronSchedule::cron_label]：人类可读标签（对齐前端 cronExpressionLabel
 //!   workflowScheduler.ts:212-241）。
 //!
-//! 零依赖约束：时间计算全用 std（公历换算采用 Hinnant 算法），本地时区偏移
-//! 解析走平台 API（Windows：kernel32 GetLocalTime，见 [local_utc_offset_minutes]），
-//! 不引入 chrono 类依赖（T-CF-08 约束：不改 Cargo.toml）。
+//! 时间计算：公历换算走 `conex_shared::time`（Hinnant 算法唯一真源，不再本地
+//! 复制），本地时区偏移解析走平台 API（Windows：kernel32 GetLocalTime，见
+//! [local_utc_offset_minutes]），不引入 chrono 类依赖。
 //!
 //! ## 语义选择（任务书 T-CF-08 定稿，与前端标签逻辑对齐）
 //!
@@ -28,6 +28,7 @@
 //!    只校验单值/范围）。
 //! 4. **dow 0-7**：0 与 7 都表示周日（前端 CRON_FIELD_BOUNDS 注释同源）。
 
+use conex_shared::time::{civil_from_days, days_from_civil};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -290,32 +291,7 @@ fn parse_cron_field(field: &str, min: u32, max: u32) -> Result<CronField, String
     })
 }
 
-// ── 公历换算（Hinnant 算法，std-only；日期算术的单一事实源）──
-
-/// 自 1970-01-01 起的天数 → 公历（年, 月, 日）
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-/// 公历（年, 月, 日）→ 自 1970-01-01 起的天数
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
-    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
+// ── 日期匹配（公历换算统一走 conex_shared::time）──
 
 /// 星期（0 = 周日，与 cron dow 0-7 语义对齐；1970-01-01 为周四）
 fn weekday_sunday0(days: i64) -> u32 {

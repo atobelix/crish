@@ -41,7 +41,7 @@ use conex_types::impact::ImpactAssessment;
 use crate::events::{EventQueue, PersistError};
 use crate::persist::Store;
 use crate::steering_queue::{PendingMessageQueue, SteeringInputEntry};
-use conex_shared::time::now_iso_utc;
+use conex_shared::time::{now_iso_utc, Clock, SystemClock};
 
 // ── 唤醒摘要（REQ-C04 四模板，01 方案 §4.5 通知文案冻结）────────────
 
@@ -177,7 +177,7 @@ pub fn build_wake_steering_entry(text: String) -> SteeringInputEntry {
         id: TASK_WAKE_GROUP_ID.to_string(),
         text,
         attachments: Vec::new(),
-        enqueued_at: crate::now_ms() as u64,
+        enqueued_at: u64::try_from(SystemClock.now_ms()).unwrap_or(0),
         group_id: Some(TASK_WAKE_GROUP_ID.to_string()),
         is_steering: true,
     }
@@ -211,7 +211,7 @@ pub fn build_task_failed_steering_entry(event: &AgentEvent) -> Option<SteeringIn
         id: format!("task-failed-{task_id}"),
         text,
         attachments: Vec::new(),
-        enqueued_at: crate::now_ms() as u64,
+        enqueued_at: u64::try_from(SystemClock.now_ms()).unwrap_or(0),
         group_id: Some(task_steering_group_id(task_id)),
         is_steering: true,
     })
@@ -424,7 +424,7 @@ impl TaskAuditAccumulator {
                     self.commands.pop_first();
                 }
                 self.commands.insert(task_id.clone(), command.clone());
-                let at_ms = crate::now_ms() as u64;
+                let at_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
                 self.record_with(
                     task_id.as_str(),
                     command.clone(),
@@ -435,7 +435,7 @@ impl TaskAuditAccumulator {
             }
             AgentEvent::TaskCompleted { task_id, .. } => {
                 let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
-                let at_ms = crate::now_ms() as u64;
+                let at_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
                 self.record_with(
                     task_id.as_str(),
                     command,
@@ -446,7 +446,7 @@ impl TaskAuditAccumulator {
             }
             AgentEvent::TaskFailed { task_id, .. } => {
                 let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
-                let at_ms = crate::now_ms() as u64;
+                let at_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
                 self.record_with(
                     task_id.as_str(),
                     command,
@@ -457,7 +457,7 @@ impl TaskAuditAccumulator {
             }
             AgentEvent::TaskKilled { task_id, .. } => {
                 let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
-                let at_ms = crate::now_ms() as u64;
+                let at_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
                 self.record_with(
                     task_id.as_str(),
                     command,

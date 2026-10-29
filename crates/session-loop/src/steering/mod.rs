@@ -61,7 +61,7 @@ pub(crate) const DEFAULT_INTERVENTION_MESSAGE: &str =
     "The agent did not recover after runtime steering.";
 
 pub use coordinator::SteeringCoordinator;
-pub(crate) use events::{iso_from_epoch_ms, steering_evaluated_event};
+pub(crate) use events::steering_evaluated_event;
 pub(crate) use types::SteeringEvaluationTrace;
 pub use types::{
     AppliedResult, SteeringAction, SteeringContext, SteeringCoordinatorOptions, SteeringPhase,

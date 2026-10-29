@@ -142,8 +142,8 @@ pub use note_backend::{
     NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
 pub use subagent_inject::{
-    comment_preservation_section, git_revert_caution_section, iso8601_from_epoch_ms,
-    ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
+    comment_preservation_section, git_revert_caution_section, ref_older_than_threshold,
+    resolve_started_at, started_at_section, subagent_session_injections,
     COMMENT_PRESERVATION_TITLE, DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER,
     REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };

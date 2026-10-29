@@ -19,7 +19,6 @@
 mod record;
 mod rewind_exec;
 mod rewind_plan;
-mod time;
 mod tree;
 
 #[cfg(test)]
@@ -36,8 +35,6 @@ pub use rewind_plan::{
     RewindRestorePolicy, RewindRunCancellation, RewindRunInfo, RewindRunRole, RewindStep,
     RewindWorkspaceRestore, REWIND_CANCEL_REASON,
 };
-#[cfg(test)]
-pub(crate) use time::parse_iso8601_epoch_ms;
 pub use tree::SessionTree;
 
 #[cfg(test)]

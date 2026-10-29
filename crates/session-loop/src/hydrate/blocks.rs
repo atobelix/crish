@@ -1,8 +1,8 @@
+use conex_shared::time::format_iso_utc_ms;
 use conex_types::history::HistoryMessage;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::tool::ToolOutput;
 
-use super::time_text::iso8601_from_epoch_millis;
 use super::tool_calls::{
     extract_output_text, parse_arguments, parse_tool_call_results, HydratedToolCall,
     HydratedToolResult,
@@ -93,7 +93,7 @@ pub(crate) fn resolve_assistant_blocks(
                             companion_tools.push(AgentMessage {
                                 id: format!("tool-result-{}", tool_call_id),
                                 role: AgentMessageRole::Tool,
-                                created_at: iso8601_from_epoch_millis(entry.timestamp),
+                                created_at: format_iso_utc_ms(entry.timestamp),
                                 blocks: vec![AgentMessageBlock::ToolResult {
                                     tool_call_id,
                                     tool_name,
@@ -150,7 +150,7 @@ pub(crate) fn resolve_assistant_blocks(
                                 companion_tools.push(AgentMessage {
                                     id: format!("tool-result-{}", call.id),
                                     role: AgentMessageRole::Tool,
-                                    created_at: iso8601_from_epoch_millis(entry.timestamp),
+                                    created_at: format_iso_utc_ms(entry.timestamp),
                                     blocks: vec![AgentMessageBlock::ToolResult {
                                         tool_call_id: call.id.clone(),
                                         tool_name: call.tool_name.clone(),
@@ -242,7 +242,7 @@ pub(crate) fn synthesize_assistant_blocks(
             companion_tools.push(AgentMessage {
                 id: format!("tool-result-{}", call.id),
                 role: AgentMessageRole::Tool,
-                created_at: iso8601_from_epoch_millis(entry.timestamp),
+                created_at: format_iso_utc_ms(entry.timestamp),
                 blocks: vec![AgentMessageBlock::ToolResult {
                     tool_call_id: call.id.clone(),
                     tool_name: call.name.clone(),
@@ -268,7 +268,7 @@ pub(crate) fn synthesize_assistant_blocks(
                 companion_tools.push(AgentMessage {
                     id: format!("tool-result-{}", res.id),
                     role: AgentMessageRole::Tool,
-                    created_at: iso8601_from_epoch_millis(entry.timestamp),
+                    created_at: format_iso_utc_ms(entry.timestamp),
                     blocks: vec![AgentMessageBlock::ToolResult {
                         tool_call_id: res.id.clone(),
                         tool_name: String::new(),
