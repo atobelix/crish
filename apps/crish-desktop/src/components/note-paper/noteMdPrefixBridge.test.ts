@@ -10,11 +10,8 @@
  * | CONN-D3 simulate 行首 `# `/`- ` → commitProduct* | 单测抬 e2e / UI 读 pending 当 kind |
  */
 import { describe, expect, it } from 'vitest';
-import {
-  createMockTurnIntoSink,
-  TextLeafModel,
-  type ApplyOpsAdapter,
-} from '@crish/block-paper';
+import { TextLeafModel, type ApplyOpsAdapter } from '@crish/block-paper';
+import { createMockTurnIntoSink } from '../../../../../packages/block-paper/src/leaves/mdPrefixHost.audit';
 import {
   bindingFromStrictMdPrefixProps,
   commitProductMdPrefixFromLeaf,

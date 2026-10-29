@@ -14,12 +14,12 @@ import {
   BP_SLASH_GROUP,
   BP_SLASH_ITEM,
   createCollabApplySink,
-  createMockIntentSink,
   DEFAULT_SLASH_CATALOG,
   SlashMenuModel,
   type ApplyOpsAdapter,
   type SlashInsertIntent,
 } from '@crish/block-paper';
+import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
 import { SlashMenuOverlay } from './SlashMenuOverlay';
 
 /** 可控：打开后 bump syncToken 强制重绘 */

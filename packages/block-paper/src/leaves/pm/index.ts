@@ -24,7 +24,6 @@ export {
 
 export {
   PmTextLeaf,
-  diffToReplace,
   isPmTextLeaf,
   type PmTextLeafSnapshot,
   type PmTextLeafOptions,

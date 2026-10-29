@@ -36,34 +36,19 @@ import {
   BlockChromeModel,
   SlashMenuModel,
   BlockChromeDomHost, // W3-F DOM 余量（≠ EL-01）
-  createSilentFixture,
-  listSilentBlocks,
   DEFAULT_SLASH_CATALOG,
   // W3-D
   TextLeafModel,
   submitIntent,
   createCollabApplySink, // 生产默认
-  createMockIntentSink, // 仅形状测
   computeLineWindow,
   PmTextLeaf,
   // W3-E
   CodeLeafModel,
-  createMockCodeLeafHost,
   Cm6CodeLeafHost,
   mountCodeLeaf,
 } from '@crish/block-paper';
 ```
-
-## 静默假数据（A-SIL 子集）
-
-```ts
-const fixture = createSilentFixture(32, { docId: 'demo' });
-// fixture.state 已 apply 增量 Diff；fullRemountCount === 0
-// fixture.blocks / fixture.order 符合 MemoryBlock 形状
-const blocks = listSilentBlocks(fixture);
-```
-
-假数据 **仅供 chrome 原型与单测**；接真实键入必须等 01+04 投影通道。
 
 ## BlockChromeModel
 
@@ -149,32 +134,6 @@ await submitIntent(textIntent, collab.sink, { ime });
 | `cancelComposition()`                | 回滚缓冲，无 Intent                                 |
 | `replaceFromProjection(text)`        | 权威回填；composing 期拒绝                          |
 
-```ts
-import {
-  TextLeafModel,
-  submitIntent,
-  createMockIntentSink,
-} from '@crish/block-paper';
-import { ImeMachine } from '@crish/editor-kit';
-
-const leaf = new TextLeafModel('block-1', 'Hello');
-const mock = createMockIntentSink();
-const ime = new ImeMachine();
-
-// 普通键入
-const intent = leaf.applyLocalEdit(5, 5, '!');
-await submitIntent(intent!, mock.sink, { ime });
-// mock.calls[0] === TextEditIntent
-
-// IME
-ime.startComposition('block-1');
-leaf.beginComposition(6);
-leaf.applyLocalEdit(6, 6, '你'); // 仅本地，无 Intent
-ime.endComposition('你');
-const flushed = leaf.flushOnCompositionEnd('你');
-await submitIntent(flushed!, mock.sink, { ime });
-```
-
 ### intentBridge
 
 - `submitIntent`：经 `ImeMachine.tryAcceptIntent` / `structureKeyGuard` 后调用 sink
@@ -223,51 +182,6 @@ IntentSink（mock 或未来 RS IPC）
 | `Cm6CodeLeafHost`                          | 真 EditorView；`getEditorView()` / `onDocChanged`             |
 | `createCm6EditorState`                     | 无 DOM 可构造 `EditorState`（语言/只读 Compartment）          |
 | `mountCodeLeaf(el, opts)`                  | DOM 挂载；CM6 host 时 `getEditorView()` 返回真实 View         |
-
-```ts
-import {
-  CodeLeafModel,
-  createMockCodeLeafHost,
-  Cm6CodeLeafHost,
-  mountCodeLeaf,
-  submitIntent,
-  createMockIntentSink,
-} from '@crish/block-paper';
-
-// —— 单测 / 无 DOM：mock host ——
-const host = createMockCodeLeafHost();
-const leaf = new CodeLeafModel('block-code', 'const x = 1;', {
-  language: 'javascript',
-  host,
-});
-const mock = createMockIntentSink();
-
-leaf.focus();
-const intent = leaf.applyLocalEdit(12, 12, '0');
-await submitIntent(intent!, mock.sink);
-// mock.calls[0].type === 'text_edit'
-
-leaf.setReadOnly(true);
-expect(leaf.applyLocalEdit(0, 0, 'x')).toBeNull(); // 只读拒绝
-
-// —— 浏览器：真 CM6 host ——
-// const { model, getEditorView, unmount } = mountCodeLeaf(el, {
-//   blockId: 'b-code',
-//   language: 'javascript',
-//   initialContent: 'const x = 1;',
-//   createHost: (parent) =>
-//     new Cm6CodeLeafHost(parent, {
-//       language: 'javascript',
-//       initialContent: 'const x = 1;',
-//       onDocChanged: (content) => {
-//         const old = model.getContent();
-//         if (old !== content) model.applyLocalEdit(0, old.length, content);
-//       },
-//     }),
-// });
-// getEditorView(); // → EditorView
-// unmount();
-```
 
 ## 不变量速查
 

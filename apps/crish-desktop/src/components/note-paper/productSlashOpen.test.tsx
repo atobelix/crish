@@ -18,11 +18,8 @@ import {
   waitFor,
 } from '@testing-library/react';
 import React, { useMemo, useState } from 'react';
-import {
-  createMockIntentSink,
-  SlashMenuModel,
-  type ApplyOpsAdapter,
-} from '@crish/block-paper';
+import { SlashMenuModel, type ApplyOpsAdapter } from '@crish/block-paper';
+import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
 import {
   handleProductSlashKeydown,
   isNativeFormFieldTarget,

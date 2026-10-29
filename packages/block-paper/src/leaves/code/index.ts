@@ -23,12 +23,9 @@ export {
 } from './CodeLeafModel';
 
 export {
-  createMockCodeLeafHost,
   DomCodeLeafHost,
   mountCodeLeaf,
   type CodeLeafHost,
-  type MockCodeLeafHost,
-  type MockCodeLeafHostOptions,
   type MountCodeLeafOptions,
   type CodeLeafMount,
 } from './CodeLeafHost';

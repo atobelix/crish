@@ -20,14 +20,15 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import type { TextEditIntent } from '@crish/block-paper-contract';
-import { diffToReplace } from './diffToReplace';
+import { diffToReplace } from '@crish/block-paper-contract';
 import {
   PmTextLeaf,
   leafInlineSchema,
   textToLeafDoc,
   textOffsetToPmPos,
 } from './index';
-import { TextLeafModel, resetIntentIdSeqForTests } from '../TextLeafModel';
+import { TextLeafModel } from '../TextLeafModel';
+import { resetIntentIdSeqForTests } from '../../intentId';
 import { CodeLeafModel } from '../code/CodeLeafModel';
 
 describe('diffToReplace: 代理项感知与标量坐标产出', () => {

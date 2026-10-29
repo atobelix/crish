@@ -34,7 +34,7 @@ import {
   type ApplyOpsAdapter,
   type IntentSinkResult,
 } from './intentBridge';
-import { resetIntentIdSeqForTests } from './TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 
 const ID_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ID_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';

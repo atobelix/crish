@@ -21,11 +21,11 @@ import {
 import {
   BlockChromeModel,
   buildSlashInsertIntent,
-  createMockIntentSink,
-  createMockTurnIntoSink,
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
+import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
+import { createMockTurnIntoSink } from '../../../../../packages/block-paper/src/leaves/mdPrefixHost.audit';
 import { isUuidV4, newNoteBlockId } from './noteBlockId';
 import {
   createFixtureHydrateTransport,

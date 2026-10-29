@@ -12,10 +12,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCollabApplySink,
-  createMockIntentSink,
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
+import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
 import {
   defaultEditSessionRegistry,
   isEditSessionOpen,

@@ -7,11 +7,8 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { ImeMachine } from '@crish/editor-kit';
 import type { Intent, TextEditIntent } from '@crish/block-paper-contract';
-import {
-  TextLeafModel,
-  nextIntentId,
-  resetIntentIdSeqForTests,
-} from './TextLeafModel';
+import { TextLeafModel } from './TextLeafModel';
+import { nextIntentId, resetIntentIdSeqForTests } from '../intentId';
 import { createMockIntentSink, submitIntent } from './intentBridge';
 import {
   DEFAULT_PM_NODE_SOFT_BYTES,
