@@ -261,6 +261,14 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     );
     const btn = document.createElement('button');
     btn.dataset.testid = 'session-more-button';
+    btn.onclick = () => {
+      act(() => {
+        result.current.handleContextMenu(
+          fakeMouseEvent(btn, { button: 0 }),
+          'sess-1'
+        );
+      });
+    };
     document.body.append(btn);
 
     act(() => {
@@ -287,6 +295,14 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     );
     const btn = document.createElement('button');
     btn.dataset.testid = 'session-more-button';
+    btn.onclick = () => {
+      act(() => {
+        result.current.handleContextMenu(
+          fakeMouseEvent(btn, { button: 0 }),
+          'sess-1'
+        );
+      });
+    };
     document.body.append(btn);
 
     act(() => {
@@ -317,6 +333,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
 
     fireEvent.pointerDown(btn);
     fireEvent.pointerUp(btn);
+    fireEvent.click(btn);
     await waitFor(() => expect(result.current.contextMenu).toBeNull());
     rerender(<></>);
     btn.remove();

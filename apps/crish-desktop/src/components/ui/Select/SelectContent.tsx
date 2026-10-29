@@ -13,7 +13,7 @@ export function SelectContent({
   sideOffset = 6,
   edgePadding = 8,
   portalContainer,
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   children,
 }: SelectContentProps) {
   const ctx = useSelectContext('SelectContent');

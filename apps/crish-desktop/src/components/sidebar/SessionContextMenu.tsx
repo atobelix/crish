@@ -41,6 +41,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       dismissible: true,
       onDismiss: () => onCloseContextMenu?.(),
       elementRef: menuRef,
+      anchorRef: contextMenuTriggerRef,
       restoreFocusTarget: contextMenuTriggerRef?.current ?? undefined,
     },
     isOpen
