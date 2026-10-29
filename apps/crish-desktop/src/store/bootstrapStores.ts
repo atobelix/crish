@@ -11,7 +11,7 @@ import { MessageSnapshots } from '../api/MessageSnapshots';
 import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
 import { logger, toErrMeta } from '../services/LoggerService';
 import { initTabModeProjection } from './tabModeApply';
-import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import { sessionDraftManager } from '../api/draft/sessionDraftManager';
 import { bindDraftManagerForEviction } from './sessionDeleteTransition';
 
@@ -171,16 +171,11 @@ export function bootstrapStores(): () => void {
   }
 
   // Double-Lock 墓碑与存活探针（E3-01）：为流式调度器注入会话在 Store 中的存活判定闭包
-  sharedSessionStreamManager.bindSessionAliveOracle((sessionId: string) => {
-    const state = useSessionStore.getState();
-    return Boolean(
-      state.sessionsById[sessionId] ||
-      state.sessions?.some((s) => s.id === sessionId)
-    );
-  });
-  unsubs.push(() => {
-    sharedSessionStreamManager.bindSessionAliveOracle(null);
-  });
+  unsubs.push(
+    sessionStreams.bindSessionAliveOracle((sessionId: string) =>
+      Boolean(useSessionStore.getState().sessionsById[sessionId])
+    )
+  );
 
   // 草稿管理器驱逐单向解耦（E3-04）：为 store 会话删除注入草稿管理器实例
   bindDraftManagerForEviction(sessionDraftManager);

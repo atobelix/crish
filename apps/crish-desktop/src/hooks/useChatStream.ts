@@ -8,14 +8,14 @@
  * | **子 Agent 面板** | `hooks/useAgentStream.ts` → `useAgentPanel` | `handleStopGeneration` / `handleForceCancelGeneration` |
  *
  * 实现目录 `./chat-stream/`；本文件只 re-export。
- * 协议终止统一经 SessionStreamManager.cancel → createStreamCancel → compositionRoot.runControl。
+ * 协议终止统一经 sessionStreams.cancel → createStreamCancel → compositionRoot.runControl。
  * 勿从本门面拉子 Agent 面板逻辑；勿 import 已删除的 `hooks/useStreamCallbacks.ts`。
  *
  * 拆分模块：
  * - `./chat-stream/helpers.ts`: session id / stream 防护 / terminal tool patches
  * - `./chat-stream/multimodal.ts`: 附件与多模态 content parts
  * - `./chat-stream/useStreamBatchers.ts`: rAF buffer + 48ms 批处理
- * - `./chat-stream/useGoalMode.ts`: /goal 续写与 drain
+ * - `./chat-stream/goalContinuation.ts`: /goal 续写与 drain
  * - `./chat-stream/useStreamCallbacks.ts`: SSE 回调、子 agent 时间线、终态
  * - `./chat-stream/useSlashSend.ts`: slash 与 handleSendChat
  */

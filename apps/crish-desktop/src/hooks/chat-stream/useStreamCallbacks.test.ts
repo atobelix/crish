@@ -3,10 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useStreamCallbacks } from './useStreamCallbacks';
 import type { UseChatStreamOptions } from './types';
-import type { StreamBatcherRefs, StreamToolCallPatch } from './useStreamBatchers';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
-import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
-import { StreamTextBatcher, StreamValueBatcher } from '../../api/streamTextBatcher';
+import type {
+  StreamBatcherRefs,
+  StreamToolCallPatch,
+} from './useStreamBatchers';
+import {
+  StreamTextBatcher,
+  StreamValueBatcher,
+} from '../../api/streamTextBatcher';
 
 // 单轨收敛：resolveRunErrorSurface / isActionableErrorKind 旧四态裁决器已删除，
 // 本文件保留 hook 表面与停止生成安全性的行为测试。
@@ -27,26 +31,20 @@ describe('useStreamCallbacks', () => {
   };
 
   const createMockRefs = (): StreamBatcherRefs => {
-    const streamManagerRef = { current: new SessionStreamManager() };
-    const textBatcherRef = {
-      current: new StreamTextBatcher(() => {}, { intervalMs: 1000 }),
-    };
     const thinkingBatcherRef = {
       current: new StreamTextBatcher(() => {}, { intervalMs: 1000 }),
     };
     const toolBatcherRef = {
-      current: new StreamValueBatcher<StreamToolCallPatch>(() => {}, { intervalMs: 1000 }),
+      current: new StreamValueBatcher<StreamToolCallPatch>(() => {}, {
+        intervalMs: 1000,
+      }),
     };
-    const renderBufferRef = { current: new StreamRenderBuffer() };
     const openSidePanelOnceRef = { current: { terminal: false, diff: false } };
     const flushStreamBatchers = vi.fn();
 
     return {
-      streamManagerRef,
-      textBatcherRef,
       thinkingBatcherRef,
       toolBatcherRef,
-      renderBufferRef,
       openSidePanelOnceRef,
       flushStreamBatchers,
     };

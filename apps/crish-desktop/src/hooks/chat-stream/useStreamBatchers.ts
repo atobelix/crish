@@ -1,5 +1,4 @@
 import { useRef, useEffect, type MutableRefObject } from 'react';
-import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import {
   StreamTextBatcher,
   StreamValueBatcher,
@@ -8,52 +7,48 @@ import {
   isImmediateToolStatus,
   type StreamToolCallPatch,
 } from '../../api/streamTextBatcher';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
 import {
   clearStreamTool,
-  setStreamText,
   setStreamThinking,
   setStreamTool,
 } from '../../store/streamingStore';
 import { commitToolPatchToSession } from './helpers';
-import { registerStreamBatcher, unregisterStreamBatcher } from '../../api/beforeunloadFlush';
+import {
+  registerStreamBatcher,
+  unregisterStreamBatcher,
+} from '../../api/beforeunloadFlush';
+import { logger, toErrMeta } from '../../services/LoggerService';
 
+/**
+ * 每个 useChatStream 实例的批处理器（thinking / tool → streamingStore）。
+ * 正文经每轮 run 独占的 StreamRenderBuffer（登记在 sessionStreams 句柄上）上屏。
+ */
 export interface StreamBatcherRefs {
-  streamManagerRef: MutableRefObject<SessionStreamManager | null>;
-  textBatcherRef: MutableRefObject<StreamTextBatcher | null>;
   thinkingBatcherRef: MutableRefObject<StreamTextBatcher | null>;
   toolBatcherRef: MutableRefObject<StreamValueBatcher<StreamToolCallPatch> | null>;
-  renderBufferRef: MutableRefObject<StreamRenderBuffer | null>;
   openSidePanelOnceRef: MutableRefObject<{ terminal: boolean; diff: boolean }>;
   flushStreamBatchers: () => void;
 }
 
-export function useStreamBatchers(): StreamBatcherRefs {
-  const streamManagerRef = useRef<SessionStreamManager | null>(null);
-  if (!streamManagerRef.current) {
-    streamManagerRef.current = new SessionStreamManager();
+function flushBatcher(
+  name: string,
+  batcher: { flushNow: () => void } | null
+): void {
+  try {
+    batcher?.flushNow();
+  } catch (err) {
+    logger.warn(`[chat-stream] ${name} batcher flush failed`, {
+      module: 'chat-stream',
+      err: toErrMeta(err),
+    });
   }
+}
 
+export function useStreamBatchers(): StreamBatcherRefs {
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
 
-  // Text/thinking flush into lightweight streamingStore (no immer) so token
-  // ticks do not rewrite session messages. Durable commit happens on end/cancel/tool.
-  const textBatcherRef = useRef<StreamTextBatcher | null>(null);
-  if (!textBatcherRef.current) {
-    const batcher = new StreamTextBatcher(
-      (key, text) => {
-        const sep = key.indexOf('::');
-        if (sep < 0) return;
-        const sessionId = key.slice(0, sep);
-        const messageId = key.slice(sep + 2);
-        setStreamText(sessionId, messageId, text);
-      },
-      { intervalMs: 48, maxBufferedChars: 8000 }
-    );
-    registerStreamBatcher(batcher);
-    textBatcherRef.current = batcher;
-  }
-
+  // Thinking flush into lightweight streamingStore (no immer) so token ticks do
+  // not rewrite session messages. Durable commit happens on end/cancel/tool.
   const thinkingBatcherRef = useRef<StreamTextBatcher | null>(null);
   if (!thinkingBatcherRef.current) {
     const batcher = new StreamTextBatcher(
@@ -72,7 +67,9 @@ export function useStreamBatchers(): StreamBatcherRefs {
 
   // Intermediate tool progress → streamingStore (no immer). Durable terminal
   // statuses (success/error/pending_approval) → single session write + clear lite.
-  const toolBatcherRef = useRef<StreamValueBatcher<StreamToolCallPatch> | null>(null);
+  const toolBatcherRef = useRef<StreamValueBatcher<StreamToolCallPatch> | null>(
+    null
+  );
   if (!toolBatcherRef.current) {
     const batcher = new StreamValueBatcher<StreamToolCallPatch>(
       (key, patch) => {
@@ -110,35 +107,28 @@ export function useStreamBatchers(): StreamBatcherRefs {
   }
 
   useEffect(() => {
-    const textBatcher = textBatcherRef.current;
     const thinkingBatcher = thinkingBatcherRef.current;
     const toolBatcher = toolBatcherRef.current;
 
-    if (textBatcher) registerStreamBatcher(textBatcher);
     if (thinkingBatcher) registerStreamBatcher(thinkingBatcher);
-    if (toolBatcher) registerStreamBatcher(toolBatcher as StreamValueBatcher<unknown>);
+    if (toolBatcher)
+      registerStreamBatcher(toolBatcher as StreamValueBatcher<unknown>);
 
     return () => {
-      if (textBatcher) unregisterStreamBatcher(textBatcher);
       if (thinkingBatcher) unregisterStreamBatcher(thinkingBatcher);
-      if (toolBatcher) unregisterStreamBatcher(toolBatcher as StreamValueBatcher<unknown>);
+      if (toolBatcher)
+        unregisterStreamBatcher(toolBatcher as StreamValueBatcher<unknown>);
     };
   }, []);
 
-  const renderBufferRef = useRef<StreamRenderBuffer | null>(null);
-
   const flushStreamBatchers = () => {
-    try { textBatcherRef.current?.flushNow(); } catch { /* ignore */ }
-    try { thinkingBatcherRef.current?.flushNow(); } catch { /* ignore */ }
-    try { toolBatcherRef.current?.flushNow(); } catch { /* ignore */ }
+    flushBatcher('thinking', thinkingBatcherRef.current);
+    flushBatcher('tool', toolBatcherRef.current);
   };
 
   return {
-    streamManagerRef,
-    textBatcherRef,
     thinkingBatcherRef,
     toolBatcherRef,
-    renderBufferRef,
     openSidePanelOnceRef,
     flushStreamBatchers,
   };

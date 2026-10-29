@@ -22,10 +22,7 @@ import {
 import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
 import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
 import { sessionDraftManager } from '../api/draft/sessionDraftManager';
-import {
-  registerSessionRenderBuffer,
-  getSessionRenderBuffer,
-} from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../api/StreamRenderBuffer';
 import { useStreamingStore } from './streamingStore';
 
@@ -151,7 +148,7 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
     expect(sm.getRecordCount()).toBe(0);
   });
 
-  it('executeDualLatchFinalCleanup 刚性执行：abortSession、DOM 节点解引用与流缓冲清退', () => {
+  it('executeDualLatchFinalCleanup 刚性执行：abortSession、DOM 节点解引用与流式 store 清退', () => {
     const sessionId = 'sess-cleanup-test';
     const messageId = 'msg-dom-test';
 
@@ -184,13 +181,7 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
     );
     expect(streamDirectDomEngine.size).toBe(1);
 
-    // 3. 注册 StreamRenderBuffer
-    const renderBuf = new StreamRenderBuffer({ maxBytesPerFrame: 1024 });
-    const stopSpy = vi.spyOn(renderBuf, 'reset');
-    registerSessionRenderBuffer(sessionId, renderBuf);
-    expect(getSessionRenderBuffer(sessionId)).toBe(renderBuf);
-
-    // 4. 设置流式文本
+    // 3. 设置流式文本
     useStreamingStore
       .getState()
       .setStreamText(sessionId, messageId, 'Streaming buffer text');
@@ -203,7 +194,6 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
 
     expect(cleanupResult.dualLatchRecordsAborted).toBe(true);
     expect(cleanupResult.domTargetsDereferenced).toBe(true);
-    expect(cleanupResult.renderBufferAborted).toBe(true);
     expect(cleanupResult.streamingStoreCleared).toBe(true);
 
     // 断言 DualLatch records 彻底清除
@@ -214,10 +204,6 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
 
     // 断言 DOM 引擎槽位被释放且节点解除引用
     expect(streamDirectDomEngine.size).toBe(0);
-
-    // 断言 renderBuffer 被重置且从全局 Map 移除
-    expect(stopSpy).toHaveBeenCalled();
-    expect(getSessionRenderBuffer(sessionId)).toBeNull();
 
     // 断言流式 store 被清退
     expect(
@@ -286,14 +272,28 @@ describe('executeSessionDeleteLifecycle · 全生命周期终态原子协调', (
     // 准备活跃流与状态
     dualLatchStateMachine.latch(sessionId, 'msg-1', '测试文本');
     expect(dualLatchStateMachine.getRecordCount()).toBe(1);
+    const cancel = vi.fn();
+    const renderBuffer = new StreamRenderBuffer();
+    const resetSpy = vi.spyOn(renderBuffer, 'reset');
+    sessionStreams.register(sessionId, {
+      userMsgId: 'u-1',
+      assistantMsgId: 'a-1',
+      renderBuffer,
+      runId: 'run-1',
+      cancel,
+    });
 
     const lifecycleResult = executeSessionDeleteLifecycle(sessionId);
 
     expect(lifecycleResult.sessionId).toBe(sessionId);
     expect(lifecycleResult.tombstoned).toBe(true);
     expect(lifecycleResult.dualLatchCleaned).toBe(true);
-    expect(lifecycleResult.streamCancelled).toBe(true);
     expect(lifecycleResult.draftsEvicted).toBe(true);
+
+    // 流断言：删会话经进程级注册表 force 取消在途流并重置其渲染缓冲（仅一次）
+    expect(cancel).toHaveBeenCalledExactlyOnceWith('force');
+    expect(resetSpy).toHaveBeenCalledTimes(1);
+    expect(sessionStreams.get(sessionId)).toBeUndefined();
 
     // 双重锁断言：会话已被永久打上墓碑，严禁复活
     expect(isSessionTombstoned(sessionId)).toBe(true);

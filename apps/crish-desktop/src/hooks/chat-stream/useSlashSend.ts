@@ -16,7 +16,7 @@ import {
 } from './streamRunState';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
-import type { StreamBatcherRefs } from './useStreamBatchers';
+import { sessionStreams } from '../../api/sessionStreamManager';
 import type { SessionMessage } from '../../store/types';
 import {
   saveDraftSnapshot,
@@ -41,7 +41,6 @@ import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export function useSlashSend(
   options: UseChatStreamOptions & { sessionId?: string | null },
-  refs: StreamBatcherRefs,
   runStreamingAssistant: (
     input: string,
     userMsgId: string,
@@ -73,7 +72,6 @@ export function useSlashSend(
   // 渲染订阅：仅 activeSessionId
   const scopedSessionId = useScopedSessionId(options.sessionId);
   const activeSessionId = scopedSessionId;
-  const { streamManagerRef } = refs;
 
   const handleSendChat = async (
     isInsert: boolean = false,
@@ -127,8 +125,7 @@ export function useSlashSend(
       modelText: preflight.modelText,
       displayText: preflight.displayText,
       attachments: activeAttachments,
-      onClearGoalCancelled: () =>
-        streamManagerRef.current?.clearGoalCancelled(sessionId),
+      onClearGoalCancelled: () => sessionStreams.clearGoalCancelled(sessionId),
     });
 
     // 4. 准备用户消息 ID 与幂等键
@@ -162,14 +159,13 @@ export function useSlashSend(
     }
 
     // 6. 并发忙碌检测与 Follow-up 判定
-    const hasLiveStream =
-      streamManagerRef.current?.hasStream(sessionId) ?? false;
+    const liveHandle = sessionStreams.get(sessionId);
+    const hasLiveStream = liveHandle !== undefined;
     // 强制执行绝对自愈：只要无物理 live stream，立即收口清扫历史 processing/queued 脏数据
     settleStaleSessionProcessingMessages(sessionId, hasLiveStream);
 
     const isAiBusy = checkSessionAiBusy(hasLiveStream, sessionId);
     const isFollowUp = decideSendWhileRunning(isAiBusy) === 'follow_up';
-    const liveHandle = streamManagerRef.current?.get(sessionId);
 
     // 7. 保存草稿快照
     saveDraftSnapshot(sessionId, rawInput);

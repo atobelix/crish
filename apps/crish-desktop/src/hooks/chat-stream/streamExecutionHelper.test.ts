@@ -1,54 +1,54 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleStreamConflict,
   createFinalHtmlScheduler,
   handleThinkingResetOnChunk,
   executeStreamCompletion,
 } from './streamExecutionHelper';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
+import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { StreamTextBatcher } from '../../api/streamTextBatcher';
 import * as helpers from './helpers';
 import { useSessionStore } from '../../store/sessionStore';
 import type { Session, SessionMessage } from '../../store/sessionStore';
+
+const goal = vi.hoisted(() => ({
+  maybeContinueGoalMode: vi.fn(
+    (_sid: string, _assistantMsgId: string) => false
+  ),
+  drainQueuedAfterComplete: vi.fn((_sid: string) => undefined),
+}));
+
+vi.mock('./goalContinuation', () => goal);
+
+function registerLiveStream(sid: string): void {
+  sessionStreams.register(sid, {
+    userMsgId: 'prev-user-msg',
+    assistantMsgId: 'prev-asst-msg',
+    renderBuffer: new StreamRenderBuffer(),
+    runId: 'run-1',
+    cancel: vi.fn(),
+  });
+}
 
 describe('streamExecutionHelper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    sessionStreams.clearSession('sess-1');
+  });
+
   describe('handleStreamConflict', () => {
-    it('returns false when no active stream exists in manager', () => {
-      const manager = new SessionStreamManager();
-      const conflict = handleStreamConflict('sess-1', 'msg-1', manager);
-      expect(conflict).toBe(false);
+    it('returns false when no active stream is registered', () => {
+      expect(handleStreamConflict('sess-1', 'msg-1')).toBe(false);
     });
 
-    it('returns false when streamManager is undefined or null', () => {
-      expect(handleStreamConflict('sess-1', 'msg-1', null)).toBe(false);
-      expect(handleStreamConflict('sess-1', 'msg-1', undefined)).toBe(false);
-    });
-
-    it('returns true and handles conflict when active stream exists', () => {
-      const manager = new SessionStreamManager();
-      manager.set('sess-1', {
-        cancel: vi.fn(),
-        userMsgId: 'prev-user-msg',
-        assistantMsgId: 'prev-asst-msg',
-        runId: 'run-1',
-      });
-
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const conflict = handleStreamConflict('sess-1', 'msg-2', manager);
-      expect(conflict).toBe(true);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '[runStreamingAssistant] refuse start while stream live'
-        ),
-        'sess-1',
-        'msg-2'
-      );
-      warnSpy.mockRestore();
+    it('returns true when the session already has a live stream', () => {
+      registerLiveStream('sess-1');
+      expect(handleStreamConflict('sess-1', 'msg-2')).toBe(true);
     });
 
     it('活动流冲突时把 processing 的 user 消息转为 queued（串行守卫自动排队）', () => {
@@ -75,16 +75,10 @@ describe('streamExecutionHelper', () => {
         sessions: [session],
         activeSessionId: 'sess-1',
       });
-      const manager = new SessionStreamManager();
-      manager.set('sess-1', {
-        cancel: vi.fn(),
-        userMsgId: 'prev-user-msg',
-        assistantMsgId: 'prev-asst-msg',
-        runId: 'run-1',
-      });
+      registerLiveStream('sess-1');
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      expect(handleStreamConflict('sess-1', 'msg-2', manager)).toBe(true);
+      expect(handleStreamConflict('sess-1', 'msg-2')).toBe(true);
 
       const after = useSessionStore
         .getState()
@@ -149,8 +143,6 @@ describe('streamExecutionHelper', () => {
       const flushStreamBatchers = vi.fn();
       const generationMapRef = { current: new Map([['sess-1', 1]]) };
       const state = { runClosed: false, draining: true };
-      const maybeContinueGoalMode = vi.fn().mockReturnValue(false);
-      const drainQueuedAfterComplete = vi.fn();
 
       executeStreamCompletion({
         sid: 'sess-1',
@@ -167,16 +159,17 @@ describe('streamExecutionHelper', () => {
         flushStreamBatchers,
         generationMapRef,
         state,
-        maybeContinueGoalMode,
-        drainQueuedAfterComplete,
       });
 
       expect(flushStreamBatchers).toHaveBeenCalled();
       expect(generationMapRef.current.has('sess-1')).toBe(false);
       expect(state.runClosed).toBe(true);
       expect(state.draining).toBe(false);
-      expect(maybeContinueGoalMode).toHaveBeenCalledWith('sess-1', 'asst-1');
-      expect(drainQueuedAfterComplete).toHaveBeenCalledWith('sess-1');
+      expect(goal.maybeContinueGoalMode).toHaveBeenCalledWith(
+        'sess-1',
+        'asst-1'
+      );
+      expect(goal.drainQueuedAfterComplete).toHaveBeenCalledWith('sess-1');
     });
   });
 });

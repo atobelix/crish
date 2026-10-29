@@ -1,7 +1,7 @@
 /**
  * chat-stream 流式运行编排钩子（useRunStreamingAssistant）。
  *
- * 负责组装与启动 streamAssistantResponseApi、维护 sessionStreamManager 句柄、
+ * 负责组装与启动 streamAssistantResponseApi、维护 sessionStreams 句柄、
  * 对接 renderBuffer 与 streamingStore，并在生命周期内完整派发工具/思考/事件。
  */
 import { useCallback, type MutableRefObject } from 'react';
@@ -13,6 +13,10 @@ import type {
 } from './streamCallbacksSurfaces';
 import { streamAssistantResponseApi } from '../../api/chatApi';
 import { markStreamingActive } from '../../api/streamStop';
+import {
+  sessionStreams,
+  type SessionStreamHandle,
+} from '../../api/sessionStreamManager';
 import { generateMessageId } from '../../utils/generateMessageId';
 import {
   resolveStreamSessionId,
@@ -26,7 +30,6 @@ import { useSessionExecutionTrackerStore } from '../../store/sessionExecutionTra
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { recordChunkSample } from '../../api/streamDiag';
-import { useGoalMode } from './useGoalMode';
 import {
   applySubagentStarted,
   applySubagentEvent,
@@ -59,17 +62,7 @@ export function useRunStreamingAssistant(
   generationMapRef: MutableRefObject<Map<string, number>>
 ): { runStreamingAssistant: StreamRunStarter } {
   const { wsId, upsertSessionAgent } = queryHelpers;
-  const {
-    streamManagerRef,
-    textBatcherRef,
-    thinkingBatcherRef,
-    toolBatcherRef,
-    renderBufferRef,
-    flushStreamBatchers,
-  } = refs;
-
-  const { maybeContinueGoalMode, drainQueuedAfterComplete } =
-    useGoalMode(streamManagerRef);
+  const { thinkingBatcherRef, toolBatcherRef, flushStreamBatchers } = refs;
 
   const runStreamingAssistant: StreamRunStarter = useCallback(
     (input, userMsgId, sessionIdOverride, streamOptions) => {
@@ -79,7 +72,7 @@ export function useRunStreamingAssistant(
       );
       if (!sid || !canStreamLocalSession(sid, !!getSessionById(sid))) return;
 
-      if (handleStreamConflict(sid, userMsgId, streamManagerRef.current)) {
+      if (handleStreamConflict(sid, userMsgId)) {
         return;
       }
 
@@ -103,12 +96,6 @@ export function useRunStreamingAssistant(
       let cancelStreamFn: (opts?: {
         mode?: 'cooperative' | 'force';
       }) => void = () => {};
-      streamManagerRef.current?.set(sid, {
-        cancel: (opts) => cancelStreamFn(opts),
-        userMsgId,
-        assistantMsgId,
-        runId: null,
-      });
 
       markStreamingActive(true);
       tracker().startRun(sid, null, 'thinking');
@@ -146,24 +133,30 @@ export function useRunStreamingAssistant(
           flushStreamBatchers,
           generationMapRef,
           state,
-          maybeContinueGoalMode,
-          drainQueuedAfterComplete,
         });
       };
 
       const assertLive = (): boolean =>
         !state.runClosed &&
-        isLiveStreamRun(streamManagerRef.current?.get(sid), assistantMsgId);
+        isLiveStreamRun(sessionStreams.get(sid), assistantMsgId);
 
       const buffer = setupStreamRenderBuffer({
         sid,
         assistantMsgId,
-        renderBufferRef,
         generationMapRef,
         state,
         assertLive,
         finishComplete,
       });
+
+      const handle: SessionStreamHandle = {
+        userMsgId,
+        assistantMsgId,
+        renderBuffer: buffer,
+        runId: null,
+        cancel: (mode) => cancelStreamFn({ mode }),
+      };
+      sessionStreams.register(sid, handle);
 
       const { queueToolCallPatch, upsertToolCall } = createToolPatchQueue({
         sid,
@@ -178,7 +171,6 @@ export function useRunStreamingAssistant(
         sid,
         assistantMsgId,
         state,
-        refs: { streamManagerRef },
         flushStreamBatchers,
         finishComplete,
         buffer,
@@ -191,9 +183,7 @@ export function useRunStreamingAssistant(
             if (!assertLive()) return;
             localRunId = runId;
             tracker().updateRunId(sid, runId);
-            const entry = streamManagerRef.current?.get(sid);
-            if (entry && entry.assistantMsgId === assistantMsgId)
-              entry.runId = runId;
+            handle.runId = runId;
             getCompositionRoot()
               .session.getState()
               .setEngineLastRunId(sid, runId);
@@ -303,14 +293,7 @@ export function useRunStreamingAssistant(
             }
             gotRealText = true;
             streamedFullText += chunk;
-            if (renderBufferRef.current) {
-              renderBufferRef.current.push(chunk);
-            } else {
-              textBatcherRef.current?.push(
-                streamBatchKey(sid, assistantMsgId),
-                streamedFullText
-              );
-            }
+            buffer.push(chunk);
             handleThinkingResetOnChunk(
               sid,
               assistantMsgId,
@@ -332,8 +315,7 @@ export function useRunStreamingAssistant(
               detail,
               flushStreamBatchers,
               refs: {
-                renderBuffer: renderBufferRef.current,
-                streamManager: streamManagerRef.current ?? undefined,
+                renderBuffer: buffer,
                 generationMap: generationMapRef.current,
               },
             });
@@ -345,29 +327,16 @@ export function useRunStreamingAssistant(
         assistantMsgId,
         buildGoalStreamOptions({ sid, assistantMsgId, streamOptions })
       );
-
-      const stillMine = streamManagerRef.current?.get(sid);
-      if (stillMine?.assistantMsgId === assistantMsgId) {
-        stillMine.cancel = (opts) => cancelStreamFn?.(opts);
-        if (localRunId) stillMine.runId = localRunId;
-      }
     },
     [
       wsId,
       upsertSessionAgent,
-      streamManagerRef,
-      textBatcherRef,
       thinkingBatcherRef,
       toolBatcherRef,
-      renderBufferRef,
       flushStreamBatchers,
-      maybeContinueGoalMode,
-      drainQueuedAfterComplete,
       generationMapRef,
     ]
   );
-
-  streamManagerRef.current?.bindStarter(runStreamingAssistant);
 
   return { runStreamingAssistant };
 }

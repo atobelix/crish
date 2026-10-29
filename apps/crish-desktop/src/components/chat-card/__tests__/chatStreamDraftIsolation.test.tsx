@@ -4,12 +4,6 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { LeafScopeProvider } from '../../../contexts/LeafScopeContext';
 import { sessionRuntimeRegistry } from '../../../api/SessionRuntimeRegistry';
-import {
-  registerSessionRenderBuffer,
-  getSessionRenderBuffer,
-  flushAndRemoveSessionRenderBuffer,
-  clearSessionRenderBuffers,
-} from '../../../hooks/chat-stream/sessionStreamManager';
 import { draftFolderRegistry } from '../../../store/draft-routing/draftFolderRegistry';
 import { useChatSessionMeta } from '../useChatSessionMeta';
 import { useChatAttachments } from '../useChatAttachments';
@@ -67,66 +61,14 @@ vi.mock('../../../api/localFileReader', () => ({
 describe('Dimension 03: 对话流式引擎、草稿、附件与项目选择隔离测试', () => {
   beforeEach(() => {
     sessionRuntimeRegistry.clearAll();
-    clearSessionRenderBuffers();
     draftFolderRegistry.clear();
     resetFileAnnotationsForTest();
   });
 
   afterEach(() => {
     sessionRuntimeRegistry.clearAll();
-    clearSessionRenderBuffers();
     draftFolderRegistry.clear();
     resetFileAnnotationsForTest();
-  });
-
-  describe('1. SessionStreamManager: 按 sessionId 隔离渲染缓冲', () => {
-    it('不同 session 的 StreamRenderBuffer 独立注册并按 session 检索', () => {
-      const mockBufferA = {
-        appendChunk: vi.fn(),
-        flushFinal: vi.fn(),
-        flushImmediate: vi.fn(),
-        destroy: vi.fn(),
-        stop: vi.fn(),
-      } as any;
-      const mockBufferB = {
-        appendChunk: vi.fn(),
-        flushFinal: vi.fn(),
-        flushImmediate: vi.fn(),
-        destroy: vi.fn(),
-        stop: vi.fn(),
-      } as any;
-
-      registerSessionRenderBuffer('session-a', mockBufferA);
-      registerSessionRenderBuffer('session-b', mockBufferB);
-
-      expect(getSessionRenderBuffer('session-a')).toBe(mockBufferA);
-      expect(getSessionRenderBuffer('session-b')).toBe(mockBufferB);
-      expect(getSessionRenderBuffer('session-c')).toBeNull();
-    });
-
-    it('flushAndRemoveSessionRenderBuffer 仅冲刷并销毁目标会话缓冲区，不污染并行会话', () => {
-      const mockBufferA = {
-        flushFinal: vi.fn(),
-        stop: vi.fn(),
-      } as any;
-      const mockBufferB = {
-        flushFinal: vi.fn(),
-        stop: vi.fn(),
-      } as any;
-
-      registerSessionRenderBuffer('session-a', mockBufferA);
-      registerSessionRenderBuffer('session-b', mockBufferB);
-
-      // 仅冲刷 session-a
-      flushAndRemoveSessionRenderBuffer('session-a');
-
-      expect(mockBufferA.flushFinal).toHaveBeenCalledTimes(1);
-      expect(mockBufferB.flushFinal).not.toHaveBeenCalled();
-
-      // session-a 已注销，session-b 仍有效
-      expect(getSessionRenderBuffer('session-a')).toBeNull();
-      expect(getSessionRenderBuffer('session-b')).toBe(mockBufferB);
-    });
   });
 
   describe('2. Dual Draft Panes: 双草稿分屏项目选择与元数据隔离', () => {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSessionStore } from '../../store/sessionStore';
 import { useTerminalStore } from '../../store/terminalStore';
 import { getTransport } from '../../api/transport';
@@ -8,10 +8,7 @@ import { useStreamBatchers } from './useStreamBatchers';
 import { useStreamCallbacks } from './useStreamCallbacks';
 import { useSlashSend } from './useSlashSend';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
-import {
-  registerSessionRenderBuffer,
-  flushAndRemoveSessionRenderBuffer,
-} from './sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
 
 export interface ScopedUseChatStreamOptions extends UseChatStreamOptions {
   sessionId?: string | null;
@@ -31,7 +28,6 @@ export function useChatStream(
   };
 
   const refs = useStreamBatchers();
-  const { renderBufferRef } = refs;
 
   const wsId = options.wsId;
   const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
@@ -47,20 +43,6 @@ export function useChatStream(
     };
   }, []);
 
-  useEffect(() => {
-    const renderBuffer = renderBufferRef.current;
-    if (scopedSessionId && renderBuffer) {
-      registerSessionRenderBuffer(scopedSessionId, renderBuffer);
-    }
-    return () => {
-      if (scopedSessionId) {
-        flushAndRemoveSessionRenderBuffer(scopedSessionId, renderBuffer);
-      } else {
-        renderBuffer?.stop();
-      }
-    };
-  }, [scopedSessionId, renderBufferRef]);
-
   const {
     runStreamingAssistant,
     handleStopGeneration,
@@ -71,9 +53,20 @@ export function useChatStream(
     upsertSessionAgent,
   });
 
+  // goal 续写 / 排队 drain 的启动器：以本视图会话登记进 sessionStreams，卸载 / 切会话时解绑
+  const runStreamingAssistantRef = useRef(runStreamingAssistant);
+  useEffect(() => {
+    runStreamingAssistantRef.current = runStreamingAssistant;
+  });
+  useEffect(() => {
+    if (!scopedSessionId) return undefined;
+    return sessionStreams.bindStarter(scopedSessionId, (sid, text, userMsgId) =>
+      runStreamingAssistantRef.current(text, userMsgId, sid)
+    );
+  }, [scopedSessionId]);
+
   const { handleSendChat } = useSlashSend(
     optionsWithSession,
-    refs,
     runStreamingAssistant
   );
 

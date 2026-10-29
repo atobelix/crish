@@ -12,10 +12,7 @@
  * - Tier 3 存储屏障级 (Storage Barrier Tier)：维护容量为 500 的 LRU 墓碑集合，拦截一切迟到落盘。
  */
 
-import {
-  sharedSessionStreamManager,
-  abortSessionRenderBuffer,
-} from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import {
   DEFAULT_TOMBSTONE_CAPACITY,
   bindSessionTombstoneOracle,
@@ -249,22 +246,11 @@ export class SessionCascadeCancellation {
   }
 
   private executeTier2(sessionId: string): void {
-    // 1. 本地流管理取消与清空
-    try {
-      sharedSessionStreamManager.cancelSession(sessionId);
-      sharedSessionStreamManager.clearSession(sessionId);
-    } catch {
-      // 容错处理
-    }
+    // 1. 本地流句柄 force 取消（含渲染缓冲重置）并清空该会话追踪状态
+    sessionStreams.cancel(sessionId, 'force');
+    sessionStreams.clearSession(sessionId);
 
-    // 2. 本地会话流式渲染缓冲重置与移除
-    try {
-      abortSessionRenderBuffer(sessionId);
-    } catch {
-      // 容错处理
-    }
-
-    // 3. 清理前端流式状态缓冲（防追加）
+    // 2. 清理前端流式状态缓冲（防追加）
     try {
       useStreamingStore.getState().clearSession(sessionId);
     } catch {

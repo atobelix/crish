@@ -21,7 +21,7 @@ import type {
   StreamBatcherRefs,
   StreamToolCallPatch,
 } from './useStreamBatchers';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import {
   StreamTextBatcher,
@@ -349,10 +349,6 @@ describe('Dual-Latch Handoff Protocol (W2-2 / VULN-01)', () => {
     };
 
     const createMockRefs = (): StreamBatcherRefs => ({
-      streamManagerRef: { current: new SessionStreamManager() },
-      textBatcherRef: {
-        current: new StreamTextBatcher(() => {}, { intervalMs: 1000 }),
-      },
       thinkingBatcherRef: {
         current: new StreamTextBatcher(() => {}, { intervalMs: 1000 }),
       },
@@ -361,7 +357,6 @@ describe('Dual-Latch Handoff Protocol (W2-2 / VULN-01)', () => {
           intervalMs: 1000,
         }),
       },
-      renderBufferRef: { current: new StreamRenderBuffer() },
       openSidePanelOnceRef: { current: { terminal: false, diff: false } },
       flushStreamBatchers: vi.fn(),
     });
@@ -373,7 +368,8 @@ describe('Dual-Latch Handoff Protocol (W2-2 / VULN-01)', () => {
       const userId = 'user-msg-stop';
 
       // 注册活跃流句柄
-      refs.streamManagerRef.current.set(sid, {
+      sessionStreams.register(sid, {
+        renderBuffer: new StreamRenderBuffer(),
         assistantMsgId: asstId,
         userMsgId: userId,
         cancel: vi.fn(),
@@ -457,7 +453,8 @@ describe('Dual-Latch Handoff Protocol (W2-2 / VULN-01)', () => {
       const asstId = 'asst-msg-empty';
       const userId = 'user-msg-empty';
 
-      refs.streamManagerRef.current.set(sid, {
+      sessionStreams.register(sid, {
+        renderBuffer: new StreamRenderBuffer(),
         assistantMsgId: asstId,
         userMsgId: userId,
         cancel: vi.fn(),

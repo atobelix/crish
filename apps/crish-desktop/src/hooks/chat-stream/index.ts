@@ -20,7 +20,6 @@ export function useChatStream(
   options: UseChatStreamOptions
 ): UseChatStreamResult {
   const refs = useStreamBatchers();
-  const { renderBufferRef } = refs;
 
   const wsId = options.wsId;
   const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
@@ -38,13 +37,6 @@ export function useChatStream(
     };
   }, []);
 
-  useEffect(() => {
-    const renderBuffer = renderBufferRef.current;
-    return () => {
-      renderBuffer?.stop();
-    };
-  }, [renderBufferRef]);
-
   const {
     runStreamingAssistant,
     handleStopGeneration,
@@ -55,7 +47,7 @@ export function useChatStream(
     upsertSessionAgent,
   });
 
-  const { handleSendChat } = useSlashSend(options, refs, runStreamingAssistant);
+  const { handleSendChat } = useSlashSend(options, runStreamingAssistant);
 
   return {
     runStreamingAssistant,

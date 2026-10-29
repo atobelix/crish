@@ -17,10 +17,7 @@ import {
 } from '../utils/lifecycle/ScopedLifecycleRegistry';
 import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
 import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
-import {
-  sharedSessionStreamManager,
-  abortSessionRenderBuffer,
-} from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import { useStreamingStore } from './streamingStore';
 import { sessionCascadeCancellation } from './sessionCascadeCancellation';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
@@ -159,7 +156,6 @@ export function evictSessionDraftsAndTimers(sessionId: string): void {
 export function executeDualLatchFinalCleanup(sessionId: string): {
   dualLatchRecordsAborted: boolean;
   domTargetsDereferenced: boolean;
-  renderBufferAborted: boolean;
   streamingStoreCleared: boolean;
 } {
   const id = typeof sessionId === 'string' ? sessionId.trim() : '';
@@ -167,7 +163,6 @@ export function executeDualLatchFinalCleanup(sessionId: string): {
     return {
       dualLatchRecordsAborted: false,
       domTargetsDereferenced: false,
-      renderBufferAborted: false,
       streamingStoreCleared: false,
     };
   }
@@ -194,19 +189,7 @@ export function executeDualLatchFinalCleanup(sessionId: string): {
     );
   }
 
-  // 3. 流式渲染缓冲：取消未决 rAF 分帧刷新并重置清空
-  let renderBufferAborted = false;
-  try {
-    abortSessionRenderBuffer(id);
-    renderBufferAborted = true;
-  } catch (err) {
-    console.error(
-      `[DualLatchCleanup] abortSessionRenderBuffer failed for ${id}:`,
-      err
-    );
-  }
-
-  // 4. 清理前端流式状态缓冲（防残留追加）
+  // 3. 清理前端流式状态缓冲（防残留追加）；渲染缓冲归属 run 句柄，随 sessionStreams.cancel 重置
   let streamingStoreCleared = false;
   try {
     useStreamingStore.getState().clearSession(id);
@@ -218,7 +201,6 @@ export function executeDualLatchFinalCleanup(sessionId: string): {
   return {
     dualLatchRecordsAborted,
     domTargetsDereferenced,
-    renderBufferAborted,
     streamingStoreCleared,
   };
 }
@@ -231,7 +213,6 @@ export function executeSessionDeleteLifecycle(sessionId: string): {
   sessionId: string;
   tombstoned: boolean;
   dualLatchCleaned: boolean;
-  streamCancelled: boolean;
   draftsEvicted: boolean;
 } {
   const id = typeof sessionId === 'string' ? sessionId.trim() : '';
@@ -240,7 +221,6 @@ export function executeSessionDeleteLifecycle(sessionId: string): {
       sessionId: '',
       tombstoned: false,
       dualLatchCleaned: false,
-      streamCancelled: false,
       draftsEvicted: false,
     };
   }
@@ -252,18 +232,9 @@ export function executeSessionDeleteLifecycle(sessionId: string): {
   // 2. 刚性执行 DualLatch 终态清理协议（DOM 节点解引用 + rAF 排空）
   const dualLatchResult = executeDualLatchFinalCleanup(id);
 
-  // 3. 本地会话流式句柄强行中止与清理
-  let streamCancelled = false;
-  try {
-    sharedSessionStreamManager.cancelSession(id);
-    sharedSessionStreamManager.clearSession(id);
-    streamCancelled = true;
-  } catch (err) {
-    console.error(
-      `[sessionDeleteLifecycle] Stream cancel failed for ${id}:`,
-      err
-    );
-  }
+  // 3. 本地会话流式句柄强行中止（含渲染缓冲重置）与追踪状态清理（级联 Tier 2 已执行时幂等）
+  sessionStreams.cancel(id, 'force');
+  sessionStreams.clearSession(id);
 
   // 4. 彻底回收 SessionDraftManager 中的内存草稿与挂起防抖定时器
   evictSessionDraftsAndTimers(id);
@@ -282,7 +253,6 @@ export function executeSessionDeleteLifecycle(sessionId: string): {
     dualLatchCleaned:
       dualLatchResult.dualLatchRecordsAborted &&
       dualLatchResult.domTargetsDereferenced,
-    streamCancelled,
     draftsEvicted: true,
   };
 }

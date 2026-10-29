@@ -10,9 +10,9 @@ import { act, renderHook } from '@testing-library/react';
 import { useSlashSend } from './useSlashSend';
 import { useSessionStore } from '../../store/sessionStore';
 import { resetCompositionRoot } from '../../app/compositionRoot';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
+import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import type { UseChatStreamOptions } from './types';
-import type { StreamBatcherRefs } from './useStreamBatchers';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import type { ErrorDomain } from '../../api/userFacingErrors';
 
@@ -125,18 +125,6 @@ function makeOptions(
   };
 }
 
-function makeRefs(manager?: SessionStreamManager): StreamBatcherRefs {
-  return {
-    streamManagerRef: { current: manager ?? new SessionStreamManager() },
-    textBatcherRef: { current: null as any },
-    thinkingBatcherRef: { current: null as any },
-    toolBatcherRef: { current: null as any },
-    renderBufferRef: { current: null as any },
-    openSidePanelOnceRef: { current: { terminal: false, diff: false } },
-    flushStreamBatchers: vi.fn(),
-  };
-}
-
 describe('useSlashSend (OPT-G3 compositionRoot)', () => {
   beforeEach(() => {
     resetCompositionRoot();
@@ -147,6 +135,7 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
   });
 
   afterEach(() => {
+    sessionStreams.clearSession(SID);
     vi.clearAllMocks();
     resetCompositionRoot();
   });
@@ -154,10 +143,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
   it('idle send: clears composer draft via session facade + starts stream', async () => {
     const runStreamingAssistant = vi.fn();
     const options = makeOptions({ chatInput: 'ping' });
-    const refs = makeRefs();
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {
@@ -180,18 +168,17 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
 
   it('busy send: L1 followUp via compositionRoot.runControl (no stream start)', async () => {
     const runStreamingAssistant = vi.fn();
-    const manager = new SessionStreamManager();
-    manager.set(SID, {
+    sessionStreams.register(SID, {
       cancel: vi.fn(),
       userMsgId: 'u-prev',
       assistantMsgId: 'a-prev',
+      renderBuffer: new StreamRenderBuffer(),
       runId: 'run-live-1',
     });
     const options = makeOptions({ chatInput: 'while running' });
-    const refs = makeRefs(manager);
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {
@@ -233,10 +220,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
 
     const runStreamingAssistant = vi.fn();
     const options = makeOptions({ chatInput: 'first message' });
-    const refs = makeRefs();
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {
@@ -259,10 +245,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S1' });
     const runStreamingAssistant = vi.fn();
     const options = makeOptions({ chatInput: 'engine starting' });
-    const refs = makeRefs();
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {
@@ -281,10 +266,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S2' });
     const runStreamingAssistant = vi.fn();
     const options = makeOptions({ chatInput: 'no provider' });
-    const refs = makeRefs();
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {
@@ -301,10 +285,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S3' });
     const runStreamingAssistant = vi.fn();
     const options = makeOptions({ chatInput: 'restoring' });
-    const refs = makeRefs();
 
     const { result } = renderHook(() =>
-      useSlashSend(options, refs, runStreamingAssistant)
+      useSlashSend(options, runStreamingAssistant)
     );
 
     await act(async () => {

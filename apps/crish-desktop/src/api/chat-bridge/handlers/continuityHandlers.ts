@@ -12,7 +12,7 @@
  * 信息分级（用户约束 C / §9.3）：熔断与重连进度不进对话历史、不进 LLM
  * 上下文，仅事件流 + UI 面（横幅 / 临时通知）。
  */
-import { applyGoalRoundEventToGoalMode } from '../../../hooks/chat-stream/useGoalMode';
+import { applyGoalRoundEventToGoalMode } from '../../../hooks/chat-stream/goalContinuation';
 import {
   getSessionById,
   getSessionStoreState,

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSessionStore } from '../../store/sessionStore';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
 import { isSessionAiBusy } from './streamRunState';
 import { settleStaleSessionProcessingMessages } from './staleSessionHealer';
 import type { Session, SessionMessage } from '../../store/sessionStore';
