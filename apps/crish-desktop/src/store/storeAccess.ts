@@ -369,16 +369,7 @@ export {
   getActiveVsm,
 } from './messageSnapshotsBridge';
 
-export {
-  mergeSessionMessageFields,
-  sortMessagesByOrder,
-} from './sessionSharedHelpers';
-
-export {
-  findInsertIndex,
-  isSortedByMessageOrder,
-  messageOrderKey,
-} from './messageOrderKey';
+export { sortMessagesByOrder } from './sessionSharedHelpers';
 export { triggerSessionMessageHydrateIfNeeded } from './sessionStore';
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
