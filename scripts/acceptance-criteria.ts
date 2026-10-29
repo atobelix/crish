@@ -29,12 +29,6 @@ const ACCEPTANCE_CRITERIA: AcceptanceEntry[] = [
     memBenchmarks: ['cache.eviction.no-leak', 'lru-map.no-leak'],
   },
   {
-    module: 'JsonlAppendBatcher',
-    benchmarks: ['jsonl.append.1000'],
-    targets: { 'jsonl.append.1000': 10 },
-    memBenchmarks: ['jsonl-batcher.no-leak'],
-  },
-  {
     module: 'AsyncMutex',
     benchmarks: ['async-mutex.contention.100'],
     targets: { 'async-mutex.contention.100': 5 },

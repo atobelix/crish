@@ -66,7 +66,11 @@ export {
 export { LruCache, BoundedMapCache } from './cache';
 export type { CacheProvider, CacheBudget, SizeEstimator } from './cache';
 
-export { MemoryManager, memoryManager, DEFAULT_ABSOLUTE_LIMITS } from './memory-manager';
+export {
+  MemoryManager,
+  memoryManager,
+  DEFAULT_ABSOLUTE_LIMITS,
+} from './memory-manager';
 export type {
   MemoryPressureLevel,
   MemoryManagerOptions,
@@ -74,68 +78,7 @@ export type {
   MemoryPressureEvent,
 } from './memory-manager';
 
-export { ObjectPool } from './object-pool';
-
 export { TokenBucket } from './backpressure';
-
-export { detectHardware } from './hardware-profile';
-export type {
-  HardwareProfile,
-  HardwareProfileInit,
-  HardwareProfileChangeListener,
-} from './hardware-profile';
-
-export {
-  PerformanceLevel,
-  assignTier,
-  shouldDowngrade,
-  shouldUpgrade,
-  TIER_CONFIGS,
-} from './performance-tier';
-export type { TierConfig, TierAssignment } from './performance-tier';
-
-export {
-  DynamicAdaptationEngine,
-  createAdaptationEngine,
-} from './dynamic-adaptation';
-export type {
-  RuntimeMetrics,
-  MetricEvent,
-  MetricEventType,
-  AdaptationListener,
-  DynamicAdaptationOptions,
-} from './dynamic-adaptation';
-
-export {
-  getFullAdaptation,
-  applyRenderAdaptation,
-  RENDER_ADAPTATIONS,
-  COMPUTE_ADAPTATIONS,
-  NETWORK_ADAPTATIONS,
-  STORAGE_ADAPTATIONS,
-} from './platform-adaptation';
-export type {
-  RenderAdaptation,
-  DomStrategy,
-  ComputeAdaptation,
-  CpuPerformanceTargets,
-  GpuAccelerationGains,
-  NetworkAdaptation,
-  StorageAdaptation,
-  FullPlatformAdaptation,
-} from './platform-adaptation';
 
 // ── 技能 ID 算法（纯浏览器安全） ──
 export { skillStableId, ruleStableId, hashTextSha256Hex } from './skill-id';
-
-// ── React 集成（纯浏览器安全） ──
-export {
-  PlatformAdaptationCtx,
-  usePlatformAdaptationCtx,
-  usePlatformAdaptation,
-} from './use-platform-adaptation';
-export type {
-  PlatformAdaptationState,
-  PlatformAdaptationOptions,
-  UsePlatformAdaptationResult,
-} from './use-platform-adaptation';
