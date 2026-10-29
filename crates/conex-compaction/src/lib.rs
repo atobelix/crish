@@ -25,11 +25,11 @@ pub mod ai_summary;
 pub mod clean_output;
 pub mod cut_point;
 pub mod engine;
+pub mod estimate;
 pub mod plan;
 pub mod recovery;
 pub mod summary_document;
 pub mod template;
-pub mod thresholds;
 pub mod tokens;
 pub mod tool_output;
 
@@ -37,7 +37,6 @@ pub mod compaction {
     pub use crate::cut_point::*;
     pub use crate::engine::*;
     pub use crate::plan::*;
-    pub use crate::thresholds::*;
 }
 
 pub use ai_summary::push_critical_context;
@@ -46,16 +45,12 @@ pub use cut_point::{
     MIN_RECENT_TURNS_DEFAULT,
 };
 pub use engine::{CompactionEngine, CompactionPreview};
+pub use estimate::{EstimateContext, EstimateSource};
 pub use plan::{
     CompactionPlan, CompactionPolicy, StubPolicy, Summarizer, MAX_SUMMARY_TOKENS_DEFAULT,
+    SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
 };
 pub use template::structured_summary_template;
-pub use thresholds::{
-    parse_iso8601_epoch_ms, CompactionThresholds, EstimateContext, EstimateSource,
-    ThresholdDecision, COMPACT_CRITICAL_RATIO_DEFAULT, COMPACT_THRESHOLD_RATIO_DEFAULT,
-    SESSION_META_KEY_COMPACT_CRITICAL_RATIO, SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
-    SESSION_META_KEY_COMPACT_THRESHOLD_RATIO,
-};
 pub use tokens::{
     count_agent_message_tokens, count_tokens, count_tokens_fast, count_tool_output_tokens,
     IMAGE_TOKEN_COST, MESSAGE_FRAMING_TOKENS, TOOL_CALL_FRAMING_TOKENS,

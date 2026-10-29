@@ -10,15 +10,13 @@
 //!   + 后半行数；标记计入行/字节预算；标记放不下时退化只保留标记；
 //! - **留痕不静默丢弃**：[ToolOutputTruncationRecord] 随截断动作产出，
 //!   调用方写入 events 表（截断范围与标记可查）；
-//! - **与压缩预算水位联动**：截断节省 token 计入上下文估算
-//!   （[estimate_after_truncation]），经 [classify_after_truncation]
-//!   判定水位——截断后仍未收敛才进入常规线触发 AI 摘要（02 M10 内容 8：
+//! - **与压缩预算水位联动**：截断节省 token 经 [estimate_after_truncation]
+//!   从上下文估算中扣除，由调用方按自身触发阈值判定水位（02 M10 内容 8：
 //!   「截断事件计入上下文预算水位，截断后仍未收敛才进入 85% 常规线」）。
 //!
 //! 本模块为纯函数算法，无运行时依赖；截断动作的注入时机（工具结果
 //! 记录路径）与事件落库由调用方（session-loop）接线。
 
-use crate::compaction::{CompactionThresholds, ThresholdDecision};
 use crate::count_tokens;
 
 // D0/U-BUDGET：G8 默认双阈值定义收敛至 conex-shared::perf_budget（行为不变）
@@ -308,31 +306,12 @@ pub fn estimate_after_truncation(estimate: u64, tokens_saved: u64) -> u64 {
     estimate.saturating_sub(tokens_saved)
 }
 
-/// 水位联动判定：截断计入预算水位后仍未收敛才进入常规线（AI 摘要）；
-/// 截断节省足够时回到预算内（无需压缩）。
-///
-/// 语义（02 M10 内容 8）：截断是压缩的前置防线——单条工具输出截断
-/// 计入上下文估算，`estimate - tokens_saved` 仍 ≥ 常规线才触发 AI 摘要。
-pub fn classify_after_truncation(
-    estimate: u64,
-    result: &ToolOutputTruncationResult,
-    window: u64,
-    thresholds: &CompactionThresholds,
-) -> ThresholdDecision {
-    thresholds.classify(
-        estimate_after_truncation(estimate, result.tokens_saved),
-        window,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_after_truncation, estimate_after_truncation, truncate_tool_output,
-        ToolOutputTruncationLimits, ToolOutputTruncationRecord, TOOL_OUTPUT_MAX_BYTES_DEFAULT,
-        TOOL_OUTPUT_MAX_LINES_DEFAULT,
+        estimate_after_truncation, truncate_tool_output, ToolOutputTruncationLimits,
+        ToolOutputTruncationRecord, TOOL_OUTPUT_MAX_BYTES_DEFAULT, TOOL_OUTPUT_MAX_LINES_DEFAULT,
     };
-    use crate::compaction::{CompactionThresholds, ThresholdDecision};
 
     /// 多行文本（行间 \n、末行无尾随换行——与真实工具输出的
     /// split('\n') 计数口径一致）
@@ -485,55 +464,29 @@ mod tests {
 
     // ── 与压缩预算水位联动 ──
 
-    /// 截断节省计入水位：节省足够 → 回到预算内；不足 → 仍触发常规线
+    /// 截断节省计入水位：估算按节省量回落，节省大于估算时钳到 0
     #[test]
-    fn water_level_linkage_after_truncation() {
-        let thresholds = CompactionThresholds::default();
-        let window = 100_000u64;
-        let estimate = 90_000u64; // 0.90 → 常规线
+    fn estimate_after_truncation_deducts_savings() {
         let limits = ToolOutputTruncationLimits {
             max_lines: 10,
             max_bytes: 100_000,
         };
-        // 大输出截断（200KB 超 100KB 字节预算）→ 节省显著 → 估算回落 → 预算内
+        // 大输出截断（200KB 超 100KB 字节预算）→ 节省显著 → 估算回落
         let truncated = truncate_tool_output(&"y".repeat(200_000), &limits);
         assert!(truncated.truncated);
         assert!(truncated.tokens_saved > 0);
         assert_eq!(
-            classify_after_truncation(estimate, &truncated, window, &thresholds),
-            ThresholdDecision::UnderBudget
+            estimate_after_truncation(90_000, truncated.tokens_saved),
+            90_000 - truncated.tokens_saved
         );
-        // 截断节省计入估算本身
-        assert_eq!(
-            estimate_after_truncation(estimate, truncated.tokens_saved),
-            estimate - truncated.tokens_saved
-        );
-        // 未截断（节省 0）→ 水位不变，仍常规线
+        // 未截断（节省 0）→ 估算不变
         let untruncated = truncate_tool_output("short", &limits);
         assert!(!untruncated.truncated);
         assert_eq!(
-            classify_after_truncation(estimate, &untruncated, window, &thresholds),
-            ThresholdDecision::Regular
+            estimate_after_truncation(90_000, untruncated.tokens_saved),
+            90_000
         );
-    }
-
-    /// 截断后仍超临界线 → 临界硬压缩（联动不改变临界判定）
-    #[test]
-    fn water_level_critical_unchanged_by_truncation() {
-        let thresholds = CompactionThresholds::default();
-        let window = 100_000u64;
-        let estimate = 96_000u64; // 0.96 → 临界线
-        let limits = ToolOutputTruncationLimits {
-            max_lines: 2,
-            max_bytes: 100,
-        };
-        // 小输出截断：节省不足以把水位拉回临界线之下
-        let truncated = truncate_tool_output(&"z".repeat(1_000), &limits);
-        assert!(truncated.truncated);
-        assert!(truncated.tokens_saved < 1_000, "节省须小于临界裕量");
-        assert_eq!(
-            classify_after_truncation(estimate, &truncated, window, &thresholds),
-            ThresholdDecision::Critical
-        );
+        // 节省大于估算 → 饱和到 0（不 panic、不出负数）
+        assert_eq!(estimate_after_truncation(10, 1_000), 0);
     }
 }
