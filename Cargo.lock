@@ -1291,6 +1291,7 @@ dependencies = [
  "agent-tools",
  "anyhow",
  "async-trait",
+ "chrono",
  "conex-agents",
  "conex-compaction",
  "conex-db",

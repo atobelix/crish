@@ -78,6 +78,10 @@ thiserror = "2"
 # orchestrator dev 补 rt-multi-thread（persist.rs 测试用 Runtime::new）。
 tokio = { version = "1", default-features = false, features = ["rt", "macros", "time", "sync", "net", "io-util", "process"] }
 async-trait = "0.1"
+# chrono：仅 conex-run 的 cron 调度器使用（目标时刻本地时区偏移 + DST 复算）。
+# 关闭 default-features 只留 clock/std——不引入 serde/wasm 等无关 feature；
+# 日历换算仍走 conex_shared::time，chrono 只提供系统时区数据库查询。
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 notify = { version = "8", features = [] }
 ignore = "0.4"

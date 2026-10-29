@@ -37,6 +37,8 @@ session-loop = { path = "../session-loop" }
 # trash 服务契约（conex-fs::trash 返回 anyhow::Result）
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+# sched::cron 的系统本地时区偏移查询（目标时刻偏移 + DST 复算）
+chrono = { workspace = true }
 futures-util = { workspace = true }
 getrandom = "0.2"
 indexmap = { workspace = true }

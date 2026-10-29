@@ -13,8 +13,8 @@
 //!   重建 sleep；Paused → 加载内存表不建 sleep；已过期未触发 → 先入 tasks 表消除真空期，再异步补发一次。
 //!
 //! 冻结契约对齐（§4.4 / §4.7 / §4.8）：
-//! - `parse_cron` / `CronSchedule::next_fire_after` 来自 conex-types cron
-//!   模块（T-CF-08 冻结签名，A4 域）；
+//! - `parse_cron` / `CronSchedule::next_fire_after` 来自本模块的 [cron]
+//!   （T-CF-08 冻结签名，A4 域；时区偏移经 `LocalOffset` 注入）；
 //! - `AgentEvent::CronFired` 事件变体来自 conex-types events.rs
 //!   （T-CF-08 登记，字段：sessionId/cronId/prompt/expression/iteration/
 //!   firedAtMs），本文件经内部形状 [CronEvent] 与 [EventSink] 单点映射，
@@ -22,6 +22,7 @@
 //! - 唤醒摘要（T-CF-12 冻结模板 §4.8）：Cron 触发文本按
 //!   「<prompt>（cron <id> 第 N 次触发）」模板拼接。
 
+pub mod cron;
 pub mod entry;
 pub mod registry;
 pub mod store;

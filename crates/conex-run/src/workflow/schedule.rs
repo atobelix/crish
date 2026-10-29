@@ -1,6 +1,6 @@
 //! 调度 wire 形状 + daily/interval ↔ cron 转换与校验。
 
-use conex_types::cron::parse_cron;
+use crate::sched::cron::{parse_cron, SystemLocal};
 use serde::{Deserialize, Serialize};
 
 /// 间隔分钟上限（对齐前端 WORKFLOW_INTERVAL_MINUTES_MAX = 60*24*7）
@@ -149,7 +149,7 @@ pub(crate) fn schedule_to_expression(schedule: &WorkflowScheduleWire) -> Option<
 
 // ── cron 校验与 next_fire（委托 T-CF-08 解析器，真实 Rust 侧文案）──────
 
-/// 校验 5 字段 cron 表达式（委托 `conex_types::cron::parse_cron`）。
+/// 校验 5 字段 cron 表达式（委托 `crate::sched::cron::parse_cron`）。
 ///
 /// 通过返回空白压缩的规范化表达式；失败返回**解析器真实中文错误文案**
 /// （前端双重校验的第二道；T-CF-14 内容 4）。
@@ -159,10 +159,12 @@ pub(crate) fn validate_cron_expression(expr: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-/// 下一次触发时刻（委托 `CronSchedule::next_fire_after`，本地时区固定偏移；
-/// 无未来命中时刻返回 None——如 2 月 30 日类表达式）
+/// 下一次触发时刻（委托 `CronSchedule::next_fire_after`，系统本地时区按
+/// 目标时刻取偏移；无未来命中时刻返回 None——如 2 月 30 日类表达式）
 pub(crate) fn next_fire_after_ms(expression: &str, after_ms: u64) -> Option<u64> {
-    parse_cron(expression).ok()?.next_fire_after(after_ms)
+    parse_cron(expression)
+        .ok()?
+        .next_fire_after(after_ms, &SystemLocal)
 }
 
 // ── 时间展示（ISO-8601 UTC；next_fire 为本地时刻，展示做 UTC 归一）──────
