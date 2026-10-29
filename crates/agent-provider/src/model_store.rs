@@ -380,9 +380,20 @@ impl ModelsStore {
             .find_provider(provider_id)
             .filter(|provider| provider.enabled)
             .ok_or_else(|| ModelsStoreError::new("PROVIDER_UNAVAILABLE", "供应商不存在或已停用"))?;
-        let key = self
-            .key_for(provider)?
-            .unwrap_or_default();
+        let key = match self.key_for(provider)? {
+            Some(key) => key,
+            None => {
+                let base_url = provider.base_url.as_deref().unwrap_or("");
+                if is_loopback_or_private_base_url(base_url) {
+                    SecretString::default()
+                } else {
+                    return Err(ModelsStoreError::new(
+                        "CREDENTIAL_MISSING",
+                        "供应商尚未配置有效凭据引用",
+                    ));
+                }
+            }
+        };
         Ok(ResolvedProviderConfig {
             revision: snapshot.revision.clone(),
             provider_id: provider_id.into(),
@@ -418,9 +429,20 @@ impl ModelsStore {
                 "供应商尚未配置服务地址",
             ));
         }
-        let key = self.key_for(provider)?.ok_or_else(|| {
-            ModelsStoreError::new("CREDENTIAL_MISSING", "供应商尚未配置有效凭据引用")
-        })?;
+        let key = match self.key_for(provider)? {
+            Some(key) => key,
+            None => {
+                let base_url = provider.base_url.as_deref().unwrap_or("");
+                if is_loopback_or_private_base_url(base_url) {
+                    SecretString::default()
+                } else {
+                    return Err(ModelsStoreError::new(
+                        "CREDENTIAL_MISSING",
+                        "供应商尚未配置有效凭据引用",
+                    ));
+                }
+            }
+        };
         Ok(ResolvedModelConfig {
             revision: snapshot.revision.clone(),
             model_ref: reference,
@@ -678,4 +700,26 @@ fn validate_references(tree: &UnifiedModelsConfig) -> Result<(), ModelsStoreErro
         }
     }
     Ok(())
+}
+
+fn is_loopback_or_private_base_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    let authority = if let Some((_, rest)) = trimmed.split_once("://") {
+        rest.split(['/', '?', '#']).next().unwrap_or("")
+    } else {
+        trimmed.split(['/', '?', '#']).next().unwrap_or("")
+    };
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
+        Err(_) => false,
+    }
 }
