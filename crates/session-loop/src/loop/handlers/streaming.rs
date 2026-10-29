@@ -26,6 +26,7 @@ use conex_types::session::AgentSessionEvent as E;
 use futures::StreamExt;
 use std::sync::Arc;
 
+use crate::ids::new_message_id;
 use crate::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema};
 use crate::steering::metadata_kind_wire;
 use crate::stream::{
@@ -35,8 +36,8 @@ use crate::stream::{
 use super::super::end::EndDecision;
 use super::super::handlers::{
     check_control, clamp_max_tokens, dispatch, emit_missing_turn_end, estimate_context,
-    last_assistant_with_tool_calls, new_message_id, synthesize_and_record_interrupted_calls,
-    HandlerOutcome, LoopState,
+    last_assistant_with_tool_calls, synthesize_and_record_interrupted_calls, HandlerOutcome,
+    LoopState,
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};

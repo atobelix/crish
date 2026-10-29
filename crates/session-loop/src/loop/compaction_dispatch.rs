@@ -40,10 +40,11 @@ use conex_types::tool::{
     ContextCompressionReason, ContextCompressionRecord, ContextCompressionTrigger,
 };
 
-use super::handlers::{compaction_shape_ok, new_message_id, record_message, streaming, LoopState};
+use super::handlers::{compaction_shape_ok, record_message, streaming, LoopState};
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::compaction::{CacheInvarianceGuard, PinnedDecisionLedger};
+use crate::ids::new_message_id;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
 use crate::r#loop::summary_dispatch::{summarize_via_blocking_with_abort, SummaryDispatch};
 
