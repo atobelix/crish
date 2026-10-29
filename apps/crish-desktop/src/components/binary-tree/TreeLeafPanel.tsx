@@ -38,6 +38,8 @@ import {
   isPendingDraft,
   isDockTreeEmpty,
   findSpatialNode,
+  createDefaultDockTree,
+  openToolInDock,
   type DockLeaf,
 } from '../../store/storeAccess';
 import { LeafScopeProvider } from '../../contexts/LeafScopeContext';
@@ -224,10 +226,16 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         updateLeafDock(leaf.id, { collapsed: true });
         return;
       }
-      updateLeafDock(leaf.id, {
-        collapsed: false,
-      });
-    }, [dockOpen, isChatSurface, isStandaloneTab, leaf.id]);
+      const currentTree = dock.tree ?? createDefaultDockTree();
+      if (isDockTreeEmpty(currentTree)) {
+        const { tree: nextTree } = openToolInDock(currentTree, {
+          viewId: 'overview',
+        });
+        updateLeafDock(leaf.id, { collapsed: false, tree: nextTree });
+      } else {
+        updateLeafDock(leaf.id, { collapsed: false });
+      }
+    }, [dockOpen, isChatSurface, isStandaloneTab, leaf.id, dock.tree]);
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),

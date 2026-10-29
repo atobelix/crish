@@ -1,10 +1,7 @@
 import React, { useMemo } from 'react';
 
-import {
-  SmartPanel,
-  type MenuItem,
-  useLayerRegistration,
-} from '@/components/ui';
+import { SmartPanel, type MenuItem } from '../ui/SmartPanel';
+import { useLayerRegistration } from '@/components/ui';
 import type {
   SessionContextMenuState,
   SessionMenuAction,
@@ -44,7 +41,6 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       dismissible: true,
       onDismiss: () => onCloseContextMenu?.(),
       elementRef: menuRef,
-      anchorRef: contextMenuTriggerRef,
       restoreFocusTarget: contextMenuTriggerRef?.current ?? undefined,
     },
     isOpen

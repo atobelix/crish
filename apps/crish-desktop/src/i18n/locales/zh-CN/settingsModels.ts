@@ -58,4 +58,10 @@ export const settingsPartModels = {
   'models.profileList.missingKey': '缺少密钥',
   'models.profileList.disabled': '已停用',
   'models.profileList.ready': '已配置并启用',
+  // ── 连通探活与表单校验（models.probe.*）──
+  'models.probe.vendorNameEmpty': '厂商名称不能为空',
+  'models.probe.vendorNameSaveFailed': '保存厂商名称失败',
+  'models.probe.handshakeOk':
+    '服务商握手正常（已验证服务地址与凭据有效，可点击右侧「自动获取」添加模型）',
+  'models.probe.checkFailed': '连通检查失败：{error}',
 };

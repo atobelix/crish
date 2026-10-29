@@ -382,7 +382,7 @@ impl ModelsStore {
             .ok_or_else(|| ModelsStoreError::new("PROVIDER_UNAVAILABLE", "供应商不存在或已停用"))?;
         let key = self
             .key_for(provider)?
-            .ok_or_else(|| ModelsStoreError::new("CREDENTIAL_MISSING", "供应商尚未配置有效凭据"))?;
+            .unwrap_or_default();
         Ok(ResolvedProviderConfig {
             revision: snapshot.revision.clone(),
             provider_id: provider_id.into(),

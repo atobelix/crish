@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Input, Select } from '@/components/ui';
 import {
-  saveProfileBaseUrl,
   upsertProfile,
   type ProviderProfile,
 } from '../../api/providerProfiles';
@@ -9,6 +8,7 @@ import {
   modelsCatalogStore,
   selectProvider,
 } from '../../api/modelsCatalogStore';
+import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import {
   YAML_PROTOCOL_SELECT_OPTIONS,
@@ -19,7 +19,11 @@ import {
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
-import { DEFAULT_PROTOCOL } from '../../api/modelsNormalize';
+import { t } from '../../i18n';
+import {
+  DEFAULT_PROTOCOL,
+  type ModelProtocol,
+} from '../../api/modelsNormalize';
 
 /** 凭据区：厂商名称/Base URL/API Key/协议。配置完成后支持优雅人机工程折叠。 */
 export const ProviderProfileForm: React.FC<{
@@ -46,10 +50,15 @@ export const ProviderProfileForm: React.FC<{
   const catalogVersion = useModelsCatalogVersion();
   const storeProvider = selectProvider(selected.id);
   const storeBaseUrl = storeProvider?.baseUrl ?? '';
-  const protocolValue =
-    toYamlProtocol(storeProvider?.protocol) ?? DEFAULT_PROTOCOL;
+  const effectiveProtocol =
+    toYamlProtocol(storeProvider?.protocol ?? selected.protocol) ??
+    DEFAULT_PROTOCOL;
+
   const [baseUrlDraft, setBaseUrlDraft] = useState(storeBaseUrl);
-  const [vendorNameDraft, setVendorNameDraft] = useState(selected.name || '');
+  const vendorName = storeProvider?.displayName || selected.name || '';
+  const [vendorNameDraft, setVendorNameDraft] = useState(vendorName);
+  const [protocolDraft, setProtocolDraft] =
+    useState<ModelProtocol>(effectiveProtocol);
 
   // 判定连接与凭据是否已配置齐全
   const effectiveBaseUrl = storeBaseUrl || selected.baseUrl || '';
@@ -66,8 +75,12 @@ export const ProviderProfileForm: React.FC<{
   }, [selected.id, storeBaseUrl, catalogVersion]);
 
   useEffect(() => {
-    setVendorNameDraft(selected.name || '');
-  }, [selected.id, selected.name]);
+    setVendorNameDraft(vendorName);
+  }, [selected.id, vendorName]);
+
+  useEffect(() => {
+    setProtocolDraft(effectiveProtocol);
+  }, [selected.id, effectiveProtocol, catalogVersion]);
 
   useEffect(() => {
     if (prevSelectedIdRef.current !== selected.id) {
@@ -80,50 +93,83 @@ export const ProviderProfileForm: React.FC<{
 
   const handleSaveVendorName = () => {
     const trimmed = vendorNameDraft.trim();
-    if (trimmed !== selected.name) {
+    if (!trimmed) {
+      notify(false, t('models.probe.vendorNameEmpty'));
+      setVendorNameDraft(vendorName);
+      return;
+    }
+    if (trimmed !== vendorName) {
       void runAsLocalMutation(async () => {
-        upsertProfile({ ...selected, name: trimmed });
-        await modelsCatalogStore.updateProvider(selected.id, {
-          displayName: trimmed,
-        });
-        _refresh();
+        try {
+          upsertProfile({ ...selected, name: trimmed });
+          const res = await modelsCatalogStore.updateProvider(selected.id, {
+            displayName: trimmed,
+          });
+          if (!res.ok) {
+            notify(false, res.error || t('models.probe.vendorNameSaveFailed'));
+          } else {
+            _refresh();
+          }
+        } catch (e) {
+          notify(false, e instanceof Error ? e.message : String(e));
+        }
       });
     }
   };
 
   const persistProviderPatch = (patch: {
     baseUrl?: string;
-    protocol?: ReturnType<typeof protocolForProviderWrite>;
+    protocol?: ModelProtocol;
   }) => {
     void runAsLocalMutation(async () => {
       try {
+        const cleanBaseUrl =
+          patch.baseUrl !== undefined
+            ? patch.baseUrl.trim() || undefined
+            : storeBaseUrl || selected.baseUrl || undefined;
+        const cleanProtocol =
+          patch.protocol ?? storeProvider?.protocol ?? selected.protocol;
+
         const shell = await ensureProviderShell({
           providerId: selected.id,
-          displayName: selected.name,
-          baseUrl: patch.baseUrl ?? storeBaseUrl ?? selected.baseUrl,
-          protocol:
-            patch.protocol ?? storeProvider?.protocol ?? selected.protocol,
+          displayName: vendorName,
+          baseUrl: cleanBaseUrl ?? '',
+          protocol: cleanProtocol,
         });
         if (!shell.ok) {
           notify(false, shell.error || '写入服务商失败');
           return;
         }
+
+        const updatePatch: Partial<ProviderSpec> = {};
         if (patch.baseUrl !== undefined) {
-          await saveProfileBaseUrl(selected.id, patch.baseUrl);
+          updatePatch.baseUrl = patch.baseUrl.trim() || undefined;
         }
-        const res = await modelsCatalogStore.updateProvider(selected.id, {
-          ...patch,
-          protocol: protocolForProviderWrite(
-            patch.protocol ?? storeProvider?.protocol ?? selected.protocol
-          ),
-        });
+        if (patch.protocol !== undefined) {
+          updatePatch.protocol = protocolForProviderWrite(patch.protocol);
+        }
+
+        const res = await modelsCatalogStore.updateProvider(
+          selected.id,
+          updatePatch
+        );
         if (!res.ok) {
           notify(false, res.error || '保存失败');
+        } else {
+          _refresh();
         }
       } catch (e) {
         notify(false, e instanceof Error ? e.message : String(e));
       }
     });
+  };
+
+  const handleSaveBaseUrl = () => {
+    const trimmed = baseUrlDraft.trim();
+    const current = storeBaseUrl || selected.baseUrl || '';
+    if (trimmed !== current) {
+      persistProviderPatch({ baseUrl: trimmed });
+    }
   };
 
   return (
@@ -209,14 +255,13 @@ export const ProviderProfileForm: React.FC<{
               onChange={(e) => {
                 setBaseUrlDraft(e.target.value);
               }}
-              onBlur={() => {
-                persistProviderPatch({ baseUrl: baseUrlDraft.trim() });
-              }}
+              onBlur={handleSaveBaseUrl}
+              onEnter={handleSaveBaseUrl}
             />
           </div>
 
           {/* API Key */}
-          <div className={styles.mrdField}>
+          <div className={styles.mrdKeyRowContainer ?? styles.mrdField}>
             <label className={styles.mrdFieldLabel}>API Key</label>
             <div className={styles.mrdKeyRow}>
               <div className={styles.mrdKeyInputWrapper}>
@@ -253,10 +298,12 @@ export const ProviderProfileForm: React.FC<{
             <label className={styles.mrdFieldLabel}>首要通信协议</label>
             <Select
               size="sm"
-              value={protocolValue}
+              value={protocolDraft}
               onChange={(val) => {
+                const next = protocolForProviderWrite(val);
+                setProtocolDraft(next);
                 persistProviderPatch({
-                  protocol: protocolForProviderWrite(val),
+                  protocol: next,
                 });
               }}
               options={[...YAML_PROTOCOL_SELECT_OPTIONS]}

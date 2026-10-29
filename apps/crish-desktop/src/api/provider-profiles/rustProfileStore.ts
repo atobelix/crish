@@ -66,7 +66,7 @@ export async function configSecretSet(
     expectedRevision: rev,
   });
   if (res.status === 'ok') {
-    if (res.data) {
+    if (res.data?.tree) {
       modelsCatalogStore.acceptSnapshot(res.data);
     }
     const cred = res.data?.credentialStates?.[providerId];
@@ -108,7 +108,7 @@ export async function configSecretClear(
     expectedRevision: rev,
   });
   if (res.status === 'ok') {
-    if (res.data) {
+    if (res.data?.tree) {
       modelsCatalogStore.acceptSnapshot(res.data);
     }
     return {

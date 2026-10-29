@@ -8,6 +8,7 @@ use std::{fs, path::Path};
 /// 说明：workspace 根 Cargo.toml 未声明 `zeroize` 依赖（Cargo.lock 中仅作为传递依赖存在，
 /// 见 04 §5.2/§5.3），按任务约束"不引入新依赖"，这里用简单覆写实现；
 /// 待 zeroize 转正为 workspace 直接依赖后，可替换为 `derive(Zeroize)` 并移除手工覆写。
+#[derive(Default)]
 pub struct SecretString {
     inner: String,
 }

@@ -274,14 +274,16 @@ describe('useModelProfilesState', () => {
     expect(result.current.modelsList).toContain('gpt-4o');
   });
 
-  it('notify 丢掉成功（已自动获取），失败才 toast 且带 error 皮', () => {
+  it('notify 成功与失败均显式回执（成功带 success，失败带 error）', () => {
     toastShow.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.notify(true, '已自动获取 7 个模型');
     });
-    expect(toastShow).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith('已自动获取 7 个模型', undefined, {
+      type: 'success',
+    });
 
     act(() => {
       result.current.notify(false, '保存失败：x');
