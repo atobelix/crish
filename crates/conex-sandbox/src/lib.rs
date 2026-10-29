@@ -1,3 +1,5 @@
+pub mod lex;
+pub mod powershell;
 pub mod semantics;
 pub mod smart_classifier;
 

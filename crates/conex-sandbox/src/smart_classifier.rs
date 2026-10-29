@@ -128,7 +128,7 @@ impl SmartClassifier {
             };
         }
 
-        let segments = Self::split_segments(&normalized);
+        let segments = Self::command_segments(&normalized);
         if segments.is_empty() {
             return CommandAnalysis {
                 verdict: SmartVerdict::Allow,
@@ -275,8 +275,10 @@ impl SmartClassifier {
         while let Some(c) = chars.next() {
             match c {
                 '\\' if !in_single => {
-                    // 转义下一个字符（不参与形态判定）
-                    let _ = chars.next();
+                    let escaped_char = chars.next();
+                    if escaped_char.is_none() {
+                        break;
+                    }
                 }
                 '\'' if !in_double => in_single = !in_single,
                 '"' if !in_single => in_double = !in_double,
@@ -481,7 +483,7 @@ impl SmartClassifier {
         if !cmd.contains('|') {
             return false;
         }
-        let segments = Self::split_segments(cmd);
+        let segments = Self::command_segments(cmd);
         let has_downloader = segments.iter().any(|s| {
             matches!(
                 s.command.as_str(),
@@ -957,7 +959,7 @@ impl SmartClassifier {
         // 5.1 npx / bunx 运行工具
         if matches!(cmd, "npx" | "bunx") {
             if let Some(sub) = seg.args.first() {
-                let sub_clean = Self::normalize_token(sub);
+                let sub_clean = crate::lex::normalize_token(sub);
                 if matches!(
                     sub_clean.as_str(),
                     "eslint"
@@ -1065,112 +1067,20 @@ impl SmartClassifier {
             .collect()
     }
 
-    /// 拆分复合命令段（支持单双引号保护，避免在引号内误切分 &&, ;, ||, |）
-    pub fn split_segments(cmd: &str) -> Vec<CommandSegment> {
-        let mut segments = Vec::new();
-        let mut cur = String::new();
-        let mut in_single = false;
-        let mut in_double = false;
-        let mut chars = cmd.chars().peekable();
-
-        while let Some(c) = chars.next() {
-            match c {
-                '\\' if !in_single => {
-                    cur.push(c);
-                    if let Some(next) = chars.next() {
-                        cur.push(next);
-                    }
-                }
-                '\'' if !in_double => {
-                    in_single = !in_single;
-                    cur.push(c);
-                }
-                '"' if !in_single => {
-                    in_double = !in_double;
-                    cur.push(c);
-                }
-                ';' if !in_single && !in_double => {
-                    Self::push_segment(&mut segments, &cur);
-                    cur.clear();
-                }
-                '\n' | '\r' if !in_single && !in_double => {
-                    // 换行即命令分隔符（多行脚本注入不得与首 token 合并）
-                    Self::push_segment(&mut segments, &cur);
-                    cur.clear();
-                }
-                '&' if !in_single && !in_double => {
-                    if chars.peek() == Some(&'&') {
-                        chars.next();
-                        Self::push_segment(&mut segments, &cur);
-                        cur.clear();
-                    } else {
-                        cur.push(c);
-                    }
-                }
-                '|' if !in_single && !in_double => {
-                    if chars.peek() == Some(&'|') {
-                        chars.next();
-                    }
-                    Self::push_segment(&mut segments, &cur);
-                    cur.clear();
-                }
-                _ => cur.push(c),
-            }
-        }
-        Self::push_segment(&mut segments, &cur);
-        segments
-    }
-
-    fn push_segment(segments: &mut Vec<CommandSegment>, raw: &str) {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return;
-        }
-        let tokens = Self::tokenize_segment(trimmed);
-        if let Some((first, args)) = tokens.split_first() {
-            let command = Self::normalize_token(first);
-            let args_vec: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-            segments.push(CommandSegment {
-                raw: trimmed.to_string(),
-                command,
-                args: args_vec,
-            });
-        }
-    }
-
-    /// 简单的段内词法切分（支持引号保护）
-    fn tokenize_segment(segment: &str) -> Vec<String> {
-        let mut tokens = Vec::new();
-        let mut cur = String::new();
-        let mut in_single = false;
-        let mut in_double = false;
-
-        for c in segment.chars() {
-            match c {
-                '\'' if !in_double => in_single = !in_single,
-                '"' if !in_single => in_double = !in_double,
-                ' ' | '\t' if !in_single && !in_double => {
-                    if !cur.is_empty() {
-                        tokens.push(cur.clone());
-                        cur.clear();
-                    }
-                }
-                _ => cur.push(c),
-            }
-        }
-        if !cur.is_empty() {
-            tokens.push(cur);
-        }
-        tokens
-    }
-
-    /// 规范化命令名（剥离目录前缀与 .exe 后缀，转为小写）
-    fn normalize_token(token: &str) -> String {
-        let clean = token.trim_matches(['"', '\'']);
-        let p = std::path::Path::new(clean);
-        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or(clean);
-        let lower = name.to_ascii_lowercase();
-        lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
+    /// 用唯一词法把命令行拆成段。
+    fn command_segments(cmd: &str) -> Vec<CommandSegment> {
+        crate::lex::split_segments(cmd)
+            .into_iter()
+            .filter_map(|raw| {
+                let tokens = crate::lex::tokenize_segment(&raw);
+                let (first, args) = tokens.split_first()?;
+                Some(CommandSegment {
+                    raw,
+                    command: crate::lex::normalize_token(first),
+                    args: args.to_vec(),
+                })
+            })
+            .collect()
     }
 }
 
@@ -1472,11 +1382,11 @@ mod tests {
     // ── 规则函数级正反例（2026-10-27 补齐）─────────────────────────────
 
     fn segment(raw: &str) -> CommandSegment {
-        let tokens = SmartClassifier::tokenize_segment(raw);
+        let tokens = crate::lex::tokenize_segment(raw);
         let (first, rest) = tokens.split_first().expect("测试命令至少一个 token");
         CommandSegment {
             raw: raw.to_string(),
-            command: SmartClassifier::normalize_token(first),
+            command: crate::lex::normalize_token(first),
             args: rest.to_vec(),
         }
     }
@@ -1790,14 +1700,14 @@ mod tests {
     }
 
     #[test]
-    fn normalize_token_strips_path_and_exe_suffix() {
+    fn command_name_strips_path_and_exe_suffix() {
         assert_eq!(
-            SmartClassifier::normalize_token("C:/Windows/System32/CMD.EXE"),
+            crate::lex::normalize_token("C:/Windows/System32/CMD.EXE"),
             "cmd"
         );
-        assert_eq!(SmartClassifier::normalize_token("/usr/bin/git"), "git");
-        assert_eq!(SmartClassifier::normalize_token("\"pwsh.exe\""), "pwsh");
-        assert_eq!(SmartClassifier::normalize_token("rg"), "rg");
+        assert_eq!(crate::lex::normalize_token("/usr/bin/git"), "git");
+        assert_eq!(crate::lex::normalize_token("\"pwsh.exe\""), "pwsh");
+        assert_eq!(crate::lex::normalize_token("rg"), "rg");
     }
 
     #[test]
@@ -1829,10 +1739,10 @@ mod tests {
     }
 
     #[test]
-    fn split_segments_respects_quotes_and_operators() {
-        assert_eq!(SmartClassifier::split_segments("echo 'a && b'").len(), 1);
-        assert_eq!(SmartClassifier::split_segments("ls && pwd").len(), 2);
-        assert_eq!(SmartClassifier::split_segments("a ; b | c").len(), 3);
-        assert!(SmartClassifier::split_segments("   ").is_empty());
+    fn compound_split_respects_quotes_and_operators() {
+        assert_eq!(SmartClassifier::command_segments("echo 'a && b'").len(), 1);
+        assert_eq!(SmartClassifier::command_segments("ls && pwd").len(), 2);
+        assert_eq!(SmartClassifier::command_segments("a ; b | c").len(), 3);
+        assert!(SmartClassifier::command_segments("   ").is_empty());
     }
 }
