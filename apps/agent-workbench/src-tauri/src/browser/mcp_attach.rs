@@ -43,7 +43,7 @@
 use agent_tools::definition::ToolError;
 use agent_tools::mcp::McpServerConfig;
 use conex_browser::CdpEndpoint;
-use conex_browser_tools::codes::{TOOL_BROWSER_CAPABILITY_DISABLED, TOOL_BROWSER_NOT_READY};
+use conex_types::error::codes::{TOOL_BROWSER_CAPABILITY_DISABLED, TOOL_BROWSER_NOT_READY};
 use std::fmt;
 
 /// attach 型 MCP 端点暴露载荷（E-1 注入形态）。

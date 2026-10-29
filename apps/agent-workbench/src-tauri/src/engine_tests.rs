@@ -2469,7 +2469,7 @@ async fn register_plugin_mcp_server_integration() {
 /// BrowserSlot，守卫无法命中开关先行判定——装配注入由错误码互斥背书）。
 #[tokio::test]
 async fn mcp_attach_assembly_default_denies_zero_exposure() {
-    use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
+    use conex_types::error::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
     let slot = crate::browser::BrowserSlot::new().with_mcp_attach_allowed(
         conex_browser_tools::BrowserToolsConfig::default().mcp_attach_allowed,
     );
@@ -2483,7 +2483,7 @@ async fn mcp_attach_assembly_default_denies_zero_exposure() {
 /// 由 browser 域单测以样例端点覆盖，引擎级不触发真实浏览器启动）。
 #[tokio::test]
 async fn mcp_attach_assembly_enabled_requires_running_endpoint() {
-    use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
+    use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
     let slot = crate::browser::BrowserSlot::new().with_mcp_attach_allowed(true);
     let err = slot.mcp_attach_endpoint().unwrap_err();
     assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
