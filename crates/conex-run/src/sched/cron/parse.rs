@@ -125,13 +125,14 @@ pub fn parse_cron(expression: &str) -> Result<CronSchedule, CronError> {
             })
         })
         .collect::<Result<_, _>>()?;
-    // 逆序 pop 还原五个字段（字段数已锁定为 5，pop 不会落空）
-    let mut parsed = parsed;
-    let day_of_week = parsed.pop().expect("字段数已锁定为 5");
-    let month = parsed.pop().expect("字段数已锁定为 5");
-    let day_of_month = parsed.pop().expect("字段数已锁定为 5");
-    let hour = parsed.pop().expect("字段数已锁定为 5");
-    let minute = parsed.pop().expect("字段数已锁定为 5");
+    // 字段数已在上方锁定为 5；数组转换失败仅防御性返回结构化错误，
+    // 不用 panic 表达不可达状态。
+    let [minute, hour, day_of_month, month, day_of_week]: [CronField; 5] =
+        parsed.try_into().map_err(|fields: Vec<CronField>| {
+            CronError::WrongFieldCount {
+                actual: fields.len(),
+            }
+        })?;
     Ok(CronSchedule {
         minute,
         hour,
