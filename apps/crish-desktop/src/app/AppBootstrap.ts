@@ -5,7 +5,7 @@ import { bootstrapStores } from '../store/bootstrapStores';
 import { bootstrapServices } from '../bootstrap-services';
 import { emitUiEvent, onUiEvent } from '../api/uiEvents';
 import { pickWorkspaceFolder } from '../api/pickWorkspaceFolder';
-import { syncTelemetryData } from '../api/storeAccess';
+import { syncTelemetryData } from '../store/storeAccess';
 import { telemetry } from '../services/TelemetryService';
 import { toast } from '../services/toast';
 import { isDemoModeFast } from '../createSsrGlobals';

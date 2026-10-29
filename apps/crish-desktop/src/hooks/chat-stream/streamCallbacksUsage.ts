@@ -14,7 +14,7 @@ import {
   applyUsageDelta,
   fetchRunSnapshotUsage,
 } from '../../api/sessionEventHydrate';
-import { accumulateTokenUsage } from '../../api/storeAccess';
+import { accumulateTokenUsage } from '../../store/storeAccess';
 import { buildMessageIndex } from './streamCallbacksInternals';
 import { DELAY_AFTER_STOP_MS } from './streamCallbacksSurfaces';
 

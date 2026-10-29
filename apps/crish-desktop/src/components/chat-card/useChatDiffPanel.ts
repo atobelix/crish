@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import type { FileDiff } from '../../store/types';
 import { selectSessionDiffFiles } from '../../api/sessionDiffDerivation';
-import { setActiveDiffSource as setActiveDiffSourceAccess } from '../../api/storeAccess';
+import { setActiveDiffSource as setActiveDiffSourceAccess } from '../../store/storeAccess';
 import type { SessionMessage } from '../../store/types';
 
 export interface UseChatDiffPanelOptions {

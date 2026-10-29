@@ -1,81 +1,91 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { FileDiff, SessionState, WorkspaceState } from '../store/types';
-import type { CronJob } from './clientApi';
+import type { FileDiff, SessionState, WorkspaceState } from './types';
+import type { CronJob } from '../api/clientApi';
+import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
+import { listSessions } from './sessionIndex';
+import { usePermissionStore } from './permissionStore';
+import { useSettingsStore } from './settingsStore';
+import { useTerminalStore } from './terminalStore';
 import {
-  PENDING_DRAFT_SESSION_ID,
-  isPendingDraft,
-} from '../store/draftSession';
-import { listSessions } from '../store/sessionIndex';
-import { usePermissionStore } from '../store/permissionStore';
-import { useSettingsStore } from '../store/settingsStore';
-import { useTerminalStore } from '../store/terminalStore';
+  isNonEmptySessionId,
+  normalizeSessionId,
+  resolveActiveSession,
+  resolveSession,
+  selectActiveSession,
+  selectSessionAgent,
+  selectSessionById,
+  hasSession,
+  withActiveSession,
+  withSession,
+} from './sessionAccessQuery';
 import {
   addMessage,
   addMessageToolCall,
   archiveSession,
   branchSession,
-  closeSettings,
   createSession,
   enterDraftMode,
-  filterCronJobs,
-  findPanelCardLocation,
-  findWorkspaceById,
-  focusOrOpenPanel,
-  getActiveDiffSource,
-  getActiveSession,
-  getActiveSessionId,
-  getActiveWorkspace,
-  getAppSettings,
-  getDiffFiles,
-  getDropPreview,
-  getLayoutState,
-  getPermissionMode,
-  getScheduledTasks,
-  getSessionAgent,
-  getSessionById,
-  getSessionStoreState,
-  getSettingsUiState,
-  getWorkspaceById,
-  getWorkspaceStoreState,
-  hasSession,
-  isCronJob,
-  isDiffChange,
-  isFileDiff,
-  isNonEmptySessionId,
-  normalizeCronJob,
-  normalizeFileDiff,
-  normalizeSessionId,
-  openSettings,
   patchSession,
   pinSession,
-  pushDiffFile,
   renameSession,
-  resolveActiveSession,
-  resolvePanelCardId,
-  resolveSession,
-  selectActiveSession,
-  selectSessionAgent,
-  selectSessionById,
   setActiveAgentId,
-  setActiveDiffSource,
   setActiveSessionId,
-  setAppSettings,
-  setDropPreview,
-  setGroupActiveCard,
   setPanelAgentId,
-  setPermissionMode,
-  setScheduledTasks,
-  setSettingsActiveTab,
-  setShowSettingsOverlay,
-  togglePanel,
-  toggleSettingsOverlay,
   unarchiveSession,
   unpinSession,
   updateMessageToolCall,
-  withActiveSession,
-  withSession,
+} from './sessionAccess';
+import {
+  getActiveSession,
+  getActiveSessionId,
+  getSessionAgent,
+  getSessionById,
+  getSessionStoreState,
+} from './sessionStore';
+import {
+  getAppSettings,
+  setAppSettings,
+  setPermissionMode,
+  setSettingsActiveTab,
+  setShowSettingsOverlay,
+} from './settingsAccess';
+import {
+  closeSettings,
+  getSettingsUiState,
+  openSettings,
+  toggleSettingsOverlay,
+} from './settingsUiStore';
+import {
+  filterCronJobs,
+  getDiffFiles,
+  getActiveDiffSource,
+  getScheduledTasks,
+  isCronJob,
+  isDiffChange,
+  isFileDiff,
+  normalizeCronJob,
+  normalizeFileDiff,
+  pushDiffFile,
+  setActiveDiffSource,
+  setScheduledTasks,
+} from './telemetryAccess';
+import {
+  findPanelCardLocation,
+  findWorkspaceById,
+  focusOrOpenPanel,
+  getWorkspaceById,
+  resolvePanelCardId,
   workspaceHasCard,
-} from './storeAccess';
+} from './workspacePanelAccess';
+import {
+  getActiveWorkspace,
+  getDropPreview,
+  getWorkspaceStoreState,
+  setDropPreview,
+  setGroupActiveCard,
+  togglePanel,
+} from './workspaceStore';
+import { getLayoutState, getPermissionMode } from './storeAccess';
 
 // ── 纯函数单元（不依赖 / 不 mock zustand）──────────────────────────────────
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import styles from './ComposePlusMenu.module.css';
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 import { navigateToSurface } from '../../store/storeAccess';
 import { useI18n } from '../../i18n';
 import { SmartExpandablePanel, type MenuItem } from '@/components/ui';

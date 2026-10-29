@@ -13,7 +13,7 @@ import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
-import { openSettings, patchSession } from '../../api/storeAccess';
+import { openSettings, patchSession } from '../../store/storeAccess';
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
 import type { ChatAttachment } from '../../hooks/chat-stream';

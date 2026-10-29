@@ -15,7 +15,7 @@ import { WorkspaceGitChangesView } from './WorkspaceGitChangesView';
 import { useSessionScopedChanges } from './useSessionScopedChanges';
 import type { ChangesScopeMode, UnifiedFileChange } from './types';
 import type { GitStatusResult, GitStatusFile } from '../../../api/gitApi';
-import { setActiveDiffSource, pushDiffFile } from '../../../api/storeAccess';
+import { setActiveDiffSource, pushDiffFile } from '../../../store/storeAccess';
 import styles from '../OverviewCard.module.css';
 
 export interface ChangesSectionProps {
@@ -52,7 +52,8 @@ export const ChangesSection: React.FC<ChangesSectionProps> = React.memo(
     const [scope, setScope] = useState<ChangesScopeMode>('session');
 
     // 提取当前对话专属改动列表
-    const { sessionFiles, totalFiles: sessionCount } = useSessionScopedChanges(workspaceRoot);
+    const { sessionFiles, totalFiles: sessionCount } =
+      useSessionScopedChanges(workspaceRoot);
     const gitCount = git?.found ? git.files.length : 0;
 
     const handleOpenSessionFile = useCallback(

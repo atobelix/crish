@@ -11,8 +11,11 @@
  * 从 workspaceFsApi 拆分而来；hub 经 re-export 保持对外契约不变。
  */
 
-import { getActiveSessionId } from './store-access/sessionAccessQuery';
-import { sessionRuntimeRegistry, type Attachment } from './SessionRuntimeRegistry';
+import { getActiveSessionId } from '../store/sessionAccessQuery';
+import {
+  sessionRuntimeRegistry,
+  type Attachment,
+} from './SessionRuntimeRegistry';
 import type { ChatAttachment } from '../hooks/chat-stream/types';
 
 export type PendingFileAnnotation = {
@@ -53,8 +56,6 @@ function resolveSessionId(explicit?: string | null): string {
     return DRAFT_SESSION_KEY;
   }
 }
-
-
 
 /** 路径短名（卡片标题展示用：取末段文件名） */
 function shortName(path: string): string {
@@ -107,7 +108,9 @@ export function addPendingFileAnnotation(
   const existing = (runtime.attachments ?? []) as ChatAttachment[];
   sessionRuntimeRegistry.save(sid, {
     attachments: [
-      ...existing.filter((x) => x.name !== attachName && x.annotation?.id !== a.id),
+      ...existing.filter(
+        (x) => x.name !== attachName && x.annotation?.id !== a.id
+      ),
       chatAttachment,
     ] as Attachment[],
   });
@@ -191,7 +194,9 @@ export function updatePendingFileAnnotationComment(
 
   const runtime = sessionRuntimeRegistry.get(sid);
   const existing = (runtime.attachments ?? []) as ChatAttachment[];
-  const idx = existing.findIndex((att) => att.annotation?.id === id || att.id === id);
+  const idx = existing.findIndex(
+    (att) => att.annotation?.id === id || att.id === id
+  );
   if (idx < 0) return false;
   const target = existing[idx]!;
   if (!target.annotation) return false;
@@ -261,11 +266,16 @@ export function takePendingFileAnnotations(
 }
 
 /** 格式化为注入模型的上下文块（卡片正文与 wire 文本的单一来源） */
-export function formatAnnotationsForModel(list: PendingFileAnnotation[]): string {
+export function formatAnnotationsForModel(
+  list: PendingFileAnnotation[]
+): string {
   if (!list.length) return '';
   const parts = list.map((a, i) => {
     const path = a.path;
-    const sel = a.selectedText.length > 800 ? `${a.selectedText.slice(0, 800)}…` : a.selectedText;
+    const sel =
+      a.selectedText.length > 800
+        ? `${a.selectedText.slice(0, 800)}…`
+        : a.selectedText;
     return [
       `### 文件批注 ${i + 1}`,
       `路径: ${path}`,

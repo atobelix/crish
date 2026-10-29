@@ -18,7 +18,7 @@ import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
 import { insertSessionAt, replaceSessions } from '../store/sessionIndex';
-import { getSessionAgent } from './storeAccess';
+import { getSessionAgent } from '../store/sessionStore';
 import type {
   MessageToolCall,
   SessionAgent,

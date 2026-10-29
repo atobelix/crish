@@ -35,7 +35,7 @@ import { ComposerSendControls } from './ComposerSendControls';
 import {
   readSendShortcut,
   SEND_SHORTCUT_CHANGED_EVENT,
-} from '../../api/store-access/settingsAccess';
+} from '../../store/storeAccess';
 import { dispatchUiEvent } from '../../api/uiEvents';
 import { openSettings } from '../../store/storeAccess';
 import { extractEditorScopeTarget } from './AiCommandSlashExtension';

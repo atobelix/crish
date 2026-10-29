@@ -11,7 +11,7 @@ import {
   selectTokenUsage,
 } from '../../store/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
-import { setActiveSessionId } from '../../api/storeAccess';
+import { setActiveSessionId } from '../../store/storeAccess';
 import {
   getActiveModelId,
   resolveDisplayModelId,

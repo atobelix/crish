@@ -63,8 +63,8 @@ export {
   sessionShellFingerprint,
 } from './sessionStore';
 export type {
-  SessionFacade,
-  SessionFacadeState,
+  SessionStore,
+  SessionStoreState,
   SessionActions,
   SessionState,
   SessionAgent,

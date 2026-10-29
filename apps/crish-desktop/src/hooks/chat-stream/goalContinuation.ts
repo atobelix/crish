@@ -13,7 +13,7 @@ import {
 import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
 import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { getSessionById } from '../../store/sessionStore';
-import { addMessage, patchSession } from '../../api/storeAccess';
+import { addMessage, patchSession } from '../../store/storeAccess';
 import {
   decideGoalContinuation,
   GOAL_DEFAULT_MAX_ITERATIONS,

@@ -10,9 +10,11 @@ import {
   findInsertIndex,
   isSortedByMessageOrder,
   messageOrderKey,
+} from '../store/messageOrderKey';
+import {
   mergeSessionMessageFields,
   sortMessagesByOrder,
-} from './store-access/helperAccess';
+} from '../store/sessionSharedHelpers';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
 import { blockText } from './chat-bridge/handlers/eventUtils';

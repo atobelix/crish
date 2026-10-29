@@ -30,9 +30,9 @@ vi.mock('../../../api/import/scan', () => ({
 }));
 
 // 4. Mock store access and profiles
-vi.mock('../../../api/storeAccess', async (importOriginal) => {
+vi.mock('../../../store/storeAccess', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../api/storeAccess')>();
+    await importOriginal<typeof import('../../../store/storeAccess')>();
   return {
     ...actual,
     openSettings: vi.fn(),

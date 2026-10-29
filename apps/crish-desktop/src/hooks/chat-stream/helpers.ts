@@ -5,7 +5,7 @@ import {
   updateMessageText,
   updateMessageThinking,
   updateMessageToolCall,
-} from '../../api/storeAccess';
+} from '../../store/storeAccess';
 import {
   clearStream,
   clearStreamTools,
@@ -57,7 +57,7 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
  * Merges any lite-store intermediate fields so success patches that omit
  * name/args still land a complete durable row.
  *
- * T4 A3：写入统一走 `api/storeAccess` 编排单点（sessionAccess 门面），
+ * T4 A3：写入统一走 `store/storeAccess` 编排单点（sessionAccess 门面），
  * 不再直写 layoutStore（单一写入通道语义，check:store-writes 对齐）。
  */
 export function commitToolPatchToSession(

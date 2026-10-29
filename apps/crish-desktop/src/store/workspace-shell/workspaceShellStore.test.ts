@@ -25,15 +25,6 @@ vi.mock('../../api/projectStore', () => ({
   activateWorkspaceForSessionFolder: vi.fn(async () => undefined),
 }));
 
-vi.mock('../../api/storeAccess', () => ({
-  enterDraftMode: vi.fn(),
-  setActiveSessionId: vi.fn(),
-  getSessionStoreState: vi.fn(() => ({})),
-  getActiveSessionId: vi.fn(() => null),
-  getWorkspaceStoreState: vi.fn(() => ({})),
-  getLayoutState: vi.fn(() => ({})),
-}));
-
 const sessionSetActiveSessionId = vi.fn();
 const sessionEnterDraftMode = vi.fn();
 const sessionDeleteSession = vi.fn(

@@ -15,7 +15,7 @@ import {
 } from '../../api/modelsCatalogLive';
 import { listAvailableModelPickerEntries } from '../../api/modelPickerAvailability';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 import { Menu, Tooltip, Button, Input } from '@/components/ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
 import {

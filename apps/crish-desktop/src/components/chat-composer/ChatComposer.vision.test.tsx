@@ -35,7 +35,8 @@ vi.mock('../../app/compositionRoot', () => ({
   }),
 }));
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   openSettings: vi.fn(),
 }));
 
@@ -66,7 +67,9 @@ async function loadCatalog(input: string[]): Promise<void> {
     parseError: null,
     tree: { version: 2, activeModel: null, providers: providers(input) },
   }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }

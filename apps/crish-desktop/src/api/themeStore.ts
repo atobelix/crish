@@ -42,7 +42,9 @@ function readDomThemeForInit(): UiTheme | null {
 }
 
 let currentTheme: UiTheme = readDomThemeForInit() ?? 'default';
-let currentPersonalization: PersonalizationSettings = { ...DEFAULT_PERSONALIZATION };
+let currentPersonalization: PersonalizationSettings = {
+  ...DEFAULT_PERSONALIZATION,
+};
 
 /**
  * 规范化主题标识符
@@ -218,7 +220,9 @@ export function setPersonalization(
     currentTheme
   );
 
-  const safePersist = <K extends Parameters<typeof preferencesClient.setPreference>[0]>(
+  const safePersist = <
+    K extends Parameters<typeof preferencesClient.setPreference>[0],
+  >(
     key: K,
     val: Parameters<typeof preferencesClient.setPreference>[1]
   ) => {
@@ -296,11 +300,11 @@ export function bootstrapTheme(): UiTheme {
       document.documentElement.setAttribute('data-theme', currentTheme);
       document.documentElement.classList.toggle(
         'theme-dark',
-        currentTheme === 'dark',
+        currentTheme === 'dark'
       );
       document.documentElement.classList.toggle(
         'theme-light',
-        currentTheme !== 'dark',
+        currentTheme !== 'dark'
       );
     } catch {
       /* swallow-ok */
@@ -314,77 +318,80 @@ export function bootstrapTheme(): UiTheme {
   );
 
   try {
-    void preferencesClient.getAllPreferences().then((prefs) => {
-      let changed = false;
-      if (
-        prefs.theme &&
-        (prefs.theme === 'dark' || prefs.theme === 'default') &&
-        prefs.theme !== currentTheme
-      ) {
-        currentTheme = prefs.theme;
-        changed = true;
-      }
-
-      const newSkin = prefs.theme_skin || currentPersonalization.skin;
-      const newCustomBg =
-        prefs.theme_custom_bg !== undefined
-          ? prefs.theme_custom_bg
-          : currentPersonalization.customBg;
-      const newCustomFg =
-        prefs.theme_custom_fg !== undefined
-          ? prefs.theme_custom_fg
-          : currentPersonalization.customFg;
-      const newFontSize =
-        prefs.font_size_adjust !== undefined
-          ? prefs.font_size_adjust
-          : currentPersonalization.fontSizeAdjust;
-      const newBrightness =
-        prefs.theme_brightness_adjust !== undefined
-          ? prefs.theme_brightness_adjust
-          : currentPersonalization.themeBrightnessAdjust;
-      const newVibrant =
-        prefs.theme_brightness_vibrant !== undefined
-          ? prefs.theme_brightness_vibrant
-          : currentPersonalization.themeBrightnessVibrant;
-      const newAutoTime =
-        prefs.theme_brightness_auto_time !== undefined
-          ? prefs.theme_brightness_auto_time
-          : currentPersonalization.themeAutoTimeTransition;
-
-      if (
-        newSkin !== currentPersonalization.skin ||
-        newCustomBg !== currentPersonalization.customBg ||
-        newCustomFg !== currentPersonalization.customFg ||
-        newFontSize !== currentPersonalization.fontSizeAdjust ||
-        newBrightness !== currentPersonalization.themeBrightnessAdjust ||
-        newVibrant !== currentPersonalization.themeBrightnessVibrant ||
-        newAutoTime !== currentPersonalization.themeAutoTimeTransition
-      ) {
-        currentPersonalization = {
-          skin: newSkin,
-          customBg: newCustomBg,
-          customFg: newCustomFg,
-          fontSizeAdjust: newFontSize,
-          themeBrightnessAdjust: newBrightness,
-          themeBrightnessVibrant: newVibrant,
-          themeAutoTimeTransition: newAutoTime,
-        };
-        changed = true;
-      }
-
-      if (changed) {
-        TokenRuntimeController.getInstance().applyTokens(
-          currentPersonalization,
-          currentTheme,
-        );
-        // 漂移校准后同步 Commit Ack 镜像（与 SQLite 保持一致）
-        if (prefs.theme === 'dark' || prefs.theme === 'default') {
-          commitThemePreference(currentTheme);
+    void preferencesClient
+      .getAllPreferences()
+      .then((prefs) => {
+        let changed = false;
+        if (
+          prefs.theme &&
+          (prefs.theme === 'dark' || prefs.theme === 'default') &&
+          prefs.theme !== currentTheme
+        ) {
+          currentTheme = prefs.theme;
+          changed = true;
         }
-      }
-    }).catch(() => {
-      /* swallow-ok: 后端偏好读取失败时保持当前内存态 */
-    });
+
+        const newSkin = prefs.theme_skin || currentPersonalization.skin;
+        const newCustomBg =
+          prefs.theme_custom_bg !== undefined
+            ? prefs.theme_custom_bg
+            : currentPersonalization.customBg;
+        const newCustomFg =
+          prefs.theme_custom_fg !== undefined
+            ? prefs.theme_custom_fg
+            : currentPersonalization.customFg;
+        const newFontSize =
+          prefs.font_size_adjust !== undefined
+            ? prefs.font_size_adjust
+            : currentPersonalization.fontSizeAdjust;
+        const newBrightness =
+          prefs.theme_brightness_adjust !== undefined
+            ? prefs.theme_brightness_adjust
+            : currentPersonalization.themeBrightnessAdjust;
+        const newVibrant =
+          prefs.theme_brightness_vibrant !== undefined
+            ? prefs.theme_brightness_vibrant
+            : currentPersonalization.themeBrightnessVibrant;
+        const newAutoTime =
+          prefs.theme_brightness_auto_time !== undefined
+            ? prefs.theme_brightness_auto_time
+            : currentPersonalization.themeAutoTimeTransition;
+
+        if (
+          newSkin !== currentPersonalization.skin ||
+          newCustomBg !== currentPersonalization.customBg ||
+          newCustomFg !== currentPersonalization.customFg ||
+          newFontSize !== currentPersonalization.fontSizeAdjust ||
+          newBrightness !== currentPersonalization.themeBrightnessAdjust ||
+          newVibrant !== currentPersonalization.themeBrightnessVibrant ||
+          newAutoTime !== currentPersonalization.themeAutoTimeTransition
+        ) {
+          currentPersonalization = {
+            skin: newSkin,
+            customBg: newCustomBg,
+            customFg: newCustomFg,
+            fontSizeAdjust: newFontSize,
+            themeBrightnessAdjust: newBrightness,
+            themeBrightnessVibrant: newVibrant,
+            themeAutoTimeTransition: newAutoTime,
+          };
+          changed = true;
+        }
+
+        if (changed) {
+          TokenRuntimeController.getInstance().applyTokens(
+            currentPersonalization,
+            currentTheme
+          );
+          // 漂移校准后同步 Commit Ack 镜像（与 SQLite 保持一致）
+          if (prefs.theme === 'dark' || prefs.theme === 'default') {
+            commitThemePreference(currentTheme);
+          }
+        }
+      })
+      .catch(() => {
+        /* swallow-ok: 后端偏好读取失败时保持当前内存态 */
+      });
   } catch {
     /* swallow-ok: 环境不支持异步请求时静默保持 */
   }
@@ -396,7 +403,7 @@ export function bootstrapTheme(): UiTheme {
       if (currentPersonalization.themeAutoTimeTransition) {
         TokenRuntimeController.getInstance().applyTokens(
           currentPersonalization,
-          currentTheme,
+          currentTheme
         );
       }
     }, 60000);
@@ -414,12 +421,12 @@ export function setTheme(theme: UiTheme | string): UiTheme {
     currentTheme = t;
     TokenRuntimeController.getInstance().applyTokens(
       currentPersonalization,
-      currentTheme,
+      currentTheme
     );
 
     try {
       window.dispatchEvent(
-        new CustomEvent('crish-theme-changed', { detail: { theme: t } }),
+        new CustomEvent('crish-theme-changed', { detail: { theme: t } })
       );
     } catch {
       /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
@@ -430,7 +437,7 @@ export function setTheme(theme: UiTheme | string): UiTheme {
 
     // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
     try {
-      void import('./storeAccess')
+      void import('../store/settingsAccess')
         .then(({ getAppSettings, setAppSettings }) => {
           if (typeof window === 'undefined') return;
           const current = getAppSettings();
@@ -443,7 +450,10 @@ export function setTheme(theme: UiTheme | string): UiTheme {
         });
       void import('./clientApi')
         .then(({ clientApi }) => {
-          if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+          if (
+            typeof window === 'undefined' ||
+            typeof localStorage === 'undefined'
+          ) {
             return;
           }
           return clientApi.saveSettingsEx('__global__', 'global', { theme: t });

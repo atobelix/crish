@@ -12,7 +12,7 @@ import {
   pushDiffFile,
   setActiveDiffSource,
   setActiveSessionId,
-} from '../../api/storeAccess';
+} from '../../store/storeAccess';
 import {
   getBackgroundTaskOutput,
   openBackgroundTaskInTerminal,

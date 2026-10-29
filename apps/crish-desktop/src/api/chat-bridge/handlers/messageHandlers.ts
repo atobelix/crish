@@ -9,7 +9,7 @@
 import { blockText } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { getSessionStoreState } from '../../storeAccess';
+import { getSessionStoreState } from '../../../store/sessionStore';
 import { projectAgentMessageContent } from '../../messageProjection';
 
 /**

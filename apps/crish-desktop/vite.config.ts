@@ -743,8 +743,7 @@ export default defineConfig({
             n.includes('/src/store/sessionMessage') ||
             n.includes('/src/store/sessionCrud') ||
             n.includes('/src/store/layout-helpers/') ||
-            n.includes('/src/store/middleware/') ||
-            n.includes('/src/api/storeAccess')
+            n.includes('/src/store/middleware/')
           ) {
             return 'store-session-core';
           }

@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { getSessionById } from '../../store/sessionStore';
-import { patchSession } from '../../api/storeAccess';
+import { patchSession } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { clearStream, getStreamText } from '../../store/streamingStore';
 import { markStreamingActive, cancelModeFromForce } from '../../api/streamStop';

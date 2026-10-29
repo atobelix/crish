@@ -6,7 +6,8 @@
  */
 import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
-import { getPermissionMode, getSessionStoreState } from '../storeAccess';
+import { getSessionStoreState } from '../../store/sessionStore';
+import { getPermissionMode } from '../../store/storeAccess';
 import {
   classifyErrorDomain,
   logInternalError,

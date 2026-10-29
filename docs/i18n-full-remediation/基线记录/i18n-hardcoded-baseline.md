@@ -117,7 +117,7 @@ apps/crish-desktop/src/api/sessionTitleSource.ts 3
 apps/crish-desktop/src/api/silentComplete.ts 2
 apps/crish-desktop/src/api/skillsApi.ts 9
 apps/crish-desktop/src/api/skillsApiCreate.ts 12
-apps/crish-desktop/src/api/store-access/telemetryAccess.ts 1
+apps/crish-desktop/src/store/telemetryAccess.ts 1
 apps/crish-desktop/src/api/streamDiag.ts 10
 apps/crish-desktop/src/api/subagentApi.ts 1
 apps/crish-desktop/src/api/subagentTimeline.ts 1

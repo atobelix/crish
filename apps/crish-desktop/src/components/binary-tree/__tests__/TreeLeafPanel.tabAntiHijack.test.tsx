@@ -132,9 +132,9 @@ vi.mock('../../../api/import/autoSyncExternalSessions', () => ({
 }));
 
 // 5. Mock external provider & vision helpers for ChatCard
-vi.mock('../../../api/storeAccess', async (importOriginal) => {
+vi.mock('../../../store/storeAccess', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../api/storeAccess')>();
+    await importOriginal<typeof import('../../../store/storeAccess')>();
   return {
     ...actual,
     openSettings: vi.fn(),

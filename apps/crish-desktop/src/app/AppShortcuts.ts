@@ -6,7 +6,7 @@ import {
   openSettings,
   setActiveSessionId,
   toggleSettingsOverlay,
-} from '../api/storeAccess';
+} from '../store/storeAccess';
 import { ShortcutService } from '../services/ShortcutService';
 import { emitUiEvent } from '../api/uiEvents';
 import { formatBranchUndoToast } from '../hooks/useToastQueue';

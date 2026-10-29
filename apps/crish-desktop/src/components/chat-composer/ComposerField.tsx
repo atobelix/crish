@@ -7,7 +7,7 @@ import {
   useAutoGrowTextarea,
 } from '../../hooks/useAutoGrowTextarea';
 import type { ComposerFieldProps } from './composerTypes';
-import { readSendShortcut } from '../../api/store-access/settingsAccess';
+import { readSendShortcut } from '../../store/storeAccess';
 import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 import { ComposerSendControls } from './ComposerSendControls';
 import { Textarea } from '@/components/ui';

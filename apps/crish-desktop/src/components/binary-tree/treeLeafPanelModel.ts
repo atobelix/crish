@@ -1,10 +1,10 @@
 import type { LayoutLeaf } from '../../store/types';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import {
   DEFAULT_RIGHT_DOCK,
   collectSpatialLeaves,
   isPendingDraftSessionId,
   mintDraftSessionId,
-  getCompositionRoot,
   type RightToolDockState,
   type DockTree,
 } from '../../store/storeAccess';

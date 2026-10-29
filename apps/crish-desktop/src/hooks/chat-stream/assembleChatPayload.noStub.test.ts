@@ -10,8 +10,9 @@ const patchSessionMock = vi.hoisted(() => vi.fn());
 const setPermissionModeMock = vi.hoisted(() => vi.fn());
 const toastShowMock = vi.hoisted(() => vi.fn());
 
-vi.mock('../../api/storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/storeAccess')>();
+vi.mock('../../store/storeAccess', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../store/storeAccess')>();
   return {
     ...actual,
     patchSession: (...args: unknown[]) => patchSessionMock(...args),

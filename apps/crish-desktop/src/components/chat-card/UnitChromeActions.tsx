@@ -24,11 +24,11 @@ import {
   GENERAL_FOLDER,
   clearSessionMessages,
   exportSessionToMarkdown,
-  getCompositionRoot,
   tryDownloadSessionMarkdown,
   renameSession,
   enterDraftMode,
 } from '../../store/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { toast } from '../../services/toast';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { useDraftFolder } from '../../store/storeAccess';

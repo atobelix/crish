@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
-import { openSettings } from '../api/storeAccess';
+import { openSettings } from '../store/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import type { SettingsTabType } from '../store/types';
 import type { WizardStep } from '../components/firstRunWizardLib';

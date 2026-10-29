@@ -1,15 +1,17 @@
 /**
  * 设置与模型/权限操作门面 (Settings & Model Access Facade)
+ *
+ * 自 api/store-access/settingsAccess.ts 迁入 store 域（SS-P6c 门面合一）。
  */
-import type { SettingsTabType } from '../../store/types';
-import type { PermissionMode } from '../permissionModes';
-import type { Settings } from '../clientApi';
+import type { SettingsTabType } from './types';
+import type { PermissionMode } from '../api/permissionModes';
+import type { Settings } from '../api/clientApi';
 import {
   setShowSettingsOverlay as setShowSettingsOverlayUi,
   setSettingsActiveTab as setSettingsActiveTabUi,
-} from '../../store/settingsUiStore';
-import { useSettingsStore } from '../../store/settingsStore';
-import { usePermissionStore } from '../../store/permissionStore';
+} from './settingsUiStore';
+import { useSettingsStore } from './settingsStore';
+import { usePermissionStore } from './permissionStore';
 
 export function setShowSettingsOverlay(show: boolean): void {
   setShowSettingsOverlayUi(show);

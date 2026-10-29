@@ -22,7 +22,8 @@ import {
 } from '../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   openSettings: vi.fn(),
 }));
 
@@ -128,7 +129,7 @@ describe('permPill × modelBadge 互斥 / 四击', () => {
   });
 
   it('未配置模型或未配置密钥时：徽标直出「去配置模型供应商」按钮，点击直接打开设置', async () => {
-    const { openSettings } = await import('../../api/storeAccess');
+    const { openSettings } = await import('../../store/storeAccess');
     render(
       <ModelBadgePicker
         engineModel=""

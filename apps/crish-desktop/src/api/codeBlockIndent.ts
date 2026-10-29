@@ -3,7 +3,7 @@
  * 写面仍在外观设置（useAppearanceSettings）；本模块只读、不改设置表。
  */
 
-import { getAppSettings } from './store-access/settingsAccess';
+import { getAppSettings } from '../store/settingsAccess';
 
 export const CODE_INDENT_TWO = '  ';
 export const CODE_INDENT_FOUR = '    ';

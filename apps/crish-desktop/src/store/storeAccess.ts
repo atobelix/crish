@@ -1,34 +1,14 @@
 /**
- * storeAccess（store 侧公共读面）— R3-T11 交付。
+ * storeAccess（store 侧唯一公共门面）。
  *
- * components / api 读取 T11 新域 store（terminal / worker / permission / settings）
- * 与布局 chrome 时，**只经本模块**（T14 依赖规则据此守门）。
- * 写入仍走各域 store 自身 actions；跨域编排继续由 `api/storeAccess.ts`（既有编排层）承担。
+ * 唯一公共面：components / hooks / app / api 读取与命令式写入 store 时**只经本模块**
+ * （T14 依赖规则据此守门）。历史上并存的两套 storeAccess（本文件 + 已删除的
+ * `api/storeAccess.ts` + `api/store-access/**`）在 SS-P6c 合二为一：
+ * 会话写门面（./sessionAccess）、设置门面（./settingsAccess）、
+ * 遥测/定时门面（./telemetryAccess）、工作区面板门面（./workspacePanelAccess）
+ * 全部归 store 域所有，api 层不再持有第二份实现。
  *
- * ## 双 storeAccess 消费方决策树（维度 3 步骤 1 / 3-L）
- *
- * 1. 你需要 **读** T11 新域 store（terminal / worker / permission / settings）
- *    或布局 chrome / session / layout-tree / workspace-shell（只读快照 + hooks）？
- *    → 走本文件（`store/storeAccess.ts`，公共**读**面）。
- *
- * 2. 你需要 **写** 会话/工作区/设置（命令式 mutation，含跨域编排、
- *    setActiveSessionId / createSession / setAppSettings / pushDiffFile 等）？
- *    → 走 `api/storeAccess.ts`（编排层门面；实现于 `./store-access/`）。
- *    - 注：workspace-shell 域的 `enterDraftMode`/`setActiveSessionId` 经
- *      `useSessionStore.getState()` 同层 action 调用（3-C 斩断 store→api 反向边后），
- *      不再经 api/storeAccess；其它写路径仍经 api 编排层。
- *
- * 3. 既有 `api/storeAccess` 的会话**读**门面（getActiveSession / getSessionById 等）
- *    与本文件的会话读面**等价**（同源 store）；新代码读会话/布局优先本文件。
- *
- * ## 双 storeAccess 说明（既有，保留）
- *
- * - `store/storeAccess.ts`（本文件）：T11 新公共**读**面，覆盖四个新域 store 与布局 chrome。
- * - `api/storeAccess.ts`（既有）：编排层门面（会话/工作区/settingsUi facade + 跨域写），
- *   由 api/store-access/** 实现，其 getLayoutState 依赖旧 god-object 形状的兼容工作归 T14/汇合。
- *
- * 混用文件（同文件既读 store/storeAccess 又写 api/storeAccess）应各补行内注释
- * 标明哪条是读路径、哪条是写路径，避免后续维护者误用反向。
+ * 写入仍走各域 store 自身 actions；跨域编排只在本文件与上述门面模块内出现。
  *
  * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
  */
@@ -168,7 +148,8 @@ export const selectTokenUsage = (s: Pick<SettingsStore, 'tokenUsage'>) =>
 
 export { useLayoutStore };
 
-export function getLayoutChromeState(): LayoutStore {
+/** 布局域状态快照（编排层跨域读；唯一 `useLayoutStore.getState()` 访问点） */
+export function getLayoutState(): LayoutStore {
   return useLayoutStore.getState();
 }
 
@@ -241,6 +222,8 @@ export {
   selectActiveAgentId,
   getSessionAgent,
   getSessionStoreState,
+  getActiveSession,
+  getActiveSessionId,
   selectSessionList,
 } from './sessionStore';
 
@@ -417,17 +400,14 @@ export {
   projectFolderLabel,
 } from '../api/projectStore';
 
-export {
-  pinSession,
-  unpinSession,
-  clearSessionMessages,
-  renameSession,
-  enterDraftMode,
-} from '../api/storeAccess';
+// ── 会话 / 设置 / 遥测 / 面板命令式门面（store 域自有实现，api 不再持有第二份）──
+
+export * from './sessionAccess';
+export * from './settingsAccess';
+export * from './telemetryAccess';
+export * from './workspacePanelAccess';
 
 export { setDraftProjectFolder } from './sessionDraftActions';
-
-export { getCompositionRoot } from '../app/compositionRoot';
 
 export {
   exportSessionToMarkdown,

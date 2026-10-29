@@ -3,7 +3,7 @@
  * 核心聊天发送主协调 Hook（模块化拆解后约 140 有效行）
  */
 import { getSessionById } from '../../store/sessionStore';
-import { addMessage } from '../../api/storeAccess';
+import { addMessage } from '../../store/storeAccess';
 import { generateMessageId } from '../../utils/generateMessageId';
 import type { StreamRequestOptions } from '../../api/chatApi';
 import {
