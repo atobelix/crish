@@ -6,7 +6,7 @@
 //! # SD-06 / SD-11 边界
 //! - **本模块职责**：单入口 `plan_block_ops_to_collab` + kind/id 解析 + 规划期元数据
 //! - **SD-11**：按 op kind 拆至 [`kinds`]（insert/update/delete/move/set_attr）；
-//!   测旁挂 `store_plan_ops_tests.rs`；**仍仅一处**权威 `plan_block_ops_to_collab` 定义
+//!   测旁挂 `tests.rs`；**仍仅一处**权威 `plan_block_ops_to_collab` 定义
 //! - **不**含 session open / hydrate / apply_md / outline / trait 门面
 //! - **≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**；不宣称 Store 生产关账
 //!
@@ -15,11 +15,9 @@
 //! Store：本模块（collab 树）。双引擎对齐契约见 `tests/note_plan_parity.rs`
 //! （有意差异 D-01… 保持；本包 **不**整包重做 SD-07）。
 
-#[path = "store_plan_ops_kinds.rs"]
 mod kinds;
 
 #[cfg(test)]
-#[path = "store_plan_ops_tests.rs"]
 mod tests;
 
 use agent_tools::note_backend::{

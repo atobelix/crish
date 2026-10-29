@@ -9,7 +9,7 @@
 //!   MD mirror detect/三路/轮询/OS watcher（**不回退**；SD-10 内聚）
 //! - [`mirror_export`]：`export_md_mirror` / lag / `safe_doc_id`（**SD-38**；方法仍挂 [`WorkspaceStore`]）
 //! - 本文件：`WorkspaceStore` 薄门面（open/meta/clock）+ `pub use`
-//! - [`tests`]（`lib_tests.rs`）：门面测外置（`#[path]`；无孤儿）
+//! - [`tests`]（`tests.rs`）：门面测外置（目录即模块路径；无孤儿）
 //!
 //! **诚实（SD-27 / SD-38）**：**≠ EL-03**；**≠ Wave 2「存储完成」**。
 //! 测旁挂 / 实现再抽 ≠ 假关恢复 / ≠ 存储完成。
@@ -331,5 +331,4 @@ impl WorkspaceStore {
 // ── 测试（SD-27 外置） ─────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "lib_tests.rs"]
 mod tests;

@@ -5,7 +5,7 @@
 //!   [`WorkspaceStore::mirror_lag`] + [`safe_doc_id`] / [`note_authority_advanced_conn`]
 //! - 接线：`mod mirror_export`（无孤儿）；公开方法仍挂 [`WorkspaceStore`]；
 //!   `lib` `pub(crate) use` 保持 `crate::safe_doc_id` / `crate::note_authority_advanced_conn`
-//! - 测仍在 `lib_tests.rs`（**不**重做 SD-27 测旁挂）
+//! - 测仍在 `tests.rs`（**不**重做 SD-27 测旁挂）
 //!
 //! **不变量（S1）**：
 //! - Conex-MD mirror = 人/git 契约视图，**非**第二写入口、**非**权威。

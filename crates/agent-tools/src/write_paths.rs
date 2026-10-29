@@ -42,7 +42,7 @@
 //! - `write_paths_validate`：路径校验与冲突判定域（[validate_write_path] /
 //!   Overlaps 组件级前缀判定 / 归一化底座 / 白名单策略与越权判定）；
 //!
-//! 测试外置 `write_paths_tests.rs`（`#[path]` 旁挂，无孤儿，写路径互斥测
+//! 测试外置 `write_paths/tests.rs`（`mod` 旁挂，无孤儿，写路径互斥测
 //! 全保留）；公开 API 经本文件 `pub use` 保持不 break（lib.rs `pub mod
 //! write_paths;` 与 session-loop / workbench 壳消费方 import 路径不变）。
 //!
@@ -51,15 +51,13 @@
 
 // ==================== 拆分接线（SR-06a-5 · 结构拆分 · ≠ EL）====================
 //
-// 本文件为薄门面：全部实现按逻辑域拆入两个子模块（扁平文件必须 #[path]
-// 显式接线，吸取 SR-06d 教训）：
+// 本文件为薄门面：全部实现按逻辑域拆入两个子模块（子模块位于同目录，`mod`
+// 直接接线）：
 //   write_paths_state（互斥状态机域：声明记账 / 注册表 / RAII 守卫 / 工具接线）
 //   write_paths_validate（路径校验与冲突判定域：Overlaps / 归一化 / 白名单策略）
-// 测试整体外置 write_paths_tests.rs（#[path] 接线，零删除）。
+// 测试整体外置 `write_paths/tests.rs`（`mod` 接线，零删除）。
 // 诚实边界：仅结构拆分，语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
-#[path = "write_paths_state.rs"]
 mod write_paths_state;
-#[path = "write_paths_validate.rs"]
 mod write_paths_validate;
 
 use conex_types::error::codes;
@@ -79,8 +77,7 @@ pub use write_paths_validate::{
     WritePathPolicy,
 };
 
-// ── 测试（SR-06a-5 外置；`#[path]` 旁挂，无孤儿）───────────────────
+// ── 测试（SR-06a-5 外置；`mod` 旁挂，无孤儿）───────────────────
 
 #[cfg(test)]
-#[path = "write_paths_tests.rs"]
 mod tests;

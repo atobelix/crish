@@ -18,12 +18,12 @@
 //! 与 18 §M1。超长策略见 `docs/.../specs/huge-block-policy.md`。
 //!
 //! **SR-06g · 拆分 · ≠ EL**：本文件为薄门面（结构 / 错误 / 常量 / 访问器 /
-//! 跨写路径统一 commit 面 + P-H2 快照）。逻辑域经 `#[path]` 扁平模接线（无孤儿）：
+//! 跨写路径统一 commit 面 + P-H2 快照）。逻辑域经子模块目录接线（无孤儿）：
 //! - [`session_apply`]：CRDT apply 主路径 + 同事务分段
 //! - [`session_validate`]：整批预校验 + 环检测
 //! - [`session_undo`]：undo + 远端文本合入
 //! - [`session_hydrate`]：hydrate 重建
-//! - 测试旁挂 `session_tests*.rs`（`#[path]` 接入，零删除零改写）
+//! - 测试旁挂 `session/tests/`（`mod tests;` 接入，零删除零改写）
 //!
 //! 拆分只切不修：公开 API 不 break（lib.rs re-export 不变）；**CT-01 CAS 已接线**
 //!（emit_commit 期望版本参数 + 三写路径传入本次写前 rev，见 [`Self::emit_commit`]）。
@@ -39,16 +39,9 @@ use crate::tx::TxId;
 use std::collections::HashSet;
 use thiserror::Error;
 
-#[path = "session_apply.rs"]
 mod session_apply;
-
-#[path = "session_hydrate.rs"]
 mod session_hydrate;
-
-#[path = "session_undo.rs"]
 mod session_undo;
-
-#[path = "session_validate.rs"]
 mod session_validate;
 
 // ─── P-H2 内存快照（方案 A：clone 树 + TextEngine 检查点）────────────────
@@ -507,5 +500,4 @@ fn block_to_upsert(n: &BlockNode) -> BlockUpsert {
 }
 
 #[cfg(test)]
-#[path = "session_tests.rs"]
 mod tests;

@@ -26,11 +26,8 @@
 //! - 幂等守卫 `check_and_record` 的 CAS 归 C1（另一 Agent）。
 //! - **结论**：agent-tools 域无遗漏的连锁事务 CAS 缺口，无需本维度修复。
 
-#[path = "note_memory_apply.rs"]
 mod apply;
-#[path = "note_memory_batch.rs"]
 mod batch;
-#[path = "note_memory_query.rs"]
 mod query;
 
 use crate::note_backend::NoteBackend;

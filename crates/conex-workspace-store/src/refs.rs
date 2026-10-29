@@ -2,8 +2,8 @@
 //!
 //! # 模块内聚（SD-18 · 黄带体积切开）
 //! - **本文件**：`KIND_*` / 类型 / `WorkspaceStore` 方法 / 抽边纯函数 / 连接级 SQL
-//! - [`tests`]（`refs_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::refs::*` / `lib` `pub use`）
+//! - [`tests`]（`refs/tests/mod.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::refs::*` / `lib` `pub use`）
 //!
 //! # 角色
 //! - 派生索引：可丢、可重建；权威仍为 snapshot+updates（**不得** hydrate 主路径）。
@@ -308,5 +308,4 @@ pub fn refs_from_conn(
 // ── 测试（SD-18 外置） ─────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "refs_tests.rs"]
 mod tests;

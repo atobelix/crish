@@ -12,16 +12,14 @@
 //! [provider_stream] 为高层封装：循环发送请求 → 分类错误 → 退避重试，
 //! 流已产出内容时中途错误不重试（02 §六.7），abort 一律直接传播。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂
-//! retry_decision_tests.rs / retry_stream_tests.rs，经 #[path] 接线，非直接 mod）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（模块文件同处 retry/ 目录，
+//! 测试旁挂 retry/decision_tests.rs / retry/stream_tests.rs）：
 //! - [retry_decision]：重试策略 / 状态 / 决策域（[RetryPolicy] / [RetryState] /
 //!   [RetryDecision] / [should_retry] / [parse_retry_after_ms] / 退避计算）
 //! - [retry_stream]：可中断睡眠与高层流封装域（[RetrySleeper] / [TokioSleeper] /
 //!   [StreamAttempt] / [provider_stream_with_observer]）
 
-#[path = "retry_decision.rs"]
 mod retry_decision;
-#[path = "retry_stream.rs"]
 mod retry_stream;
 
 pub use retry_decision::{
@@ -33,8 +31,6 @@ pub use retry_stream::{
 };
 
 #[cfg(test)]
-#[path = "retry_decision_tests.rs"]
 mod decision_tests;
 #[cfg(test)]
-#[path = "retry_stream_tests.rs"]
 mod stream_tests;

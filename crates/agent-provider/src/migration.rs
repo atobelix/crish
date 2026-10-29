@@ -15,7 +15,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-#[path = "models/config_legacy.rs"]
 mod legacy;
 
 #[derive(Error, Debug)]
@@ -280,7 +279,6 @@ impl ConfigMigrationManager {
 }
 
 #[cfg(test)]
-#[path = "migration_tests.rs"]
 mod migration_tests;
 
 #[cfg(test)]

@@ -48,9 +48,7 @@ use crate::session::{SessionRecord, SessionTreeError};
 // 公开面经 `pub use` 重导出，orchestrator::restore::* 路径不 break；
 // 测试由 tests/ 集成测试目录承载（如 crash_consistency.rs），不在 src/ 内联。
 
-#[path = "restore_manager.rs"]
 mod restore_manager;
-#[path = "restore_snapshot.rs"]
 mod restore_snapshot;
 
 pub use restore_manager::{is_blocked_reason, RestoreManager};

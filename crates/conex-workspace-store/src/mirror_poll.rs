@@ -2,8 +2,8 @@
 //!
 //! # 模块内聚（**SD-45** · 测旁挂黄带切开）
 //! - **本文件**：指纹 / `MirrorWatchHandle` / `MirrorWatcher` / `poll_mirror_once`
-//! - [`tests`]（`mirror_poll_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::mirror_poll::*` / `mirror` re-export）
+//! - [`tests`]（`mirror_poll/tests.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::mirror_poll::*` / `mirror` re-export）
 //!
 //! 设计：
 //! - 上层（timer / 测试）持有 [`MirrorWatchHandle`] 或 [`MirrorWatcher`]；
@@ -243,5 +243,4 @@ impl MirrorWatcher {
 // ── 测试（SD-45 外置） ─────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "mirror_poll_tests.rs"]
 mod tests;

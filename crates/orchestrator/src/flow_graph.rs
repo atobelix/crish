@@ -16,11 +16,8 @@
 //! 对外 API，保持 crate::flow_graph::FlowGraph 等路径不 break。三子模块
 //! 为唯一真源，门面内无重复实现。
 
-#[path = "flow_graph_advance.rs"]
 pub mod advance;
-#[path = "flow_graph_model.rs"]
 pub mod model;
-#[path = "flow_graph_scheduler.rs"]
 pub mod scheduler;
 
 pub use model::{
