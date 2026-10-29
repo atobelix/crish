@@ -3,7 +3,7 @@
 > 归属：`docs/design-token-ssot/00-总方案-设计Token与偏好SSOT端到端重构.md` §6.5 G1/G2
 > 建线日期：2026-09-10 · 维护：`node scripts/check-token-consistency.mjs [--update|--list|--check-format]`
 >
-> 语义：扫描 `apps/crish-desktop/src` 与 `apps/avatar-studio/src`（`--scan` 可覆盖），核算三项：
+> 语义：扫描 `apps/crish-desktop/src`（`--scan` 可覆盖），核算三项：
 > - `undefined_refs`：`var(--x)` 被引用，但 CSS 定义集与 JS 运行时注入集都不含 `--x` 的条目数。
 >   此类引用在浏览器中令整条声明成为 invalid at computed-value time，属性静默退回
 >   `inherit`/`initial`，**不产生任何报错**（方案 §3 R4）。
@@ -24,11 +24,10 @@
   `docs/design-token-ssot/` 的分维文档按依赖拓扑执行。
 - 与 `analysis/2026-09-10-前端设计Token体系审查与扩充方案.md` 中「未定义 75 / 无 fallback 16 /
   死 token 146」的口径差异来自**检测精度提升**，非问题数量变化：
-  1. 本脚本把 `apps/avatar-studio/src` 纳入扫描（其样式依赖 vendored 库 token，属真实缺口）；
-  2. JS 运行时注入判定收紧为 `setProperty('--x'` 与两种对象键形态（字面键 `'--x':`、
+  1. JS 运行时注入判定收紧为 `setProperty('--x'` 与两种对象键形态（字面键 `'--x':`、
      计算键 `['--x' as string]:`，后者覆盖 `ToastCard.tsx:103` 的 `--toast-index` 注入），
      不再用宽泛的 `'--x'` 后随逗号匹配（后者会把数组字面量误判为定义）；
-  3. `var()` 的 fallback 判定改为**括号配平扫描**，替代逐行正则（避免嵌套 `var()` 与
+  2. `var()` 的 fallback 判定改为**括号配平扫描**，替代逐行正则（避免嵌套 `var()` 与
      多行声明下的误判）。
 
 ## 建线当日精度修复（假阳性清零）

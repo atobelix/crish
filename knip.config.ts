@@ -80,11 +80,6 @@ const config: KnipConfig = {
     // sites/（未跟踪的新站点项目，git status 显示 ?? sites/）：进行中的 WIP，
     // 非本轮死代码清理对象；0 引用（rg 证实），不参与归零断言。
     'sites/**',
-    // apps/avatar-studio 孤岛应用（T-BLK-03-a / T-DEBT-03-a，deferred）：
-    // 用户裁决 §3.4-1 暂缓处理，按单包粒度登记并引用 GAP-05 裁决；
-    // 解除条件：GAP-05 定位裁决生效后恢复 127 全量口径。禁止以此为由
-    // 通配排除其它应用目录。
-    'apps/avatar-studio/**',
     // shared-types/subagent.ts（DEBT-01 批次）：Rust 侧子代理契约的 TS
     // 镜像（REQ-D08 / T-D-01/02/06/07/08 落地资产，「两侧同值」契约文档，
     // Rust 侧 DEFAULT_RECURSION_GUARD 为唯一权威）。hooks.ts 真实消费
