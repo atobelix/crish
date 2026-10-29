@@ -8,9 +8,7 @@
  *   2. timelineBuild100KB —— buildAssistantTimeline（20 工具 + 100KB 文本，修复前每帧重建）
  *   3. searchScanPerFrame —— 100 消息 + 搜索激活的每帧全量扫描（messageMatchesSearch × N）
  *   4. flushFrameBudget  —— StreamRenderBuffer.flushFrame 单帧预算吞吐（模块基线）
- *   5. stripperPerFrame  —— IncrementalThoughtStripper.next 单帧增量成本（修复后新增，
- *                           修复前不存在则跳过，不影响基线文件结构）
- *   6. timelineCachedHit —— buildAssistantTimelineCached 签名命中成本（修复后新增）
+ *   5. timelineCachedHit —— buildAssistantTimelineCached 签名命中成本（修复后新增）
  *
  * 输出：
  * - tests/perf/baselines/desktop-module.json —— 与 scripts/compare-benchmarks.ts 的
@@ -121,7 +119,7 @@ function measure(
   name: string,
   fn: () => void,
   iterations: number,
-  warmup = 3,
+  warmup = 3
 ): BaselineEntry {
   for (let i = 0; i < warmup; i++) fn();
   const samples: number[] = [];
@@ -132,7 +130,8 @@ function measure(
   }
   samples.sort((a, b) => a - b);
   const avgMs = samples.reduce((a, b) => a + b, 0) / samples.length;
-  const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? samples[samples.length - 1]!;
+  const p95Ms =
+    samples[Math.floor(samples.length * 0.95)] ?? samples[samples.length - 1]!;
   return { name, avgMs, ops: iterations, p95Ms };
 }
 
@@ -144,7 +143,9 @@ function parseArgs(): { output?: string } {
       output = args[i + 1];
       i++;
     } else if (args[i] === '--help') {
-      console.log('用法: npx tsx tests/perf/capture-streaming-baseline.ts [--output <path>]');
+      console.log(
+        '用法: npx tsx tests/perf/capture-streaming-baseline.ts [--output <path>]'
+      );
       process.exit(0);
     }
   }
@@ -175,7 +176,9 @@ async function main(): Promise<void> {
 
   const entries: BaselineEntry[] = [];
 
-  console.log(`[perf-baseline] 采样开始（文本 ${bigText.length} 字符 / ${sessionMessages.length} 消息）...`);
+  console.log(
+    `[perf-baseline] 采样开始（文本 ${bigText.length} 字符 / ${sessionMessages.length} 消息）...`
+  );
 
   // 1. 全量 strip（修复前每帧同步成本；100KB 文本）
   entries.push(
@@ -184,8 +187,8 @@ async function main(): Promise<void> {
       () => {
         strip.stripThoughtPlaceholders(bigText);
       },
-      20,
-    ),
+      20
+    )
   );
 
   // 2. timeline 全量重建（20 工具 + 100KB 正文）
@@ -195,8 +198,8 @@ async function main(): Promise<void> {
       () => {
         timeline.buildAssistantTimeline(toolRich as never);
       },
-      20,
-    ),
+      20
+    )
   );
 
   // 3. 搜索态每帧全量扫描（100 消息，query 命中少数消息）
@@ -208,8 +211,8 @@ async function main(): Promise<void> {
           search.messageMatchesSearch(m as never, '吞吐 延迟');
         }
       },
-      30,
-    ),
+      30
+    )
   );
 
   // 4. StreamRenderBuffer 单帧预算吞吐（100KB 输入按 8192B 分帧）
@@ -219,41 +222,24 @@ async function main(): Promise<void> {
       () => {
         let pending: string[] = [bigText];
         while (pending.length > 0) {
-          const r = buffer.flushFrame(pending, 8192, performance.now() + 6, false);
+          const r = buffer.flushFrame(
+            pending,
+            8192,
+            performance.now() + 6,
+            false
+          );
           pending = r.remaining;
           if (r.batch.length === 0) break;
         }
       },
-      10,
-    ),
+      10
+    )
   );
 
-  // 5. 增量 stripper（修复后存在才采样；修复前跳过）
+  // 5. timeline 签名缓存（修复后存在才采样）
   try {
-    const lite = await import('../../apps/crish-desktop/src/api/markdownRenderLite');
-    if (typeof lite.IncrementalThoughtStripper === 'function') {
-      entries.push(
-        measure(
-          'stripperPerFrame',
-          () => {
-            const s = new lite.IncrementalThoughtStripper();
-            // 模拟 12KB/帧 的 100KB 流：逐帧增量剥离
-            const chunk = 12 * 1024;
-            for (let i = 0; i < bigText.length; i += chunk) {
-              s.next(bigText.slice(0, Math.min(i + chunk, bigText.length)));
-            }
-          },
-          20,
-        ),
-      );
-    }
-  } catch {
-    /* 修复前无 stripper，跳过 */
-  }
-
-  // 6. timeline 签名缓存（修复后存在才采样）
-  try {
-    const tp = await import('../../apps/crish-desktop/src/api/toolPresentation');
+    const tp =
+      await import('../../apps/crish-desktop/src/api/toolPresentation');
     if (typeof tp.timelineSignature === 'function') {
       const sig = tp.timelineSignature(toolRich as never);
       let prevTimeline: unknown;
@@ -264,12 +250,12 @@ async function main(): Promise<void> {
             const r = tp.buildAssistantTimelineCached(
               toolRich as never,
               sig,
-              prevTimeline as never,
+              prevTimeline as never
             );
             prevTimeline = r.timeline;
           },
-          20,
-        ),
+          20
+        )
       );
     }
   } catch {
@@ -281,7 +267,9 @@ async function main(): Promise<void> {
 
   console.log('[perf-baseline] 采样完成，已落盘:');
   for (const e of entries) {
-    console.log(`  ${e.name}: avg ${e.avgMs.toFixed(3)}ms p95 ${e.p95Ms.toFixed(3)}ms (${e.ops} ops)`);
+    console.log(
+      `  ${e.name}: avg ${e.avgMs.toFixed(3)}ms p95 ${e.p95Ms.toFixed(3)}ms (${e.ops} ops)`
+    );
   }
 }
 

@@ -241,8 +241,7 @@ describe('Stage 01 — sessionSubtreeModel & Orthogonal 3-Subtree Architecture',
         slice,
         'sess-2k',
         'msg-1999',
-        `streamed token payload ${i}`,
-        `<p>${i}</p>`
+        `streamed token payload ${i}`
       );
     }
     const elapsedMs = performance.now() - start;
@@ -251,9 +250,6 @@ describe('Stage 01 — sessionSubtreeModel & Orthogonal 3-Subtree Architecture',
     expect(avgMs).toBeLessThan(0.08);
     expect(slice.messagesBySessionId['sess-2k']?.[1999]?.text).toBe(
       'streamed token payload 99'
-    );
-    expect(slice.messagesBySessionId['sess-2k']?.[1999]?.precomputedHtml).toBe(
-      '<p>99</p>'
     );
     expect(slice.messageEpochById['sess-2k']).toBe(110);
   });

@@ -123,31 +123,20 @@ export const useSessionStore = create<SessionStore>()(
             composerDrafts: {},
             hydrationComplete: false,
             ...baseActions,
-            updateMessageText: (
-              sessionId,
-              messageId,
-              text,
-              precomputedHtml
-            ) => {
+            updateMessageText: (sessionId, messageId, text) => {
               const prev = get();
               const nextSub = updateSubtreeMessageText(
                 prev,
                 sessionId,
                 messageId,
-                text,
-                precomputedHtml
+                text
               );
               if (nextSub === prev) {
                 if (
                   prev.sessionsById[sessionId] &&
                   !prev.messagesBySessionId[sessionId]
                 ) {
-                  baseActions.updateMessageText(
-                    sessionId,
-                    messageId,
-                    text,
-                    precomputedHtml
-                  );
+                  baseActions.updateMessageText(sessionId, messageId, text);
                 }
                 return;
               }

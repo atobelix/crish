@@ -546,8 +546,6 @@ export interface SessionMessage extends Pick<
   seq?: number | undefined;
   toolCalls?: MessageToolCall[] | undefined;
   status?: SessionMessageStatus | undefined;
-  /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */
-  precomputedHtml?: string | undefined;
   /**
    * 工具调用结果回执：本消息作为某些 toolCall 的结果时，
    * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。

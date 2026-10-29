@@ -6,8 +6,6 @@ import {
   updateMessageThinking,
   updateMessageToolCall,
 } from '../../api/storeAccess';
-import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
-import { requestMarkdownResult } from '../../api/markdownRenderScheduler';
 import {
   clearStream,
   clearStreamTools,
@@ -51,40 +49,6 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
     })
     .catch(() => {
       /* ignore */
-    });
-}
-
-export function scheduleFinalMarkdownHtml(
-  sessionId: string,
-  messageId: string,
-  fullText: string,
-  options?: {
-    /** true = fullText 已由调用方预清理（N6 单次化，08-detail 3.3），不再二次 strip */
-    preCleaned?: boolean;
-  }
-): void {
-  // N6：complete 路径已预清理（onComplete 算一次 strip），本处不再重复；
-  // 未预清理调用方（stop 等）保持原行为
-  const cleaned = options?.preCleaned
-    ? fullText || ''
-    : stripThoughtPlaceholders(fullText || '');
-  if (!cleaned.trim()) return;
-  void requestMarkdownResult(cleaned, 'chat')
-    .then((result) => {
-      const html = result?.html;
-      if (!html) return;
-      const msg = getSessionById(sessionId)?.messages?.find(
-        (m: SessionMessage) => m.id === messageId
-      );
-      if (!msg) return;
-      const now = msg.text || '';
-      const nowClean = stripThoughtPlaceholders(now);
-      if (nowClean !== cleaned && now !== cleaned && now !== fullText) return;
-      const textToKeep = nowClean === cleaned ? now || cleaned : cleaned;
-      updateMessageText(sessionId, messageId, textToKeep, html);
-    })
-    .catch(() => {
-      /* Worker fail: AsyncMarkdown sync fallback */
     });
 }
 

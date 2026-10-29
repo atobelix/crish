@@ -1,7 +1,7 @@
 /**
  * chat-stream 流式执行与收口纯辅助函数（streamExecutionHelper）。
  *
- * 封装并发流冲突检测、Markdown HTML 单次调度、思考占位清理与完成终态收口逻辑。
+ * 封装并发流冲突检测、思考占位清理与完成终态收口逻辑。
  */
 import type { MutableRefObject } from 'react';
 import type { StreamTextBatcher } from '../../api/streamTextBatcher';
@@ -10,7 +10,7 @@ import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
-import { scheduleFinalMarkdownHtml, buildTerminalToolPatches } from './helpers';
+import { buildTerminalToolPatches } from './helpers';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { getStreamThinking, setStreamText } from '../../store/streamingStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -53,23 +53,6 @@ export function handleStreamConflict(sid: string, userMsgId: string): boolean {
     { module: 'chat-stream', sessionId: sid }
   );
   return true;
-}
-
-/**
- * 构造针对单次 assistant 运行的 Markdown HTML 调度器（单次触发，防止重复调度）。
- */
-export function createFinalHtmlScheduler(
-  sid: string,
-  assistantMsgId: string
-): (fullText: string) => void {
-  let finalHtmlScheduled = false;
-  return (fullText: string) => {
-    if (finalHtmlScheduled || !(fullText || '').trim()) return;
-    finalHtmlScheduled = true;
-    scheduleFinalMarkdownHtml(sid, assistantMsgId, fullText, {
-      preCleaned: true,
-    });
-  };
 }
 
 /**
@@ -117,7 +100,6 @@ export interface StreamCompletionContext {
   localRunId: string | null;
   gotRealText: boolean;
   runEndedWithNetworkError: boolean;
-  scheduleRunFinalHtml: (fullText: string) => void;
   thinkingBatcher: StreamTextBatcher | null | undefined;
   flushStreamBatchers: () => void;
   generationMapRef: MutableRefObject<Map<string, number>>;
@@ -138,7 +120,6 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     localRunId,
     gotRealText,
     runEndedWithNetworkError,
-    scheduleRunFinalHtml,
     thinkingBatcher,
     flushStreamBatchers,
     generationMapRef,
@@ -174,7 +155,6 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     assistantMsgId,
     committedText,
     streamedFullText,
-    scheduleRunFinalHtml,
     thinkingBatcher,
   });
   // 首条成功的助手回复后异步要标题。失败保留现有标题，策略在 sessionAiTitle。

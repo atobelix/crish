@@ -2,14 +2,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleStreamConflict,
-  createFinalHtmlScheduler,
   handleThinkingResetOnChunk,
   executeStreamCompletion,
 } from './streamExecutionHelper';
 import { sessionStreams } from '../../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { StreamTextBatcher } from '../../api/streamTextBatcher';
-import * as helpers from './helpers';
 import { useSessionStore } from '../../store/sessionStore';
 import type { Session, SessionMessage } from '../../store/sessionStore';
 
@@ -93,31 +91,6 @@ describe('streamExecutionHelper', () => {
     });
   });
 
-  describe('createFinalHtmlScheduler', () => {
-    it('schedules HTML on first non-empty text and ignores subsequent calls', () => {
-      const scheduleSpy = vi
-        .spyOn(helpers, 'scheduleFinalMarkdownHtml')
-        .mockImplementation(() => {});
-      const scheduler = createFinalHtmlScheduler('sess-1', 'asst-1');
-
-      scheduler(''); // empty, ignored
-      expect(scheduleSpy).not.toHaveBeenCalled();
-
-      scheduler('Hello world');
-      expect(scheduleSpy).toHaveBeenCalledTimes(1);
-      expect(scheduleSpy).toHaveBeenCalledWith(
-        'sess-1',
-        'asst-1',
-        'Hello world',
-        { preCleaned: true }
-      );
-
-      scheduler('Hello world 2'); // subsequent, ignored
-      expect(scheduleSpy).toHaveBeenCalledTimes(1);
-      scheduleSpy.mockRestore();
-    });
-  });
-
   describe('handleThinkingResetOnChunk', () => {
     it('does not throw when thinkingBatcher is null/undefined', () => {
       expect(() => {
@@ -139,7 +112,6 @@ describe('streamExecutionHelper', () => {
 
   describe('executeStreamCompletion', () => {
     it('executes full completion lifecycle safely', () => {
-      const scheduleRunFinalHtml = vi.fn();
       const flushStreamBatchers = vi.fn();
       const generationMapRef = { current: new Map([['sess-1', 1]]) };
       const state = { runClosed: false, draining: true };
@@ -154,7 +126,6 @@ describe('streamExecutionHelper', () => {
         localRunId: 'run-1',
         gotRealText: true,
         runEndedWithNetworkError: false,
-        scheduleRunFinalHtml,
         thinkingBatcher: null,
         flushStreamBatchers,
         generationMapRef,

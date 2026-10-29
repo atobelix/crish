@@ -24,7 +24,6 @@ import type { StreamBatcherRefs } from './useStreamBatchers';
 import {
   commitStreamToolsToSession,
   commitStreamToSession,
-  scheduleFinalMarkdownHtml,
   buildTerminalToolPatches,
 } from './helpers';
 import { resolveStreamSessionId } from './streamRunState';
@@ -307,9 +306,6 @@ export function useStreamCallbacks(
     const asst = buildMessageIndex(getSessionById(sid)).get(cur.assistantMsgId);
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
     st.setSessionMessageStatus(sid, cur.assistantMsgId, 'completed');
-    if (stopText) {
-      scheduleFinalMarkdownHtml(sid, cur.assistantMsgId, stopText);
-    }
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
       // T-E 步骤 3（U5）：raw setState → applyToolCallPatches action（批量终态）

@@ -23,8 +23,6 @@ import {
 } from '../utils/lifecycle/ScopedLifecycleRegistry';
 import { useStreamingStore } from './streamingStore';
 import { dualLatchStateMachine } from './dualLatchProtocol';
-import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
-import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
 
 export { DEFAULT_TOMBSTONE_CAPACITY };
 
@@ -276,13 +274,7 @@ export class SessionCascadeCancellation {
       dualLatchStateMachine.abortSession(sessionId)
     );
 
-    // 4. 解引用 DOM Text 节点与直写影子槽位
-    runIsolated('Tier2', 'stream direct DOM abort', sessionId, () => {
-      streamDirectEngine.abortSession(sessionId);
-      streamDirectDomEngine.releaseSession(sessionId);
-    });
-
-    // 5. 通信级回调与订阅者通知
+    // 4. 通信级回调与订阅者通知
     for (const cb of this.transportAbortCallbacks) {
       runIsolated('Tier2', 'callback', sessionId, () => cb(sessionId));
     }
@@ -294,7 +286,7 @@ export class SessionCascadeCancellation {
       );
     }
 
-    // 6. 通知 Rust 后端中止该会话运行（单一出站通道；abortSessionRun 永不 reject）
+    // 5. 通知 Rust 后端中止该会话运行（单一出站通道；abortSessionRun 永不 reject）
     void abortSessionRun(sessionId);
   }
 

@@ -254,21 +254,6 @@ export function mergeSessionMessageFields(
     existing.status = nextStatus;
   }
 
-  if (incoming.precomputedHtml !== undefined) {
-    // 终态预渲染 HTML 不被 partial 空/短覆盖
-    const exTerm = isTerminalSessionMessageStatus(
-      preferSessionMessageStatus(existing.status, incoming.status)
-    );
-    const inTerm = isTerminalSessionMessageStatus(incoming.status);
-    if (!(
-      exTerm &&
-      !inTerm &&
-      existing.precomputedHtml &&
-      !incoming.precomputedHtml
-    )) {
-      existing.precomputedHtml = incoming.precomputedHtml;
-    }
-  }
   if (incoming.toolCallResults !== undefined) {
     if (
       incoming.toolCallResults.length > 0 ||

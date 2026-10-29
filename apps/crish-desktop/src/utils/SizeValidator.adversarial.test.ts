@@ -16,7 +16,6 @@
  *  SV10. truncateToBytes 边界值：文本等于 maxBytes+1 截断为 maxBytes-suffix+suffix
  *  SV11. ZWJ 组合 emoji（👨‍👩‍👧）截断在 ZWJ 处可能产生孤儿字符
  *  SV12. Regional indicator（🇺🇸 国旗）截断边界
- *  SV13. validateMessageSize 不处理 precomputedHtml 字段（可能远超 SIZE_LIMITS.text）
  *  SV14. validateMessageSize 不处理 blocks 字段（可能含未截断的 toolCall 引用）
  *  SV15. truncateToolCall 不处理 explanation 字段
  *  SV16. truncateToBytes 不保留 streamTextOffset 一致性（截断后偏移量错误）
@@ -271,8 +270,11 @@ describe('SizeValidator — 对抗性测试', () => {
       expect(validated.toolCalls![0]!.diffs).toBe(msg.toolCalls![0]!.diffs);
 
       // 修改 validated 的 diffs 会影响原对象
-      (validated.toolCalls![0]!.diffs as any[]).push({ path: 'injected', content: 'evil' });
-      expect((msg.toolCalls![0]!.diffs as any[])).toHaveLength(2);
+      (validated.toolCalls![0]!.diffs as any[]).push({
+        path: 'injected',
+        content: 'evil',
+      });
+      expect(msg.toolCalls![0]!.diffs as any[]).toHaveLength(2);
       expect((msg.toolCalls![0]!.diffs as any[])[1]!.path).toBe('injected');
     });
 
@@ -331,59 +333,50 @@ describe('SizeValidator — 对抗性测试', () => {
     });
   });
 
-  describe('SV13/SV14/SV15: 未处理的字段', () => {
-    it('暴露 bug: precomputedHtml 字段不被截断', () => {
-      const hugeHtml = '<p>' + 'x'.repeat(SIZE_LIMITS.text * 2) + '</p>';
-      const msg: SessionMessage = {
-        id: 'msg-1',
-        sender: 'assistant',
-        timestamp: Date.now(),
-        text: 'small text',
-        precomputedHtml: hugeHtml,
-      };
-
-      const validated = validateMessageSize(msg);
-
-      // Bug: precomputedHtml 未被截断，仍然巨大
-      expect(validated.precomputedHtml).toBe(hugeHtml);
-      expect(validated.precomputedHtml!.length).toBeGreaterThan(SIZE_LIMITS.text);
-    });
-
+  describe('SV14/SV15: 未处理的字段', () => {
     it('暴露 bug: toolCall.explanation 字段不被截断', () => {
       const hugeExplanation = 'x'.repeat(SIZE_LIMITS.toolCallOutput * 2);
       const msg: SessionMessage = {
         id: 'msg-1',
         sender: 'assistant',
         timestamp: Date.now(),
-        toolCalls: [{
-          id: 'tc-1',
-          name: 'test',
-          arguments: '{}',
-          status: 'success',
-          explanation: hugeExplanation,
-        }],
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'test',
+            arguments: '{}',
+            status: 'success',
+            explanation: hugeExplanation,
+          },
+        ],
       };
 
       const validated = validateMessageSize(msg);
 
       // Bug: explanation 未被截断
       expect(validated.toolCalls![0]!.explanation).toBe(hugeExplanation);
-      expect(validated.toolCalls![0]!.explanation!.length).toBeGreaterThan(SIZE_LIMITS.toolCallOutput);
+      expect(validated.toolCalls![0]!.explanation!.length).toBeGreaterThan(
+        SIZE_LIMITS.toolCallOutput
+      );
     });
 
     it('暴露 bug: toolCall.approvalMeta 字段不被截断', () => {
-      const hugeMeta = { reason: 'x'.repeat(SIZE_LIMITS.toolCallOutput * 2) } as any;
+      const hugeMeta = {
+        reason: 'x'.repeat(SIZE_LIMITS.toolCallOutput * 2),
+      } as any;
       const msg: SessionMessage = {
         id: 'msg-1',
         sender: 'assistant',
         timestamp: Date.now(),
-        toolCalls: [{
-          id: 'tc-1',
-          name: 'test',
-          arguments: '{}',
-          status: 'pending_approval',
-          approvalMeta: hugeMeta,
-        }],
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'test',
+            arguments: '{}',
+            status: 'pending_approval',
+            approvalMeta: hugeMeta,
+          },
+        ],
       };
 
       const validated = validateMessageSize(msg);
@@ -466,12 +459,14 @@ describe('SizeValidator — 对抗性测试', () => {
         id: 'x',
         sender: 'assistant',
         timestamp: 0,
-        toolCalls: [{
-          id: 'tc-1',
-          name: 'test',
-          status: 'success',
-          // arguments 未提供
-        }],
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'test',
+            status: 'success',
+            // arguments 未提供
+          },
+        ],
       } as unknown as SessionMessage;
       expect(() => validateMessageSize(msg)).not.toThrow();
     });
@@ -481,13 +476,15 @@ describe('SizeValidator — 对抗性测试', () => {
         id: 'x',
         sender: 'assistant',
         timestamp: 0,
-        toolCalls: [{
-          id: 'tc-1',
-          name: 'test',
-          arguments: '{}',
-          status: 'success',
-          // output 未提供
-        }],
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'test',
+            arguments: '{}',
+            status: 'success',
+            // output 未提供
+          },
+        ],
       } as unknown as SessionMessage;
       expect(() => validateMessageSize(msg)).not.toThrow();
     });
@@ -596,7 +593,9 @@ describe('SizeValidator — 对抗性测试', () => {
       expect(validated.text!.length).toBeLessThan(SIZE_LIMITS.text);
       expect(validated.streamTextOffset).toBe(msg.streamTextOffset);
       // streamTextOffset > validated.text.length → 越界
-      expect(validated.streamTextOffset!).toBeGreaterThan(validated.text!.length);
+      expect(validated.streamTextOffset!).toBeGreaterThan(
+        validated.text!.length
+      );
     });
   });
 
@@ -627,22 +626,35 @@ describe('SizeValidator — 对抗性测试', () => {
         timestamp: Date.now(),
         text: 'x'.repeat(SIZE_LIMITS.text * 2),
         thinking: 'y'.repeat(SIZE_LIMITS.thinking * 2),
-        toolCalls: [{
-          id: 'tc-1',
-          name: 'big-tool',
-          arguments: '{ "data": "' + 'z'.repeat(SIZE_LIMITS.toolCallArguments * 2) + '" }',
-          status: 'success',
-          output: 'o'.repeat(SIZE_LIMITS.toolCallOutput * 2),
-        }],
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'big-tool',
+            arguments:
+              '{ "data": "' +
+              'z'.repeat(SIZE_LIMITS.toolCallArguments * 2) +
+              '" }',
+            status: 'success',
+            output: 'o'.repeat(SIZE_LIMITS.toolCallOutput * 2),
+          },
+        ],
       };
 
       const validated = validateMessageSize(msg);
 
       // 所有字段都应被截断到 SIZE_LIMITS 以内
-      expect(new TextEncoder().encode(validated.text!).length).toBeLessThanOrEqual(SIZE_LIMITS.text);
-      expect(new TextEncoder().encode(validated.thinking!).length).toBeLessThanOrEqual(SIZE_LIMITS.thinking);
-      expect(new TextEncoder().encode(validated.toolCalls![0]!.arguments!).length).toBeLessThanOrEqual(SIZE_LIMITS.toolCallArguments);
-      expect(new TextEncoder().encode(validated.toolCalls![0]!.output!).length).toBeLessThanOrEqual(SIZE_LIMITS.toolCallOutput);
+      expect(
+        new TextEncoder().encode(validated.text!).length
+      ).toBeLessThanOrEqual(SIZE_LIMITS.text);
+      expect(
+        new TextEncoder().encode(validated.thinking!).length
+      ).toBeLessThanOrEqual(SIZE_LIMITS.thinking);
+      expect(
+        new TextEncoder().encode(validated.toolCalls![0]!.arguments!).length
+      ).toBeLessThanOrEqual(SIZE_LIMITS.toolCallArguments);
+      expect(
+        new TextEncoder().encode(validated.toolCalls![0]!.output!).length
+      ).toBeLessThanOrEqual(SIZE_LIMITS.toolCallOutput);
 
       // 验证截断后包含 suffix
       expect(validated.text!.endsWith(SUFFIX)).toBe(true);
@@ -677,8 +689,12 @@ describe('SizeValidator — 对抗性测试', () => {
       const validated = validateMessageSize(msg);
 
       for (const tc of validated.toolCalls!) {
-        expect(new TextEncoder().encode(tc.arguments!).length).toBeLessThanOrEqual(SIZE_LIMITS.toolCallArguments);
-        expect(new TextEncoder().encode(tc.output!).length).toBeLessThanOrEqual(SIZE_LIMITS.toolCallOutput);
+        expect(
+          new TextEncoder().encode(tc.arguments!).length
+        ).toBeLessThanOrEqual(SIZE_LIMITS.toolCallArguments);
+        expect(new TextEncoder().encode(tc.output!).length).toBeLessThanOrEqual(
+          SIZE_LIMITS.toolCallOutput
+        );
       }
     });
   });

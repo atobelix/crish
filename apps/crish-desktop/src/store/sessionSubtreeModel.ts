@@ -136,8 +136,7 @@ export function updateSubtreeMessageText<S extends SessionSubtreeSlice>(
   state: S,
   sessionId: string,
   messageId: string,
-  text: string,
-  precomputedHtml?: string
+  text: string
 ): S {
   if (!sessionId || !messageId) return state;
   const list = state.messagesBySessionId[sessionId];
@@ -151,17 +150,12 @@ export function updateSubtreeMessageText<S extends SessionSubtreeSlice>(
   }
   if (idx === -1) return state;
   const prev = list[idx]!;
-  const htmlChanged =
-    precomputedHtml !== undefined && prev.precomputedHtml !== precomputedHtml;
-  if (prev.text === text && !htmlChanged) return state;
+  if (prev.text === text) return state;
   const nextBlocks = updateMessageBlocksForText(prev, text);
   const nextList = list.slice();
   nextList[idx] = {
     ...prev,
     text,
-    ...(htmlChanged && precomputedHtml !== undefined
-      ? { precomputedHtml }
-      : {}),
     ...(nextBlocks !== undefined ? { blocks: nextBlocks } : {}),
   };
   return {

@@ -47,7 +47,6 @@ import {
 } from './streamCallbacksInternals';
 import {
   handleStreamConflict,
-  createFinalHtmlScheduler,
   handleThinkingResetOnChunk,
   executeStreamCompletion,
   setupStreamRenderBuffer,
@@ -109,11 +108,6 @@ export function useRunStreamingAssistant(
         toolCalls: [],
       });
 
-      const scheduleRunFinalHtml = createFinalHtmlScheduler(
-        sid,
-        assistantMsgId
-      );
-
       const finishComplete = () => {
         if (completed) return;
         completed = true;
@@ -128,7 +122,6 @@ export function useRunStreamingAssistant(
           localRunId,
           gotRealText,
           runEndedWithNetworkError,
-          scheduleRunFinalHtml,
           thinkingBatcher: thinkingBatcherRef.current,
           flushStreamBatchers,
           generationMapRef,

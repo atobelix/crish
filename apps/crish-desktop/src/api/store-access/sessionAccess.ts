@@ -159,17 +159,11 @@ export function addMessage(
 export function updateMessageText(
   sessionId: string,
   messageId: string,
-  text: string,
-  precomputedHtml?: string
+  text: string
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
-  getSessionStoreState().updateMessageText(
-    sid,
-    messageId,
-    text,
-    precomputedHtml
-  );
+  getSessionStoreState().updateMessageText(sid, messageId, text);
 }
 
 export function updateMessageThinking(

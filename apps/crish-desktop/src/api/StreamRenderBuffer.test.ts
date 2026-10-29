@@ -74,21 +74,11 @@ describe('StreamRenderBuffer', () => {
     expect(result.remaining).toEqual(['😀 world']);
   });
 
-  it('frames carry html as string and chunkUpdates as empty array', () => {
+  it('final frame carries accumulated full text and isFinal', () => {
     const buf = new StreamRenderBuffer();
-    const frames: {
-      full: string;
-      html: string;
-      chunkUpdates: unknown[];
-      isFinal: boolean;
-    }[] = [];
+    const frames: { full: string; isFinal: boolean }[] = [];
     buf.onFrame = (frame) => {
-      frames.push({
-        full: frame.full,
-        html: frame.html,
-        chunkUpdates: frame.chunkUpdates,
-        isFinal: frame.isFinal,
-      });
+      frames.push({ full: frame.full, isFinal: frame.isFinal });
     };
 
     buf.push('hello ');
@@ -99,25 +89,7 @@ describe('StreamRenderBuffer', () => {
     expect(frames.length).toBeGreaterThan(0);
     const last = frames[frames.length - 1]!;
     expect(last.full).toBe('hello world!');
-    // html 类型为 string：JS 增量解析器接入前为 ''，接入后可携带非空 HTML
-    expect(typeof last.html).toBe('string');
-    expect(last.chunkUpdates).toEqual([]);
     expect(last.isFinal).toBe(true);
-  });
-
-  it('constructor no longer accepts htmlNeeded option (bridge removed)', () => {
-    // htmlNeeded 已废弃：构造函数不接受该参数
-    // frame.html 为 string 类型：解析器接入前为 ''，接入后可携带非空 HTML
-    const buf = new StreamRenderBuffer();
-    let lastHtml: string | null = null;
-    buf.onFrame = (frame) => {
-      lastHtml = frame.html;
-    };
-
-    buf.push('hello', true);
-    buf.flush(true);
-
-    expect(typeof lastHtml).toBe('string');
   });
 });
 
@@ -191,10 +163,6 @@ describe('maxBacklogBytes 降级跳帧', () => {
 
     const degradedFrames = frames.filter((f) => f.degraded);
     expect(degradedFrames.length).toBeGreaterThanOrEqual(1);
-    for (const f of degradedFrames) {
-      expect(f.html).toBe('');
-      expect(f.chunkUpdates).toEqual([]);
-    }
   });
 
   it('积压在 maxBacklogBytes 以内时不降级', async () => {
