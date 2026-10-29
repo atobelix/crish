@@ -9,12 +9,10 @@ import type { SessionMessage } from '../store/layoutStore';
 import {
   findInsertIndex,
   isSortedByMessageOrder,
-  messageOrderKey,
-} from '../store/messageOrderKey';
-import {
   mergeSessionMessageFields,
+  messageOrderKey,
   sortMessagesByOrder,
-} from '../store/sessionSharedHelpers';
+} from '../store/storeAccess';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
 import { blockText } from './chat-bridge/handlers/eventUtils';
