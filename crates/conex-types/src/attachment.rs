@@ -1,11 +1,9 @@
 //! 上下文引用 / 多模态附件统一强类型定义（维度四 · 详案 04 §2.1.1）
 //!
 //! **定位声明（主控复核裁决，详见 00-总方案 §三 #2 与详案 04 文首注记）**：
-//! 本模块全部类型**不是**与详案 02 并行的顶层卡片实体，而是唯一时间线卡片
-//! 契约 `MessageContextInjection`（TS：`apps/crish-desktop/src/store/types.ts`）
-//! 的 `metadata` 类型化子结构 schema；顶层卡片只有 `ContextInjectionCardPayload`
-//! （`crates/conex-types/src/injection_card.rs`），附件元数据经卡片 `kind`
-//! （`file_context / git_status / terminal_output / workspace_env`）承载。
+//! 本模块全部类型是注入元数据的类型化子结构 schema（附件、差分、终端日志、
+//! 多模态图片等）；Rust 侧不保留顶层卡片实体，前端时间线卡片契约由
+//! `apps/crish-desktop/src/store/types.ts` 定义。
 //! 前端 TS 同构见 `apps/crish-desktop/src/types/attachmentContracts.ts`（仅预览，
 //! 不做 wire 权威）。
 //!
