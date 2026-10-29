@@ -2,9 +2,8 @@
 //! network / telemetry / common / security / goal 域注册条目
 
 use crate::error::{codes, CrishErrorCategory, CrishErrorInfo};
-use std::collections::HashMap;
 
-pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
+error_catalog_table! {
     // ── mcp 域 ──
     m.insert(
         codes::MCP_CONNECTION_FAILED,
@@ -423,6 +422,17 @@ pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
             retryable: false,
             is_public: true,
             action: "action.common.check_encoding",
+        },
+    );
+    m.insert(
+        codes::COMMON_PANIC,
+        CrishErrorInfo {
+            code: codes::COMMON_PANIC,
+            title: "内部异常",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: false,
+            action: "action.common.report_bug",
         },
     );
     // ── security 域 ──

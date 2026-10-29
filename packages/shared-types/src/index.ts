@@ -170,12 +170,12 @@ export type {
   CrishErrorCode,
   CrishErrorCategory,
   CrishErrorDomain,
-} from './errors/codes';
+} from './errors';
 export {
   CRISH_ERROR_DOMAINS,
   domainOf,
   isCrishErrorCode,
-} from './errors/codes';
+} from './errors';
 export type { CrishResult } from './errors/result';
 export {
   ok,

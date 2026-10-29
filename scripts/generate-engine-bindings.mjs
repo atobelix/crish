@@ -7,6 +7,8 @@
  *   （41 事件注册表，真源 crates/conex-types/src/events.rs，行为与 R3 T6 一致）
  * - device-protocol → packages/shared-types/src/generated/device/
  *   （多端互通 103 kind 注册表，真源 crates/conex-types/src/device/**）
+ * - error-codes     → packages/shared-types/src/generated/errors/
+ *   （错误码单一真源契约，真源 crates/conex-types/src/error/**）
  *
  * 输出纪律（两个注册表共用）：
  * - 幂等：无时间戳/随机数，两次运行字节一致；
@@ -33,6 +35,7 @@ const GENERATED_DIR = join(ROOT, "packages", "shared-types", "src", "generated")
 const REGISTRY_TARGETS = {
   "engine-events": "engine",
   "device-protocol": "device",
+  "error-codes": "errors",
 };
 
 /** engine 产物文件头（保持与 R3 T6 逐字节一致） */
@@ -58,6 +61,17 @@ const DEVICE_HEADER = [
 ].join("\n");
 
 const PRIMITIVES = new Set(["string", "number", "boolean", "JsonValue"]);
+
+/** error-codes 产物文件头（ASCII-only 纪律与 engine/device 一致） */
+const ERROR_CODES_HEADER = [
+  "// =======================================================================",
+  "// GENERATED FILE - DO NOT EDIT BY HAND.",
+  "// Source of truth: crates/conex-types/src/error/**",
+  "// Registry: crates/conex-types/contracts/error-codes.json",
+  "// Generator: scripts/generate-engine-bindings.mjs",
+  "// Regenerate: node scripts/generate-engine-bindings.mjs",
+  "// =======================================================================",
+].join("\n");
 
 function fail(message) {
   throw new Error(message);
@@ -1278,6 +1292,187 @@ function emitDeviceParser(reg) {
 }
 
 // ---------------------------------------------------------------------------
+// error-codes 注册表校验与产物发射器（错误码单一真源：JSON 契约 → TS 生成物）
+// ---------------------------------------------------------------------------
+
+const ERROR_CATEGORIES = new Set([
+  "transient",
+  "permanent",
+  "security",
+  "protocol",
+]);
+/** 码形态：小写点分，至少两段（多段合法，如 tool.browser.not_ready） */
+const ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
+
+function validateErrorCodesRegistry(reg) {
+  if (reg.contract !== "error-codes") {
+    fail(`registry contract must be "error-codes", got ${reg.contract}`);
+  }
+  if (reg.schemaVersion !== 1) {
+    fail(`unsupported error-codes registry schemaVersion ${reg.schemaVersion}`);
+  }
+  if (!Array.isArray(reg.codes) || reg.codes.length === 0) {
+    fail("error-codes registry must declare a non-empty codes array");
+  }
+  if (reg.count !== reg.codes.length) {
+    fail(`error-codes registry count ${reg.count} != codes length ${reg.codes.length}`);
+  }
+  const seen = new Set();
+  let previous = null;
+  reg.codes.forEach((entry, idx) => {
+    const where = `error-codes[${idx}]`;
+    if (typeof entry.code !== "string" || !ERROR_CODE_PATTERN.test(entry.code)) {
+      fail(`${where} code must be lowercase dotted (domain.segment...): ${entry.code}`);
+    }
+    if (seen.has(entry.code)) fail(`duplicate error code ${entry.code}`);
+    if (previous !== null && entry.code < previous) {
+      fail(`error codes must be sorted by code (${entry.code} after ${previous})`);
+    }
+    seen.add(entry.code);
+    previous = entry.code;
+    if (typeof entry.title !== "string" || entry.title.length === 0) {
+      fail(`error code ${entry.code} must declare a non-empty title`);
+    }
+    if (!ERROR_CATEGORIES.has(entry.category)) {
+      fail(`error code ${entry.code} unknown category ${entry.category}`);
+    }
+    if (typeof entry.retryable !== "boolean") {
+      fail(`error code ${entry.code} retryable must be boolean`);
+    }
+    if (typeof entry.public !== "boolean") {
+      fail(`error code ${entry.code} public must be boolean`);
+    }
+    if (typeof entry.action !== "string" || entry.action.length === 0) {
+      fail(`error code ${entry.code} must declare a non-empty action`);
+    }
+  });
+  // getErrorInfo / CrishError 的未知码回退锚点，必须始终注册
+  if (!seen.has("common.unknown")) {
+    fail("error-codes registry must register common.unknown (fallback anchor)");
+  }
+}
+
+/**
+ * ASCII-only TS 字符串字面量：JSON.stringify（转义引号/反斜杠/控制符）后
+ * 把全部非 ASCII 码点转成 \uXXXX。中文 title 只存在注册表，生成产物零非 ASCII 原字符。
+ */
+function asciiJsonString(value) {
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (ch) => {
+    return "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0");
+  });
+}
+
+/** 从码前缀去重得到域清单（按字母排序，确定性） */
+function errorDomainsOf(reg) {
+  const domains = new Set();
+  for (const entry of reg.codes) {
+    domains.add(entry.code.slice(0, entry.code.indexOf(".")));
+  }
+  return [...domains].sort();
+}
+
+/** codes.ts：码集合联合 + 类别/域联合 + domainOf/isCrishErrorCode */
+function emitErrorCodeList(reg) {
+  const lines = [ERROR_CODES_HEADER, ""];
+
+  lines.push(`export const CRISH_ERROR_CODES = [`);
+  for (const entry of reg.codes) {
+    lines.push(`  ${asciiJsonString(entry.code)},`);
+  }
+  lines.push(`] as const;`);
+  lines.push(`export type CrishErrorCode = (typeof CRISH_ERROR_CODES)[number];`);
+  lines.push("");
+
+  lines.push(`export type CrishErrorCategory =`);
+  lines.push(`  | "transient"`);
+  lines.push(`  | "permanent"`);
+  lines.push(`  | "security"`);
+  lines.push(`  | "protocol";`);
+  lines.push("");
+
+  lines.push(
+    `export const CRISH_ERROR_DOMAINS = ${asciiJsonString(errorDomainsOf(reg))} as const;`,
+  );
+  lines.push(`export type CrishErrorDomain = (typeof CRISH_ERROR_DOMAINS)[number];`);
+  lines.push("");
+
+  lines.push(`const CRISH_ERROR_CODE_SET: ReadonlySet<string> = new Set(CRISH_ERROR_CODES);`);
+  lines.push("");
+  lines.push(`/** Extract the domain prefix (first dot-separated segment) from a code. */`);
+  lines.push(`export function domainOf(code: CrishErrorCode): CrishErrorDomain {`);
+  lines.push(`  return code.split(".")[0] as CrishErrorDomain;`);
+  lines.push(`}`);
+  lines.push("");
+  lines.push(`/** Registered-code guard: set membership over CRISH_ERROR_CODES. */`);
+  lines.push(`export function isCrishErrorCode(value: string): value is CrishErrorCode {`);
+  lines.push(`  return CRISH_ERROR_CODE_SET.has(value);`);
+  lines.push(`}`);
+  lines.push("");
+
+  return lines.join("\n") + "\n";
+}
+
+/** info.ts：CrishErrorInfo 接口 + 每条码一行的只读注册表（ASCII-only） */
+function emitErrorCodeInfo(reg) {
+  const lines = [ERROR_CODES_HEADER, ""];
+
+  lines.push(
+    `import type { CrishErrorCode, CrishErrorCategory } from "./codes";`,
+    "",
+    `export interface CrishErrorInfo {`,
+    `  readonly code: CrishErrorCode;`,
+    `  readonly title: string;`,
+    `  readonly titleKey?: string;`,
+    `  readonly category: CrishErrorCategory;`,
+    `  readonly retryable: boolean;`,
+    `  readonly public: boolean;`,
+    `  readonly action: string;`,
+    `  readonly actionKey?: string;`,
+    `}`,
+    "",
+    `export const CRISH_ERROR_REGISTRY: Readonly<`,
+    `  Record<CrishErrorCode, CrishErrorInfo>`,
+    `> = {`,
+  );
+  // 每条码一行：生成产物保持行数可控（契约 100+ 条）
+  for (const entry of reg.codes) {
+    const fields = [
+      `code: ${asciiJsonString(entry.code)}`,
+      `title: ${asciiJsonString(entry.title)}`,
+      `category: ${asciiJsonString(entry.category)}`,
+      `retryable: ${entry.retryable}`,
+      `public: ${entry.public}`,
+      `action: ${asciiJsonString(entry.action)}`,
+    ];
+    lines.push(`  ${asciiJsonString(entry.code)}: { ${fields.join(", ")} },`);
+  }
+  lines.push(`};`);
+  lines.push("");
+
+  return lines.join("\n") + "\n";
+}
+
+function emitErrorCodes(reg, outDir) {
+  validateErrorCodesRegistry(reg);
+  mkdirSync(outDir, { recursive: true });
+  const files = {
+    "codes.ts": emitErrorCodeList(reg),
+    "info.ts": emitErrorCodeInfo(reg),
+    "index.ts": emitIndex(ERROR_CODES_HEADER, ["./codes", "./info"]),
+  };
+  for (const [fileName, content] of Object.entries(files)) {
+    writeFileSync(join(outDir, fileName), content, "utf8");
+  }
+  console.log(
+    `generate-engine-bindings: error-codes -> ${outDir} (${Object.keys(files).length} files)`,
+  );
+  console.log(
+    `  codes: ${reg.codes.length}, domains: ${errorDomainsOf(reg).length}`,
+  );
+  return Object.keys(files).length;
+}
+
+// ---------------------------------------------------------------------------
 // 主入口：注册表发现 → 契约分发 → 写入
 // ---------------------------------------------------------------------------
 
@@ -1381,6 +1576,8 @@ function main() {
     } else if (reg.contract === "device-protocol") {
       if (!engineReg) fail("device-protocol 需要 engine-events.json 做事件段交叉校验");
       totalFiles += emitDevice(reg, outDir, engineReg);
+    } else if (reg.contract === "error-codes") {
+      totalFiles += emitErrorCodes(reg, outDir);
     }
   }
   console.log(`generate-engine-bindings: total ${totalFiles} files`);

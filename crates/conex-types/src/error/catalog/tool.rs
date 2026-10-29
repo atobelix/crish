@@ -1,9 +1,8 @@
 //! tool / browser / computer 域注册条目
 
 use crate::error::{codes, CrishErrorCategory, CrishErrorInfo};
-use std::collections::HashMap;
 
-pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
+error_catalog_table! {
     // ── tool 域 ──
     m.insert(
         codes::TOOL_NOT_FOUND,
@@ -96,7 +95,7 @@ pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
             category: CrishErrorCategory::Permanent,
             retryable: false,
             is_public: true,
-            action: "请求已被用户或控制总线中止，无需重试",
+            action: "action.tool.aborted_before_dispatch",
         },
     );
     m.insert(
@@ -107,7 +106,7 @@ pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
             category: CrishErrorCategory::Permanent,
             retryable: false,
             is_public: true,
-            action: "兄弟工具执行失败或批处理取消，跳过执行",
+            action: "action.tool.cancelled",
         },
     );
     m.insert(
@@ -118,7 +117,7 @@ pub(super) fn register(m: &mut HashMap<&'static str, CrishErrorInfo>) {
             category: CrishErrorCategory::Permanent,
             retryable: false,
             is_public: true,
-            action: "系统冷启动恢复自动合成未闭合调用，继续会话",
+            action: "action.tool.outcome_unknown",
         },
     );
     // ── browser 域（9 正式码：17 文档 §1.3，R-9-2/R-8/U-12 语义）──
