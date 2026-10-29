@@ -117,6 +117,7 @@ async fn kill_graceful_path() {
 /// Unix 平台限制（诚实边界）：process.rs 的强制原语与优雅同为 SIGTERM
 /// （无 SIGKILL 升级项），忽略 TERM 的进程两阶段均无效 → 等待窗口耗尽 →
 /// Failed（升级已尝试，diagnostics 留痕完整）。
+#[cfg(windows)]
 #[tokio::test]
 async fn kill_force_escalation() {
     let registry = test_registry();

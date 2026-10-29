@@ -219,6 +219,10 @@ command_registry![
         host_openers::workbench_open_path_default
     ),
     (
+        "workbench_open_external_url",
+        host_openers::workbench_open_external_url
+    ),
+    (
         "workbench_list_file_openers",
         host_openers::workbench_list_file_openers
     ),
@@ -438,6 +442,7 @@ command_registry![
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
     ("core_md_render_batch", markdown_commands::md_render_batch),
+    ("core_md_render_stream", markdown_commands::md_render_stream),
     // ── 工具 Worker 组（E，§2.2）──
     ("core_hash_compute", core_commands::core_hash_compute),
     ("core_base64_encode", core_commands::core_base64_encode),

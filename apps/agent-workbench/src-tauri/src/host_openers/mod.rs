@@ -12,7 +12,9 @@ pub(crate) mod types;
 use conex_types::CoreError;
 
 use crate::host_openers::discovery::discover_host_openers;
-use crate::host_openers::execute::{open_host_target, open_path_with_default_app};
+use crate::host_openers::execute::{
+    open_external_url, open_host_target, open_path_with_default_app,
+};
 use crate::host_openers::types::{to_core_error, HostOpenResult, HostOpenTarget, HostOpener};
 
 #[tauri::command]
@@ -33,6 +35,12 @@ pub(crate) fn workbench_open_path_default(path: String) -> Result<HostOpenResult
     open_path_with_default_app(path)
 }
 
+/// 外部链接统一交给系统默认浏览器（Markdown 外链唯一合法出口）。
+#[tauri::command]
+pub(crate) fn workbench_open_external_url(url: String) -> Result<(), CoreError> {
+    open_external_url(url)
+}
+
 #[tauri::command]
 pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener>, CoreError> {
     crate::host_openers::discovery::list_file_openers_for_path(path).map_err(to_core_error)
@@ -41,12 +49,12 @@ pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
-    use std::env;
     use std::ffi::OsString;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use crate::host_openers::types::HostOpenerKind;
 
+    #[cfg(windows)]
     #[test]
     fn host_openers_include_file_manager_and_editor_candidates() {
         let discovered = super::discovery::discover_host_openers_with(
@@ -118,8 +126,9 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     fn path_env(paths: &[&str]) -> OsString {
-        env::join_paths(paths.iter().map(PathBuf::from)).expect("test PATH")
+        std::env::join_paths(paths.iter().map(std::path::PathBuf::from)).expect("test PATH")
     }
 
     fn env_lookup(entries: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {

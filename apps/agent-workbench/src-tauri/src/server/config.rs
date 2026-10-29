@@ -186,6 +186,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn new_config_joins_pairing_file_in_dir() {
         let config = ServerConfig::new("C:\\test\\cfg");

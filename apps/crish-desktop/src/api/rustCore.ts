@@ -196,48 +196,99 @@ export async function rebuildSearchIndex(): Promise<boolean> {
 }
 
 // ===== Markdown API =====
-// Stream A 在 Rust 侧已注册 5 个 Tauri command：
-//   core_md_render / core_md_render_batch / core_md_render_stream / core_highlight_code / core_md_clear_cache
-// 全部走 tokio::task::spawn_blocking，HTML 输出 byte-for-byte 兼容现有 CSS 选择器，
-// ammonia 已在渲染末端 sanitize（组件层 DOMPurify 为冗余）。
+// Rust 侧注册 3 个 Markdown 命令（Markdown 2.0）：
+//   core_md_render / core_md_render_batch / core_md_render_stream
+// 全部走 tokio::task::spawn_blocking。返回值是 { html, truncated }：
+// 输入超过 5MB 时 Rust 按 UTF-8 边界截断，truncated=true 由前端提示。
+// raw HTML 已在 Rust 侧逐片段白名单清洗；渲染器生成 HTML 可信。
 //
 // JS 侧调用契约：
-//   - 命令缺失（missing）→ 返回 null，调用方回退到 JS 实现
+//   - 命令缺失（missing）→ 返回 null，调用方决定降级/纯文本兜底
 //   - 命令报错（error）→ 返回 null 并由调用方决定日志/告警
-//   - 命令成功 → 返回字符串 / 字符串数组 / void
+//   - 命令成功 → 返回 MarkdownRenderResult
+
+export type MarkdownVariant = 'chat' | 'document';
+
+export interface MarkdownRenderResult {
+  html: string;
+  truncated: boolean;
+}
 
 /**
- * 单段 markdown → HTML。Rust ammonia 已 sanitize，可直接注入。
- * 命令缺失或失败时返回 null，调用方需回退到 worker pool / JS 实现。
+ * 单段 markdown → HTML（core_md_render）。
+ * 命令缺失或失败时返回 null；调用方不得再回退到 JS Markdown 渲染器。
  */
-export async function renderMarkdown(text: string): Promise<string | null> {
-  const res = await invokeResult<string>('core_md_render', { text });
-  if (res.status === 'ok') return res.data;
+export async function renderMarkdown(
+  text: string,
+  variant: MarkdownVariant
+): Promise<MarkdownRenderResult | null> {
+  const res = await invokeResult<MarkdownRenderResult>('core_md_render', {
+    text,
+    variant,
+  });
+  if (res.status === 'ok' && res.data && typeof res.data.html === 'string') {
+    return {
+      html: res.data.html,
+      truncated: Boolean(res.data.truncated),
+    };
+  }
   return null;
 }
 
 /**
- * 批量渲染 markdown → HTML 数组（core_md_render_batch，对齐 markdown_commands.rs
- * md_render_batch 签名 `{ texts }`）。命令缺失或失败时返回 null 数组
- * （逐条语义与 renderMarkdown 一致），调用方逐条回退 worker。
+ * 批量渲染 markdown → 结果数组（core_md_render_batch）。
+ * 首屏/历史消息应走这里，避免 N 次 IPC。命令缺失或失败时返回 null 数组。
  */
 export async function renderMarkdownBatch(
-  texts: string[]
-): Promise<(string | null)[]> {
+  texts: string[],
+  variant: MarkdownVariant
+): Promise<(MarkdownRenderResult | null)[]> {
   const items = Array.isArray(texts)
     ? texts.filter((t): t is string => typeof t === 'string')
     : [];
   if (items.length === 0) return [];
-  const res = await invokeResult<string[]>('core_md_render_batch', {
-    texts: items,
-  });
+  const res = await invokeResult<MarkdownRenderResult[]>(
+    'core_md_render_batch',
+    {
+      texts: items,
+      variant,
+    }
+  );
   if (res.status !== 'ok' || !Array.isArray(res.data)) {
     return items.map(() => null);
   }
   return items.map((_, i) => {
-    const html = res.data?.[i];
-    return typeof html === 'string' ? html : null;
+    const result = res.data?.[i];
+    if (!result || typeof result.html !== 'string') return null;
+    return {
+      html: result.html,
+      truncated: Boolean(result.truncated),
+    };
   });
+}
+
+/**
+ * 流式渲染 markdown → HTML（core_md_render_stream）。
+ * 跳过 syntect 高亮、不写 Rust 缓存；HTML 外壳与完成态一致。
+ */
+export async function renderMarkdownStream(
+  text: string,
+  variant: MarkdownVariant
+): Promise<MarkdownRenderResult | null> {
+  const res = await invokeResult<MarkdownRenderResult>(
+    'core_md_render_stream',
+    {
+      text,
+      variant,
+    }
+  );
+  if (res.status === 'ok' && res.data && typeof res.data.html === 'string') {
+    return {
+      html: res.data.html,
+      truncated: Boolean(res.data.truncated),
+    };
+  }
+  return null;
 }
 
 // ===== Worker 池下沉 API (Stream E) =====

@@ -316,8 +316,8 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 校准：162 条 registered 命令；其中原生 browser hit-test 命令会显式
-    // 回报 unsupported，因此有 161 条作为完整 product capability 计数。
+    // 校准：165 条 registered 命令；其中原生 browser hit-test 命令会显式
+    // 回报 unsupported，因此有 164 条作为完整 product capability 计数。
     // 包含 models_yaml 三命令、usage 五命令以及 b6 core_generate_session_title。
     // 2026-09-15 更正：131 为陈旧值——旧 config/catalog 命令族 5 条
     // （config_get / config_profile_apply / config_update / catalog_get /
@@ -334,7 +334,7 @@ describe('Tauri command registry', () => {
     // restart_app）在 manifest 与 main.rs 早已注册、本表漏登，D11 补齐后 143 → 147。
     // 工作区授权六命令漏登，D11 命中后补齐 147 → 153。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(162);
+    expect(productCommands).toHaveLength(164);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

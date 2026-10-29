@@ -30,6 +30,22 @@ export const BLOCKED_EXECUTABLE_EXTENSIONS = [
   'wsh',
   'msc',
   'jar',
+  // 2026-10 Markdown 2.0：Windows 高危载体补齐
+  'lnk',
+  'reg',
+  'url',
+  'cpl',
+  'msix',
+  'appx',
+  'docm',
+  'xlsm',
+  'pptm',
+  'xll',
+  'xlam',
+  'inf',
+  'scf',
+  'settingcontent-ms',
+  'appref-ms',
 ] as const;
 
 export type BlockedExecutableExtension =

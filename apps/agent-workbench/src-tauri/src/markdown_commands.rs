@@ -1,40 +1,91 @@
-//! Stream A: Tauri 命令层 —— Rust Markdown 渲染入口
+//! Stream A: Tauri 命令层 —— Rust Markdown 渲染入口。
 //!
-//! 本模块提供 2 个 `#[tauri::command]`，包装 `conex_markdown` 的渲染 API，
-//! 替代 JS 主线程同步渲染（长会话首屏 4-15s 卡顿的根因）。
-//! CPU 密集操作统一走 `tokio::task::spawn_blocking`，参考 `core_commands.rs` 模式。
+//! 包装 `conex_markdown` 的渲染 API：
+//! - `core_md_render`：单条渲染（带缓存）
+//! - `core_md_render_batch`：批量渲染（每条独立缓存）
+//! - `core_md_render_stream`：流式渲染（跳过 syntect 高亮，不写缓存）
 //!
-//! 命令错误统一为 `CoreError`（serde tagged enum），JS 侧可按 `error.kind` 分类处理。
+//! CPU 密集操作统一走 `tokio::task::spawn_blocking`。命令返回
+//! `{ html, truncated }`：输入超过 5MB 时按 UTF-8 边界截断，`truncated=true`
+//! 由前端提示，不再静默丢数据。
 //!
-//! 对应 JS wrapper: `crish-desktop/src/api/rustCore.ts` 中的
-//! `renderMarkdown` / `renderMarkdownBatch`。
+//! 对应 JS wrapper：`crish-desktop/src/api/rustCore.ts`。
 
 use conex_types::CoreError;
+use serde::Serialize;
+
+use conex_markdown::{MarkdownVariant, RenderOptions, RenderResult};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderResultDto {
+    pub html: String,
+    pub truncated: bool,
+}
+
+impl From<RenderResult> for RenderResultDto {
+    fn from(result: RenderResult) -> Self {
+        Self {
+            html: result.html,
+            truncated: result.truncated,
+        }
+    }
+}
+
+fn parse_options(variant: &str) -> Result<RenderOptions, CoreError> {
+    let variant = MarkdownVariant::parse(variant).ok_or_else(|| {
+        CoreError::InvalidInput(format!(
+            "unknown markdown variant: {variant} (expected chat|document)"
+        ))
+    })?;
+    Ok(RenderOptions::new(variant))
+}
 
 /// 渲染单条 markdown 为 HTML。
 ///
-/// - 输入超长（>5MB，`conex_markdown::MAX_MARKDOWN_INPUT`）由 crate 内部按 UTF-8 字符边界安全截断，不返回错误
-/// - CPU 密集（pulldown-cmark 解析 + syntect 高亮 + ammonia sanitize），走 spawn_blocking
-/// - 结果自带 LRU 缓存（moka），重复输入 O(1) 命中
-///
-/// wire 名 = `core_md_render`（T03.4 更名 core_md_*，并入 core 族；与
-/// command_manifest.rs / 前端 BUILTIN_COMMAND_MANIFEST 保持一致）。
+/// wire 名 = `core_md_render`。结果自带 LRU 缓存（按 variant 隔离）。
 #[tauri::command(rename = "core_md_render")]
-pub async fn md_render(text: String) -> Result<String, CoreError> {
-    tokio::task::spawn_blocking(move || conex_markdown::render_markdown(&text))
-        .await
-        .map_err(|e| CoreError::Internal(format!("md_render join: {e}")))
+pub async fn md_render(text: String, variant: String) -> Result<RenderResultDto, CoreError> {
+    let options = parse_options(&variant)?;
+    tokio::task::spawn_blocking(move || {
+        RenderResultDto::from(conex_markdown::render_markdown(&text, options))
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("md_render join: {e}")))
 }
 
 /// 批量渲染 markdown 为 HTML。
 ///
-/// 用于首屏一次性渲染整个会话的多条消息，避免 N 次 IPC 往返。
-/// 每条独立享受 moka LRU 缓存命中。
-///
-/// wire 名 = `core_md_render_batch`（T03.4 更名 core_md_*）。
+/// wire 名 = `core_md_render_batch`。首屏/历史消息应走这里，避免 N 次 IPC。
 #[tauri::command(rename = "core_md_render_batch")]
-pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreError> {
-    tokio::task::spawn_blocking(move || conex_markdown::render_markdown_batch(texts))
-        .await
-        .map_err(|e| CoreError::Internal(format!("md_render_batch join: {e}")))
+pub async fn md_render_batch(
+    texts: Vec<String>,
+    variant: String,
+) -> Result<Vec<RenderResultDto>, CoreError> {
+    let options = parse_options(&variant)?;
+    tokio::task::spawn_blocking(move || {
+        conex_markdown::render_markdown_batch(texts, options)
+            .into_iter()
+            .map(RenderResultDto::from)
+            .collect()
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("md_render_batch join: {e}")))
+}
+
+/// 流式渲染 markdown 为 HTML。
+///
+/// wire 名 = `core_md_render_stream`。`stream_mode=true` 跳过 syntect 高亮，
+/// 输出与完成态一致的行 span 外壳；不写缓存（流式片段唯一，缓存无收益）。
+#[tauri::command(rename = "core_md_render_stream")]
+pub async fn md_render_stream(
+    text: String,
+    variant: String,
+) -> Result<RenderResultDto, CoreError> {
+    let options = parse_options(&variant)?;
+    tokio::task::spawn_blocking(move || {
+        RenderResultDto::from(conex_markdown::render_markdown_stream(&text, options))
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
 }

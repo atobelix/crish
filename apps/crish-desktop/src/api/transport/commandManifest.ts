@@ -45,14 +45,15 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（162 = 注册面 162 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（165 = 注册面 165 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
- * T-F 06 退役登记：delete_session / touch_session / core_md_render_stream /
- * core_md_clear_cache 已随本快照退役（changelog 33 可查）；F-03（DM-07）已
- * 撤销 core_read_run_events 的退役登记——IPC 面恢复激活，本快照同步恢复。
+ * T-F 06 退役登记：delete_session / touch_session / core_md_clear_cache 已随
+ * 本快照退役（changelog 33 可查）；F-03（DM-07）已撤销 core_read_run_events
+ * 的退役登记；Markdown 2.0 重新启用 core_md_render_stream（流式渲染）——
+ * IPC 面恢复激活，本快照同步恢复。
  */
 export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -79,6 +80,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_list_host_openers', 'workbench', 'gui'),
     entry('workbench_open_host_target', 'workbench', 'gui'),
     entry('workbench_open_path_default', 'workbench', 'gui'),
+    entry('workbench_open_external_url', 'workbench', 'gui'),
     entry('workbench_list_file_openers', 'workbench', 'gui'),
     // 模型字典真源（models.yaml）：读（缺则播种）/ 校验 / 原子保存
     entry('workbench_read_models_yaml', 'workbench', 'gui'),
@@ -185,6 +187,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
     entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
+    entry('core_md_render_stream', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2）──
     entry('core_hash_compute', 'core', 'engine'),
     entry('core_base64_encode', 'core', 'engine'),

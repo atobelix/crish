@@ -1,27 +1,25 @@
 /**
- * T-F 06 T2.4/T2.5 接线测试：
- * - renderMarkdownBatch（core_md_render_batch 三态：ok/missing/error）；
- * - rebuildSearchIndex（core_rebuild_search_index 三态 + logInternalError）；
- * - prewarmMarkdownBatch / collectPrewarmTexts（去重非空 → 缓存写入）。
+ * Markdown IPC 契约与搜索索引三态测试。
+ *
+ * Markdown 2.0 只有三条命令：core_md_render / core_md_render_batch /
+ * core_md_render_stream，统一携带 variant（chat/document），统一返回
+ * `{ html, truncated }`。命令缺失或失败时返回 null（批量返回 null 数组），
+ * 严禁回退 JS 渲染器。
  *
  * 可观测面口径：`logInternalError` 已收敛为唯一走 `logger.warn`
- * （userFacingErrors.ts:341-349「删除 console.warn 裸调」），而 LoggerService
+ * （userFacingErrors.ts「删除 console.warn 裸调」），而 LoggerService
  * 仅在 `isDev()`（NODE_ENV==='development'）下才转发 `console.warn`，测试环境
  * （NODE_ENV==='test'）走 `console.log(JSON.stringify(entry))`。
- * 故断言必须落在真源可观测面 `logger.getRecentLogs()` 环形缓冲上，
- * 而非 `console.warn`（后者在测试环境恒 0 次，属断言与实现漂移）。
+ * 故断言落在真源可观测面 `logger.getRecentLogs()` 环形缓冲上。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invokeResult } from './tauriInvoke';
-import { renderMarkdown, renderMarkdownBatch, rebuildSearchIndex } from './rustCore';
 import {
-  collectPrewarmTexts,
-  prewarmMarkdownBatch,
-} from './markdown-render/markdownBatchPrewarm';
-import {
-  getMarkdownHtmlCache,
-  clearMarkdownHtmlCache,
-} from './markdownCache';
+  rebuildSearchIndex,
+  renderMarkdown,
+  renderMarkdownBatch,
+  renderMarkdownStream,
+} from './rustCore';
 import { logger } from '../services/LoggerService';
 
 vi.mock('./tauriInvoke', async (importOriginal) => {
@@ -36,81 +34,145 @@ const mockedInvokeResult = vi.mocked(invokeResult);
 
 beforeEach(() => {
   mockedInvokeResult.mockReset();
-  clearMarkdownHtmlCache();
   logger.clearLogs();
 });
 
-describe('T2.4 renderMarkdownBatch（core_md_render_batch）', () => {
-  it('ok → 返回 HTML 数组', async () => {
+describe('core_md_render', () => {
+  it('ok → 返回 html/truncated 并携带 variant', async () => {
     mockedInvokeResult.mockResolvedValueOnce({
       status: 'ok',
-      data: ['<p>a</p>', '<p>b</p>'],
+      data: { html: '<p>a</p>', truncated: false },
     });
-    await expect(renderMarkdownBatch(['a', 'b'])).resolves.toEqual([
-      '<p>a</p>',
-      '<p>b</p>',
-    ]);
-    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render_batch', {
-      texts: ['a', 'b'],
+    await expect(renderMarkdown('a', 'chat')).resolves.toEqual({
+      html: '<p>a</p>',
+      truncated: false,
+    });
+    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render', {
+      text: 'a',
+      variant: 'chat',
     });
   });
 
-  it('missing → null 数组（调用方逐条回退 worker）', async () => {
+  it('truncated 标记透传给调用方', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'ok',
+      data: { html: '<p>long</p>', truncated: true },
+    });
+    await expect(renderMarkdown('long', 'document')).resolves.toEqual({
+      html: '<p>long</p>',
+      truncated: true,
+    });
+  });
+
+  it('missing → null', async () => {
     mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
-    await expect(renderMarkdownBatch(['a', 'b'])).resolves.toEqual([null, null]);
+    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
   });
 
-  it('error → null 数组（不抛）', async () => {
+  it('error → null', async () => {
     mockedInvokeResult.mockResolvedValueOnce({
       status: 'error',
       message: 'boom',
     });
-    await expect(renderMarkdownBatch(['a'])).resolves.toEqual([null]);
+    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
   });
 
-  it('空输入 → 空数组（不调 invoke）', async () => {
-    await expect(renderMarkdownBatch([])).resolves.toEqual([]);
-    expect(mockedInvokeResult).not.toHaveBeenCalled();
-  });
-});
-
-describe('T2.4 prewarmMarkdownBatch（首屏批量预热）', () => {
-  it('collectPrewarmTexts：去重、非空、trim', () => {
-    expect(
-      collectPrewarmTexts([
-        { content: '  a  ' },
-        { content: 'b' },
-        { content: 'b' },
-        { content: '   ' },
-        { content: '' },
-        { content: undefined },
-        { content: 123 },
-        null,
-      ]),
-    ).toEqual(['a', 'b']);
-  });
-
-  it('命中结果写入 markdownCache（既有缓存面复用）', async () => {
+  it('畸形载荷（缺 html）→ null', async () => {
     mockedInvokeResult.mockResolvedValueOnce({
       status: 'ok',
-      data: ['<p>a</p>', null],
+      data: { truncated: false },
     });
-    const written = await prewarmMarkdownBatch([
-      { content: 'a' },
-      { content: 'b' },
-    ]);
-    expect(written).toBe(1);
-    expect(getMarkdownHtmlCache('a')).toBe('<p>a</p>');
-    expect(getMarkdownHtmlCache('b')).toBeUndefined();
-  });
-
-  it('missing → 0 写入（静默回退，后续逐条走异步路径）', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
-    await expect(prewarmMarkdownBatch([{ content: 'a' }])).resolves.toBe(0);
+    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
   });
 });
 
-describe('T2.5 rebuildSearchIndex（core_rebuild_search_index）', () => {
+describe('core_md_render_batch', () => {
+  it('ok → 返回结果数组并透传 variant', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'ok',
+      data: [
+        { html: '<p>a</p>', truncated: false },
+        { html: '<p>b</p>', truncated: true },
+      ],
+    });
+    await expect(renderMarkdownBatch(['a', 'b'], 'document')).resolves.toEqual([
+      { html: '<p>a</p>', truncated: false },
+      { html: '<p>b</p>', truncated: true },
+    ]);
+    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render_batch', {
+      texts: ['a', 'b'],
+      variant: 'document',
+    });
+  });
+
+  it('missing → 与输入等长的 null 数组', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
+    await expect(renderMarkdownBatch(['a', 'b'], 'chat')).resolves.toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('error → 与输入等长的 null 数组（不抛）', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'error',
+      message: 'boom',
+    });
+    await expect(renderMarkdownBatch(['a'], 'chat')).resolves.toEqual([null]);
+  });
+
+  it('部分缺项 → 缺失位置为 null', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'ok',
+      data: [{ html: '<p>a</p>', truncated: false }, null],
+    });
+    await expect(renderMarkdownBatch(['a', 'b'], 'chat')).resolves.toEqual([
+      { html: '<p>a</p>', truncated: false },
+      null,
+    ]);
+  });
+
+  it('过滤非字符串输入；空输入不调 invoke', async () => {
+    await expect(renderMarkdownBatch([], 'chat')).resolves.toEqual([]);
+    expect(mockedInvokeResult).not.toHaveBeenCalled();
+
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'ok',
+      data: [{ html: '<p>a</p>', truncated: false }],
+    });
+    await expect(
+      renderMarkdownBatch(['a', 42 as unknown as string], 'chat')
+    ).resolves.toEqual([{ html: '<p>a</p>', truncated: false }]);
+    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render_batch', {
+      texts: ['a'],
+      variant: 'chat',
+    });
+  });
+});
+
+describe('core_md_render_stream', () => {
+  it('ok → 返回 html/truncated 并携带 variant', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({
+      status: 'ok',
+      data: { html: '<p>partial</p>', truncated: false },
+    });
+    await expect(renderMarkdownStream('partial', 'chat')).resolves.toEqual({
+      html: '<p>partial</p>',
+      truncated: false,
+    });
+    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render_stream', {
+      text: 'partial',
+      variant: 'chat',
+    });
+  });
+
+  it('missing → null', async () => {
+    mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
+    await expect(renderMarkdownStream('a', 'chat')).resolves.toBeNull();
+  });
+});
+
+describe('rebuildSearchIndex（core_rebuild_search_index）', () => {
   it('ok → true', async () => {
     mockedInvokeResult.mockResolvedValueOnce({ status: 'ok', data: null });
     await expect(rebuildSearchIndex()).resolves.toBe(true);
@@ -119,8 +181,9 @@ describe('T2.5 rebuildSearchIndex（core_rebuild_search_index）', () => {
   it('missing → false（可观测日志）', async () => {
     mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
     await expect(rebuildSearchIndex()).resolves.toBe(false);
-    const logs = logger.getRecentLogs();
-    const hit = logs.find((l) => l.msg.includes('[rebuildSearchIndex]'));
+    const hit = logger
+      .getRecentLogs()
+      .find((l) => l.msg.includes('[rebuildSearchIndex]'));
     expect(hit).toBeDefined();
     expect(hit?.level).toBe('warn');
     expect(hit?.module).toBe('userFacingErrors');

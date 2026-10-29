@@ -27,6 +27,21 @@ describe('blockedExecutableExtensions SSOT', () => {
       'wsh',
       'msc',
       'jar',
+      'lnk',
+      'reg',
+      'url',
+      'cpl',
+      'msix',
+      'appx',
+      'docm',
+      'xlsm',
+      'pptm',
+      'xll',
+      'xlam',
+      'inf',
+      'scf',
+      'settingcontent-ms',
+      'appref-ms',
     ]);
   });
 
@@ -45,6 +60,12 @@ describe('blockedExecutableExtensions SSOT', () => {
     expect(isBlockedExecutablePath('C:\\tmp\\console.msc')).toBe(true);
     expect(isBlockedExecutablePath('C:\\tmp\\lib.jar')).toBe(true);
     expect(isBlockedExecutablePath('C:\\tmp\\setup.SCR')).toBe(true);
+    // 2026-10 Markdown 2.0：Windows 高危载体
+    expect(isBlockedExecutablePath('C:\\tmp\\shortcut.lnk')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\import.reg')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\site.url')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\macro.docm')).toBe(true);
+    expect(isBlockedExecutablePath('C:\\tmp\\installer.msix')).toBe(true);
     expect(isBlockedExecutablePath('readme.md')).toBe(false);
     expect(isBlockedExecutablePath('archive.tar.gz')).toBe(false);
     expect(extensionOfPath('a.b.CMD')).toBe('cmd');

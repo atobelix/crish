@@ -4,7 +4,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**162 = 注册面 162 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**165 = 注册面 165 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**162 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**165 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
@@ -86,7 +86,8 @@ const fn entry(
 /// PE-07 工作区复授权与 Rust 原生目录选择五命令接线后 147 → **152**；
 /// 默认工作区激活命令追加后 152 → **153**；原生子 Webview 七命令追加后
 /// 153 → 160；Hit-Test 能力查询命令追加后 160 → 161；Inspector 开关追加后
-/// 161 → **162**。
+/// 161 → **162**；运行时权限切换后 162 → **163**；Markdown 2.0 恢复
+/// `core_md_render_stream` 后 163 → **164**；外链命令后 164 → **165**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -108,6 +109,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_list_host_openers", "workbench", "gui", true),
         entry("workbench_open_host_target", "workbench", "gui", true),
         entry("workbench_open_path_default", "workbench", "gui", true),
+        entry("workbench_open_external_url", "workbench", "gui", true),
         entry("workbench_list_file_openers", "workbench", "gui", true),
         // 模型字典真源（models.yaml）：读（缺则播种）/ 校验 / 原子保存
         entry("workbench_read_models_yaml", "workbench", "gui", true),
@@ -235,6 +237,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
+        entry("core_md_render_stream", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2）──
         entry("core_hash_compute", "core", "engine", true),
         entry("core_base64_encode", "core", "engine", true),
@@ -397,12 +400,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 163,
-            "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153，原生子 Webview 七命令追加后 160，Hit-Test 能力命令后 161，Inspector 后 162，运行时权限切换后 163"
+            total, 165,
+            "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153，原生子 Webview 七命令追加后 160，Hit-Test 能力命令后 161，Inspector 后 162，运行时权限切换后 163，Markdown 2.0 流式渲染命令后 164，外链命令后 165"
         );
         assert_eq!(
-            registered, 163,
-            "注册面 163（全部为 registered=true 实装命令）"
+            registered, 165,
+            "注册面 165（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }

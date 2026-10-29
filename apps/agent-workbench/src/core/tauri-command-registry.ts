@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（162 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（165 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -84,6 +84,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_open_path_default',
     status: 'implemented',
     feature: 'host default app open',
+  },
+  {
+    command: 'workbench_open_external_url',
+    status: 'implemented',
+    feature: 'host external URL open',
   },
   {
     command: 'workbench_open_workspace',
@@ -604,8 +609,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'workflow runs list',
   },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-  // T-F 06 退役：core_md_render_stream（流式主路径 JS 零 IPC）/ core_md_clear_cache
-  // （moka 自动 LRU，仅测试隔离用途）已退役（changelog 33）
+  // Markdown 2.0：恢复 core_md_render_stream（活跃尾块 Rust 流式渲染）。
   {
     command: 'core_md_render',
     status: 'implemented',
@@ -615,6 +619,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_md_render_batch',
     status: 'implemented',
     feature: 'markdown batch render',
+  },
+  {
+    command: 'core_md_render_stream',
+    status: 'implemented',
+    feature: 'markdown streaming render',
   },
   // ── 工具 Worker 组（E，§2.2）──
   {
