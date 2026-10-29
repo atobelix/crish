@@ -1,13 +1,11 @@
 //! B1.5 错误负载序列化契约测试
 //!
-//! 对齐 error-propagation.e2e.test.ts:309（cause 链 8 层上限）与
-//! :356（旧码迁移 NO_PROVIDER→config.missing）；错误 payload 结构
-//! `{kind, detail}` 对齐 03 §5.3-5（CoreError）。
+//! 对齐 error-propagation.e2e.test.ts:309（cause 链 8 层上限）；错误 payload
+//! 结构 `{kind, detail}` 对齐 03 §5.3-5（CoreError）。
 
 use conex_types::error::{codes, CrishError, CrishErrorPayload, CRISH_ERROR_CAUSE_MAX_DEPTH};
 use conex_types::{
-    migrate_error_code, AgentEndReason, AgentSessionEvent, CoreError, MigrateErrorContext,
-    ProviderErrorKind, RunTerminal, RunTerminalError,
+    AgentEndReason, AgentSessionEvent, CoreError, ProviderErrorKind, RunTerminal, RunTerminalError,
 };
 
 // ── cause 链 8 层上限（对齐 error-propagation.e2e.test.ts:309）──
@@ -78,125 +76,6 @@ fn core_error_payload_kind_and_detail() {
     let cancelled = serde_json::to_value(CoreError::Cancelled).unwrap();
     assert_eq!(cancelled["kind"], "Cancelled");
     assert!(cancelled.get("detail").is_none() || cancelled["detail"].is_null());
-}
-
-// ── 旧码迁移（对齐 error-propagation.e2e.test.ts:356 与 normalize.ts）──
-
-#[test]
-fn migrate_no_provider_to_config_missing() {
-    // B1.5 验收：旧码 NO_PROVIDER → config.missing
-    let code = migrate_error_code("NO_PROVIDER", MigrateErrorContext::default());
-    assert_eq!(code, codes::CONFIG_MISSING);
-}
-
-#[test]
-fn migrate_run_error_to_runtime_unexpected_state() {
-    let code = migrate_error_code("RUN_ERROR", MigrateErrorContext::default());
-    assert_eq!(code, codes::RUNTIME_UNEXPECTED_STATE);
-}
-
-#[test]
-fn migrate_provider_kinds() {
-    let ctx = MigrateErrorContext::default();
-    assert_eq!(migrate_error_code("network", ctx), codes::PROVIDER_NETWORK);
-    assert_eq!(
-        migrate_error_code("gateway-challenge", ctx),
-        codes::PROVIDER_GATEWAY_CHALLENGE
-    );
-    assert_eq!(
-        migrate_error_code("rate-limit", ctx),
-        codes::PROVIDER_RATE_LIMIT
-    );
-    assert_eq!(migrate_error_code("auth", ctx), codes::PROVIDER_AUTH);
-    assert_eq!(migrate_error_code("quota", ctx), codes::PROVIDER_QUOTA);
-    assert_eq!(
-        migrate_error_code("endpoint-unavailable", ctx),
-        codes::PROVIDER_ENDPOINT_UNAVAILABLE
-    );
-    assert_eq!(migrate_error_code("schema", ctx), codes::PROVIDER_SCHEMA);
-    assert_eq!(migrate_error_code("server", ctx), codes::PROVIDER_SERVER);
-    assert_eq!(migrate_error_code("timeout", ctx), codes::PROVIDER_TIMEOUT);
-    assert_eq!(
-        migrate_error_code("cancelled", ctx),
-        codes::PROVIDER_CANCELLED
-    );
-    assert_eq!(
-        migrate_error_code("invalid-stream", ctx),
-        codes::PROVIDER_STREAM_INTERRUPTED
-    );
-    assert_eq!(migrate_error_code("unknown", ctx), codes::PROVIDER_UNKNOWN);
-}
-
-#[test]
-fn migrate_tool_error_split_by_context_kind() {
-    let path = MigrateErrorContext {
-        kind: Some("path"),
-        sub_type: None,
-    };
-    let input = MigrateErrorContext {
-        kind: Some("input"),
-        sub_type: None,
-    };
-    let not_found = MigrateErrorContext {
-        kind: Some("not_found"),
-        sub_type: None,
-    };
-    let default_ctx = MigrateErrorContext::default();
-    assert_eq!(
-        migrate_error_code("TOOL_ERROR", path),
-        codes::TOOL_PATH_ESCAPE
-    );
-    assert_eq!(
-        migrate_error_code("TOOL_ERROR", input),
-        codes::TOOL_INVALID_INPUT
-    );
-    assert_eq!(
-        migrate_error_code("TOOL_ERROR", not_found),
-        codes::TOOL_NOT_FOUND
-    );
-    assert_eq!(
-        migrate_error_code("TOOL_ERROR", default_ctx),
-        codes::TOOL_EXECUTION_FAILED
-    );
-}
-
-#[test]
-fn migrate_error_domain_and_session_codes() {
-    let ctx = MigrateErrorContext::default();
-    assert_eq!(
-        migrate_error_code("USER_ABORT", ctx),
-        codes::RUNTIME_ABORTED
-    );
-    assert_eq!(
-        migrate_error_code("STREAM_INTERRUPT", ctx),
-        codes::PROVIDER_STREAM_INTERRUPTED
-    );
-    assert_eq!(
-        migrate_error_code("CLIENT_INVALID_INPUT", ctx),
-        codes::PROVIDER_SCHEMA
-    );
-    let context_overflow = MigrateErrorContext {
-        kind: None,
-        sub_type: Some("context_length_exceeded"),
-    };
-    assert_eq!(
-        migrate_error_code("CLIENT_INVALID_INPUT", context_overflow),
-        codes::CONTEXT_LENGTH_EXCEEDED
-    );
-    assert_eq!(
-        migrate_error_code("not_found", ctx),
-        codes::SESSION_NOT_FOUND
-    );
-    assert_eq!(
-        migrate_error_code("storage", ctx),
-        codes::SESSION_STORAGE_FAILED
-    );
-    assert_eq!(migrate_error_code("UNKNOWN", ctx), codes::COMMON_UNKNOWN);
-    // 未知名回退
-    assert_eq!(
-        migrate_error_code("SOME_LEGACY_CODE", ctx),
-        codes::COMMON_UNKNOWN
-    );
 }
 
 // ── ProviderErrorKind 13 类（02 §4.2 分类表逐行）──

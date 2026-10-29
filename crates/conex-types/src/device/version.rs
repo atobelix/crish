@@ -33,11 +33,6 @@ impl ProtocolVersion {
     pub fn current() -> Self {
         Self(PROTOCOL_VERSION)
     }
-
-    /// 兼容下限
-    pub fn min_supported() -> Self {
-        Self(MIN_PROTOCOL_VERSION)
-    }
 }
 
 /// 协议版本协商（D3 §10.2）
@@ -225,8 +220,6 @@ pub struct Rotate {
 
 /// 单帧上限（信封层；超限断链 + frame_too_large）
 pub const MAX_FRAME_BYTES: usize = 1_048_576;
-/// 单事件 push 帧上限（超限先摘要化，仍超 → 降级元组）
-pub const EVENT_PUSH_MAX_BYTES: usize = 65_536;
 /// 每会话下行窗口（游标落后超窗 → 全量回放）
 pub const EVENT_WINDOW: usize = 4096;
 /// 订阅会话上限
@@ -265,8 +258,6 @@ pub const IDEMPOTENCY_TTL_MS: u64 = 300_000;
 pub const IDEMPOTENCY_TABLE_TTL_DAYS: u32 = 30;
 /// outbox 队列上限
 pub const OUTBOX_MAX_ITEMS: usize = 200;
-/// outbox 重试退避序列（1s/4s/16s/60s 封顶）
-pub const OUTBOX_RETRY_BACKOFF_MS: [u64; 4] = [1_000, 4_000, 16_000, 60_000];
 /// 游标落后重建阈值（事件数）
 pub const RECONCILE_REBUILD_THRESHOLD: u64 = 5000;
 /// 资源 URL 令牌有效期

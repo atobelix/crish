@@ -290,16 +290,6 @@ impl MessageKind {
         }
     }
 
-    /// 是否命令请求（remote.*）
-    pub fn is_remote(&self) -> bool {
-        matches!(self, MessageKind::Remote(_))
-    }
-
-    /// 是否命令响应（result.*）
-    pub fn is_result(&self) -> bool {
-        matches!(self, MessageKind::Result(_))
-    }
-
     /// 命令请求 kind（`remote.<name>`）
     pub fn remote_command(name: impl Into<String>) -> Self {
         MessageKind::Remote(name.into())

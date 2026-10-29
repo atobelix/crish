@@ -16,7 +16,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod core_map;
 mod crish_error;
-mod migrate;
 mod provider_kind;
 mod run_terminal;
 
@@ -54,7 +53,6 @@ mod catalog;
 
 pub use core_map::{core_error_code, from_core_error_with_context};
 pub use crish_error::{CrishError, CrishErrorPayload};
-pub use migrate::{migrate_error_code, MigrateErrorContext};
 pub use provider_kind::ProviderErrorKind;
 pub use run_terminal::{RunTerminal, RunTerminalError};
 
