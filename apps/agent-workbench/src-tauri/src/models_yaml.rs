@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn registered_models_commands_have_one_structured_commit() {
-        let source = include_str!("main.rs");
+        let source = include_str!("command_registry.rs");
         for command in [
             "workbench_read_models_yaml",
             "workbench_validate_models_yaml",

@@ -23,7 +23,10 @@ describe('formatRelativeTime', () => {
   });
 
   it('天档', () => {
-    expect(formatRelativeTime(NOW - 24 * 3_600_000, NOW)).toBe('1 天前');
-    expect(formatRelativeTime(NOW - 7 * 86_400_000, NOW)).toBe('7 天前');
+    expect(formatRelativeTime(NOW - 24 * 3_600_000, NOW)).toBe('昨天');
+    expect(formatRelativeTime(NOW - 3 * 86_400_000, NOW)).toBe('3 天前');
+    expect(formatRelativeTime(NOW - 10 * 86_400_000, NOW)).toMatch(
+      /^\d{4}\/\d{2}\/\d{2}$/
+    );
   });
 });

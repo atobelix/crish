@@ -10,7 +10,9 @@ describe('authStore 全局账号状态管理', () => {
     useAuthStore.setState({
       isLoggedIn: false,
       user: null,
+      profile: null,
       devices: [],
+      sessions: [],
       loading: false,
       initialized: false,
       error: null,
@@ -77,7 +79,15 @@ describe('authStore 全局账号状态管理', () => {
     useAuthStore.setState({
       isLoggedIn: true,
       user: { id: 'u1', email: 'test@example.com' },
-      devices: [{ id: 'd1', name: 'Phone', platform: 'Android', lastSeenAt: 123, trusted: true }],
+      devices: [
+        {
+          id: 'd1',
+          name: 'Phone',
+          platform: 'Android',
+          lastSeenAt: 123,
+          trusted: true,
+        },
+      ],
     });
 
     vi.mocked(authApi.authLogout).mockResolvedValueOnce(true);
@@ -89,20 +99,122 @@ describe('authStore 全局账号状态管理', () => {
     expect(useAuthStore.getState().devices).toHaveLength(0);
   });
 
-  it('revokeDevice 成功后从设备列表中剔除', async () => {
+  it('completeLogin 建立登录态并拉取资料与在线设备', async () => {
+    vi.mocked(authApi.authGetProfile).mockResolvedValueOnce({
+      accountId: 'u1',
+      email: 'test@example.com',
+      displayName: 'Test User',
+      bio: '',
+      avatarUrl: null,
+      avatarFileId: null,
+      profileUpdatedAt: null,
+    });
+    vi.mocked(authApi.authListDevices).mockResolvedValueOnce([]);
+
+    await useAuthStore
+      .getState()
+      .completeLogin({ id: 'u1', email: 'test@example.com', name: 'Test' });
+
+    expect(useAuthStore.getState().isLoggedIn).toBe(true);
+    expect(useAuthStore.getState().profile?.displayName).toBe('Test User');
+  });
+
+  it('saveProfile 更新资料与当前用户名', async () => {
     useAuthStore.setState({
       isLoggedIn: true,
-      devices: [
-        { id: 'd1', name: 'Device 1', platform: 'iOS', lastSeenAt: 123, trusted: true },
-        { id: 'd2', name: 'Device 2', platform: 'Android', lastSeenAt: 456, trusted: true },
-      ],
+      user: { id: 'u1', email: 'test@example.com' },
+    });
+    vi.mocked(authApi.authUpdateProfile).mockResolvedValueOnce({
+      accountId: 'u1',
+      email: 'test@example.com',
+      displayName: '新昵称',
+      bio: '简介',
+      avatarUrl: null,
+      avatarFileId: null,
+      profileUpdatedAt: 1,
     });
 
-    vi.mocked(authApi.authRevokeDevice).mockResolvedValueOnce(true);
+    await useAuthStore
+      .getState()
+      .saveProfile({ displayName: '新昵称', bio: '简介' });
 
-    const ok = await useAuthStore.getState().revokeDevice('d1');
-    expect(ok).toBe(true);
+    expect(useAuthStore.getState().profile?.displayName).toBe('新昵称');
+    expect(useAuthStore.getState().user?.name).toBe('新昵称');
+  });
+
+  it('loadDevices 使用中继在线设备面返回的数据', async () => {
+    useAuthStore.setState({ isLoggedIn: true });
+    vi.mocked(authApi.authListDevices).mockResolvedValueOnce([
+      {
+        id: 'd1',
+        name: 'My Phone',
+        platform: 'mobile',
+        lastSeenAt: Date.now(),
+        trusted: true,
+      },
+    ]);
+
+    await useAuthStore.getState().loadDevices();
+
     expect(useAuthStore.getState().devices).toHaveLength(1);
-    expect(useAuthStore.getState().devices[0].id).toBe('d2');
+    expect(useAuthStore.getState().devices[0].platform).toBe('mobile');
+  });
+
+  it('revokeOtherSessions 只退出非本机会话并刷新列表', async () => {
+    const base = {
+      deviceId: 'dev',
+      userAgent: 'ua',
+      ip: '127.0.0.1',
+      createdAt: 1,
+      expiresAt: 2,
+      revoked: false,
+    };
+    useAuthStore.setState({
+      isLoggedIn: true,
+      sessions: [
+        { ...base, id: 's-self', current: true },
+        { ...base, id: 's-other', current: false },
+        { ...base, id: 's-old', current: false, revoked: true },
+      ],
+    });
+    vi.mocked(authApi.authRevokeSession).mockResolvedValue(true);
+    vi.mocked(authApi.authListSessions).mockResolvedValueOnce([
+      { ...base, id: 's-self', current: true },
+    ]);
+
+    const ok = await useAuthStore.getState().revokeOtherSessions();
+
+    expect(ok).toBe(true);
+    expect(authApi.authRevokeSession).toHaveBeenCalledTimes(1);
+    expect(authApi.authRevokeSession).toHaveBeenCalledWith('s-other');
+    expect(useAuthStore.getState().sessions).toHaveLength(1);
+  });
+
+  it('deleteAccount 后端未就绪时抛错且保持登录态', async () => {
+    useAuthStore.setState({
+      isLoggedIn: true,
+      user: { id: 'u1', email: 'test@example.com' },
+    });
+    vi.mocked(authApi.authDeleteAccount).mockRejectedValueOnce(
+      new Error('unavailable')
+    );
+
+    await expect(useAuthStore.getState().deleteAccount()).rejects.toThrow(
+      'unavailable'
+    );
+    expect(useAuthStore.getState().isLoggedIn).toBe(true);
+  });
+
+  it('deleteAccount 成功后回到未登录态', async () => {
+    useAuthStore.setState({
+      isLoggedIn: true,
+      user: { id: 'u1', email: 'test@example.com' },
+    });
+    vi.mocked(authApi.authDeleteAccount).mockResolvedValueOnce(undefined);
+
+    await useAuthStore.getState().deleteAccount();
+
+    expect(useAuthStore.getState().isLoggedIn).toBe(false);
+    expect(useAuthStore.getState().user).toBeNull();
   });
 });

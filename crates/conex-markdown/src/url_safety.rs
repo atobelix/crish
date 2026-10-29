@@ -33,10 +33,6 @@ static DATA_IMAGE_RASTER_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("valid data image regex")
 });
 
-static JS_VBSCRIPT_DATA_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^(javascript|vbscript|data):").expect("valid unsafe scheme regex")
-});
-
 static WIN_DRIVE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[A-Za-z]:[\\/]").expect("valid windows drive regex"));
 
@@ -263,10 +259,15 @@ pub fn is_safe_img_src(url: &str) -> bool {
     true
 }
 
-/// `file:///C:/foo` / `file://server/share` / `file:/home/user` → 本地路径。
+/// `file:///C:/foo` / `file:/home/user` → 本地路径。
 ///
-/// 返回 None 表示不是 file URL、路径为空或含控制字符。路径只做 percent-decode，
-/// 不做规范化/存在性检查（存在性与可执行后缀由前端/宿主侧守卫）。
+/// 返回 None 表示不是 file URL、路径为空、含控制字符，或为**主机名形式**
+/// （`file://host/share`）。主机名形式一律拒绝：它在 Windows 下会展开成
+/// `\\host\share` UNC 路径，点击即触发 SMB 445 外连并泄露 NetNTLMv2 哈希。
+/// 网络共享若确需访问，应由用户在系统层自行挂载，不经 Markdown 链接承载。
+///
+/// 路径只做 percent-decode，不做规范化/存在性检查（存在性与可执行后缀由
+/// 前端/宿主侧守卫）。
 pub fn file_url_to_path(url: &str) -> Option<String> {
     let trimmed = url.trim();
     let lower = trimmed.to_ascii_lowercase();
@@ -286,20 +287,14 @@ pub fn file_url_to_path(url: &str) -> Option<String> {
     }
 
     let path = if is_authority_form {
-        if let Some(after_slash) = decoded.strip_prefix('/') {
-            // file:///C:/foo 或 file:///home/user
-            if is_windows_drive_prefix(after_slash) {
-                after_slash.to_string()
-            } else {
-                decoded.clone()
-            }
+        // file:// 之后必须紧跟 `/`（空 authority），否则 `file://host/share`
+        // 是远程主机引用——拒绝，不构造 UNC。
+        let after_slash = decoded.strip_prefix('/')?;
+        // file:///C:/foo 或 file:///home/user
+        if is_windows_drive_prefix(after_slash) {
+            after_slash.to_string()
         } else {
-            // file://server/share：UNC / 网络路径
-            if cfg!(windows) {
-                format!("\\\\{}", decoded.replace('/', "\\"))
-            } else {
-                format!("//{decoded}")
-            }
+            decoded
         }
     } else {
         decoded
@@ -329,17 +324,18 @@ pub fn is_local_path_ref(s: &str) -> bool {
         return true;
     }
 
-    // 任一变体已是 http(s)/mailto 或危险 scheme → 非本地路径
-    for v in variants.iter() {
-        if HTTP_SCHEME_RE.is_match(v) || MAILTO_SCHEME_RE.is_match(v) {
-            return false;
-        }
-        if JS_VBSCRIPT_DATA_RE.is_match(v) {
-            return false;
-        }
-    }
+    // Windows 盘符（`C:\a` / `C:/a`）形如 scheme 但实为本地路径，故先判定。
     if WIN_DRIVE_RE.is_match(t) {
         return true;
+    }
+    // 任一变体带 scheme（http/mailto/blob/data/javascript/任意自定义 scheme）
+    // → 非本地路径。scheme 判定必须先于下面所有路径形态判定：否则
+    // `blob:payload.rs` 这类「无 :// 且有代码后缀」的引用会绕过 scheme 检查
+    // 被误判成本地文件，进而渲染出特权路径链接。
+    for v in variants.iter() {
+        if ANY_SCHEME_RE.is_match(v) {
+            return false;
+        }
     }
     if t.starts_with('/') || t.starts_with("~/") || t.starts_with("./") || t.starts_with("../") {
         return true;
@@ -347,10 +343,7 @@ pub fn is_local_path_ref(s: &str) -> bool {
     if PROJECT_PREFIX_RE.is_match(t) {
         return true;
     }
-    if CODE_EXT_RE.is_match(t) && !t.contains("://") {
-        return true;
-    }
-    false
+    CODE_EXT_RE.is_match(t)
 }
 
 /// 从 markdown 链目标字符串取出 URL（去掉可选 title；支持尖括号）。
@@ -441,5 +434,47 @@ mod tests {
     fn file_url_rejects_empty_and_control_chars() {
         assert_eq!(file_url_to_path("file://"), None);
         assert_eq!(file_url_to_path("file:///%00evil"), None);
+    }
+
+    /// 回归：`file://host/share` 是远程主机引用，必须拒绝。
+    ///
+    /// 若放行，Windows 下会展开成 `\\host\share` UNC 路径——用户点一下链接，
+    /// 系统就向攻击者 SMB 服务器发起 445 连接并自动送出 NetNTLMv2 哈希。
+    #[test]
+    fn file_url_rejects_remote_host_authority() {
+        assert_eq!(file_url_to_path("file://server/share/a.md"), None);
+        assert_eq!(file_url_to_path("file://evil.example.com/a.md"), None);
+        assert_eq!(file_url_to_path("file://192.168.1.5/share"), None);
+        assert!(!is_local_path_ref("file://server/share/a.md"));
+    }
+
+    /// 回归：带 scheme 的引用一律不是本地路径。
+    ///
+    /// `blob:payload.rs` 无 `://` 且带代码后缀，曾绕过 scheme 检查被判定为
+    /// 本地文件，从而渲染出可点击的特权路径链接。
+    #[test]
+    fn scheme_refs_are_never_local_paths() {
+        for url in [
+            "blob:payload.rs",
+            "blob:https://ex.com/uuid",
+            "data:text/html,<script>x</script>",
+            "javascript:alert(1)",
+            "vbscript:msgbox(1)",
+            "custom-scheme:a.rs",
+        ] {
+            assert!(
+                !is_local_path_ref(url),
+                "{url} 带 scheme，不得判定为本地路径"
+            );
+        }
+    }
+
+    /// 盘符形如 scheme（`C:`）但确为本地路径，不能被上一条规则误伤。
+    #[test]
+    fn windows_drive_is_still_local_path() {
+        assert!(is_local_path_ref("C:\\Workspace\\a.md"));
+        assert!(is_local_path_ref("C:/Workspace/a.md"));
+        assert!(is_local_path_ref("apps/crish-desktop/src/main.ts"));
+        assert!(is_local_path_ref("./notes.md"));
     }
 }

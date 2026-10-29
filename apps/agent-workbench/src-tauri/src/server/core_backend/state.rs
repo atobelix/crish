@@ -8,6 +8,7 @@ use conex_types::device::{
 };
 
 use crate::core_commands::SharedSearchState;
+use crate::server::backend::WorkspaceOps;
 use crate::server::ServerError;
 use conex_run::run::{
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, list_active_runs_impl,
@@ -39,6 +40,8 @@ pub struct CoreStateBackend {
     /// C21 搜索索引根（索引构建时的 canonical 工作区根；relPath 剥离
     /// 依据——与 search_state 配套注入）
     search_root: Option<String>,
+    /// 工作区文件只读操作（main.rs 装配面注入；缺省 = 文件命令 internal）
+    workspace_ops: Option<Arc<dyn WorkspaceOps>>,
 }
 
 impl CoreStateBackend {
@@ -52,6 +55,7 @@ impl CoreStateBackend {
             compaction_ready: false,
             search_state: None,
             search_root: None,
+            workspace_ops: None,
         }
     }
 
@@ -86,6 +90,16 @@ impl CoreStateBackend {
     pub fn with_search_root(mut self, root: impl Into<String>) -> Self {
         self.search_root = Some(root.into());
         self
+    }
+
+    /// 注入工作区文件只读操作（main.rs 装配面消费）
+    pub fn with_workspace_ops(mut self, ops: Arc<dyn WorkspaceOps>) -> Self {
+        self.workspace_ops = Some(ops);
+        self
+    }
+
+    pub(super) fn workspace_ops(&self) -> Option<Arc<dyn WorkspaceOps>> {
+        self.workspace_ops.clone()
     }
 
     /// 全局事件桥（R1-11：remote-* 审计事件发射通道；main.rs 装配面经此

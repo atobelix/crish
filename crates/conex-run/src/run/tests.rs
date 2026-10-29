@@ -25,6 +25,11 @@ use std::time::Duration;
 // T4.3-R2：本地 HTTP 请求捕获服务器（真实 wire 层载荷断言）
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+/// goal 状态按会话命名空间落键（`{session_id}:goal_state`）。
+fn goal_key(session_id: &str) -> String {
+    session_meta_key_of(session_id, orchestrator::goal_state::GOAL_STATE_KEY)
+}
+
 /// 便捷构造 HistoryMessage（缺省无 thinking/无 JSON 载荷字段）
 fn hmsg(id: &str, sender: &str, text: Option<&str>) -> HistoryMessage {
     HistoryMessage {
@@ -3415,6 +3420,7 @@ fn resume_launcher_probe(
                 Box::new(TestProducer::with_calls(canned_outcome(), calls)),
             )
             .await;
+            true
         })
     });
     launcher
@@ -3426,6 +3432,7 @@ fn counting_launcher(counter: Arc<AtomicU64>) -> ResumeLauncher {
         let counter = Arc::clone(&counter);
         Box::pin(async move {
             counter.fetch_add(1, Ordering::SeqCst);
+            true
         })
     });
     launcher
@@ -3433,6 +3440,56 @@ fn counting_launcher(counter: Arc<AtomicU64>) -> ResumeLauncher {
 
 /// 验收：收口时队列有 1 条目（跨 run steering：子代理完成）→ 自动续开
 /// 一轮 run——produce 再次调用 + 条目原文进入注入消息
+/// 续 run 拉起失败（launcher 返回 false）→ 本轮 drain 的队列条目必须
+/// 回灌，唤醒不得静默丢失（定时器/子代理完成通知）。
+#[tokio::test]
+async fn failed_resume_launch_reinstates_drained_queue_entries() {
+    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+    let original_text = "子代理 sa-2（实现）已完成：completed";
+    state
+        .pending_queue
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .enqueue(
+            SteeringInputEntry::steering("e-req", original_text, 1_785_456_000_000)
+                .with_session("s1"),
+        );
+    // 拉起失败替身：返回 false 表示未接受（如串行守卫/引擎未就绪）
+    let launcher: ResumeLauncher =
+        Arc::new(|_state, _session_id, _mode, _messages| Box::pin(async { false }));
+    state.set_resume_launcher(Some(launcher));
+
+    let active = build_active_run(&state, "s1", "run-fail-launch").await;
+    state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert("run-fail-launch".to_string(), Arc::clone(&active));
+    drive_run_loop(
+        Arc::clone(&state),
+        active,
+        Box::new(TestProducer::new(canned_outcome())),
+    )
+    .await;
+
+    let queue = state
+        .pending_queue
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    assert!(
+        queue.has_pending_for("s1"),
+        "拉起失败后本轮条目必须回灌队列"
+    );
+    let requeued = queue
+        .peek_for("s1")
+        .expect("回灌条目必须可读");
+    assert!(
+        requeued.text.contains(original_text),
+        "回灌内容必须保留原唤醒文本：{}",
+        requeued.text
+    );
+}
+
 #[tokio::test]
 async fn idle_resume_run_when_queue_non_empty() {
     let state = core_state_with_store(Arc::new(InMemoryStore::new()));
@@ -4501,7 +4558,7 @@ async fn goal_round_no_output_counts_streak() {
     // runs 表外键引用 sessions——活动 run 装配前先落会话行
     db.insert_session("s1", "s1").expect("会话行");
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("测试目标", 12, 2).to_json(),
     )
     .expect("goal_state 落键");
@@ -4537,6 +4594,156 @@ async fn goal_round_no_output_counts_streak() {
 
 // ── D5/D1 轮 2 接线：goal_state 写面 / 熔断计数 / 退避注入 ──────
 
+/// goal_state 按会话隔离：A 会话目标不得被 B 会话读到（旧全局键串扰：
+/// A 的 goal 会驱动 B 会话自动续轮）。
+#[tokio::test]
+async fn goal_state_is_isolated_per_session() {
+    let db = LocalDb::open_in_memory().expect("内存库");
+    db.insert_session("s1", "s1").expect("会话行 s1");
+    db.insert_session("s2", "s2").expect("会话行 s2");
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+
+    state
+        .save_goal_state("s1", &GoalState::new("A 会话目标", 5, 2))
+        .await;
+    let own = state.load_goal_state("s1").await.expect("s1 目标必须存在");
+    assert_eq!(own.goal, "A 会话目标");
+    assert!(
+        state.load_goal_state("s2").await.is_none(),
+        "目标不得跨会话泄漏"
+    );
+}
+
+/// provider 熔断 streak 按会话隔离：A 的连续失败不得熔断 B 的 run。
+#[tokio::test]
+async fn provider_fail_streak_is_isolated_per_session() {
+    let db = LocalDb::open_in_memory().expect("内存库");
+    db.insert_session("s1", "s1").expect("会话行 s1");
+    db.insert_session("s2", "s2").expect("会话行 s2");
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+    let state = core_state_with_store(store);
+
+    state.update_provider_fail_streak("s1", true).await;
+    assert_eq!(
+        state.provider_fail_streak_count("s1").await,
+        Some(1),
+        "失败计数必须落在本会话命名空间"
+    );
+    assert_eq!(
+        state.provider_fail_streak_count("s2").await,
+        None,
+        "streak 不得跨会话共享"
+    );
+    assert!(
+        !state.circuit_breaker_is_tripped("s2").await,
+        "B 会话不得因 A 的失败触发熔断"
+    );
+}
+
+/// finalize_failed 终态幂等：正常完成后再进入失败收口不得翻转状态、
+/// 不得重复终态事件（看门狗与驱动错误路径双进入的竞态防线）。
+#[tokio::test]
+async fn finalize_failed_skips_already_terminal_run() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("ok"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, db, _emitter) = run_control_test_state(provider);
+    let active = build_active_run(&state, "s1", "run-idempotent-terminal").await;
+    drive_run_loop(
+        Arc::clone(&state),
+        Arc::clone(&active),
+        Box::new(TestProducer::new(canned_outcome())),
+    )
+    .await;
+    assert_eq!(
+        active.handle.lock().await.status,
+        conex_db::RunStatus::Completed,
+        "正常收口必须为 completed"
+    );
+    let count_terminals = |db: &LocalDb| {
+        db.query_events("s1", 0, None)
+            .expect("读取事件")
+            .into_iter()
+            .filter(|event| event.event_type == "run-terminal")
+            .count()
+    };
+    let terminals_before = count_terminals(&db);
+
+    crate::run::finalize_failed(&state, &active, "watchdog late failure").await;
+
+    assert_eq!(
+        active.handle.lock().await.status,
+        conex_db::RunStatus::Completed,
+        "已终态不得被失败收口翻成 Failed"
+    );
+    assert_eq!(
+        count_terminals(&db),
+        terminals_before,
+        "重复收口不得再写 run-terminal"
+    );
+    assert!(
+        !state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key("run-idempotent-terminal"),
+        "重复收口仍须保证移出活动注册表"
+    );
+}
+
+/// 用户取消（会话级中止）必须写入会话级 user_stopped：否则收口后残留
+/// 队列条目会在 10s 冷却后被 watcher 自动重拉，等于撤销用户取消。
+#[tokio::test]
+async fn abort_session_marks_user_stopped() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("x"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, _db, _emitter) = run_control_test_state(provider);
+    let active = build_active_run(&state, "s1", "run-abort-user").await;
+    state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert("run-abort-user".to_string(), Arc::clone(&active));
+
+    let aborted = crate::run::abort_session_run_impl(&state, "s1")
+        .await
+        .expect("中止应成功");
+    assert!(aborted, "存在活动 run 时必须中止");
+    assert!(
+        state.is_user_stopped("s1"),
+        "用户中止必须登记会话级 user_stopped"
+    );
+    assert!(active.abort_signal.is_aborted(), "必须投递 L3 强停信号");
+}
+
+/// 显式取消 run 同样登记会话级 user_stopped（与 run_control L2/L3 同语义）。
+#[tokio::test]
+async fn cancel_run_marks_user_stopped() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("x"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, _db, _emitter) = run_control_test_state(provider);
+    let active = build_active_run(&state, "s1", "run-cancel-user").await;
+    state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert("run-cancel-user".to_string(), Arc::clone(&active));
+
+    crate::run::cancel_run_impl(&state, "run-cancel-user", None, Some("test"))
+        .await
+        .expect("取消应成功");
+    assert!(
+        state.is_user_stopped("s1"),
+        "取消 run 必须登记会话级 user_stopped"
+    );
+}
+
 /// 轮询至熔断键 count 达期望值（收口写键在 agent-end 落库之后，
 /// spawn_blocking 异步落键——轮询窗口内未达则 panic）
 async fn wait_for_fail_streak(db: &LocalDb, expected: u32, window: Duration) -> ProviderFailStreak {
@@ -4544,7 +4751,7 @@ async fn wait_for_fail_streak(db: &LocalDb, expected: u32, window: Duration) -> 
     let mut last_persisted = None;
     loop {
         if let Some(raw) = db
-            .get_session_meta(PROVIDER_FAIL_STREAK_KEY)
+            .get_session_meta(&session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY))
             .expect("熔断键读取")
         {
             let streak: ProviderFailStreak = serde_json::from_str(&raw).expect("熔断键合法 JSON");
@@ -4594,6 +4801,7 @@ async fn goal_mode_run_writes_state_and_continues_round() {
         let count = messages.len();
         Box::pin(async move {
             probe.lock().unwrap().push((mode, count));
+            true
         })
     });
     state.set_resume_launcher(Some(launcher));
@@ -4622,7 +4830,7 @@ async fn goal_mode_run_writes_state_and_continues_round() {
     // goal_state 键创建 + 收口评估（advance 写回 spawn_blocking 异步——竞速容忍轮询）
     wait_goal_round_advanced(&db, "s1", Duration::from_secs(10)).await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("goal_state 键必须已创建");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4668,7 +4876,7 @@ async fn goal_run_error_close_does_not_advance_round() {
     ]));
     let (state, db, _emitter) = run_control_test_state(provider);
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");
@@ -4694,7 +4902,7 @@ async fn goal_run_error_close_does_not_advance_round() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4719,7 +4927,7 @@ async fn goal_run_completed_round_terminates_goal() {
     ]));
     let (state, db, _emitter) = run_control_test_state(provider);
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");
@@ -4742,7 +4950,7 @@ async fn goal_run_completed_round_terminates_goal() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4768,7 +4976,7 @@ async fn goal_run_subagent_close_skips_assessment() {
     ]));
     let (state, db, _emitter) = run_control_test_state(provider);
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");
@@ -4802,7 +5010,7 @@ async fn goal_run_subagent_close_skips_assessment() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4873,7 +5081,7 @@ async fn goal_run_stalled_fingerprint_terminates_goal() {
     let (state, db, _emitter) = run_control_test_state(provider);
     let mut preset = GoalState::new("修复目标", 12, 2);
     preset.progress_signature = Some(signature.clone());
-    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &preset.to_json())
+    db.set_session_meta(&goal_key("s1"), &preset.to_json())
         .expect("goal_state 预置（带进度签名）");
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
@@ -4887,7 +5095,7 @@ async fn goal_run_stalled_fingerprint_terminates_goal() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4908,7 +5116,7 @@ async fn goal_run_stalled_fingerprint_terminates_goal() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4937,7 +5145,7 @@ async fn goal_run_max_rounds_exhausted_terminates_goal() {
     let (state, db, _emitter) = run_control_test_state(provider);
     let mut preset = GoalState::new("修复目标", 12, 2);
     preset.current_round = 11;
-    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &preset.to_json())
+    db.set_session_meta(&goal_key("s1"), &preset.to_json())
         .expect("goal_state 预置（末轮）");
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
@@ -4957,7 +5165,7 @@ async fn goal_run_max_rounds_exhausted_terminates_goal() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -4998,6 +5206,7 @@ async fn goal_continue_inject_text_contains_goal_prefix_and_round() {
         let mode = mode.to_string();
         Box::pin(async move {
             probe.lock().unwrap().push((mode, messages));
+            true
         })
     });
     state.set_resume_launcher(Some(launcher));
@@ -5068,7 +5277,7 @@ async fn goal_run_plain_mode_preserves_goal_state() {
     let mut preset = GoalState::new("修复目标", 12, 2);
     preset.current_round = 3;
     preset.progress_signature = Some("tools:fnv1a:aaaaaaaaaaaaaaaa".into());
-    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &preset.to_json())
+    db.set_session_meta(&goal_key("s1"), &preset.to_json())
         .expect("goal_state 预置（挂起中）");
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
@@ -5089,7 +5298,7 @@ async fn goal_run_plain_mode_preserves_goal_state() {
     )
     .await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("普通 run 收口后 goal_state 键必须保留");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -5119,7 +5328,7 @@ async fn goal_mode_new_goal_overwrites_old_state() {
     old.current_round = 5;
     old.stalled_rounds = 2;
     old.progress_signature = Some("tools:fnv1a:bbbbbbbbbbbbbbbb".into());
-    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &old.to_json())
+    db.set_session_meta(&goal_key("s1"), &old.to_json())
         .expect("旧 goal_state 预置");
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
@@ -5134,7 +5343,7 @@ async fn goal_mode_new_goal_overwrites_old_state() {
     wait_run_terminal(&db, "s1", Duration::from_secs(90)).await;
     wait_goal_round_advanced(&db, "s1", Duration::from_secs(10)).await;
     let raw = db
-        .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+        .get_session_meta(&goal_key("s1"))
         .expect("键读取")
         .expect("键存在");
     let goal: serde_json::Value = serde_json::from_str(&raw).expect("合法 JSON");
@@ -5228,7 +5437,7 @@ async fn drive_run_loop_close_clears_streak_on_normal_stop() {
     ]));
     let (state, db, _emitter) = run_control_test_state(provider);
     db.set_session_meta(
-        PROVIDER_FAIL_STREAK_KEY,
+        &session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY),
         &ProviderFailStreak {
             count: 3,
             first_fail_at_ms: 1_785_456_000_000,
@@ -5405,6 +5614,7 @@ fn recording_resume_launcher(
                 texts,
             ));
             prod(&state, &session_id, &mode, messages).await;
+            true
         })
     });
     launcher
@@ -5577,7 +5787,7 @@ async fn content_resume_budget_caps_at_two() {
     assert!(denied.is_none(), "第 3 次断流预算耗尽不得续写");
     // 预算落键：content-resume 指纹计数 = 2（上限封顶）
     let raw = db
-        .get_session_meta(RECOVER_EPISODES_KEY)
+        .get_session_meta(&session_meta_key_of("s1", RECOVER_EPISODES_KEY))
         .expect("预算键读取")
         .expect("预算键已写入");
     let counts: serde_json::Value = serde_json::from_str(&raw).expect("预算键合法 JSON");
@@ -5667,7 +5877,7 @@ async fn content_resume_skips_non_transient_kind() {
     assert!(verdict.is_none(), "含工具调用的消息不得触发续写（T3）");
     // 预算零消费 + 队列无残留
     assert!(
-        db.get_session_meta(RECOVER_EPISODES_KEY)
+        db.get_session_meta(&session_meta_key_of("s1", RECOVER_EPISODES_KEY))
             .expect("预算键读取")
             .is_none(),
         "非瞬态/不可重试/非纯文本判定不消费续写预算"
@@ -5712,7 +5922,7 @@ async fn content_resume_gates_disabled_circuit_abort_user_touched() {
         .expect("开关键复位");
     // T5：熔断触发（count=6 预置 ≥ 阈值 6）→ 不续写且预算不消费
     db.set_session_meta(
-        PROVIDER_FAIL_STREAK_KEY,
+        &session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY),
         &ProviderFailStreak {
             count: 6,
             first_fail_at_ms: 1_785_456_000_000,
@@ -5725,7 +5935,7 @@ async fn content_resume_gates_disabled_circuit_abort_user_touched() {
     let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true, &signals).await;
     assert!(verdict.is_none(), "熔断触发不续写（T5）");
     assert!(
-        db.get_session_meta(RECOVER_EPISODES_KEY)
+        db.get_session_meta(&session_meta_key_of("s1", RECOVER_EPISODES_KEY))
             .expect("预算键读取")
             .is_none(),
         "熔断闸拒绝不消费预算（动作未发生不消费）"
@@ -5837,7 +6047,7 @@ async fn content_resume_degrades_to_error_retry_when_resume_run_fails() {
     // 指纹域隔离：content-resume 与 error-retry 各自计数 1（互不消耗，
     // E1 §3.4 同键互斥 + D2 §3.4 域隔离）
     let raw = db
-        .get_session_meta(RECOVER_EPISODES_KEY)
+        .get_session_meta(&session_meta_key_of("s1", RECOVER_EPISODES_KEY))
         .expect("预算键读取")
         .expect("预算键已写入");
     let counts: serde_json::Value = serde_json::from_str(&raw).expect("预算键合法 JSON");
@@ -5922,7 +6132,7 @@ async fn fail_streak_cross_threshold_emits_circuit_trip() {
         transient_retry_limit: Some(3),
     }));
     db.set_session_meta(
-        PROVIDER_FAIL_STREAK_KEY,
+        &session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY),
         &ProviderFailStreak {
             count: 5,
             first_fail_at_ms: 1_785_456_000_000,
@@ -5993,7 +6203,7 @@ async fn circuit_breaker_gate_fatals_without_retry() {
     let (state, db, _emitter) = run_control_test_state(provider.clone());
     state.run_restore().await;
     db.set_session_meta(
-        PROVIDER_FAIL_STREAK_KEY,
+        &session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY),
         &ProviderFailStreak {
             count: 6,
             first_fail_at_ms: 1_785_456_000_000,
@@ -6136,7 +6346,7 @@ async fn circuit_breaker_streak_survives_restart_and_gates_new_run() {
     let provider = failing();
     let (state, db, _emitter) = run_control_test_state_on_db(provider.clone(), db);
     db.set_session_meta(
-        PROVIDER_FAIL_STREAK_KEY,
+        &session_meta_key_of("s1", PROVIDER_FAIL_STREAK_KEY),
         &ProviderFailStreak {
             count: 6,
             first_fail_at_ms: 1_785_456_000_000,
@@ -7968,7 +8178,7 @@ async fn diag_goal_overwrite_dump() {
     old.current_round = 5;
     old.stalled_rounds = 2;
     old.progress_signature = Some("tools:fnv1a:bbbbbbbbbbbbbbbb".into());
-    db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &old.to_json())
+    db.set_session_meta(&goal_key("s1"), &old.to_json())
         .expect("旧 goal_state 预置");
     let counter = Arc::new(AtomicU64::new(0));
     state.set_resume_launcher(Some(counting_launcher(Arc::clone(&counter))));
@@ -7982,7 +8192,7 @@ async fn diag_goal_overwrite_dump() {
         .expect("run 发起成功");
     for i in 0..50 {
         let raw = db
-            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .get_session_meta(&goal_key("s1"))
             .ok()
             .flatten();
         match raw {
@@ -8009,7 +8219,7 @@ async fn diag_goal_overwrite_dump() {
 async fn wait_goal_round_advanced(db: &LocalDb, _session_id: &str, window: Duration) {
     let deadline = tokio::time::Instant::now() + window;
     loop {
-        if let Ok(Some(raw)) = db.get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY) {
+        if let Ok(Some(raw)) = db.get_session_meta(&goal_key("s1")) {
             if let Ok(goal) = serde_json::from_str::<serde_json::Value>(&raw) {
                 if goal["current_round"].as_u64().unwrap_or(0) >= 1 {
                     return;
@@ -8735,7 +8945,7 @@ async fn watcher_wakes_sleeping_ai_after_timer_expiry_e2e() {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .is_empty();
-        if active_empty && queue_empty && provider.call_count() >= 3 {
+        if active_empty && queue_empty && provider.call_count() >= 2 {
             break;
         }
         assert!(
@@ -8758,8 +8968,8 @@ async fn watcher_wakes_sleeping_ai_after_timer_expiry_e2e() {
         .collect();
     assert_eq!(
         provider.call_count(),
-        3,
-        "唤醒链共 3 轮（首轮 + watcher 拉起轮 + 注入轮），不得继续拉起；calls={call_summaries:?}"
+        2,
+        "唤醒链共 2 轮（首轮 + watcher 直接注入拉起轮；旧实现多一轮空 prompt），不得继续拉起；calls={call_summaries:?}"
     );
     // 收尾：停掉后台 watcher 周期任务（防 runtime 销毁前的残留 tick）
     let watcher = state
@@ -10176,7 +10386,7 @@ async fn goal_continuation_decided_completed_action_is_complete() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");
@@ -10213,7 +10423,7 @@ async fn goal_continuation_decided_blocked_action_is_blocked() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");
@@ -10253,7 +10463,7 @@ async fn goal_continuation_decided_no_progress_action_is_stop() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta(
-        orchestrator::goal_state::GOAL_STATE_KEY,
+        &goal_key("s1"),
         &GoalState::new("修复目标", 12, 2).to_json(),
     )
     .expect("goal_state 预置");

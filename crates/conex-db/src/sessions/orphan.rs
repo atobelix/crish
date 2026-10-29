@@ -158,14 +158,32 @@ pub(crate) fn cleanup_orphan_sessions_conn(
     };
 
     // RUN-15：同事务内清理被删孤儿会话的 session_meta 前缀键（独立 KV 表
-    // 无 FK 级联；删行后按收集到的 id 逐个前缀清理，键不残留）。
+    // 无 FK 级联；删行后按收集到的 id 逐个前缀清理，键不残留）与
+    // session_sequence 序列槽（无 FK，必须显式删）。
     for id in &orphan_ids {
         delete_session_meta_prefix_conn(conn, id)?;
+        delete_session_sequence_conn(conn, id)?;
     }
 
     // RUN-07：返回带产出 meta 捕获的结果列表（长度 = 实际删除行数，
     // 收集条件与 DELETE 条件完全同构）。
     Ok(outcomes)
+}
+
+/// 删除会话的事件序列号槽（`session_sequence` 无 FK 级联：旧实现删会话后
+/// 该行永久残留，长期运行库体积只增不减）。
+pub(crate) fn delete_session_sequence_conn(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<usize, DbFailure> {
+    conn.execute(
+        "DELETE FROM session_sequence WHERE session_id = ?1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("delete_session_sequence: {e}"),
+        kind: DbFailureKind::Other("delete_session_sequence".to_string()),
+    })
 }
 
 /// 按会话 id 前缀删除 session_meta 键（`{session_id}:*`；RUN-15）。

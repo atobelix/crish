@@ -22,10 +22,9 @@ import type { WorkspaceEntry } from '@crish/shared-types';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { useFilesStore } from '@/adapters/hooks/useFilesStore';
 import { dirCacheKey } from '@/domain/store/filesCache';
+import { joinRelPath, workspaceNameOf } from '@/domain/pure/workspacePath';
 import {
   getFilesContext,
-  joinRelPath,
-  workspaceNameOf,
   type FilesContext,
 } from '@/adapters/wiring/filesWiring';
 import { FilesCommandError } from '@/adapters/wiring/filesRepository';
@@ -36,11 +35,8 @@ import {
 
 // ── 常量与类型 ────────────────────────────────────────────────────────────
 
-/** 行高密度三档（R2UX-06-01：固定行高 44/48/56，默认 48） */
-export const ROW_DENSITIES = [44, 48, 56] as const;
-export type RowDensity = (typeof ROW_DENSITIES)[number];
-/** 默认密度（任务书：默认 48；设置联动可后置） */
-export const DEFAULT_ROW_DENSITY: RowDensity = 48;
+/** 文件行高（固定 56；移动端不再提供密度切换） */
+export const FILE_ROW_HEIGHT = 56;
 
 /** 工作区列表装载态（WorkspaceSwitcher 数据面） */
 export type WorkspacesStatus = 'idle' | 'loading' | 'loaded' | 'error';
@@ -79,8 +75,6 @@ export interface FilesVm {
   /** 展示用错误码（工作区错误优先，其次当前层错误；null = 无错误） */
   errorCode: string | null;
   sortMode: DirSortMode;
-  /** 行高密度（44/48/56，默认 48） */
-  density: RowDensity;
   /** 下拉刷新进行中 */
   refreshing: boolean;
   /** 工作区切换中（防双点，F2 §9.3-3） */
@@ -96,7 +90,6 @@ export interface FilesVm {
   /** 面包屑跳转：导航栈截断到指定深度 */
   jumpTo: (index: number) => void;
   setSortMode: (mode: DirSortMode) => void;
-  setDensity: (density: RowDensity) => void;
   /** 下拉刷新：失效当前层缓存 + 重拉 */
   refresh: () => void;
   /** 错误态重试：重拉当前层 */
@@ -122,7 +115,6 @@ export function useFilesVm(contextOverride?: FilesContext | null): FilesVm {
   }));
 
   // ── 本地态 ──────────────────────────────────────────────────────────────
-  const [density, setDensity] = useState<RowDensity>(DEFAULT_ROW_DENSITY);
   const [refreshing, setRefreshing] = useState(false);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [workspaces, setWorkspaces] = useState<
@@ -376,7 +368,6 @@ export function useFilesVm(contextOverride?: FilesContext | null): FilesVm {
     status: dirState.status,
     errorCode,
     sortMode: tree.sortMode,
-    density,
     refreshing,
     switchingWorkspace,
     workspaces,
@@ -386,7 +377,6 @@ export function useFilesVm(contextOverride?: FilesContext | null): FilesVm {
     back,
     jumpTo,
     setSortMode,
-    setDensity,
     refresh,
     retry,
     retryConnect,

@@ -1,20 +1,20 @@
 /**
  * 命令契约漂移总门禁（T-F 06 T5.1，对齐 04 方案步骤 6）。
  *
- * 断言一（零断链）：每个前端 invoke 字面量 ∈ Rust 注册键集（main.rs
+ * 断言一（零断链）：每个前端 invoke 字面量 ∈ Rust 注册键集（command_registry.rs
  * command_registry! 注册宏；rename 后 wire 键 = 宏名 = manifest 名）。
  * 断言二（零幽灵）：注册键集 ⊆ 前端 invoke 字面量 ∪ 显式豁免集。
  *
- * ── 断言一当前状态：**红**，且不得「修绿」────────────────────────────
- * 断链集 = `catalog_get` / `catalog_refresh`（真缺陷）：Rust 侧
- * `catalog_commands.rs` 已物理删除、`main.rs` 无注册，而前端消费面仍在调
- * （`modelCatalogIpc.ts:107` / `:236`、`thinkingGear.ts:208`）。
- * 由 04 方案**阶段 3**（Rust 注册内置目录读面 + 前端改调）修复。
- * **严禁**用「加豁免 / 改前端调用名」把它变绿——那正是本门禁要拦的作弊面；
- * 新增断链（超出已知两条）由下方「已知断链棘轮」断言单独拦截。
+ * ── 历史：两条已知断链（已修复）────────────────────────────────────────
+ * `catalog_get` / `catalog_refresh` 曾因 Rust 侧 `catalog_commands.rs` 物理删除而
+ * 断链。现已由「出厂能力字典只读投影」读面（`workbench_read_capability_dictionary`）
+ * 取代，前端不再 invoke 旧命令名（仅剩历史注释）。断言一当前**无断链**、全绿。
+ *
+ * 该门禁**不是**「允许已知债务」的棘轮：任何新断链都必须修掉，不得加豁免变绿
+ * ——那正是本门禁要拦的作弊面。
  *
  * 抽取面：
- * - Rust 真源：`main.rs` 注册宏 `("name", path)` 元组 + `command_manifest.rs`
+ * - Rust 真源：`command_registry.rs` 注册宏 `("name", path)` 元组 + `command_manifest.rs`
  *   registered=true 条目（对齐 commandManifest.test.ts 的 locateRepoRoot +
  *   extractRustManifestNames 先例；读失败 fail 不 skip + 哨兵计数防摆设化）；
  * - 前端：扫描 `apps/crish-desktop/src` 生产文件（排除 `*.test.ts`、
@@ -33,7 +33,7 @@
  * - `DRIFT_DEBT`（B 类·幽灵侧）：**真漂移**（Rust 有注册 + 前端生产代码零消费），
  *   显式登记为「目标 0 的债务」，**不再静默豁免**；每条带证据 / 责任方 /
  *   到期条件，并由「债务棘轮」断言锁上限（只降不升）。
- *   退役受制于四方对齐（`main.rs` + `command_manifest.rs` + 实现文件 +
+ *   退役受制于四方对齐（`command_registry.rs` + `command_manifest.rs` + 实现文件 +
  *   `commandManifest.ts` + `tauri-command-registry.ts` ≥ 5 文件，D11 防线
  *   双向全量对齐）——**超出本测试文件域**，故如实登记而非擅自删；
  * - `ENGINE_API_DEBT`（B 类·断链侧）：`config_get` / `config_update`。
@@ -51,6 +51,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const MAIN_RS_REL = 'apps/agent-workbench/src-tauri/src/main.rs';
+const REGISTRY_RS_REL =
+  'apps/agent-workbench/src-tauri/src/command_registry.rs';
 const MANIFEST_RS_REL =
   'apps/agent-workbench/src-tauri/src/command_manifest.rs';
 const FRONTEND_ROOT_REL = 'apps/crish-desktop/src';
@@ -69,9 +71,9 @@ function locateRepoRoot(): string {
   }
 }
 
-/** 从 main.rs command_registry! 抽取注册键（`("name", path)` 元组） */
+/** 从 command_registry.rs 抽取注册键（`("name", path)` 元组） */
 function extractRegistryNames(): string[] {
-  const file = join(locateRepoRoot(), MAIN_RS_REL);
+  const file = join(locateRepoRoot(), REGISTRY_RS_REL);
   if (!existsSync(file)) {
     throw new Error(`Rust 真源缺失：${file}（契约门禁必须 fail，不得 skip）`);
   }
@@ -82,7 +84,9 @@ function extractRegistryNames(): string[] {
     .replace(/\/\/[^\n]*/g, '');
   const macroMatch = stripped.match(/command_registry!\s*\[([\s\S]*?)\];/);
   if (!macroMatch?.[1]) {
-    throw new Error('未在 main.rs 中找到 command_registry! 宏调用块');
+    throw new Error(
+      '未在 command_registry.rs 中找到 command_registry! 宏调用块'
+    );
   }
   const macroBody = macroMatch[1];
   const re = /\(\s*"([a-z][a-z0-9_-]*)",/g;
@@ -281,7 +285,7 @@ const ENGINE_API_DEBT: readonly EngineApiDebt[] = [
   {
     command: 'config_get',
     evidence:
-      '前端消费：`engineConfigIO.ts:99-100` `transport.request(\'config_get\')`；' +
+      "前端消费：`engineConfigIO.ts:99-100` `transport.request('config_get')`；" +
       'Rust 侧**已退役**（`command_manifest.rs:326` 记载退役；注册面无此键）。' +
       'REST 孪生 `GET /v1/settings` 存在于 `server/backend.rs:205` / ' +
       '`server/core_backend.rs:759`，但前端未经 HTTP 面消费 ⇒ 该调用恒抛。',
@@ -293,7 +297,7 @@ const ENGINE_API_DEBT: readonly EngineApiDebt[] = [
   {
     command: 'config_update',
     evidence:
-      '前端消费：`engineConfigIO.ts:127` `transport.request(\'config_update\')`；' +
+      "前端消费：`engineConfigIO.ts:127` `transport.request('config_update')`；" +
       'Rust 侧**已退役**（`command_manifest.rs:326`；注册面无此键）。' +
       'REST 孪生 `PUT /v1/settings` 存在于 `server/backend.rs:217` ⇒ 同 `config_get`，' +
       '当前经 Tauri IPC 恒抛，`updateEngineConfig` 恒返回 `{ok:false}`。',
@@ -325,7 +329,7 @@ const JUSTIFIED_EXEMPTIONS: readonly JustifiedExemption[] = [
     command: 'workbench_window_ready',
     reason:
       '窗口首绘显现门闩：由 `public/loader.js:33` 骨架屏直出调用' +
-      '（`window.__TAURI_INTERNALS__.invoke(\'workbench_window_ready\')`），' +
+      "（`window.__TAURI_INTERNALS__.invoke('workbench_window_ready')`），" +
       '`public/` 不在本门禁扫描面（本门禁只扫 `apps/crish-desktop/src`）' +
       '——非「注册未消费」，故属正当豁免。',
     expiry:
@@ -349,7 +353,7 @@ interface DriftDebt {
  * 真漂移债务表（04 方案阶段 2 ④「掩盖项清零」的**如实登记**形态）。
  *
  * 为何不直接退役：退役一条命令必须同步五处
- * （`main.rs` + `command_manifest.rs` + 实现文件 + 前端 `commandManifest.ts` +
+ * （`command_registry.rs` + `command_manifest.rs` + 实现文件 + 前端 `commandManifest.ts` +
  * 前端 `tauri-command-registry.ts`），D11 防线要求四方**双向全量对齐**，
  * 改动面 ≥ 5 文件且跨 Rust / 前端两个文件域 —— 超出本测试文件域，
  * 故按战役规则「不得静默豁免」登记为**带到期条件的债务**，由责任方收口。
@@ -359,7 +363,7 @@ const DRIFT_DEBT: readonly DriftDebt[] = [
   {
     command: 'core_read_run_events',
     evidence:
-      'Rust 有注册：`main.rs:288-294` + `command_manifest.rs:164`' +
+      'Rust 有注册：`command_registry.rs` + `command_manifest.rs`' +
       '（F-03 DM-07「恢复激活」）+ `core_query_commands.rs:810`。' +
       '前端零消费：Tauri 侧 grep 命中 0；前端 REST 侧亦零命中。' +
       '注：引擎 REST 孪生 `GET /v1/runs/{id}/events` 已接线' +
@@ -496,10 +500,7 @@ describe('T-F 06 T5.1 命令契约漂移总门禁', () => {
     ).map((e) => e.command || '(空)');
     const blankDebt = DRIFT_DEBT.filter(
       (d) =>
-        !d.command ||
-        !d.evidence.trim() ||
-        !d.owner.trim() ||
-        !d.expiry.trim()
+        !d.command || !d.evidence.trim() || !d.owner.trim() || !d.expiry.trim()
     ).map((d) => d.command || '(空)');
     expect(
       { blankJustified, blankDebt },

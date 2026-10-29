@@ -20,13 +20,13 @@ import { isSameOriginRequest } from './dev-server/sameOriginRequest';
  */
 const DEV_CSP =
   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-  "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+  "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://auth.flowbit.me; " +
   "connect-src 'self' ipc: http: https: ws: wss:; " +
   "frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:;";
 
 const PROD_CSP_BASE =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-  "font-src 'self' data:; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
+  "font-src 'self' data:; img-src 'self' data: blob: https://auth.flowbit.me asset: http://asset.localhost https://asset.localhost; " +
   "media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
   "connect-src 'self' ipc: http://ipc.localhost http://localhost:8765 http://127.0.0.1:8765 ws://localhost:8765 ws://127.0.0.1:8765; " +
   "worker-src 'self' blob:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:; " +

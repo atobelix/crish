@@ -1,160 +1,300 @@
-// 设置页主视图（R2-06 部分 3 · R4 批次2 单真源收敛）：分组列表布局 + 未连接禁用态
-// + 移除本机危险区
-// - 分组（F6 §12.6 设置首页）：通用（主题三选，R2UX-06-05）/ 通知偏好（F6 §10：
-//   总开关 + 场景级开关，仅渲染有通道映射的场景——审批请求/任务完成/新消息；
-//   error/deviceOffline 场景无通道映射前不渲染假开关，R4 诚实化裁决）/ 关于
-//   （版本 + 桌面连接信息，F6 §3.2 只读参考）；
-// - 通知权限联动（F6 §10.3）：系统权限 denied → 场景开关禁用 + 引导文案
-//   （防「开了但收不到」幻觉）；总开关不受权限门控（关总开关无需权限）；
-// - 未连接态（任务书）：顶部「未连接」横幅 + 开关禁用（SettingsSwitchRow
-//   disabled + 灰字提示），关于区显示「未连接」；
-// - 移除本机：底部危险区（SettingsRemoveLocalZone，R2UX-06-06 双保险）。
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
+// 设置：浅灰分组底（canvasGrouped）+ 白色分组卡（surfaceGrouped）；返回圆钮 + 居中标题；行首线性图标。
+import { useState } from 'react';
+import { Linking, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import Constants from 'expo-constants';
 import { useTheme } from '@/adapters/platform/theme';
-import SettingsGroup from './SettingsGroup';
-import SettingsSwitchRow from './SettingsSwitchRow';
-import SettingsThemeSelector from './SettingsThemeSelector';
-import SettingsAboutCard from './SettingsAboutCard';
-import SettingsRemoveLocalZone from './SettingsRemoveLocalZone';
+import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
+import { reconnectNow } from '@/adapters/runtime/appRuntime';
+import {
+  AppHeader,
+  AppText,
+  Badge,
+  Card,
+  Dialog,
+  Icon,
+  type IconName,
+  ListRow,
+  Screen,
+  SectionHeader,
+  SegmentedControl,
+} from '@/presentation/ui';
+import type { ThemeMode } from '@/domain/store/settingsReducers';
+import { useAccountStore } from '@/adapters/hooks/useAccountStore';
+import { logoutAccount } from '@/adapters/account/accountService';
+import { ConnectionHelpSheet } from '@/presentation/components/status/ConnectionHelpSheet';
 
-/** 场景开关展示面（仅有通道映射的场景；label/description/testID 单一真源） */
-const NOTIFY_SCENE_META: ReadonlyArray<{
-  scene: 'approval' | 'taskDone' | 'message';
-  label: string;
-  description: string;
-  testID: string;
-}> = [
-  {
-    scene: 'approval',
-    label: '审批请求',
-    description: '桌面工具执行待确认时提醒（D7 §3.3 S1：审批不能漏）',
-    testID: 'setting-notify-approval',
-  },
-  {
-    scene: 'taskDone',
-    label: '任务完成',
-    description: '任务运行完成 / 失败 / 取消等结果提醒',
-    testID: 'setting-notify-task-done',
-  },
-  {
-    scene: 'message',
-    label: '新消息',
-    description: '会话新消息与汇总类提醒（低打扰）',
-    testID: 'setting-notify-message',
-  },
+const THEME_OPTIONS = [
+  { value: 'system' as ThemeMode, label: '跟随系统' },
+  { value: 'light' as ThemeMode, label: '浅色' },
+  { value: 'dark' as ThemeMode, label: '深色' },
 ];
+
+const NOTIFY_SCENES = [
+  { scene: 'approval' as const, label: '审批请求' },
+  { scene: 'taskDone' as const, label: '任务完成' },
+  { scene: 'message' as const, label: '新消息' },
+];
+
+function LeadingIcon({ name, color }: { name: IconName; color?: string }) {
+  const theme = useTheme();
+  return (
+    <Icon
+      name={name}
+      size={theme.size.icon}
+      color={color ?? theme.colors.textSecondary}
+    />
+  );
+}
 
 export interface SettingsScreenViewProps {
   vm: SettingsVm;
-  /** 移除本机确认回调（页面层接 unpair + 重定向 /pair/welcome） */
+  onBack: () => void;
+  onOpenAccount: () => void;
+  onOpenProfile: () => void;
   onConfirmRemove: () => void | Promise<void>;
 }
 
 export default function SettingsScreenView({
   vm,
+  onBack,
+  onOpenAccount,
+  onOpenProfile,
   onConfirmRemove,
 }: SettingsScreenViewProps) {
   const theme = useTheme();
-  const notifyDisabled = !vm.connected;
-  // 权限联动（F6 §10.3）：系统权限 denied → 场景开关禁用 + 引导文案
-  const sceneGate = vm.notifySwitchGate;
+  const accountStatus = useAccountStore((s) => s.status);
+  const accountUser = useAccountStore((s) => s.user);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const appVersion = Constants.expoConfig?.version ?? '0.1.0';
+  const sceneDisabled = !vm.notifySwitchGate.enabled;
+  const permissionDenied = vm.notifyPermission === 'denied';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-      <View style={[styles.header, { borderBottomColor: theme.hairline }]}>
-        <Text style={[styles.title, { color: theme.textPrimary }]}>设置</Text>
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        {!vm.connected ? (
-          <View
-            testID="settings-disconnected"
-            style={[styles.banner, { backgroundColor: theme.bgSecondary }]}
-          >
-            <Text style={[styles.bannerText, { color: theme.textSecondary }]}>
-              未连接：设置项暂不可用，连接桌面端后可调整
-            </Text>
-          </View>
-        ) : null}
+    <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
+      <AppHeader title="设置" onBack={onBack} centered />
+      <ScrollView
+        contentContainerStyle={{
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.sm,
+          paddingBottom: theme.space.section,
+          gap: theme.space.xl,
+        }}
+      >
+        <View style={{ gap: theme.space.xs }}>
+          <SectionHeader title="账号" />
+          <Card padded={false} tone="grouped">
+            {accountStatus === 'loggedIn' && accountUser ? (
+              <ListRow
+                leading={<LeadingIcon name="user" />}
+                title={accountUser.name ?? accountUser.email}
+                subtitle={accountUser.email}
+                onPress={onOpenProfile}
+                divider
+              />
+            ) : (
+              <ListRow
+                leading={<LeadingIcon name="user" />}
+                title="登录 Crish 账号"
+                subtitle="登录后自动发现电脑并远程连接"
+                onPress={onOpenAccount}
+                divider={false}
+              />
+            )}
+            {accountStatus === 'loggedIn' ? (
+              <ListRow
+                title="退出登录"
+                destructive
+                onPress={() => void logoutAccount()}
+                divider={false}
+              />
+            ) : null}
+          </Card>
+        </View>
 
-        <SettingsGroup title="通用">
-          <SettingsThemeSelector
-            value={vm.themeMode}
-            onChange={vm.setThemeMode}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup title="通知偏好">
-          <SettingsSwitchRow
-            testID="setting-notify-master"
-            label="通知总开关"
-            description="关闭后不再收到任何系统通知（应用内通知中心保留）"
-            value={vm.notifyMasterOn}
-            disabled={notifyDisabled}
-            onValueChange={vm.setNotifyMasterOn}
-          />
-          {NOTIFY_SCENE_META.map((meta) => (
-            <SettingsSwitchRow
-              key={meta.scene}
-              testID={meta.testID}
-              label={meta.label}
-              description={
-                sceneGate.hint
-                  ? `${meta.description}；${sceneGate.hint}`
-                  : meta.description
+        <View style={{ gap: theme.space.xs }}>
+          <SectionHeader title="连接" />
+          <Card padded={false} tone="grouped">
+            <ListRow
+              leading={
+                <LeadingIcon
+                  name="monitor"
+                  color={vm.connected ? theme.colors.success : undefined}
+                />
               }
-              value={vm.notifyScenes[meta.scene]}
-              disabled={notifyDisabled || !sceneGate.enabled}
-              onValueChange={(value) => {
-                void vm.setNotifyScene(meta.scene, value);
-              }}
+              title="桌面连接"
+              subtitle={
+                vm.host
+                  ? `${vm.host}${vm.port ? `:${vm.port}` : ''}`
+                  : '尚未配对'
+              }
+              divider
+              trailing={
+                <View style={[styles.status, { gap: theme.space.xs }]}>
+                  <Badge dot tone={vm.connected ? 'accent' : 'neutral'} />
+                  <AppText variant="caption" color="textTertiary">
+                    {vm.connected ? '已连接' : '未连接'}
+                  </AppText>
+                </View>
+              }
             />
-          ))}
-        </SettingsGroup>
+            <ListRow
+              leading={<LeadingIcon name="refresh" />}
+              title="重新连接"
+              onPress={() => {
+                reconnectNow();
+              }}
+              divider
+            />
+            <ListRow
+              leading={<LeadingIcon name="info" />}
+              title="连接帮助"
+              onPress={() => setHelpOpen(true)}
+              divider
+            />
+            <ListRow
+              leading={<LeadingIcon name="shield" />}
+              title="安全连接"
+              subtitle="系统 CA 信任 · 首次连接需安装桌面证书"
+              onPress={() => setHelpOpen(true)}
+              showChevron
+              divider={false}
+            />
+          </Card>
+        </View>
 
-        <SettingsGroup title="关于">
-          <SettingsAboutCard
-            status={vm.aboutStatus}
-            presence={vm.presence}
-            mirror={vm.mirror}
-            host={vm.host}
-            desktopId={vm.desktopId}
-            onRefresh={vm.refreshAbout}
-          />
-        </SettingsGroup>
+        <View style={{ gap: theme.space.xs }}>
+          <SectionHeader title="外观" />
+          <Card tone="grouped">
+            <SegmentedControl
+              options={THEME_OPTIONS}
+              value={vm.themeMode}
+              onChange={vm.setThemeMode}
+              testID="settings-theme"
+            />
+          </Card>
+        </View>
 
-        <SettingsRemoveLocalZone onConfirm={onConfirmRemove} />
+        <View style={{ gap: theme.space.xs }}>
+          <SectionHeader title="通知" />
+          <Card padded={false} tone="grouped">
+            <ListRow
+              title="通知"
+              divider
+              trailing={
+                <Switch
+                  testID="setting-notify-master"
+                  value={vm.notifyMasterOn}
+                  onValueChange={vm.setNotifyMasterOn}
+                  trackColor={{
+                    true: theme.colors.brand,
+                    false: theme.colors.borderStrong,
+                  }}
+                  thumbColor={theme.colors.surface}
+                />
+              }
+            />
+            {NOTIFY_SCENES.map((item, index) => (
+              <ListRow
+                key={item.scene}
+                title={item.label}
+                divider={index < NOTIFY_SCENES.length - 1}
+                trailing={
+                  <Switch
+                    testID={`setting-notify-${item.scene}`}
+                    value={vm.notifyScenes[item.scene]}
+                    disabled={!vm.notifyMasterOn || sceneDisabled}
+                    onValueChange={(value) => {
+                      void vm.setNotifyScene(item.scene, value);
+                    }}
+                    trackColor={{
+                      true: theme.colors.brand,
+                      false: theme.colors.borderStrong,
+                    }}
+                    thumbColor={theme.colors.surface}
+                  />
+                }
+              />
+            ))}
+            {permissionDenied ? (
+              <ListRow
+                title="通知权限"
+                subtitle="前往系统设置开启"
+                divider={false}
+                onPress={() => {
+                  void Linking.openSettings();
+                }}
+                showChevron
+              />
+            ) : null}
+          </Card>
+        </View>
+
+        <View style={{ gap: theme.space.xs }}>
+          <SectionHeader title="关于" />
+          <Card padded={false} tone="grouped">
+            <ListRow
+              title="版本"
+              trailing={
+                <AppText variant="footnote" color="textTertiary">
+                  {appVersion}
+                </AppText>
+              }
+              divider={false}
+            />
+          </Card>
+        </View>
+
+        <View style={{ gap: theme.space.xs }}>
+          <Card padded={false} tone="grouped">
+            <ListRow
+              leading={
+                <LeadingIcon name="log-out" color={theme.colors.danger} />
+              }
+              title="解除配对"
+              destructive
+              onPress={() => setRemoveOpen(true)}
+              divider={false}
+            />
+          </Card>
+        </View>
       </ScrollView>
-    </View>
+
+      <ConnectionHelpSheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
+      <Dialog
+        visible={removeOpen}
+        title="解除配对？"
+        description="将清除本机的配对信息，需要重新配对才能连接。"
+        onDismiss={() => setRemoveOpen(false)}
+        actions={[
+          {
+            label: '取消',
+            variant: 'secondary',
+            onPress: () => setRemoveOpen(false),
+            testID: 'settings-remove-cancel',
+          },
+          {
+            label: '解除配对',
+            variant: 'danger',
+            onPress: () => {
+              setRemoveOpen(false);
+              void onConfirmRemove();
+            },
+            testID: 'settings-remove-confirm',
+          },
+        ]}
+        testID="settings-remove-dialog"
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  content: {
-    padding: 16,
-  },
-  banner: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 16,
-  },
-  bannerText: {
-    fontSize: 13,
-    lineHeight: 20,
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

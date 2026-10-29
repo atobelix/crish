@@ -1,19 +1,16 @@
-// 审批已处理行（F2 §7.2 · R4 批次3 自 approvalListScreen 抽出共用）：
-// 审批中心「最近已处理」区与审批历史全量页共用同一行渲染——decision 徽标 +
-// 工具名 + 时间/渠道 meta；配色经 useTheme token，无硬编码色值（M4 §3.8）。
+// 审批已处理行：决策 / 工具 / 渠道 / 时间。
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { ApprovalRecord } from '@/domain/types/domain';
+import { AppText, Icon, ListRow } from '@/presentation/ui';
 
-/** 已处理行时间格式化（F2 §7.2 线框口径：HH:MM:SS） */
 export function formatHistoryTime(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const date = new Date(ms);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** 决策徽标文案（F2 §7.2 线框：已允许 / 已拒绝 / 已过期） */
 export const HISTORY_DECISION_TEXT: Record<ApprovalRecord['decision'], string> =
   {
     approved: '已允许',
@@ -21,85 +18,84 @@ export const HISTORY_DECISION_TEXT: Record<ApprovalRecord['decision'], string> =
     expired: '已过期',
   };
 
-/** 决策渠道文案（F2 §7.1-3：本机 / 桌面端 / 自动过期） */
 export const HISTORY_CHANNEL_TEXT: Record<ApprovalRecord['channel'], string> = {
   mobile: '本机',
   desktop: '桌面端',
-  auto: '自动过期',
+  auto: '自动',
 };
 
 export interface ApprovalHistoryRowProps {
   record: ApprovalRecord;
   testID?: string;
+  divider?: boolean;
 }
 
-/** 单条已处理记录行（memo：历史列表静态，追加新行不重渲染旧行） */
 export const ApprovalHistoryRow = memo(function ApprovalHistoryRow({
   record,
   testID,
+  divider = true,
 }: ApprovalHistoryRowProps) {
   const theme = useTheme();
-  const badgeBg =
+  const color =
     record.decision === 'approved'
-      ? theme.colorSuccessBg
+      ? theme.colors.success
       : record.decision === 'denied'
-        ? theme.colorErrorBg
-        : theme.bgTertiary;
-  const badgeColor =
+        ? theme.colors.danger
+        : theme.colors.textTertiary;
+  const icon =
     record.decision === 'approved'
-      ? theme.colorSuccess
+      ? 'check'
       : record.decision === 'denied'
-        ? theme.colorError
-        : theme.textSecondary;
+        ? 'x'
+        : 'clock';
+  const subtitle = [HISTORY_CHANNEL_TEXT[record.channel], record.reason]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <View
+    <ListRow
       testID={testID}
-      style={[styles.row, { borderBottomColor: theme.hairline }]}
-    >
-      <View style={[styles.decisionBadge, { backgroundColor: badgeBg }]}>
-        <Text style={[styles.decisionBadgeText, { color: badgeColor }]}>
-          {HISTORY_DECISION_TEXT[record.decision]}
-        </Text>
-      </View>
-      <Text
-        style={[styles.tool, { color: theme.textPrimary }]}
-        numberOfLines={1}
-      >
-        {record.toolName}
-      </Text>
-      <Text style={[styles.meta, { color: theme.textTertiary }]}>
-        {formatHistoryTime(record.resolvedAtMs)} ·{' '}
-        <Text style={{ color: theme.textTertiary }}>
-          {HISTORY_CHANNEL_TEXT[record.channel]}
-        </Text>
-      </Text>
-    </View>
+      title={record.toolName}
+      subtitle={subtitle || undefined}
+      divider={divider}
+      leading={
+        <View
+          style={[
+            styles.icon,
+            {
+              borderRadius: theme.radius.pill,
+              backgroundColor: theme.colors.fillSubtle,
+            },
+          ]}
+        >
+          <Icon name={icon} size={14} color={color} />
+        </View>
+      }
+      trailing={
+        <View style={styles.trailing}>
+          <AppText variant="caption" style={{ color }}>
+            {HISTORY_DECISION_TEXT[record.decision]}
+          </AppText>
+          <AppText variant="caption" color="textTertiary">
+            {formatHistoryTime(record.resolvedAtMs)}
+          </AppText>
+        </View>
+      }
+    />
   );
 });
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
+  icon: {
+    width: 26,
+    height: 26,
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+    justifyContent: 'center',
   },
-  decisionBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  decisionBadgeText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  tool: {
-    flex: 1,
-    fontSize: 14,
-  },
-  meta: {
-    fontSize: 12,
-    fontVariant: ['tabular-nums'],
+  trailing: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
 });
+
+export default ApprovalHistoryRow;

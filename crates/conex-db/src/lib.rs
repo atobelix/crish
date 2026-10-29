@@ -106,10 +106,12 @@ pub struct LocalDb {
 /// v13：存量孤儿 session_meta 键一次性 GC（RUN-15：会话段不在 sessions 表
 /// 且命中已知会话作用域后缀才删，防误删 sched:/workflow: 等含冒号全局键）；
 /// v14：session_agents 补 capability_mode / model_override / resumable /
-/// last_heartbeat_ms 列 + status 索引（子代理协作 P3：跨重启恢复）。
-pub const LATEST_VERSION: u32 = 14;
+/// last_heartbeat_ms 列 + status 索引（子代理协作 P3：跨重启恢复）；
+/// v15：usage_records 按 run_id 唯一（部分唯一索引 + 存量重复去重），
+/// 防收口重入/并发 check-then-insert 造成同 run 重复计费。
+pub const LATEST_VERSION: u32 = 15;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "14";
+pub const SCHEMA_VERSION_STRING: &str = "15";
 /// 写连接 PRAGMA cache_size（负值 = KiB；写侧 8 MiB，D0 预算源命名常量）。
 pub const WRITE_CONN_CACHE_SIZE_KIB: i64 = -8000;
 /// 读连接 PRAGMA cache_size（负值 = KiB；读侧 4 MiB）。

@@ -73,8 +73,6 @@ export function ComboboxContent({
       aria-orientation="vertical"
       className={contentClass}
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
         transformOrigin: position.transformOrigin,
         visibility: position.isPositioned ? 'visible' : 'hidden',
         pointerEvents: position.isPositioned ? 'auto' : 'none',

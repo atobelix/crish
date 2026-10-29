@@ -18,7 +18,7 @@
 //   app 层启动装配的专属入口被 _layout 直接引用（保持 db 桶纯存储层）。
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { expoSqlDriver, migrateIfNeeded } from './db';
-import { configureSqlitePersistence } from '@/domain/store/persistBootstrap';
+import { configureSqlitePersistence } from '@/adapters/persistence/persistBootstrap';
 import { settingsStore } from '@/domain/store/settingsStore';
 import { notificationStore } from '@/domain/store/notificationStore';
 

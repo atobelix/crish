@@ -32,6 +32,43 @@ fn migration_v10_creates_usage_records_table_and_indexes() {
     assert!(indexes.contains(&"idx_usage_records_session".to_string()));
 }
 
+/// v15：同 run 重复写入是幂等的（DB 唯一索引兜底，防收口重入重复计费）。
+#[test]
+fn insert_usage_record_same_run_is_idempotent() {
+    let db = LocalDb::open_in_memory().unwrap();
+    let input = InsertUsageRecordInput {
+        session_id: "s1".to_string(),
+        run_id: Some("run-dup".to_string()),
+        project_name: "conex".to_string(),
+        model: "deepseek-v4-flash".to_string(),
+        provider: "deepseek".to_string(),
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        cost_cny: 0.1,
+        cost_usd: 0.01,
+        timestamp: 1700000000000,
+    };
+    let first = db.insert_usage_record(input.clone()).unwrap();
+    let second = db
+        .insert_usage_record(InsertUsageRecordInput {
+            prompt_tokens: 999,
+            ..input
+        })
+        .unwrap();
+    assert_eq!(second, first, "重复写入必须返回既有行 id");
+    let conn = db.conn.lock().unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM usage_records WHERE run_id = 'run-dup';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "同 run 只允许一条流水");
+}
+
 #[test]
 fn insert_and_clear_usage_records() {
     let db = LocalDb::open_in_memory().unwrap();

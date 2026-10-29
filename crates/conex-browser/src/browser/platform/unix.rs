@@ -180,6 +180,12 @@ mod tests {
         let result = kill_pgid(child as u32);
         assert!(result.is_ok(), "一次杀组失败：{result:?}");
 
+        // 先回收子进程：僵尸仍占用 pgid，未 waitpid 前 killpg(0) 可能返回 0
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(child, &mut status, 0) };
+        assert_eq!(waited, child, "waitpid 回收失败");
+        assert!(libc::WIFSIGNALED(status) && libc::WTERMSIG(status) == libc::SIGKILL);
+
         // 组已消亡：killpg(pgid, 0) 存活探测返回 ESRCH
         let probe = unsafe { libc::killpg(child, 0) };
         assert_eq!(probe, -1, "杀组后进程组应不存在（killpg 探测应为 -1）");
@@ -192,12 +198,6 @@ mod tests {
         // 二次杀组：ESRCH 幂等映射为 Ok（不因目标已不存在而报错）
         let result2 = kill_pgid(child as u32);
         assert!(result2.is_ok(), "二次杀组应幂等成功：{result2:?}");
-
-        // 回收子进程（SIGKILL 已杀，不产生僵尸）
-        let mut status = 0;
-        let waited = unsafe { libc::waitpid(child, &mut status, 0) };
-        assert_eq!(waited, child, "waitpid 回收失败");
-        assert!(libc::WIFSIGNALED(status) && libc::WTERMSIG(status) == libc::SIGKILL);
 
         unsafe { libc::close(fds[0]) };
         unsafe { libc::close(fds[1]) };

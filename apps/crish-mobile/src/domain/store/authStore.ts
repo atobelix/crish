@@ -50,6 +50,8 @@ export interface AuthIdentityMeta {
   desktopId: string;
   /** 桌面连接主机（wss://host:8765 的 host 段，observationWiring 消费） */
   host: string;
+  /** 桌面网关端口（自定义端口冷启动恢复） */
+  port?: number;
 }
 
 /**
@@ -76,6 +78,8 @@ export interface AuthState {
   desktopId: string | null;
   /** 桌面连接主机（未配对 = null；observationWiring 据此决定是否启动连接） */
   host: string | null;
+  /** 桌面网关端口（未配对 = null；缺省 8765） */
+  port: number | null;
   /** 配对流程元数据（host/port/code/阶段）；null = 未在进行配对 */
   pairingMeta: PairingMeta | null;
   /** 令牌元数据（hasToken/issuedAt/ttl；密钥明文在 secure-store） */
@@ -146,6 +150,7 @@ function resetPairingState(s: AuthState): void {
   s.deviceId = null;
   s.desktopId = null;
   s.host = null;
+  s.port = null;
   s.pairingMeta = null;
   s.token = emptyToken();
   s.hasKeyMaterial = false;
@@ -159,6 +164,7 @@ export const authStore = createStore<AuthState>()(
     deviceId: null,
     desktopId: null,
     host: null,
+    port: null,
     pairingMeta: null,
     token: emptyToken(),
     hasKeyMaterial: false,
@@ -188,6 +194,7 @@ export const authStore = createStore<AuthState>()(
           s.deviceId = meta.deviceId;
           s.desktopId = meta.desktopId;
           s.host = meta.host;
+          s.port = meta.port ?? null;
         }
       });
     },
@@ -227,6 +234,7 @@ export const authStore = createStore<AuthState>()(
         s.deviceId = meta.deviceId;
         s.desktopId = meta.desktopId;
         s.host = meta.host;
+        s.port = meta.port ?? null;
         // 配对成功 = 令牌材料落库 → hasToken 恒 true（D4 §5.2 令牌生命周期起点）
         s.token = {
           hasToken: true,

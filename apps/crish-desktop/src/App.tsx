@@ -20,6 +20,7 @@ import styles from './App.module.css';
 
 import { useAppBootstrap } from './app/AppBootstrap';
 import { useEngineBootstrap } from './app/useEngineBootstrap';
+import { useLoginPromptOnFirstLaunch } from './app/useLoginPromptOnFirstLaunch';
 import { useAppShortcuts } from './app/AppShortcuts';
 import { AppGlobalDialogs, SkeletonFallback } from './app/AppGlobalDialogs';
 import { useWorkspaceShellStore } from './store/workspace-shell';
@@ -107,6 +108,11 @@ function App() {
   const [firstRunInitialStep, setFirstRunInitialStep] = useState<WizardStep>(0);
   // 引擎就绪门闩（T06.8 归一：useEngineBootstrap 取代 useAppBootstrap setEngineReady）
   const engineReady = useEngineBootstrap();
+
+  // 首次启动登录引导：已水合、引擎就绪、非演示模式且未在首启向导时，自动打开登录弹窗一次
+  useLoginPromptOnFirstLaunch(
+    isHydrated && engineReady && !showFirstRun && !isDemoModeFast()
+  );
 
   // App startup & service hydration
   // T16 密度档复活：真实 store 订阅值透传，驱动 body[data-ui-size] 生效

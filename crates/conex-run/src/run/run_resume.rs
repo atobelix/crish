@@ -24,8 +24,8 @@ use super::run_idle::idle_resume;
 use super::run_idle::{emit_goal_continuation_decided, EpisodeConsume};
 use super::run_retry::RecoveryPlan;
 use super::{
-    emit_envelope_event, ActiveRun, CoreRunState, ResumeLauncher, CONTENT_RESUME_ENABLED_KEY,
-    SUBAGENT_PROGRESS_TRUNCATE_CHARS,
+    emit_envelope_event, session_meta_key_of, ActiveRun, CoreRunState, ResumeLauncher,
+    CONTENT_RESUME_ENABLED_KEY, SUBAGENT_PROGRESS_TRUNCATE_CHARS,
 };
 /// D2 §3.2 + E1 §3.3：续 run 判定输入（drive_run_loop 在 outcome 移动消费
 /// 前提取的数据面；decide_idle_resume 消费）。
@@ -276,39 +276,79 @@ pub(crate) fn goal_decision_wire(decision: GoalDecision) -> String {
 }
 
 impl CoreRunState {
-    /// D5 §3.2：读 `goal_state` 键（宽容解析 fail-open：缺键 / 坏 JSON →
-    /// None = 无 goal；字段级容忍由 [GoalState::from_json] 保证）
-    pub(crate) async fn load_goal_state(&self, _session_id: &str) -> Option<GoalState> {
+    /// 旧版本 goal 全局键一次性迁移标记（迁移后不再读取旧键，防止其被
+    /// 后续活动会话重复认领）。
+    const GOAL_LEGACY_MIGRATED_KEY: &'static str = "goal_state_legacy_migrated";
+
+    /// D5 §3.2：读 `{session_id}:goal_state` 键（宽容解析 fail-open：缺键 /
+    /// 坏 JSON → None = 无 goal；字段级容忍由 [GoalState::from_json] 保证）。
+    ///
+    /// 旧版本把 goal 存在全局 `goal_state` 键（串会话污染：A 会话目标推进
+    /// B 会话）。升级首次读取时做一次性迁移：仅当旧键存在、本会话正是
+    /// `active_session_id`、且迁移标记未置位时，把旧值归属到本会话并置标记。
+    pub(crate) async fn load_goal_state(&self, session_id: &str) -> Option<GoalState> {
         let db = self.local_db()?;
+        let key = session_meta_key_of(session_id, orchestrator::goal_state::GOAL_STATE_KEY);
+        let session_id = session_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let raw = db
+            if let Ok(Some(raw)) = db.get_session_meta(&key) {
+                return GoalState::from_json(Some(&raw));
+            }
+            let migrated = db
+                .get_session_meta(Self::GOAL_LEGACY_MIGRATED_KEY)
+                .ok()
+                .flatten()
+                .is_some();
+            if migrated {
+                return None;
+            }
+            let legacy = db
                 .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
                 .ok()
-                .flatten();
-            GoalState::from_json(raw.as_deref())
+                .flatten()?;
+            let active = db.get_session_meta("active_session_id").ok().flatten();
+            if active.as_deref() != Some(session_id.as_str()) {
+                return None;
+            }
+            if db.set_session_meta(&key, &legacy).is_err() {
+                // 归属写入失败：不置迁移标记，下次读取重试迁移。
+                // 此时仍把旧值返回给本会话（只读语义），不阻断 goal 展示。
+                return GoalState::from_json(Some(&legacy));
+            }
+            if let Err(error) = db.set_session_meta(Self::GOAL_LEGACY_MIGRATED_KEY, "1") {
+                // 标记写失败是必须留痕的：若不记录，旧全局键会被后续每个
+                // 「恰好是 active」的会话反复认领，造成跨会话 goal 串味。
+                tracing::warn!(
+                    target: "run",
+                    %error,
+                    "goal 旧键迁移标记写入失败，下次读取将重试迁移"
+                );
+            }
+            GoalState::from_json(Some(&legacy))
         })
         .await
         .ok()
         .flatten()
     }
 
-    /// D5 §3.2：写 `goal_state` 键（唯一写方 = run 收口 RoundAssessment +
-    /// run_task_impl 装配覆盖；spawn_blocking 落键）。
+    /// D5 §3.2：写 `{session_id}:goal_state` 键（唯一写方 = run 收口
+    /// RoundAssessment + run_task_impl 装配覆盖；spawn_blocking 落键）。
     ///
     /// 表锁竞速防护：收口写回与 events 终态落库同时段争用 SQLite（实测
     /// `database table is locked`），旧实现 `let _` 静默吞失败导致 goal
     /// 轮次推进无声丢失。现对锁类失败做有限重试（50ms ×3），仍失败
     /// tracing::error 显式留痕（不阻断收口——goal 推进丢失属可观测降级，
     /// 下轮续轮判定会重新读到未推进值并重新评估）。
-    pub(crate) async fn save_goal_state(&self, _session_id: &str, state: &GoalState) {
+    pub(crate) async fn save_goal_state(&self, session_id: &str, state: &GoalState) {
         let Some(db) = self.local_db() else {
             return;
         };
+        let key = session_meta_key_of(session_id, orchestrator::goal_state::GOAL_STATE_KEY);
         let json = state.to_json();
         let result = tokio::task::spawn_blocking(move || {
             let mut last = None;
             for attempt in 0..3 {
-                match db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &json) {
+                match db.set_session_meta(&key, &json) {
                     Ok(()) => return Ok(()),
                     Err(error) => {
                         let locked = error.to_string().contains("table is locked");
@@ -474,7 +514,7 @@ impl CoreRunState {
 impl CoreRunState {
     pub(crate) async fn consume_resume_episode(
         &self,
-        _session_id: &str,
+        session_id: &str,
         fp: &str,
         limit_key: &'static str,
         default_limit: u32,
@@ -487,8 +527,11 @@ impl CoreRunState {
         };
         let fp = fp.to_string();
         let limit_key = limit_key.to_string();
+        // 恢复预算按会话隔离（旧实现读全局键：A 会话的自愈消耗会把 B 会话
+        // 的 fork 预算吃穿）。
+        let episodes_key = session_meta_key_of(session_id, RECOVER_EPISODES_KEY);
         tokio::task::spawn_blocking(move || {
-            let raw = db.get_session_meta(RECOVER_EPISODES_KEY).ok().flatten();
+            let raw = db.get_session_meta(&episodes_key).ok().flatten();
             let limit = db
                 .get_session_meta(&limit_key)
                 .ok()
@@ -512,7 +555,7 @@ impl CoreRunState {
                 }
             };
             if db
-                .set_session_meta(RECOVER_EPISODES_KEY, &budget.to_json())
+                .set_session_meta(&episodes_key, &budget.to_json())
                 .is_err()
             {
                 return EpisodeConsume::Denied { count, max: limit };
@@ -662,7 +705,15 @@ impl CoreRunState {
                 action: RecoveryAction::AutoRetry { delay, .. },
                 ..
             }) => Some(RecoveryPlan::AutoRetry { delay, ctx, coord }),
-            Ok(_) => None,
+            // 其余阶梯（SteeringQueued / Forked / NeedsUser）的处置已在协调器内完成，
+            // 本层无需追加计划——显式列举，不用 `Ok(_)` 隐式兜底。
+            Ok(RecoveryOutcome {
+                action:
+                    RecoveryAction::SteeringQueued { .. }
+                    | RecoveryAction::Forked { .. }
+                    | RecoveryAction::NeedsUser { .. },
+                ..
+            }) => None,
             Err(error) => {
                 tracing::warn!(
                     target: "run",
@@ -865,10 +916,14 @@ impl CoreRunState {
             };
             match emitter.emit_event(&emit_ctx, &info).await {
                 Ok(sequenced) => {
+                    // subagent progress 为 NoPersist 增量：序列号是占位值，
+                    // 信封必须留空（前端按 type:sequence 去重，占位号会让
+                    // 同类型进度事件只保留首条）。
+                    let sequence = sequenced.persisted.then_some(sequenced.sequence);
                     let envelope = AgentEventEnvelope::new(
                         sequenced.event,
                         Some(cfg.subagent_run_id.clone()),
-                        Some(sequenced.sequence),
+                        sequence,
                     );
                     bridge.emit(&envelope);
                 }
@@ -901,7 +956,7 @@ pub(crate) fn production_resume_launcher() -> ResumeLauncher {
         let session_id = session_id.to_string();
         let mode = mode.to_string();
         Box::pin(async move {
-            idle_resume::spawn_idle_resume_run(state, session_id, &mode, messages).await;
+            idle_resume::spawn_idle_resume_run(state, session_id, &mode, messages).await
         })
     });
     launcher

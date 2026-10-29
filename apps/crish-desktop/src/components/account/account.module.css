@@ -1,0 +1,339 @@
+/* 设置「账户」分区：身份行 / 资料 / 登录设备 / 注销，以及修改密码子页与确认弹窗。
+ * 颜色一律走 --account-*；段落间距 32、组内 8，内容最大宽 560。 */
+
+.pane {
+  max-width: var(--account-content-max);
+  color: var(--account-text-1);
+}
+
+.section {
+  margin-top: var(--gap-section);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-group);
+}
+
+/* ── 身份行 ── */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.avatarWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--account-avatar-size);
+  height: var(--account-avatar-size);
+  overflow: hidden;
+  border-radius: var(--radius-circle);
+  background: var(--account-avatar-bg);
+  font-size: var(--font-size-title);
+  font-weight: var(--fw-semibold);
+  color: var(--account-avatar-fg);
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 相机按钮：24 圆，次级底，2px 与内容区同色的描边把它从头像上「切」出来 */
+.avatarEdit {
+  position: absolute;
+  right: calc(-1 * var(--gap-inline));
+  bottom: calc(-1 * var(--gap-inline));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  box-sizing: border-box;
+  border: var(--account-ring-width) solid var(--surface-main);
+  border-radius: var(--radius-circle);
+  background: var(--account-secondary);
+  color: var(--account-text-1);
+  cursor: pointer;
+  transition: background-color var(--duration-snappy) var(--ease-standard);
+}
+
+.avatarEdit:hover:not(:disabled) {
+  background: var(--account-pressed);
+}
+
+.identityText {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--font-size-heading);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--account-text-1);
+}
+
+.email {
+  margin-top: var(--gap-inline);
+  overflow: hidden;
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--account-text-3);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--gap-group);
+}
+
+.hiddenFile {
+  display: none;
+}
+
+.inlineError {
+  margin-top: var(--gap-group);
+}
+
+/* ── 未登录 ── */
+.signedOutAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--account-avatar-size);
+  height: var(--account-avatar-size);
+  border-radius: var(--radius-circle);
+  background: var(--account-field);
+  color: var(--account-text-4);
+}
+
+.signedOutTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-heading);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-heading);
+  color: var(--account-text-1);
+}
+
+/* ── 登录设备：48 行，悬停显露「退出」 ── */
+.deviceList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deviceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--account-row-height);
+  margin: 0 calc(-1 * var(--gap-group));
+  padding: 0 var(--gap-group);
+  border-radius: var(--account-radius);
+  transition: background-color var(--duration-snappy) var(--ease-standard);
+}
+
+.deviceRow:hover,
+.deviceRow:focus-within {
+  background: var(--account-hover);
+}
+
+.deviceIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  border-radius: var(--account-radius);
+  background: var(--account-field);
+  color: var(--account-text-1);
+}
+
+.deviceName {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--gap-group);
+  min-width: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--fw-medium);
+  line-height: var(--account-line-body);
+  color: var(--account-text-1);
+}
+
+.deviceNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deviceTag {
+  flex-shrink: 0;
+  padding: calc(var(--gap-inline) / 2) var(--gap-group);
+  border-radius: var(--account-radius);
+  background: var(--account-secondary);
+  font-size: var(--font-size-meta);
+  font-weight: var(--fw-regular);
+  line-height: var(--account-line-caption);
+  color: var(--account-text-2);
+}
+
+.deviceMeta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--gap-group);
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-text-3);
+}
+
+.onlineDot {
+  width: var(--account-dot-size);
+  height: var(--account-dot-size);
+  border-radius: var(--radius-circle);
+  background: var(--brand);
+}
+
+/* 「退出」平时透明占位，行悬停 / 键盘聚焦时显露 */
+.deviceRevoke {
+  margin-left: var(--gap-group);
+  opacity: 0;
+  transition: opacity var(--duration-snappy) var(--ease-standard);
+}
+
+.deviceRow:hover .deviceRevoke,
+.deviceRow:focus-within .deviceRevoke {
+  opacity: 1;
+}
+
+.deviceHint {
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-text-4);
+}
+
+.afterList {
+  margin-top: var(--gap-group);
+}
+
+/* ── 修改密码子页：从右侧滑入 + 淡入 ── */
+.subPage {
+  width: 100%;
+  max-width: var(--settings-content-max);
+  margin: 0 auto;
+}
+
+.subPane {
+  animation: account-sub-enter var(--duration-enter) var(--ease-emphasized) both;
+}
+
+@keyframes account-sub-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-4));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.subHead {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-group);
+  margin-left: calc(-1 * var(--gap-group));
+}
+
+.subTitle {
+  margin: 0;
+  font-size: var(--font-size-heading);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-heading);
+  color: var(--account-text-1);
+}
+
+.subBlock {
+  margin-top: var(--space-6);
+}
+
+.formWidth {
+  width: var(--account-form-width);
+  max-width: 100%;
+}
+
+.subRow {
+  margin-top: var(--gap-group);
+}
+
+.subActions {
+  display: flex;
+  gap: var(--gap-group);
+  margin-top: var(--space-6);
+}
+
+/* ── 确认弹窗：24 内边距，16/24 标题，按钮右对齐 ── */
+.confirmPanel {
+  width: min(var(--account-confirm-width), calc(100vw - var(--space-8)));
+}
+
+.confirmPanelWide {
+  width: min(var(--account-confirm-width-wide), calc(100vw - var(--space-8)));
+}
+
+.confirmBody {
+  padding: var(--space-6);
+  overflow: visible;
+}
+
+.confirmTitle {
+  margin: 0;
+  font-size: var(--font-size-subhead);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-heading);
+  color: var(--account-text-1);
+}
+
+.confirmDesc {
+  margin: var(--gap-group) 0 0;
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-text-2);
+}
+
+.confirmMessage {
+  margin-top: var(--gap-group);
+}
+
+.confirmField {
+  margin-top: var(--space-4);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap-group);
+  margin-top: var(--space-6);
+}

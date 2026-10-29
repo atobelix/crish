@@ -17,7 +17,7 @@ import {
   resetNotificationsForTest,
 } from '@/domain/store/notificationStore';
 import { defaultSettingsGroups } from '@/domain/store/settingsReducers';
-import { configureSqlitePersistence } from '@/domain/store/persistBootstrap';
+import { configureSqlitePersistence } from '@/adapters/persistence/persistBootstrap';
 
 /** 等异步写落盘（settingsStore.set 的 void 写为 fire-and-forget） */
 function flush(): Promise<void> {

@@ -18,20 +18,42 @@
 //!   CoreStateBackend 覆盖为真实直调。
 
 use conex_types::device::commands::{
-    SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
+    SettingsConfirmParams, SettingsConfirmResult, SwitchWorkspaceParams, SwitchWorkspaceResult,
+    TaskOutputParams, TaskOutputResult, WorkspaceEntry,
 };
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetUrlParams,
     AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams,
     EventPageResult, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
-    ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
-    ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
-    PauseAutomationResult, RunControlParams, RunControlResult, RunEventsParams, RunSnapshotParams,
-    RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams, SearchFilesResult,
-    SearchIndexResult,
+    ListCommandsResult, ListDirParams, ListDirResult, ListPendingApprovalsParams,
+    ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
+    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, PauseAutomationParams,
+    PauseAutomationResult, ReadFileParams, ReadFileResult, RunControlParams, RunControlResult,
+    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
+    SearchFilesParams, SearchFilesResult, SearchIndexResult,
 };
+use serde_json::Value;
 
 use crate::server::ServerError;
+
+/// 工作区文件只读操作（由装配面注入 Tauri AppHandle 实现；CoreStateBackend
+/// 只依赖本 trait，保持 server 层可测试、不直接依赖 tauri runtime）。
+pub trait WorkspaceOps: Send + Sync {
+    fn list_workspaces(&self) -> Result<Vec<WorkspaceEntry>, ServerError>;
+    fn switch_workspace(&self, path: &str) -> Result<String, ServerError>;
+    fn list_dir(
+        &self,
+        workspace_root: Option<&str>,
+        path: Option<&str>,
+    ) -> Result<ListDirResult, ServerError>;
+    fn read_file(
+        &self,
+        workspace_root: Option<&str>,
+        path: &str,
+        max_lines: Option<u32>,
+        start_line: Option<u64>,
+    ) -> Result<ReadFileResult, ServerError>;
+}
 
 /// 非敏感配置更新载荷（PUT /v1/settings；R1-04 直调 config_update 的
 /// wire 形状——camelCase 与既有 Tauri 命令面一致，跨端不造第二套 DTO；
@@ -276,5 +298,169 @@ pub trait ApiBackend: Send + Sync {
         Err(ServerError::internal(
             "pause_automation 未接线（CoreStateBackend 由 R2-12c 注入）",
         ))
+    }
+
+    // ── F4 文件域读命令（移动端伴侣必需；写面不暴露）──
+
+    /// C16 目录列表（path 相对活动工作区根；workspaceRoot 缺省 = 活动根）
+    async fn list_dir(&self, _params: ListDirParams) -> Result<ListDirResult, ServerError> {
+        Err(ServerError::internal(
+            "list_dir 未接线（需要装配 WorkspaceOps）",
+        ))
+    }
+
+    /// C17 文本文件预览（≤1MB / 行数上限）
+    async fn read_file(&self, _params: ReadFileParams) -> Result<ReadFileResult, ServerError> {
+        Err(ServerError::internal(
+            "read_file 未接线（需要装配 WorkspaceOps）",
+        ))
+    }
+
+    /// C19 已授权工作区列表
+    async fn list_workspaces(
+        &self,
+        _params: ListWorkspacesParams,
+    ) -> Result<ListWorkspacesResult, ServerError> {
+        Err(ServerError::internal(
+            "list_workspaces 未接线（需要装配 WorkspaceOps）",
+        ))
+    }
+
+    /// C20 切换活动工作区（只允许已授权根）
+    async fn switch_workspace(
+        &self,
+        _params: SwitchWorkspaceParams,
+    ) -> Result<SwitchWorkspaceResult, ServerError> {
+        Err(ServerError::internal(
+            "switch_workspace 未接线（需要装配 WorkspaceOps）",
+        ))
+    }
+
+    /// 跨端命令通用分发（WS `remote.<cmd>` / REST 共用；命令名 = 白名单后缀）。
+    /// 默认实现覆盖全部已接线命令；未登记命令返回 `cmd.unknown`。
+    async fn dispatch_remote_command(
+        &self,
+        cmd: &str,
+        params: Value,
+    ) -> Result<Value, ServerError> {
+        fn parse<T: serde::de::DeserializeOwned>(
+            value: Value,
+            name: &str,
+        ) -> Result<T, ServerError> {
+            serde_json::from_value(value).map_err(|error| {
+                ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("{name} 参数非法：{error}"),
+                )
+            })
+        }
+        fn encode<T: serde::Serialize>(value: T, name: &str) -> Result<Value, ServerError> {
+            serde_json::to_value(value)
+                .map_err(|error| ServerError::internal(format!("{name} 序列化失败：{error}")))
+        }
+
+        match cmd {
+            "getStatus" => self.get_status().await,
+            "getRunSnapshot" => {
+                let result = self.get_run_snapshot(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "readSessionEvents" => {
+                let result = self.read_session_events(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "readRunEvents" => {
+                let result = self.read_run_events(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listSessions" => {
+                let result = self.list_sessions(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listBackgroundTasks" => {
+                let result = self.list_background_tasks(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "getTaskOutput" => {
+                let result = self.get_task_output(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "getFlowSnapshot" => {
+                let result = self.get_flow_snapshot(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listCommands" => {
+                let result = self.list_commands().await?;
+                encode(result, cmd)
+            }
+            "getSearchIndex" => {
+                let result = self.get_search_index().await?;
+                encode(result, cmd)
+            }
+            "runTask" => {
+                let result = self.run_task(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "runControl" => {
+                let result = self.run_control(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "cancelRun" => {
+                let result = self.cancel_run(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "approve" => {
+                let result = self.approve(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "deny" => {
+                let result = self.deny(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listPendingApprovals" => {
+                let result = self.list_pending_approvals(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "approvalHistory" => {
+                let result = self.approval_history(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "getSettings" => {
+                let result = self.settings_get(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "searchFiles" => {
+                let result = self.search_files(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listDir" => {
+                let result = self.list_dir(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "readFile" => {
+                let result = self.read_file(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listWorkspaces" => {
+                let result = self.list_workspaces(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "switchWorkspace" => {
+                let result = self.switch_workspace(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "settingsConfirm" => {
+                let result = self.settings_confirm(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "pauseAutomation" => {
+                let result = self.pause_automation(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            other => Err(ServerError::protocol(
+                DeviceErrorCode::CmdUnknown,
+                format!("Unsupported remote command: {other}"),
+            )),
+        }
     }
 }

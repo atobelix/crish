@@ -64,10 +64,6 @@ export interface ReconnectingWsClientOptions {
   gateway?: WsGateway;
   /** 会话令牌（R2-03 配对派生后替换注入源：secure-store 读取；当前为接线占位） */
   token?: string;
-  /** 中继票据（云端中继模式下注入短效 Ticket） */
-  ticket?: string;
-  /** 中继角色（默认 client） */
-  role?: 'client' | 'host';
   /** 对账输入源（R2-05 接线点：本地投影快照/outbox；缺省空输入） */
   projections?: () => ReconnectProjectionSource;
   /** 相位变化回调（R2-03 接线点：连接 store 投影 mapWsPhase 消费） */
@@ -337,20 +333,9 @@ export class ReconnectingWsClient {
     return this.opts.token;
   }
 
-  /** 中继票据（云端中继短效 Ticket） */
-  get ticket(): string | undefined {
-    return this.opts.ticket;
-  }
-
-  /** 动态更新认证凭据（支持动态刷新 token / ticket 避免重构连接实例） */
-  setAuth(params: {
-    token?: string;
-    ticket?: string;
-    role?: 'client' | 'host';
-  }): void {
+  /** 动态更新认证 token（避免重构连接实例） */
+  setAuth(params: { token?: string }): void {
     if (params.token !== undefined) this.opts.token = params.token;
-    if (params.ticket !== undefined) this.opts.ticket = params.ticket;
-    if (params.role !== undefined) this.opts.role = params.role;
   }
 
   /** 连续失败次数（诊断 / 单测断言） */
@@ -422,8 +407,6 @@ export class ReconnectingWsClient {
     const factory = this.opts.factory ?? defaultFactory;
     const connectUrl = buildAuthenticatedWsUrl(this.opts.url, {
       token: this.opts.token,
-      ticket: this.opts.ticket,
-      role: this.opts.role,
     });
     const ws = factory(connectUrl);
     this.ws = ws;

@@ -19,11 +19,11 @@ import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import type { StoreIngestAction } from '@/domain/store/eventMappers';
-import { mapDeviceFrame } from '@/domain/store/eventMappers';
+import { extractEnvelope, mapDeviceFrame } from '@/domain/store/eventMappers';
 import { readBool, readRecord } from '@/domain/store/eventReducers';
 import type { SessionIndexEntry } from '@crish/shared-types';
 import { dispatchIngestActions } from './ingestRouter';
-import { devicePresenceStore } from './devicePresenceStore';
+import type { MonitorRepository } from '@/adapters/repositories/monitorRepository';
 
 /** 活跃窗口上限（R2UX-05-09：M5 §9.3 内存预算 5000 条 × ≤4 窗口） */
 export const MAX_ACTIVE_WINDOWS = 4;
@@ -37,11 +37,37 @@ export type ListSessionsRepository = (
   gateway: WsGateway
 ) => Promise<SessionIndexEntry[]>;
 
+/** 全局轻订阅关键事件（确保未打开会话的审批 / 终态也能到达） */
+export const CRITICAL_EVENT_TYPES: readonly string[] = [
+  'approval-requested',
+  'approval-resolved',
+  'run-terminal',
+  'runtime-error',
+  'runtime-intervention-required',
+  'security-audit',
+  'task-started',
+  'task-output',
+  'task-suspicious',
+  'task-completed',
+  'task-failed',
+  'task-killed',
+  'timer-fired',
+  'cron-fired',
+];
+
+/** 会话订阅上限（协议 MAX_SUBSCRIPTIONS=32） */
+export const MAX_SUBSCRIPTIONS = 32;
+
+/** 单会话回填页数上限（500 条窗口 + 起始页余量） */
+const MAX_BACKFILL_PAGES = 6;
+
 export interface FeedBridgeOptions {
   /** 网关实例（生产 = ReconnectingWsClient.gateway；测试注入 mock） */
   gateway: WsGateway;
   /** 会话索引全量拉取（缺省 = 不拉取；对账收敛依赖注入方提供） */
   listSessions?: ListSessionsRepository;
+  /** 监控仓库（生产注入；用于打开会话时的历史回填） */
+  monitor?: MonitorRepository;
   /** 活跃窗口上限（缺省 4，R2UX-05-09） */
   maxWindows?: number;
 }
@@ -54,16 +80,20 @@ export interface FeedBridgeOptions {
 export class FeedBridge {
   private readonly gateway: WsGateway;
   private readonly listSessionsRepo?: ListSessionsRepository;
+  private readonly monitor?: MonitorRepository;
   private readonly maxWindows: number;
   private unsubscribers: Array<() => void> = [];
   /** 窗口活跃度追踪（sessionId → 最近一次帧到达 ms；卸载策略数据面） */
   private readonly activity = new Map<string, number>();
   /** 续传在途会话（防重入：同一会话同时只允许一个 events.resume 请求链） */
   private readonly inflightResume = new Set<string>();
+  /** 历史回填在途会话（防重入） */
+  private readonly inflightBackfill = new Set<string>();
 
   constructor(opts: FeedBridgeOptions) {
     this.gateway = opts.gateway;
     this.listSessionsRepo = opts.listSessions;
+    this.monitor = opts.monitor;
     this.maxWindows = opts.maxWindows ?? MAX_ACTIVE_WINDOWS;
   }
 
@@ -157,8 +187,114 @@ export class FeedBridge {
     eventStore.getState().setNetwork(feedNetworkOf(phase));
     connectionStore.getState().setPhase(mapWsPhase(phase, false));
     if (phase === 'open') {
-      void this.queryDevicePresence();
-      void this.refreshSessions();
+      void this.onOpen();
+    }
+  }
+
+  /** run 详情深链：按 runId 拉取事件并按会话回填窗口 */
+  async hydrateRun(runId: string): Promise<void> {
+    if (!this.monitor) return;
+    try {
+      const result = await this.monitor.readRunEvents({
+        runId,
+        maxEvents: 500,
+      });
+      const bySession = new Map<string, typeof result.events>();
+      for (const event of result.events) {
+        const frame = extractEnvelope(event);
+        if (!frame) continue;
+        const bucket = bySession.get(frame.sessionId) ?? [];
+        bucket.push(event);
+        bySession.set(frame.sessionId, bucket);
+      }
+      for (const [sessionId, events] of bySession) {
+        const frames = events
+          .map((event) => extractEnvelope(event, sessionId))
+          .filter(
+            (frame): frame is NonNullable<typeof frame> => frame !== null
+          );
+        if (frames.length > 0) {
+          eventStore
+            .getState()
+            .hydrate(sessionId, frames, result.nextAfterSequence);
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `[wiring] run 历史回填失败（${runId}）：${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /** 手动刷新（下拉刷新 / 前台恢复）：重拉会话索引并同步订阅 */
+  async refreshNow(): Promise<void> {
+    await this.onOpen();
+  }
+
+  /** 连接就绪：拉会话索引 → 订阅 → 回填已打开窗口（顺序执行，避免空订阅）。 */
+  private async onOpen(): Promise<void> {
+    await this.refreshSessions();
+    this.syncSubscriptions();
+    for (const sessionId of Object.keys(eventStore.getState().windows)) {
+      void this.hydrateSession(sessionId);
+    }
+  }
+
+  /** 会话级订阅（活跃会话前 32）+ 全局关键类型轻订阅。 */
+  syncSubscriptions(): void {
+    const sessions = sessionStore
+      .getState()
+      .sessions.filter((session) => session.isArchived !== true)
+      .slice(0, MAX_SUBSCRIPTIONS);
+    const lastSequences: Record<string, number> = {};
+    for (const session of sessions) {
+      lastSequences[session.id] = lastSeqOf(session.id);
+    }
+    this.gateway.send('events.subscribe', {
+      sessions: sessions.map((session) => session.id),
+      lastSequences,
+      ackMode: 'auto',
+    });
+    this.gateway.send('events.subscribeAll', {
+      events: [...CRITICAL_EVENT_TYPES],
+    });
+  }
+
+  /**
+   * 打开会话时回填历史（C03 readSessionEvents 分页；已打开窗口从本地游标续传）。
+   * 仅入 feed 展示面，不重放审批 / 活动 run 副作用（实时订阅负责状态增量）。
+   */
+  async hydrateSession(sessionId: string, fromStart = false): Promise<void> {
+    if (!this.monitor || this.inflightBackfill.has(sessionId)) return;
+    this.inflightBackfill.add(sessionId);
+    this.markActive(sessionId);
+    try {
+      let after = fromStart ? RESUME_FROM_ZERO : lastSeqOf(sessionId);
+      for (let page = 0; page < MAX_BACKFILL_PAGES; page += 1) {
+        const result = await this.monitor.readSessionEvents({
+          sessionId,
+          afterSequence: after,
+          maxEvents: RESUME_PAGE_SIZE,
+        });
+        const frames = result.events
+          .map((event) => extractEnvelope(event, sessionId))
+          .filter(
+            (frame): frame is NonNullable<typeof frame> => frame !== null
+          );
+        if (frames.length > 0) {
+          eventStore
+            .getState()
+            .hydrate(sessionId, frames, result.nextAfterSequence);
+        }
+        if (!result.hasMore || result.nextAfterSequence <= after) break;
+        after = result.nextAfterSequence;
+      }
+    } catch (error) {
+      console.warn(
+        `[wiring] 会话历史回填失败（${sessionId}）：${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      this.inflightBackfill.delete(sessionId);
     }
   }
 
@@ -210,34 +346,22 @@ export class FeedBridge {
       });
   }
 
-  /** 会话索引全量对账（repository 注入时执行；失败静默留痕——下次 updatedAll/重连再收敛） */
+  /** 会话索引全量对账（repository 注入时执行；失败静默留痕——下次重连再收敛） */
   private async refreshSessions(): Promise<void> {
-    if (!this.listSessionsRepo) return;
     try {
-      const list = await this.listSessionsRepo(this.gateway);
-      sessionStore.getState().reconcile(list);
-    } catch (err) {
+      if (this.listSessionsRepo) {
+        const list = await this.listSessionsRepo(this.gateway);
+        sessionStore.getState().reconcile(list);
+      } else if (this.monitor) {
+        const result = await this.monitor.listSessions({});
+        sessionStore.getState().reconcile(result.sessions);
+      } else {
+        return;
+      }
+      this.syncSubscriptions();
+    } catch (error) {
       console.warn(
-        `[wiring] 会话索引对账失败：${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-  }
-
-  /** 设备在场查询（open 相位 fire-and-forget；失败保持 null = 未知，不伪造 0） */
-  private async queryDevicePresence(): Promise<void> {
-    try {
-      const result = await this.gateway.invoke<{ devices: unknown[] } | null>(
-        'remote.listDevices',
-        {}
-      );
-      devicePresenceStore
-        .getState()
-        .setCount(
-          Array.isArray(result?.devices) ? result.devices.length : null
-        );
-    } catch (err) {
-      console.warn(
-        `[wiring] 设备在场查询失败（保持未知）：${err instanceof Error ? err.message : String(err)}`
+        `[wiring] 会话索引对账失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

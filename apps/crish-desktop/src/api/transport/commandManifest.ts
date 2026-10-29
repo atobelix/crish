@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（165 = 注册面 165 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（166 = 注册面 166 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -126,6 +126,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('multi_device_rename_device', 'multi_device', 'engine'),
     // R1-09（G-4）：网络环境检测（注册表网络配置文件 + 可直连 IP + 引导文案）
     entry('multi_device_network_info', 'multi_device', 'engine'),
+    // 首次配对信任引导：导出桌面自签 CA（移动端系统安装后 wss 才可信）
+    entry('multi_device_export_ca', 'multi_device', 'engine'),
     // R1-11（G-1）：多端服务总开关（Rust 侧已登记，镜像同步）
     entry('multi_device_set_enabled', 'multi_device', 'engine'),
     // ── 用户账号与云端设备管理面 ──
@@ -134,8 +136,16 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('auth_get_session', 'auth', 'engine'),
     entry('auth_refresh_token', 'auth', 'engine'),
     entry('auth_list_devices', 'auth', 'engine'),
-    entry('auth_revoke_device', 'auth', 'engine'),
-    entry('auth_get_relay_ticket', 'auth', 'engine'),
+    entry('auth_request_email_code', 'auth', 'engine'),
+    entry('auth_confirm_email_code', 'auth', 'engine'),
+    entry('auth_get_profile', 'auth', 'engine'),
+    entry('auth_update_profile', 'auth', 'engine'),
+    entry('auth_upload_avatar', 'auth', 'engine'),
+    entry('auth_list_sessions', 'auth', 'engine'),
+    entry('auth_revoke_session', 'auth', 'engine'),
+    entry('auth_delete_account', 'auth', 'engine'),
+    entry('auth_request_password_code', 'auth', 'engine'),
+    entry('auth_set_password_with_code', 'auth', 'engine'),
     // ── 供应商隔离凭据；配置读写统一由 models 命令负责。──
     entry('config_secret_set', 'config', 'engine'),
     entry('config_secret_get', 'config', 'engine'),

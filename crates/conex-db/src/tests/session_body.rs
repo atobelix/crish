@@ -90,6 +90,37 @@ fn rebase_resets_body_version_so_post_restart_batches_are_accepted() {
     );
 }
 
+/// 非 CAS rebase（batch_version=None）只做 Upsert 合并，不按载荷长度删尾：
+/// 局部快照（2 条）不得抹掉库内 4 条历史，message_count 取库内实际行数。
+/// 显式替换 API（save_session_body）仍保留缩容语义（撤回/清空/恢复自愈）。
+#[test]
+fn rebase_without_version_never_truncates_stored_history() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+    let full: Vec<_> = (1..=4)
+        .map(|i| sample_message(&format!("m{i}"), "user", i))
+        .collect();
+    db.save_session_body_versioned("s1", &full, Some(1))
+        .unwrap();
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 4);
+
+    db.save_session_body_versioned("s1", &full[..2], None)
+        .unwrap();
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 4, "非 CAS rebase 不得删除库内既有尾部");
+    assert_eq!(loaded[3].id, "m4");
+    assert_eq!(
+        db.list_sessions().unwrap()[0].message_count,
+        4,
+        "message_count 必须反映库内实际行数"
+    );
+
+    // 显式全量替换仍允许缩容
+    db.save_session_body("s1", &full[..1]).unwrap();
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 1);
+}
+
 #[test]
 fn upsert_and_list_sessions() {
     let db = LocalDb::open_in_memory().unwrap();

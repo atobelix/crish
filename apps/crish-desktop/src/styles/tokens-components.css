@@ -1,6 +1,7 @@
 /* ==========================================================================
    tokens-components.css — 领域组件级衍生变量 (--md-*, --syntax-*, --terminal-*,
-   --xterm-*, --diff-*, --filetree-*, --notice-*, --usage-*, --sep-*, --stream-*)
+   --xterm-*, --diff-*, --filetree-*, --notice-*, --usage-*, --sep-*, --stream-*,
+   --account-*)
    ========================================================================== */
 
 :root,
@@ -623,4 +624,95 @@ html[data-ui-size='large'] {
     --syntax-addition: oklch(0.82 0.16 142);
     --syntax-deletion: oklch(0.75 0.18 25);
   }
+}
+
+/* --------------------------------------------------------------------------
+   账号界面（登录弹窗 / 设置「账户」分区）组件 token — 设计稿「账号界面 v2」
+   暖灰阶只在账号界面内生效，不改全局 --surface-* / --text-* 灰阶（冲突见评审记录）
+   -------------------------------------------------------------------------- */
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 表面与控件底色（浅色） */
+  --account-surface: #ffffff;
+  --account-panel: #f3f3f2;
+  --account-hover: #f7f7f6;
+  --account-field: #f3f3f2;
+  --account-field-focus: #eeeeed;
+  --account-secondary: #ececeb;
+  --account-pressed: #e7e7e6;
+  /* 文字四阶与禁用（浅色） */
+  --account-text-1: #121212;
+  --account-text-2: #4d4d4d;
+  --account-text-3: #6b6b6b;
+  --account-text-4: #939393;
+  --account-text-disabled: #b3b2b1;
+  /* 主操作 / 危险 / 头像（浅色） */
+  --account-action: #121212;
+  --account-action-text: #ffffff;
+  --account-danger: #dc2626;
+  --account-danger-fill: #faeded;
+  --account-avatar-bg: #eef2fa;
+  --account-avatar-fg: #3b5b92;
+  /* 遮罩：支持 backdrop-filter 时轻压暗 + 模糊；不支持时退化为更深的纯色 */
+  --account-scrim: hsl(0 0% 7% / 0.08);
+  --account-scrim-solid: hsl(0 0% 0% / 0.16);
+  --account-scrim-filter: blur(10px) saturate(120%);
+
+  /* 尺寸（与主题无关） */
+  --account-radius: 10px;
+  --account-radius-dialog: 20px;
+  --account-auth-width: 760px;
+  --account-auth-height: 480px;
+  --account-auth-brand-width: 280px;
+  --account-form-width: 320px;
+  --account-confirm-width: 360px;
+  --account-confirm-width-wide: 400px;
+  --account-content-max: 560px;
+  --account-avatar-size: 56px;
+  --account-mark-size: 40px;
+  --account-row-height: 48px;
+  --account-dot-size: 6px;
+  --account-ring-width: 2px;
+  --account-caret-width: 1.5px;
+
+  /* 字号与行高（13/15 号无全局 token，随字号档位 --font-size-adjust 缩放） */
+  --account-font-size-label: calc(13px + var(--font-size-adjust, 0px));
+  --account-font-size-brand: calc(15px + var(--font-size-adjust, 0px));
+  --account-line-caption: 16px;
+  --account-line-body: 20px;
+  --account-line-heading: 24px;
+  --account-line-title: 28px;
+  --account-tracking-title: -0.3px;
+  --account-tracking-brand: -0.2px;
+
+  /* 动效：遮罩 160ms（无对应全局时长档） */
+  --account-duration-scrim: 160ms;
+}
+
+html[data-theme='dark'] {
+  /* 表面与控件底色（深色） */
+  --account-surface: #1b1b1b;
+  --account-panel: #222222;
+  --account-hover: #202020;
+  --account-field: #232323;
+  --account-field-focus: #282828;
+  --account-secondary: #2a2a2a;
+  --account-pressed: #2f2f2f;
+  /* 文字四阶与禁用（深色） */
+  --account-text-1: #f5f5f5;
+  --account-text-2: #bdbdbd;
+  --account-text-3: #979797;
+  --account-text-4: #6e6e6e;
+  --account-text-disabled: #5e5e5e;
+  /* 主操作 / 危险 / 头像（深色） */
+  --account-action: #f5f5f5;
+  --account-action-text: #121212;
+  --account-danger: #f87171;
+  --account-danger-fill: #251919;
+  --account-avatar-bg: #1d2433;
+  --account-avatar-fg: #8faee0;
+  /* 遮罩（深色） */
+  --account-scrim: hsl(0 0% 0% / 0.4);
+  --account-scrim-solid: hsl(0 0% 0% / 0.55);
 }

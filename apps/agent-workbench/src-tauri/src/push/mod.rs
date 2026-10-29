@@ -113,6 +113,7 @@ mod coalesce;
 mod copy;
 mod dedupe;
 mod engine;
+mod engine_types;
 mod intent;
 mod online;
 mod pending;

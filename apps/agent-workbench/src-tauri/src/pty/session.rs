@@ -479,6 +479,14 @@ pub(crate) fn create_session(
         let mut reg = registry()
             .lock()
             .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+        // 前置检查在 spawn 前做快速失败；插入时在锁内复检，避免并发 create
+        // 在检查与入表之间同时通过造成超限。超限时丢弃 session（Drop 杀子进程）。
+        if reg.len() >= MAX_PTY_SESSIONS {
+            drop(reg);
+            return Err(CoreError::InvalidInput(format!(
+                "PTY session capacity exceeded: maximum {MAX_PTY_SESSIONS} active sessions allowed"
+            )));
+        }
         reg.insert(pty_id.clone(), session);
     }
 
@@ -487,7 +495,7 @@ pub(crate) fn create_session(
     // 无条件冲刷导致的 IPC 广播风暴，同时保证交互式首帧 0ms 延迟与尾帧保底送达。
     let emit_id = pty_id.clone();
     let app_reader = app.clone();
-    thread::Builder::new()
+    let reader_thread = thread::Builder::new()
         .name(format!("pty-read-{pty_id}"))
         .spawn(move || {
             let mut buf = [0u8; 8192];
@@ -642,8 +650,16 @@ pub(crate) fn create_session(
             if let Ok(mut reg) = registry().lock() {
                 reg.remove(&emit_id);
             }
-        })
-        .map_err(|e| CoreError::Internal(format!("pty reader thread spawn failed: {e}")))?;
+        });
+    // 线程创建失败时回收已入表的会话（Drop 杀子进程），不留无读者的孤儿 shell。
+    if let Err(error) = reader_thread {
+        if let Ok(mut reg) = registry().lock() {
+            reg.remove(&pty_id);
+        }
+        return Err(CoreError::Internal(format!(
+            "pty reader thread spawn failed: {error}"
+        )));
+    }
 
     tracing::info!(
         target: "pty",

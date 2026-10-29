@@ -431,7 +431,8 @@ describe('SlideToConfirm reduce-motion 降级（R2UX §4.4-3 / M4 §8.4）', () 
     expect(screen.queryByTestId('slide-confirm-dialog')).toBeNull();
 
     await fireEvent.press(screen.getByTestId('slide-track'));
-    await fireEvent.press(screen.getByTestId('dialog-backdrop'));
+    expect(screen.queryByTestId('slide-confirm-dialog')).not.toBeNull();
+    await fireEvent.press(screen.getByTestId('slide-confirm-cancel'));
     expect(onConfirm).not.toHaveBeenCalled();
     expect(screen.queryByTestId('slide-confirm-dialog')).toBeNull();
   });

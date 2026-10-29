@@ -187,6 +187,9 @@ pub fn local_hour(timestamp_ms: i64, tz_offset_minutes: i32) -> u32 {
 
 impl LocalDb {
     /// 插入一条用量记录。经组提交 Writer。
+    ///
+    /// `run_id` 非空时按 `(run_id)` 部分唯一索引幂等（v15）：重复收口写返回
+    /// 既有行 id，不产生第二条流水（计费口径唯一）。
     pub fn insert_usage_record(&self, input: InsertUsageRecordInput) -> Result<i64, DbFailure> {
         self.write_blocking(move |conn| {
             let timestamp = if input.timestamp <= 0 {
@@ -198,32 +201,50 @@ impl LocalDb {
                 input.timestamp
             };
 
-            conn.execute(
-                "INSERT INTO usage_records (
+            let run_id = input.run_id.clone();
+            let changed = conn
+                .execute(
+                    "INSERT OR IGNORE INTO usage_records (
                     session_id, run_id, project_name, model, provider,
                     prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
                     cost_cny, cost_usd, timestamp
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12);",
-                params![
-                    input.session_id,
-                    input.run_id,
-                    input.project_name,
-                    input.model,
-                    input.provider,
-                    input.prompt_tokens as i64,
-                    input.completion_tokens as i64,
-                    input.cache_read_tokens as i64,
-                    input.cache_write_tokens as i64,
-                    input.cost_cny,
-                    input.cost_usd,
-                    timestamp,
-                ],
-            )
-            .map_err(|e| DbFailure {
-                message: format!("insert_usage_record: {e}"),
-                kind: DbFailureKind::Other("insert_usage_record".to_string()),
-            })?;
-            Ok(conn.last_insert_rowid())
+                    params![
+                        input.session_id,
+                        input.run_id,
+                        input.project_name,
+                        input.model,
+                        input.provider,
+                        input.prompt_tokens as i64,
+                        input.completion_tokens as i64,
+                        input.cache_read_tokens as i64,
+                        input.cache_write_tokens as i64,
+                        input.cost_cny,
+                        input.cost_usd,
+                        timestamp,
+                    ],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("insert_usage_record: {e}"),
+                    kind: DbFailureKind::Other("insert_usage_record".to_string()),
+                })?;
+            if changed > 0 {
+                return Ok(conn.last_insert_rowid());
+            }
+            // 唯一索引命中（同 run 已存在）：返回既有行 id（幂等语义）
+            match run_id {
+                Some(run_id) => conn
+                    .query_row(
+                        "SELECT id FROM usage_records WHERE run_id = ?1 LIMIT 1;",
+                        params![run_id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("insert_usage_record_lookup: {e}"),
+                        kind: DbFailureKind::Other("insert_usage_record".to_string()),
+                    }),
+                None => Ok(conn.last_insert_rowid()),
+            }
         })
     }
 

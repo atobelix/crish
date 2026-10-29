@@ -10,6 +10,8 @@ import { configSecretClear, configSecretSet } from './rustProfileStore';
 import { profileHasKey } from './profileValidation';
 import type { ProviderProfile } from './profileCatalog';
 import { saveProfiles, loadProfiles } from './profileStorePersistence';
+import { selectProvider } from '../modelsCatalogStore';
+import { providerHasKey as catalogProviderHasKey } from '../modelsCatalogLive';
 
 /**
  * 会话内密钥内存缓存（K-01 明文下线的唯一例外持有面）：
@@ -44,7 +46,6 @@ export async function setProfileKey(
   const key = apiKey.trim();
   const list = loadProfiles();
   const p = list.find((x) => x.id === profileId);
-  if (!p) return list;
 
   if (key) profileKeyCache.set(profileId, key);
   else profileKeyCache.delete(profileId);
@@ -52,15 +53,17 @@ export async function setProfileKey(
   const res = key
     ? await configSecretSet(profileId, key)
     : await configSecretClear(profileId);
-  if (res.status === 'ok') {
-    p.hasKey = Boolean(res.data?.hasKey);
-  } else if (res.status === 'missing') {
-    // 非 Tauri 环境（浏览器 dev）：降级为本地草稿标记（25-audit 允许）
-    p.hasKey = Boolean(key);
-  } else {
-    p.hasKey = false;
+  if (p) {
+    if (res.status === 'ok') {
+      p.hasKey = Boolean(res.data?.hasKey);
+    } else if (res.status === 'missing') {
+      // 非 Tauri 环境（浏览器 dev）：降级为本地草稿标记（25-audit 允许）
+      p.hasKey = Boolean(key);
+    } else {
+      p.hasKey = false;
+    }
+    saveProfiles(list);
   }
-  saveProfiles(list);
   return list;
 }
 
@@ -77,11 +80,17 @@ export async function saveProfileKey(
   const key = apiKey.trim();
   if (!key) return { ok: false, error: 'empty_key', synced: false };
 
-  await setProfileKey(profileId, key);
-  const profile = loadProfiles().find((p) => p.id === profileId);
-  if (!profile) return { ok: false, error: 'profile_not_found', synced: false };
-  if (!profile.hasKey)
-    return { ok: false, error: 'key_save_failed', synced: false };
+  const list = await setProfileKey(profileId, key);
+  const profile = list.find((p) => p.id === profileId);
+  const inUnifiedStore = selectProvider(profileId);
+  if (!profile && !inUnifiedStore)
+    return { ok: false, error: 'profile_not_found', synced: false };
+
+  const hasKey =
+    catalogProviderHasKey(profileId) ||
+    Boolean(profile?.hasKey) ||
+    Boolean(getProfileKeyInMemory(profileId));
+  if (!hasKey) return { ok: false, error: 'key_save_failed', synced: false };
 
   // 延迟导入避免与 profileStoreActivation 形成静态循环
   const { getActiveProfileId } = await import('./profileActiveSelection');
@@ -99,14 +108,16 @@ export async function saveProfileKey(
   const model = (
     opts?.activateModel ||
     getActiveModelId() ||
-    profile.models[0] ||
+    profile?.models?.[0] ||
+    inUnifiedStore?.models?.[0]?.id ||
     ''
   ).trim();
   if (!model) {
     const { configProfileApply } = await import('./rustProfileStore');
+    const baseUrl = profile?.baseUrl || inUnifiedStore?.baseUrl;
     const res = await configProfileApply({
       profileId,
-      ...(profile.baseUrl ? { baseUrl: profile.baseUrl } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
     });
     if (res.status === 'ok' && res.data?.ok === true) {
       const { setActiveProfileId } = await import('./profileActiveSelection');

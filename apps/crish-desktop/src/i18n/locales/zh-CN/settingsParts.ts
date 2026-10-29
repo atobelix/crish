@@ -137,7 +137,6 @@ export const settingsPartRest = {
   'profile.importFailed': '导入失败：{error}',
   'profile.serviceDisconnected': '服务未连接',
   'profile.connAbnormal': '连接异常',
-  'profile.flowbitSection': 'Flowbit 账号与多端协同',
   'profile.currentEnvSection': '当前环境',
   'profile.currentProject': '当前项目',
   'profile.localWorkspace': '本机工作区',
@@ -217,6 +216,13 @@ export const settingsPartRest = {
   'devices.copyPairCode': '复制配对码',
   'devices.remainingTime': '剩余有效时间：',
   'devices.closePairing': '关闭配对',
+  'devices.securitySection': '安全连接',
+  'devices.exportCertTitle': '桌面证书',
+  'devices.exportCertDesc':
+    '首次连接前，在手机安装此证书并完全信任，才能建立加密连接',
+  'devices.exportCertBtn': '导出证书',
+  'devices.exportCertSuccess': '证书已导出',
+  'devices.exportCertFailed': '证书导出失败，请稍后重试',
   'devices.revokeConfirmTitle': '撤销设备',
   'devices.revokeConfirmDesc':
     '撤销后该设备将立即断开，令牌失效，需重新扫码配对才能连接。确定撤销？',

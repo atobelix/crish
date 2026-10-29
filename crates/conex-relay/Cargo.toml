@@ -1,24 +1,31 @@
 [package]
 name = "conex-relay"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-description = "Conex high-concurrency lightweight E2EE zero-knowledge relay server"
-repository.workspace = true
-
-[lints]
-workspace = true
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+authors = ["atobelix"]
+description = "Crish remote relay: account-scoped tickets, blind frame forwarding, no business storage"
+repository = "https://github.com/atobelix/crish"
+publish = false
 
 [dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util"] }
+anyhow = "1"
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["ws", "json", "http1", "tokio", "query"] }
+base64 = "0.22"
+futures-util = "0.3"
+hex = "0.4"
+hmac = "0.12"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"
 tokio-tungstenite = "0.29"
-futures-util = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-thiserror = { workspace = true }
-hex = { workspace = true }
-sha2 = { workspace = true }

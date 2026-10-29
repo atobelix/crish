@@ -111,6 +111,7 @@ impl ToolCallCollector {
             }
         }
         // 标准结构：function.name 覆盖式 / function.arguments 追加式（忽略空 name）
+        let mut has_nested_arguments = false;
         if let Some(function) = record.get("function").and_then(Value::as_object) {
             if let Some(name) = string_field(function.get("name")) {
                 if !name.trim().is_empty() {
@@ -118,6 +119,7 @@ impl ToolCallCollector {
                 }
             }
             if let Some(arguments) = string_field(function.get("arguments")) {
+                has_nested_arguments = true;
                 entry.arguments_text.push_str(arguments);
             }
         }
@@ -131,8 +133,13 @@ impl ToolCallCollector {
                 }
             }
         }
-        if let Some(arguments) = string_field(record.get("arguments")) {
-            entry.arguments_text.push_str(arguments);
+        // 平铺 arguments 仅在标准 function.arguments 缺失时读取：部分代理
+        // 会把同一片段镜像到两个字段，双读会把 JSON 拼成两遍导致解析失败
+        // （降级为 __rawArguments，工具收到坏参数）。
+        if !has_nested_arguments {
+            if let Some(arguments) = string_field(record.get("arguments")) {
+                entry.arguments_text.push_str(arguments);
+            }
         }
     }
 
@@ -237,6 +244,45 @@ mod tests {
             "id": id,
             "function": { "name": name, "arguments": arguments },
         })
+    }
+
+    /// 镜像字段双写（function.arguments 与顶层 arguments 同片段）不得重复
+    /// 拼接——双拼会让 JSON 解析失败并降级为 __rawArguments。
+    #[test]
+    fn mirrored_arguments_are_not_double_appended() {
+        let mut collector = ToolCallCollector::new();
+        collector.merge(&json!({
+            "index": 0,
+            "id": "call_x",
+            "function": { "name": "read_file", "arguments": "{\"path\":\"/a\"}" },
+            "arguments": "{\"path\":\"/a\"}",
+        }));
+        let flush = collector.finish();
+        assert_eq!(flush.calls.len(), 1);
+        assert_eq!(
+            flush.calls[0].input,
+            json!({ "path": "/a" }),
+            "镜像字段不得双拼"
+        );
+        assert!(
+            flush.calls[0].input.get("__rawArguments").is_none(),
+            "参数必须解析成功"
+        );
+    }
+
+    /// 平铺变体（无 function.arguments）仍读取顶层 arguments。
+    #[test]
+    fn flat_arguments_fallback_still_works() {
+        let mut collector = ToolCallCollector::new();
+        collector.merge(&json!({
+            "index": 0,
+            "id": "call_flat",
+            "name": "read_file",
+            "arguments": "{\"path\":\"/b\"}",
+        }));
+        let flush = collector.finish();
+        assert_eq!(flush.calls[0].tool_name, "read_file");
+        assert_eq!(flush.calls[0].input, json!({ "path": "/b" }));
     }
 
     #[test]

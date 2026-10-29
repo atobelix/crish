@@ -1,65 +1,81 @@
+// 根布局：安全区 / 主题 / Toast / 启动装配 / 认证水合闸门 / 导航栈 / 全局审批悬浮卡。
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
+import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { authStore } from '@/domain/store/authStore';
+import { useTheme } from '@/adapters/platform/theme';
 import { ensureDatabaseForApp } from '@/db/dbBootstrap';
+import { startAppRuntime } from '@/adapters/runtime/appRuntime';
+import { ensurePairingWiringForApp } from '@/adapters/pairing/pairingController';
 import {
   ensureNotificationsForApp,
   type NotificationLayerHandle,
 } from '@/notifications/notificationBootstrap';
+import { ErrorBoundary } from '@/presentation/components/ErrorBoundary';
+import { ApprovalFloat } from '@/presentation/components/approval/ApprovalFloat';
+import { BrandMark, Spinner, ToastProvider } from '@/presentation/ui';
 
-// 根布局（M5 §2.1 app/_layout.tsx）：SplashGate + Stack
-// 路由守卫（D4 §5.0）落在 (tabs)/_layout（未配对 → 配对流程）与
-// ProtectedPlaceholder（深链详情页）；通知层装配（R3-04 部分 4）随 SplashGate
-// 之后执行（见下方装配 effect）；DB 启动装配（R2-13 部分 2）由 ensureDatabaseForApp
-// 接入（src/db/dbBootstrap）
-export default function RootLayout() {
+/** 账号 v3 页面（统一推入时长） */
+const ACCOUNT_V3_ROUTES = [
+  'account/index',
+  'account/login',
+  'account/code',
+  'account/password',
+  'account/set-password',
+  'account/profile',
+  'account/sessions',
+  'account/delete',
+] as const;
+
+function RootShell() {
+  const theme = useTheme();
   const hydrated = useAuthStore((s) => s.hydrated);
+  const accountHydrated = useAccountStore((s) => s.hydrated);
+  const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
 
-  // 启动水合：骨架期 hydrate 为同步置位；R2-03 在此接 secure-store + kv-store 读取
   useEffect(() => {
-    void authStore.getState().hydrate();
+    let cancelled = false;
+    void ensurePairingWiringForApp()
+      .catch((error: unknown) => {
+        console.warn(
+          `[startup] 配对接线装配失败，回退未配对态：${error instanceof Error ? error.message : String(error)}`
+        );
+        return authStore.getState().hydrate();
+      })
+      .finally(() => {
+        if (!cancelled && !authStore.getState().hydrated) {
+          void authStore.getState().hydrate();
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // DB 启动装配（R2-13 部分 2）：openDatabaseAsync → migrateIfNeeded →
-  // configureSqlitePersistence → settings/notification hydrate；不阻塞首屏
-  // （SplashGate 只等 auth hydrate；DB 失败降级内存态 + 日志注记，见 dbBootstrap）
+  useEffect(() => {
+    startAppRuntime();
+  }, []);
+
   useEffect(() => {
     void ensureDatabaseForApp();
   }, []);
 
-  // 通知层装配（R3-04 部分 4）：SplashGate（auth hydrate）之后执行——
-  // 路由树就绪，冷启动深链导航（getLastNotificationResponseAsync → navigate →
-  // router.push）安全；深链导航注入 = router.push 包装（notificationRouteToPath
-  // 已翻译为 expo-router 路径，deepLink.ts / M4 §4.3 白名单）；
-  // - 配对状态不 gate：桌面只在配对后推送（D7 §6.4「未配对不推」是发送面语义），
-  //   监听注册无害；推送到达按 authStore 状态处理（PushWiring 离开 paired 清
-  //   去重表，pushConsumer attach）；权限引导由 UI 层配对后触发（D7 §7.5）；
-  // - Expo Go 降级（P0-1 DEF-5）：系统通知面不可用 → 应用内通知 only，
-  //   不抛错不阻塞启动（notificationBootstrap catch + warn 兜底）；
-  // - 卸载/热重载：dispose 解绑监听，重装配幂等。
-  const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
-    void ensureNotificationsForApp({
-      navigate: (path) => router.push(path),
-    })
+    void ensureNotificationsForApp({ navigate: (path) => router.push(path) })
       .then((handle) => {
-        if (cancelled) {
-          handle.dispose();
-        } else {
-          notificationLayerRef.current = handle;
-        }
+        if (cancelled) handle.dispose();
+        else notificationLayerRef.current = handle;
       })
-      .catch((err: unknown) => {
-        // 兜底防线：ensureNotificationsForApp 内部已降级不抛（DEF-5 契约），
-        // 此处再防未来回归——装配异常不阻塞启动，仅日志注记
+      .catch((error: unknown) => {
         console.warn(
-          `[notifications] 通知层装配异常（不阻塞启动）：${err instanceof Error ? err.message : String(err)}`
+          `[notifications] 通知层装配失败：${error instanceof Error ? error.message : String(error)}`
         );
       });
     return () => {
@@ -69,24 +85,101 @@ export default function RootLayout() {
     };
   }, [hydrated]);
 
-  // SplashGate：令牌未读出前不挂导航树，防配对页闪跳（D4 §5.0）
-  if (!hydrated) {
+  if (!hydrated || !accountHydrated) {
     return (
-      <View style={styles.splash}>
-        <ActivityIndicator />
+      <View
+        style={[
+          styles.splash,
+          { gap: theme.space.xl, backgroundColor: theme.colors.canvas },
+        ]}
+      >
+        <BrandMark size={64} />
+        <Spinner />
       </View>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
-    </SafeAreaProvider>
+    <View style={[styles.flex, { backgroundColor: theme.colors.canvas }]}>
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: theme.colors.canvas },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen name="(main)" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="pair" />
+        <Stack.Screen name="welcome" />
+        {/* 账号 v3：推入时长取 motion.account.push（iOS 生效；自定义缓动曲线原生栈不支持） */}
+        {ACCOUNT_V3_ROUTES.map((name) => (
+          <Stack.Screen
+            key={name}
+            name={name}
+            options={{ animationDuration: theme.motion.account.push }}
+          />
+        ))}
+        <Stack.Screen name="run/[runId]" />
+        <Stack.Screen name="terminal/[runId]" />
+        <Stack.Screen name="approval-history" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen
+          name="approval/[toolCallId]"
+          options={{
+            presentation: 'transparentModal',
+            animation: 'fade',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
+        <Stack.Screen
+          name="tools/[sessionId]"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: theme.layout.toolSheetDetents,
+            // iOS：停在低档时对话不压暗、仍可交互
+            sheetLargestUndimmedDetentIndex: 0,
+            sheetGrabberVisible: true,
+            sheetCornerRadius: theme.radius.sheet,
+            contentStyle: { backgroundColor: theme.colors.surfaceRaised },
+          }}
+        />
+        <Stack.Screen
+          name="approvals"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: theme.layout.approvalSheetDetents,
+            sheetGrabberVisible: true,
+            sheetCornerRadius: theme.radius.sheet,
+            contentStyle: { backgroundColor: theme.colors.surfaceRaised },
+          }}
+        />
+      </Stack>
+      {/* 全局唯一审批入口：悬浮于所有页面之上，隐藏规则见 approvalFloatModel */}
+      <ApprovalFloat />
+    </View>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView>
+      <View style={styles.flex}>
+        <SafeAreaProvider>
+          <ToastProvider>
+            <ErrorBoundary>
+              <RootShell />
+            </ErrorBoundary>
+          </ToastProvider>
+        </SafeAreaProvider>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   splash: {
     flex: 1,
     alignItems: 'center',

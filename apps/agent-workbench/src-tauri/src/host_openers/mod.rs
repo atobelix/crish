@@ -5,16 +5,17 @@
 
 pub(crate) mod discovery;
 pub(crate) mod execute;
+pub(crate) mod external_url;
 pub(crate) mod icon;
+pub(crate) mod path_safety;
 pub(crate) mod resolve;
 pub(crate) mod types;
 
 use conex_types::CoreError;
 
 use crate::host_openers::discovery::discover_host_openers;
-use crate::host_openers::execute::{
-    open_external_url, open_host_target, open_path_with_default_app,
-};
+use crate::host_openers::execute::{open_host_target, open_path_with_default_app};
+use crate::host_openers::external_url::open_external_url;
 use crate::host_openers::types::{to_core_error, HostOpenResult, HostOpenTarget, HostOpener};
 
 #[tauri::command]

@@ -13,6 +13,29 @@ use crate::core_error::CoreError;
 pub async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message: &str) {
     let session_id = active.session_id.clone();
     let run_id = active.run_id.clone();
+
+    // 终态幂等：正常收口（completed/cancelled）后，驱动错误路径与看门狗
+    // 仍可能再次进入本函数；已终态不得再 push runtime-error、把记录翻成
+    // Failed 或重发 run-terminal（同一 run 双终态 = 前端状态回退与事件重复）。
+    {
+        let run = active.handle.lock().await;
+        if run.is_terminal() {
+            tracing::warn!(
+                target: "run",
+                run_id = %run_id,
+                status = ?run.status,
+                "finalize_failed：run 已终态，跳过重复失败收口"
+            );
+            drop(run);
+            state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&run_id);
+            return;
+        }
+    }
+
     let mut run = active.handle.lock().await;
     let mut queue = active.queue.lock().await;
 
@@ -525,7 +548,11 @@ mod tests {
     async fn missing_provider_is_rejected_before_launch_side_effects() {
         let db = conex_db::LocalDb::open_in_memory().expect("内存数据库");
         let previous_goal = GoalState::new("保留中的目标", 7, 3).to_json();
-        db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &previous_goal)
+        let goal_key = session_meta_key_of(
+            "sess-missing-provider",
+            orchestrator::goal_state::GOAL_STATE_KEY,
+        );
+        db.set_session_meta(&goal_key, &previous_goal)
             .expect("预置既有 goal_state");
         let store: Arc<dyn orchestrator::persist::Store> =
             Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
@@ -570,7 +597,7 @@ mod tests {
             "provider 缺失时不得清除 user_stopped"
         );
         let goal_after = db
-            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .get_session_meta(&goal_key)
             .expect("读取 goal_state")
             .expect("既有 goal_state 仍存在");
         assert_eq!(
@@ -1109,8 +1136,7 @@ pub async fn run_task_impl(
                     && name != agent_tools::tools::send_message::SEND_MESSAGE_TOOL_NAME
                     && name != agent_tools::tools::configure_agents::CONFIGURE_AGENTS_TOOL_NAME
                     && name != agent_tools::tools::grant_capability::GRANT_CAPABILITY_TOOL_NAME
-                    && name
-                        != agent_tools::tools::switch_agent_model::SWITCH_AGENT_MODEL_TOOL_NAME
+                    && name != agent_tools::tools::switch_agent_model::SWITCH_AGENT_MODEL_TOOL_NAME
             })
             .map_err(|error| CoreError::internal(format!("子代理工具集剔除失败：{error}")))?;
             // 能力档裁剪（纵深防御；运行中升降级由执行面 gate 承担）
@@ -1996,9 +2022,10 @@ pub async fn push_emit_idle_event(
 ) -> Option<u64> {
     let mut queue = queue.lock().await;
     let sequenced = queue.push(session_id, event).await.ok()?;
-    let envelope = AgentEventEnvelope::new(sequenced.event, None, Some(sequenced.sequence));
+    let sequence = sequenced.persisted.then_some(sequenced.sequence);
+    let envelope = AgentEventEnvelope::new(sequenced.event, None, sequence);
     bridge.emit_envelope(&envelope);
-    Some(sequenced.sequence)
+    sequence
 }
 
 /// F4：DB body（SessionMessage）→ HistoryMessage（字段一一对应；再经
@@ -2042,6 +2069,11 @@ pub async fn cancel_run_impl(
     let engine = ActiveRunEngine {
         active: Arc::clone(&active),
     };
+    // D6 决策 1：用户显式取消 = 会话级 user_stopped（跨 run）——否则收口时
+    // 残留队列条目（定时器/唤醒）会被 watcher 在 10s 后自动重拉，等于撤销
+    // 用户取消。与 run_control 的 L2/L3 入口保持同一语义。
+    active.user_touched.store(true, Ordering::SeqCst);
+    state.set_user_stopped(&active.session_id);
     let mut handle = active.handle.lock().await;
     let path = handle
         .cancel_run(
@@ -2087,6 +2119,10 @@ pub async fn abort_session_run_impl(
     let Some(run) = target else {
         return Ok(false);
     };
+    // D6 决策 1：会话级中止同属用户显式停止（同 cancel_run_impl：防残留
+    // 队列条目在收口后被 watcher 自动重拉）。
+    run.user_touched.store(true, Ordering::SeqCst);
+    state.set_user_stopped(&run.session_id);
     run.abort_signal.abort();
     {
         let mut bus = run.control_bus.lock().unwrap_or_else(|e| e.into_inner());

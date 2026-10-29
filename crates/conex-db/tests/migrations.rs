@@ -1626,3 +1626,178 @@ fn migrate_v10_to_v11_creates_app_preferences_preserves_data() {
     assert!(db2.get_failure().is_none(), "二次 open 幂等无失败闩");
     assert_eq!(db2.user_version().unwrap(), LATEST_VERSION);
 }
+
+/// v2 脏数据防线：旧库 status / sender 超出 v3 CHECK 集合时，迁移按
+/// 「status 未知 → error、sender 未知 → assistant」归一，绝不因 CHECK
+/// 失败把历史库打成「永久打不开」。
+#[test]
+fn v2_fixture_dirty_agent_message_values_are_normalized() {
+    let temp = TempDb::new("v2-dirty");
+    build_v2_fixture(&temp);
+
+    // 模拟历史脏数据：status='failed'（v3 CHECK 之外）、sender='tool'
+    // （v2 fixture 自身 CHECK 之外，经 ignore_check_constraints 写入原始行）
+    {
+        let conn = Connection::open(temp.path()).unwrap();
+        conn.execute_batch("PRAGMA ignore_check_constraints = ON;")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO session_agent_messages
+                (session_id, agent_id, seq, id, sender, text, timestamp, status)
+             VALUES ('s1', 'a1', 1, 'am-dirty', 'tool', '历史工具输出', 960, 'failed')",
+            [],
+        )
+        .unwrap();
+    }
+
+    let db = LocalDb::open(temp.path()).expect("脏 status/sender 不得阻断迁移");
+    assert!(db.get_failure().is_none(), "迁移失败闩不得置位");
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+
+    let conn = Connection::open(temp.path()).unwrap();
+    let (sender, status): (String, String) = conn
+        .query_row(
+            "SELECT sender, status FROM session_agent_messages WHERE id='am-dirty'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("脏行必须保留（数据不丢）");
+    assert_eq!(status, "error", "未知 status 归一为 error");
+    assert_eq!(sender, "assistant", "未知 sender 归一为 assistant");
+    assert_eq!(
+        count_rows(&conn, "session_agent_messages"),
+        2,
+        "合法行 + 归一后的脏行都在"
+    );
+}
+
+/// 未来版本库（user_version > LATEST）必须拒绝打开且不做任何结构改动——
+/// 旧二进制读新库不得 DROP 未来触发器或回写 schema_version。
+#[test]
+fn future_schema_version_is_rejected_without_mutation() {
+    let temp = TempDb::new("future");
+    {
+        let conn = Connection::open(temp.path()).unwrap();
+        conn.execute_batch("PRAGMA user_version = 99;").unwrap();
+    }
+
+    let err = match LocalDb::open(temp.path()) {
+        Ok(_) => panic!("未来版本库必须拒绝打开"),
+        Err(err) => err,
+    };
+    assert_eq!(err.kind, conex_db::DbFailureKind::Migration);
+    assert!(
+        err.message.contains("newer than supported"),
+        "错误信息应指明版本过新：{}",
+        err.message
+    );
+
+    let conn = Connection::open(temp.path()).unwrap();
+    let version: u32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 99, "拒绝路径不得改写 user_version");
+    let sessions: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sessions'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(sessions, 0, "拒绝路径不得创建/改动任何表");
+}
+
+/// 最新版本库的完整性修复：晚出版本表（usage_records 等）缺失时，重新打开
+/// 必须通过幂等修复补齐，而不是只在 v5 结构上兜底后继续缺失。
+#[test]
+fn latest_schema_repair_restores_missing_late_tables() {
+    let temp = TempDb::new("repair");
+    {
+        let db = LocalDb::open(temp.path()).unwrap();
+        assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+    }
+    {
+        let conn = Connection::open(temp.path()).unwrap();
+        conn.execute_batch("DROP TABLE usage_records;").unwrap();
+        conn.execute_batch("DROP TABLE compression_blocks;")
+            .unwrap();
+    }
+
+    let db = LocalDb::open(temp.path()).expect("残缺最新库必须可修复打开");
+    assert!(db.get_failure().is_none());
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+
+    let conn = Connection::open(temp.path()).unwrap();
+    for table in ["usage_records", "compression_blocks", "app_preferences"] {
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(exists, 1, "缺失的晚出版本表 {table} 必须被幂等修复补齐");
+    }
+}
+
+/// v14 → v15：存量同 run 重复用量行去重（保留 MIN(id)）+ 建部分唯一索引；
+/// 去重后再次迁移幂等。
+#[test]
+fn v15_dedupes_usage_records_per_run_and_enforces_uniqueness() {
+    let temp = TempDb::new("v15-dedupe");
+    {
+        let db = LocalDb::open(temp.path()).unwrap();
+        assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+    }
+    {
+        let conn = Connection::open(temp.path()).unwrap();
+        // 退回 v14 形态：去掉唯一索引后塞入同 run 两条流水
+        conn.execute_batch("DROP INDEX idx_usage_records_run_unique;")
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO usage_records
+                (session_id, run_id, project_name, model, provider,
+                 prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
+                 cost_cny, cost_usd, timestamp)
+             VALUES
+                ('s1', 'run-dup', 'conex', 'm', 'p', 1, 1, 0, 0, 0.1, 0.01, 1000),
+                ('s1', 'run-dup', 'conex', 'm', 'p', 2, 2, 0, 0, 0.2, 0.02, 2000);
+             PRAGMA user_version = 14;",
+        )
+        .unwrap();
+    }
+
+    let db = LocalDb::open(temp.path()).expect("v14→v15 迁移必须成功");
+    assert!(db.get_failure().is_none());
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+
+    let conn = Connection::open(temp.path()).unwrap();
+    let (count, kept_prompt): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), MIN(prompt_tokens) FROM usage_records WHERE run_id='run-dup';",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "同 run 重复流水必须去重为一条");
+    assert_eq!(kept_prompt, 1, "保留最早一条（MIN(id)）");
+    let has_index: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_usage_records_run_unique';",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_index, 1, "部分唯一索引必须建立");
+
+    // 索引生效：同 run 再插入被拒（UNIQUE 约束）
+    let duplicate = conn.execute(
+        "INSERT INTO usage_records
+            (session_id, run_id, project_name, model, provider,
+             prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
+             cost_cny, cost_usd, timestamp)
+         VALUES ('s1', 'run-dup', 'conex', 'm', 'p', 3, 3, 0, 0, 0.3, 0.03, 3000);",
+        [],
+    );
+    assert!(duplicate.is_err(), "同 run 第二条流水必须被唯一约束拒绝");
+}

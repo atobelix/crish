@@ -6,8 +6,8 @@
 // - 导航经注入（页面/接线层提供 navigate，如 expo-router router.push）；
 //   冷启动补账：响应到达时先 ingest（幂等）再 markRead，保证角标/列表与系统通知同步。
 import { notificationStore } from '@/domain/store/notificationStore';
-import { notificationRouteToPath } from '@/presentation/components/notifications/notificationMeta';
-import type { NotificationDeepLinkSource } from '@/presentation/components/notifications/notificationMeta';
+import { notificationRouteToPath } from './notificationMeta';
+import type { NotificationDeepLinkSource } from './notificationMeta';
 import type { PushMessage } from './types';
 import { ingestPushIntoStore } from './foreground';
 import {

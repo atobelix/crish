@@ -1951,11 +1951,10 @@ pub async fn emit_envelope_event(
 ) {
     let mut queue = queue.lock().await;
     if let Ok(sequenced) = queue.push(session_id, event).await {
-        let envelope = AgentEventEnvelope::new(
-            sequenced.event,
-            Some(run_id.to_string()),
-            Some(sequenced.sequence),
-        );
+        // NoPersist 事件（delta 等）没有真实序列号：信封不得携带占位的
+        // last_reserved（前端按 type:sequence 去重会把同类型增量误吞）。
+        let sequence = sequenced.persisted.then_some(sequenced.sequence);
+        let envelope = AgentEventEnvelope::new(sequenced.event, Some(run_id.to_string()), sequence);
         bridge.emit(&envelope);
         bridge.flush();
     }

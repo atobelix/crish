@@ -145,9 +145,32 @@ export async function networkEnvInfo(): Promise<NetworkEnvInfo | null> {
   return null;
 }
 
+export type CertificateExportResult =
+  | { status: 'saved'; path: string }
+  | { status: 'cancelled' }
+  | { status: 'failed'; message: string };
+
 /**
- * 多端服务总开关（R1-11 G-1）：true = 服务开启（按当前配对态绑定监听）；
- * false = 停服（不 bind 任何端口，红线 1 零监听）。
+ * 导出桌面自签 CA 证书（PEM 内容写为 .crt）：首次配对前安装到手机并完全信任。
+ * 用户取消与失败分开返回，UI 可给出准确反馈。
+ */
+export async function exportCertificate(): Promise<CertificateExportResult> {
+  const res = await invokeTyped<string | null>('multi_device_export_ca', {});
+  if (res.status === 'ok') {
+    return res.data
+      ? { status: 'saved', path: res.data }
+      : { status: 'cancelled' };
+  }
+  const message =
+    res.status === 'missing'
+      ? 'multi_device_export_ca unavailable'
+      : res.message;
+  logInternalError('exportCertificate', `multi_device_export_ca ${message}`);
+  return { status: 'failed', message };
+}
+
+/**
+ * 多端服务总开关（R1-11 G-1）：true = 服务开启（按当前配对态绑定监听）； * false = 停服（不 bind 任何端口，红线 1 零监听）。
  * 服务关闭时 multi_device_pair_start 会被守卫拒绝——配对页必须先开启服务。
  */
 export async function setMultiDeviceEnabled(

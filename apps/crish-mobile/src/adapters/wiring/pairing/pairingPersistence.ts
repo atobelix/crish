@@ -23,15 +23,6 @@ export const PAIRING_META_PORT_KEY = 'pairing.meta.port';
 /** 缺省设备名（pair.hello deviceName 兜底，对齐 pair/manual.tsx 占位） */
 export const DEFAULT_DEVICE_NAME = 'crish-mobile';
 
-/** 引擎传输安全开关（R2-16 联调豁免，裁决-1）：`EXPO_PUBLIC_ENGINE_TLS=false`
- *  → 配对期/会话端点解析为明文 ws（联调 harness tls_enabled=false 场景；
- *   RN WebSocket 无自签证书信任选项，R2-16-e2e-plan §3.1 风险 R-1）；
- *  缺省/其它值 → wss（生产装配语义不变）。与 observationWiring 的
- *  EXPO_PUBLIC_ENGINE_URL env 模式对齐（D8 §6.2 优先级 1）。 */
-export function engineTlsEnabled(): boolean {
-  return process.env.EXPO_PUBLIC_ENGINE_TLS !== 'false';
-}
-
 /**
  * secure-store 组装 AuthPersist（authStore 注释「接线层组装」落点）：
  * load = loadPairingCredential；save = savePairingCredential；clear = clearPairing。

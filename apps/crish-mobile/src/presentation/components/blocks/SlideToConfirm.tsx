@@ -20,8 +20,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import Button from '@/presentation/components/ui/Button';
-import Dialog from '@/presentation/components/ui/Dialog';
+import { Button, Dialog } from '@/presentation/ui';
 import {
   SLIDE_THUMB_SIZE,
   createSlideConfirmState,
@@ -240,8 +239,12 @@ export default function SlideToConfirm({
   const isTriggered = machine.phase === 'triggered';
   const emphasized = isArmed || isTriggered;
   const labelText = isArmed ? '松手确认' : label;
-  const trackColor = emphasized ? theme.colorSuccess : theme.bgTertiary;
-  const labelColor = emphasized ? theme.textOnAccent : theme.textSecondary;
+  const trackColor = emphasized
+    ? theme.colors.success
+    : theme.colors.fillSubtle;
+  const labelColor = emphasized
+    ? theme.colors.actionPrimaryText
+    : theme.colors.textSecondary;
 
   const twoStepDialog = (
     <Dialog
@@ -304,7 +307,11 @@ export default function SlideToConfirm({
         onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
         style={[
           styles.track,
-          { backgroundColor: trackColor, borderColor: theme.hairlineStrong },
+          { borderRadius: theme.radius.pill },
+          {
+            backgroundColor: trackColor,
+            borderColor: theme.colors.borderStrong,
+          },
           disabled && styles.disabled,
         ]}
         {...panResponder.panHandlers}
@@ -314,18 +321,19 @@ export default function SlideToConfirm({
           style={[
             styles.thumb,
             {
-              backgroundColor: theme.bgElevated,
+              backgroundColor: theme.colors.surfaceRaised,
               borderColor: emphasized
-                ? theme.colorSuccess
-                : theme.hairlineStrong,
+                ? theme.colors.success
+                : theme.colors.borderStrong,
               transform: [{ translateX: thumbX }],
             },
+            theme.shadow.sm,
           ]}
         />
         <Text
           testID="slide-label"
           numberOfLines={1}
-          style={[styles.label, { color: labelColor }]}
+          style={[theme.type.footnote, styles.label, { color: labelColor }]}
         >
           {labelText}
         </Text>
@@ -341,11 +349,9 @@ const styles = StyleSheet.create({
   },
   track: {
     height: 44,
-    borderRadius: 22,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
   },
   thumb: {
     position: 'absolute',
@@ -355,14 +361,8 @@ const styles = StyleSheet.create({
     height: SLIDE_THUMB_SIZE,
     borderRadius: SLIDE_THUMB_SIZE / 2,
     borderWidth: 1,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
   label: {
-    fontSize: 13,
     fontWeight: '500',
     paddingHorizontal: 48,
   },

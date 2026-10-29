@@ -1,248 +1,201 @@
-// 审批详情页（L2 页面组件，M4 §2.2.1：只组合 view-model 与区块组件，不触碰领域层）
-// - 深链目标页（F2 §5.1 / M4 §4.2）：首屏即见决策区（固定底部不滚动，R2UX-04-01 3 秒决策路径）；
-// - 三态：待办数据态（卡 + 决策区）/ 结果态（决策后审计回执）/ 空态（不存在或已过期，M4 §5.9）；
-// - 决策区危险分级（F2 §5.3 / §15-4）：dangerLevel 2 条目允许改滑动确认（ApprovalActionBar 内部切换）；
-// - main-agent 裁决请求只读展示（F2 §4.4：无决策按钮）；
-// - onBack 由路由注入（页面不依赖 expo-router，组件测试可直接挂载）。
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+// 审批弹窗：以底部卡片覆盖当前页面，完成允许 / 拒绝决策。
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import { useApprovalDetailVm } from '@/adapters/viewmodels/useApprovalDetailVm';
+import { useSessionStore } from '@/adapters/hooks/useAppStore';
+import {
+  AppText,
+  Button,
+  EmptyState,
+  Icon,
+  IconButton,
+  useToast,
+} from '@/presentation/ui';
 import ApprovalCard from '@/presentation/components/blocks/ApprovalCard';
 import ApprovalActionBar from '@/presentation/components/blocks/ApprovalActionBar';
 
 export interface ApprovalDetailScreenProps {
   toolCallId: string;
-  /** 返回动作（路由注入 router.back；测试可注入 spy） */
-  onBack?: () => void;
+  onBack: () => void;
 }
 
-const RESULT_TEXT: Record<string, string> = {
+const DECISION_TEXT = {
   approved: '已允许',
   denied: '已拒绝',
   expired: '已过期',
-};
-
-const RESULT_CHANNEL: Record<string, string> = {
-  mobile: '本机处理',
-  desktop: '其他设备处理',
-  auto: '自动过期',
-};
+} as const;
 
 export default function ApprovalDetailScreen({
   toolCallId,
   onBack,
 }: ApprovalDetailScreenProps) {
   const theme = useTheme();
-  const { item, historyResult, remainingMs, busy, onAllow, onDeny } =
-    useApprovalDetailVm(toolCallId);
-
-  const isMainAgent = item?.arbiter === 'main-agent';
-  // 决策入口仅对可决策条目开放（F2 §6.2：过期/冲突展示状态页，不产生决策入口；§4.4 只读）
-  const showActionBar =
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const vm = useApprovalDetailVm(toolCallId);
+  const sessionTitle = useSessionStore(
+    (s) =>
+      s.sessions.find((session) => session.id === vm.item?.request.sessionId)
+        ?.title ?? null
+  );
+  const isMainAgent = vm.item?.arbiter === 'main-agent';
+  const showActions =
     !isMainAgent &&
-    item !== null &&
-    (item.status === 'pending' ||
-      item.status === 'deciding' ||
-      item.status === 'queued');
+    vm.item !== null &&
+    (vm.item.status === 'pending' ||
+      vm.item.status === 'deciding' ||
+      vm.item.status === 'queued');
+
+  const handleAllow = () => {
+    vm.onAllow();
+    toast.showToast('已提交允许', 'success');
+  };
+  const handleDeny = () => {
+    vm.onDeny();
+    toast.showToast('已提交拒绝', 'info');
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
-      <View style={[styles.header, { borderBottomColor: theme.hairline }]}>
-        <Pressable
-          testID="header-back"
-          accessibilityRole="button"
-          accessibilityLabel="返回"
-          onPress={onBack}
-          style={styles.backButton}
-        >
-          <Text style={[styles.backText, { color: theme.textPrimary }]}>
-            ← 返回
-          </Text>
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
-          审批详情
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={styles.overlay}>
+      <Pressable
+        testID="approval-scrim"
+        accessibilityRole="button"
+        accessibilityLabel="关闭审批"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: theme.colors.scrim },
+        ]}
+        onPress={onBack}
+      />
+      <View
+        style={[
+          styles.sheet,
+          {
+            borderTopLeftRadius: theme.radius.sheet,
+            borderTopRightRadius: theme.radius.sheet,
+            backgroundColor: theme.colors.surfaceRaised,
+            borderColor: theme.colors.hairline,
+            paddingBottom: Math.max(insets.bottom, theme.space.md),
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.handle,
+            {
+              width: theme.size.sheetHandleWidth,
+              height: theme.size.sheetHandleHeight,
+              marginTop: theme.space.sm,
+              borderRadius: theme.radius.pill,
+              backgroundColor: theme.colors.borderStrong,
+            },
+          ]}
+        />
+        <View style={styles.header}>
+          <AppText variant="title2" style={styles.headerTitle}>
+            审批
+          </AppText>
+          <IconButton
+            name="x"
+            accessibilityLabel="关闭"
+            onPress={onBack}
+            testID="approval-close"
+          />
+        </View>
 
-      {item ? (
-        <>
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={styles.contentInner}
-          >
-            <ApprovalCard item={item} remainingMs={remainingMs} />
-            {isMainAgent ? (
-              <Text
-                testID="main-agent-note"
-                style={[styles.readonlyNote, { color: theme.textSecondary }]}
-              >
-                该请求由桌面端主 Agent 自动裁决，无需你操作（F2 §4.4 只读卡片）
-              </Text>
+        {vm.item ? (
+          <>
+            <ScrollView contentContainerStyle={styles.content}>
+              {sessionTitle ? (
+                <AppText variant="footnote" color="textTertiary">
+                  {sessionTitle}
+                </AppText>
+              ) : null}
+              <ApprovalCard item={vm.item} remainingMs={vm.remainingMs} />
+              {isMainAgent ? (
+                <View style={styles.note}>
+                  <Icon
+                    name="info"
+                    size={14}
+                    color={theme.colors.textTertiary}
+                  />
+                  <AppText variant="footnote" color="textTertiary">
+                    该请求由桌面端自动裁决
+                  </AppText>
+                </View>
+              ) : null}
+            </ScrollView>
+            {showActions ? (
+              <ApprovalActionBar
+                busy={vm.busy}
+                onAllow={handleAllow}
+                onDeny={handleDeny}
+                toolName={vm.item.request.toolName}
+                dangerLevel={vm.item.dangerLevel}
+                embedded
+              />
             ) : null}
-          </ScrollView>
-          {showActionBar ? (
-            <ApprovalActionBar
-              busy={busy}
-              onAllow={onAllow}
-              onDeny={onDeny}
-              toolName={item.request.toolName}
-              dangerLevel={item.dangerLevel}
-            />
-          ) : null}
-        </>
-      ) : historyResult ? (
-        <View testID="approval-result" style={styles.stateWrap}>
-          <View
-            style={[
-              styles.stateCard,
-              { backgroundColor: theme.bgCard, borderColor: theme.hairline },
-            ]}
-          >
-            <Text
-              style={[
-                styles.stateTitle,
-                {
-                  color:
-                    historyResult.decision === 'approved'
-                      ? theme.colorSuccess
-                      : historyResult.decision === 'denied'
-                        ? theme.colorError
-                        : theme.textSecondary,
-                },
-              ]}
-            >
-              {RESULT_TEXT[historyResult.decision] ?? historyResult.decision}
-            </Text>
-            <Text style={[styles.stateSub, { color: theme.textSecondary }]}>
-              该请求已由
-              {RESULT_CHANNEL[historyResult.channel] ?? '其他设备处理'}
-              ，无需再操作
-            </Text>
-            <Pressable
-              testID="result-back"
-              accessibilityRole="button"
-              accessibilityLabel="返回"
-              onPress={onBack}
-              style={[styles.stateBack, { borderColor: theme.hairlineStrong }]}
-            >
-              <Text
-                style={[styles.stateBackText, { color: theme.textPrimary }]}
-              >
-                返回
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <View testID="approval-empty" style={styles.stateWrap}>
-          <View
-            style={[
-              styles.stateCard,
-              { backgroundColor: theme.bgCard, borderColor: theme.hairline },
-            ]}
-          >
-            <Text style={[styles.stateTitle, { color: theme.textPrimary }]}>
-              该请求不存在或已过期
-            </Text>
-            <Text style={[styles.stateSub, { color: theme.textSecondary }]}>
-              返回审批中心可查看最新状态（M4 §5.9 深链目标不存在空态）
-            </Text>
-            <Pressable
-              testID="empty-back"
-              accessibilityRole="button"
-              accessibilityLabel="返回"
-              onPress={onBack}
-              style={[styles.stateBack, { borderColor: theme.hairlineStrong }]}
-            >
-              <Text
-                style={[styles.stateBackText, { color: theme.textPrimary }]}
-              >
-                返回
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
+          </>
+        ) : vm.historyResult ? (
+          <EmptyState
+            icon={
+              vm.historyResult.decision === 'approved'
+                ? 'check-circle'
+                : vm.historyResult.decision === 'denied'
+                  ? 'x'
+                  : 'clock'
+            }
+            title={DECISION_TEXT[vm.historyResult.decision]}
+            action={
+              <Button label="关闭" variant="secondary" onPress={onBack} />
+            }
+          />
+        ) : (
+          <EmptyState
+            icon="alert-circle"
+            title="请求不存在或已过期"
+            action={
+              <Button label="关闭" variant="secondary" onPress={onBack} />
+            }
+          />
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    maxHeight: '92%',
+  },
+  handle: {
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    minHeight: 44,
-    minWidth: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  backText: {
-    fontSize: 14,
+    paddingLeft: 20,
+    paddingRight: 8,
+    minHeight: 52,
   },
   headerTitle: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  headerSpacer: {
-    width: 60,
   },
   content: {
-    flex: 1,
-  },
-  contentInner: {
-    padding: 16,
-    gap: 12,
-  },
-  readonlyNote: {
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  stateWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  stateCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 24,
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: 320,
-  },
-  stateTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  stateSub: {
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  stateBack: {
-    marginTop: 8,
-    minHeight: 44,
-    minWidth: 120,
-    borderRadius: 9999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 14,
   },
-  stateBackText: {
-    fontSize: 14,
-    fontWeight: '500',
+  note: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
   },
 });

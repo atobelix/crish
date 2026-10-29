@@ -37,6 +37,9 @@ tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 window-vibrancy = "0.6.0"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
+# 账户远程 host 桥：公网 wss（webpki 根）+ 本机 loopback ws
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+uuid = { version = "1", features = ["v4"] }
 url = "2"
 reqwest.workspace = true
 # 本地服务化（D2 §6.4 / R1-02）：axum 0.8 默认关 feature，显式开

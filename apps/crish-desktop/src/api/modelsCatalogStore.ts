@@ -26,6 +26,9 @@ import {
 import { createSelectors } from './modelsCatalogSelectors';
 import { createCatalogQueries } from './modelsCatalogQuery';
 
+/** 保存期间被新一轮变更取代时的统一错误文案 */
+const STALE_OPERATION_ERROR = '配置操作已失效';
+
 export {
   addProvider,
   updateProvider,
@@ -169,7 +172,8 @@ function mutate(
 ): Promise<ModelsCatalogWriteResult> {
   const token = generation;
   return enqueue(async () => {
-    if (token !== generation) return { ok: false, error: '配置操作已失效' };
+    if (token !== generation)
+      return { ok: false, error: STALE_OPERATION_ERROR };
     if (!state.loaded) return { ok: false, error: NOT_LOADED };
     if (expectedRevision !== undefined && expectedRevision !== state.revision) {
       return fail('REVISION_CONFLICT', CONFLICT);
@@ -184,17 +188,36 @@ function mutate(
       );
     }
     try {
-      const requestRevision = state.revision;
-      const result = await writeModelsYamlIpc(candidate, requestRevision);
-      if (token !== generation) return { ok: false, error: '配置操作已失效' };
+      let requestRevision = state.revision;
+      let result = await writeModelsYamlIpc(candidate, requestRevision);
+      if (token !== generation)
+        return { ok: false, error: STALE_OPERATION_ERROR };
+      if (
+        !result.ok &&
+        result.kind === 'REVISION_CONFLICT' &&
+        expectedRevision === undefined
+      ) {
+        const fresh = await readModelsYamlIpc();
+        if (fresh.ok && fresh.data) {
+          try {
+            acceptSnapshot(fresh.data);
+            requestRevision = state.revision;
+            candidate = normalizeModelsTree(action(state.tree));
+            result = await writeModelsYamlIpc(candidate, requestRevision);
+          } catch {
+            // 重试失败走下方常规 fail 分支
+          }
+        }
+      }
+      if (token !== generation)
+        return { ok: false, error: STALE_OPERATION_ERROR };
       if (!result.ok) {
         return fail(
           result.kind === 'REVISION_CONFLICT'
             ? 'REVISION_CONFLICT'
             : 'WRITE_REJECTED',
           result.error,
-          result.kind === 'REVISION_CONFLICT' ||
-            result.code === 'CONTRACT_MISMATCH'
+          result.code === 'CONTRACT_MISMATCH'
         );
       }
       if (
@@ -203,7 +226,8 @@ function mutate(
       ) {
         return fail(
           'REVISION_CONFLICT',
-          '配置已收到更新回执，拒绝安装过期保存结果'
+          '配置已收到更新回执，拒绝安装过期保存结果',
+          false
         );
       }
       try {
@@ -217,7 +241,8 @@ function mutate(
       }
       return { ok: true };
     } catch (error) {
-      if (token !== generation) return { ok: false, error: '配置操作已失效' };
+      if (token !== generation)
+        return { ok: false, error: STALE_OPERATION_ERROR };
       return fail(
         'WRITE_REJECTED',
         error instanceof Error ? error.message : String(error)

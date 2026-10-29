@@ -14,6 +14,7 @@
 
 mod api;
 pub(crate) mod state;
+pub(crate) mod workspace_ops;
 #[cfg(test)]
 mod tests;
 

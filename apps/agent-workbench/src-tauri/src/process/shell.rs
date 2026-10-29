@@ -1,23 +1,10 @@
-//! 终端面板 shell 执行辅助：cd 判定点、cwd 解析、PowerShell/bash 调用组装、
+//! 终端面板 shell 执行辅助：cwd 解析、PowerShell/bash 调用组装、
 //! base64 编码与输出截断解码（自 process.rs 原样搬迁）
 
 use conex_types::CoreError;
 use std::path::{Path, PathBuf};
 
 use super::MAX_SHELL_OUTPUT_BYTES;
-
-/// cd 判定点（预留）：终端面板是用户主动输入的单命令面板，`cd` 属合法交互，
-/// 产品决策**保留允许 cd**（不拦截，与 AI 侧工具层 T-AB-04 的全路径禁 cd 不同——
-/// 用户在自己终端面板里的 cd 是期望行为）。
-///
-/// 若需求演进为全路径禁 cd：在本函数内调用 conex-sandbox 的 CdShape 分类
-/// （T-AB-05 冻结接口：段级分类器，`cd x` / `Set-Location x` / `pushd x` 命中；
-/// `git -C` / 引号内 `echo "cd x"` 不命中），命中即返回 InvalidInput，
-/// 文案引导「请使用 Cwd 参数指定工作目录，而非 cd 命令」（对齐 T-AB-04 拦截文案）。
-pub(super) fn check_cd_policy(command: &str) -> Option<CoreError> {
-    let _ = command;
-    None
-}
 
 pub(super) fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, CoreError> {
     if let Some(raw) = cwd.map(str::trim).filter(|s| !s.is_empty()) {

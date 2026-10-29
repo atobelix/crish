@@ -78,11 +78,12 @@ pub fn strip_inline_data_urls(text: &str) -> String {
                 out.push_str(rest);
                 break;
             }
-            // 形似但非 base64 的 data url：原样保留并前进一个字符（按字符边界），避免死循环
+            // 形似但非 base64 的 data url：原样保留并整体跳过已匹配前缀
+            // （只前进 1 字符会让 next_data_url 每次都从同一前缀重扫 → O(n²)）。
             Some((start, end)) if start == end => {
-                let char_len = rest.chars().next().map(char::len_utf8).unwrap_or(1);
-                out.push_str(&rest[..char_len]);
-                rest = &rest[char_len..];
+                let advance = start + DATA_URL_PREFIX.len();
+                out.push_str(&rest[..advance]);
+                rest = &rest[advance..];
             }
             Some((start, end)) => {
                 out.push_str(&rest[..start]);
@@ -94,10 +95,13 @@ pub fn strip_inline_data_urls(text: &str) -> String {
     out
 }
 
+/// 内联图片 data url 前缀（扫描与跳过共用同一常量，避免两处字面量漂移）。
+const DATA_URL_PREFIX: &str = "data:image/";
+
 /// 定位 `data:image/<mime>;base64,<payload>`；形似但非法时返回 `(start, start)` 哨兵
 fn next_data_url(rest: &str) -> Option<(usize, usize)> {
-    let start = rest.find("data:image/")?;
-    let after_prefix = &rest[start + "data:image/".len()..];
+    let start = rest.find(DATA_URL_PREFIX)?;
+    let after_prefix = &rest[start + DATA_URL_PREFIX.len()..];
     let semi = after_prefix.find(';')?;
     let mime = &after_prefix[..semi];
     let mime_ok = mime

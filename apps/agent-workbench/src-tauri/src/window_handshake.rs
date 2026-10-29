@@ -307,7 +307,7 @@ mod tests {
     }
 
     /// 命令注册名契约：函数路径存在（编译期 generate_handler 绑定）。
-    /// 真源登记见 main.rs command_registry! 与 command_manifest.rs。
+    /// 真源登记见 command_registry.rs command_registry! 与 command_manifest.rs。
     #[test]
     fn command_name_contract_documented() {
         // 防改名静默断裂：wire 名固定为 workbench_window_ready（CON-01）

@@ -4,10 +4,10 @@
 // - 失败降级：initNotificationLayer 抛错 → 降级句柄 + warn 注记，绝不抛给启动链
 //   （装配后 app 仍可启动的契约，对齐 dbBootstrap 降级风格）。
 import { ensureNotificationsForApp } from './notificationBootstrap';
-import { connectNotificationPrefs } from '@/adapters/settings/settingsNotificationWiring';
+import { connectNotificationPrefs } from './prefsBinding';
 import { initNotificationLayer } from './index';
 
-jest.mock('@/adapters/settings/settingsNotificationWiring', () => ({
+jest.mock('./prefsBinding', () => ({
   connectNotificationPrefs: jest.fn(),
 }));
 

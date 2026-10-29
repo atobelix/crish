@@ -19,7 +19,7 @@ mod terminate;
 pub(crate) use group_unix::*;
 #[cfg(windows)]
 pub(crate) use job_windows::*;
-use shell::{build_shell_invocation, check_cd_policy, clamp_output_bytes, resolve_shell_cwd};
+use shell::{build_shell_invocation, clamp_output_bytes, resolve_shell_cwd};
 pub(crate) use terminate::*;
 
 /// 当前进程启动后的毫秒时间戳（run 时长 / 超时计时用）。
@@ -109,12 +109,9 @@ pub(crate) async fn workbench_run_shell(
         conex_sandbox::gatekeeper::GatekeeperResult::Allowed => {}
     }
 
-    // ── cd 判定点（预留；产品决策：终端面板保留允许 cd）──
-    // 详见 check_cd_policy：全路径禁 cd 演进时在此拦截。
-    if let Some(err) = check_cd_policy(&command) {
-        return Err(err);
-    }
-
+    // 门禁只做一次：`command` 即最终执行载荷（Windows 侧 base64 包装仅编码
+    // 同一字符串，bash 侧 -lc 直传），不存在二次组装面，重复校验只会制造
+    // 「已二次防护」的假象。
     let timeout_ms = request
         .timeout_ms
         .unwrap_or(DEFAULT_SHELL_TIMEOUT_MS)
@@ -122,14 +119,6 @@ pub(crate) async fn workbench_run_shell(
 
     let (program, args, shell_label) = build_shell_invocation(&command)?;
 
-    // 2. 二次 AST 语法校验（Secondary AST Gate）：落地执行前杜绝参数逃逸与组装后 Redline 注入
-    let secondary_verdict =
-        gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
-    if secondary_verdict == conex_sandbox::gatekeeper::GatekeeperResult::Blocked {
-        return Err(CoreError::InvalidInput(
-            "Command payload violates safety redline on secondary inspection".to_string(),
-        ));
-    }
     let started = now_millis();
 
     let mut child_cmd = TokioCommand::new(&program);

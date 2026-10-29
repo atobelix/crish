@@ -43,7 +43,7 @@
 //! - `note_commands_mirror.rs`：mirror 面（detect / import 提案 + wire 转换）
 //! - `note_commands_tests.rs`：测试旁挂（`#[cfg(test)] #[path] mod tests;`）
 //!
-//! 公开 API 不 break：main.rs `command_registry!` 的 `note_commands::*` 路径零改动。
+//! 公开 API 不 break：command_registry.rs `command_registry!` 的 `note_commands::*` 路径零改动。
 
 #[cfg(test)]
 use crate::note_runtime;
@@ -82,7 +82,7 @@ mod note_commands_hydrate;
 #[path = "note_commands_mirror.rs"]
 mod note_commands_mirror;
 
-// 公开 API 保持：main.rs `command_registry!` 引用的命令路径不变
+// 公开 API 保持：command_registry.rs `command_registry!` 引用的命令路径不变
 pub use note_commands_apply::{
     note_apply_ops, note_document_apply_md, note_redo_text, note_send_to_note, note_undo_text,
 };
@@ -93,7 +93,7 @@ pub use note_commands_hydrate::{note_document_hydrate, note_document_recent, not
 pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
-// 从注册路径（main.rs command_registry! 的 `note_commands::*`）所在模块
+// 从注册路径（command_registry.rs command_registry! 的 `note_commands::*`）所在模块
 // 解析包装符号——门面必须透出，否则 bin 编译失败（de8e744e 欠验债，
 // 此处补闭环；零逻辑改动）。
 pub use note_commands_apply::{

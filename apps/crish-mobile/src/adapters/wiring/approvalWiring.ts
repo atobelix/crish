@@ -20,7 +20,8 @@
 //   repository 构造注入，测试 mock；单例装配见 ensureApprovalWiring。
 //
 // 职责边界：outbox 状态持有从 useApprovalDetailVm 迁移至本接线层（原 VM 注释「届时本态
-// 移除」的落点）；持久化（D6 §6.6 硬底线）属 db 域后续轮次，本层为内存态占位。
+// 移除」的落点）；持久化经 OutboxPersistAdapter 落 SQLite approval_queue
+// （DB 不可用时降级内存态，见 adapters/persistence/outboxPersist.ts）。
 import { WsGateway, GatewayError } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import { approvalStore } from '@/domain/store/approvalStore';
@@ -48,7 +49,8 @@ import {
 import {
   createDefaultOutboxPersist,
   type OutboxPersistAdapter,
-} from '@/domain/data/outboxPersist';
+} from '@/adapters/persistence/outboxPersist';
+import { getSqlDriver } from '@/adapters/persistence/persistBootstrap';
 import { parseEngineEvent } from '@crish/shared-types';
 import type { PermissionRequest } from '@crish/shared-types';
 import { parseListPendingApprovalsResult } from '@crish/shared-types';
@@ -58,7 +60,7 @@ import type {
   ListPendingApprovalsResult,
   PendingApproval,
 } from '@crish/shared-types';
-import { getObservationWiring } from './observationWiring';
+import { getObservationWiring, onObservationOpen } from './observationWiring';
 
 // ── 决策冲突/终局错误码（不可重试；D6 §6.3 不自动重试 conflict/stale） ────────
 // - cmd.approval_mismatch：toolCallId 不在待审批集合（I-02 语义，F2 §11.2 冲突表）；
@@ -242,12 +244,15 @@ export class ApprovalBridge {
 
   private syncAndPersist(): void {
     syncOutboxCount();
-    if (this.persistAdapter) {
-      void this.persistAdapter.save(snapshotOutbox(outboxState));
-    }
+    if (!this.persistAdapter) return;
+    // 持久化失败不得静默：离线决策丢失是用户可见的数据事故，必须留下
+    // 可观测错误（console.error + 可选 onError 上报），而不是 void 吞掉。
+    void this.persistAdapter.save(snapshotOutbox(outboxState)).catch((e) => {
+      console.error('[approvalWiring] outbox 持久化失败，离线决策可能丢失:', e);
+    });
   }
 
-  /** 从持久化安全存储水合恢复 Outbox 队列 */
+  /** 从 SQLite approval_queue 水合恢复 Outbox 队列 */
   async hydrate(): Promise<void> {
     if (!this.persistAdapter) return;
     try {
@@ -257,7 +262,7 @@ export class ApprovalBridge {
         syncOutboxCount();
       }
     } catch (e) {
-      console.warn('[approvalWiring] hydrate outbox failed:', e);
+      console.error('[approvalWiring] outbox 水合失败:', e);
     }
   }
 
@@ -530,14 +535,36 @@ export function ensureApprovalWiring(
 ): ApprovalWiring | null {
   if (singleton) return singleton;
   const gateway = opts.gateway ?? getObservationWiring()?.client.gateway;
-  if (!gateway) return null;
+  if (!gateway) {
+    // gateway 尚未就绪（冷启动中观察面接线晚于本调用）：注册一次性补齐，
+    // 连接 open 时自动装配。不再静默失败留下永久缺口。
+    ensurePendingRegistration();
+    return null;
+  }
   singleton = startApprovalWiring({
-    persistAdapter: createDefaultOutboxPersist(),
+    persistAdapter: createDefaultOutboxPersist(getSqlDriver()),
     ...opts,
     gateway,
   });
   void singleton.bridge.hydrate();
   return singleton;
+}
+
+/**
+ * 「等待 gateway 就绪」的单次注册（幂等）。
+ *
+ * 与 ensureApprovalWiring 一样有 `if (singleton)` 前置，因此 open 回调里
+ * 重入本函数是安全的：已有单例即早返回，不会重复装配。
+ */
+let pendingOpenUnsubscribe: (() => void) | null = null;
+
+function ensurePendingRegistration(): void {
+  if (pendingOpenUnsubscribe) return;
+  pendingOpenUnsubscribe = onObservationOpen(() => {
+    pendingOpenUnsubscribe?.();
+    pendingOpenUnsubscribe = null;
+    ensureApprovalWiring();
+  });
 }
 
 /** 当前审批接线单例读取（测试/诊断；未启动返回 null） */
@@ -549,6 +576,21 @@ export function getApprovalWiring(): ApprovalWiring | null {
 export function resetApprovalWiringForTest(): void {
   singleton?.bridge.detach();
   singleton = null;
+  clearPendingOpenRegistration();
+}
+
+/** 解绑 / 换机：销毁审批接线单例 */
+export function disposeApprovalWiring(): void {
+  singleton?.bridge.detach();
+  singleton = null;
+  clearPendingOpenRegistration();
+  outboxState = createOutboxState();
+}
+
+/** 撤销「等待 gateway 就绪」注册（解散单例时调用，避免悬挂回调） */
+function clearPendingOpenRegistration(): void {
+  pendingOpenUnsubscribe?.();
+  pendingOpenUnsubscribe = null;
 }
 
 // ── 决策入队（VM 共用入口；接线就绪时立即触发重放） ─────────────────────────
@@ -578,7 +620,14 @@ export function enqueueApprovalDecision(
   outboxState = result.state;
   syncOutboxCount();
   if (singleton?.bridge.persistAdapter) {
-    void singleton.bridge.persistAdapter.save(snapshotOutbox(outboxState));
+    void singleton.bridge.persistAdapter
+      .save(snapshotOutbox(outboxState))
+      .catch((e) => {
+        console.error(
+          '[approvalWiring] outbox 持久化失败，离线决策可能丢失:',
+          e
+        );
+      });
   }
   if (result.outcome !== 'full') {
     void singleton?.flush();
