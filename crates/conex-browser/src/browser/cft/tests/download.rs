@@ -182,9 +182,10 @@ async fn ensure_downloaded_success_end_to_end() {
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
         let top = format!("chrome-{key}");
-        writer
-            .start_file(format!("{top}/chrome.exe"), options)
-            .expect("start");
+        // 平台一致的二进制相对路径（win64: chrome.exe；linux64: chrome-linux64/chrome；
+        // macOS: 嵌套 .app 路径）——fixture 不再硬编码 Windows 形态
+        let binary_rel = crate::browser::cft::binary_rel_path().expect("平台二进制路径");
+        writer.start_file(binary_rel, options).expect("start");
         writer.write_all(b"bin").expect("写入");
         writer
             .start_file(format!("{top}/sub/f.txt"), options)
@@ -320,9 +321,10 @@ async fn ensure_downloaded_extract_limit_cleans_up() {
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
         let top = format!("chrome-{key}");
-        writer
-            .start_file(format!("{top}/chrome.exe"), options)
-            .expect("start");
+        // 平台一致的二进制相对路径（win64: chrome.exe；linux64: chrome-linux64/chrome；
+        // macOS: 嵌套 .app 路径）——fixture 不再硬编码 Windows 形态
+        let binary_rel = crate::browser::cft::binary_rel_path().expect("平台二进制路径");
+        writer.start_file(binary_rel, options).expect("start");
         writer.write_all(b"bin").expect("写入");
         writer
             .start_file(format!("{top}/sub/f.txt"), options)

@@ -1,28 +1,17 @@
-// 审批卡区块（M4 §2.3 L3：props = 领域类型 + 派生标记，不感知数据来源，F2 §4.2 列表项形态）
-// - 展示：风险徽标（L1 灰「需确认」/ L2 红「高风险」）+ 工具名 + 参数摘要（敏感字段打码 last4，
-//   F2 §14 R3「敏感参数默认脱敏展示」）+ 会话/run 上下文 + 剩余时间（mm:ss，最后 15s 变红「即将过期」，
-//   R2UX-04-06）+ 决策状态行（处理中/待发送/未送达/已过期/冲突，R2UX-04-04/§3.4）
-// - 倒计时由父级派生传入（M5 §3.3：本地 interval 不进 store），本组件纯展示。
-import { StyleSheet, Text, View } from 'react-native';
+// 审批详情卡：风险、工具、参数摘要、倒计时、状态。
+import { StyleSheet, View } from 'react-native';
 import type { ApprovalItem } from '@/domain/types/domain';
 import { useTheme } from '@/adapters/platform/theme';
+import { AppText, Icon } from '@/presentation/ui';
 
 export interface ApprovalCardProps {
   item: ApprovalItem;
-  /** 剩余决策时间 ms（expiresAt - now，父级每秒派生） */
   remainingMs: number;
 }
 
-// ---------- 纯函数（可单测）：打码 / 摘要 / 倒计时格式 ----------
-
-/** 敏感参数键名匹配（provider key / token / secret / password 等，F2 打码纪律） */
 const SENSITIVE_KEY_PATTERN =
   /(api[_-]?key|token|secret|password|credential|authorization|bearer)/i;
 
-/**
- * 参数值打码（保留末 4 位，F2 §14 R3 / PE-07 last4 口径）：
- * 命中敏感键名 → `****<last4>`；值过短（<4）整体打码 `****`；非敏感键原样字符串化。
- */
 export function maskSensitiveParamValue(key: string, value: unknown): string {
   const raw = typeof value === 'string' ? value : JSON.stringify(value);
   if (raw === undefined) return '';
@@ -31,50 +20,44 @@ export function maskSensitiveParamValue(key: string, value: unknown): string {
   return `****${raw.slice(-4)}`;
 }
 
-/**
- * 命令行脱敏（详情/卡片的命令类展示）：`--xxx-key <secret>` / `--xxx-key=<secret>` / `Bearer <secret>`
- * 保留末 4 位；非敏感命令原样返回。
- */
 export function maskCommandSecrets(command: string): string {
-  let out = command;
-  out = out.replace(
+  let output = command;
+  output = output.replace(
     /(--?[a-z0-9-]*(?:key|token|secret|password|credential|auth)[a-z0-9-]*)(?:\s*=\s*|\s+)(\S{6,})/gi,
     (_match, flag: string, secret: string) => `${flag}=****${secret.slice(-4)}`
   );
-  out = out.replace(
+  output = output.replace(
     /(bearer\s+)(\S+)/gi,
     (_match, prefix: string, secret: string) =>
       `${prefix}****${secret.slice(-4)}`
   );
-  return out;
+  return output;
 }
 
-/** 参数包摘要（打码后拼接 `key=value`，最多 maxLength 字符，超长截断，F2 §4.2-2） */
 export function summarizeParameters(
   parameters: ApprovalItem['request']['parameters'],
-  maxLength = 80
+  maxLength = 160
 ): string {
-  const rec =
+  const record =
     typeof parameters === 'object' &&
     parameters !== null &&
     !Array.isArray(parameters)
       ? (parameters as Record<string, unknown>)
       : null;
   const raw =
-    rec === null
+    record === null
       ? typeof parameters === 'string'
         ? parameters
         : JSON.stringify(parameters)
-      : Object.entries(rec)
+      : Object.entries(record)
           .map(
             ([key, value]) => `${key}=${maskSensitiveParamValue(key, value)}`
           )
-          .join(' · ');
+          .join('\n');
   if (raw.length <= maxLength) return raw;
   return `${raw.slice(0, maxLength - 1)}…`;
 }
 
-/** 剩余时间 mm:ss 格式化（F2 §4.2 线框口径：`1:42` / `0:58`） */
 export function formatRemainingMs(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -82,188 +65,162 @@ export function formatRemainingMs(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-/** 决策状态行文案映射（F2 §3.3 状态机 / §9.3-6 处理中 / §11.2 冲突 / §8.3 过期 / R2UX-04-05 待发送） */
-export function decisionStatusText(
+export function approvalStatusText(
   item: ApprovalItem
-): { text: string; tone: 'info' | 'warning' | 'error' | 'muted' } | null {
+): { text: string; tone: 'info' | 'warning' | 'danger' | 'muted' } | null {
   if (item.arbiter === 'main-agent') {
-    return { text: '等待 Agent 裁决', tone: 'info' };
+    return { text: '由桌面端自动裁决', tone: 'info' };
   }
   switch (item.status) {
     case 'deciding':
-      return { text: '处理中…', tone: 'info' };
+      return { text: '正在提交…', tone: 'info' };
     case 'queued':
-      return { text: '待发送 · 网络恢复后自动发送', tone: 'warning' };
+      return { text: '等待网络恢复后发送', tone: 'warning' };
     case 'conflict':
-      return { text: '状态可能已变化，点击查看', tone: 'error' };
+      return { text: '状态已变化', tone: 'danger' };
     case 'expired':
-      return { text: '已过期（超过 120 秒），决策未生效', tone: 'muted' };
+      return { text: '已过期', tone: 'muted' };
     case 'approved':
       return { text: '已允许', tone: 'info' };
     case 'denied':
-      return { text: '已拒绝', tone: 'error' };
+      return { text: '已拒绝', tone: 'danger' };
     case 'pending':
-      // 决策发送通道失败回滚（F2 §11.3 网络失败 → pending + failed 通道）
       return item.decisionStatus === 'failed'
-        ? { text: '决策未送达，将自动重试', tone: 'error' }
+        ? { text: '发送失败，将自动重试', tone: 'danger' }
         : null;
     default:
       return null;
   }
 }
 
-/** 剩余 15 秒警戒线（F2 §4.2 / R2UX-04-06：最后 15s 变红 +「即将过期」） */
 export const COUNTDOWN_WARNING_MS = 15_000;
-
-// ---------- 组件 ----------
 
 export default function ApprovalCard({ item, remainingMs }: ApprovalCardProps) {
   const theme = useTheme();
-  const isL2 = item.dangerLevel === 2;
+  const isHighRisk = item.dangerLevel === 2;
   const urgent = remainingMs <= COUNTDOWN_WARNING_MS;
-  const status = decisionStatusText(item);
-  const isExpired = item.status === 'expired';
-
-  const paramSummary = item.riskMeta?.command
+  const status = approvalStatusText(item);
+  const expired = item.status === 'expired';
+  const summary = item.riskMeta?.command
     ? `$ ${maskCommandSecrets(item.riskMeta.command)}`
     : summarizeParameters(item.request.parameters);
-
   const statusColor =
-    status?.tone === 'error'
-      ? theme.colorError
+    status?.tone === 'danger'
+      ? theme.colors.danger
       : status?.tone === 'warning'
-        ? theme.colorWarning
+        ? theme.colors.warning
         : status?.tone === 'info'
-          ? theme.colorInfo
-          : theme.textSecondary;
+          ? theme.colors.info
+          : theme.colors.textTertiary;
 
   return (
     <View
       testID="approval-card"
-      accessible
-      accessibilityLabel={`审批卡：${item.request.toolName}，剩余 ${formatRemainingMs(remainingMs)}`}
-      style={[
-        styles.card,
-        { backgroundColor: theme.bgCard, borderColor: theme.hairline },
-        isExpired && { opacity: 0.6 },
-      ]}
+      style={[styles.container, expired && styles.expired]}
     >
-      <View style={styles.headerRow}>
+      <View style={styles.header}>
         <View
-          testID="risk-badge"
           style={[
-            styles.badge,
-            { backgroundColor: isL2 ? theme.colorErrorBg : theme.bgTertiary },
+            styles.riskBadge,
+            { borderRadius: theme.radius.xs },
+            {
+              backgroundColor: isHighRisk
+                ? theme.colors.dangerSoft
+                : theme.colors.fillSubtle,
+            },
           ]}
         >
-          <Text
-            style={[
-              styles.badgeText,
-              { color: isL2 ? theme.colorError : theme.textSecondary },
-            ]}
+          <AppText
+            variant="caption"
+            style={{
+              color: isHighRisk
+                ? theme.colors.danger
+                : theme.colors.textSecondary,
+            }}
           >
-            {isL2 ? '高风险' : '需确认'}
-          </Text>
+            {isHighRisk ? '高风险' : '需确认'}
+          </AppText>
         </View>
-        <Text
-          style={[styles.toolName, { color: theme.textPrimary }]}
-          numberOfLines={1}
-        >
+        <AppText variant="title2" numberOfLines={1} style={styles.toolName}>
           {item.request.toolName}
-        </Text>
-        <View style={styles.countdownArea}>
-          <Text
-            testID="countdown"
-            style={[
-              styles.countdown,
-              { color: urgent ? theme.colorError : theme.textSecondary },
-            ]}
-          >
-            {formatRemainingMs(remainingMs)}
-          </Text>
-          {urgent && !isExpired ? (
-            <Text
-              testID="countdown-warning"
-              style={[styles.urgent, { color: theme.colorError }]}
-            >
-              即将过期
-            </Text>
+        </AppText>
+        <View style={styles.countdown}>
+          {!expired ? (
+            <Icon
+              name="clock"
+              size={14}
+              color={urgent ? theme.colors.danger : theme.colors.textTertiary}
+            />
           ) : null}
+          <AppText
+            variant="footnote"
+            style={{
+              color: urgent ? theme.colors.danger : theme.colors.textSecondary,
+              fontVariant: ['tabular-nums'],
+            }}
+          >
+            {expired ? '已过期' : formatRemainingMs(remainingMs)}
+          </AppText>
         </View>
       </View>
 
-      <Text
-        testID="param-summary"
-        style={[styles.params, { color: theme.textSecondary }]}
-        numberOfLines={2}
-      >
-        {paramSummary}
-      </Text>
-
-      <Text style={[styles.context, { color: theme.textTertiary }]}>
-        会话 {item.request.sessionId}
-        {item.runId !== null ? ` · run ${item.runId}` : ''}
-      </Text>
+      {summary ? (
+        <View
+          style={[
+            styles.summaryBox,
+            { borderRadius: theme.radius.sm },
+            { backgroundColor: theme.colors.fillSubtle },
+          ]}
+        >
+          <AppText
+            variant="mono"
+            color="textSecondary"
+            numberOfLines={6}
+            selectable
+          >
+            {summary}
+          </AppText>
+        </View>
+      ) : null}
 
       {status ? (
-        <Text
-          testID="decision-status"
-          style={[styles.status, { color: statusColor }]}
+        <AppText
+          testID="approval-status"
+          variant="footnote"
+          style={{ color: statusColor }}
         >
           {status.text}
-        </Text>
+        </AppText>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    gap: 8,
+  container: {
+    gap: 12,
   },
-  headerRow: {
+  expired: {
+    opacity: 0.55,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  badge: {
-    borderRadius: 8,
+  riskBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '500',
+    paddingVertical: 3,
   },
   toolName: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  countdownArea: {
-    alignItems: 'flex-end',
-    gap: 2,
   },
   countdown: {
-    fontSize: 13,
-    fontWeight: '500',
-    fontVariant: ['tabular-nums'],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  urgent: {
-    fontSize: 11,
-  },
-  params: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  context: {
-    fontSize: 12,
-  },
-  status: {
-    fontSize: 13,
-    fontWeight: '500',
+  summaryBox: {
+    padding: 12,
   },
 });

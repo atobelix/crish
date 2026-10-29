@@ -39,6 +39,8 @@ export interface EventState {
   setNetwork: (network: FeedNetwork) => void;
   /** 窗口卸载（R2UX-05-09 内存预算：非活跃窗口卸载释放） */
   unloadWindow: (sessionId: string) => void;
+  /** 解绑 / 换机：清空全部窗口与连接相位 */
+  reset: () => void;
 }
 
 function nowDefault(): number {
@@ -85,6 +87,12 @@ export const eventStore: StoreApi<EventState> = createStore<EventState>()(
     unloadWindow: (sessionId) =>
       set((s) => {
         delete s.windows[sessionId];
+      }),
+
+    reset: () =>
+      set((s) => {
+        s.windows = {};
+        s.network = 'offline';
       }),
   }))
 );

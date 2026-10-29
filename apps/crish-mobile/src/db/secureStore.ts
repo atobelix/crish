@@ -38,6 +38,71 @@ export const ALL_KEY_SLOTS: readonly string[] = [
   KEYS.HOST_FINGERPRINT,
 ];
 
+/** 云端账号会话键（与局域网配对凭据分离；clearPairing 不得清除账号）。 */
+export const ACCOUNT_KEYS = {
+  ACCESS_TOKEN: 'account.access_token',
+  REFRESH_TOKEN: 'account.refresh_token',
+  DEVICE_ID: 'account.device_id',
+  USER_ID: 'account.user_id',
+  EMAIL: 'account.email',
+} as const;
+
+export interface AccountSession {
+  accessToken: string | null;
+  refreshToken: string;
+  deviceId: string;
+  userId: string | null;
+  email: string | null;
+}
+
+export async function loadAccountSession(
+  driver: SecureStoreDriver
+): Promise<AccountSession | null> {
+  const [refreshToken, deviceId, accessToken, userId, email] =
+    await Promise.all([
+      driver.getItem(ACCOUNT_KEYS.REFRESH_TOKEN),
+      driver.getItem(ACCOUNT_KEYS.DEVICE_ID),
+      driver.getItem(ACCOUNT_KEYS.ACCESS_TOKEN),
+      driver.getItem(ACCOUNT_KEYS.USER_ID),
+      driver.getItem(ACCOUNT_KEYS.EMAIL),
+    ]);
+  if (refreshToken === null || deviceId === null) return null;
+  return {
+    accessToken,
+    refreshToken,
+    deviceId,
+    userId,
+    email,
+  };
+}
+
+export async function saveAccountSession(
+  driver: SecureStoreDriver,
+  session: AccountSession
+): Promise<void> {
+  await Promise.all([
+    driver.setItem(ACCOUNT_KEYS.REFRESH_TOKEN, session.refreshToken),
+    driver.setItem(ACCOUNT_KEYS.DEVICE_ID, session.deviceId),
+    session.accessToken !== null
+      ? driver.setItem(ACCOUNT_KEYS.ACCESS_TOKEN, session.accessToken)
+      : driver.deleteItem(ACCOUNT_KEYS.ACCESS_TOKEN),
+    session.userId !== null
+      ? driver.setItem(ACCOUNT_KEYS.USER_ID, session.userId)
+      : driver.deleteItem(ACCOUNT_KEYS.USER_ID),
+    session.email !== null
+      ? driver.setItem(ACCOUNT_KEYS.EMAIL, session.email)
+      : driver.deleteItem(ACCOUNT_KEYS.EMAIL),
+  ]);
+}
+
+export async function clearAccountSession(
+  driver: SecureStoreDriver
+): Promise<void> {
+  await Promise.all(
+    Object.values(ACCOUNT_KEYS).map((key) => driver.deleteItem(key))
+  );
+}
+
 /**
  * 安全存储驱动接口（对齐 expo-secure-store 的 getItemAsync/setItemAsync/deleteItemAsync）。
  * 注入模式：测试用 InMemorySecureStore；真实环境 expoSecureStoreDriver（见文件底部）。
@@ -164,8 +229,38 @@ export async function hasPairing(driver: SecureStoreDriver): Promise<boolean> {
  * Android 需确认 allowBackup=false；开发/生产构建 Keychain 访问组一致（EAS 配置）。
  */
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+/** Web 预览：localStorage 仅作为开发预览存储；原生端始终走系统 Keychain/Keystore。 */
+function webStorageDriver(): SecureStoreDriver {
+  const prefix = 'crish.secure.';
+  const memory = new Map<string, string>();
+  const storage =
+    typeof globalThis !== 'undefined' &&
+    typeof globalThis.localStorage !== 'undefined'
+      ? globalThis.localStorage
+      : null;
+  const read = (key: string): string | null => {
+    if (storage) return storage.getItem(`${prefix}${key}`);
+    return memory.get(key) ?? null;
+  };
+  return {
+    async getItem(key) {
+      return read(key);
+    },
+    async setItem(key, value) {
+      if (storage) storage.setItem(`${prefix}${key}`, value);
+      else memory.set(key, value);
+    },
+    async deleteItem(key) {
+      if (storage) storage.removeItem(`${prefix}${key}`);
+      else memory.delete(key);
+    },
+  };
+}
 
 export function expoSecureStoreDriver(): SecureStoreDriver {
+  if (Platform.OS === 'web') return webStorageDriver();
   return {
     async getItem(key) {
       return SecureStore.getItemAsync(key);

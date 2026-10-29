@@ -1,6 +1,6 @@
 // 通知层启动装配（R3-04 部分 4：生产装配轮——initNotificationLayer 调用点）
 // - 装配链（顺序铁律）：① connectNotificationPrefs（设置页开关 → prefsGate 过滤，
-//   R3-04 部分 3 接线入口，settingsNotificationWiring.ts:8「启动装配轮调用
+//   R3-04 部分 3 接线入口，prefsBinding.ts「启动装配轮调用
 //   initNotificationLayer 前执行一次」）→ ② initNotificationLayer（能力探测 →
 //   建渠道 → 权限查询 → 前台 handler → 监听 → 冷启动深链，index.ts 顺序铁律）；
 // - 配对联动（确认注记）：通知层不依赖配对——桌面只在配对后推送（D7 §6.4
@@ -13,7 +13,8 @@
 // - Expo Go 降级（P0-1 DEF-5）：initNotificationLayer 能力探测失败 → 跳过系统面
 //   整体装配（应用内通知 only，不抛错不阻塞启动）；本层再兜一层 catch → warn
 //   注记降级句柄（装配后 app 仍可启动的契约保证，不向启动链抛错）。
-import { connectNotificationPrefs } from '@/adapters/settings/settingsNotificationWiring';
+import { Platform } from 'react-native';
+import { connectNotificationPrefs } from './prefsBinding';
 import { initNotificationLayer } from './index';
 import type { NotificationLayerHandle } from './index';
 
@@ -30,6 +31,9 @@ export interface NotificationBootstrapOptions {
 export async function ensureNotificationsForApp(
   options: NotificationBootstrapOptions = {}
 ): Promise<NotificationLayerHandle> {
+  if (Platform.OS === 'web') {
+    return { permissionStatus: 'undetermined', dispose: () => {} };
+  }
   try {
     connectNotificationPrefs();
     return await initNotificationLayer(options);

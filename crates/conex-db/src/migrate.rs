@@ -137,10 +137,51 @@ impl LocalDb {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .map_err(|e| self.latch_error("user_version_read", e))?;
 
+        if current > LATEST_VERSION {
+            // 未来版本库（新二进制写、旧二进制读）：拒绝打开而不是按当前
+            // 结构「修复」——后者会 DROP 未来版本触发器/索引并把
+            // schema_version 回写为旧值。
+            let failure = DbFailure {
+                message: format!(
+                    "database schema version {current} is newer than supported {LATEST_VERSION}"
+                ),
+                kind: DbFailureKind::Migration,
+            };
+            self.set_failure(failure.clone());
+            return Err(failure);
+        }
+
         if current == LATEST_VERSION {
-            // 已是目标版本：确保关键结构存在（幂等兜底，含备份恢复场景）
-            conn.execute_batch(create_v5_schema())
+            // 已是目标版本：幂等修复。只重跑 v5 起的**幂等 DDL 步骤**
+            // （ADD COLUMN col-check / CREATE TABLE IF NOT EXISTS / 孤儿键
+            // 清理），修复残缺库（如 usage_records / compression_blocks 等
+            // 晚出版本表缺失）；v2..v4 含表重建，禁止在最新结构上重演。
+            let tx = conn
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .map_err(|e| self.latch_error("schema_repair_tx", e))?;
+            tx.execute_batch(create_v5_schema())
                 .map_err(|e| self.latch_error("schema_ensure", e))?;
+            type RepairStep = fn(&rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error>;
+            // v13 为数据清理（删除孤儿 session_meta 键），不属于结构修复：
+            // 每次打开都重跑会误删「先写 meta、后建会话行」的合法场景，
+            // 故修复面只含 idempotent 结构步骤（v5..v12 + v14）。
+            let repair_steps: [(u32, RepairStep); 10] = [
+                (5, migrate_v4_to_v5),
+                (6, migrate_v5_to_v6),
+                (7, migrate_v6_to_v7),
+                (8, migrate_v7_to_v8),
+                (9, migrate_v8_to_v9),
+                (10, migrate_v9_to_v10),
+                (11, step_10_to_11),
+                (12, step_11_to_12),
+                (14, step_13_to_14),
+                (15, step_14_to_15),
+            ];
+            for (version, step) in repair_steps {
+                step(&tx).map_err(|e| self.latch_error(&format!("schema_repair_v{version}"), e))?;
+            }
+            tx.commit()
+                .map_err(|e| self.latch_error("schema_repair_commit", e))?;
             self.record_schema_version(&conn)?;
             return Ok(());
         }
@@ -178,7 +219,7 @@ impl LocalDb {
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
             // 锚定 v3→v4 只产 .bak-v4，v5..v14 不额外产生备份）
             if let Some(p) = &path {
-                if !(5..=14).contains(&version) {
+                if !(5..=15).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -194,8 +235,19 @@ impl LocalDb {
                 }
             }
             let tx = conn
-                .transaction()
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
                 .map_err(|e| self.latch_error(&format!("migrate_tx_v{version}"), e))?;
+            // IMMEDIATE 已持有写锁：事务内复核版本，跨进程并发迁移时后到者
+            // 直接跳过已推进版本，不在新结构上重演旧步骤（避免 DROP 列/
+            // 重建表导致的数据丢失）。
+            let in_tx_version: u32 = tx
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .map_err(|e| self.latch_error(&format!("migrate_version_recheck_v{version}"), e))?;
+            if in_tx_version >= version {
+                tx.commit()
+                    .map_err(|e| self.latch_error(&format!("migrate_skip_commit_v{version}"), e))?;
+                continue;
+            }
             let step_result = match version {
                 2 => migrate_v1_to_v2(&tx),
                 3 => migrate_v2_to_v3(&tx),
@@ -210,6 +262,7 @@ impl LocalDb {
                 12 => step_11_to_12(&tx),
                 13 => step_12_to_13(&tx),
                 14 => step_13_to_14(&tx),
+                15 => step_14_to_15(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {

@@ -1003,9 +1003,11 @@
   min-width: 0;
 }
 
+/* 虚拟化块：尺寸由 ResizeObserver 实测写入 HeightMap，不设 content-visibility
+ * / contain-intrinsic-size —— 假高度（auto 240px）会在实测回填时让前缀和突变，
+ * 上方块变高时把视口内容推走。与 ChatMessageRow.module.css 的 DEF-14 口径一致。 */
 .md-virtual-chunk {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
+  will-change: transform;
 }
 
 .markdown-fallback-text {

@@ -187,7 +187,11 @@ export function useStreamingMarkdownResult(
 
       void renderMarkdownStream(source, sourceVariant)
         .then((result) => {
-          if (stopped || textRef.current !== current) return;
+          if (stopped) return;
+          // 文本在 IPC 往返期间前移时本帧结果已过期。不能直接丢弃等下一 tick：
+          // 高频吐字下会连续丢帧，富文本迟迟不更新（纯文本 fallback 长时间定格）。
+          // 这里落一次「过渡帧」——先展示旧文本的渲染结果；下一 tick 因
+          // lastAttempted 仍是旧值，会立即用新文本再排一次，最终收敛到最新。
           if (result) {
             setState({
               html: result.html,
@@ -195,7 +199,7 @@ export function useStreamingMarkdownResult(
               loading: false,
               failed: false,
             });
-          } else {
+          } else if (textRef.current === current) {
             setState((prev) => ({ ...prev, loading: false, failed: true }));
           }
         })

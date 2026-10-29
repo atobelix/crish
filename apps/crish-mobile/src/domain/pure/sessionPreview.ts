@@ -46,8 +46,12 @@ function textOfMessageEnd(frame: EventEnvelopeFrame): string {
 /** 事件条目 → 原始正文（非消息类返回空串；字段缺失宽容兜底空串） */
 export function extractPreviewText(frame: EventEnvelopeFrame): string {
   switch (frame.type) {
-    case 'message-delta':
-      return readString(frame, 'text') ?? '';
+    case 'message-delta': {
+      // 线上契约：message-delta.block.text（crates/conex-types message.rs；
+      // 与 buildTimeline 同源），不存在顶层 text。
+      const block = readRecord(frame['block']);
+      return readString(block, 'text') ?? '';
+    }
     case 'message-end':
       return textOfMessageEnd(frame);
     case 'tool-update': {
@@ -79,10 +83,14 @@ export function previewText(entry: FeedEntry): string {
   return `${cleaned.slice(0, SESSION_PREVIEW_MAX - 1)}…`;
 }
 
-/** 事件窗口尾部条目预览（无窗口 / 空窗口返回空串）；列表行数据面 */
+/** 事件窗口尾部预览：从末尾向前找第一条有正文的事件（run-terminal 等非消息事件不占预览） */
 export function lastPreviewOfWindow(window: EventWindow | undefined): string {
-  const tail = window?.entries[window.entries.length - 1];
-  return tail ? previewText(tail) : '';
+  if (!window) return '';
+  for (let index = window.entries.length - 1; index >= 0; index -= 1) {
+    const text = previewText(window.entries[index]!);
+    if (text !== '') return text;
+  }
+  return '';
 }
 
 /** 事件窗口尾部条目是否处于流式期（增量类型判定；会话列表预览流式标记数据面，

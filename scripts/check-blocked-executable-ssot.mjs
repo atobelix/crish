@@ -53,6 +53,10 @@ const tsPath = path.join(
 );
 const rsPath = path.join(
   root,
+  'apps/agent-workbench/src-tauri/src/host_openers/path_safety.rs'
+);
+const rsExecutePath = path.join(
+  root,
   'apps/agent-workbench/src-tauri/src/host_openers/execute.rs'
 );
 
@@ -89,7 +93,7 @@ if (/\(exe\|bat\|cmd\|msi\|ps1\|vbs\|com\|sh\|bin\)\$/.test(usa)) {
   fail('useChatSessionActions.ts still has inline executable regex (dual-track)');
 }
 
-const rs = fs.readFileSync(rsPath, 'utf8');
+const rs = fs.readFileSync(rsExecutePath, 'utf8');
 if (!rs.includes('is_blocked_executable_path(&target)')) {
   fail('execute.rs open_path must call is_blocked_executable_path');
 }

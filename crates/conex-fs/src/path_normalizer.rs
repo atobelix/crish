@@ -326,6 +326,7 @@ mod tests {
         assert_eq!(ConexPathNormalizer::normalize(p_sub), PathBuf::from("/foo"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn test_normalize_uppercase_drive_letter() {
         let p1 = Path::new("c:\\software\\conex");
@@ -365,6 +366,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn test_unc_root_monotonicity_protection() {
         let unc_root = Path::new(r"\\server\share\..");

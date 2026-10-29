@@ -7,10 +7,9 @@ import { authStore } from '@/domain/store/authStore';
 import {
   createFilesContext,
   getFilesContext,
-  joinRelPath,
   resetFilesContextForTest,
-  workspaceNameOf,
 } from './filesWiring';
+import { joinRelPath, workspaceNameOf } from '@/domain/pure/workspacePath';
 import type { WsSocket } from '@/network/ReconnectingWsClient';
 import {
   ensureObservationWiring,

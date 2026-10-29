@@ -35,6 +35,7 @@ import {
   listDevices,
   revokeDevice,
   networkEnvInfo,
+  exportCertificate,
   type DeviceInfo,
   type NetworkEnvInfo,
 } from '../../api/multiDevice';
@@ -203,6 +204,17 @@ export const SettingsDevicesTab: React.FC<Props> = ({
     dispatchDeviceList({ type: 'setRevokeHash', hash: deviceId });
   }, []);
 
+  const handleExportCertificate = useCallback(async () => {
+    const result = await exportCertificate();
+    if (result.status === 'saved') {
+      showToast(t('settings.devices.exportCertSuccess', '证书已导出'));
+    } else if (result.status === 'failed') {
+      showToast(
+        t('settings.devices.exportCertFailed', '证书导出失败，请稍后重试')
+      );
+    }
+  }, [showToast, t]);
+
   // 配对态生效条件：服务开启 + 服务端配对态翻转（服务关闭时即使轮询
   // 残留 pairing_enabled 也不展示配对面——服务关闭即零监听）。
   const enabled =
@@ -313,6 +325,31 @@ export const SettingsDevicesTab: React.FC<Props> = ({
               />
             </div>
           )}
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('settings.devices.securitySection', '安全连接')}
+      >
+        <SettingsCard>
+          <SettingsRow
+            icon={<AppIcon name="shield-check" size={18} aria-hidden />}
+            title={t('settings.devices.exportCertTitle', '桌面证书')}
+            desc={t(
+              'settings.devices.exportCertDesc',
+              '首次连接前，在手机安装此证书并完全信任，才能建立加密连接'
+            )}
+            control={
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleExportCertificate()}
+              >
+                <AppIcon name="download" size={14} aria-hidden />{' '}
+                {t('settings.devices.exportCertBtn', '导出证书')}
+              </Button>
+            }
+          />
         </SettingsCard>
       </SettingsSection>
 

@@ -189,16 +189,18 @@ fn daemon_job_isolated_from_pty() {
 #[cfg(not(windows))]
 #[test]
 fn daemon_process_survives_pty_kill_all() {
+    use std::os::unix::process::CommandExt;
+    // spawn 时即建立独立进程组（exec 前），避免 post-hoc setpgid 在受限
+    // 沙箱/竞态下 EPERM
     let mut child = std::process::Command::new("sleep")
         .arg("30")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .process_group(0)
         .spawn()
         .expect("spawn daemon test process");
     let pid = child.id();
-    // 模拟后台任务进程组（T-AB-06 daemon 语义：与 PTY 会话独立）
-    set_child_process_group(pid).expect("setpgid");
 
     crate::pty::kill_all_sessions();
     assert!(pid_is_alive(pid), "kill_all_sessions 不得连带 daemon 进程");

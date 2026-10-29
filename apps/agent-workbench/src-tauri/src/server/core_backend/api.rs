@@ -1,13 +1,15 @@
 use conex_types::device::commands::{
     SettingsConfirmAction, SettingsConfirmParams, SettingsConfirmResult, SettingsConfirmStatus,
 };
+use conex_types::device::commands::{SwitchWorkspaceParams, SwitchWorkspaceResult};
 use conex_types::device::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
     CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
-    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
-    ListCommandsResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams,
-    ListSessionsResult, ListTasksParams, ListTasksResult, PauseAutomationParams,
-    PauseAutomationResult, RunControlLevel, RunControlParams, RunControlResult, RunEventsParams,
+    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
+    ListDirParams, ListDirResult, ListPendingApprovalsParams, ListPendingApprovalsResult,
+    ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, ListWorkspacesParams,
+    ListWorkspacesResult, PauseAutomationParams, PauseAutomationResult, ReadFileParams,
+    ReadFileResult, RunControlLevel, RunControlParams, RunControlResult, RunEventsParams,
     RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
     SearchFilesResult, SearchIndexResult,
 };
@@ -402,6 +404,67 @@ impl ApiBackend for CoreStateBackend {
         Ok(PauseAutomationResult {
             ok: true,
             paused_until,
+        })
+    }
+
+    // ── F4 文件域读命令（移动端伴侣；阻塞 IO 下沉 spawn_blocking）──
+
+    async fn list_dir(&self, params: ListDirParams) -> Result<ListDirResult, ServerError> {
+        let ops = self.workspace_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "工作区操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || {
+            ops.list_dir(params.workspace_root.as_deref(), params.path.as_deref())
+        })
+        .await
+        .map_err(|error| ServerError::internal(format!("list_dir 任务失败：{error}")))?
+    }
+
+    async fn read_file(&self, params: ReadFileParams) -> Result<ReadFileResult, ServerError> {
+        let ops = self.workspace_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "工作区操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || {
+            ops.read_file(
+                params.workspace_root.as_deref(),
+                &params.path,
+                params.max_lines,
+                params.start_line,
+            )
+        })
+        .await
+        .map_err(|error| ServerError::internal(format!("read_file 任务失败：{error}")))?
+    }
+
+    async fn list_workspaces(
+        &self,
+        _params: ListWorkspacesParams,
+    ) -> Result<ListWorkspacesResult, ServerError> {
+        let ops = self.workspace_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "工作区操作未装配")
+        })?;
+        let workspaces = tokio::task::spawn_blocking(move || ops.list_workspaces())
+            .await
+            .map_err(|error| ServerError::internal(format!("list_workspaces 任务失败：{error}")))??;
+        Ok(ListWorkspacesResult { workspaces })
+    }
+
+    async fn switch_workspace(
+        &self,
+        params: SwitchWorkspaceParams,
+    ) -> Result<SwitchWorkspaceResult, ServerError> {
+        let ops = self.workspace_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "工作区操作未装配")
+        })?;
+        let active_root =
+            tokio::task::spawn_blocking(move || ops.switch_workspace(&params.path))
+                .await
+                .map_err(|error| {
+                    ServerError::internal(format!("switch_workspace 任务失败：{error}"))
+                })??;
+        Ok(SwitchWorkspaceResult {
+            ok: true,
+            active_root,
         })
     }
 }

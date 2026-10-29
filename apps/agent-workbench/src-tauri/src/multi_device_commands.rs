@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use tauri::State;
+use tauri_plugin_dialog::DialogExt;
 
 use crate::multi_device_network::NetworkEnvInfo;
 use crate::server::error::ServerError;
@@ -120,6 +121,44 @@ pub async fn multi_device_network_info() -> NetworkEnvInfo {
             usable_ips: vec!["0.0.0.0".to_string()],
             hint: String::new(),
         })
+}
+
+/// 导出桌面自签 CA 证书（首次配对前安装到手机，建立系统级信任）。
+///
+/// 证书材料未生成时先按服务同一路径生成（`config_dir()/multi-device/`），
+/// 再经原生保存对话框写出 `.crt`（PEM 内容）。取消返回 `None`。
+#[tauri::command]
+pub async fn multi_device_export_ca(app: tauri::AppHandle) -> Result<Option<String>, CoreError> {
+    let material = tauri::async_runtime::spawn_blocking(|| {
+        crate::multi_device::tls::load_or_generate_in(&crate::multi_device::tls::cert_dir())
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("证书生成任务失败：{e}")))?
+    .map_err(|e| CoreError::Internal(format!("证书材料不可用：{e}")))?;
+    let pem = material
+        .ca_cert_pem()
+        .map_err(|e| CoreError::Internal(format!("证书读取失败：{e}")))?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("导出桌面证书")
+        .set_file_name("crish-ca.crt")
+        .add_filter("证书", &["crt", "pem"])
+        .save_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let Some(path) = rx
+        .await
+        .map_err(|_| CoreError::Internal("原生保存对话框未返回结果".to_string()))?
+    else {
+        return Ok(None);
+    };
+    let path = path
+        .into_path()
+        .map_err(|e| CoreError::Internal(format!("无法读取保存路径：{e}")))?;
+    std::fs::write(&path, pem).map_err(|e| CoreError::Internal(format!("证书写入失败：{e}")))?;
+    Ok(Some(path.display().to_string()))
 }
 
 /// 多端服务总开关（R1-11 G-1 / D5 D-01 红线 1）：控制服务本身启停——

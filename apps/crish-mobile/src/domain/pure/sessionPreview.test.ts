@@ -21,13 +21,18 @@ function makeEntry(
 }
 
 describe('extractPreviewText 消息正文提取', () => {
-  it('message-delta 取 frame.text', () => {
+  it('message-delta 取 block.text', () => {
     expect(
-      extractPreviewText(makeEntry('message-delta', { text: '问题定位在' }))
+      extractPreviewText(
+        makeEntry('message-delta', {
+          messageId: 'm-1',
+          block: { type: 'text', text: '问题定位在' },
+        })
+      )
     ).toBe('问题定位在');
   });
 
-  it('message-delta 缺 text → 空串', () => {
+  it('message-delta 缺 block/text → 空串', () => {
     expect(extractPreviewText(makeEntry('message-delta'))).toBe('');
   });
 
@@ -102,7 +107,9 @@ describe('previewText 收敛（ANSI / 空白 / 截断）', () => {
   it('剥离 ANSI SGR 序列（复用 stripAnsi 白名单）', () => {
     expect(
       previewText(
-        makeEntry('message-delta', { text: '\u001b[31m红色\u001b[0m 正文' })
+        makeEntry('message-delta', {
+          block: { type: 'text', text: '\u001b[31m红色\u001b[0m 正文' },
+        })
       )
     ).toBe('红色 正文');
   });
@@ -110,7 +117,9 @@ describe('previewText 收敛（ANSI / 空白 / 截断）', () => {
   it('换行与多空格收敛为单空格（单行渲染前提）', () => {
     expect(
       previewText(
-        makeEntry('message-delta', { text: '第一行\n\n  第二行\t结尾' })
+        makeEntry('message-delta', {
+          block: { type: 'text', text: '第一行\n\n  第二行\t结尾' },
+        })
       )
     ).toBe('第一行 第二行 结尾');
   });
@@ -121,7 +130,9 @@ describe('previewText 收敛（ANSI / 空白 / 截断）', () => {
 
   it('超长截断：保留 SESSION_PREVIEW_MAX-1 码点 + …', () => {
     const long = 'A'.repeat(SESSION_PREVIEW_MAX + 20);
-    const result = previewText(makeEntry('message-delta', { text: long }));
+    const result = previewText(
+      makeEntry('message-delta', { block: { type: 'text', text: long } })
+    );
     expect(result.length).toBe(SESSION_PREVIEW_MAX);
     expect(result.endsWith('…')).toBe(true);
     expect(result.startsWith('A'.repeat(SESSION_PREVIEW_MAX - 1))).toBe(true);
@@ -129,9 +140,11 @@ describe('previewText 收敛（ANSI / 空白 / 截断）', () => {
 
   it('恰好等于上限不截断（无尾缀 …）', () => {
     const exact = 'B'.repeat(SESSION_PREVIEW_MAX);
-    expect(previewText(makeEntry('message-delta', { text: exact }))).toBe(
-      exact
-    );
+    expect(
+      previewText(
+        makeEntry('message-delta', { block: { type: 'text', text: exact } })
+      )
+    ).toBe(exact);
   });
 });
 
@@ -147,12 +160,18 @@ describe('lastPreviewOfWindow 窗口尾部数据面', () => {
   it('尾部条目为消息 → 预览文本', () => {
     const window = createWindow();
     window.entries.push(
-      makeEntry('message-delta', { sequence: 1, text: '旧增量' }),
+      makeEntry('message-delta', {
+        sequence: 1,
+        block: { type: 'text', text: '旧增量' },
+      }),
       makeEntry('message-end', {
         sequence: 2,
         message: { id: 'asst-2', role: 'assistant', blocks: [] },
       }),
-      makeEntry('message-delta', { sequence: 3, text: '最近消息文本' })
+      makeEntry('message-delta', {
+        sequence: 3,
+        block: { type: 'text', text: '最近消息文本' },
+      })
     );
     expect(lastPreviewOfWindow(window)).toBe('最近消息文本');
   });
@@ -173,7 +192,10 @@ describe('tailIsStreamingOfWindow 尾部流式标记数据面（R2UX-05-02）', 
   it('尾部为流式增量类型（message-delta / tool-update / task-output）→ true', () => {
     const window = createWindow();
     window.entries.push(
-      makeEntry('message-delta', { sequence: 1, text: '增量' })
+      makeEntry('message-delta', {
+        sequence: 1,
+        block: { type: 'text', text: '增量' },
+      })
     );
     expect(tailIsStreamingOfWindow(window)).toBe(true);
     const toolWindow = createWindow();
@@ -187,7 +209,10 @@ describe('tailIsStreamingOfWindow 尾部流式标记数据面（R2UX-05-02）', 
   it('尾部为终态类型（message-end / run-terminal 等）→ false', () => {
     const window = createWindow();
     window.entries.push(
-      makeEntry('message-delta', { sequence: 1, text: '增量' }),
+      makeEntry('message-delta', {
+        sequence: 1,
+        block: { type: 'text', text: '增量' },
+      }),
       makeEntry('message-end', {
         sequence: 2,
         message: { id: 'asst-2', role: 'assistant', blocks: [] },

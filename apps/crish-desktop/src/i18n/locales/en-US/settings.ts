@@ -1,6 +1,7 @@
 import type { SettingsTranslations } from '../../types';
 import { settingsPartRest } from './settingsParts';
 import { settingsPartModels } from './settingsModels';
+import { settingsPartAccount } from './settingsAccount';
 
 export const settings: SettingsTranslations = {
   // ── Existing 11 keys (Strict backwards compatibility) ──
@@ -366,6 +367,7 @@ export const settings: SettingsTranslations = {
 
   ...settingsPartRest,
   ...settingsPartModels,
+  ...settingsPartAccount,
 };
 
 export default settings;

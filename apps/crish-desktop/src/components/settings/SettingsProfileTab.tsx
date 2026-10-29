@@ -4,7 +4,7 @@ import { useToast } from '../../services/toast/ToastContext';
  *
  * Stream D 改造后：磁盘镜像已删除，存储位置统一显示「本机 SQLite 数据库」。
  */
-import React, { useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 
 import { clientApi } from '../../api/clientApi';
 import { ensureEngineConnected } from '../../api/chatBridge';
@@ -20,6 +20,9 @@ import {
 } from './SettingsUI';
 import { Button, Input, Tooltip } from '@/components/ui';
 import { AccountAuthCard } from './AccountAuthCard';
+import { ChangePasswordPane } from '../account/ChangePasswordPane';
+import { useAccountUiStore } from '../../store/accountUiStore';
+import { useAuthField } from '../../store/storeAccess';
 import styles from './SettingsProfileTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
@@ -39,6 +42,11 @@ export const SettingsProfileTab: React.FC<Props> = ({
 }) => {
   void _onBlockingOverlayChange;
   const { t } = useI18n();
+  const accountView = useAccountUiStore((state) => state.view);
+  const setAccountView = useAccountUiStore((state) => state.setView);
+  const isLoggedIn = useAuthField((state) => state.isLoggedIn);
+  // 离开「账户」分区（切分区 / 关设置）时复位为概览，下次进入不停留在修改密码子页
+  useEffect(() => () => setAccountView('overview'), [setAccountView]);
 
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
@@ -162,6 +170,9 @@ export const SettingsProfileTab: React.FC<Props> = ({
         ? engineConnHint
         : null;
 
+  if (accountView === 'changePassword' && isLoggedIn)
+    return <ChangePasswordPane />;
+
   return (
     <SettingsPage
       title={t('settings.profile.title')}
@@ -180,7 +191,7 @@ export const SettingsProfileTab: React.FC<Props> = ({
         ) : null
       }
     >
-      <SettingsSection title={t('settings.profile.flowbitSection')}>
+      <SettingsSection>
         <AccountAuthCard />
       </SettingsSection>
 

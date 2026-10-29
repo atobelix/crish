@@ -72,6 +72,12 @@ pub struct ServerConfig {
     /// TLS 证书目录（None = 默认 `config_dir()/multi-device/`，目录语义
     /// 见 multi_device/tls.rs；测试注入临时目录隔离真实配置目录）
     pub tls_cert_dir: Option<PathBuf>,
+    /// 叶子证书额外 SAN（局域网 IP / 主机名；服务以 Lan 绑定时由装配面
+    /// 从本机网卡注入，保证移动端按 IP 连接可通过主机名校验）
+    pub tls_extra_sans: Vec<String>,
+    /// 远程中继本地桥接密钥（仅 loopback 的 /v1/relay-loopback 使用；
+    /// None = 该路由关闭。由账户远程服务在启动 loopback 网关时注入）
+    pub relay_loopback_secret: Option<String>,
     /// 令牌文件路径（SHA-256 哈希落盘；D2 §7.3）
     pub pairing_file_path: PathBuf,
 }
@@ -90,6 +96,8 @@ impl ServerConfig {
             // 装配层显式开启（wss 强制，D5 D-02a / D2 §12.8 裁决修正 11）
             tls_enabled: false,
             tls_cert_dir: None,
+            tls_extra_sans: Vec::new(),
+            relay_loopback_secret: None,
             pairing_file_path: config_dir.into().join(PAIRING_FILE_NAME),
         }
     }

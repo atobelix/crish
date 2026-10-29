@@ -62,7 +62,10 @@ pub(crate) fn migrate_v2_to_v3(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
          INSERT INTO session_agent_messages
             (session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
              stream_text_offset, thinking_time, tool_calls_json, blocks_json, tool_call_results_json)
-            SELECT session_id, agent_id, seq, id, sender, text, thinking, timestamp, status,
+            SELECT session_id, agent_id, seq, id,
+             CASE WHEN sender IN ('user','assistant') THEN sender ELSE 'assistant' END,
+             text, thinking, timestamp,
+             CASE WHEN status IN ('queued','processing','completed','error') THEN status ELSE 'error' END,
              stream_text_offset, thinking_time, tool_calls_json, blocks_json, tool_call_results_json
             FROM sam_v2;
          DROP TABLE sam_v2;",
@@ -618,4 +621,31 @@ pub(crate) fn step_13_to_14(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqli
         "CREATE INDEX IF NOT EXISTS idx_session_agents_status ON session_agents(status);",
     )?;
     Ok(())
+}
+
+/// v14 → v15：usage_records 每 run 至多一条（部分唯一索引 + 存量去重）。
+///
+/// 背景：写面幂等守卫是跨连接 `exists → insert`（run_core.rs），并发重入
+/// 可双写；DB 层唯一约束是唯一可靠防线。去重保留每个 run 最早一条
+/// （MIN(id)），`run_id IS NULL` 的会话域/导入行不受约束。
+pub(crate) fn step_14_to_15(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    let has_usage: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='usage_records'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_usage == 0 {
+        // 残缺/裁剪库（fixture 或备份恢复）无该表：跳过，建表由 v10 步骤
+        // 或最新版幂等修复负责。
+        return Ok(());
+    }
+    tx.execute_batch(
+        "DELETE FROM usage_records
+         WHERE run_id IS NOT NULL
+           AND id NOT IN (
+             SELECT MIN(id) FROM usage_records WHERE run_id IS NOT NULL GROUP BY run_id
+           );
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_records_run_unique
+           ON usage_records(run_id) WHERE run_id IS NOT NULL;",
+    )
 }

@@ -82,12 +82,34 @@ export function VirtualMarkdownBlockList({
     };
   }, [viewportRef, chunkSignature]);
 
-  const measureChunk = useCallback((index: number, height: number) => {
-    if (height <= 0) return;
-    if (heightMapRef.current?.measure(index, height)) {
+  const measureChunk = useCallback(
+    (index: number, height: number) => {
+      if (height <= 0) return;
+      const map = heightMapRef.current;
+      if (!map) return;
+
+      // 记录变更前的绝对偏移：measure 后 HeightMap 前缀和会更新，旧值只能提前取。
+      const offsetBefore = map.offsetOf(index);
+      if (!map.measure(index, height)) return;
+
+      const element = viewportRef.current;
+      const offsetAfter = map.offsetOf(index);
+      const shift = offsetAfter - offsetBefore;
+
+      // 滚动锚定补偿：块变高/变矮会让它下方所有内容整体平移 `shift` 像素。
+      // 若该块完全在视口上方，视口内内容被动跟着移位——同步调整 scrollTop，
+      // 读者当前行才会停在原处。块在视口内或下方时补偿会干扰阅读，不处理。
+      if (element && shift !== 0) {
+        const viewportTop = element.scrollTop;
+        const changedBottom = offsetAfter + height;
+        if (changedBottom <= viewportTop) {
+          element.scrollTop = viewportTop + shift;
+        }
+      }
       setRevision((revision) => revision + 1);
-    }
-  }, []);
+    },
+    [viewportRef]
+  );
 
   const measureCallbacks = useMemo(
     () =>

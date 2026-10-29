@@ -131,10 +131,11 @@ impl ModelsStore {
         &self.path
     }
 
+    /// 取配置状态锁。持锁 panic 后按恢复模式继续（与本仓锁纪律一致）：
+    /// 配置内容以磁盘文件为准，内存态由下一次 read/reload 重建，不因一次
+    /// panic 让读写面永久 STORE_LOCK。
     fn lock(&self) -> Result<MutexGuard<'_, StoreState>, ModelsStoreError> {
-        self.state
-            .lock()
-            .map_err(|_| ModelsStoreError::new("STORE_LOCK", "配置存储锁不可用"))
+        Ok(self.state.lock().unwrap_or_else(|e| e.into_inner()))
     }
 
     fn process_lock(&self) -> Result<File, ModelsStoreError> {

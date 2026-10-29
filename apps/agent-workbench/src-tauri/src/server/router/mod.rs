@@ -172,10 +172,16 @@ pub fn build_router(state: ServerState) -> Router {
     // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
     // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
     // 自定义头，且 401 响应会破坏升级握手语义）
-    let ws_router = Router::new().route(
-        crate::server::ws::WS_EVENTS_PATH,
-        get(crate::server::ws::handle_ws_upgrade),
-    );
+    let ws_router = Router::new()
+        .route(
+            crate::server::ws::WS_EVENTS_PATH,
+            get(crate::server::ws::handle_ws_upgrade),
+        )
+        // 账户远程 host 桥（仅 loopback 部署 + 桥密钥；见 ws.rs）
+        .route(
+            crate::server::ws::RELAY_LOOPBACK_PATH,
+            get(crate::server::ws::handle_relay_loopback_upgrade),
+        );
     // 鉴权面（Bearer 中间件；全部只读端点挂此组，D2 §7.1 零信任）
     let protected = Router::new()
         .route(STATUS_PATH, get(handle_status))

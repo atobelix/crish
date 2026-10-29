@@ -1,0 +1,371 @@
+/* 账号界面基础控件：无描边字段、按钮、验证码格、遮罩与弹窗外壳。
+ * 设计语言：无阴影、无光圈、无描边；聚焦只换底色 + 品牌色光标，出错浅红底 + 红字。
+ * 颜色一律走 --account-*（tokens-components.css），排版与间距走全局 token。 */
+
+/* ── 字段 ── */
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-group);
+  height: var(--control-height-lg);
+  padding: 0 var(--space-3);
+  box-sizing: border-box;
+  border-radius: var(--account-radius);
+  background: var(--account-field);
+  transition: background-color var(--duration-snappy) var(--ease-standard);
+}
+
+.field:focus-within {
+  background: var(--account-field-focus);
+}
+
+.field[data-invalid='true'] {
+  background: var(--account-danger-fill);
+}
+
+.fieldInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--font-size-body);
+  line-height: var(--account-line-body);
+  color: var(--account-text-1);
+  caret-color: var(--brand);
+}
+
+.fieldInput:focus,
+.fieldInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.fieldInput::placeholder {
+  color: var(--account-text-4);
+}
+
+.reveal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--gap-inline);
+  margin-right: calc(-1 * var(--gap-inline));
+  border-radius: var(--account-radius);
+  color: var(--account-text-4);
+  transition: color var(--duration-snappy) var(--ease-standard);
+}
+
+.reveal:hover {
+  color: var(--account-text-2);
+}
+
+/* ── 按钮：40 高、10 圆角、14/600；禁用 = 次级底 + 禁用字色（不叠透明度） ── */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: var(--control-height-lg);
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+  border-radius: var(--account-radius);
+  font-size: var(--font-size-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-snappy) var(--ease-standard),
+    color var(--duration-snappy) var(--ease-standard);
+}
+
+.primary {
+  background: var(--account-action);
+  color: var(--account-action-text);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--account-action) 88%,
+    var(--account-surface)
+  );
+}
+
+.secondary {
+  background: var(--account-secondary);
+  color: var(--account-text-1);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--account-pressed);
+}
+
+.danger {
+  background: var(--account-danger);
+  color: var(--account-surface);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--account-danger) 88%,
+    var(--account-surface)
+  );
+}
+
+.linkButton {
+  background: transparent;
+  color: var(--account-text-2);
+  font-weight: var(--fw-medium);
+}
+
+.linkButton:hover:not(:disabled) {
+  background: var(--account-hover);
+  color: var(--account-text-1);
+}
+
+.button:disabled {
+  background: var(--account-secondary);
+  color: var(--account-text-disabled);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.linkButton:disabled {
+  background: transparent;
+}
+
+.block {
+  width: 100%;
+}
+
+/* ── 文字按钮：13/20，无底色 ── */
+.textButton {
+  padding: 0;
+  background: transparent;
+  font-size: var(--account-font-size-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--account-line-body);
+  color: var(--account-text-1);
+  cursor: pointer;
+}
+
+.textButton:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.textButton:disabled {
+  color: var(--account-text-4);
+  opacity: 1;
+  cursor: default;
+}
+
+.textDanger {
+  color: var(--account-danger);
+}
+
+.textQuiet {
+  font-weight: var(--fw-regular);
+  color: var(--account-text-4);
+}
+
+/* ── 图标按钮：32 方块，t3 ── */
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  border-radius: var(--account-radius);
+  color: var(--account-text-3);
+  transition:
+    background-color var(--duration-snappy) var(--ease-standard),
+    color var(--duration-snappy) var(--ease-standard);
+}
+
+.iconButton:hover {
+  background: var(--account-hover);
+  color: var(--account-text-1);
+}
+
+/* ── 文本 ── */
+.label {
+  margin: 0 0 var(--gap-group);
+  font-size: var(--account-font-size-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--account-line-body);
+  color: var(--account-text-3);
+}
+
+.errorText {
+  margin: 0;
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-danger);
+}
+
+.resend {
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--account-text-4);
+}
+
+/* ── 验证码格：空 = 次级底，已填 = 字段底，当前 = 聚焦底 + 品牌色光标 ── */
+.cells {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--gap-group);
+}
+
+.cellsInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: text;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--account-row-height);
+  border-radius: var(--account-radius);
+  background: var(--account-secondary);
+  font-size: var(--font-size-title);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--account-text-1);
+  pointer-events: none;
+  transition: background-color var(--duration-snappy) var(--ease-standard);
+}
+
+.cell[data-state='filled'] {
+  background: var(--account-field);
+}
+
+.cell[data-state='active'] {
+  background: var(--account-field-focus);
+}
+
+.cells[data-invalid='true'] .cell {
+  background: var(--account-danger-fill);
+}
+
+.caret {
+  width: var(--account-caret-width);
+  height: var(--icon-size);
+  background: var(--brand);
+}
+
+/* ── 弹窗外壳：无阴影无描边，20 圆角，缩放 .98→1 ── */
+.dialogPanel {
+  border: 0;
+  box-shadow: none;
+  border-radius: var(--account-radius-dialog);
+  background: var(--account-surface);
+  overflow: hidden;
+  transition:
+    opacity var(--duration-enter) var(--ease-emphasized),
+    transform var(--duration-enter) var(--ease-emphasized);
+}
+
+@starting-style {
+  .dialogPanel {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.dialogPanel[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.98);
+  transition:
+    opacity var(--duration-exit) var(--ease-accelerate),
+    transform var(--duration-exit) var(--ease-accelerate);
+}
+
+/* 遮罩：不支持 backdrop-filter 时用更深的纯色兜底 */
+.scrim > [data-dialog-backdrop] {
+  background: var(--account-scrim-solid);
+  transition: opacity var(--account-duration-scrim) var(--ease-standard);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .scrim > [data-dialog-backdrop] {
+    background: var(--account-scrim);
+    -webkit-backdrop-filter: var(--account-scrim-filter);
+    backdrop-filter: var(--account-scrim-filter);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim > [data-dialog-backdrop] {
+    transition: none;
+  }
+}
+
+/* ── 密码强度：三段刻度 + 文案（拒绝态用 danger，其余只用中性/文本色） ── */
+.strength {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  margin-top: var(--gap-inline);
+}
+
+.strengthBars {
+  display: inline-flex;
+  flex: 1;
+  gap: var(--gap-inline);
+}
+
+.strengthBars > span {
+  flex: 1;
+  height: 3px;
+  border-radius: var(--radius-s);
+  background: var(--account-secondary);
+  transition: background-color var(--duration-snappy) var(--ease-standard);
+}
+
+.strengthBars > span:nth-child(1),
+.strength[data-strength='medium'] .strengthBars > span:nth-child(2),
+.strength[data-strength='strong'] .strengthBars > span {
+  background: var(--account-text-3);
+}
+
+.strength[data-strength='medium'] .strengthBars > span:nth-child(2) {
+  background: var(--account-text-2);
+}
+
+.strength[data-strength='strong'] .strengthBars > span {
+  background: var(--account-text-1);
+}
+
+.strength[data-strength='reject'] .strengthBars > span:nth-child(1) {
+  background: var(--account-danger);
+}
+
+.strengthText {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: var(--font-size-caption);
+  line-height: var(--account-line-caption);
+  color: var(--account-text-3);
+}
+
+.strength[data-strength='reject'] .strengthText {
+  color: var(--account-danger);
+}

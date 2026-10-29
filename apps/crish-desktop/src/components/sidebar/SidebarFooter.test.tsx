@@ -5,6 +5,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SidebarFooter } from './SidebarFooter';
 import { UserProfileCard } from './UserProfileCard';
 import { useSettingsUiStore } from '../../store/settingsUiStore';
+import { useAuthStore } from '../../store/authStore';
+import { useAccountUiStore } from '../../store/accountUiStore';
+import { AUTH_BASE_URL } from '../../api/authApi';
 
 describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
   const onShowToast = vi.fn();
@@ -31,7 +34,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     // 左列用户卡片：纯净单行昵称，无工作空间副文本与头像状态标点
     const userCard = screen.getByTestId('user-profile-card');
     expect(userCard).toBeInTheDocument();
-    expect(screen.getByText('Developer')).toBeInTheDocument();
+    expect(screen.getByText('未登录')).toBeInTheDocument();
     expect(screen.queryByText('Conex Workspace')).toBeNull();
     expect(screen.queryByLabelText('在线')).toBeNull();
 
@@ -109,5 +112,91 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
       '用户卡片：tester (访客用户)，点击打开设置导航'
     );
     expect(cardBtn).not.toHaveAttribute('title');
+  });
+});
+
+describe('UserProfileCard 头像：账户入口与展示', () => {
+  const signedInUser = { id: 'u1', email: 'lin@example.com', name: 'Lin' };
+
+  beforeEach(() => {
+    // 已初始化：避免卡片挂载时 initSession 覆盖测试设定的登录态
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: false,
+      user: null,
+      profile: null,
+    });
+    useAccountUiStore.setState({ view: 'changePassword', loginOpen: false });
+    useSettingsUiStore.setState({ showSettingsOverlay: false });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useAuthStore.setState({ isLoggedIn: false, user: null, profile: null });
+    useAccountUiStore.setState({ view: 'overview', loginOpen: false });
+    useSettingsUiStore.setState({ showSettingsOverlay: false });
+  });
+
+  it('未登录：中性占位头像，点击打开设置「账户」分区概览，不浮出登录弹窗', () => {
+    render(<UserProfileCard />);
+    const avatar = screen.getByTestId('user-avatar-button');
+    expect(avatar).toHaveAttribute('data-avatar', 'placeholder');
+    expect(avatar).toHaveAttribute('aria-label', '登录或注册 Crish 账号');
+    expect(screen.getByText('未登录')).toBeInTheDocument();
+
+    fireEvent.click(avatar);
+
+    const settings = useSettingsUiStore.getState();
+    expect(settings.showSettingsOverlay).toBe(true);
+    expect(settings.settingsActiveTab).toBe('profile');
+    expect(useAccountUiStore.getState().view).toBe('overview');
+    expect(useAccountUiStore.getState().loginOpen).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('已登录无头像图：显示首字母圆与账号名，点击同样进入「账户」', () => {
+    useAuthStore.setState({ isLoggedIn: true, user: signedInUser });
+    render(<UserProfileCard />);
+    const avatar = screen.getByTestId('user-avatar-button');
+    expect(avatar).toHaveAttribute('data-avatar', 'account');
+    expect(avatar).toHaveAttribute('aria-label', '在设置中管理账号');
+    expect(avatar).toHaveTextContent('L');
+    expect(screen.getByText('Lin')).toBeInTheDocument();
+
+    fireEvent.click(avatar);
+    expect(useSettingsUiStore.getState().settingsActiveTab).toBe('profile');
+    expect(useSettingsUiStore.getState().showSettingsOverlay).toBe(true);
+  });
+
+  it('已登录有头像图：相对路径拼账号中心地址，加载失败回落首字母', () => {
+    useAuthStore.setState({
+      isLoggedIn: true,
+      user: signedInUser,
+      profile: {
+        accountId: 'u1',
+        email: 'lin@example.com',
+        displayName: '林',
+        avatarUrl: '/avatars/u1.png',
+        bio: '',
+      },
+    });
+    render(<UserProfileCard />);
+    const avatar = screen.getByTestId('user-avatar-button');
+    const img = avatar.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute('src', `${AUTH_BASE_URL}/avatars/u1.png`);
+    expect(screen.getByText('林')).toBeInTheDocument();
+
+    fireEvent.error(img as HTMLImageElement);
+    expect(avatar.querySelector('img')).toBeNull();
+    expect(avatar).toHaveTextContent('林');
+  });
+
+  it('点击名字仍打开快捷设置菜单，不切换「账户」', async () => {
+    render(<UserProfileCard />);
+    fireEvent.click(screen.getByTestId('user-profile-card'));
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    expect(useSettingsUiStore.getState().showSettingsOverlay).toBe(false);
   });
 });

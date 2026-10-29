@@ -60,9 +60,7 @@ describe('TerminalView 行渲染与固定行高（R2UX-05-07）', () => {
       />
     );
     expect(screen.getByTestId('terminal-truncated')).toBeTruthy();
-    expect(
-      screen.getByText('已截断 42 行早期输出（环形缓冲上限）')
-    ).toBeTruthy();
+    expect(screen.getByText('已省略 42 行较早输出')).toBeTruthy();
   });
 
   it('truncatedCount = 0 不显示截断标记', async () => {

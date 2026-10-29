@@ -17,7 +17,11 @@ import type { Platform } from '@crish/shared-types';
 import { ReconnectingWsClient } from '@/network/ReconnectingWsClient';
 import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
-import { resolveWsUrl, DEFAULT_GATEWAY_PORT } from '@/network/EndpointResolver';
+import {
+  resolveWsUrl,
+  DEFAULT_GATEWAY_PORT,
+  engineTlsEnabled,
+} from '@/network/EndpointResolver';
 import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { connectionStore } from '@/domain/store/connectionStore';
 import type { ConnectionPhase } from '@/domain/store/connectionStore';
@@ -34,14 +38,16 @@ import {
   type PairingCredential,
   type SecureStoreDriver,
 } from '@/db/secureStore';
-import { getObservationWiring } from '../observationWiring';
+import {
+  getObservationWiring,
+  disposeObservationWiring,
+} from '../observationWiring';
 import {
   PAIRING_META_DEVICE_ID_KEY,
   PAIRING_META_DESKTOP_ID_KEY,
   PAIRING_META_HOST_KEY,
   PAIRING_META_PORT_KEY,
   DEFAULT_DEVICE_NAME,
-  engineTlsEnabled,
   buildAuthPersist,
 } from './pairingPersistence';
 import { PairingGateway } from './pairingGateway';
@@ -246,7 +252,11 @@ export class PairingWiring {
 
   private async doHydrate(): Promise<boolean> {
     const cred = await loadPairingCredential(this.driver);
-    if (!cred) return false;
+    if (!cred) {
+      // 无凭据 = 明确的未配对态；同时置位 authStore.hydrated（SplashGate 唯一出口）
+      await authStore.getState().hydrate(this.persist);
+      return false;
+    }
     const [deviceId, desktopId, host, rawPort] = await Promise.all([
       this.driver.getItem(PAIRING_META_DEVICE_ID_KEY),
       this.driver.getItem(PAIRING_META_DESKTOP_ID_KEY),
@@ -261,6 +271,7 @@ export class PairingWiring {
         message: '配对凭据不完整（缺少设备身份），已清理——请重新配对',
         retryable: true,
       });
+      await authStore.getState().hydrate(this.persist);
       return false;
     }
     // 端口恢复（R4 批次4）：缺键（旧版本配对）→ 缺省 8765；非法值 → 缺省
@@ -272,7 +283,7 @@ export class PairingWiring {
     this.pairingPort = port;
     await authStore
       .getState()
-      .hydrate(this.persist, { deviceId, desktopId, host });
+      .hydrate(this.persist, { deviceId, desktopId, host, port });
     // 冷启动已配对 → 直接连接（tokenKey 即持久化的会话密钥材料）
     this.connectSessionOnce({
       url: resolveWsUrl(host, port, engineTlsEnabled()),
@@ -388,7 +399,7 @@ export class PairingWiring {
       this.driver.deleteItem(PAIRING_META_PORT_KEY),
     ]);
     this.detachRevokedHandler();
-    getObservationWiring()?.client.disconnect();
+    disposeObservationWiring();
     this.closePairingConnection();
     this.machine = { ...PAIR_INITIAL_STATE };
     this.lastError = null;
@@ -473,10 +484,17 @@ export class PairingWiring {
    *  attachSend，见 PairingGateway），由发送就绪信号驱动。 */
   private handlePairingPhase(phase: WsPhase): void {
     if (phase === 'dead') {
-      this.reportError({
-        code: 'pairing.transport_failed',
-        message: '配对连接失败（多次重连未恢复），请重试',
-        retryable: true,
+      const message = engineTlsEnabled()
+        ? '无法建立安全连接：请确认同一网络、桌面服务已开启；首次连接需先在手机信任桌面证书'
+        : '无法连接桌面主机，请检查地址与网络后重试';
+      this.dispatch({
+        type: 'onPairError',
+        error: {
+          kind: 'unknown',
+          code: 'pairing.transport_failed',
+          message,
+          retryable: true,
+        },
       });
     }
   }
@@ -647,6 +665,7 @@ export class PairingWiring {
       deviceId,
       desktopId: ok.desktopId,
       host: this.pairingHost,
+      port: this.pairingPort,
     };
     try {
       // 端口一并落库（R4 批次4）：冷启动恢复与 finalize 会话连接共用同一端口

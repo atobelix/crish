@@ -12,9 +12,10 @@ use orchestrator::recovery::{
 
 use super::run_idle::idle_resume;
 use super::{
-    now_ms_internal, CoreRunState, PROVIDER_FAIL_STREAK_KEY, PROVIDER_FAIL_THRESHOLD_DEFAULT,
-    PROVIDER_FAIL_THRESHOLD_KEY, PROVIDER_FAIL_WINDOW_MS_DEFAULT, PROVIDER_RETRY_BACKOFF_MS_KEY,
-    RECOVER_LADDER1_MAX_RETRIES_DEFAULT, RECOVER_LADDER1_MAX_RETRIES_KEY,
+    now_ms_internal, session_meta_key_of, CoreRunState, PROVIDER_FAIL_STREAK_KEY,
+    PROVIDER_FAIL_THRESHOLD_DEFAULT, PROVIDER_FAIL_THRESHOLD_KEY, PROVIDER_FAIL_WINDOW_MS_DEFAULT,
+    PROVIDER_RETRY_BACKOFF_MS_KEY, RECOVER_LADDER1_MAX_RETRIES_DEFAULT,
+    RECOVER_LADDER1_MAX_RETRIES_KEY,
 };
 
 /// D1 §3.2.1：`provider_fail_streak` 键形状（05 形状冻结；字段 snake_case，
@@ -363,15 +364,31 @@ impl CoreRunState {
                 let Some(state) = weak.upgrade() else {
                     return;
                 };
-                // D6 §8 决策 2 路径①：空 Vec 注入——队列条目由新 run 收口
-                // 时 decide_idle_resume drain（wake_watcher.rs 装配注记）；
-                // D7 摘要注入在 spawn_idle_resume_run 内统一拼接
-                idle_resume::spawn_idle_resume_run(state, sid, "idle-resume", Vec::new()).await;
+                // 唤醒条目必须在本轮拉起时注入（watcher 仅在队列非空时拉起）：
+                // 旧实现传空 Vec，导致每次唤醒先跑一轮空 prompt，条目只能等
+                // 该轮收口再 drain——多一次空请求且内容迟一轮才到达。
+                let inject = {
+                    let mut queue = state
+                        .pending_queue
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    idle_resume::drain_pending_to_inject_messages(&mut queue, &sid)
+                };
+                let launched = idle_resume::spawn_idle_resume_run(
+                    Arc::clone(&state),
+                    sid.clone(),
+                    "idle-resume",
+                    inject.clone(),
+                )
+                .await;
+                if !launched {
+                    idle_resume::requeue_injected_messages(&state, &sid, "idle-resume", inject);
+                }
             })
         });
         let weak_cb = Arc::downgrade(self);
         let is_circuit_tripped: Arc<dyn Fn(&str) -> bool + Send + Sync> =
-            Arc::new(move |_sid: &str| {
+            Arc::new(move |sid: &str| {
                 weak_cb
                     .upgrade()
                     .map(|state| {
@@ -379,7 +396,8 @@ impl CoreRunState {
                             return false;
                         };
                         let threshold = state.provider_fail_threshold_config(&db);
-                        let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
+                        let streak_key = session_meta_key_of(sid, PROVIDER_FAIL_STREAK_KEY);
+                        let raw = db.get_session_meta(&streak_key).ok().flatten();
                         let streak = ProviderFailStreak::from_json(raw.as_deref());
                         streak.effective_count(now_ms_internal()) >= threshold
                     })
@@ -400,19 +418,23 @@ impl CoreRunState {
 impl CoreRunState {
     // ── D1/D2/D5：壳层恢复面（熔断计数 / goal_state / 退避注入）─────
 
-    /// D1 §3.2.4：熔断闸查询（读 `provider_fail_streak` 键 count 字段；
-    /// count >= 阈值 → true；fail-open：坏 JSON / 缺字段 → count=0）。
+    /// D1 §3.2.4：熔断闸查询（读 `{session_id}:provider_fail_streak` 键 count
+    /// 字段；count >= 阈值 → true；fail-open：坏 JSON / 缺字段 → count=0）。
+    ///
+    /// 会话隔离：旧实现读全局键，A 会话的连续失败会熔断 B 会话；失败 streak
+    /// 是「本会话 run 的连续失败」，必须按会话命名空间落键。
     ///
     /// 落点 ① transient_retry 入口（经 [Self::provider_fail_streak_count]
     /// 装配进 SessionLoopOptions，D1 §3.2.3）；落点 ② decide_idle_resume
     /// error 分支与 E1 续写分支（02-定夺 S2：两处共用同一查询面）。
-    pub async fn circuit_breaker_is_tripped(&self, _session_id: &str) -> bool {
+    pub async fn circuit_breaker_is_tripped(&self, session_id: &str) -> bool {
         let Some(db) = self.local_db() else {
             return false;
         };
         let threshold = self.provider_fail_threshold_config(&db);
+        let streak_key = session_meta_key_of(session_id, PROVIDER_FAIL_STREAK_KEY);
         tokio::task::spawn_blocking(move || {
-            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
+            let raw = db.get_session_meta(&streak_key).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
             streak.effective_count(now_ms_internal()) >= threshold
         })
@@ -436,8 +458,9 @@ impl CoreRunState {
         };
         let threshold = self.provider_fail_threshold_config(&db);
         let session_id = session_id.to_string();
+        let streak_key = session_meta_key_of(&session_id, PROVIDER_FAIL_STREAK_KEY);
         tokio::task::spawn_blocking(move || {
-            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
+            let raw = db.get_session_meta(&streak_key).ok().flatten();
             let mut streak = ProviderFailStreak::from_json(raw.as_deref());
             let now = now_ms_internal();
             let before = streak.effective_count(now);
@@ -451,10 +474,7 @@ impl CoreRunState {
                     "provider 连续失败计数清零（非瞬态收场/正常完成）"
                 );
             }
-            if db
-                .set_session_meta(PROVIDER_FAIL_STREAK_KEY, &streak.to_json())
-                .is_err()
-            {
+            if db.set_session_meta(&streak_key, &streak.to_json()).is_err() {
                 return false;
             }
             let crossed = before < threshold && streak.count >= threshold;
@@ -486,10 +506,11 @@ impl CoreRunState {
     /// D1 §3.2.3：熔断计数当前值（run 装配面注入 SessionLoopOptions
     /// provider_fail_streak——transient_retry 入口闸 C1 输入；无键 → None
     /// = 不启用闸，向后兼容）
-    pub async fn provider_fail_streak_count(&self, _session_id: &str) -> Option<u32> {
+    pub async fn provider_fail_streak_count(&self, session_id: &str) -> Option<u32> {
         let db = self.local_db()?;
+        let streak_key = session_meta_key_of(session_id, PROVIDER_FAIL_STREAK_KEY);
         tokio::task::spawn_blocking(move || {
-            let raw = db.get_session_meta(PROVIDER_FAIL_STREAK_KEY).ok().flatten();
+            let raw = db.get_session_meta(&streak_key).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
             let count = streak.effective_count(now_ms_internal());
             (count > 0).then_some(count)

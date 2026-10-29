@@ -286,7 +286,7 @@ pub(crate) mod idle_resume {
                 &str,
                 &str,
                 Vec<AgentMessage>,
-            ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+            ) -> Pin<Box<dyn Future<Output = bool> + Send>>
             + Send
             + Sync,
     >;
@@ -1219,7 +1219,9 @@ pub(crate) mod idle_resume {
         let mut queue = EventQueue::new(Arc::clone(&state.store), base, None);
         if let Ok(sequenced) = queue.push(session_id, event).await {
             let bridge = BufferedRunEventBridge::new(state.bridge.clone(), "session-event");
-            let envelope = AgentEventEnvelope::new(sequenced.event, None, Some(sequenced.sequence));
+            // NoPersist 事件不携带占位序列（避免前端按 type:sequence 误去重）
+            let sequence = sequenced.persisted.then_some(sequenced.sequence);
+            let envelope = AgentEventEnvelope::new(sequenced.event, None, sequence);
             bridge.emit(&envelope);
             bridge.flush();
         }
@@ -1606,12 +1608,52 @@ pub(crate) mod idle_resume {
     /// mode = 续 run 类型（D2 §3.4 mode 参数化：idle-resume / recovery-retry
     /// / content-resume / goal-continue，自动恢复类型可观测，G-6）。失败仅
     /// 告警不重试（下一收口再判定；空转护栏防风暴）。
+    /// 拉起失败补偿：把本轮已 drain 的注入文本重新入队（仅队列来源的
+    /// 模式）。`goal-continue` 的注入是 goal_state 派生物，下一轮收口会
+    /// 重新生成，不重复投递。
+    pub(crate) fn requeue_injected_messages(
+        state: &CoreRunState,
+        session_id: &str,
+        mode: &str,
+        inject: Vec<AgentMessage>,
+    ) {
+        if mode == "goal-continue" || inject.is_empty() {
+            return;
+        }
+        let now = now_ms_internal();
+        let mut queue = state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        for (idx, message) in inject.iter().enumerate() {
+            let text = message.text();
+            if text.trim().is_empty() {
+                continue;
+            }
+            queue.replace_or_enqueue(SteeringInputEntry {
+                session_id: session_id.to_string(),
+                id: format!("requeue-{session_id}-{now}-{idx}"),
+                text,
+                attachments: Vec::new(),
+                enqueued_at: now,
+                group_id: None,
+                is_steering: true,
+            });
+        }
+        tracing::warn!(
+            target: "run",
+            session_id,
+            mode,
+            "续 run 拉起失败：已把本轮注入条目回灌队列（防唤醒丢失）"
+        );
+    }
+
     pub(crate) async fn spawn_idle_resume_run(
         state: Arc<CoreRunState>,
         session_id: String,
         mode: &str,
         inject: Vec<AgentMessage>,
-    ) {
+    ) -> bool {
         let mut text = inject
             .iter()
             .map(|message| message.text())
@@ -1683,13 +1725,17 @@ pub(crate) mod idle_resume {
             has_images: None,
             max_turns: None,
         };
-        if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
-            tracing::warn!(
-                target: "run",
-                session_id,
-                error = %error,
-                "idle 续 run 拉起失败（下一收口再判定；空转护栏防风暴）"
-            );
+        match run_task_impl(Arc::clone(&state), options).await {
+            Ok(_) => true,
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    session_id,
+                    error = %error,
+                    "idle 续 run 拉起失败（调用方回灌队列条目；空转护栏防风暴）"
+                );
+                false
+            }
         }
     }
 
@@ -1851,11 +1897,8 @@ pub(crate) mod idle_resume {
             if let AgentEvent::RuntimeError { error, .. } = &sequenced.event {
                 runtime_error = Some(error.clone());
             }
-            let envelope = AgentEventEnvelope::new(
-                sequenced.event,
-                Some(run_id.clone()),
-                Some(sequenced.sequence),
-            );
+            let sequence = sequenced.persisted.then_some(sequenced.sequence);
+            let envelope = AgentEventEnvelope::new(sequenced.event, Some(run_id.clone()), sequence);
             report.add(active.bridge.emit(&envelope));
         }
         if let Some(ref error) = runtime_error {
@@ -2056,7 +2099,19 @@ pub(crate) mod idle_resume {
                     .clone();
                 match launcher {
                     Some(launcher) => {
-                        launcher(&state, &session_id, decision.mode, decision.inject).await
+                        let launched =
+                            launcher(&state, &session_id, decision.mode, decision.inject.clone())
+                                .await;
+                        if !launched {
+                            // 拉起失败补偿：本轮条目已被 drain，必须回灌，
+                            // 否则定时器/子代理完成/恢复条目的唤醒会静默丢失。
+                            requeue_injected_messages(
+                                &state,
+                                &session_id,
+                                decision.mode,
+                                decision.inject,
+                            );
+                        }
                     }
                     None => {
                         // 防御分支：拉起器未注入（生产恒注入——CoreRunState::new

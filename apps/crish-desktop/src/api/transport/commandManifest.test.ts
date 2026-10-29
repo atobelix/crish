@@ -35,7 +35,7 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBe(0);
-      // 与 Rust COMMAND_MANIFEST（165 = 注册面 165 全实装）保持同步；
+      // 与 Rust COMMAND_MANIFEST（171 = 注册面 171 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 曾接线；**单轨收敛
@@ -85,6 +85,7 @@ describe('commandManifest', () => {
       // Win11 贴靠布局热区追加（136 → 137，workbench_set_snap_overlay_rect）
       // PE-07：五条工作区授权命令后 147 → 152；默认根激活命令追加后 152 → 153
       // 原生 Hit-Test 能力诊断命令追加后 160 → 161；Inspector 命令 161 → 162
+      // auth_get_relay_ticket / auth_revoke_device 下线（改走远端中继直连与在线设备面）166 → 164
       const rust = rustManifestOnce();
       expect(registered).toBe(rust.registered.length);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(

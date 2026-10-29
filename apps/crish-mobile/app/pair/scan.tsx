@@ -1,5 +1,10 @@
-import { Redirect } from 'expo-router';
+import { router } from 'expo-router';
+import PairScanScreen from '@/presentation/pair/pairScanScreen';
+import { useSafeBack } from '../_components/useSafeBack';
 
 export default function PairScanRoute() {
-  return <Redirect href="/pair/manual" />;
+  const goBack = useSafeBack();
+  return (
+    <PairScanScreen onClose={goBack} onPaired={() => router.replace('/')} />
+  );
 }

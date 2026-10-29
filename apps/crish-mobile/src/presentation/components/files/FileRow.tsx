@@ -1,33 +1,25 @@
-// 文件行（R2-06b 渲染面；R2UX-06-01 固定行高 + R2UX-06-08 行 44 热区）：
-// - 布局：类型图标（目录 📁 / 文件按类型字形+配色）+ 名称（省略号）+ meta
-//   （文件：大小 + 相对时间，F4-F17；目录：不显示 meta）；
-// - 固定行高（rowHeight 传入，密度三档 44/48/56 由列表层决定）；
-// - memo：条目变化才重渲染（R2UX-05-01 行 memo 纪律同构）；
-// - 语义：可点击列表项 + accessibilityLabel（TalkBack/旁白可用）。
+// 文件行：类型图标 + 名称 + 大小/时间（目录无 meta）。
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import type { FileEntry } from '@/domain/types/domain';
 import { useTheme } from '@/adapters/platform/theme';
+import { formatRelativeTime } from '@/domain/pure/time';
+import { AppText, Icon } from '@/presentation/ui';
 import {
-  DIR_GLYPH,
   detectFileKind,
-  fileKindColor,
-  fileKindGlyph,
+  FILE_KIND_ICON,
+  FILE_KIND_TONE,
   formatFileSize,
-  formatRelativeTime,
   isSensitiveFile,
 } from './fileMeta';
 
 export interface FileRowProps {
   entry: FileEntry;
-  /** 行高（密度三档 44/48/56，R2UX-06-01） */
-  rowHeight: number;
-  /** 点击（目录 = 进入；文件 = 打开预览） */
   onPress: (entry: FileEntry) => void;
+  divider?: boolean;
 }
 
-/** 行 meta 文案（文件：大小 · 相对时间；目录：空，F4-F17） */
-export function rowMetaText(entry: FileEntry, nowMs: number): string {
+export function rowMetaText(entry: FileEntry, nowMs = Date.now()): string {
   if (entry.isDir) return '';
   const parts: string[] = [];
   if (entry.size !== undefined) parts.push(formatFileSize(entry.size));
@@ -39,14 +31,16 @@ export function rowMetaText(entry: FileEntry, nowMs: number): string {
 
 export const FileRow = memo(function FileRow({
   entry,
-  rowHeight,
   onPress,
+  divider = true,
 }: FileRowProps) {
   const theme = useTheme();
   const kind = detectFileKind(entry.name);
-  const glyph = entry.isDir ? DIR_GLYPH : fileKindGlyph(kind);
-  const glyphColor = entry.isDir ? theme.textSecondary : fileKindColor(kind);
-  const meta = rowMetaText(entry, Date.now());
+  const icon = entry.isDir ? 'folder' : FILE_KIND_ICON[kind];
+  const color = entry.isDir
+    ? theme.colors.textSecondary
+    : theme.colors[FILE_KIND_TONE[kind]];
+  const meta = rowMetaText(entry);
   const sensitive = !entry.isDir && isSensitiveFile(entry.name);
 
   return (
@@ -59,39 +53,38 @@ export const FileRow = memo(function FileRow({
       onPress={() => onPress(entry)}
       style={({ pressed }) => [
         styles.row,
-        { height: rowHeight, borderBottomColor: theme.hairline },
-        pressed && styles.pressed,
+        {
+          borderBottomColor: theme.colors.border,
+          borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
+        },
+        pressed && { backgroundColor: theme.colors.surfaceSubtle },
       ]}
     >
-      <Text
-        testID="file-row-glyph"
-        style={[styles.glyph, { color: glyphColor }]}
-      >
-        {glyph}
-      </Text>
-      <Text
-        testID="file-row-name"
-        numberOfLines={1}
-        style={[styles.name, { color: theme.textPrimary }]}
-      >
+      <Icon name={icon} size={20} color={color} />
+      <AppText variant="body" numberOfLines={1} style={styles.name}>
         {entry.name}
-      </Text>
+      </AppText>
       {sensitive ? (
-        <Text
-          testID="file-row-sensitive"
-          style={[styles.sensitive, { color: theme.colorWarning }]}
-        >
+        <AppText variant="caption" color="warning">
           敏感
-        </Text>
+        </AppText>
       ) : null}
       {meta ? (
-        <Text
-          testID="file-row-meta"
+        <AppText
+          variant="caption"
+          color="textTertiary"
           numberOfLines={1}
-          style={[styles.meta, { color: theme.textTertiary }]}
+          style={styles.meta}
         >
           {meta}
-        </Text>
+        </AppText>
+      ) : null}
+      {entry.isDir ? (
+        <Icon
+          name="chevron-right"
+          size={14}
+          color={theme.colors.textTertiary}
+        />
       ) : null}
     </Pressable>
   );
@@ -99,31 +92,20 @@ export const FileRow = memo(function FileRow({
 
 const styles = StyleSheet.create({
   row: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  glyph: {
-    width: 28,
-    fontSize: 16,
-    textAlign: 'center',
+    gap: 12,
   },
   name: {
     flex: 1,
-    fontSize: 14,
-  },
-  sensitive: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   meta: {
-    maxWidth: 120,
-    fontSize: 12,
+    maxWidth: 130,
+    textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
 });
+
+export default FileRow;

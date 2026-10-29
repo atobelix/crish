@@ -10,21 +10,18 @@ import type { RefObject } from 'react';
 import { redactSecrets } from '@crish/shared-utils';
 import {
   FlatList,
-  Platform,
   StyleSheet,
-  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
+import { AppText } from '@/presentation/ui';
 
 /** 固定行高（R2UX-05-07 固定行高数据面；getItemLayout 虚拟化依赖） */
 export const TERMINAL_LINE_HEIGHT = 24;
 /** 吸底跟随阈值（R2UX-05-03 / M4 §5.5：40dp） */
 export const AUTO_FOLLOW_THRESHOLD_DP = 40;
-/** 等宽字体（M4 §1.4：iOS Menlo / Android Droid Sans Mono） */
-const MONO_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 export interface TerminalViewProps {
   /** 纯文本行（ANSI 已剥离，环形窗口原序） */
@@ -52,7 +49,7 @@ export function TerminalView({
   onFollowChange,
   listRef,
   emptyTitle = '暂无终端输出',
-  emptyHint = '该 run 的工具流式输出与任务输出会实时显示在这里',
+  emptyHint = '任务运行时的工具输出会显示在这里',
 }: TerminalViewProps) {
   const theme = useTheme();
   const internalRef = useRef<FlatList<string> | null>(null);
@@ -92,7 +89,7 @@ export function TerminalView({
   return (
     <FlatList
       testID="terminal-list"
-      style={[styles.list, { backgroundColor: theme.bgSecondary }]}
+      style={[styles.list, { backgroundColor: theme.colors.fillSubtle }]}
       data={lines as string[]}
       keyExtractor={(_line, index) => String(startIndex + index)}
       renderItem={({ item, index }) => (
@@ -109,23 +106,39 @@ export function TerminalView({
       scrollEventThrottle={16}
       ListHeaderComponent={
         truncatedCount > 0 ? (
-          <View testID="terminal-truncated" style={styles.truncatedNotice}>
-            <Text
-              style={[styles.truncatedText, { color: theme.textSecondary }]}
-            >
-              已截断 {truncatedCount} 行早期输出（环形缓冲上限）
-            </Text>
+          <View
+            testID="terminal-truncated"
+            style={{
+              paddingHorizontal: theme.space.md,
+              paddingVertical: theme.space.xs,
+            }}
+          >
+            <AppText variant="caption" color="textSecondary">
+              已省略 {truncatedCount} 行较早输出
+            </AppText>
           </View>
         ) : null
       }
       ListEmptyComponent={
-        <View testID="terminal-empty" style={styles.emptyWrap}>
-          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-            {emptyTitle}
-          </Text>
-          <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>
+        <View
+          testID="terminal-empty"
+          style={[
+            styles.emptyWrap,
+            {
+              paddingVertical: theme.space.xxxl,
+              paddingHorizontal: theme.space.xxl,
+              gap: theme.space.sm,
+            },
+          ]}
+        >
+          <AppText variant="headline">{emptyTitle}</AppText>
+          <AppText
+            variant="footnote"
+            color="textSecondary"
+            style={styles.center}
+          >
             {emptyHint}
-          </Text>
+          </AppText>
         </View>
       }
       ref={targetRef}
@@ -146,14 +159,13 @@ const TerminalRow = memo(function TerminalRow({
   // 与桌面 redact 同规范（shared-utils 单实现）；按行打码避免跨 chunk 拆分漏匹配
   const safeText = redactSecrets(text);
   return (
-    <View style={styles.row} testID={testID}>
-      <Text
-        numberOfLines={1}
-        selectable
-        style={[styles.rowText, { color: theme.textPrimary }]}
-      >
+    <View
+      style={[styles.row, { paddingHorizontal: theme.space.md }]}
+      testID={testID}
+    >
+      <AppText variant="mono" numberOfLines={1} selectable>
         {safeText}
-      </Text>
+      </AppText>
     </View>
   );
 });
@@ -165,33 +177,11 @@ const styles = StyleSheet.create({
   row: {
     height: TERMINAL_LINE_HEIGHT,
     justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  rowText: {
-    fontFamily: MONO_FONT,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  truncatedNotice: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  truncatedText: {
-    fontSize: 12,
   },
   emptyWrap: {
     alignItems: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-    gap: 8,
   },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  emptyHint: {
-    fontSize: 13,
-    lineHeight: 20,
+  center: {
     textAlign: 'center',
   },
 });

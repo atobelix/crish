@@ -40,11 +40,11 @@ import {
 } from '../observationWiring';
 import {
   buildAuthPersist,
-  engineTlsEnabled,
   PAIRING_META_DEVICE_ID_KEY,
   PAIRING_META_DESKTOP_ID_KEY,
   PAIRING_META_HOST_KEY,
 } from './pairingPersistence';
+import { engineTlsEnabled } from '@/network/EndpointResolver';
 import {
   buildSessionGateway,
   buildSignedRequest,
@@ -1113,6 +1113,29 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
     expect(await wiring.hydrate()).toBe(true);
     expect(sessionCtxs).toHaveLength(1);
     expect(sessionCtxs[0]!.url).toBe('ws://10.0.2.2:8765/v1/events');
+  });
+
+  it('EXPO_PUBLIC_ENGINE_TLS=false：观测接线冷启动重连同样解析 ws', () => {
+    process.env.EXPO_PUBLIC_ENGINE_TLS = 'false';
+    authStore.setState({
+      host: '10.0.2.2',
+      port: 8765,
+      pairState: 'paired',
+    });
+    const urls: string[] = [];
+    const wiring = ensureObservationWiring({
+      factory: (url) => {
+        urls.push(url);
+        return makeSocket();
+      },
+    });
+    try {
+      expect(wiring?.url).toBe('ws://10.0.2.2:8765/v1/events');
+      expect(urls[0]).toBe('ws://10.0.2.2:8765/v1/events');
+    } finally {
+      resetObservationWiringForTest();
+      authStore.setState({ host: null, port: null, pairState: 'unpaired' });
+    }
   });
 
   it('engineTlsEnabled：仅精确值 false 关闭 TLS（缺省/其它值 → true）', () => {

@@ -13,6 +13,8 @@
 
 import { invokeTyped, type InvokeTypedResult } from '../tauriInvoke';
 import { readModelsYamlIpc, writeModelsYamlIpc } from '../modelsCatalogIpc';
+import { modelsCatalogStore } from '../modelsCatalogStore';
+import type { ModelsCatalogSnapshot } from '../modelsCatalogTypes';
 import type {
   ModelSpec,
   ModelsYamlTree,
@@ -52,35 +54,73 @@ export type ConfigSecretRevealResult = ConfigSecretStatus & {
 };
 
 /** config_secret_set：写 profile API key 到 DPAPI 凭据槽（空串 = 清除） */
-export function configSecretSet(
-  profileId: string,
-  apiKey: string
+export async function configSecretSet(
+  providerId: string,
+  apiKey: string,
+  expectedRevision?: string
 ): Promise<InvokeTypedResult<ConfigSecretStatus>> {
-  return invokeTyped<ConfigSecretStatus>('config_secret_set', {
-    profileId,
+  const rev = expectedRevision ?? modelsCatalogStore.getState().revision ?? '';
+  const res = await invokeTyped<ModelsCatalogSnapshot>('config_secret_set', {
+    providerId,
     apiKey,
+    expectedRevision: rev,
   });
+  if (res.status === 'ok') {
+    if (res.data) {
+      modelsCatalogStore.acceptSnapshot(res.data);
+    }
+    const cred = res.data?.credentialStates?.[providerId];
+    return {
+      status: 'ok',
+      data: {
+        ok: true,
+        profileId: providerId,
+        hasKey: cred?.hasKey ?? Boolean(apiKey.trim()),
+        apiKeyLast4: cred?.apiKeyLast4,
+      },
+    };
+  }
+  return res as unknown as InvokeTypedResult<ConfigSecretStatus>;
 }
 
 /** config_secret_get：仅回 { hasKey, apiKeyLast4 }（K-02，不回明文） */
 export function configSecretGet(
-  profileId: string
+  providerId: string
 ): Promise<InvokeTypedResult<ConfigSecretStatus>> {
-  return invokeTyped<ConfigSecretStatus>('config_secret_get', { profileId });
+  return invokeTyped<ConfigSecretStatus>('config_secret_get', { providerId });
 }
 
 /** config_secret_has：仅探测是否存在 */
 export function configSecretHas(
-  profileId: string
+  providerId: string
 ): Promise<InvokeTypedResult<ConfigSecretStatus>> {
-  return invokeTyped<ConfigSecretStatus>('config_secret_has', { profileId });
+  return invokeTyped<ConfigSecretStatus>('config_secret_has', { providerId });
 }
 
 /** config_secret_clear：清除指定 profile 密钥 */
-export function configSecretClear(
-  profileId: string
+export async function configSecretClear(
+  providerId: string,
+  expectedRevision?: string
 ): Promise<InvokeTypedResult<ConfigSecretStatus>> {
-  return invokeTyped<ConfigSecretStatus>('config_secret_clear', { profileId });
+  const rev = expectedRevision ?? modelsCatalogStore.getState().revision ?? '';
+  const res = await invokeTyped<ModelsCatalogSnapshot>('config_secret_clear', {
+    providerId,
+    expectedRevision: rev,
+  });
+  if (res.status === 'ok') {
+    if (res.data) {
+      modelsCatalogStore.acceptSnapshot(res.data);
+    }
+    return {
+      status: 'ok',
+      data: {
+        ok: true,
+        profileId: providerId,
+        hasKey: false,
+      },
+    };
+  }
+  return res as unknown as InvokeTypedResult<ConfigSecretStatus>;
 }
 
 /**
@@ -88,11 +128,11 @@ export function configSecretClear(
  * uiConfirm=true 才回明文（webview 需用户手势确认后再调用）；false 仅回 last4。
  */
 export function configSecretReveal(
-  profileId: string,
+  providerId: string,
   uiConfirm: boolean
 ): Promise<InvokeTypedResult<ConfigSecretRevealResult>> {
   return invokeTyped<ConfigSecretRevealResult>('config_secret_reveal', {
-    profileId,
+    providerId,
     uiConfirm,
   });
 }
@@ -153,7 +193,11 @@ export function configProfileApply(
 }
 
 /** 空树（首次写入用；对应后端 `content_revision(None)` = `"missing"`）。 */
-const EMPTY_TREE: ModelsYamlTree = { version: 2, activeModel: null, providers: {} };
+const EMPTY_TREE: ModelsYamlTree = {
+  version: 2,
+  activeModel: null,
+  providers: {},
+};
 
 const APPLY_TREE_MAX_ATTEMPTS = 3;
 

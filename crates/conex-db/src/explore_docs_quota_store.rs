@@ -59,17 +59,19 @@ impl ExploreDocsQuotaStore for SessionMetaExploreDocsQuotaStore {
 
     fn consume(&self, session_id: &str, run_id: &str) -> Result<ExploreDocsQuotaSnapshot, String> {
         let key = session_meta_key_of(session_id, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED);
-        // 读改写：当前快照 +1（saturating_add 防溢出回绕）并登记最近
-        // 消耗者；落库失败返回错误文案（调用方按执行失败处理，不 panic）
-        let current = self.snapshot(session_id);
-        let next = ExploreDocsQuotaSnapshot {
-            consumed: current.consumed.saturating_add(1),
-            last_consumer_run_id: Some(run_id.to_string()),
-        };
+        // 单写闭包内读改写：并发 consume 序列化于组提交 Actor 单写事务，
+        // 不存在「先读后写」双事务丢更新（旧实现 snapshot → set 两步会少计）。
+        let run_id = run_id.to_string();
         self.db
-            .set_session_meta(&key, &explore_docs_consumed_value(&next))
+            .update_session_meta(&key, move |current| {
+                let cur = parse_explore_docs_consumed(current);
+                Some(explore_docs_consumed_value(&ExploreDocsQuotaSnapshot {
+                    consumed: cur.consumed.saturating_add(1),
+                    last_consumer_run_id: Some(run_id),
+                }))
+            })
             .map_err(|e| format!("探索类文档配额计数落库失败：{e}"))?;
-        Ok(next)
+        Ok(self.snapshot(session_id))
     }
 
     fn try_consume(

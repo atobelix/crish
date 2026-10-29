@@ -1,21 +1,16 @@
-import { Redirect, router } from 'expo-router';
-import { useAuthStore } from '@/adapters/hooks/useAppStore';
-import { NotificationCenterScreen } from '@/presentation/screens';
+import { router, type Href } from 'expo-router';
+import NotificationCenterScreen from '@/presentation/screens/notificationCenterScreen';
+import { Protected } from './_components/Protected';
+import { useSafeBack } from './_components/useSafeBack';
 
-// 通知中心（R2-04 部分 5：应用内通知列表 + 未读管理；入口 = 首页顶部铃铛，app/(tabs)/index）
-// 路由骨架：守卫（未配对 → 配对页）+ 深链跳转注入（notificationRouteToPath 已在页面层翻译
-// 为 expo-router 路径；本层仅 router.push）
 export default function NotificationsRoute() {
-  const pairState = useAuthStore((s) => s.pairState);
-
-  if (pairState !== 'paired') {
-    return <Redirect href="/pair/welcome" />;
-  }
-
+  const goBack = useSafeBack();
   return (
-    <NotificationCenterScreen
-      onBack={() => router.back()}
-      onOpenNotification={(path) => router.push(path)}
-    />
+    <Protected>
+      <NotificationCenterScreen
+        onBack={goBack}
+        onOpenNotification={(path) => router.push(path as Href)}
+      />
+    </Protected>
   );
 }

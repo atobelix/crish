@@ -195,6 +195,7 @@ impl LocalDb {
                 kind: DbFailureKind::Other("delete_session".to_string()),
             })?;
             delete_session_meta_prefix_conn(conn, &session_id)?;
+            orphan::delete_session_sequence_conn(conn, &session_id)?;
             Ok(())
         })
     }

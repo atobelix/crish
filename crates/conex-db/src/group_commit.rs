@@ -592,6 +592,9 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
 
     let mut pending_responses = Vec::with_capacity(batch_len);
     let conn = &mut state.conn;
+    // RELEASE 失败 = 事务栈状态不可信：整批回滚，已成功任务也必须回执
+    // 失败（否则调用方会以为已提交而重试 → 重复行）。
+    let mut abort_error: Option<DbFailure> = None;
 
     for (idx, task) in batch.drain(..).enumerate() {
         let sp_name = format!("gc_sp_{idx}");
@@ -619,7 +622,11 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
                         kind: DbFailureKind::Other("savepoint_release_failed".to_string()),
                     };
                     stats.record_error();
-                    pending_responses.push((task.respond_to, Err(err)));
+                    pending_responses.push((task.respond_to, Err(err.clone())));
+                    abort_error = Some(err);
+                    // 未执行任务的回执通道随迭代器 drop 释放（等待端收到
+                    // 取消错误），不产生任何「成功」假象。
+                    break;
                 } else {
                     pending_responses.push((task.respond_to, Ok(val)));
                 }
@@ -647,6 +654,19 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
                 pending_responses.push((task.respond_to, Err(err)));
             }
         }
+    }
+
+    if let Some(abort) = abort_error {
+        logged_cleanup_rollback(conn, "组提交批次 savepoint RELEASE 失败，整批回滚");
+        for (resp, _) in pending_responses.drain(..) {
+            if resp.send(Err(abort.clone())).is_err() {
+                tracing::debug!(
+                    target: "conex_db",
+                    "组提交批次回滚回执无人接收（等待端已释放），回执丢弃"
+                );
+            }
+        }
+        return;
     }
 
     // 统一提交批次内所有成功项

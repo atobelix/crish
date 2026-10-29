@@ -348,10 +348,10 @@ fn protect_block_start(text: &str) -> String {
 }
 
 fn escape_block_start(body: &str) -> String {
-    if body.is_empty() {
+    // 序列化路径不应因边界输入 panic：非空检查后取首字符，取不到即原样返回。
+    let Some(first) = body.chars().next() else {
         return String::new();
-    }
-    let first = body.chars().next().expect("non-empty");
+    };
 
     // 强调 / 代码分隔符：实体化整个起始 run，避免残留分隔符配对。
     if matches!(first, '*' | '_' | '`') {

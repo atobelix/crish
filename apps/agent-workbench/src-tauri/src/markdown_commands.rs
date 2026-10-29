@@ -78,10 +78,7 @@ pub async fn md_render_batch(
 /// wire 名 = `core_md_render_stream`。`stream_mode=true` 跳过 syntect 高亮，
 /// 输出与完成态一致的行 span 外壳；不写缓存（流式片段唯一，缓存无收益）。
 #[tauri::command(rename = "core_md_render_stream")]
-pub async fn md_render_stream(
-    text: String,
-    variant: String,
-) -> Result<RenderResultDto, CoreError> {
+pub async fn md_render_stream(text: String, variant: String) -> Result<RenderResultDto, CoreError> {
     let options = parse_options(&variant)?;
     tokio::task::spawn_blocking(move || {
         RenderResultDto::from(conex_markdown::render_markdown_stream(&text, options))

@@ -17,10 +17,6 @@ import {
   settingsStore,
   type SettingsState,
 } from '@/domain/store/settingsStore';
-import {
-  devicePresenceStore,
-  type DevicePresenceState,
-} from '@/adapters/wiring/devicePresenceStore';
 
 export const useAuthStore = <T>(selector: (s: AuthState) => T): T =>
   useStore(authStore, useShallow(selector));
@@ -42,8 +38,3 @@ export const useSessionStore = <T>(selector: (s: SessionState) => T): T =>
 /** 设置面订阅（R4 批次2 单真源：appearance/notification 持久化分组） */
 export const useSettingsStore = <T>(selector: (s: SettingsState) => T): T =>
   useStore(settingsStore, useShallow(selector));
-
-/** 设备在场订阅（R2-05 状态卡：设备数，null = 未知） */
-export const useDevicePresenceStore = <T>(
-  selector: (s: DevicePresenceState) => T
-): T => useStore(devicePresenceStore, useShallow(selector));

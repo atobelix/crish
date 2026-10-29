@@ -91,6 +91,7 @@ export function defaultConnectSession(
   const gateway =
     opts.gateway ?? buildSessionGateway(ctx.deviceId, ctx.tokenKey);
   ensureObservationWiring({
+    url: ctx.url,
     token: ctx.token,
     gateway,
     ...(opts.factory ? { factory: opts.factory } : {}),

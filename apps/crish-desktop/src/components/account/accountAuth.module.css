@@ -1,0 +1,159 @@
+/* 登录弹窗（仅登录前）：760×480 左右分栏，左品牌栏 280，右表单栏 320 居中；
+ * 只有右栏随步骤交叉淡入（AccountCenterDialog 中以 motion 驱动）。 */
+
+.panel {
+  width: min(var(--account-auth-width), calc(100vw - var(--space-8)));
+  height: min(var(--account-auth-height), calc(100vh - var(--space-8)));
+}
+
+.body {
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.split {
+  display: flex;
+  height: 100%;
+}
+
+.brand {
+  display: flex;
+  flex: 0 0 var(--account-auth-brand-width);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  background: var(--account-panel);
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--account-mark-size);
+  height: var(--account-mark-size);
+  border-radius: var(--account-radius);
+  background: var(--account-action);
+}
+
+.markSvg {
+  width: 60%;
+  height: 60%;
+}
+
+.markArc {
+  stroke: var(--account-action-text);
+}
+
+.markDot {
+  fill: var(--brand);
+}
+
+.brandName {
+  font-size: var(--account-font-size-brand);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--account-tracking-brand);
+  color: var(--account-text-2);
+}
+
+.main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  width: var(--account-form-width);
+  max-width: calc(100% - var(--space-8));
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--account-line-title);
+  letter-spacing: var(--account-tracking-title);
+  color: var(--account-text-1);
+}
+
+.subtitle {
+  margin: var(--gap-group) 0 0;
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-text-3);
+  overflow-wrap: anywhere;
+}
+
+.afterTitle {
+  margin-top: var(--gap-section);
+}
+
+.gapGroup {
+  margin-top: var(--gap-group);
+}
+
+.gapBlock {
+  margin-top: var(--space-4);
+}
+
+.messageRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-group);
+  margin-top: var(--gap-group);
+}
+
+.messageRowEnd {
+  justify-content: flex-end;
+}
+
+.corner {
+  position: absolute;
+  top: var(--space-4);
+  z-index: 1;
+}
+
+.cornerStart {
+  left: var(--space-4);
+}
+
+.cornerEnd {
+  right: var(--space-4);
+}
+
+.terms {
+  position: absolute;
+  right: 0;
+  bottom: var(--space-6);
+  left: 0;
+  margin: 0;
+  font-size: var(--font-size-meta);
+  line-height: var(--account-line-caption);
+  text-align: center;
+  color: var(--account-text-4);
+}
+
+.termsLink {
+  color: var(--account-text-2);
+}
+
+.termsButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--account-text-2);
+  cursor: pointer;
+}

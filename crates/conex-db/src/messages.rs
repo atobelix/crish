@@ -52,27 +52,29 @@ impl LocalDb {
         })
     }
 
-    /// 保存会话正文（增量 Upsert + Diff Shrink，显式 rebase API）。
+    /// 保存会话正文（增量 Upsert + 显式全量替换，权威写入 API）。
     ///
     /// 经组提交 Writer 提交（外层 Actor `BEGIN IMMEDIATE` 事务保证原子）。
-    /// `message_count` 绝对赋值为 `messages.len()`（v12 后双触发器已 DROP）。
-    /// 兼容旧调用：不传 `batch_version` 时跳过 CAS（见
-    /// [Self::save_session_body_versioned] 的「禁止静默当 CAS 通过」——
-    /// 缺参路径显式文档化为非 CAS 全量 rebase，导入/恢复/自愈用）。
+    /// `message_count` 取库内实际行数（v12 后双触发器已 DROP）。
+    /// 本 API 表示「调用方持有完整正文」：允许 Diff Shrink（撤回/清空/恢复自愈）。
+    /// 局部快照/进程首批 rebase 必须走 [Self::save_session_body_versioned]
+    /// 的 `None` 分支——该分支不缩容，避免按短载荷删掉库内历史。
     pub fn save_session_body(
         &self,
         session_id: &str,
         messages: &[SessionMessage],
     ) -> Result<(), DbFailure> {
-        self.save_session_body_versioned(session_id, messages, None)
+        self.save_session_body_inner(session_id, messages, None, true)
     }
 
     /// 带 CAS 的会话正文保存（D3-4 / DEL-8 → P04 增量 Upsert）。
     ///
     /// - `batch_version = Some(v)`：要求 `sessions.body_version < v` 才写入；
     ///   过期写返回 [`DbFailureKind::CasConflict`]（可识别错误，禁止静默 Ok）。
-    /// - `batch_version = None`：显式非 CAS 全量 rebase（导入 / 损坏恢复 /
-    ///   **进程首批**）；该分支会把 `sessions.body_version` **归零**作为
+    ///   该分支允许 Diff Shrink（版本递增即调用方确认了更短的权威正文）。
+    /// - `batch_version = None`：显式非 CAS rebase（导入 / 损坏恢复 /
+    ///   **进程首批**）；该分支只做 Upsert 合并，**不删除**库内现有尾部——
+    ///   载荷可能只是局部快照。随后把 `sessions.body_version` **归零**作为
     ///   「新纪元」标记，使前端随后递传的 `Some(1..n)` 与库中序列连续
     ///   （详见 [save_session_body_conn] 第 5 步的归零说明）。
     ///
@@ -84,10 +86,20 @@ impl LocalDb {
         messages: &[SessionMessage],
         batch_version: Option<i64>,
     ) -> Result<(), DbFailure> {
+        self.save_session_body_inner(session_id, messages, batch_version, batch_version.is_some())
+    }
+
+    fn save_session_body_inner(
+        &self,
+        session_id: &str,
+        messages: &[SessionMessage],
+        batch_version: Option<i64>,
+        allow_shrink: bool,
+    ) -> Result<(), DbFailure> {
         let session_id = session_id.to_string();
         let messages = messages.to_vec();
         self.write_blocking(move |conn| {
-            save_session_body_conn(conn, &session_id, &messages, batch_version)
+            save_session_body_conn(conn, &session_id, &messages, batch_version, allow_shrink)
         })
     }
 
@@ -132,11 +144,12 @@ impl LocalDb {
 /// 5. `message_count = messages.len()` 绝对赋值（禁单调累加 / 禁 COUNT(*) 唯一路径）。
 ///
 /// 仅接收 `&mut Connection`，禁止捕获 `LocalDb` / `self`；禁止内部 `conn.transaction()`。
-pub fn save_session_body_conn(
+fn save_session_body_conn(
     conn: &mut rusqlite::Connection,
     session_id: &str,
     messages: &[SessionMessage],
     batch_version: Option<i64>,
+    allow_shrink: bool,
 ) -> Result<(), DbFailure> {
     // 1. 自愈补建会话行（与 session_commands::self_heal 同源，防 FK 失败）
     conn.execute(
@@ -255,24 +268,37 @@ pub fn save_session_body_conn(
     // 释放预编译语句，避免占住连接借用（后续 DELETE / UPDATE）
     drop(upsert_stmt);
 
-    // 4. 差异化尾部收缩（Diff Shrink）：?2 = messages.len()；
-    //    常规追加匹配 0 行；收缩/清空仅删 seq >= 新长度的越界尾部。
-    let new_len = messages.len() as i64;
-    conn.execute(
-        "DELETE FROM session_messages WHERE session_id = ?1 AND seq >= ?2",
-        rusqlite::params![session_id, new_len],
-    )
-    .map_err(|e| DbFailure {
-        message: format!("save_session_body_diff_shrink: {e}"),
-        kind: DbFailureKind::Other("save_session_body".to_string()),
-    })?;
+    // 4. 差异化尾部收缩（Diff Shrink）：仅权威全量正文允许缩容
+    //    （CAS 成功批次 = 前端确认的更高版本；save_session_body = 显式替换）。
+    //    非 CAS rebase 载荷可能只是局部快照，按长度删尾会物理抹掉库内历史。
+    if allow_shrink {
+        let new_len = messages.len() as i64;
+        conn.execute(
+            "DELETE FROM session_messages WHERE session_id = ?1 AND seq >= ?2",
+            rusqlite::params![session_id, new_len],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("save_session_body_diff_shrink: {e}"),
+            kind: DbFailureKind::Other("save_session_body".to_string()),
+        })?;
+    }
 
-    // 5. 推进元数据：message_count 绝对赋值 + 可选 body_version
-    //    （禁止 COUNT(*) 批末重算作为唯一路径——收缩/清空场景下绝对赋值即真理）
+    // 5. 推进元数据：message_count 取库内实际行数（CAS 缩容后与载荷等长；
+    //    非 CAS 分支保留的既有尾部也必须计数，禁止用载荷长度直接覆盖）。
+    let stored_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM session_messages WHERE session_id = ?1",
+            rusqlite::params![session_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| DbFailure {
+            message: format!("save_session_body_count: {e}"),
+            kind: DbFailureKind::Other("save_session_body".to_string()),
+        })?;
     if let Some(batch_version) = batch_version {
         conn.execute(
             "UPDATE sessions SET message_count = ?2, body_version = ?3 WHERE id = ?1",
-            rusqlite::params![session_id, new_len, batch_version],
+            rusqlite::params![session_id, stored_count, batch_version],
         )
     } else {
         // 显式非 CAS rebase（导入 / 恢复 / 自愈 / **进程首批**）：更新
@@ -286,7 +312,7 @@ pub fn save_session_body_conn(
         // （跨进程时旧批次随进程结束，无并发可防，归零不削弱防线）。
         conn.execute(
             "UPDATE sessions SET message_count = ?2, body_version = 0 WHERE id = ?1",
-            rusqlite::params![session_id, new_len],
+            rusqlite::params![session_id, stored_count],
         )
     }
     .map_err(|e| DbFailure {

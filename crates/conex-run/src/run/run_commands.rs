@@ -899,10 +899,7 @@ pub(crate) async fn persist_subagent_heartbeats(state: &Arc<CoreRunState>) {
         return;
     };
     let candidates: Vec<(String, String)> = {
-        let runs = state
-            .active_runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let runs = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
         runs.iter()
             .filter_map(|(run_id, active)| {
                 active
@@ -979,7 +976,11 @@ fn abort_and_clean_hung_run(active: &ActiveRun, state: &CoreRunState, run_id: &s
 /// 1. 查询 `active.suspended_until_ms()`：
 ///    - 若处于合法挂起租约期内（`now < until_ms`）：看门狗绝对放行，严禁误杀！
 ///    - 若挂起租约已到期（`now >= until_ms`）：判定为卡死需满足 `now.saturating_sub(until_ms) > RUN_HANG_TIMEOUT_MS`；
-///    - 若无租约（常规活跃态）：`!is_finished && now.saturating_sub(last_beat) > RUN_HANG_TIMEOUT_MS` 判定为卡死挂起；
+///    - **活跃推进态不做「无心跳」强杀**：活跃态的真实耗时由各组件自身超时
+///      兜底（provider 流超时 / 工具 timeoutMs ≤ 600s / 审批 120s / 子代理
+///      等待），一段数分钟的静默长构建与「死锁」在没有进展事件时不可区分；
+///      旧实现按 120s 无心跳强杀，会把合法的长 run 当作卡死中断（高危误杀）。
+///      活跃态只有驱动任务已收口时才由孤儿回收接管（见判定 4）。
 /// 2. 判定为卡死后：强行打断底层 Tokio Future、广播 AbortSignal、推进终态收口并向队列注入自愈通知；
 /// 3. 若未卡死且未完成（正常推进或在合法挂起中）：清零去抖并放行；
 /// 4. 若驱动任务已收口（`is_finished == true`）且仍停留 active_runs：连续 [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮去抖触发孤儿收割。
@@ -1000,19 +1001,13 @@ pub async fn reap_orphan_runs_round(state: &Arc<CoreRunState>) {
             .load(std::sync::atomic::Ordering::Relaxed);
         let suspended_until = active.suspended_until_ms();
 
-        // 核心加固：动态租约判定与看门狗豁免
-        let is_hung = if let Some(until_ms) = suspended_until {
-            if now < until_ms {
-                // 处于合法挂起租约期内（如正在等待 300s 的 429 Retry-After）：
-                // 看门狗绝对放行，严禁误杀！
-                false
-            } else {
-                // 挂起租约已到期，但 Driver 超过 120s 仍未唤醒恢复心跳：判定为真正的卡死挂起
-                now.saturating_sub(until_ms) > RUN_HANG_TIMEOUT_MS
-            }
-        } else {
-            // 常规活跃态：超过 120 秒无心跳，判定为卡死挂起
-            !is_finished && (now.saturating_sub(last_beat) > RUN_HANG_TIMEOUT_MS)
+        // 核心加固：动态租约判定与看门狗豁免（活跃态不做时间强杀，见函数文档）
+        let is_hung = match suspended_until {
+            // 处于合法挂起租约期内（如正在等待 300s 的 429 Retry-After）：绝对放行
+            Some(until_ms) if now < until_ms => false,
+            // 挂起租约已到期，但 Driver 超过 120s 仍未唤醒恢复心跳：卡死挂起
+            Some(until_ms) => !is_finished && now.saturating_sub(until_ms) > RUN_HANG_TIMEOUT_MS,
+            None => false,
         };
 
         if is_hung {
@@ -1351,9 +1346,7 @@ mod tests {
         let running_handle = tokio::spawn(async {
             tokio::time::sleep(Duration::from_millis(5000)).await;
         });
-        let active =
-            build_active_run(&state, "s1", "run-suspended", Some(running_handle))
-                .await;
+        let active = build_active_run(&state, "s1", "run-suspended", Some(running_handle)).await;
 
         // 进入 300 秒弹性退避挂起租约
         active.enter_suspended_phase(
@@ -1385,13 +1378,8 @@ mod tests {
         let running_handle = tokio::spawn(async {
             tokio::time::sleep(Duration::from_millis(10000)).await;
         });
-        let active = build_active_run(
-            &state,
-            "s1",
-            "run-hung-after-lease",
-            Some(running_handle),
-        )
-        .await;
+        let active =
+            build_active_run(&state, "s1", "run-hung-after-lease", Some(running_handle)).await;
 
         let now = conex_shared::time::unix_millis() as u64;
         // 人工模拟一个过去已超期 130 秒的挂起租约
@@ -1423,19 +1411,17 @@ mod tests {
     }
 
     /// W3-T1：常规活跃态超过 120s 无心跳判定为卡死并触发自愈
+    /// ——该语义已撤销（活跃态无进展事件 ≠ 卡死：静默长工具/长审批与死锁
+    /// 不可区分，时间强杀会中断合法 run）。现行语义见
+    /// [`watchdog_does_not_kill_active_run_with_stale_heartbeat`]：活跃态只由
+    /// 组件自身超时兜底，看门狗仅处理「驱动已收口」与「挂起租约过期」。
     #[tokio::test]
-    async fn watchdog_reaps_active_run_with_no_heartbeat_over_120s() {
+    async fn watchdog_active_phase_requires_driver_progress_not_wall_clock() {
         let state = test_state();
         let running_handle = tokio::spawn(async {
             tokio::time::sleep(Duration::from_millis(10000)).await;
         });
-        let active = build_active_run(
-            &state,
-            "s1",
-            "run-active-stale",
-            Some(running_handle),
-        )
-        .await;
+        let active = build_active_run(&state, "s1", "run-active-stale", Some(running_handle)).await;
 
         let now = conex_shared::time::unix_millis() as u64;
         // 人工将心跳时间拨回 130 秒前
@@ -1447,12 +1433,15 @@ mod tests {
 
         let registry = state.active_runs.lock().unwrap();
         assert!(
-            !registry.contains_key("run-active-stale"),
-            "超过 120s 无心跳的活跃任务必须被看门狗收割"
+            registry.contains_key("run-active-stale"),
+            "活跃态无心跳不得触发时间强杀（组件超时才是权威边界）"
         );
-        assert!(active.abort_signal.is_aborted(), "AbortSignal 必须触发");
-
-        let queue = state.pending_queue.lock().unwrap();
-        assert_eq!(queue.len(), 1, "自愈通知必须入队");
+        assert!(!active.abort_signal.is_aborted(), "AbortSignal 不得触发");
+        drop(registry);
+        assert_eq!(
+            state.pending_queue.lock().unwrap().len(),
+            0,
+            "未判定卡死不得注入自愈通知"
+        );
     }
 }

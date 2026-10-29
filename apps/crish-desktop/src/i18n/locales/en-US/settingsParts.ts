@@ -142,7 +142,6 @@ export const settingsPartRest = {
   'profile.importFailed': 'Import failed: {error}',
   'profile.serviceDisconnected': 'Service disconnected',
   'profile.connAbnormal': 'Connection Issue',
-  'profile.flowbitSection': 'Flowbit Account & Multi-Device Sync',
   'profile.currentEnvSection': 'Current Environment',
   'profile.currentProject': 'Current Project',
   'profile.localWorkspace': 'Local workspace',
@@ -227,6 +226,13 @@ export const settingsPartRest = {
   'devices.copyPairCode': 'Copy Pairing Code',
   'devices.remainingTime': 'Remaining time:',
   'devices.closePairing': 'Close Pairing',
+  'devices.securitySection': 'Secure Connection',
+  'devices.exportCertTitle': 'Desktop Certificate',
+  'devices.exportCertDesc':
+    'Install and fully trust this certificate on your phone before connecting over the encrypted channel',
+  'devices.exportCertBtn': 'Export Certificate',
+  'devices.exportCertSuccess': 'Certificate exported',
+  'devices.exportCertFailed': 'Failed to export certificate, please try again',
   'devices.revokeConfirmTitle': 'Revoke Device',
   'devices.revokeConfirmDesc':
     'The device will be disconnected immediately and its token invalidated. Re-pairing will be required. Confirm revocation?',

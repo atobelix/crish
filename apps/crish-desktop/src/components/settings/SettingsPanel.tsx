@@ -8,7 +8,8 @@ import React, {
   Suspense,
 } from 'react';
 import styles from './SettingsPanel.module.css';
-import { useSettingsUiStore } from '../../store/storeAccess';
+import { useAuthField, useSettingsUiStore } from '../../store/storeAccess';
+import { useAccountUiStore } from '../../store/accountUiStore';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,
@@ -268,6 +269,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const activeLabel = t(currentTabDef.labelKey);
   const panelId = `${baseId}-panel-${safeActiveTab}`;
   const activeTabBtnId = `${baseId}-tab-${safeActiveTab}`;
+  // 「账户」分区的修改密码子页：面包屑多一级，Esc 先回到账户概览
+  const accountView = useAccountUiStore((state) => state.view);
+  const setAccountView = useAccountUiStore((state) => state.setView);
+  const isLoggedIn = useAuthField((state) => state.isLoggedIn);
+  const inAccountSubView =
+    safeActiveTab === 'profile' &&
+    accountView === 'changePassword' &&
+    isLoggedIn;
 
   useEffect(() => {
     void refreshProductCapabilities().then(() => {
@@ -284,6 +293,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     selectTab,
     navFocusId,
   });
+  const { handleSettingsEscape } = nav;
+  const handleEscape = useCallback(
+    (event: KeyboardEvent): boolean => {
+      if (!inAccountSubView) return handleSettingsEscape(event);
+      event.preventDefault();
+      setAccountView('overview');
+      return true;
+    },
+    [inAccountSubView, handleSettingsEscape, setAccountView]
+  );
 
   return (
     // dismissible=false：LayerStack 不对设置做「外部点击即退栈」（portal 进 overlay 的下拉、
@@ -296,7 +315,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       closeOnBackdropClick
       ariaLabel={t('settings.title')}
       initialFocusRef={nav.searchInputRef}
-      onEscapeKeyDown={nav.handleSettingsEscape}
+      onEscapeKeyDown={handleEscape}
       classNames={{
         panel: styles.settingsModal,
         overlay: styles.settingsModalOverlay,
@@ -349,7 +368,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <span className={styles.settingsTitleSep} aria-hidden="true">
                 /
               </span>
-              <span className={styles.settingsTitleCurrent}>{activeLabel}</span>
+              {inAccountSubView ? (
+                <>
+                  <span>{activeLabel}</span>
+                  <span className={styles.settingsTitleSep} aria-hidden="true">
+                    /
+                  </span>
+                  <span className={styles.settingsTitleCurrent}>
+                    {t('settings.account.changePassword')}
+                  </span>
+                </>
+              ) : (
+                <span className={styles.settingsTitleCurrent}>
+                  {activeLabel}
+                </span>
+              )}
             </h2>
             <Tooltip content={t('settings.frame.closeWithEsc')} delayShow={300}>
               <Button

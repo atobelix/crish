@@ -359,4 +359,13 @@ describe('ui/Select (Compound 复合组件模式)', () => {
     fireEvent.keyDown(trigger, { key: 'Home' });
     expect(opt1).toHaveAttribute('data-highlighted', '');
   });
+
+  it('浮层几何去重：不在 listbox 上重复设置 inline left/top 导致 2x 坐标飞出视口', async () => {
+    render(<ControlledSelect defaultOpen options={OPTIONS} />);
+    const listbox = screen.getByRole('listbox');
+    // applyPositionStyles 规范将 DOM left/top 归零为 '0px'，并通过 translate 进行平移
+    // 组件内联 style 不得再次注入 position.x/position.y 覆盖 '0px'
+    expect(listbox.style.left).toBe('0px');
+    expect(listbox.style.top).toBe('0px');
+  });
 });

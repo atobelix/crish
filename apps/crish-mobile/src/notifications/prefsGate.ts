@@ -11,7 +11,7 @@
 //   设置开启通知权限」，防「开了但收不到」幻觉）；开关首次开（undetermined）→
 //   requestPermissionOnEnable 弹系统权限框（请求前先建渠道由 permissions.ts
 //   request() 内部自保证，D7 §7.5 顺序铁律）；
-// - 实时注入 seam：bindNotificationPrefs 由适配层（settingsNotificationWiring）
+// - 实时注入 seam：bindNotificationPrefs 由通知层装配（prefsBinding）
 //   注册 settingsStore 读取器——本层不引 adapters（依赖方向：适配层 → 服务域），
 //   过滤时实时读快照（无缓存 → 设置变更即时生效，无需事件总线/订阅）。
 import { channelIdOf, type PushChannelId } from './channels';
@@ -133,7 +133,7 @@ export function decideForegroundPresentationFor(
   return decideForegroundPresentation();
 }
 
-// ── 实时注入（适配层接线：settingsNotificationWiring 注册读取器） ─────────
+// ── 实时注入（prefsBinding 注册读取器） ─────────
 
 let prefsProvider: (() => NotificationPrefs) | null = null;
 

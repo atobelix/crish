@@ -10,14 +10,17 @@
 //!
 //! 档案唯一真源 = 云端服务；本地只持久化 refresh token（DPAPI）。
 
-use crate::auth::client::{AuthTokens, CloudAuthClient, CloudAuthError, UserProfile};
+use crate::auth::client::{
+    AccountProfile, AuthSessionInfo, AuthTokens, CloudAuthClient, CloudAuthError, EmailCodeScene,
+    EmailCodeTicket, PasswordCodeScene, UserProfile,
+};
 use crate::auth::credential_store::SecureCredentialStore;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 use tracing::{error, info, warn};
 
 /// 静默续期的基础间隔（成功 / 空闲检查周期）
@@ -45,14 +48,19 @@ pub struct AuthManager {
     credential_store: SecureCredentialStore,
     client: CloudAuthClient,
     session: RwLock<Option<SessionInternal>>,
+    /// 冷启动凭据恢复完成信号：命令面等待首次恢复结束再返回会话快照，
+    /// 避免前端在恢复前读到 is_logged_in=false 后不再刷新。
+    restored: watch::Sender<bool>,
 }
 
 impl AuthManager {
     pub fn new(app_data_dir: PathBuf, base_url: Option<String>) -> Arc<Self> {
+        let (restored, _) = watch::channel(false);
         let manager = Arc::new(Self {
             credential_store: SecureCredentialStore::new(app_data_dir),
             client: CloudAuthClient::new(base_url),
             session: RwLock::new(None),
+            restored,
         });
 
         // 启动后台恢复与静默续期任务（统一走 tauri::async_runtime::spawn 确保全局 runtime 安全）
@@ -67,7 +75,21 @@ impl AuthManager {
     /// 应用冷启动：DPAPI 恢复 refresh token → 静默续期 → 拉真实档案 → 进入守护循环
     async fn restore_then_daemon_loop(&self) {
         self.restore_persisted_session().await;
+        let _ = self.restored.send(true);
         self.daemon_loop().await;
+    }
+
+    /// 等待冷启动凭据恢复完成（首次完成后立即返回）。
+    pub async fn wait_restored(&self) {
+        let mut rx = self.restored.subscribe();
+        if *rx.borrow_and_update() {
+            return;
+        }
+        while !*rx.borrow_and_update() {
+            if rx.changed().await.is_err() {
+                return;
+            }
+        }
     }
 
     /// 冷启动恢复：成功后档案经 /me 真实拉取；失败区分 401（清凭据）与网络错误
@@ -233,37 +255,286 @@ impl AuthManager {
         }
     }
 
-    /// 用户登录
-    pub async fn login_password(&self, email: &str, password: &str) -> Result<UserProfile> {
-        let (tokens, user) = self.client.login_password(email, password).await?;
-        self.credential_store
-            .save_refresh_token(&tokens.refresh_token)
-            .context("Failed to encrypt token via Windows DPAPI")?;
-
-        let expires_in_secs = tokens.expires_in.unwrap_or(900);
-        let mut s = self.session.write().await;
-        *s = Some(SessionInternal {
-            tokens,
-            user: Some(user.clone()),
-            obtained_at: Instant::now(),
-            expires_in_secs,
-        });
-
-        info!("User logged in successfully: {}", email);
+    /// 用户登录（密码）
+    pub async fn login_password(
+        &self,
+        email: &str,
+        password: &str,
+        device_id: &str,
+        device_name: &str,
+    ) -> Result<UserProfile> {
+        // 冷启动恢复与手动登录串行化，避免旧会话覆盖新登录
+        self.wait_restored().await;
+        let (tokens, user) = self
+            .client
+            .login_password(email, password, device_id, device_name)
+            .await?;
+        self.apply_session(tokens, user.clone(), email).await?;
         Ok(user)
     }
 
-    /// 用户登出
-    pub async fn logout(&self) -> Result<()> {
+    /// 用户登录（邮件验证码）
+    pub async fn login_email_code(
+        &self,
+        email: &str,
+        code: &str,
+        device_id: &str,
+        device_name: &str,
+    ) -> Result<UserProfile> {
+        self.wait_restored().await;
+        let (tokens, user) = self
+            .client
+            .confirm_email_code(EmailCodeScene::Login, email, code, device_id, device_name)
+            .await?;
+        self.apply_session(tokens, user.clone(), email).await?;
+        Ok(user)
+    }
+
+    /// 注册并直接建立会话
+    pub async fn register_email(
+        &self,
+        email: &str,
+        code: &str,
+        device_id: &str,
+        device_name: &str,
+    ) -> Result<UserProfile> {
+        self.wait_restored().await;
+        let (tokens, user) = self
+            .client
+            .confirm_email_code(EmailCodeScene::Register, email, code, device_id, device_name)
+            .await?;
+        self.apply_session(tokens, user.clone(), email).await?;
+        Ok(user)
+    }
+
+    /// 重置密码并直接建立会话
+    pub async fn reset_password(
+        &self,
+        email: &str,
+        code: &str,
+        device_id: &str,
+        device_name: &str,
+    ) -> Result<UserProfile> {
+        self.wait_restored().await;
+        let (tokens, user) = self
+            .client
+            .confirm_email_code(EmailCodeScene::Reset, email, code, device_id, device_name)
+            .await?;
+        self.apply_session(tokens, user.clone(), email).await?;
+        Ok(user)
+    }
+
+    /// 请求邮件验证码（无会话副作用）
+    pub async fn request_email_code(
+        &self,
+        scene: EmailCodeScene,
+        email: &str,
+        password: Option<&str>,
+    ) -> Result<EmailCodeTicket> {
+        self.client
+            .request_email_code(scene, email, password)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// 先码后密码 · 发送验证码（已登录的重置改走改密接口，不建立会话）。
+    pub async fn request_password_code(
+        &self,
+        scene: PasswordCodeScene,
+        email: &str,
+    ) -> Result<EmailCodeTicket> {
+        self.wait_restored().await;
+        if scene == PasswordCodeScene::Reset {
+            if let Some(token) = self.access_token().await {
+                return self
+                    .client
+                    .request_password_change_code(&token)
+                    .await
+                    .map_err(Into::into);
+            }
+        }
+        self.client
+            .request_password_code(scene, email)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// 先码后密码 · 凭码设置新密码（注册 / 重置）。
+    /// 已登录的重置走改密接口（保留当前会话）；其余场景校验验证码后设密并建立会话。
+    pub async fn set_password_with_code(
+        &self,
+        scene: PasswordCodeScene,
+        email: &str,
+        code: &str,
+        password: &str,
+        device_id: &str,
+        device_name: &str,
+    ) -> Result<UserProfile> {
+        self.wait_restored().await;
+        if scene == PasswordCodeScene::Reset {
+            if let Some(token) = self.access_token().await {
+                let current_user = {
+                    let session = self.session.read().await;
+                    session.as_ref().and_then(|current| current.user.clone())
+                };
+                self.client.change_password(&token, code, password).await?;
+                return match current_user {
+                    Some(user) => Ok(user),
+                    None => self.client.me(&token).await.map_err(Into::into),
+                };
+            }
+        }
+        let setup = self.client.verify_email_code(scene, email, code).await?;
+        let (tokens, user) = self
+            .client
+            .set_password_with_setup_token(&setup.setup_token, password, device_id, device_name)
+            .await?;
+        self.apply_session(tokens, user.clone(), email).await?;
+        Ok(user)
+    }
+
+    /// 注销账号：服务端校验确认邮箱后匿名化并吊销全部会话，随后清本地凭据。
+    pub async fn delete_account(&self, confirm_email: &str) -> Result<()> {
+        self.wait_restored().await;
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        self.client.delete_account(&token, confirm_email).await?;
         let _ = self.credential_store.clear_credentials();
-        let mut s = self.session.write().await;
-        *s = None;
+        *self.session.write().await = None;
+        info!("Account deleted, local credentials cleared");
+        Ok(())
+    }
+
+    async fn apply_session(
+        &self,
+        tokens: AuthTokens,
+        user: UserProfile,
+        email: &str,
+    ) -> Result<()> {
+        self.credential_store
+            .save_refresh_token(&tokens.refresh_token)
+            .context("Failed to encrypt token via Windows DPAPI")?;
+        let expires_in_secs = tokens.expires_in.unwrap_or(900);
+        let mut session = self.session.write().await;
+        *session = Some(SessionInternal {
+            tokens,
+            user: Some(user),
+            obtained_at: Instant::now(),
+            expires_in_secs,
+        });
+        info!("User logged in successfully: {}", email);
+        Ok(())
+    }
+
+    /// 用户登出（先尽力吊销服务端会话，再清理本地凭据）
+    pub async fn logout(&self) -> Result<()> {
+        self.wait_restored().await;
+        let refresh_token = {
+            let session = self.session.read().await;
+            session
+                .as_ref()
+                .map(|current| current.tokens.refresh_token.clone())
+        };
+        if let Some(refresh_token) = refresh_token {
+            if let Err(error) = self.client.logout_remote(&refresh_token).await {
+                warn!("Remote logout failed (local credentials still cleared): {error}");
+            }
+        }
+        let _ = self.credential_store.clear_credentials();
+        let mut session = self.session.write().await;
+        *session = None;
         info!("User logged out, DPAPI credentials cleared");
         Ok(())
     }
 
+    /// 当前 access token（未登录返回 None）。
+    async fn access_token(&self) -> Option<String> {
+        let session = self.session.read().await;
+        session
+            .as_ref()
+            .map(|current| current.tokens.access_token.clone())
+    }
+
+    pub async fn get_profile(&self) -> Result<AccountProfile> {
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        self.client
+            .get_profile(&token)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn update_profile(
+        &self,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+    ) -> Result<AccountProfile> {
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        let profile = self
+            .client
+            .update_profile(&token, display_name, bio)
+            .await?;
+        self.sync_profile_name(&profile.display_name).await;
+        Ok(profile)
+    }
+
+    pub async fn upload_avatar(
+        &self,
+        data_url: &str,
+        file_name: Option<&str>,
+    ) -> Result<AccountProfile> {
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        self.client
+            .upload_avatar(&token, data_url, file_name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn list_sessions(&self) -> Result<Vec<AuthSessionInfo>> {
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        self.client
+            .list_sessions(&token)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn revoke_session(&self, session_id: &str) -> Result<()> {
+        let token = self
+            .access_token()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+        self.client
+            .revoke_session(&token, session_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// 资料改名后同步会话快照中的展示名（避免 UI 仍显示旧昵称）。
+    async fn sync_profile_name(&self, display_name: &str) {
+        let mut session = self.session.write().await;
+        if let Some(current) = session.as_mut() {
+            if let Some(user) = current.user.as_mut() {
+                user.name = Some(display_name.to_string());
+            }
+        }
+    }
+
     /// 获取当前会话快照（user 可能暂时为 None：恢复期档案尚未拉到，UI 须如实显示）
     pub async fn get_session_snapshot(&self) -> SessionSnapshot {
+        self.wait_restored().await;
         let s = self.session.read().await;
         if let Some(cur) = s.as_ref() {
             let elapsed_ms = cur.obtained_at.elapsed().as_millis() as u64;
@@ -287,10 +558,7 @@ impl AuthManager {
         }
     }
 
-    pub fn client(&self) -> &CloudAuthClient {
-        &self.client
     }
-}
 
 /// 单次续期检查的结果（驱动守护循环退避节奏）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

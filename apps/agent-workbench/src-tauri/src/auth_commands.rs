@@ -6,9 +6,13 @@
 use std::sync::Arc;
 use tauri::State;
 
-use crate::auth::client::CloudAuthError;
-use crate::auth::{
-    AuthManager, CloudDeviceItem, RelayTicketResponse, SessionSnapshot, UserProfile,
+use crate::auth::client::{
+    AccountProfile, AuthSessionInfo, CloudAuthError, EmailCodeScene, EmailCodeTicket,
+    PasswordCodeScene,
+};
+use crate::auth::{AuthManager, CloudDeviceItem, SessionSnapshot, UserProfile};
+use crate::remote::client::{
+    fetch_relay_devices, http_client, ticket_base_url, RelayTicketError,
 };
 use conex_run::core_error::CoreError;
 
@@ -22,6 +26,7 @@ fn map_cloud_auth_err(err: CloudAuthError) -> CoreError {
         CloudAuthError::Unauthorized => {
             CoreError::InvalidInput("unauthorized: token invalid or revoked".to_string())
         }
+        CloudAuthError::Rejected { message, .. } => CoreError::InvalidInput(message),
         CloudAuthError::Network(msg) => CoreError::Io(format!("auth.network: {msg}")),
         CloudAuthError::BadResponse(msg) => {
             CoreError::Encoding(format!("auth.bad_response: {msg}"))
@@ -32,6 +37,14 @@ fn map_cloud_auth_err(err: CloudAuthError) -> CoreError {
 /// `AuthManager` 的 anyhow 错误 → `CoreError`：优先还原内层 `CloudAuthError`
 /// （login_password 经 `?` 包装，downcast 可还原 kind 语义），其余走 Internal 兜底
 /// （detail 必填原始错误文案）。
+/// 中继客户端错误 → `CoreError`（与账号中心错误同语义：401 = 登录态失效）。
+fn map_relay_err(err: RelayTicketError) -> CoreError {
+    match err {
+        RelayTicketError::Unauthorized => map_cloud_auth_err(CloudAuthError::Unauthorized),
+        RelayTicketError::Other(message) => map_cloud_auth_err(CloudAuthError::Network(message)),
+    }
+}
+
 fn map_auth_err(err: anyhow::Error) -> CoreError {
     match err.downcast::<CloudAuthError>() {
         Ok(cloud_err) => map_cloud_auth_err(cloud_err),
@@ -51,8 +64,10 @@ pub async fn auth_login(
     email: String,
     password: String,
 ) -> Result<UserProfile, CoreError> {
+    let device_id = crate::remote::device::stable_device_id();
+    let device_name = crate::remote::device::device_display_name();
     auth_mgr
-        .login_password(&email, &password)
+        .login_password(&email, &password, &device_id, &device_name)
         .await
         .map_err(map_auth_err)
 }
@@ -80,7 +95,156 @@ pub async fn auth_refresh_token(auth_mgr: State<'_, Arc<AuthManager>>) -> Result
     Ok(s.is_logged_in)
 }
 
-/// 获取名下云端已绑定的全部设备列表
+/// 请求邮件验证码（`scene` = login / register / reset；注册与重置需同时提交密码）
+#[tauri::command]
+pub async fn auth_request_email_code(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    scene: String,
+    email: String,
+    password: Option<String>,
+) -> Result<EmailCodeTicket, CoreError> {
+    let scene = EmailCodeScene::parse(&scene)
+        .ok_or_else(|| CoreError::InvalidInput(format!("unknown email code scene: {scene}")))?;
+    auth_mgr
+        .request_email_code(scene, &email, password.as_deref())
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 校验邮件验证码并建立会话（登录 / 注册 / 重置密码）
+#[tauri::command]
+pub async fn auth_confirm_email_code(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    scene: String,
+    email: String,
+    code: String,
+) -> Result<UserProfile, CoreError> {
+    let scene = EmailCodeScene::parse(&scene)
+        .ok_or_else(|| CoreError::InvalidInput(format!("unknown email code scene: {scene}")))?;
+    let device_id = crate::remote::device::stable_device_id();
+    let device_name = crate::remote::device::device_display_name();
+    let result = match scene {
+        EmailCodeScene::Login => {
+            auth_mgr
+                .login_email_code(&email, &code, &device_id, &device_name)
+                .await
+        }
+        EmailCodeScene::Register => {
+            auth_mgr
+                .register_email(&email, &code, &device_id, &device_name)
+                .await
+        }
+        EmailCodeScene::Reset => {
+            auth_mgr
+                .reset_password(&email, &code, &device_id, &device_name)
+                .await
+        }
+    };
+    result.map_err(map_auth_err)
+}
+
+/// 读取账号资料（昵称 / 头像 / 简介）
+#[tauri::command]
+pub async fn auth_get_profile(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+) -> Result<AccountProfile, CoreError> {
+    auth_mgr.get_profile().await.map_err(map_auth_err)
+}
+
+/// 更新账号资料（仅提交提供字段）
+#[tauri::command]
+pub async fn auth_update_profile(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    display_name: Option<String>,
+    bio: Option<String>,
+) -> Result<AccountProfile, CoreError> {
+    auth_mgr
+        .update_profile(display_name.as_deref(), bio.as_deref())
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 上传头像（data URL，账号中心限制 3 MiB / png-jpeg-webp-gif）
+#[tauri::command]
+pub async fn auth_upload_avatar(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    data_url: String,
+    file_name: Option<String>,
+) -> Result<AccountProfile, CoreError> {
+    auth_mgr
+        .upload_avatar(&data_url, file_name.as_deref())
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 登录会话列表
+#[tauri::command]
+pub async fn auth_list_sessions(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+) -> Result<Vec<AuthSessionInfo>, CoreError> {
+    auth_mgr.list_sessions().await.map_err(map_auth_err)
+}
+
+/// 撤销指定登录会话
+#[tauri::command]
+pub async fn auth_revoke_session(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    session_id: String,
+) -> Result<bool, CoreError> {
+    auth_mgr
+        .revoke_session(&session_id)
+        .await
+        .map(|_| true)
+        .map_err(map_auth_err)
+}
+
+/// 注销账号（服务端校验确认邮箱，成功后匿名化并吊销全部会话）
+#[tauri::command]
+pub async fn auth_delete_account(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    confirm_email: String,
+) -> Result<(), CoreError> {
+    auth_mgr
+        .delete_account(&confirm_email)
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 先码后密码 · 发送验证码（register / reset；只带 email，不带密码）
+#[tauri::command]
+pub async fn auth_request_password_code(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    scene: String,
+    email: String,
+) -> Result<EmailCodeTicket, CoreError> {
+    let scene = PasswordCodeScene::parse(&scene)
+        .ok_or_else(|| CoreError::InvalidInput(format!("unknown password code scene: {scene}")))?;
+    auth_mgr
+        .request_password_code(scene, &email)
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 先码后密码 · 凭验证码设置新密码（成功后建立会话；已登录改密保留当前会话）
+#[tauri::command]
+pub async fn auth_set_password_with_code(
+    auth_mgr: State<'_, Arc<AuthManager>>,
+    scene: String,
+    email: String,
+    code: String,
+    password: String,
+) -> Result<UserProfile, CoreError> {
+    let scene = PasswordCodeScene::parse(&scene)
+        .ok_or_else(|| CoreError::InvalidInput(format!("unknown password code scene: {scene}")))?;
+    let device_id = crate::remote::device::stable_device_id();
+    let device_name = crate::remote::device::device_display_name();
+    auth_mgr
+        .set_password_with_code(scene, &email, &code, &password, &device_id, &device_name)
+        .await
+        .map_err(map_auth_err)
+}
+
+/// 获取账号内当前在线的设备列表（中继房间状态；离线设备不返回）
 #[tauri::command]
 pub async fn auth_list_devices(
     auth_mgr: State<'_, Arc<AuthManager>>,
@@ -88,43 +252,22 @@ pub async fn auth_list_devices(
     let s = auth_mgr.get_session_snapshot().await;
     let token = s.access_token.ok_or_else(not_logged_in)?;
 
-    auth_mgr
-        .client()
-        .list_devices(&token)
+    let devices = fetch_relay_devices(&http_client(), &ticket_base_url(), &token)
         .await
-        .map_err(map_cloud_auth_err)
-}
-
-/// 踢出 / 撤销指定设备
-#[tauri::command]
-pub async fn auth_revoke_device(
-    auth_mgr: State<'_, Arc<AuthManager>>,
-    device_id: String,
-) -> Result<(), CoreError> {
-    let s = auth_mgr.get_session_snapshot().await;
-    let token = s.access_token.ok_or_else(not_logged_in)?;
-
-    auth_mgr
-        .client()
-        .revoke_device(&token, &device_id)
-        .await
-        .map_err(map_cloud_auth_err)
-}
-
-/// 申请 Host 驻留中继票据
-#[tauri::command]
-pub async fn auth_get_relay_ticket(
-    auth_mgr: State<'_, Arc<AuthManager>>,
-    device_id: String,
-) -> Result<RelayTicketResponse, CoreError> {
-    let s = auth_mgr.get_session_snapshot().await;
-    let token = s.access_token.ok_or_else(not_logged_in)?;
-
-    auth_mgr
-        .client()
-        .get_host_relay_ticket(&token, &device_id)
-        .await
-        .map_err(map_cloud_auth_err)
+        .map_err(map_relay_err)?;
+    let self_id = crate::remote::device::stable_device_id();
+    Ok(devices
+        .into_iter()
+        .filter(|device| device.id != self_id)
+        .map(|device| CloudDeviceItem {
+            id: device.id,
+            name: device.name,
+            platform: device.platform,
+            last_seen_at: device.last_seen_at,
+            trusted: true,
+            metadata: None,
+        })
+        .collect())
 }
 
 #[cfg(test)]

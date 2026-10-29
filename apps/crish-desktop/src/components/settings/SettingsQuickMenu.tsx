@@ -11,12 +11,13 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
-import { openSettings } from '../../store/storeAccess';
+import { openSettings, useAuthField } from '../../store/storeAccess';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
 import { Button, Menu, SegmentedControl, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 export interface SettingsQuickMenuProps {
   trigger?: React.ReactNode;
@@ -90,6 +91,17 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   renderTrigger,
 }) => {
   const [open, setOpen] = useState(false);
+  const i18n = useI18n();
+  const isLoggedIn = useAuthField((state) => state.isLoggedIn);
+  const user = useAuthField((state) => state.user);
+  const accountLabel = isLoggedIn
+    ? user?.name ||
+      user?.email?.split('@')[0] ||
+      i18n.t('settings.account.quick.myAccount')
+    : i18n.t('settings.account.quick.signIn');
+  const accountTip = isLoggedIn
+    ? i18n.t('settings.account.quick.manageTip')
+    : i18n.t('settings.account.quick.signInTip');
   const [theme, setThemeState] = useState<UiTheme>(() => readStoredTheme());
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -287,6 +299,23 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
           onKeyDownCapture={onMenuKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          <Tooltip content={accountTip}>
+            <Button
+              bare
+              type="button"
+              className={`${styles.sbQuickItem} sb-quick-item`}
+              data-testid="quick-settings-account"
+              role="menuitem"
+              tabIndex={-1}
+              onClick={() => go('profile')}
+            >
+              <AppIcon name="user" size={16} aria-hidden />
+              <span>{accountLabel}</span>
+            </Button>
+          </Tooltip>
+
+          <div className={styles.sbQuickDivider} role="separator" />
+
           <div className={styles.sbQuickSection} role="none">
             <div className={styles.sbQuickLabel} id={themeGroupId}>
               外观

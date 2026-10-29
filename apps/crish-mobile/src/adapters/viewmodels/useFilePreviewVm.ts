@@ -94,11 +94,11 @@ const LOADING_STATE: PreviewState = {
 /** 错误码 → 状态机态（占位态 vs 可重试错误，R2UX-06-02） */
 export function mapPreviewErrorCode(code: string): PreviewStatus {
   switch (code) {
-    case 'file_too_large':
+    case 'file.too_large':
       return 'too-large';
-    case 'binary_file':
+    case 'file.binary':
       return 'binary';
-    case 'unsupported_encoding':
+    case 'file.encoding':
       return 'unsupported-encoding';
     default:
       return 'error';

@@ -152,10 +152,8 @@ export function useModelProfilesState() {
     []
   );
 
-  /** 成功静默（含「已自动获取 N 个模型」）；失败才进 Toast，并带 error 皮。 */
   const notify = useCallback((ok: boolean, msg: string) => {
-    if (ok) return;
-    toast.show(msg, undefined, { type: 'error' });
+    toast.show(msg, undefined, { type: ok ? 'success' : 'error' });
   }, []);
 
   /** 写盘回执后重读统一树，把失效的选中项收敛掉（树是唯一名单源）。 */
@@ -298,11 +296,11 @@ export function useModelProfilesState() {
     await runAsLocalMutation(async () => {
       const res = await saveProfileKey(selected.id, keyDraft.trim());
       refresh();
-      setKeyDraft('');
       if (!res.ok) {
         notify(false, `保存失败：${res.error || '未知错误'}`);
         return;
       }
+      setKeyDraft('');
       notify(true, '密钥已保存，正在自动扫描服务器可用模型...');
       void runScan();
     });

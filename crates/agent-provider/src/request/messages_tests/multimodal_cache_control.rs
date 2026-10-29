@@ -103,6 +103,17 @@ fn strip_inline_data_urls_keeps_plain_text() {
     );
 }
 
+/// 大量「形似但非法」的 data:image/ 前缀必须原样保留且线性完成（旧实现
+/// 每次只前进 1 字符，逐个前缀重扫导致 O(n²)）。
+#[test]
+fn strip_inline_data_urls_handles_repeated_invalid_prefixes_linearly() {
+    let text = "data:image/not-base64;utf8,abc ".repeat(2_000);
+    let stripped = strip_inline_data_urls(&text);
+    assert_eq!(stripped, text, "非法 data url 必须原样保留");
+    // 幂等：再次剥离结果不变
+    assert_eq!(strip_inline_data_urls(&stripped), stripped);
+}
+
 #[test]
 fn wire_value_shape() {
     let messages = to_chat_messages(

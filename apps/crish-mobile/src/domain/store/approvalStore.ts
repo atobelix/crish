@@ -64,6 +64,8 @@ export interface ApprovalState {
   setOutboxCount: (n: number) => void;
   /** 对账时间戳（F2 §4.1） */
   setLastReconcileAt: (ts: number) => void;
+  /** 解绑 / 换机：清空待办、历史与 outbox 状态 */
+  reset: () => void;
 }
 
 function nowDefault(): number {
@@ -197,6 +199,15 @@ export const approvalStore: StoreApi<ApprovalState> =
       setLastReconcileAt: (ts) =>
         set((s) => {
           s.lastReconcileAt = ts;
+        }),
+
+      reset: () =>
+        set((s) => {
+          s.pending = [];
+          s.decisionBusy = {};
+          s.outboxCount = 0;
+          s.lastReconcileAt = null;
+          s.history = [];
         }),
     }))
   );

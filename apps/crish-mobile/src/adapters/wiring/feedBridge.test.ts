@@ -12,7 +12,6 @@ import { WsGateway } from '@/network/WsGateway';
 import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
-import { devicePresenceStore } from './devicePresenceStore';
 import { FeedBridge, feedNetworkOf } from './feedBridge';
 
 function frame(kind: string, body: unknown): InboundEnvelope {
@@ -31,7 +30,6 @@ function resetStores(): void {
   eventStore.setState({ windows: {}, network: 'live' });
   sessionStore.setState({ sessions: [], selectedSessionId: null });
   connectionStore.setState({ phase: 'disconnected' });
-  devicePresenceStore.setState({ count: null });
 }
 
 beforeEach(() => {
@@ -433,13 +431,11 @@ describe('FeedBridge 重连对账驱动（M6 §9.3 ①~③）', () => {
     const bridge = new FeedBridge({ gateway, listSessions });
     bridge.attach();
     sessionStore.getState().upsert({ id: 's-gone', updatedAt: 1000 });
-    eventStore
-      .getState()
-      .ingest('s-gone', {
-        type: 'message-end',
-        sessionId: 's-gone',
-        sequence: 1,
-      });
+    eventStore.getState().ingest('s-gone', {
+      type: 'message-end',
+      sessionId: 's-gone',
+      sequence: 1,
+    });
     await act(async () => {
       bridge.handleProjection({
         resume: [],
@@ -487,68 +483,41 @@ describe('FeedBridge 窗口卸载策略（R2UX-05-09：≤4 活跃窗口）', ()
   });
 });
 
-describe('FeedBridge 设备在场查询（open 相位 fire-and-forget）', () => {
-  it('listDevices 成功 → 写入设备数；失败 → 保持未知不伪造', async () => {
+describe('FeedBridge 连接就绪订阅（open 相位）', () => {
+  it('open → 发送 events.subscribe 与关键类型 subscribeAll', async () => {
     const sent: string[] = [];
     const gateway = new WsGateway({ send: (raw) => sent.push(raw) });
     const bridge = new FeedBridge({ gateway });
     bridge.attach();
+    sessionStore.setState({
+      sessions: [
+        {
+          id: 's-1',
+          title: '会话一',
+          folder: '常规会话',
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          updatedAt: 1000,
+          messageCount: 0,
+          receivedAtMs: 1,
+          lastReadSequence: 0,
+          unreadCount: 0,
+          activeRunIds: [],
+          pendingApprovalCount: 0,
+        },
+      ],
+      selectedSessionId: null,
+    });
     await act(async () => {
       bridge.handlePhaseChange('open');
       await Promise.resolve();
     });
-    // remote.listDevices 请求已发出（fire-and-forget）
-    expect(sent.some((raw) => raw.includes('remote.listDevices'))).toBe(true);
-    // 无响应时保持 null（不伪造 0）
-    expect(devicePresenceStore.getState().count).toBeNull();
+    const subscribe = sent.find((raw) => raw.includes('events.subscribe"'));
+    expect(subscribe).toBeDefined();
+    expect(subscribe).toContain('s-1');
+    expect(sent.some((raw) => raw.includes('events.subscribeAll'))).toBe(true);
     bridge.detach();
-  });
-
-  it('listDevices 响应 devices 数组 → 写入条数；null 载荷 → 保持未知', async () => {
-    const sent: string[] = [];
-    const gateway = new WsGateway({ send: (raw) => sent.push(raw) });
-    const bridge = new FeedBridge({ gateway });
-    bridge.attach();
-    await act(async () => {
-      bridge.handlePhaseChange('open');
-      await Promise.resolve();
-    });
-    // 回填 result 帧（命中 pending → setCount）
-    const sentRaw = sent.find((raw) => raw.includes('remote.listDevices'))!;
-    const req = JSON.parse(sentRaw) as { msgId: string };
-    await act(async () => {
-      gateway.dispatchFrame(
-        frame('result.remote.listDevices', {
-          reqMsgId: req.msgId,
-          ok: true,
-          result: { devices: [{ id: 'd-1' }, { id: 'd-2' }] },
-        })
-      );
-      await Promise.resolve();
-    });
-    expect(devicePresenceStore.getState().count).toBe(2);
-    bridge.detach();
-  });
-
-  it('listDevices 失败 → warn 留痕且保持未知（不伪造 0）', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      // 无 send 注入 → invoke 立即 reject
-      const gateway = new WsGateway();
-      const bridge = new FeedBridge({ gateway });
-      bridge.attach();
-      await act(async () => {
-        bridge.handlePhaseChange('open');
-        await Promise.resolve();
-      });
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('设备在场查询失败')
-      );
-      expect(devicePresenceStore.getState().count).toBeNull();
-      bridge.detach();
-    } finally {
-      warnSpy.mockRestore();
-    }
   });
 });
 

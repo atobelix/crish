@@ -1,11 +1,9 @@
-// theme.ts 测试（R2UX-06-05 深色模式三选 + R4 批次2 持久化单真源）：
-// projectThemeTokens 投影 / token 键集合完整性（浅深两套）/ useTheme 订阅行为 /
-// setThemeMode 写入（settingsStore 落库语义）/ 持久化往返（set → 模拟重启 hydrate → 读取一致）
+// theme.ts 测试：主题投影 / 浅深 token 结构一致 / useTheme 订阅 / 持久化往返。
 import { act, renderHook } from '@testing-library/react-native';
 import {
-  darkTokens,
-  lightTokens,
-  projectThemeTokens,
+  darkTheme,
+  lightTheme,
+  projectTheme,
   resetThemeModeForTest,
   setThemeMode,
   useTheme,
@@ -16,7 +14,6 @@ import {
   type SettingsPersist,
 } from '@/domain/store/settingsStore';
 
-/** 内存 kv fake（模拟重启：同一 Map 重新 hydrate） */
 function makeKvPersist(): SettingsPersist & { map: Map<string, string> } {
   const map = new Map<string, string>();
   return {
@@ -36,20 +33,20 @@ beforeEach(() => {
   configureSettingsPersistence(null);
 });
 
-describe('projectThemeTokens（R2UX-06-05 token 完整性）', () => {
-  it('system → 透传系统方案 token', () => {
-    expect(projectThemeTokens('system', lightTokens)).toBe(lightTokens);
-    expect(projectThemeTokens('system', darkTokens)).toBe(darkTokens);
+describe('projectTheme', () => {
+  it('system → 透传系统方案', () => {
+    expect(projectTheme('system', lightTheme)).toBe(lightTheme);
+    expect(projectTheme('system', darkTheme)).toBe(darkTheme);
   });
 
-  it('light/dark → 对应完整 token 表', () => {
-    expect(projectThemeTokens('light', darkTokens)).toBe(lightTokens);
-    expect(projectThemeTokens('dark', lightTokens)).toBe(darkTokens);
+  it('light/dark → 对应完整主题', () => {
+    expect(projectTheme('light', darkTheme)).toBe(lightTheme);
+    expect(projectTheme('dark', lightTheme)).toBe(darkTheme);
   });
 
-  it('浅深两套 token 键集合一致（R2UX-06-05 完整性断言）', () => {
-    expect(Object.keys(darkTokens).sort()).toEqual(
-      Object.keys(lightTokens).sort()
+  it('浅深两套颜色键集合一致', () => {
+    expect(Object.keys(darkTheme.colors).sort()).toEqual(
+      Object.keys(lightTheme.colors).sort()
     );
   });
 });
@@ -57,24 +54,24 @@ describe('projectThemeTokens（R2UX-06-05 token 完整性）', () => {
 describe('useTheme 订阅', () => {
   it('默认 system 档（jest 环境浅色）', async () => {
     const { result } = await renderHook(() => useTheme());
-    expect(result.current).toBe(lightTokens);
+    expect(result.current).toBe(lightTheme);
   });
 
-  it('setThemeMode 切换深色 → useTheme 即时投影深色 token 表', async () => {
+  it('setThemeMode 切换深色 → 即时投影深色主题', async () => {
     const { result } = await renderHook(() => useTheme());
-    expect(result.current).toBe(lightTokens);
+    expect(result.current).toBe(lightTheme);
     await act(async () => {
       setThemeMode('dark');
     });
-    expect(result.current).toBe(darkTokens);
+    expect(result.current).toBe(darkTheme);
     await act(async () => {
       setThemeMode('light');
     });
-    expect(result.current).toBe(lightTokens);
+    expect(result.current).toBe(lightTheme);
   });
 });
 
-describe('主题持久化往返（R4 批次2：重启不丢偏好）', () => {
+describe('主题持久化往返', () => {
   it('setThemeMode 写 kv → 模拟重启 hydrate → useTheme 恢复所选档', async () => {
     const persist = makeKvPersist();
     configureSettingsPersistence(persist);
@@ -82,7 +79,6 @@ describe('主题持久化往返（R4 批次2：重启不丢偏好）', () => {
       setThemeMode('dark');
     });
     expect(persist.map.get('settings.appearance')).toBeDefined();
-    // 模拟重启：内存态复位（回到出厂默认）后从 kv 回填
     resetThemeModeForTest();
     expect(settingsStore.getState().groups.appearance.theme).toBe('system');
     await act(async () => {
@@ -90,6 +86,6 @@ describe('主题持久化往返（R4 批次2：重启不丢偏好）', () => {
     });
     expect(settingsStore.getState().groups.appearance.theme).toBe('dark');
     const { result } = await renderHook(() => useTheme());
-    expect(result.current).toBe(darkTokens);
+    expect(result.current).toBe(darkTheme);
   });
 });

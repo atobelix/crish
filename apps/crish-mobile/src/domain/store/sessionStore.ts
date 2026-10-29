@@ -42,6 +42,8 @@ export interface SessionState {
   applyRunActive: (sessionId: string, runId: string, active: boolean) => void;
   /** 待审批计数（approval-requested +1 / resolved −1；钳制 ≥0，F1 §5.3） */
   applyApprovalDelta: (sessionId: string, delta: 1 | -1) => void;
+  /** 解绑 / 换机：清空会话索引 */
+  reset: () => void;
 }
 
 function nowDefault(): number {
@@ -128,6 +130,12 @@ export const sessionStore: StoreApi<SessionState> = createStore<SessionState>()(
           // 待审批变化影响置顶排序（F1 §4.4）
           s.sessions = sortSessions(s.sessions);
         }
+      }),
+
+    reset: () =>
+      set((s) => {
+        s.sessions = [];
+        s.selectedSessionId = null;
       }),
   }))
 );

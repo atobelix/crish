@@ -715,6 +715,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'kill specific subagent',
   },
   {
+    command: 'multi_device_export_ca',
+    status: 'implemented',
+    feature: 'multi-device pairing CA export',
+  },
+  {
     command: 'multi_device_set_enabled',
     status: 'implemented',
     feature: 'multi-device gateway state set',
@@ -827,17 +832,57 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   {
     command: 'auth_list_devices',
     status: 'implemented',
-    feature: 'paired device list',
+    feature: 'online account device list',
   },
   {
-    command: 'auth_revoke_device',
+    command: 'auth_request_email_code',
     status: 'implemented',
-    feature: 'paired device revocation',
+    feature: 'account email verification code request',
   },
   {
-    command: 'auth_get_relay_ticket',
+    command: 'auth_confirm_email_code',
     status: 'implemented',
-    feature: 'relay ticket issue',
+    feature: 'account email verification login/register/reset',
+  },
+  {
+    command: 'auth_get_profile',
+    status: 'implemented',
+    feature: 'account profile read',
+  },
+  {
+    command: 'auth_update_profile',
+    status: 'implemented',
+    feature: 'account profile update',
+  },
+  {
+    command: 'auth_upload_avatar',
+    status: 'implemented',
+    feature: 'account avatar upload',
+  },
+  {
+    command: 'auth_list_sessions',
+    status: 'implemented',
+    feature: 'account login session list',
+  },
+  {
+    command: 'auth_revoke_session',
+    status: 'implemented',
+    feature: 'account login session revoke',
+  },
+  {
+    command: 'auth_delete_account',
+    status: 'implemented',
+    feature: 'account deletion with confirmed email',
+  },
+  {
+    command: 'auth_request_password_code',
+    status: 'implemented',
+    feature: 'password setup verification code request',
+  },
+  {
+    command: 'auth_set_password_with_code',
+    status: 'implemented',
+    feature: 'password setup with verification code',
   },
   {
     command: 'note_document_list',
