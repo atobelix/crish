@@ -13,6 +13,11 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    },
     "./chrome.css": "./src/chrome/blockChrome.css",
     "./paper-list.css": "./src/list/paperList.css"
   },

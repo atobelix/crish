@@ -19,7 +19,7 @@ import {
   type ApplyOpsAdapter,
   type SlashInsertIntent,
 } from '@crish/block-paper';
-import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
+import { createMockIntentSink } from '@crish/block-paper/testing';
 import { SlashMenuOverlay } from './SlashMenuOverlay';
 
 /** 可控：打开后 bump syncToken 强制重绘 */

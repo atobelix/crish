@@ -24,8 +24,10 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
-import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
-import { createMockTurnIntoSink } from '../../../../../packages/block-paper/src/leaves/mdPrefixHost.audit';
+import {
+  createMockIntentSink,
+  createMockTurnIntoSink,
+} from '@crish/block-paper/testing';
 import { isUuidV4, newNoteBlockId } from './noteBlockId';
 import {
   createFixtureHydrateTransport,
