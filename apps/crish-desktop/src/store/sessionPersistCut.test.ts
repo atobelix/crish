@@ -264,6 +264,11 @@ describe('U-PERSIST-A · 真实 store partialize 探针（NA-A1）', () => {
     localStorage.setItem(SESSION_STORE_PERSIST_KEY, JSON.stringify(legacy));
     vi.resetModules();
     await import('./sessionStore');
+    // 导入期副作用已移除：迁移由 bootstrapStores 显式调用（启动序列），
+    // 用例需显式执行同一步骤后再断言。
+    const { ensureSessionStoreShellKeyMigrated } =
+      await import('../api/session-persistence/sessionShellKeyMigration');
+    ensureSessionStoreShellKeyMigrated();
     const raw = localStorage.getItem(SESSION_STORE_PERSIST_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as { state: Record<string, unknown> };

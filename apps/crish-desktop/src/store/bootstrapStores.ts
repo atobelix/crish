@@ -1,12 +1,10 @@
 import { useLayoutStore } from './layoutStore';
 import { useSessionStore } from './sessionStore';
-import { useWorkspaceStore } from './workspaceStore';
-import { useSettingsUiStore } from './settingsUiStore';
 import { useTerminalStore } from './terminalStore';
 import { useWorkerStore } from './workerStore';
 import { usePermissionStore } from './permissionStore';
 import { useSettingsStore } from './settingsStore';
-import { initStoreAccess } from '../api/storeAccess';
+import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
 import { MessageSnapshots } from '../api/MessageSnapshots';
 import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
 import { logger, toErrMeta } from '../services/LoggerService';
@@ -114,6 +112,11 @@ export function bootstrapStores(): () => void {
   const unsubs: (() => void)[] = [];
   _setupFrequencyLogging();
 
+  // U-PERSIST-A（D4 票 A）：persist 键迁移必须在任何 persist 读写前完成一次——
+  // 旧全量 sessions 镜像剥离为轻量 meta 壳；正文唯一来源 = SQLite hydrate。
+  // 显式启动序列调用（原为 sessionStore import 期副作用，SS-P6b 移除）。
+  ensureSessionStoreShellKeyMigrated();
+
   // Note: Facade stores share the same underlying LayoutStore instance in Phase 0/1,
   // so no inter-store subscribe sync is required. Single listener for frequency metrics:
   unsubs.push(
@@ -141,8 +144,6 @@ export function bootstrapStores(): () => void {
   for (let i = 0; i < domainHooks.length; i++) {
     _wrapSubscriberCounting(domainHooks[i]!, _STORE_NAMES[4 + i]!);
   }
-
-  initStoreAccess(useSessionStore, useWorkspaceStore, useSettingsUiStore);
 
   unsubs.push(initTabModeProjection());
 

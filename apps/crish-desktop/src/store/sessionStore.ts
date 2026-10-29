@@ -5,7 +5,6 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
 import { useShallow } from '../store/useShallowSelector';
 import {
   initStorePersistence,
@@ -44,16 +43,6 @@ export interface SessionStoreState {
 }
 
 export type SessionStore = SessionStoreState & SessionActions;
-export type SotaSessionStoreState = SessionStoreState;
-export type SotaSessionStore = SessionStore;
-export type SessionFacadeState = SessionStoreState;
-export type SessionFacade = SessionStore;
-
-/**
- * U-PERSIST-A（D4 票 A）：persist 键在 create 前完成一次迁移——
- * 旧全量 sessions 镜像剥离为轻量 meta 壳；正文唯一来源 = SQLite hydrate。
- */
-ensureSessionStoreShellKeyMigrated();
 
 /**
  * 物理独立 SessionStore。唯一源 = sessionsById + sessionOrder。
@@ -271,6 +260,11 @@ export function triggerSessionMessageHydrateIfNeeded(sessionId: string): void {
   );
 }
 
-if (typeof window !== 'undefined') {
+/**
+ * DEV 调试门面（生产静态剥离）：e2e `tests/e2e/ui-store-invariants.spec.ts`
+ * 仍以 `window.useSessionStore` 作为 `__CRISH_SESSION_STORE__` 的回退取值面，
+ * 故保留在 DEV 分支内（真源仍是 entry-core 暴露的 `__CRISH_SESSION_STORE__`）。
+ */
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.useSessionStore = useSessionStore;
 }
