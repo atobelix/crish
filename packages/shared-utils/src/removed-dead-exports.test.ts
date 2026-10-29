@@ -43,6 +43,20 @@ const REMOVED_FILES = [
   'dynamic-adaptation.ts',
   'platform-adaptation.ts',
   'use-platform-adaptation.ts',
+  'wal.adversarial.test.ts',
+  'jsonl-append-batcher.test.ts',
+  'jsonl-append-batcher.adversarial.test.ts',
+  'file/file-watchdog.test.ts',
+  'file/streaming-file-reader.test.ts',
+  'file/streaming-jsonl-reader.test.ts',
+  'seek-sequence.test.ts',
+  'object-pool.test.ts',
+  'prometheus-exporter.test.ts',
+  'hardware-profile.test.ts',
+  'performance-tier.test.ts',
+  'dynamic-adaptation.test.ts',
+  'platform-adaptation.test.ts',
+  'use-platform-adaptation.test.ts',
 ];
 
 const KEPT_FILES = [
