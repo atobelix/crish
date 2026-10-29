@@ -63,6 +63,8 @@ export interface UseChatStreamResult {
   ) => Promise<void>;
   /** 默认 Stop = L2 cooperative_stop */
   handleStopGeneration: () => void;
+  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  handleSilentStopGeneration: () => void;
   /** 强制取消 = L3 force_cancel（UI 二次确认后调用） */
   handleForceCancelGeneration: () => void;
 }

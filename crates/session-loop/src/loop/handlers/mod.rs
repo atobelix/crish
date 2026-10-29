@@ -71,6 +71,10 @@ pub(crate) struct LoopState {
     pub(crate) control_bus: Arc<Mutex<ControlBus>>,
     /// abort 信号（L3 强停等价，可 Clone 共享）
     pub(crate) abort_signal: AbortSignal,
+    /// L2 协作停止信号（流中即时打断收流）：与 [Self::control_bus] 内的
+    /// 总线信号共享触发面（with_control_bus 注入时拉取克隆）；自建总线时
+    /// 为独立未触发实例
+    pub(crate) stop_signal: AbortSignal,
     /// steering 协调器（预算 / 计数单一来源，01 §3.3 / D10）
     pub(crate) steering: SteeringCoordinator,
     /// 会话对话消息列表（跨 run 持久；Arc 共享——记录路径 0 深克隆，
@@ -147,11 +151,16 @@ impl LoopState {
         // 子结构（定义与 from_options 在 compaction_dispatch.rs）
         let budget_state = BudgetState::from_options(&options);
         let compaction = CompactionRuntime::from_options(&options);
+        // 自建总线场景：state 直接持有总线内同一停止信号（Arc 共享触发面）；
+        // 外部注入总线时由 with_control_bus 重新对齐
+        let bus = ControlBus::new();
+        let stop_signal = bus.stop_signal().clone();
         Self {
             machine: AgentSessionMachine::new(session_id, max_turns),
             input_queue: AgentInputQueue::new(),
-            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            control_bus: Arc::new(Mutex::new(bus)),
             abort_signal: AbortSignal::new(),
+            stop_signal,
             steering,
             conversation: Vec::new(),
             events: Vec::new(),

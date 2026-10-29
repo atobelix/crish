@@ -64,6 +64,7 @@ export function useChatStream(
   const {
     runStreamingAssistant,
     handleStopGeneration,
+    handleSilentStopGeneration,
     handleForceCancelGeneration,
   } = useStreamCallbacks(optionsWithSession, refs, {
     wsId,
@@ -81,6 +82,7 @@ export function useChatStream(
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleSilentStopGeneration,
     handleForceCancelGeneration,
   };
 }

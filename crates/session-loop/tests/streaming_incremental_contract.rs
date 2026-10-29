@@ -384,6 +384,34 @@ async fn abort_interrupts_stalled_stream_promptly() {
     assert_eq!(partial.text(), "首条内容", "abort 前已产出内容保留");
 }
 
+/// L2 协作停止流中即时收场：挂起流 + 总线注入协作停止 → stop_signal
+/// 竞速分支立即停收，首条内容保留，run 终态 stopped（不 abort、不报错、
+/// 不等下一安全点——「停止生成」从整个 turn 收敛到当前 chunk）。
+#[tokio::test]
+async fn cooperative_stop_interrupts_stalled_stream_and_ends_stopped() {
+    let provider = StallingProvider;
+    let mut loop_ = loop_with(Box::new(provider));
+    let bus = loop_.control_bus();
+
+    let handle = tokio::spawn(async move { loop_.run(user("生成内容")).await });
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    bus.lock()
+        .unwrap()
+        .request_cooperative_stop(Some("ui-stop".into()), Some("ui".into()));
+    let outcome = tokio::time::timeout(std::time::Duration::from_secs(2), handle)
+        .await
+        .expect("L2 停止应及时中断挂起的收流，不得等传输层超时")
+        .expect("run 不应 panic");
+
+    assert_eq!(outcome.reason, AgentEndReason::Stopped);
+    let partial = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("首条内容应已 commit");
+    assert_eq!(partial.text(), "首条内容", "L2 停止前已产出内容保留");
+}
+
 /// 构造用户消息
 fn user(text: &str) -> AgentMessage {
     AgentMessage {

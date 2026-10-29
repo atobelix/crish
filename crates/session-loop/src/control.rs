@@ -234,6 +234,11 @@ pub struct ControlBus {
     trace: VecDeque<ControlIntent>,
     /// BC03-1 / BC03-2：可选绑定的 Run 级 AbortSignal；在 L3 强停入队时立即广播触发
     abort_signal: Option<crate::safe_point::AbortSignal>,
+    /// L2 协作停止即时触发面（流中停止）：`request_cooperative_stop` 入队即触发；
+    /// 流消费循环经 [Self::stop_signal] 克隆共享触发面竞速等待，把 L2 收场延迟
+    /// 从「下一安全点」降到「当前 chunk」。恒有实例（Default = 未触发），
+    /// 安全点 drain 仍是本意图的唯一消费点，收场语义不变。
+    stop_signal: crate::safe_point::AbortSignal,
 }
 
 fn now_millis() -> u64 {
@@ -257,6 +262,11 @@ impl ControlBus {
     /// 获取绑定的 AbortSignal
     pub fn abort_signal(&self) -> Option<&crate::safe_point::AbortSignal> {
         self.abort_signal.as_ref()
+    }
+
+    /// L2 协作停止信号（只读）：loop 装配方克隆后与总线共享同一触发面
+    pub fn stop_signal(&self) -> &crate::safe_point::AbortSignal {
+        &self.stop_signal
     }
 
     /// 入队一条控制意图；返回规范化后的 intent。
@@ -375,6 +385,13 @@ impl ControlBus {
         reason: Option<String>,
         source: Option<String>,
     ) -> ControlIntent {
+        // 流中即时性：入队即触发停止信号，流消费循环的竞速分支立即打断收流；
+        // 意图本体仍入队，由下一安全点 drain 消费（收场语义不变）
+        if let Some(reason) = &reason {
+            self.stop_signal.abort_with_reason(reason.clone());
+        } else {
+            self.stop_signal.abort();
+        }
         self.request(ControlIntentInput {
             kind: ControlKind::CooperativeStop,
             reason,
@@ -637,6 +654,19 @@ mod tests {
         let mut bus = ControlBus::new();
         bus.request(ControlIntentInput::new(ControlKind::Continue));
         assert_eq!(bus.drain_as_action(), ControlDrainAction::None);
+    }
+
+    /// L2 入队即触发停止信号（流中即时停止）：request_cooperative_stop 后
+    /// 信号立即处于触发态，流消费侧竞速分支无锁可感知
+    #[test]
+    fn cooperative_stop_request_triggers_stop_signal() {
+        let mut bus = ControlBus::new();
+        assert!(!bus.stop_signal().is_aborted());
+        bus.request_cooperative_stop(Some("enough".to_string()), None);
+        assert!(
+            bus.stop_signal().is_aborted(),
+            "协作停止入队即触发停止信号"
+        );
     }
 
     /// 无 L1 消息的混合队列（如仅 cooperative_stop + continue）→ cooperative_stop

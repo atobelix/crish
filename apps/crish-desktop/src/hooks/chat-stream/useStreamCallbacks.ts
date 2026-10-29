@@ -193,6 +193,8 @@ export function useStreamCallbacks(
   runStreamingAssistant: StreamRunStarter;
   /** 默认 Stop = L2 cooperative */
   handleStopGeneration: (targetSessionId?: string) => void;
+  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  handleSilentStopGeneration: (targetSessionId?: string) => void;
   /** 强制取消 = L3 force（UI 二次确认后调用） */
   handleForceCancelGeneration: (targetSessionId?: string) => void;
 } {
@@ -211,11 +213,18 @@ export function useStreamCallbacks(
   /**
    * 停止生成：默认 L2 cooperative；force=true 时 L3。
    * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()。
+   * opts.silent = 内部编排复用（如编辑重发的先行停止）：只做本地收口与 wire
+   * 派发，不弹停止类 toast——停止是手段，不得冒充用户可见语义。
    * 共享 wire：api/streamStop.dispatchStreamStopCancel → createStreamCancel / compositionRoot
    *（Wave C：core_run_control 单一命令面，cancel-run 双线已删）。
    * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
    */
-  const finalizeStopGeneration = (force: boolean, targetSessionId?: string) => {
+  const finalizeStopGeneration = (
+    force: boolean,
+    targetSessionId?: string,
+    opts?: { silent?: boolean }
+  ) => {
+    const silent = opts?.silent === true;
     const sid = resolveStreamSessionId(
       targetSessionId || scopedSessionId || null,
       null
@@ -260,9 +269,11 @@ export function useStreamCallbacks(
       }
       // 3. 彻底清扫会话中残留的 processing 和 queued 状态消息，解除输入框锁定
       settleStaleSessionProcessingMessages(sid, false);
-      toast.show(force ? '已强制停止本轮任务。' : '已停止任务并清空排队。', {
-        type: 'info',
-      });
+      if (!silent) {
+        toast.show(force ? '已强制停止本轮任务。' : '已停止任务并清空排队。', {
+          type: 'info',
+        });
+      }
       return;
     }
 
@@ -314,9 +325,11 @@ export function useStreamCallbacks(
       // 无正文：清空占位（不写 assistant 正文）；停止提示走全局 toast（单轨收敛 §2.4）
       st.updateMessageText(sid, cur.assistantMsgId, '');
       scheduleDualRafClearStream(sid, cur.assistantMsgId);
-      toast.show(force ? '已强制停止本轮生成。' : '已停止本轮生成。', {
-        type: 'info',
-      });
+      if (!silent) {
+        toast.show(force ? '已强制停止本轮生成。' : '已停止本轮生成。', {
+          type: 'info',
+        });
+      }
     }
     const asst = buildMessageIndex(getSessionById(sid)).get(cur.assistantMsgId);
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
@@ -358,6 +371,11 @@ export function useStreamCallbacks(
     finalizeStopGeneration(false, targetSessionId);
   };
 
+  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  const handleSilentStopGeneration = (targetSessionId?: string) => {
+    finalizeStopGeneration(false, targetSessionId, { silent: true });
+  };
+
   /** 强制取消 = L3 force_cancel（UI 应二次确认） */
   const handleForceCancelGeneration = (targetSessionId?: string) => {
     finalizeStopGeneration(true, targetSessionId);
@@ -382,6 +400,7 @@ export function useStreamCallbacks(
   return {
     runStreamingAssistant,
     handleStopGeneration,
+    handleSilentStopGeneration,
     handleForceCancelGeneration,
   };
 }

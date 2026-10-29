@@ -91,11 +91,11 @@ pub(crate) async fn handle(
     //    契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；
     //    流中 Err = 已产出内容 → 内容保留收场（不重试，01 D6），未产出 → 重试阶梯。
     let outcome = consume_stream(state, delta_sink, &assistant_message_id, result).await;
-    // 流前/流中无内容错误（未产出任何事件）：流中 abort → aborted 收场；
+    // 流前/流中无内容错误（未产出任何事件）：流中 abort / L2 停止 → 立即收场；
     // 否则进入分类重试阶梯（瞬态 / length / payload，01 §2.5）；
     // 重试入口自身的 abort 复查由 stream_error::handle 承担（Q40）
     if let Some(classified) = outcome.stream_error {
-        if outcome.aborted {
+        if outcome.aborted || outcome.cooperative_stopped {
             return streaming_aborted(state);
         }
         return stream_error::handle(state, classified).await;
@@ -103,15 +103,27 @@ pub(crate) async fn handle(
     let consumed = outcome
         .consumed
         .expect("consume_stream：无流错误时必有收口结果");
-    consume_classify(state, &consumed, &assistant_message_id, outcome.aborted).await
+    consume_classify(
+        state,
+        &consumed,
+        &assistant_message_id,
+        outcome.aborted,
+        outcome.cooperative_stopped,
+    )
+    .await
 }
 
 /// 流消费收束状态（[consume_stream] 返回）：收口结果 / abort 竞速标记 /
-/// 流前或流中无内容的流错误（分类重试阶梯入口）。`consumed` 与
-/// `stream_error` 互斥：有错误时无收口结果。
+/// L2 停止竞速标记 / 流前或流中无内容的流错误（分类重试阶梯入口）。
+/// `consumed` 与 `stream_error` 互斥：有错误时无收口结果。
+/// `aborted` 与 `cooperative_stopped` 可同时为 false（正常收流）；
+/// abort 优先——两者同置时按 abort 收场（biased 分支序保证）。
 struct ConsumeOutcome {
     consumed: Option<ConsumeResult>,
     aborted: bool,
+    /// L2 协作停止在流中触发（stop_signal 竞速命中）：部分内容保留，
+    /// 经 [streaming_aborted] 的安全点 drain 以 stopped 收场
+    cooperative_stopped: bool,
     stream_error: Option<conex_types::response::ClassifiedStreamError>,
 }
 
@@ -131,6 +143,9 @@ async fn consume_stream(
     // Q21（T09.9）：流中 abort 竞速标记——流式消费期间 abort 置位即停收
     // （语义：abort 优先于后续事件消费，partial salvage 判定输入）
     let mut aborted = false;
+    // L2 协作停止竞速标记（流中即时停止）：stop_signal 触发即停收，
+    // 部分内容保留，收场由 consume_classify / handle 经安全点 drain 判为 stopped
+    let mut cooperative_stopped = false;
     match result {
         Ok(mut stream) => {
             // 3-1：session_id 在流消费入口缓存一次；热路径按帧借用，构造
@@ -147,6 +162,13 @@ async fn consume_stream(
                     biased;
                     _ = state.abort_signal.wait_aborted() => {
                         aborted = true;
+                        break;
+                    }
+                    // L2 协作停止即时打断（与 abort 同款竞速语义）：停止意图
+                    // 本体在总线中，由收场路径的安全点 drain 消费（stopped 收场，
+                    // 不 abort——D1 语义）；此处只负责「立即停收」
+                    _ = state.stop_signal.wait_aborted() => {
+                        cooperative_stopped = true;
                         break;
                     }
                     item = stream.next() => item,
@@ -224,10 +246,16 @@ async fn consume_stream(
     if !aborted && state.abort_signal.is_aborted() {
         aborted = true;
     }
+    // 同款竞速窗口复查（L2）：流结束瞬间触发的协作停止补标注；
+    // abort 已置位时以 abort 收场为准（优先级 force > cooperative）
+    if !aborted && !cooperative_stopped && state.stop_signal.is_aborted() {
+        cooperative_stopped = true;
+    }
     if let Some(classified) = stream_error {
         return ConsumeOutcome {
             consumed: None,
             aborted,
+            cooperative_stopped,
             stream_error: Some(classified),
         };
     }
@@ -242,6 +270,7 @@ async fn consume_stream(
     ConsumeOutcome {
         consumed: Some(consumed),
         aborted,
+        cooperative_stopped,
         stream_error: None,
     }
 }
@@ -256,6 +285,7 @@ async fn consume_classify(
     consumed: &ConsumeResult,
     assistant_message_id: &str,
     aborted: bool,
+    cooperative_stopped: bool,
 ) -> Result<HandlerOutcome, LoopError> {
     // 4b. diagnostics → provider-diagnostic 事件（01 §2.4 步骤 4）
     emit_diagnostics(state, consumed);
@@ -298,9 +328,15 @@ async fn consume_classify(
             // 再退出，消除流末尾孤儿泄漏。
             let has_tool_calls = !tool_calls.is_empty();
 
-            if aborted || consumed.stop_reason() == Some(ConsumeStopReason::Aborted) {
-                // abort 后 partial salvage：消息已 commit（stopReason=aborted
-                // 标注）→ ABORT 收场，内容保留（01 §2.4 步骤 5 / 01 §五.9）
+            // L2 流中停止与 L3 abort 同走「内容保留收场」：消息已 commit →
+            // 中断工具合成 → streaming_aborted 的安全点 drain 判定终态
+            //（总线含 CooperativeStop → stopped；abort 置位 → aborted）
+            if aborted
+                || cooperative_stopped
+                || consumed.stop_reason() == Some(ConsumeStopReason::Aborted)
+            {
+                // abort / 停止后 partial salvage：消息已 commit（stopReason 标注）
+                // → 收场，内容保留（01 §2.4 步骤 5 / 01 §五.9）
                 if has_tool_calls {
                     if let Some(assistant) = last_assistant_with_tool_calls(state) {
                         let assistant = assistant.clone();
@@ -308,7 +344,7 @@ async fn consume_classify(
                             state,
                             &assistant,
                             codes::TOOL_ABORTED_BEFORE_DISPATCH,
-                            "streaming aborted by user or provider before tool execution",
+                            "streaming interrupted by user stop/cancel before tool execution",
                         );
                     }
                 }
@@ -888,7 +924,7 @@ mod tests {
             })
         );
 
-        let outcome = consume_classify(&mut state, &consumed, "a1", false)
+        let outcome = consume_classify(&mut state, &consumed, "a1", false, false)
             .await
             .expect("consume_classify 应处理并返回结果");
 
@@ -946,7 +982,7 @@ mod tests {
             false,
         );
 
-        let outcome = consume_classify(&mut state, &consumed, "a1", false)
+        let outcome = consume_classify(&mut state, &consumed, "a1", false, false)
             .await
             .expect("consume_classify 应处理并返回结果");
 

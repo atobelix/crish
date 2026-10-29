@@ -219,21 +219,20 @@ export function useSlashSend(
     }
 
     // 9. 空闲时乐观入库并启动流式
+    // 信封 SSOT（2026-10-29）：context_state 仅经结构化参数 contextState
+    // 传引擎（请求组装期合并，LLM 可见）；正文恒存用户原文——严禁再拼
+    // [用户输入]/[系统环境上下文] 信封进消息正文（呈现归发丝线，编辑归原文）
     const flushedContextState = flushContextStateBeforeSend(sessionId);
     if (flushedContextState) {
       streamOptionsWithClientMsg.contextState = flushedContextState;
     }
-
-    const finalUserDisplayText = flushedContextState
-      ? `[用户输入]\n${displayText}\n\n[系统环境上下文]\n${flushedContextState}`
-      : displayText;
 
     let enqueued = false;
     try {
       addMessage(wsId, sessionId, {
         id: userMsgId,
         sender: 'user',
-        text: finalUserDisplayText,
+        text: displayText,
         timestamp: Date.now(),
         status: 'processing',
         ...(userImages.length ? { images: userImages } : {}),
