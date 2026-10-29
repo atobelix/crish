@@ -90,6 +90,9 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["simd
 # markdown-rs：Conex-MD 契约层 GFM P 基座（conex-md-ast 唯一权威 parse；S 仍自研）
 markdown = "1.0.0"
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+# syntect 默认语法包缺 TypeScript/TOML/Dockerfile 等现代语言；two-face 提供 bat 语法集。
+# 使用 fancy 变体与 workspace syntect 的 regex-fancy 后端保持一致。
+two-face = { version = "0.5", default-features = false, features = ["syntect-fancy"] }
 ammonia = "4"
 moka = { version = "0.12", features = ["sync"] }
 once_cell = "1"

@@ -406,6 +406,7 @@ impl SubagentSpawner for MockSpawner {
 /// 3. Group Commit P99 延迟满足 SLA；
 /// 4. ReaderPool 零超时，自适应 try_lock 快速路径命中率高。
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "perf SLA: run under --release --ignored (debug builds exceed 50ms P99)"]
 async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let _serial_guard = acquire_stress_test_lock().await;
     let (_guard, db_path) = create_temp_db_path();

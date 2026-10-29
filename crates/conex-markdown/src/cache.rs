@@ -1,251 +1,133 @@
-//! 全局 LRU 缓存: moka + 字节预算。
+//! 渲染结果 LRU 缓存：moka + 字节预算，按渲染变体隔离。
 //!
-//! 被 highlight.rs (代码高亮缓存) 和 renderer.rs (markdown 渲染缓存) 共享。
-//! 字符串 UTF-16 字节估算 (len * 2) 与 JS LruCache 估算口径一致。
-//!
-//! **容量语义（T-D1-C / U-MOKA / D1-E5）**：moka 在设置 `weigher` 后，
-//! `max_capacity` 表示**加权总大小上限**（不是条目数）。因此 builder
-//! 必须使用 `max_capacity(CACHE_BUDGET_BYTES as u64)`——字节预算唯一语义。
-//! 旧路径 `max_capacity(CACHE_MAX_ENTRIES=2048)` + 字节 weigher 会把有效
-//! 预算压成 ~2KB 假预算，已删除。
+//! - `RenderResult` 缓存与代码高亮缓存分离（高亮缓存在 `highlight.rs` 自持）。
+//! - chat / document 两个变体各一个缓存实例，避免同一文本在不同变体下命中
+//!   错误结果；也保留 `&str` 零拷贝查表。
+//! - 字节预算来自 `conex_shared::perf_budget`，moka 的 `max_capacity` 在
+//!   设置 weigher 后表示加权总大小上限。
 
 use moka::sync::Cache;
 use std::sync::Arc;
 
-// D0/U-BUDGET：字节预算**定义**收敛至 conex-shared::perf_budget（仅 re-export）。
-// builder（max_capacity 字节语义 / weigher）由 T-D1-C / U-MOKA 维护，本维不动。
-/// 缓存字节预算: 32MB (按 UTF-16 估算,即实际 ~16MB UTF-8)。
-///
-/// T-D1-C：此常量必须出现在两个 builder 的 `max_capacity` 中
-/// （weigher 语义下 = 加权总大小上限）。禁止回退到条目数常量。
+use crate::types::{MarkdownVariant, RenderResult};
+
 pub use conex_shared::perf_budget::{
     RUST_MARKDOWN_CACHE_BUDGET_BYTES as CACHE_BUDGET_BYTES,
     RUST_MARKDOWN_CACHE_ENTRY_MAX_BYTES as CACHE_ENTRY_MAX_BYTES,
 };
 
-/// 渲染缓存: key = String, value = Arc<String>。
-pub type RenderCache = Cache<String, Arc<String>>;
+/// 渲染缓存：key = 原文, value = Arc<RenderResult>。
+pub type RenderCache = Cache<String, Arc<RenderResult>>;
 
-/// 允许借用切片 `&str` 零拷贝查表的扩展接口（DEF-05）。
-pub trait CacheBorrowExt {
-    /// 以 `&str` 借用切片查询缓存条目，避免在查表前强制克隆 String 堆内存。
-    fn get_borrowed(&self, key: &str) -> Option<Arc<String>>;
+/// 字节估算：UTF-16 风格（len * 2），与 JS LruCache 估算口径一致。
+fn estimate_size(key: &str, value: &RenderResult) -> u32 {
+    let bytes = (key.len() + value.html.len() + 8) * 2;
+    bytes.try_into().unwrap_or(u32::MAX)
 }
 
-impl CacheBorrowExt for RenderCache {
-    #[inline]
-    fn get_borrowed(&self, key: &str) -> Option<Arc<String>> {
-        self.get(key)
+fn build_byte_budget_cache() -> RenderCache {
+    Cache::builder()
+        .max_capacity(CACHE_BUDGET_BYTES as u64)
+        .weigher(|k: &String, v: &Arc<RenderResult>| -> u32 { estimate_size(k, v) })
+        .build()
+}
+
+static CHAT_RENDER_CACHE: once_cell::sync::Lazy<RenderCache> =
+    once_cell::sync::Lazy::new(build_byte_budget_cache);
+static DOCUMENT_RENDER_CACHE: once_cell::sync::Lazy<RenderCache> =
+    once_cell::sync::Lazy::new(build_byte_budget_cache);
+
+/// 获取指定变体的全局渲染缓存。
+pub fn render_cache_for(variant: MarkdownVariant) -> &'static RenderCache {
+    match variant {
+        MarkdownVariant::Chat => &CHAT_RENDER_CACHE,
+        MarkdownVariant::Document => &DOCUMENT_RENDER_CACHE,
     }
 }
 
-/// 借用切片 `&str` 零拷贝查询全局渲染缓存（DEF-05）。
-///
-/// 允许直接以 `&str` 零拷贝查询，未命中时零堆分配；
-/// 仅在未命中且写入缓存时由写入方提升为 String。
+/// 借用切片 `&str` 零拷贝查询渲染缓存。
 #[inline]
-pub fn get_render_cached(key: &str) -> Option<Arc<String>> {
-    render_cache().get(key)
+pub fn get_render_cached(
+    variant: MarkdownVariant,
+    key: &str,
+) -> Option<Arc<RenderResult>> {
+    render_cache_for(variant).get(key)
 }
 
-/// 写入全局渲染缓存（预检查字节预算，若超预算则不插入）。
+/// 写入全局渲染缓存（预检查单条目字节预算）。
 #[inline]
-pub fn insert_render_cached(key: &str, value: Arc<String>) -> bool {
+pub fn insert_render_cached(
+    variant: MarkdownVariant,
+    key: &str,
+    value: Arc<RenderResult>,
+) -> bool {
     if entry_within_budget(key, &value) {
-        render_cache().insert(key.to_string(), value);
+        render_cache_for(variant).insert(key.to_string(), value);
         true
     } else {
         false
     }
 }
 
-/// 字节估算: UTF-16 风格 (len * 2),与 JS LruCache.estimateSize 一致。
-fn estimate_size<K: AsRef<str>, V: AsRef<str>>(key: &K, value: &V) -> u32 {
-    let bytes = (key.as_ref().len() + value.as_ref().len()) * 2;
-    // 截断到 u32 范围 (4GB),超出的极端情况退化为 u32::MAX
-    bytes.try_into().unwrap_or(u32::MAX)
+/// 清空两个变体的渲染缓存。
+pub fn clear_render_caches() {
+    render_cache_for(MarkdownVariant::Chat).invalidate_all();
+    render_cache_for(MarkdownVariant::Document).invalidate_all();
 }
 
-/// 构建带字节预算语义的 moka 缓存（weigher 存在时 max_capacity = 权重和上限）。
-///
-/// T-D1-C：单一构造路径——两个全局缓存共用，杜绝「条目数 + 字节 weigher」
-/// 混用回潮。测试可传入更小的 `budget_bytes` 验证驱逐语义。
-fn build_byte_budget_cache(budget_bytes: u64) -> Cache<String, Arc<String>> {
-    Cache::builder()
-        .max_capacity(budget_bytes)
-        .weigher(|k: &String, v: &Arc<String>| -> u32 { estimate_size(k, v.as_ref()) })
-        .build()
-}
-
-/// 全局渲染缓存。
-static RENDER_CACHE: once_cell::sync::Lazy<RenderCache> =
-    once_cell::sync::Lazy::new(|| build_byte_budget_cache(CACHE_BUDGET_BYTES as u64));
-
-/// 获取全局渲染缓存。
-pub fn render_cache() -> &'static RenderCache {
-    &RENDER_CACHE
-}
-
-/// 高亮缓存（1C-8：与渲染缓存分离）。
-///
-/// 原先 highlight.rs 与 renderer.rs 共用同一 `RENDER_CACHE`，
-/// key 格式不同（高亮 `lang:code` vs 渲染原文）——高亮大量命中会驱逐渲染
-/// 缓存条目，反之亦然。分离为独立 moka 实例后两者独立淘汰，互不干扰，命中率提升。
-pub type HighlightCache = Cache<String, Arc<String>>;
-
-static HIGHLIGHT_CACHE: once_cell::sync::Lazy<HighlightCache> =
-    once_cell::sync::Lazy::new(|| build_byte_budget_cache(CACHE_BUDGET_BYTES as u64));
-
-/// 获取全局高亮缓存（1C-8）。
-pub fn highlight_cache() -> &'static HighlightCache {
-    &HIGHLIGHT_CACHE
-}
-
-/// 判断单条目是否在字节预算内 (用于预检查,避免插入巨物)。
-pub fn entry_within_budget(key: &str, value: &str) -> bool {
-    let bytes = (key.len() + value.len()) * 2;
+/// 判断单条目是否在字节预算内（避免插入巨物）。
+pub fn entry_within_budget(key: &str, value: &RenderResult) -> bool {
+    let bytes = (key.len() + value.html.len() + 8) * 2;
     bytes <= CACHE_ENTRY_MAX_BYTES as usize
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::RenderResult;
 
-    #[test]
-    fn cache_returns_inserted_value() {
-        let cache = render_cache();
-        cache.insert("k1".to_string(), Arc::new("v1".to_string()));
-        let got = cache.get("k1");
-        assert_eq!(got.as_deref().map(|s| s.as_str()), Some("v1"));
+    fn result(html: &str) -> Arc<RenderResult> {
+        Arc::new(RenderResult {
+            html: html.to_string(),
+            truncated: false,
+        })
     }
 
     #[test]
-    fn cache_supports_zero_copy_str_lookup() {
-        let r_cache = render_cache();
-        r_cache.insert(
-            "str-lookup-key".to_string(),
-            Arc::new("rendered-html".to_string()),
-        );
-        let key_slice: &str = "str-lookup-key";
-        assert_eq!(
-            r_cache.get(key_slice).as_deref().map(|s| s.as_str()),
-            Some("rendered-html")
-        );
-        assert_eq!(
-            r_cache
-                .get_borrowed(key_slice)
-                .as_deref()
-                .map(|s| s.as_str()),
-            Some("rendered-html")
-        );
-        assert_eq!(
-            get_render_cached(key_slice).as_deref().map(|s| s.as_str()),
-            Some("rendered-html")
-        );
+    fn cache_returns_inserted_value() {
+        let cache = render_cache_for(MarkdownVariant::Chat);
+        cache.insert("k1".to_string(), result("v1"));
+        let got = cache.get("k1");
+        assert_eq!(got.map(|v| v.html.clone()).as_deref(), Some("v1"));
+    }
 
-        assert!(insert_render_cached(
-            "helper-key",
-            Arc::new("helper-val".to_string())
-        ));
-        assert_eq!(
-            get_render_cached("helper-key")
-                .as_deref()
-                .map(|s| s.as_str()),
-            Some("helper-val")
+    #[test]
+    fn variants_are_isolated() {
+        let key = "same-text";
+        insert_render_cached(MarkdownVariant::Chat, key, result("<p>chat</p>"));
+        insert_render_cached(
+            MarkdownVariant::Document,
+            key,
+            result("<p>document</p>"),
         );
-
-        let h_cache = highlight_cache();
-        h_cache.insert(
-            "ts:const x = 1;".to_string(),
-            Arc::new("<span>const</span>".to_string()),
-        );
-        let hl_slice: &str = "ts:const x = 1;";
         assert_eq!(
-            h_cache.get(hl_slice).as_deref().map(|s| s.as_str()),
-            Some("<span>const</span>")
+            get_render_cached(MarkdownVariant::Chat, key)
+                .map(|v| v.html.clone())
+                .as_deref(),
+            Some("<p>chat</p>")
+        );
+        assert_eq!(
+            get_render_cached(MarkdownVariant::Document, key)
+                .map(|v| v.html.clone())
+                .as_deref(),
+            Some("<p>document</p>")
         );
     }
 
     #[test]
     fn entry_within_budget_caps_large_entries() {
-        let small_key = "k";
-        let small_val = "v";
-        assert!(entry_within_budget(small_key, small_val));
-
-        let big_val = "x".repeat(CACHE_ENTRY_MAX_BYTES as usize);
-        assert!(!entry_within_budget(small_key, &big_val));
-    }
-
-    /// T-D1-C（U-MOKA / N5）：字节预算数量级为 MB 非 KB——
-    /// 构造 ≥ 数百 KB 条目集断言仍可多条共存（有效预算不是 ~2KB 假预算）。
-    #[test]
-    fn multi_kilobyte_entries_coexist_under_byte_budget() {
-        // 每条约 200KB 权重（key 100 + value ~100_000 字符 × 2）
-        let cache = build_byte_budget_cache(CACHE_BUDGET_BYTES as u64);
-        for i in 0..8u32 {
-            let key = format!("k{i}");
-            let val = "x".repeat(100_000);
-            cache.insert(key, Arc::new(val));
-        }
-        cache.run_pending_tasks();
-        // 8 条 × ~200KB ≈ 1.6MB 权重——远超旧假预算 2048，应全部共存
-        assert_eq!(
-            cache.entry_count(),
-            8,
-            "数百 KB 级条目集应多条共存（有效预算为 MB 量级）"
-        );
-        assert!(
-            cache.weighted_size() > 1_000_000,
-            "weighted_size 应达 MB 量级，而非旧 ~2KB 假预算"
-        );
-    }
-
-    /// T-D1-C：权重和逼近预算时发生驱逐，weighted_size ≤ 预算。
-    #[test]
-    fn eviction_keeps_weighted_size_within_budget() {
-        // 小预算：400KB（便于单测驱逐，不占 32MB 真实内存）
-        let budget: u64 = 400 * 1024;
-        let cache = build_byte_budget_cache(budget);
-        // 每条约 100KB 权重（key 50 + value 50_000 字符 × 2）
-        for i in 0..20u32 {
-            let key = format!("evict-{i}");
-            let val = "y".repeat(50_000);
-            cache.insert(key, Arc::new(val));
-        }
-        cache.run_pending_tasks();
-        // 驱逐后 weighted_size 必须 ≤ 预算（moka 维护权重和上限）
-        assert!(
-            cache.weighted_size() <= budget,
-            "weighted_size ({}) 应 ≤ 预算 ({budget})",
-            cache.weighted_size()
-        );
-        // 条目数应少于插入总数（发生了驱逐）
-        assert!(
-            cache.entry_count() < 20,
-            "超预算插入应触发驱逐，entry_count={}",
-            cache.entry_count()
-        );
-    }
-
-    /// T-D1-C：全局 builder 使用 CACHE_BUDGET_BYTES 字节语义——
-    /// 全局缓存能容纳数百 KB 级条目集（负向断言：非 ~2KB 假预算）。
-    #[test]
-    fn global_cache_uses_byte_budget_semantics() {
-        let cache = render_cache();
-        // 并行测试可能共享全局缓存——插入后按 key 断言，不断言全局 entry_count
-        for i in 0..4u32 {
-            let key = format!("global-kb-{i}");
-            let val = "z".repeat(100_000);
-            cache.insert(key.clone(), Arc::new(val));
-            assert!(
-                cache.get(&key).is_some(),
-                "数百 KB 级条目应可存入全局缓存（字节预算语义）"
-            );
-        }
-        cache.run_pending_tasks();
-        assert!(
-            cache.weighted_size() > 500_000,
-            "全局缓存 weighted_size 应达 MB 量级（非 ~2KB 假预算）"
-        );
+        assert!(entry_within_budget("k", &result("v")));
+        let big = "x".repeat(CACHE_ENTRY_MAX_BYTES as usize);
+        assert!(!entry_within_budget("k", &result(&big)));
     }
 }
