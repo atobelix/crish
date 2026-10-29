@@ -71,11 +71,3 @@ pub use normalize::{
     allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason,
 };
 pub use steering_queue::PendingMessageQueue;
-
-/// 当前 UTC 毫秒时间戳（epoch ms，run 记录与事件共用）
-pub(crate) fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
-}

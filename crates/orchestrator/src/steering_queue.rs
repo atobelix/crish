@@ -19,6 +19,7 @@
 
 use std::collections::VecDeque;
 
+use conex_shared::time::{format_iso_utc_ms, Clock, SystemClock};
 use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
 };
@@ -103,7 +104,7 @@ impl SteeringInputEntry {
         AgentMessage {
             id: self.id.clone(),
             role: AgentMessageRole::User,
-            created_at: iso_from_millis(self.enqueued_at),
+            created_at: format_iso_utc_ms(i64::try_from(self.enqueued_at).unwrap_or(i64::MAX)),
             blocks: vec![AgentMessageBlock::Text {
                 text: self.text.clone(),
             }],
@@ -309,7 +310,7 @@ impl PendingMessageQueue {
             return (0, Vec::new());
         }
 
-        let now_ms = now_millis();
+        let now_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
         self.purge_expired_leases(now_ms);
 
         let mut reserved = Vec::new();
@@ -503,40 +504,6 @@ impl Default for PendingMessageQueue {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Unix 毫秒转 ISO8601（毫秒精度，`2026-07-31T08:00:00.000Z`）
-///
-/// 与 session-loop steering 的时间戳格式一致；无 chrono 依赖，
-/// 手工换算（Howard Hinnant civil-from-days 算法）。
-fn iso_from_millis(ms: u64) -> String {
-    let secs = ms / 1000;
-    let millis = ms % 1000;
-    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let (year, month, day) = civil_from_days((secs / 86400) as i64);
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
-}
-
-/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法）
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-/// 获取当前系统 Unix 毫秒时间戳
-fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -893,9 +860,12 @@ mod tests {
 
     /// 时间戳换算：已知基准（2026-07-31 = Unix 天数 20665）
     #[test]
-    fn iso_from_millis_known_date() {
-        let iso = iso_from_millis(1_785_456_000_000);
-        assert_eq!(iso, "2026-07-31T00:00:00.000Z");
+    fn user_message_created_at_known_date() {
+        let entry = SteeringInputEntry::user("ts", "known-date", 1_785_456_000_000);
+        assert_eq!(
+            entry.into_user_message().created_at,
+            "2026-07-31T00:00:00.000Z"
+        );
     }
 
     /// 跨会话强隔离测试：不同会话条目隔离取出、分组去重互不干扰
@@ -1101,7 +1071,7 @@ mod tests {
         assert_eq!(queue.len(), 0);
 
         // 模拟当前时间未超时（+30s）
-        let now = now_millis();
+        let now = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
         let purged = queue.purge_expired_leases(now + 30_000);
         assert_eq!(purged, 0);
         assert_eq!(queue.leased_len(), 1);

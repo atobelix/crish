@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use conex_shared::time::parse_iso8601_ms;
 use conex_types::AgentMessage;
 
 use crate::tokens::{count_agent_message_tokens, count_tokens};
@@ -68,7 +69,7 @@ pub(crate) fn find_usage_message(
         }
         // 时间戳护栏：早于压缩边界 → 旧 usage 全部作废，回退启发式
         if let Some(boundary) = last_compaction_at {
-            match parse_iso8601_epoch_ms(&message.created_at) {
+            match parse_iso8601_ms(&message.created_at) {
                 Some(t) if t < boundary => return None,
                 Some(_) => {}
                 None => return None,
@@ -137,145 +138,42 @@ pub(crate) fn estimate_with_usage(
     }
 }
 
-/// ISO8601 时间戳 → epoch 毫秒（无 chrono 依赖的手工解析）
-///
-/// 期望形态：`YYYY-MM-DDTHH:MM:SS[.mmm]Z`（UTC，`now_iso_utc` 产出
-/// `YYYY-MM-DDTHH:MM:SS.mmmZ`）；小数秒缺省按 0 处理；仅接受 Z 结尾
-/// （带时区偏移的形态视为不可解析）。解析失败返回 None。
-///
-/// 只服务 usage 时间戳护栏，故保持本模块私有。
-fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
-    let bytes = value.as_bytes();
-    if bytes.len() < 20 {
-        return None;
-    }
-    if bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T' {
-        return None;
-    }
-    if bytes[13] != b':' || bytes[16] != b':' {
-        return None;
-    }
-    let num =
-        |start: usize, len: usize| -> Option<i64> { value.get(start..start + len)?.parse().ok() };
-    let year = num(0, 4)?;
-    let month = num(5, 2)?;
-    let day = num(8, 2)?;
-    let hour = num(11, 2)?;
-    let minute = num(14, 2)?;
-    let second = num(17, 2)?;
-    // 小数秒（可选；now_iso_utc 恒 3 位）
-    let mut millis = 0i64;
-    let mut idx = 19;
-    if idx < bytes.len() && bytes[idx] == b'.' {
-        idx += 1;
-        let start = idx;
-        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
-            idx += 1;
-        }
-        if idx == start {
-            return None;
-        }
-        let fraction = &value[start..idx];
-        // 不足 3 位补零、超 3 位截断（毫秒精度）
-        let mut padded = String::with_capacity(3);
-        padded.push_str(fraction);
-        while padded.len() < 3 {
-            padded.push('0');
-        }
-        padded.truncate(3);
-        millis = padded.parse().ok()?;
-    }
-    if idx >= bytes.len() || bytes[idx] != b'Z' {
-        return None;
-    }
-    // 基本范围校验（护栏判定用；不做逐月天数精确校验）
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
-    if hour > 23 || minute > 59 || second > 60 {
-        return None;
-    }
-    let days = days_from_civil(year, month as u32, day as u32)?;
-    Some((days * 86_400 + hour * 3_600 + minute * 60 + second) * 1_000 + millis)
-}
-
-/// 公历日期 → 1970-01-01 起天数（Howard Hinnant civil-from-days 逆运算）
-fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
-    if month == 0 || day == 0 {
-        return None;
-    }
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = (if year >= 0 { year } else { year - 399 }) / 400;
-    let year_of_era = year - era * 400;
-    let day_of_year: i64 = (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
-        + i64::from(day)
-        - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    Some(era * 146_097 + day_of_era - 719_468)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::parse_iso8601_epoch_ms;
+    use conex_shared::time::parse_iso8601_ms;
 
-    /// 合法形态：UTC + 可选小数秒（缺省按 0、超 3 位截断到毫秒）
+    /// usage 时间戳护栏依赖的共享解析器契约。
+    ///
+    /// `find_usage_message` 的保守作废语义建立在 [`parse_iso8601_ms`] 之上；
+    /// 常规合法/非法形态已由 conex-shared 单测覆盖，此处只保留其尚未覆盖的
+    /// 边界断言（毫秒截断、纪元秒、跨日边界、空小数秒、缺失 Z、月/日/分/秒
+    /// 下限），防止护栏判定回退。
     #[test]
-    fn parse_iso8601_timestamp() {
-        assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-03T12:00:00.000Z"),
-            Some(1_785_758_400_000i64)
-        );
-        assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-03T12:00:00Z"),
-            Some(1_785_758_400_000i64)
-        );
-        assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-03T12:00:00.999Z"),
-            Some(1_785_758_400_999i64)
-        );
-        // 小数秒不足 3 位补零（.5 → 500ms）
-        assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-03T12:00:00.5Z"),
-            Some(1_785_758_400_500i64)
-        );
+    fn usage_guard_shared_iso_parser_contract() {
         // 小数秒超 3 位截断（毫秒精度）
         assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-03T12:00:00.123456Z"),
+            parse_iso8601_ms("2026-08-03T12:00:00.123456Z"),
             Some(1_785_758_400_123i64)
         );
-    }
-
-    /// epoch 零点与跨日边界（护栏比较用绝对毫秒，不允许时区漂移）
-    #[test]
-    fn parse_iso8601_epoch_origin_and_day_boundary() {
-        assert_eq!(parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"), Some(0));
+        // epoch 零点之后的秒级时间戳
+        assert_eq!(parse_iso8601_ms("1970-01-01T00:00:01Z"), Some(1_000i64));
+        // 跨日边界（护栏比较用绝对毫秒，不允许时区漂移）
         assert_eq!(
-            parse_iso8601_epoch_ms("1970-01-01T00:00:01Z"),
-            Some(1_000i64)
-        );
-        assert_eq!(
-            parse_iso8601_epoch_ms("2026-08-04T00:00:00.000Z"),
+            parse_iso8601_ms("2026-08-04T00:00:00.000Z"),
             Some(1_785_758_400_000i64 + 12 * 3_600 * 1_000)
         );
-    }
-
-    /// 非法形态一律 None（护栏保守作废，不回退到「当成 0 时刻」）
-    #[test]
-    fn parse_iso8601_rejects_invalid_shapes() {
+        // 非法形态一律 None（护栏保守作废，不回退到「当成 0 时刻」）
         for bad in [
             "",
             "2026-08-03 12:00:00Z",
-            "2026-13-03T12:00:00Z",
-            "2026-08-03T12:00:00+08:00",
             "2026-00-03T12:00:00Z",
             "2026-08-00T12:00:00Z",
-            "2026-08-03T24:00:00Z",
             "2026-08-03T12:60:00Z",
             "2026-08-03T12:00:61Z",
             "2026-08-03T12:00:00.Z",
             "2026-08-03T12:00:00.500",
         ] {
-            assert_eq!(parse_iso8601_epoch_ms(bad), None, "非法形态：{bad}");
+            assert_eq!(parse_iso8601_ms(bad), None, "非法形态：{bad}");
         }
     }
 }

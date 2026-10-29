@@ -44,12 +44,13 @@ mod tests;
 
 use std::sync::Arc;
 
+use conex_shared::time::format_iso_utc_ms;
 use conex_types::history::HistoryMessage;
 use conex_types::message::{AgentMessage, AgentMessageRole};
 
 use self::blocks::{resolve_assistant_blocks, resolve_user_blocks, status_kind, StatusKind};
 use self::repair::{repair_orphan_tool_calls, sanitize_conversation_head};
-use self::time_text::{iso8601_from_epoch_millis, joined_text};
+use self::time_text::joined_text;
 use self::tool_calls::{parse_hydrated_tool_calls, parse_tool_call_results};
 
 /// 历史水合映射主入口：`HistoryMessage` 数组 → `AgentMessage` 数组。
@@ -98,7 +99,7 @@ fn hydrate_user(entry: &HistoryMessage) -> Option<AgentMessage> {
     Some(AgentMessage {
         id: entry.id.clone(),
         role: AgentMessageRole::User,
-        created_at: iso8601_from_epoch_millis(entry.timestamp),
+        created_at: format_iso_utc_ms(entry.timestamp),
         blocks,
         metadata,
         client_message_id: Some(entry.id.clone()),
@@ -131,7 +132,7 @@ fn hydrate_assistant(entry: &HistoryMessage) -> Vec<AgentMessage> {
     let asst_msg = AgentMessage {
         id: entry.id.clone(),
         role: AgentMessageRole::Assistant,
-        created_at: iso8601_from_epoch_millis(entry.timestamp),
+        created_at: format_iso_utc_ms(entry.timestamp),
         blocks,
         metadata,
         client_message_id: Some(entry.id.clone()),

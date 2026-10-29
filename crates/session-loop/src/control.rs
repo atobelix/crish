@@ -16,9 +16,8 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use conex_shared::time::now_iso_utc;
+use conex_shared::time::{now_iso_utc, Clock, SystemClock};
 use conex_types::message::AgentMessage;
 use serde::{Deserialize, Serialize};
 
@@ -236,13 +235,6 @@ pub struct ControlBus {
     abort_signal: Option<crate::safe_point::AbortSignal>,
 }
 
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 impl ControlBus {
     /// 新建空总线
     pub fn new() -> Self {
@@ -270,13 +262,14 @@ impl ControlBus {
             }
         }
         self.seq += 1;
+        let now_ms = u64::try_from(SystemClock.now_ms()).unwrap_or(0);
         let intent = ControlIntent {
             id: input
                 .id
-                .unwrap_or_else(|| format!("ctrl-{}-{}", now_millis(), self.seq)),
+                .unwrap_or_else(|| format!("ctrl-{now_ms}-{}", self.seq)),
             kind,
             level: input.level.unwrap_or_else(|| level_for_kind(kind)),
-            created_at: input.created_at.unwrap_or_else(now_millis),
+            created_at: input.created_at.unwrap_or(now_ms),
             message: input.message,
             reason: input.reason,
             source: input.source,

@@ -26,8 +26,8 @@ use conex_db::{BlockState, CompactionBlockRow, DbFailure, LocalDb};
 use conex_types::events::AgentEvent;
 use conex_types::tool::ContextCompressionRecord;
 
-use crate::now_ms;
 use crate::persist::StoreError;
+use conex_shared::time::{Clock, SystemClock};
 
 /// 压缩事件（context-compression-end）落库成功后写入块行。
 ///
@@ -144,7 +144,7 @@ fn build_block_row(
     });
     let dropped_at_ms = u64_field("droppedAtMs")
         .map(|v| v as i64)
-        .unwrap_or_else(now_ms);
+        .unwrap_or_else(|| SystemClock.now_ms());
     // state：details 优先；缺省 awaiting（本轮同步路径未织入时恒 awaiting）
     let state = match str_field("summaryState").as_deref() {
         Some("committed") => BlockState::Committed,
@@ -152,7 +152,7 @@ fn build_block_row(
         _ => BlockState::Awaiting,
     };
 
-    let now = now_ms();
+    let now = SystemClock.now_ms();
     Ok(CompactionBlockRow {
         session_id: session_id.to_string(),
         block_id,

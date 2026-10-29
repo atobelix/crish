@@ -28,8 +28,8 @@ use conex_db::RunStatus;
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
 
-use crate::now_ms;
 use crate::persist::{Store, StoreError};
+use conex_shared::time::{Clock, SystemClock};
 
 /// run 生命周期事件（对齐 run-lifecycle.ts 的 RunLifecycleEvent）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -298,7 +298,7 @@ pub const EVENT_STORE_WRITE_FAILED_REASON: &str = "event-store-write-failed";
 impl RunHandle {
     /// 从初始状态构建句柄（注册落库由 [RunManager::start_run] 负责）
     pub fn new(run_id: &str, session_id: &str, initial: RunStatus) -> Self {
-        let now = now_ms();
+        let now = SystemClock.now_ms();
         Self {
             run_id: run_id.to_string(),
             session_id: session_id.to_string(),
@@ -363,7 +363,7 @@ impl RunHandle {
             .await
             .map_err(RunError::Store)?;
         self.status = next;
-        self.updated_at = now_ms();
+        self.updated_at = SystemClock.now_ms();
         // F-005：活跃期（非终态）转移落库后 touch 会话；终态转移不 touch
         // （machine 已推进到新状态，is_terminal 即新状态判据）
         if !self.machine.is_terminal() {
@@ -475,7 +475,7 @@ impl RunHandle {
         self.error = error.clone();
         self.terminal_sent = true;
         self.cursor = terminal_cursor;
-        self.updated_at = now_ms();
+        self.updated_at = SystemClock.now_ms();
         // 终态落库（写入 end_reason + cursor，T08.4）
         store
             .update_run_status(
@@ -523,7 +523,7 @@ impl RunHandle {
             self.status = RunStatus::Failed;
             self.end_reason = Some(EVENT_STORE_WRITE_FAILED_REASON.to_string());
             self.error = Some(message.to_string());
-            self.updated_at = now_ms();
+            self.updated_at = SystemClock.now_ms();
             store
                 .update_run_status(
                     &self.run_id,

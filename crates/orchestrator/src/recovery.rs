@@ -67,9 +67,9 @@ use agent_tools::tools::subagent::{SubagentSpawnRequest, SubagentSpawner, Subage
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::AgentEvent;
 
-use crate::now_ms;
 use crate::session::{SessionTree, SessionTreeEntry};
 use crate::steering_queue::PendingMessageQueue;
+use conex_shared::time::{Clock, SystemClock};
 
 static NEXT_RECOVERY_FORK_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -449,7 +449,7 @@ impl RecoveryCoordinator {
             retries: ctx.retries,
             remaining_status: "running".to_string(),
             pending: true,
-            created_at_ms: now_ms() as u64,
+            created_at_ms: u64::try_from(SystemClock.now_ms()).unwrap_or(0),
         };
         // 先构造待提交快照，但不发布到 coordinator 或队列；持久化失败时
         // 调用方仍看不到未落库的通知。
@@ -588,12 +588,12 @@ impl RecoveryCoordinator {
         let new_leaf_id = format!(
             "recovery-fork-{}-{}-{}",
             ctx.subagent_run_id,
-            now_ms(),
+            SystemClock.now_ms(),
             fork_sequence
         );
         let context_mode = decide_fork_context(
             ctx.started_at_ms,
-            now_ms(),
+            SystemClock.now_ms(),
             ctx.inject_bytes,
             ctx.window_bytes,
         );
@@ -605,7 +605,7 @@ impl RecoveryCoordinator {
             new_run_id: String::new(),
             new_leaf_id: new_leaf_id.clone(),
             context_mode,
-            created_at_ms: now_ms() as u64,
+            created_at_ms: u64::try_from(SystemClock.now_ms()).unwrap_or(0),
         };
         // 先只读源分支路径。spawn 失败时不能在 SessionTree 留下无法回滚的节点。
         let mut path_ids: Vec<String> = {
@@ -821,7 +821,7 @@ impl RecoveryCoordinator {
         let report = build_user_report(
             &ctx.subagent_id,
             &ctx.subagent_run_id,
-            now_ms() as u64,
+            u64::try_from(SystemClock.now_ms()).unwrap_or(0),
             &fp,
             &self.notifications,
             &self.forks,

@@ -3,10 +3,33 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+use conex_shared::time::Clock;
 
 use crate::gate::pattern::Pattern;
 use crate::gate::segments::{is_local_hostname, is_loopback_ip, is_reserved};
-use crate::gate::types::{GateClock, HostResolver, SystemClock, SystemResolver, REBINDING_WINDOW};
+use crate::gate::types::{HostResolver, SystemResolver, REBINDING_WINDOW};
+
+/// 单调时钟：60s 重绑定窗口只做差值比较，墙钟回拨不应影响门禁。
+#[derive(Debug, Clone, Copy)]
+struct MonotonicClock {
+    start: Instant,
+}
+
+impl Default for MonotonicClock {
+    fn default() -> Self {
+        Self {
+            start: Instant::now(),
+        }
+    }
+}
+
+impl Clock for MonotonicClock {
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.start.elapsed().as_millis()).unwrap_or(i64::MAX)
+    }
+}
 
 /// 正式域名门禁（17 §4.1/§4.2/§4.3 全流程 + R-11 传输层接线面）。
 ///
@@ -21,9 +44,9 @@ pub struct FormalDomainGate {
     pub(crate) blocklist: Vec<Pattern>,
     pub(crate) resolver: Arc<dyn HostResolver>,
     pub(crate) fail_closed_resolve: bool,
-    pub(crate) clock: Arc<dyn GateClock>,
+    pub(crate) clock: Arc<dyn Clock>,
     /// host → 上次校验通过时刻（60s 重绑定窗口起点；§4.3 步骤 4）。
-    pub(crate) window: Arc<Mutex<HashMap<String, u64>>>,
+    pub(crate) window: Arc<Mutex<HashMap<String, i64>>>,
 }
 
 impl std::fmt::Debug for FormalDomainGate {
@@ -49,7 +72,7 @@ impl FormalDomainGate {
             blocklist,
             Arc::new(SystemResolver),
             true,
-            Arc::new(SystemClock::default()),
+            Arc::new(MonotonicClock::default()),
         )
     }
 
@@ -64,7 +87,7 @@ impl FormalDomainGate {
             blocklist,
             resolver,
             true,
-            Arc::new(SystemClock::default()),
+            Arc::new(MonotonicClock::default()),
         )
     }
 
@@ -72,7 +95,7 @@ impl FormalDomainGate {
     pub fn with_clock(
         allowlist: &[String],
         blocklist: &[String],
-        clock: Arc<dyn GateClock>,
+        clock: Arc<dyn Clock>,
     ) -> Result<Self, String> {
         Self::with_parts(allowlist, blocklist, Arc::new(SystemResolver), true, clock)
     }
@@ -83,7 +106,7 @@ impl FormalDomainGate {
         blocklist: &[String],
         resolver: Arc<dyn HostResolver>,
         fail_closed_resolve: bool,
-        clock: Arc<dyn GateClock>,
+        clock: Arc<dyn Clock>,
     ) -> Result<Self, String> {
         let allowlist = allowlist
             .iter()
@@ -113,7 +136,7 @@ impl FormalDomainGate {
     /// 复查窗口内。窗口内每动作一次重新解析并校验（实现不缓存校验结果）。
     pub fn within_rebinding_window(&self, host: &str) -> bool {
         let now = self.clock.now_ms();
-        let window_ms = REBINDING_WINDOW.as_millis() as u64;
+        let window_ms = i64::try_from(REBINDING_WINDOW.as_millis()).unwrap_or(i64::MAX);
         self.window
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -124,7 +147,7 @@ impl FormalDomainGate {
     /// 校验通过后记录窗口起点（并惰性清除过期条目，防表无限增长）。
     pub(crate) fn record_validated(&self, host: &str) {
         let now = self.clock.now_ms();
-        let window_ms = REBINDING_WINDOW.as_millis() as u64;
+        let window_ms = i64::try_from(REBINDING_WINDOW.as_millis()).unwrap_or(i64::MAX);
         let mut guard = self.window.lock().unwrap_or_else(|p| p.into_inner());
         guard.retain(|_, &mut t| now.saturating_sub(t) < window_ms);
         guard.insert(host.to_string(), now);

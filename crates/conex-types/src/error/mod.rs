@@ -12,7 +12,6 @@
 //! - cause 链递归深度上限 8（CRISH_ERROR_CAUSE_MAX_DEPTH）
 
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 mod core_map;
 mod crish_error;
@@ -116,13 +115,6 @@ pub fn info(code: &str) -> CrishErrorInfo {
             is_public: true,
             action: "action.common.report_bug",
         })
-}
-
-fn now_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 // ===== Tests =====

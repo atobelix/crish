@@ -1,9 +1,8 @@
 use std::fmt;
 
+use conex_shared::time::{parse_iso8601_ms, Clock, SystemClock};
 use conex_types::context::SessionContextMeta;
 use serde::{Deserialize, Serialize};
-
-use super::time::parse_iso8601_epoch_ms;
 
 /// session-leaf-moved 事件类型名（叶子移动的持久化事件，05 §2.8
 /// orchestrator.test.ts:813；载荷为 [session_leaf_moved_payload]）
@@ -56,7 +55,7 @@ impl SessionTreeEntry {
         Self {
             id: id.into(),
             parent_id,
-            created_at: crate::now_ms(),
+            created_at: SystemClock.now_ms(),
             kind: SessionTreeEntryKind::Node { payload },
         }
     }
@@ -194,7 +193,7 @@ impl SessionRecord {
     /// 返回是否成功更新（事件时间戳不可解析时返回 false，不破坏既有状态；
     /// 不变量：非法输入绝不把护栏写坏）。
     pub fn apply_compression_end(&mut self, sequence: u64, timestamp_iso: &str) -> bool {
-        let Some(boundary_ms) = parse_iso8601_epoch_ms(timestamp_iso) else {
+        let Some(boundary_ms) = parse_iso8601_ms(timestamp_iso) else {
             return false;
         };
         let meta = self

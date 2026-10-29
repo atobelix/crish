@@ -244,8 +244,9 @@ impl Tool for SetTimerTool {
 
         // 结果信封：timerId / expiresAtMs / text 摘要
         // （「定时器 <id> 已设置，将于 <时刻> 到期」，时刻为 ISO8601 UTC）
-        let expires_iso =
-            crate::subagent_inject::iso8601_from_epoch_ms(handle.expires_at_ms as i64);
+        let expires_iso = conex_shared::time::format_iso_utc_ms(
+            i64::try_from(handle.expires_at_ms).unwrap_or(i64::MAX),
+        );
         Ok(serde_json::json!({
             "timerId": handle.timer_id,
             "expiresAtMs": handle.expires_at_ms,

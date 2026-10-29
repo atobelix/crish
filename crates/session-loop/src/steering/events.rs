@@ -1,6 +1,6 @@
-//! steering-evaluated 观测事件构造与 Unix 毫秒 → ISO8601 换算（EV-03 / EV-09，D-03）。
+//! steering-evaluated 观测事件构造（EV-03 / EV-09，D-03）。
 
-use conex_shared::time::{civil_from_days, now_iso_utc};
+use conex_shared::time::now_iso_utc;
 use conex_types::events::AgentEvent;
 
 use super::types::SteeringEvaluationTrace;
@@ -30,14 +30,4 @@ pub(crate) fn steering_evaluated_event(
         budget_remaining,
         reset,
     }
-}
-
-/// Unix 毫秒 → ISO8601 UTC 字符串（EV-09 / D-03：工具执行时刻 occurred_at_ms
-/// 打点回填 tool 域事件 timestamp 用；与 [now_iso_utc] 同精度同格式）
-pub(crate) fn iso_from_epoch_ms(ms: u64) -> String {
-    let secs = ms / 1000;
-    let millis = ms % 1000;
-    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let (year, month, day) = civil_from_days((secs / 86400) as i64);
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }

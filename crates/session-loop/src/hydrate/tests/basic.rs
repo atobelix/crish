@@ -1,7 +1,7 @@
+use conex_shared::time::format_iso_utc_ms;
 use conex_types::message::{AgentMessageBlock, AgentMessageRole};
 
 use super::super::hydrate_history;
-use super::super::time_text::iso8601_from_epoch_millis;
 use super::{ids, msg};
 
 #[test]
@@ -87,7 +87,7 @@ fn timestamp_out_of_order_keeps_array_order() {
     m3.timestamp = 200;
     let hydrated = hydrate_history(vec![m1, m2, m3]);
     assert_eq!(ids(&hydrated), ["m1", "m2", "m3"]);
-    assert_eq!(hydrated[1].created_at, iso8601_from_epoch_millis(100));
+    assert_eq!(hydrated[1].created_at, format_iso_utc_ms(100));
 }
 
 #[test]
@@ -98,11 +98,11 @@ fn empty_history_yields_empty() {
 #[test]
 fn created_at_derived_from_epoch_millis() {
     assert_eq!(
-        iso8601_from_epoch_millis(1_785_456_000_000),
+        format_iso_utc_ms(1_785_456_000_000),
         "2026-07-31T00:00:00.000Z"
     );
     assert_eq!(
-        iso8601_from_epoch_millis(1_785_456_000_123),
+        format_iso_utc_ms(1_785_456_000_123),
         "2026-07-31T00:00:00.123Z"
     );
 }

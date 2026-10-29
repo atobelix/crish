@@ -11,6 +11,7 @@
 
 use std::sync::Arc;
 
+use conex_shared::time::{format_iso_utc_ms, Clock, SystemClock};
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
@@ -75,7 +76,7 @@ fn close_orphan_call(
     if has_end && has_result {
         return;
     }
-    let now_ms = conex_shared::time::unix_millis() as u64;
+    let now_ms = SystemClock.now_ms();
     if !has_end {
         if !events_have_tool_start(state, &call.id) {
             state.emit_event(AgentEvent::ToolStart {
@@ -89,7 +90,7 @@ fn close_orphan_call(
                     category: ToolCategory::Internal,
                     concurrency: ToolConcurrency::Parallel,
                 },
-                timestamp: crate::steering::iso_from_epoch_ms(now_ms),
+                timestamp: format_iso_utc_ms(now_ms),
                 turn_index: Some(state.machine.context().turn_index),
             });
         }
@@ -107,7 +108,7 @@ fn close_orphan_call(
                 is_error: true,
                 duration_ms: 0,
             },
-            timestamp: crate::steering::iso_from_epoch_ms(now_ms),
+            timestamp: format_iso_utc_ms(now_ms),
             attempt: None,
             deduplicated: None,
             executed_input: None,

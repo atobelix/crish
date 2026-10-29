@@ -4,7 +4,7 @@
 //! 状态与结果类型（SubagentWaitStatus / SubagentWaitResult）、产出文件
 //! （SubagentOutput + collect_subagent_output_files，G02 完成通知字段）、
 //! 调度声明（DispatchDeclaration，重启恢复「等待什么」）、错误与等待通道
-//! 契约（SubagentWaitError / SubagentWaitChannel）、共享时间助手（now_millis）。
+//! 契约（SubagentWaitError / SubagentWaitChannel）。
 //! 不含事件驱动等待原语（wait_events）与工具面（wait_tool）。
 //! 诚实边界：仅结构拆分，语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── 三模式（04 C8 §2.1：主 agent 视角等待策略）──────────────────
 
@@ -328,16 +327,6 @@ impl DispatchDeclaration {
             dispatched_at_ms: dispatched_at_ms?,
         })
     }
-}
-
-// ── 时间助手（共享：事件驱动等待与工具面均消费）─────────────────
-
-/// 当前时刻（epoch 毫秒；时钟异常时 0）
-pub(crate) fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 // ── 等待通道契约（引擎侧接线面）─────────────────────────────────

@@ -35,6 +35,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use anyhow::{bail, Context, Result};
+use conex_shared::time::{Clock, SystemClock};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -235,7 +236,7 @@ impl TrashService {
         let entry = TrashEntry {
             id: id.clone(),
             original_path: original.clone(),
-            trashed_at: now_millis(),
+            trashed_at: SystemClock.now_ms(),
             kind: if is_dir {
                 TrashKind::Dir
             } else {
@@ -320,7 +321,7 @@ impl TrashService {
                 let entry = TrashEntry {
                     id: id.clone(),
                     original_path: original.clone(),
-                    trashed_at: now_millis(),
+                    trashed_at: SystemClock.now_ms(),
                     kind: TrashKind::File,
                     size: 0,
                     checksum: None,
@@ -352,7 +353,7 @@ impl TrashService {
         let entry = TrashEntry {
             id: id.clone(),
             original_path: original.clone(),
-            trashed_at: now_millis(),
+            trashed_at: SystemClock.now_ms(),
             kind: TrashKind::File,
             size: metadata.len(),
             checksum,
@@ -1006,7 +1007,7 @@ fn normalize_for_compare(p: &Path) -> String {
 fn gen_entry_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let millis = now_millis();
+    let millis = SystemClock.now_ms();
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     format!("t{millis:x}-{seq:016x}-{:x}", std::process::id())
 }
@@ -1019,11 +1020,6 @@ fn snapshot_order_key(entry: &TrashEntry) -> String {
         .map(|(_, suffix)| suffix)
         .unwrap_or("");
     format!("{:020}-{id_suffix}", entry.trashed_at.max(0))
-}
-
-/// 当前纪元毫秒（时钟不可用时 0）
-fn now_millis() -> i64 {
-    epoch_millis(Some(std::time::SystemTime::now()))
 }
 
 /// 系统时间 → 纪元毫秒（对齐全仓 epoch ms 惯例；不可用时 0）

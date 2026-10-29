@@ -30,6 +30,7 @@
 
 use std::panic::{self, UnwindSafe};
 
+use conex_shared::time::{Clock, SystemClock};
 use conex_types::error::{codes, error_info, CrishErrorPayload};
 
 /// Wrap `f` so that a panic inside it becomes a structured error payload.
@@ -82,7 +83,7 @@ fn payload_to_panic_error(payload: &Box<dyn std::any::Any + Send>) -> CrishError
         metadata: Some(serde_json::json!({ "thread": thread })),
         cause: None,
         stack: None,
-        timestamp: now_millis(),
+        timestamp: SystemClock.now_ms(),
     }
 }
 
@@ -99,16 +100,4 @@ fn extract_panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
         return s.clone();
     }
     "<unknown panic payload>".to_string()
-}
-
-/// Current Unix epoch time in milliseconds.
-///
-/// Mirrors the `now_millis()` helper in `conex-types/src/error.rs` so this
-/// crate does not need to import that private function. Falls back to `0` if
-/// the system clock is before `UNIX_EPOCH`.
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
