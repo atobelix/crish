@@ -335,8 +335,9 @@ describe('Tauri command registry', () => {
     // 更新器分段 4 条（workbench_check_update / download_update / install_update /
     // restart_app）在 manifest 与 main.rs 早已注册、本表漏登，D11 补齐后 143 → 147。
     // 工作区授权六命令漏登，D11 命中后补齐 147 → 153。
+    // core_md_render 单条渲染退役（前端只消费 batch/stream）后 170 → 169。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(170);
+    expect(productCommands).toHaveLength(169);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE
