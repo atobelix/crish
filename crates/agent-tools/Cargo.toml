@@ -10,6 +10,11 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+# X-06 T3：仅供跨 crate 测试使用的替身（如 InMemoryExploreDocsQuotaStore）；
+# 消费方只允许在 [dev-dependencies] 启用，生产依赖图不得开启。
+test-support = []
+
 [dependencies]
 async-trait = { workspace = true }
 conex-agents = { path = "../conex-agents" }

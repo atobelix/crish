@@ -472,12 +472,16 @@ pub trait RevertCounterStore: Send + Sync {
     fn save(&self, session_id: &str, snapshot: RevertCounterSnapshot);
 }
 
-/// 内存版计数存储（测试 / 未接线兜底；不跨重启持久化）
+/// 内存版计数存储（测试替身：进程内计数；不跨重启持久化）。
+///
+/// X-06 T4：仅测试编译，不进生产 API。
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub struct InMemoryRevertCounterStore {
     inner: std::sync::Mutex<std::collections::HashMap<String, RevertCounterSnapshot>>,
 }
 
+#[cfg(test)]
 impl InMemoryRevertCounterStore {
     /// 新建空存储
     pub fn new() -> Self {
@@ -485,6 +489,7 @@ impl InMemoryRevertCounterStore {
     }
 }
 
+#[cfg(test)]
 impl RevertCounterStore for InMemoryRevertCounterStore {
     fn load(&self, session_id: &str) -> RevertCounterSnapshot {
         self.inner

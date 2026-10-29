@@ -25,12 +25,17 @@
 
 use crate::context::{ExploreDocsQuotaContext, ToolContext};
 use crate::definition::ToolError;
+#[cfg(any(test, feature = "test-support"))]
 use crate::poison::POISON_RECOVERIES;
 use crate::tools::subagent::{SubagentCapabilityMode, SubagentRole};
 use conex_types::error::codes;
+#[cfg(any(test, feature = "test-support"))]
 use std::collections::HashMap;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+#[cfg(any(test, feature = "test-support"))]
+use std::sync::Mutex;
 
 /// 配额键：可配上限（默认 [DEFAULT_EXPLORE_DOCS_QUOTA]）
 pub const SESSION_META_KEY_EXPLORE_DOCS_QUOTA: &str = "explore_docs_quota";
@@ -105,7 +110,7 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     /// 原子「检查 + 消耗」（F3 #9 TOCTOU 根因修复）：上限内原子占用一份
     /// 配额——并发调用只放行恰好 `quota` 份，超限返回错误文案。
     ///
-    /// 实现方须在自身互斥下完成读改写（[InMemoryExploreDocsQuotaStore] 与
+    /// 实现方须在自身互斥下完成读改写（`InMemoryExploreDocsQuotaStore` 与
     /// [crate::explore_quota] 的 session_meta 后端均覆写为原子形态）；
     /// 缺省实现为「快照检查 + consume」的非原子回退（仅向后兼容未升级的
     /// 外部实现，存在 check-then-consume 竞态）。
@@ -130,13 +135,18 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     fn release(&self, _session_id: &str, _run_id: &str) {}
 }
 
-/// 内存版存储（测试 / 未接线兜底：进程内计数，跨进程重启不恢复——
-/// 持久化语义由引擎侧 session_meta 后端承担）
+/// 内存版存储（测试替身：进程内计数，跨进程重启不恢复——持久化语义由
+/// 引擎侧 session_meta 后端承担）。
+///
+/// X-06 T3：仅 `#[cfg(test)]` / `feature = "test-support"` 编译；跨 crate
+/// 测试消费方（session-loop）经 `[dev-dependencies]` 启用 feature。
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default)]
 pub struct InMemoryExploreDocsQuotaStore {
     inner: Mutex<HashMap<String, ExploreDocsQuotaSnapshot>>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl InMemoryExploreDocsQuotaStore {
     /// 新建空存储
     pub fn new() -> Self {
@@ -144,6 +154,7 @@ impl InMemoryExploreDocsQuotaStore {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
     fn snapshot(&self, session_id: &str) -> ExploreDocsQuotaSnapshot {
         let map = self.inner.lock().unwrap_or_else(|e| {
