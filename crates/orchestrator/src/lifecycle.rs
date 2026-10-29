@@ -522,24 +522,16 @@ impl SubagentLifecycleService {
         }
     }
 
-    /// 把子代理行终态归一 failed（ended_at 缺省补当前时间）。
-    ///
-    /// kill_all / resume 共用；单行定点写（update_session_agent_status），
-    /// 不改动其余字段（summary / messages / 路径等产出保留）；
-    /// 缺行按 affected=0 判定 NotFound。
+    /// 把子代理行终态归一 failed（ended_at 缺省补当前时间）；kill_all / resume 共用。
     fn mark_row_failed(
         &self,
         session_id: &str,
         subagent_run_id: &str,
     ) -> Result<(), LifecycleError> {
+        let now = SystemClock.now_ms();
         let affected = self
             .db
-            .update_session_agent_status(
-                session_id,
-                subagent_run_id,
-                "failed",
-                Some(SystemClock.now_ms()),
-            )
+            .update_session_agent_status(session_id, subagent_run_id, "failed", Some(now))
             .map_err(db_err)?;
         if affected == 0 {
             return Err(LifecycleError::NotFound {
