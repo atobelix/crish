@@ -31,8 +31,9 @@ import {
   resetSendToNoteIntentSeqForTests,
 } from '../bridges/send-to-note';
 import { resetCompositionRoot } from '../app/compositionRoot';
-import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
+import { listSessions, replaceSessions } from '../store/sessionIndex';
+import type { SessionAgent, SessionState } from '../store/types';
 import { useChatStream } from '../hooks/chat-stream';
 import { useAgentPanel } from '../hooks/useAgentStream';
 import type { UseChatStreamOptions } from '../hooks/chat-stream/types';
@@ -161,88 +162,55 @@ const CHAT_SID = 'sess-surf-chat-04';
 const AGENT_PARENT = 'sess-surf-agent-parent';
 const AGENT_ID = 'agent-surf-04';
 
+function upsertStoreSession(
+  sess: SessionState,
+  activeSessionId?: string
+): void {
+  useSessionStore.setState((st) => {
+    const next = listSessions(st).filter((x) => x.id !== sess.id);
+    next.push(sess);
+    replaceSessions(st, next);
+    if (activeSessionId !== undefined) st.activeSessionId = activeSessionId;
+  });
+}
+
 function seedChatSession(sessionId = CHAT_SID) {
-  const sess = {
+  const sess: SessionState = {
     id: sessionId,
     title: 'surf chat',
     folder: 'general',
     isPinned: false,
     isArchived: false,
     timestamp: new Date().toISOString(),
-    messages: [] as Array<Record<string, unknown>>,
-    agents: [] as Array<Record<string, unknown>>,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    messages: [],
+    agents: [],
   };
-  useSessionStore.setState((st) => {
-    const s = st as Record<string, unknown>;
-    s.sessionsById = {
-      ...(s.sessionsById as object),
-      [sessionId]: sess,
-    };
-    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
-    const idx = list.findIndex((x: { id?: string }) => x.id === sessionId);
-    if (idx >= 0) list[idx] = sess;
-    else list.push(sess);
-    s.sessions = list;
-    s.activeSessionId = sessionId;
-  });
-  useLayoutStore.setState((st) => {
-    const s = st as Record<string, unknown>;
-    s.sessionsById = {
-      ...(s.sessionsById as object),
-      [sessionId]: sess,
-    };
-    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
-    const idx = list.findIndex((x: { id?: string }) => x.id === sessionId);
-    if (idx >= 0) list[idx] = sess;
-    else list.push(sess);
-    s.sessions = list;
-    s.activeSessionId = sessionId;
-  });
+  upsertStoreSession(sess, sessionId);
 }
 
 function seedAgentParent() {
-  const agent = {
+  const agent: SessionAgent = {
     id: AGENT_ID,
     description: 'surf agent',
-    mode: 'research' as const,
-    status: 'idle' as const,
-    messages: [] as Array<Record<string, unknown>>,
-    createdAt: Date.now(),
+    mode: 'research',
+    status: 'stopped',
+    messages: [],
+    subagentRunId: '',
+    parentSessionId: AGENT_PARENT,
+    parentRunId: '',
+    startedAt: Date.now(),
   };
-  const sess = {
+  const sess: SessionState = {
     id: AGENT_PARENT,
     title: 'surf agent parent',
+    folder: 'general',
+    isPinned: false,
+    isArchived: false,
+    timestamp: new Date().toISOString(),
     messages: [],
     agents: [agent],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
-  useSessionStore.setState((st) => {
-    const s = st as Record<string, unknown>;
-    s.sessionsById = {
-      ...(s.sessionsById as object),
-      [AGENT_PARENT]: sess,
-    };
-    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
-    const idx = list.findIndex((x: { id?: string }) => x.id === AGENT_PARENT);
-    if (idx >= 0) list[idx] = sess;
-    else list.push(sess);
-    s.sessions = list;
-  });
-  useLayoutStore.setState((st) => {
-    const s = st as Record<string, unknown>;
-    s.sessionsById = {
-      ...(s.sessionsById as object),
-      [AGENT_PARENT]: sess,
-    };
-    const list = Array.isArray(s.sessions) ? [...(s.sessions as object[])] : [];
-    const idx = list.findIndex((x: { id?: string }) => x.id === AGENT_PARENT);
-    if (idx >= 0) list[idx] = sess;
-    else list.push(sess);
-    s.sessions = list;
-  });
+  upsertStoreSession(sess);
 }
 
 function makeChatOptions(

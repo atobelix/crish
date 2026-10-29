@@ -417,11 +417,11 @@ export function getSessionMessage(
   sessionId: string,
   messageId: string
 ): { session: SessionState; message: SessionMessage } | undefined {
-  const session = getSessionForWrite(state, sessionId);
+  const session = getSessionById(state, sessionId);
   if (!session?.messages) return undefined;
   const message = getMessageById(session.messages, messageId);
   if (!message) return undefined;
   return { session, message };
 }
 
-import { getSessionForWrite, type SessionsIndexed } from './sessionIndex';
+import { getSessionById, type SessionsIndexed } from './sessionIndex';

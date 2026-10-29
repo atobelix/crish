@@ -13,6 +13,7 @@ import type {
   SessionStoreSlice,
 } from './sessionActions';
 import { findInactiveHydratedSessionIdsToEvict } from './sessionEviction';
+import { listSessions } from './sessionIndex';
 import { evictSessionMessagesInState } from './sessionStateActions';
 
 /**
@@ -78,8 +79,8 @@ async function runSoftEvictionAfterActivation<T extends SessionStoreSlice>(
   const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
     currentActiveId,
     new Set(),
-    state.sessions || [],
-    state.sessionsById || {},
+    listSessions(state),
+    state.sessionsById,
     SESSION_HYDRATE_KEEP_K,
     {
       openTabs: protectedSessionIds,

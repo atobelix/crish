@@ -22,6 +22,11 @@ import { ApprovalSection } from '../components/workspace/ApprovalSection';
 // 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
+import {
+  getSessionById,
+  insertSessionAt,
+  replaceSessions,
+} from '../store/sessionIndex';
 import type { PendingApprovalInfo } from './engineStatus';
 import type { SessionMessage } from '../store/types';
 
@@ -57,38 +62,40 @@ const approval = (
 function seedPendingSession() {
   const sid = `sess-${Math.random().toString(36).slice(2, 10)}`;
   useSessionStore.setState((st) => {
-    st.sessions.push({
-      id: sid,
-      title: '待确认会话',
-      folder: '',
-      isPinned: false,
-      isArchived: false,
-      timestamp: String(Date.now()),
-      messages: [
-        {
-          id: 'm1',
-          sender: 'assistant',
-          timestamp: Date.now(),
-          toolCalls: [
-            {
-              id: 'tc-1',
-              name: 'shell',
-              status: 'pending_approval',
-              arguments: 'node build.js',
-            },
-          ],
-        } satisfies SessionMessage,
-      ],
-    });
+    insertSessionAt(
+      st,
+      {
+        id: sid,
+        title: '待确认会话',
+        folder: '',
+        isPinned: false,
+        isArchived: false,
+        timestamp: String(Date.now()),
+        messages: [
+          {
+            id: 'm1',
+            sender: 'assistant',
+            timestamp: Date.now(),
+            toolCalls: [
+              {
+                id: 'tc-1',
+                name: 'shell',
+                status: 'pending_approval',
+                arguments: 'node build.js',
+              },
+            ],
+          } satisfies SessionMessage,
+        ],
+      },
+      st.sessionOrder.length
+    );
     st.activeSessionId = sid;
   });
   return sid;
 }
 
 function readToolStatus(sid: string, toolId: string) {
-  return useSessionStore
-    .getState()
-    .sessions.find((s) => s.id === sid)
+  return getSessionById(useSessionStore.getState(), sid)
     ?.messages.flatMap((m) => m.toolCalls ?? [])
     .find((t) => t.id === toolId);
 }
@@ -112,7 +119,7 @@ afterEach(() => {
   toastSpies.showToast.mockReset();
   toastSpies.show.mockReset();
   useSessionStore.setState((st) => {
-    st.sessions = [];
+    replaceSessions(st, []);
     st.activeSessionId = '';
   });
 });

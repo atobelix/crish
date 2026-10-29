@@ -48,10 +48,7 @@ export function workspaceKeyNow(): string {
 
 export function sessionFromStore(sessionId: string) {
   const state = useSessionStore.getState();
-  return (
-    state.sessionsById?.[sessionId] ??
-    state.sessions?.find((s) => s.id === sessionId)
-  );
+  return state.sessionsById?.[sessionId];
 }
 
 export function resolveSessionTabTitle(

@@ -64,6 +64,7 @@ import {
   record,
   type ControlMetricKey,
 } from '../api/controlMetrics';
+import { selectSessionList } from '../store';
 import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellStore';
 import {
   useLayoutTreeStore,
@@ -235,7 +236,7 @@ let root: CompositionRoot | null = null;
 function buildDefaultLayoutFacade(): LayoutFacade {
   return {
     getState: getLayoutState,
-    getSessions: () => getSessionStoreState().sessions,
+    getSessions: () => selectSessionList(getSessionStoreState()),
     setSessions: (sessions) => getSessionStoreState().setSessions(sessions),
     setTabModeEnabled: (enabled) => getLayoutState().setTabModeEnabled(enabled),
     getSidebarCollapsed: () => getLayoutState().sidebarCollapsed,

@@ -9,7 +9,8 @@ import { sessionStreams } from '../../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { StreamTextBatcher } from '../../api/streamTextBatcher';
 import { useSessionStore } from '../../store/sessionStore';
-import type { Session, SessionMessage } from '../../store/sessionStore';
+import { buildSessionIndex } from '../../store/sessionIndex';
+import type { SessionMessage, SessionState } from '../../store/sessionStore';
 
 const goal = vi.hoisted(() => ({
   maybeContinueGoalMode: vi.fn(
@@ -57,7 +58,7 @@ describe('streamExecutionHelper', () => {
         timestamp: 1,
         status: 'processing',
       } as SessionMessage;
-      const session = {
+      const session: SessionState = {
         id: 'sess-1',
         title: 't',
         folder: 'general',
@@ -65,12 +66,9 @@ describe('streamExecutionHelper', () => {
         isArchived: false,
         timestamp: new Date(0).toISOString(),
         messages: [userMsg],
-        createdAt: 0,
-        updatedAt: 0,
-      } as Session;
+      };
       useSessionStore.setState({
-        sessionsById: { 'sess-1': session },
-        sessions: [session],
+        ...buildSessionIndex([session]),
         activeSessionId: 'sess-1',
       });
       registerLiveStream('sess-1');

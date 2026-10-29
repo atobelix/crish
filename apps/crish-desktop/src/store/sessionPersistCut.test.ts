@@ -20,6 +20,7 @@ import {
   SESSION_BODY_PREFIX,
 } from '../api/session-persistence/sessionPersistenceTypes';
 import type { SessionMessage, SessionState } from './layoutStore';
+import { buildSessionIndex } from './sessionIndex';
 import { createSessionActions } from './sessionActions';
 
 function msg(id: string): SessionMessage {
@@ -140,8 +141,8 @@ describe('U-PERSIST-A · NA-A5 deleteSession 清 composerDrafts', () => {
     // 最小 immer-free set/get 契约：直接用 zustand vanilla create 不引入完整 store
     // 本 harness 复用 createSessionActions 对 state 的写路径
     let state: Record<string, unknown> = {
-      sessions: [],
       sessionsById: {},
+      sessionOrder: [],
       folderOrder: [],
       activeSessionId: '',
       draftFolder: '',
@@ -230,9 +231,8 @@ describe('U-PERSIST-A · 真实 store partialize 探针（NA-A1）', () => {
     useSessionStore.setState({
       activeSessionId: 'probe-1',
       folderOrder: ['默认'],
-      sessions: [sess('probe-1', [msg('m1')])],
-      sessionsById: { 'probe-1': sess('probe-1', [msg('m1')]) },
-    } as never);
+      ...buildSessionIndex([sess('probe-1', [msg('m1')])]),
+    });
 
     // zustand persist 同步写（测试环境 sync storage）
     const raw = localStorage.getItem(SESSION_STORE_PERSIST_KEY);
@@ -240,9 +240,10 @@ describe('U-PERSIST-A · 真实 store partialize 探针（NA-A1）', () => {
     const parsed = JSON.parse(raw!) as { state: Record<string, unknown> };
     expect(parsed.state.sessions).toBeUndefined();
     expect(parsed.state.sessionsById).toBeUndefined();
+    expect(parsed.state.sessionOrder).toBeUndefined();
     expect(parsed.state.activeSessionId).toBe('probe-1');
     expect(Object.keys(parsed.state).sort()).toEqual(
-      expect.not.arrayContaining(['sessions', 'sessionsById'])
+      expect.not.arrayContaining(['sessions', 'sessionsById', 'sessionOrder'])
     );
     // 允许的三元组
     for (const k of ['activeSessionId', 'folderOrder', 'composerDrafts']) {

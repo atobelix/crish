@@ -262,7 +262,7 @@ export async function fetchEngineSessions(): Promise<EngineSession[]> {
       { includeArchived: false },
       { timeoutMs: 10_000 },
     )) as Record<string, unknown>;
-    const list = res.sessions;
+    const { sessions: list } = res;
     return Array.isArray(list) ? (list as EngineSession[]) : [];
   } catch (e) {
     logInternalError('fetchEngineSessions', e);

@@ -8,7 +8,7 @@
 
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
 import type { MessageToolCall } from './types';
-import { getSessionForWrite, rebindSessionById } from './sessionIndex';
+import { getSessionById, listSessions } from './sessionIndex';
 import { validateStatusTransition } from '../utils/StatusTransitionGuard';
 import type {
   SessionActions,
@@ -84,7 +84,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         const existing = msg.toolCalls.find((t) => t.id === toolCall.id);
         if (existing) {
           mergeInto(existing);
-          rebindSessionById(state, sessionId, hit.session);
           return;
         }
 
@@ -106,7 +105,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             durationMs: toolCall.durationMs || 0,
           });
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     updateMessageToolCall: (sessionId, messageId, toolCallId, updates) =>
@@ -126,7 +124,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             b.durationMs = tc.durationMs;
           }
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     setSessionMessageStatus: (
@@ -179,37 +176,30 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             }
           }
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     pinMessage: (sessionId, messageId, color) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (!getMessageById(sess.messages, messageId)) return;
         if (!sess.pinnedMessageIds) sess.pinnedMessageIds = [];
-        let changed = false;
         if (
           !sess.pinnedMessageIds.includes(messageId) &&
           sess.pinnedMessageIds.length < MAX_MESSAGES_PER_SESSION
         ) {
           sess.pinnedMessageIds.push(messageId);
-          changed = true;
         }
         const pinColor = color || DEFAULT_PIN_COLOR;
         if (!sess.pinnedMessageColors) sess.pinnedMessageColors = {};
         if (sess.pinnedMessageColors[messageId] !== pinColor) {
           sess.pinnedMessageColors[messageId] = pinColor;
-          changed = true;
-        }
-        if (changed) {
-          rebindSessionById(state, sessionId, sess);
         }
       }),
 
     unpinMessage: (sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.pinnedMessageIds?.length) return;
         const next = sess.pinnedMessageIds.filter((id) => id !== messageId);
         if (next.length === sess.pinnedMessageIds.length) return;
@@ -221,18 +211,16 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             delete sess.pinnedMessageColors;
           }
         }
-        rebindSessionById(state, sessionId, sess);
       }),
 
     // ── 事件写入收敛（T-E 步骤 3）──────────────
 
     setEngineLastRunId: (sessionId, runId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (sess.engineLastRunId === runId) return;
         sess.engineLastRunId = runId;
-        rebindSessionById(state, sessionId, sess);
       }),
 
     updateMessageTimeline: (sessionId, messageId) =>
@@ -243,7 +231,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         const n = normalizeAssistantTimeline({ ...hit.message });
         hit.message.blocks = n.blocks;
         hit.message.toolCalls = n.toolCalls;
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     applyToolCallPatches: (sessionId, messageId, patches) =>
@@ -266,14 +253,13 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
             if (b) b.durationMs = p.durationMs;
           }
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     setMessageCacheMetrics: (sessionId, messageId, metrics) =>
       set((state) => {
         // metrics 为 null/空时不写（P6 C15：store 保持无字段，渲染层隐藏）
         if (!metrics || typeof metrics !== 'object') return;
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.messages) return;
         let target = messageId
           ? sess.messages.find((m) => m.id === messageId)
@@ -295,26 +281,20 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           source: 'engine-message-end',
         };
         target.cacheMetrics = cacheState;
-        rebindSessionById(state, sessionId, sess);
       }),
 
     markToolCallLocalStatus: (toolCallId, status, output, scope) =>
       set((state) => {
         if (!toolCallId) return;
         const sessions = scope?.sessionId
-          ? state.sessions.filter((s) => s.id === scope.sessionId)
+          ? [getSessionById(state, scope.sessionId)]
           : scope?.runId
-            ? state.sessions.filter(
+            ? listSessions(state).filter(
                 (s) => s.engineLastRunId === scope.runId || s.id === scope.runId
               )
-            : state.sessions;
-        for (const s of sessions) {
-          // getSessionForWrite + rebind：经 sessions[] canonical 写，避免
-          // immer fork 陷阱（sessionsById 持旧引用）——原组件 raw setState
-          // 有该陷阱，迁入 action 后内建索引保障（README:130-133）
-          const sess = getSessionForWrite(state, s.id);
+            : listSessions(state);
+        for (const sess of sessions) {
           if (!sess) continue;
-          let touched = false;
           // agentId scope 命中：主消息域不扫（「只扫 scope 内」严格语义）
           if (!scope?.agentId) {
             for (const m of sess.messages || []) {
@@ -329,7 +309,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
               }
               tc.status = status;
               tc.output = output;
-              touched = true;
             }
           }
           for (const ag of sess.agents || []) {
@@ -345,10 +324,8 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
               }
               tc.status = status;
               tc.output = output;
-              touched = true;
             }
           }
-          if (touched) rebindSessionById(state, s.id, sess);
         }
       }),
 
@@ -362,7 +339,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           if (!tc) continue;
           if (tc.approvalDecision !== d.decision) {
             tc.approvalDecision = d.decision;
-            rebindSessionById(state, d.sessionId, hit.session);
           }
         }
       }),

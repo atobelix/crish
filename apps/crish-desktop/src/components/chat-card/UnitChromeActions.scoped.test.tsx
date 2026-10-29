@@ -15,6 +15,7 @@ import {
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSessionStore } from '../../store/sessionStore';
+import { buildSessionIndex } from '../../store/sessionIndex';
 import type { SessionState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
@@ -81,8 +82,7 @@ function seedSession(
   } as unknown as SessionState;
   act(() => {
     useSessionStore.setState({
-      sessions: [session],
-      sessionsById: { [id]: session },
+      ...buildSessionIndex([session]),
       activeSessionId: id,
     });
     useLayoutStore.setState((st) => {
@@ -237,8 +237,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
   afterEach(() => {
     vi.restoreAllMocks();
     useSessionStore.setState({
-      sessions: [],
-      sessionsById: {},
+      ...buildSessionIndex([]),
       activeSessionId: '',
     });
   });

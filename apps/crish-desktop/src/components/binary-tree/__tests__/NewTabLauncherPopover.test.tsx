@@ -11,6 +11,8 @@ import {
 import { NewTabLauncherPopover } from '../NewTabLauncherPopover';
 import { useSessionExecutionTrackerStore } from '../../../store/sessionExecutionTrackerStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { buildSessionIndex } from '../../../store/sessionIndex';
+import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { layerStackManager } from '@/components/ui';
 import styles from '../NewTabLauncherPopover.module.css';
@@ -40,17 +42,21 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
     layerStackManager.dispose();
     useSessionExecutionTrackerStore.getState().clearAllRuns();
 
+    const launcherSession = (id: string, title: string): SessionState => ({
+      id,
+      title,
+      folder: '默认',
+      isPinned: false,
+      isArchived: false,
+      timestamp: new Date(0).toISOString(),
+      messages: [],
+    });
     useSessionStore.setState({
-      sessions: [
-        { id: 'sess-active-1', title: '前台对话 1' } as any,
-        { id: 'sess-bg-1', title: '后台重构分析' } as any,
-        { id: 'sess-bg-2', title: '高危工具执行' } as any,
-      ],
-      sessionsById: {
-        'sess-active-1': { id: 'sess-active-1', title: '前台对话 1' } as any,
-        'sess-bg-1': { id: 'sess-bg-1', title: '后台重构分析' } as any,
-        'sess-bg-2': { id: 'sess-bg-2', title: '高危工具执行' } as any,
-      },
+      ...buildSessionIndex([
+        launcherSession('sess-active-1', '前台对话 1'),
+        launcherSession('sess-bg-1', '后台重构分析'),
+        launcherSession('sess-bg-2', '高危工具执行'),
+      ]),
       activeSessionId: 'sess-active-1',
     });
 

@@ -5,6 +5,7 @@ import {
   PENDING_DRAFT_SESSION_ID,
   isPendingDraft,
 } from '../store/draftSession';
+import { listSessions } from '../store/sessionIndex';
 import { usePermissionStore } from '../store/permissionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTerminalStore } from '../store/terminalStore';
@@ -391,27 +392,29 @@ describe('storeAccess + domain facades', () => {
 
   it('enterDraftMode: enters draft only — no empty shell mint', () => {
     const seedId = getSessionStoreState().activeSessionId;
-    const beforeLen = getSessionStoreState().sessions.length;
-    const beforeIds = new Set(getSessionStoreState().sessions.map((s) => s.id));
+    const before = listSessions(getSessionStoreState());
+    const beforeLen = before.length;
+    const beforeIds = new Set(before.map((s) => s.id));
 
     enterDraftMode('proj-draft');
 
     const st = getSessionStoreState();
     const layout = getLayoutState();
+    const listed = listSessions(st);
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
     expect(isPendingDraft(st.activeSessionId)).toBe(true);
     // draftFolder 在 sessionStore 上
     expect(st.draftFolder).toBe('proj-draft');
     // sessions 不增、不 mint 默认标题空壳
-    expect(st.sessions).toHaveLength(beforeLen);
-    expect(st.sessions.every((s) => beforeIds.has(s.id))).toBe(true);
+    expect(listed).toHaveLength(beforeLen);
+    expect(listed.every((s) => beforeIds.has(s.id))).toBe(true);
     expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
     expect(typeof layout.chatMainSurface).toBe('string');
 
     // 连点：sessions 仍不变
     enterDraftMode('proj-draft-2');
     enterDraftMode('proj-draft-3');
-    expect(getSessionStoreState().sessions).toHaveLength(beforeLen);
+    expect(listSessions(getSessionStoreState())).toHaveLength(beforeLen);
     expect(getSessionStoreState().activeSessionId).toBe(
       PENDING_DRAFT_SESSION_ID
     );

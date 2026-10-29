@@ -8,8 +8,8 @@ const liveById: Record<string, LiveSession> = {};
 vi.mock('../store/sessionStore', () => ({
   useSessionStore: {
     getState: () => ({
-      sessions: Object.values(liveById),
       sessionsById: liveById,
+      sessionOrder: Object.keys(liveById),
     }),
   },
 }));

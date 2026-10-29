@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Message, SessionState } from './types';
+import type { SessionMessage, SessionState } from './types';
 import {
   BootHoldBarrier,
   EmptySanitizeBarrier,
 } from '../api/session-persistence/sessionWriteBarriers';
 import { SessionDeltaWriteBarrier } from '../api/session-persistence/sessionDeltaWriteBarrier';
-import {
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-} from '../api/session-persistence/sessionThreeWayMerge';
+import { performThreeWaySessionMerge } from '../api/session-persistence/sessionThreeWayMerge';
+import { replaceSessions } from './sessionIndex';
 import { initStorePersistence } from './layout-helpers/store-persistence';
 import type { PersistableStoreState } from './layout-helpers/store-persistence-types';
 import {
@@ -42,19 +40,19 @@ vi.mock('../api/sessionPersistence', async (importOriginal) => {
   };
 });
 
-function makeMessage(id: string, content: string, timestamp = 1000): Message {
+function makeMessage(id: string, text: string, timestamp = 1000): SessionMessage {
   return {
     id,
-    role: 'user',
-    content,
-    timestamp: String(timestamp),
+    sender: 'user',
+    text,
+    timestamp,
   };
 }
 
 function makeSession(
   id: string,
   title: string,
-  messages: Message[] = [],
+  messages: SessionMessage[] = [],
   overrides: Partial<SessionState> = {}
 ): SessionState {
   return {
@@ -288,16 +286,12 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
 
       const listeners = new Set<(state: PersistableStoreState) => void>();
       const state: PersistableStoreState = {
-        sessions: [],
         sessionsById: {},
         activeSessionId: '',
         folderOrder: [],
         hydrationComplete: false,
         activeAgentId: null,
         panelAgentId: null,
-        metaById: {},
-        messagesBySessionId: {},
-        agentsBySessionId: {},
         sessionOrder: [],
       };
 
@@ -332,10 +326,8 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
         makeMessage('m-fast', 'quick question'),
       ]);
       store.setState((s) => {
-        s.sessions = [fastLocal];
-        s.sessionsById = { [fastLocal.id]: fastLocal };
+        replaceSessions(s, [fastLocal]);
         s.activeSessionId = fastLocal.id;
-        syncOrthogonalSessionSubtrees(s, s.sessions);
       });
 
       // BootHoldBarrier must hold persistence while hydrationComplete === false
@@ -355,19 +347,13 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       await new Promise((r) => setTimeout(r, 30));
 
       expect(state.hydrationComplete).toBe(true);
-      expect(state.sessions.map((s) => s.id)).toEqual([
-        'fast-local-session',
-        'hist-1',
-        'hist-2',
-        'hist-3',
-      ]);
       expect(state.sessionOrder).toEqual([
         'fast-local-session',
         'hist-1',
         'hist-2',
         'hist-3',
       ]);
-      expect(state.messagesBySessionId?.['hist-2']?.[0]?.content).toBe('old 2');
+      expect(state.sessionsById['hist-2']?.messages?.[0]?.text).toBe('old 2');
       expect(mockPersistAllSessions).toHaveBeenCalledTimes(1);
 
       cleanup();

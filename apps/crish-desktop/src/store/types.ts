@@ -723,7 +723,7 @@ export type SessionImportMeta = {
 };
 
 /**
- * 侧栏/主区会话权威形状（sessions[] 与 sessionsById 同引用）。
+ * 侧栏与主区的单条会话形状。集合真源是 sessionsById 与 sessionOrder。
  * 持久化索引字段见 sessionPersistence.SessionIndexEntry（子集 + messageCount 等）。
  */
 export interface SessionState {

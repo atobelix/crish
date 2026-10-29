@@ -7,7 +7,7 @@
  */
 
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
-import { getSessionForWrite, rebindSessionById } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import { saveMessageSnapshot } from './messageSnapshotsBridge';
 import type {
   SessionActions,
@@ -38,8 +38,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
   return {
     addMessage: (_wsId, sessionId, message) =>
       set((state) => {
-        // getSessionForWrite：经 sessions[] 写，避免 immer 只 fork sessionsById
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
@@ -72,12 +71,11 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         sess.timestamp = new Date(timestamp).toISOString();
         if (sess.timestampSource !== 'local') sess.timestampSource = 'local';
         if (message.sender === 'user') maybeAutoTitleSession(state, sess);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     withdrawMessage: (_wsId, sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.messages) return;
         const idx = sess.messages.findIndex((m) => m.id === messageId);
         if (idx === -1) return;
@@ -133,7 +131,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           },
           { afterMessages: sess.messages }
         );
-        rebindSessionById(state, sessionId, sess);
         // 被撤回消息对象失效广播（仅失效被摘除的节点集合）
         invalidateEditObjects([...toRemove], 'withdraw');
       }),
@@ -142,7 +139,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
 
     applyTimelineTruncate: (sessionId, boundarySeq, targetMessageId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.messages) return;
         // 投影重放至 boundary：保留边界 user 节点（seq == boundary_seq，
         // 事件流只追加语义下其起始即边界），丢弃其后的全部节点
@@ -172,7 +169,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           },
           { afterMessages: sess.messages }
         );
-        rebindSessionById(state, sessionId, sess);
       }),
 
     respondToApproval: (sessionId, messageId, toolCallId, decision) =>
@@ -181,7 +177,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const tc = hit?.message.toolCalls?.find((t) => t.id === toolCallId);
         if (hit && tc && tc.approvalDecision !== decision) {
           tc.approvalDecision = decision;
-          rebindSessionById(state, sessionId, hit.session);
         }
       }),
 
@@ -249,7 +244,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             durationMs: 0,
           });
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     updateMessageThinking: (sessionId, messageId, thinking, turnIndex = 0) =>
@@ -371,7 +365,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             msg.blocks.push(newBlock);
           }
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
   };
 }

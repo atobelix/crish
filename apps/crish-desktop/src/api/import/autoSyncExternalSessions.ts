@@ -30,7 +30,7 @@ import type {
   MappedImportSession,
 } from './types';
 import { mapExternalSession } from './map';
-import { getSessionStoreState } from '../../store';
+import { getSessionStoreState, selectSessionList } from '../../store';
 
 let isAutoSyncing = false;
 
@@ -102,7 +102,7 @@ export async function checkAndAutoSyncExternalSessions(
 
     // 5. 过滤掉已经导入过的会话以及已被用户删除的会话（防止死灰复燃）
     const store = getSessionStoreState();
-    const existingKeys = collectExistingImportKeys(store.sessions);
+    const existingKeys = collectExistingImportKeys(selectSessionList(store));
     const deletedKeys = getDeletedExternalSessionKeys();
     const unsynced = matching.filter((s) => {
       if (isExternalImportBlocked(s.source, s.id, s.path, deletedKeys)) {
@@ -161,7 +161,7 @@ export async function detectLatestExternalLongSession(
 
     // 3. 过滤已被用户删除的会话（防墓碑）与已导入会话
     const store = getSessionStoreState();
-    const existingKeys = collectExistingImportKeys(store.sessions);
+    const existingKeys = collectExistingImportKeys(selectSessionList(store));
     const deletedKeys = getDeletedExternalSessionKeys();
     const unsynced = all.filter((s) => {
       if (isExternalImportBlocked(s.source, s.id, s.path, deletedKeys)) {

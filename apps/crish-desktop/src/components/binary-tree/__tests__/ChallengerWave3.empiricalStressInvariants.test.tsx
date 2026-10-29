@@ -6,6 +6,12 @@ import { TreeLeafPanel } from '../TreeLeafPanel';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import {
+  buildSessionIndex,
+  listSessions,
+  replaceSessions,
+} from '../../../store/sessionIndex';
+import type { SessionState } from '../../../store/types';
 import { useWorkspaceShellStore } from '../../../store/workspace-shell';
 import { useSessionExecutionTrackerStore } from '../../../store/sessionExecutionTrackerStore';
 import {
@@ -81,22 +87,37 @@ const testViews: ViewFactoryMap = {
   ),
 };
 
+function toStoreSession(input: {
+  id: string;
+  title: string;
+  folder?: string;
+  messages?: SessionState['messages'];
+}): SessionState {
+  return {
+    id: input.id,
+    title: input.title,
+    folder: input.folder ?? '默认',
+    isPinned: false,
+    isArchived: false,
+    timestamp: new Date(0).toISOString(),
+    messages: input.messages ?? [],
+  };
+}
+
 function registerSessionsInStore(ids: string[]) {
-  const existing = useSessionStore.getState().sessions || [];
-  const existingById = useSessionStore.getState().sessionsById || {};
-  const newSessions = ids.map((id) => ({
-    id,
-    title: `Session ${id}`,
-    folder: '默认',
-    messages: [],
-  }));
-  const merged = [...existing, ...newSessions];
-  useSessionStore.setState({
-    sessions: merged as any,
-    sessionsById: {
-      ...existingById,
-      ...Object.fromEntries(newSessions.map((s) => [s.id, s])),
-    } as any,
+  useSessionStore.setState((st) => {
+    const existing = listSessions(st);
+    const known = new Set(existing.map((s) => s.id));
+    const added = ids
+      .filter((id) => !known.has(id))
+      .map((id) =>
+        toStoreSession({
+          id,
+          title: `Session ${id}`,
+          folder: '默认',
+        })
+      );
+    replaceSessions(st, [...existing, ...added]);
   });
 }
 
@@ -159,17 +180,22 @@ describe('Challenger Wave 3: Empirical Stress & Invariant Probing Harness', () =
       });
 
       // Populate 20 mock sessions in sessionStore
-      const sessions = Array.from({ length: 20 }, (_, i) => ({
-        id: `session-p1-${i + 1}`,
-        title: `Session P1-${i + 1}`,
-        folder: '默认',
-        messages: [
-          { id: `m-${i}`, sender: 'user', text: `Message in session ${i + 1}` },
-        ],
-      }));
+      const sessions = Array.from({ length: 20 }, (_, i) =>
+        toStoreSession({
+          id: `session-p1-${i + 1}`,
+          title: `Session P1-${i + 1}`,
+          folder: '默认',
+          messages: [
+            {
+              id: `m-${i}`,
+              sender: 'user',
+              text: `Message in session ${i + 1}`,
+            },
+          ],
+        })
+      );
       useSessionStore.setState({
-        sessions: sessions as any,
-        sessionsById: Object.fromEntries(sessions.map((s) => [s.id, s])) as any,
+        ...buildSessionIndex(sessions),
         activeSessionId: 'session-init-1',
       });
 
@@ -293,17 +319,15 @@ describe('Challenger Wave 3: Empirical Stress & Invariant Probing Harness', () =
         activeLeafId: 'leaf-A',
       });
 
-      const poolSessions = Array.from({ length: 30 }, (_, i) => ({
-        id: `pool-s-${i + 1}`,
-        title: `Pool Session ${i + 1}`,
-        folder: '默认',
-        messages: [],
-      }));
+      const poolSessions = Array.from({ length: 30 }, (_, i) =>
+        toStoreSession({
+          id: `pool-s-${i + 1}`,
+          title: `Pool Session ${i + 1}`,
+          folder: '默认',
+        })
+      );
       useSessionStore.setState({
-        sessions: poolSessions as any,
-        sessionsById: Object.fromEntries(
-          poolSessions.map((s) => [s.id, s])
-        ) as any,
+        ...buildSessionIndex(poolSessions),
         activeSessionId: 's-A1',
       });
 
@@ -1074,46 +1098,23 @@ describe('Challenger Wave 3: Empirical Stress & Invariant Probing Harness', () =
 
       // Populate sessions in sessionStore
       useSessionStore.setState({
-        sessions: [
-          {
+        ...buildSessionIndex([
+          toStoreSession({
             id: 'session-stream-1',
             title: 'Stream 1',
             folder: '默认',
-            messages: [],
-          },
-          {
+          }),
+          toStoreSession({
             id: 'session-switch-2',
             title: 'Switch 2',
             folder: '默认',
-            messages: [],
-          },
-          {
+          }),
+          toStoreSession({
             id: 'session-switch-3',
             title: 'Switch 3',
             folder: '默认',
-            messages: [],
-          },
-        ] as any,
-        sessionsById: {
-          'session-stream-1': {
-            id: 'session-stream-1',
-            title: 'Stream 1',
-            folder: '默认',
-            messages: [],
-          },
-          'session-switch-2': {
-            id: 'session-switch-2',
-            title: 'Switch 2',
-            folder: '默认',
-            messages: [],
-          },
-          'session-switch-3': {
-            id: 'session-switch-3',
-            title: 'Switch 3',
-            folder: '默认',
-            messages: [],
-          },
-        } as any,
+          }),
+        ]),
         activeSessionId: 'session-stream-1',
       });
 

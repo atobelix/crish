@@ -1,34 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  EMPTY_SESSION_TITLE,
   assertSessionsIndexConsistent,
-  buildSessionSearchFilterKeys,
-  buildSessionsById,
+  buildSessionIndex,
   checkSessionsIndex,
   deleteSessionFromIndexed,
-  ensureSessionsById,
+  getSessionById,
+  getSessionIndex,
+  insertSessionAt,
+  isSessionsIndexConsistent,
+  listSessions,
+  moveSessionInIndexed,
+  reorderIndexedByIdList,
+  reorderSessionOrderById,
+  reorderSessionOrderByIdList,
+  replaceSessions,
+  selectSessionList,
+  type SessionsIndexed,
+} from './sessionIndex';
+import {
+  EMPTY_SESSION_TITLE,
+  buildSessionSearchFilterKeys,
   filterSessionsBySearchKeys,
   filterSidebarSessions,
-  getSessionById,
   getSessionEmptyShellFlags,
-  getSessionForWrite,
-  getSessionIndex,
   groupUnpinnedByProject,
   isPlaceholderEmptySession,
   isSessionEmpty,
-  isSessionsIndexConsistent,
-  listSessionIds,
-  moveSessionInIndexed,
   normalizeSearchFilterQuery,
   partitionSidebarSessions,
-  reindexSessionsById,
-  reorderIndexedByIdList,
-  reorderSessionById,
-  reorderSessionsByIdList,
   sessionMatchesSearchFilterKeys,
-  type SessionsIndexed,
-} from './sessionIndex';
+} from './sessionSidebarProjection';
 import type { SessionState } from './types';
+import { useSessionStore } from './sessionStore';
 
 function sess(id: string, title = id): SessionState {
   return {
@@ -42,91 +45,56 @@ function sess(id: string, title = id): SessionState {
   };
 }
 
+function indexed(list: SessionState[]): SessionsIndexed {
+  return buildSessionIndex(list);
+}
+
 describe('sessionIndex', () => {
-  it('buildSessionsById maps id to same object refs', () => {
+  it('buildSessionIndex 保留对象引用，空 id 与重复 id 丢弃', () => {
     const a = sess('a');
     const b = sess('b');
-    const map = buildSessionsById([a, b]);
-    expect(map.a).toBe(a);
-    expect(map.b).toBe(b);
+    const blank = { ...sess('x'), id: '' };
+    const dup = sess('a', 'later');
+    const built = buildSessionIndex([a, blank, b, dup]);
+    expect(built.sessionsById.a).toBe(a);
+    expect(built.sessionsById.b).toBe(b);
+    expect(built.sessionOrder).toEqual(['a', 'b']);
+    expect(built.sessionsById.a?.title).toBe('a');
   });
 
-  it('getSessionById is O(1) via sessionsById', () => {
+  it('getSessionById 只读 map', () => {
     const a = sess('a');
     const b = sess('b');
-    const state: SessionsIndexed = {
-      sessions: [a, b],
-      sessionsById: buildSessionsById([a, b]),
-    };
+    const state = indexed([a, b]);
     expect(getSessionById(state, 'b')).toBe(b);
     expect(getSessionById(state, 'missing')).toBeUndefined();
     expect(getSessionById(state, '')).toBeUndefined();
   });
 
-  it('getSessionById falls back to scan and backfills index', () => {
-    const a = sess('a');
-    const state: SessionsIndexed = {
-      sessions: [a],
-      sessionsById: {},
-    };
-    expect(getSessionById(state, 'a')).toBe(a);
-    expect(state.sessionsById.a).toBe(a);
-  });
-
-  it('getSessionForWrite rebinds forked sessionsById to sessions[] element', () => {
-    const a = sess('a');
-    const forked = { ...a, messages: [] as SessionState['messages'] };
-    const state: SessionsIndexed = {
-      sessions: [a],
-      // 模拟 immer 只 fork 了 map 值
-      sessionsById: { a: forked },
-    };
-    expect(getSessionById(state, 'a')).toBe(forked);
-    const w = getSessionForWrite(state, 'a');
-    expect(w).toBe(a);
-    expect(state.sessionsById.a).toBe(a);
-    expect(w).toBe(state.sessions[0]);
-  });
-
-  it('reindexSessionsById rebuilds after structural change', () => {
+  it('replaceSessions 同时替换 map 与顺序', () => {
     const a = sess('a');
     const b = sess('b');
-    const state: SessionsIndexed = {
-      sessions: [a],
-      sessionsById: buildSessionsById([a]),
-    };
-    state.sessions.push(b);
-    reindexSessionsById(state);
+    const state = indexed([a]);
+    replaceSessions(state, [b, a]);
+    expect(listSessions(state).map((s) => s.id)).toEqual(['b', 'a']);
     expect(getSessionById(state, 'b')).toBe(b);
-    expect(getSessionIndex(state, 'a')).toBe(0);
-    expect(getSessionIndex(state, 'b')).toBe(1);
     expect(isSessionsIndexConsistent(state)).toBe(true);
   });
 
-  it('ensureSessionsById rebuilds when index is nullish', () => {
+  it('listSessions 跳过顺序里缺失的 id', () => {
     const a = sess('a');
-    const state = {
-      sessions: [a],
-      sessionsById: null as unknown as Record<string, SessionState>,
-    } as SessionsIndexed;
-    const map = ensureSessionsById(state);
-    expect(map.a).toBe(a);
-    expect(state.sessionsById.a).toBe(a);
+    const state: SessionsIndexed = {
+      sessionsById: { a },
+      sessionOrder: ['missing', 'a'],
+    };
+    expect(listSessions(state)).toEqual([a]);
   });
 
-  it('listSessionIds follows array order and skips empty id', () => {
+  it('checkSessionsIndex 识别缺失、残留、id 不符与重复', () => {
     const a = sess('a');
     const b = sess('b');
-    const blank = { ...sess('x'), id: '' };
-    expect(listSessionIds({ sessions: [a, blank, b] })).toEqual(['a', 'b']);
-  });
-
-  it('checkSessionsIndex detects missing / stale / ref mismatch / duplicate', () => {
-    const a = sess('a');
-    const b = sess('b');
-    const cloneA = { ...a };
     const missing: SessionsIndexed = {
-      sessions: [a, b],
+      sessionOrder: ['a', 'b'],
       sessionsById: { a },
     };
     expect(
@@ -136,7 +104,7 @@ describe('sessionIndex', () => {
     ).toBe(true);
 
     const stale: SessionsIndexed = {
-      sessions: [a],
+      sessionOrder: ['a'],
       sessionsById: { a, orphan: b },
     };
     expect(
@@ -146,17 +114,17 @@ describe('sessionIndex', () => {
     ).toBe(true);
 
     const mismatch: SessionsIndexed = {
-      sessions: [a],
-      sessionsById: { a: cloneA },
+      sessionOrder: ['a'],
+      sessionsById: { a: { ...a, id: 'other' } },
     };
     expect(
       checkSessionsIndex(mismatch).some(
-        (i) => i.kind === 'ref_mismatch' && i.id === 'a'
+        (i) => i.kind === 'id_mismatch' && i.id === 'a'
       )
     ).toBe(true);
 
     const dup: SessionsIndexed = {
-      sessions: [a, a],
+      sessionOrder: ['a', 'a'],
       sessionsById: { a },
     };
     expect(
@@ -166,98 +134,151 @@ describe('sessionIndex', () => {
     ).toBe(true);
   });
 
-  it('assertSessionsIndexConsistent throws when broken', () => {
+  it('assertSessionsIndexConsistent 在损坏时抛错，修复后通过', () => {
     const a = sess('a');
-    const state: SessionsIndexed = { sessions: [a], sessionsById: {} };
+    const state: SessionsIndexed = { sessionOrder: ['a'], sessionsById: {} };
     expect(() => assertSessionsIndexConsistent(state)).toThrow(
       /index inconsistent/
     );
-    reindexSessionsById(state);
+    replaceSessions(state, [a]);
     expect(() => assertSessionsIndexConsistent(state)).not.toThrow();
+  });
+
+  it('insertSessionAt 夹紧下标，同 id 先摘再插', () => {
+    const a = sess('a');
+    const b = sess('b');
+    const c = sess('c');
+    const state = indexed([a, b]);
+    insertSessionAt(state, c, 99);
+    expect(state.sessionOrder).toEqual(['a', 'b', 'c']);
+    insertSessionAt(state, a, 0);
+    expect(state.sessionOrder).toEqual(['a', 'b', 'c']);
+    insertSessionAt(state, c, -3);
+    expect(listSessions(state).map((s) => s.id)).toEqual(['c', 'a', 'b']);
+    expect(getSessionById(state, 'c')).toBe(c);
   });
 });
 
 describe('reorder helpers', () => {
-  it('reorderSessionById moves within bounds and returns same ref when noop', () => {
-    const a = sess('a');
-    const b = sess('b');
-    const c = sess('c');
-    const list = [a, b, c];
-    expect(reorderSessionById(list, 'a', 2).map((s) => s.id)).toEqual([
-      'b',
-      'c',
-      'a',
-    ]);
-    expect(reorderSessionById(list, 'c', 0).map((s) => s.id)).toEqual([
-      'c',
-      'a',
-      'b',
-    ]);
-    expect(reorderSessionById(list, 'b', 1)).toBe(list);
-    expect(reorderSessionById(list, 'missing', 0)).toBe(list);
-    // clamp past end
-    expect(reorderSessionById(list, 'a', 99).map((s) => s.id)).toEqual([
-      'b',
-      'c',
-      'a',
-    ]);
-    expect(reorderSessionById(list, 'c', -5).map((s) => s.id)).toEqual([
-      'c',
-      'a',
-      'b',
-    ]);
+  it('reorderSessionOrderById 在界内移动，无变化时返回原数组', () => {
+    const order = ['a', 'b', 'c'];
+    expect(reorderSessionOrderById(order, 'a', 2)).toEqual(['b', 'c', 'a']);
+    expect(reorderSessionOrderById(order, 'c', 0)).toEqual(['c', 'a', 'b']);
+    expect(reorderSessionOrderById(order, 'b', 1)).toBe(order);
+    expect(reorderSessionOrderById(order, 'missing', 0)).toBe(order);
+    expect(reorderSessionOrderById(order, 'a', 99)).toEqual(['b', 'c', 'a']);
+    expect(reorderSessionOrderById(order, 'c', -5)).toEqual(['c', 'a', 'b']);
   });
 
-  it('reorderSessionsByIdList puts named ids first, keeps relative tail', () => {
-    const a = sess('a');
-    const b = sess('b');
-    const c = sess('c');
-    const d = sess('d');
-    const list = [a, b, c, d];
-    expect(reorderSessionsByIdList(list, ['c', 'a']).map((s) => s.id)).toEqual([
+  it('reorderSessionOrderByIdList 把点名 id 排前，其余保持相对顺序', () => {
+    const order = ['a', 'b', 'c', 'd'];
+    expect(reorderSessionOrderByIdList(order, ['c', 'a'])).toEqual([
       'c',
       'a',
       'b',
       'd',
     ]);
-    // unknown / dup ids ignored
-    expect(
-      reorderSessionsByIdList(list, ['x', 'b', 'b', 'd']).map((s) => s.id)
-    ).toEqual(['b', 'd', 'a', 'c']);
-    // identity order → same ref
-    expect(reorderSessionsByIdList(list, ['a', 'b', 'c', 'd'])).toBe(list);
+    expect(reorderSessionOrderByIdList(order, ['x', 'b', 'b', 'd'])).toEqual([
+      'b',
+      'd',
+      'a',
+      'c',
+    ]);
+    expect(reorderSessionOrderByIdList(order, ['a', 'b', 'c', 'd'])).toBe(
+      order
+    );
   });
 
-  it('moveSessionInIndexed mutates + reindexes consistently', () => {
+  it('moveSessionInIndexed 只改顺序并保持一致', () => {
     const a = sess('a');
     const b = sess('b');
     const c = sess('c');
-    const state: SessionsIndexed = {
-      sessions: [a, b, c],
-      sessionsById: buildSessionsById([a, b, c]),
-    };
+    const state = indexed([a, b, c]);
     expect(moveSessionInIndexed(state, 'a', 2)).toBe(true);
-    expect(state.sessions.map((s) => s.id)).toEqual(['b', 'c', 'a']);
+    expect(state.sessionOrder).toEqual(['b', 'c', 'a']);
     expect(isSessionsIndexConsistent(state)).toBe(true);
     expect(getSessionById(state, 'a')).toBe(a);
+    expect(getSessionIndex(state, 'a')).toBe(2);
     expect(moveSessionInIndexed(state, 'a', 2)).toBe(false);
   });
 
-  it('reorderIndexedByIdList + deleteSessionFromIndexed keep index healthy', () => {
+  it('reorderIndexedByIdList 与 deleteSessionFromIndexed 保持索引健康', () => {
     const a = sess('a');
     const b = sess('b');
     const c = sess('c');
-    const state: SessionsIndexed = {
-      sessions: [a, b, c],
-      sessionsById: buildSessionsById([a, b, c]),
-    };
+    const state = indexed([a, b, c]);
     expect(reorderIndexedByIdList(state, ['c', 'a', 'b'])).toBe(true);
-    expect(listSessionIds(state)).toEqual(['c', 'a', 'b']);
+    expect(state.sessionOrder).toEqual(['c', 'a', 'b']);
     expect(deleteSessionFromIndexed(state, 'a')).toBe(true);
     expect(getSessionById(state, 'a')).toBeUndefined();
     expect(state.sessionsById.a).toBeUndefined();
+    expect(state.sessionOrder).toEqual(['c', 'b']);
     expect(isSessionsIndexConsistent(state)).toBe(true);
     expect(deleteSessionFromIndexed(state, 'a')).toBe(false);
+  });
+});
+
+describe('selectSessionList 顺序与引用稳定（R6）', () => {
+  afterEach(() => {
+    useSessionStore.setState((state) => {
+      replaceSessions(state, []);
+      state.activeSessionId = '';
+    });
+  });
+
+  it('顺序与 sessionOrder 一致，同一快照重复读取返回同一数组', () => {
+    const a = sess('a');
+    const b = sess('b');
+    useSessionStore.setState((state) => {
+      replaceSessions(state, [a, b]);
+    });
+    const snap = useSessionStore.getState();
+    const first = selectSessionList(snap);
+    const second = selectSessionList(snap);
+    expect(first.map((s) => s.id)).toEqual(snap.sessionOrder);
+    expect(second).toBe(first);
+  });
+
+  it('新增、删除、更新后列表引用变化，顺序仍等于 sessionOrder', () => {
+    const a = sess('a');
+    const b = sess('b');
+    const c = sess('c');
+    useSessionStore.setState((state) => {
+      replaceSessions(state, [a, b]);
+    });
+    const before = selectSessionList(useSessionStore.getState());
+
+    useSessionStore.setState((state) => {
+      insertSessionAt(state, c, 1);
+    });
+    const added = selectSessionList(useSessionStore.getState());
+    expect(added).not.toBe(before);
+    expect(added.map((s) => s.id)).toEqual(
+      useSessionStore.getState().sessionOrder
+    );
+    expect(selectSessionList(useSessionStore.getState())).toBe(added);
+
+    useSessionStore.setState((state) => {
+      deleteSessionFromIndexed(state, 'a');
+    });
+    const removed = selectSessionList(useSessionStore.getState());
+    expect(removed).not.toBe(added);
+    expect(removed.map((s) => s.id)).toEqual(['c', 'b']);
+    expect(removed.map((s) => s.id)).toEqual(
+      useSessionStore.getState().sessionOrder
+    );
+
+    useSessionStore.setState((state) => {
+      const target = getSessionById(state, 'b');
+      if (target) target.title = 'renamed';
+    });
+    const updated = selectSessionList(useSessionStore.getState());
+    expect(updated).not.toBe(removed);
+    expect(updated.map((s) => s.id)).toEqual(
+      useSessionStore.getState().sessionOrder
+    );
+    expect(updated.find((s) => s.id === 'b')?.title).toBe('renamed');
+    expect(selectSessionList(useSessionStore.getState())).toBe(updated);
   });
 });
 

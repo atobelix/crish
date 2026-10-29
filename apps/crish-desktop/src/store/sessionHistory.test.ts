@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { produce } from 'immer';
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import { buildSessionIndex, listSessions } from './sessionIndex';
 import { exportSessionToJsonObject, exportSessionToMarkdown } from '../api/sessionExport';
 import { deriveSessionTitle } from '../api/sessionTitle';
 import { scheduledSessionTitle } from '../api/workflowApi';
@@ -29,8 +29,7 @@ function makeSession(id: string, title: string, isPinned = false, isArchived = f
 
 function makeStoreState(sessions: SessionState[], activeSessionId: string): SessionStoreSlice {
   return {
-    sessions,
-    sessionsById: buildSessionsById(sessions),
+    ...buildSessionIndex(sessions),
     folderOrder: ['general'],
     activeSessionId,
     draftFolder: '',
@@ -69,12 +68,12 @@ describe('Session History Management', () => {
 
     it('batch pins and unpins all sessions in a folder', () => {
       dispatchAction((a) => a.pinFolderSessions('general'));
-      expect(state.sessions.find((s) => s.id === 's1')?.isPinned).toBe(true);
-      expect(state.sessions.find((s) => s.id === 's2')?.isPinned).toBe(true);
+      expect(listSessions(state).find((s) => s.id === 's1')?.isPinned).toBe(true);
+      expect(listSessions(state).find((s) => s.id === 's2')?.isPinned).toBe(true);
 
       dispatchAction((a) => a.unpinFolderSessions('general'));
-      expect(state.sessions.find((s) => s.id === 's1')?.isPinned).toBe(false);
-      expect(state.sessions.find((s) => s.id === 's2')?.isPinned).toBe(false);
+      expect(listSessions(state).find((s) => s.id === 's1')?.isPinned).toBe(false);
+      expect(listSessions(state).find((s) => s.id === 's2')?.isPinned).toBe(false);
     });
   });
 
@@ -158,8 +157,7 @@ describe('Session History Management', () => {
         messages,
       };
       const slice: SessionStoreSlice = {
-        sessions: [sess],
-        sessionsById: buildSessionsById([sess]),
+        ...buildSessionIndex([sess]),
         folderOrder: ['general'],
         activeSessionId: 'overflow',
         draftFolder: '',
@@ -210,8 +208,7 @@ describe('Session History Management', () => {
         messages: [],
       };
       let state: SessionStoreSlice = {
-        sessions: [emptySess],
-        sessionsById: buildSessionsById([emptySess]),
+        ...buildSessionIndex([emptySess]),
         folderOrder: ['general'],
         activeSessionId: 'empty-src',
         draftFolder: '',
@@ -283,8 +280,7 @@ describe('Session History Management', () => {
         messages,
       };
       let state: SessionStoreSlice = {
-        sessions: [fullSess],
-        sessionsById: buildSessionsById([fullSess]),
+        ...buildSessionIndex([fullSess]),
         folderOrder: ['general'],
         activeSessionId: 'full-src',
         draftFolder: '',

@@ -81,9 +81,10 @@ export async function scanClaudeCodeSessions(
       sources: ['claude-code'],
       limit: opts?.limit,
     });
+    const claudeSessions = result.sessions;
     return {
       source: 'claude-code',
-      sessions: result.sessions.map(metaToDetected),
+      sessions: claudeSessions.map(metaToDetected),
       issues: [
         ...result.errors.map((message): ExternalSessionScanIssue => ({
           source: 'claude-code',
@@ -125,9 +126,10 @@ export async function scanCodexSessions(
       sources: ['codex'],
       limit: opts?.limit,
     });
+    const codexSessions = result.sessions;
     return {
       source: 'codex',
-      sessions: result.sessions.map(metaToDetected),
+      sessions: codexSessions.map(metaToDetected),
       issues: [
         ...result.errors.map((message): ExternalSessionScanIssue => ({
           source: 'codex',

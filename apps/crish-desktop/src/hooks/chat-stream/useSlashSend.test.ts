@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useSlashSend } from './useSlashSend';
 import { useSessionStore } from '../../store/sessionStore';
+import { listSessions, replaceSessions } from '../../store/sessionIndex';
+import type { SessionMessage, SessionState } from '../../store/types';
 import { resetCompositionRoot } from '../../app/compositionRoot';
 import { sessionStreams } from '../../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -67,7 +69,7 @@ function seedSession(opts?: {
     status?: string;
   }>;
 }) {
-  const sess = {
+  const sess: SessionState = {
     id: SID,
     title: opts?.title ?? '已有会话',
     folder: 'general',
@@ -79,29 +81,17 @@ function seedSession(opts?: {
       sender: m.sender,
       text: m.text,
       timestamp: Date.now(),
-      status:
-        (m.status as 'completed' | 'processing' | 'queued') || 'completed',
+      status: (m.status as SessionMessage['status']) || 'completed',
     })),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
   useSessionStore.setState((st) => {
-    (st as any).sessionsById = {
-      ...(st as any).sessionsById,
-      [SID]: sess,
-    };
-    const list = Array.isArray((st as any).sessions)
-      ? [...(st as any).sessions]
-      : [];
-    const idx = list.findIndex((s: { id: string }) => s.id === SID);
+    const list = listSessions(st);
+    const idx = list.findIndex((s) => s.id === SID);
     if (idx >= 0) list[idx] = sess;
     else list.push(sess);
-    (st as any).sessions = list;
-    (st as any).activeSessionId = opts?.active ?? SID;
-    (st as any).composerDrafts = {
-      ...(st as any).composerDrafts,
-      [SID]: 'draft text',
-    };
+    replaceSessions(st, list);
+    st.activeSessionId = opts?.active ?? SID;
+    st.composerDrafts[SID] = 'draft text';
   });
 }
 
@@ -214,8 +204,8 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     );
     // enter draft sentinel
     useSessionStore.setState((st) => {
-      (st as any).activeSessionId = PENDING_DRAFT_SESSION_ID;
-      (st as any).draftFolder = 'general';
+      st.activeSessionId = PENDING_DRAFT_SESSION_ID;
+      st.draftFolder = 'general';
     });
 
     const runStreamingAssistant = vi.fn();

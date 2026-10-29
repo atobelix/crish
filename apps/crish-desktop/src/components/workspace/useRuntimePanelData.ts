@@ -4,7 +4,7 @@
  * 渲染层（RuntimeSection 基座 + 4 个业务 Section）不持有这些派生逻辑。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 import {
   useSettingsField,
   selectScheduledTasks,
@@ -45,7 +45,7 @@ export type UseRuntimePanelDataResult = {
 export function useRuntimePanelData(): UseRuntimePanelDataResult {
   const cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
-  const sessions = useSessionStore((state) => state.sessions);
+  const sessions = useSessionStore(selectSessionList);
   const ds = useEngineState();
 
   const [now, setNow] = useState(() => Date.now());

@@ -8,7 +8,7 @@ import {
   sessionCascadeCancellation,
 } from './sessionCascadeCancellation';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import { buildSessionIndex } from './sessionIndex';
 import type { SessionState } from './types';
 import { sessionStreams } from '../api/sessionStreamManager';
 import { useStreamingStore } from './streamingStore';
@@ -18,8 +18,7 @@ function makeStateFromSessions(
   activeSessionId: string
 ): SessionStoreSlice {
   return {
-    sessions,
-    sessionsById: buildSessionsById(sessions),
+    ...buildSessionIndex(sessions),
     folderOrder: Array.from(new Set(sessions.map((s) => s.folder))),
     activeSessionId,
     draftFolder: '',

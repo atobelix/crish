@@ -13,6 +13,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  deleteSessionFromIndexed,
+  getSessionById,
+  listSessions,
+  replaceSessions,
+} from '../sessionIndex';
 import { useSessionStore } from '../sessionStore';
 import type {
   MessageTimelineBlock,
@@ -63,8 +69,8 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
       messages: msgs,
     } as unknown as SessionState;
     useSessionStore.setState((st) => {
-      st.sessions = [...st.sessions.filter((s) => s.id !== SESS_ID), session];
-      st.sessionsById[SESS_ID] = session;
+      const rest = listSessions(st).filter((s) => s.id !== SESS_ID);
+      replaceSessions(st, [...rest, session]);
     });
   }
 
@@ -83,8 +89,7 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
 
   afterEach(() => {
     useSessionStore.setState((st) => {
-      st.sessions = st.sessions.filter((s) => s.id !== SESS_ID);
-      delete st.sessionsById[SESS_ID];
+      deleteSessionFromIndexed(st, SESS_ID);
     });
   });
 
@@ -347,9 +352,9 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         status: 'running',
         arguments: '{"uri":"schema.json"}',
       });
-      // 经 canonical sessions[] 写入思考块（immer draft 原地修改）
+      // 经 sessionsById 写入思考块（immer draft 原地修改）
       useSessionStore.setState((st) => {
-        const sess = st.sessions.find((s) => s.id === SESS_ID);
+        const sess = getSessionById(st, SESS_ID);
         const msg = sess?.messages.find((m) => m.id === MSG_ID);
         if (msg) {
           msg.blocks = [
@@ -368,7 +373,7 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         output: 'valid',
       });
       useSessionStore.setState((st) => {
-        const sess = st.sessions.find((s) => s.id === SESS_ID);
+        const sess = getSessionById(st, SESS_ID);
         const msg = sess?.messages.find((m) => m.id === MSG_ID);
         if (msg && msg.blocks) {
           msg.blocks.push({
@@ -388,7 +393,7 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         output: 'saved',
       });
       useSessionStore.setState((st) => {
-        const sess = st.sessions.find((s) => s.id === SESS_ID);
+        const sess = getSessionById(st, SESS_ID);
         const msg = sess?.messages.find((m) => m.id === MSG_ID);
         if (msg && msg.blocks) {
           msg.blocks.push({

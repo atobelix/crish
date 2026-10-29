@@ -4,64 +4,83 @@ import {
   deleteImportedSession,
   getDeletedExternalSessionKeys,
 } from './importSessions';
-import { getSessionStoreState } from '../../store';
+import { listSessions, replaceSessions } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 
-vi.mock('../../store', () => {
+const { mockState } = vi.hoisted(() => {
   const mockState = {
-    sessions: [] as any[],
+    sessionsById: {} as Record<string, SessionState>,
+    sessionOrder: [] as string[],
     deleteSession: vi.fn((id: string) => {
-      const idx = mockState.sessions.findIndex((s) => s.id === id);
-      if (idx !== -1) {
-        mockState.sessions.splice(idx, 1);
-        return true;
-      }
-      return false;
+      const idx = mockState.sessionOrder.indexOf(id);
+      const inMap = Object.prototype.hasOwnProperty.call(
+        mockState.sessionsById,
+        id
+      );
+      if (idx < 0 && !inMap) return false;
+      if (idx >= 0) mockState.sessionOrder.splice(idx, 1);
+      if (inMap) delete mockState.sessionsById[id];
+      return true;
     }),
   };
+  return { mockState };
+});
+
+vi.mock('../../store', async () => {
+  const { selectSessionList } = await import('../../store/sessionIndex');
   return {
-    getSessionStoreState: vi.fn(() => mockState),
+    getSessionStoreState: () => mockState,
+    selectSessionList,
   };
 });
+
+function shell(
+  id: string,
+  title: string,
+  importMeta?: SessionState['importMeta']
+): SessionState {
+  return {
+    id,
+    title,
+    folder: '',
+    isPinned: false,
+    isArchived: false,
+    timestamp: '2026-08-01T00:00:00.000Z',
+    messages: [],
+    ...(importMeta ? { importMeta } : {}),
+  };
+}
 
 describe('importSessions cleanup and tombstone management', () => {
   beforeEach(() => {
     localStorage.clear();
-    const st = getSessionStoreState() as any;
-    st.deleteSession.mockClear();
-    st.sessions = [];
+    mockState.deleteSession.mockClear();
+    replaceSessions(mockState, []);
   });
 
   it('cleanAllImportedExternalSessions cleans only imported sessions and records tombstones', async () => {
-    const st = getSessionStoreState() as any;
-    st.sessions = [
-      {
-        id: 'user-sess-1',
-        title: '用户正常对话',
-        messages: [],
-      },
-      {
-        id: 'imported-sess-1',
-        title: '外部空会话 1',
-        importMeta: { source: 'claude-code', sourceSessionId: 'claude-uuid-1' },
-        messages: [],
-      },
-      {
-        id: 'imported-sess-2',
-        title: '外部空会话 2',
-        importMeta: { source: 'codex', sourceSessionId: 'codex-uuid-2' },
-        messages: [],
-      },
-    ];
+    replaceSessions(mockState, [
+      shell('user-sess-1', '用户正常对话'),
+      shell('imported-sess-1', '外部空会话 1', {
+        source: 'claude-code',
+        sourceSessionId: 'claude-uuid-1',
+      }),
+      shell('imported-sess-2', '外部空会话 2', {
+        source: 'codex',
+        sourceSessionId: 'codex-uuid-2',
+      }),
+    ]);
 
     const count = await cleanAllImportedExternalSessions();
     expect(count).toBe(2);
-    expect(st.deleteSession).toHaveBeenCalledTimes(2);
-    expect(st.deleteSession).toHaveBeenCalledWith('imported-sess-1');
-    expect(st.deleteSession).toHaveBeenCalledWith('imported-sess-2');
+    expect(mockState.deleteSession).toHaveBeenCalledTimes(2);
+    expect(mockState.deleteSession).toHaveBeenCalledWith('imported-sess-1');
+    expect(mockState.deleteSession).toHaveBeenCalledWith('imported-sess-2');
 
     // 用户正常会话应保留
-    expect(st.sessions).toHaveLength(1);
-    expect(st.sessions[0].id).toBe('user-sess-1');
+    const left = listSessions(mockState);
+    expect(left).toHaveLength(1);
+    expect(left[0]?.id).toBe('user-sess-1');
 
     // 检查 tombstone 永久写入
     const tombstones = getDeletedExternalSessionKeys();
@@ -70,37 +89,24 @@ describe('importSessions cleanup and tombstone management', () => {
   });
 
   it('cleanAllImportedExternalSessions returns 0 if no imported sessions exist', async () => {
-    const st = getSessionStoreState() as any;
-    st.sessions = [
-      {
-        id: 'user-sess-1',
-        title: '用户正常对话',
-        messages: [],
-      },
-    ];
+    replaceSessions(mockState, [shell('user-sess-1', '用户正常对话')]);
 
     const count = await cleanAllImportedExternalSessions();
     expect(count).toBe(0);
-    expect(st.deleteSession).not.toHaveBeenCalled();
+    expect(mockState.deleteSession).not.toHaveBeenCalled();
   });
 
   it('deleteImportedSession removes single imported session and writes tombstone', () => {
-    const st = getSessionStoreState() as any;
-    st.sessions = [
-      {
-        id: 'imported-sess-3',
-        title: '单个已接续会话',
-        importMeta: {
-          source: 'claude-code',
-          sourceSessionId: 'claude-single-3',
-        },
-        messages: [],
-      },
-    ];
+    replaceSessions(mockState, [
+      shell('imported-sess-3', '单个已接续会话', {
+        source: 'claude-code',
+        sourceSessionId: 'claude-single-3',
+      }),
+    ]);
 
     const ok = deleteImportedSession('imported-sess-3');
     expect(ok).toBe(true);
-    expect(st.deleteSession).toHaveBeenCalledWith('imported-sess-3');
+    expect(mockState.deleteSession).toHaveBeenCalledWith('imported-sess-3');
 
     const tombstones = getDeletedExternalSessionKeys();
     expect(tombstones.has('claude-code::claude-single-3')).toBe(true);

@@ -21,27 +21,46 @@ vi.mock('../../../store/layoutStore', () => ({
   clampActiveWorkspaceIndex: vi.fn(() => 0),
 }));
 
-vi.mock('../../../store/storeAccess', () => ({
-  useSessionStore: vi.fn((selector) => {
-    const state = {
-      sessions: [],
-      activeSessionId: 'sess-1',
-    };
-    return selector ? selector(state) : state;
-  }),
-  useSessionField: vi.fn((selector) => {
-    const state = {
-      activeSessionId: 'sess-1',
-      sessionsById: {
-        'sess-1': { id: 'sess-1', agents: [] },
-      },
-    };
-    return selector ? selector(state) : state;
-  }),
-  selectActiveSessionId: (s: any) => s.activeSessionId,
-  selectSessionsById: (s: any) => s.sessionsById,
-  getSessionById: vi.fn(() => undefined),
-}));
+vi.mock('../../../store/storeAccess', async () => {
+  const { buildSessionIndex, selectSessionList } = await import(
+    '../../../store/sessionIndex'
+  );
+  const indexed = buildSessionIndex([]);
+  return {
+    useSessionStore: vi.fn(
+      (
+        selector?: (state: typeof indexed & { activeSessionId: string }) => unknown
+      ) => {
+        const state = {
+          sessionsById: indexed.sessionsById,
+          sessionOrder: indexed.sessionOrder,
+          activeSessionId: 'sess-1',
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+      }
+    ),
+    useSessionField: vi.fn(
+      (selector?: (state: {
+        activeSessionId: string;
+        sessionsById: Record<string, { id: string; agents: never[] }>;
+      }) => unknown) => {
+        const state = {
+          activeSessionId: 'sess-1',
+          sessionsById: {
+            'sess-1': { id: 'sess-1', agents: [] },
+          },
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+      }
+    ),
+    selectActiveSessionId: (s: { activeSessionId?: string }) => s.activeSessionId,
+    selectSessionsById: (s: {
+      sessionsById?: Record<string, { id: string; agents: never[] }>;
+    }) => s.sessionsById,
+    selectSessionList,
+    getSessionById: vi.fn(() => undefined),
+  };
+});
 
 import { useScrollAnchor } from '../useScrollAnchor';
 import { ApprovalDock } from '../../chat-card/ApprovalDock';

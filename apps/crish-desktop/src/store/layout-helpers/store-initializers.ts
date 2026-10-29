@@ -17,7 +17,7 @@ import {
   resolveWorkspacePanelKey,
 } from './ui-selectors';
 import { seedSessions } from './session-selectors';
-import { buildSessionsById } from '../sessionIndex';
+import { buildSessionIndex } from '../sessionIndex';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from '../draftSession';
 import {
   DEFAULT_SETTINGS_TAB,
@@ -236,8 +236,8 @@ export function clampActiveWorkspaceIndex(
  *
  * 不变量（系统级）：activeSessionId 在稳态下绝不允许为空字符串。
  * 必须始终是有效会话 ID 或 PENDING_DRAFT_SESSION_ID（草稿态）。
- * - 若 active 无效但 sessions 非空：取首个 session 作后备
- * - 若 sessions 为空或 active 仍无效：进入草稿态
+ * - 若 active 无效但索引非空：取顺序中的首个会话作后备
+ * - 若索引为空或 active 仍无效：进入草稿态
  * - 草稿哨兵不落盘：持久化层在写入时应剥离，但读取时若遇到则归一为草稿态
  *
  * 这样确保应用启动 / 持久化恢复 / 会话删除后绝不会触发"暂无会话"空屏。
@@ -247,34 +247,39 @@ export function sanitizeSessionSeed(seed: {
   activeSessionId: string | null;
   folderOrder: string[] | null;
 }): {
-  sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
+  sessionOrder: string[];
   activeSessionId: string;
   folderOrder: string[];
 } {
   const sessions = Array.isArray(seed.sessions) ? seed.sessions : [];
-  const sessionsById = buildSessionsById(sessions);
+  const indexed = buildSessionIndex(sessions);
   let activeSessionId =
     typeof seed.activeSessionId === 'string' ? seed.activeSessionId : '';
-  // 草稿哨兵：保持草稿态（不归一为空，避免触发 no-session 空屏）
+  // 草稿哨兵先归一。哨兵不在索引里时，下面的存在性检查会落到首个真实会话。
   if (isPendingDraft(activeSessionId)) {
     activeSessionId = PENDING_DRAFT_SESSION_ID;
   }
-  // active 指向不存在的会话：优先取首个 session 作后备，否则进入草稿态
-  if (!activeSessionId || !sessionsById[activeSessionId]) {
+  // active 指向不存在的会话：优先取顺序中的首个会话，否则进入草稿态
+  if (!activeSessionId || !indexed.sessionsById[activeSessionId]) {
     activeSessionId =
-      sessions.length > 0
-        ? (sessions[0]?.id ?? PENDING_DRAFT_SESSION_ID)
+      indexed.sessionOrder.length > 0
+        ? (indexed.sessionOrder[0] ?? PENDING_DRAFT_SESSION_ID)
         : PENDING_DRAFT_SESSION_ID;
   }
-  // sessions 为空时强制草稿态（覆盖 active 指向首个 session 但 sessions 已清空的边界）
-  if (sessions.length === 0) {
+  // 索引为空时强制草稿态
+  if (indexed.sessionOrder.length === 0) {
     activeSessionId = PENDING_DRAFT_SESSION_ID;
   }
   const folderOrder = Array.isArray(seed.folderOrder)
     ? seed.folderOrder.filter((f) => typeof f === 'string' && f.length > 0)
     : [];
-  return { sessions, sessionsById, activeSessionId, folderOrder };
+  return {
+    sessionsById: indexed.sessionsById,
+    sessionOrder: indexed.sessionOrder,
+    activeSessionId,
+    folderOrder,
+  };
 }
 
 /** 工厂：生成 store 初始状态中可计算的默认字段 */

@@ -1,9 +1,6 @@
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { MessageContextInjection } from './types';
-import {
-  getSessionForWrite,
-  rebindSessionById,
-} from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import type {
   SessionActions,
   SessionImmerSet,
@@ -45,7 +42,7 @@ export function createSessionInjectionActions<T extends SessionStoreSlice>(
         return;
       }
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
@@ -89,7 +86,6 @@ export function createSessionInjectionActions<T extends SessionStoreSlice>(
             sess.timestampSource = 'local';
           }
         }
-        rebindSessionById(state, sessionId, sess);
       });
     },
   };

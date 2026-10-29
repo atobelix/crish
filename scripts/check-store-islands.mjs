@@ -231,7 +231,7 @@ const violations = [];
           '未找到 partialize 对象字面量——票 A 契约要求显式 partialize 且无 sessions',
       });
     }
-    for (const banned of ['sessions', 'sessionsById']) {
+    for (const banned of ['sessions', 'sessionsById', 'sessionOrder']) {
       if (keys.has(banned)) {
         violations.push({
           rule: 'partialize_has_sessions',

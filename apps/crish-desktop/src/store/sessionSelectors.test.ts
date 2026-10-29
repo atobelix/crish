@@ -2,32 +2,26 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 import { useSessionStore } from './sessionStore';
 import {
-  useSessionMeta,
   useSessionMessages,
   useSessionMessageCount,
   useSessionAgents,
   useSessionTitle,
   useSessionFolder,
   useSessionIsPinned,
-  useSessionEpoch,
   useActiveSessionId,
-  selectSessionMeta,
+  selectSession,
   selectSessionMessages,
   selectSessionMessageCount,
   selectSessionAgents,
   selectSessionTitle,
   selectSessionFolder,
   selectSessionIsPinned,
-  selectSessionEpoch,
-  bumpSessionEpoch,
-  getSessionEpoch,
   selectActiveSessionId,
-  clearSessionSelectorsCache,
   EMPTY_MESSAGES,
   EMPTY_AGENTS,
 } from './sessionSelectors';
@@ -83,12 +77,25 @@ function createMockAgent(
   };
 }
 
+/** 按插入顺序写入唯一源。 */
+function installSessions(sessions: SessionState[]): void {
+  useSessionStore.setState((st) => {
+    const sessionsById: Record<string, SessionState> = {};
+    const sessionOrder: string[] = [];
+    for (const sess of sessions) {
+      sessionsById[sess.id] = sess;
+      sessionOrder.push(sess.id);
+    }
+    st.sessionsById = sessionsById;
+    st.sessionOrder = sessionOrder;
+  });
+}
+
 describe('sessionSelectors (Wave 3 W3-2)', () => {
   beforeEach(() => {
-    clearSessionSelectorsCache();
     useSessionStore.setState((st) => {
-      st.sessions = [];
       st.sessionsById = {};
+      st.sessionOrder = [];
       st.activeSessionId = '';
       st.folderOrder = ['常规会话'];
       st.activeAgentId = null;
@@ -99,96 +106,105 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
     });
   });
 
-  afterEach(() => {
-    clearSessionSelectorsCache();
-  });
-
-  describe('Pure Selectors (选择器纯函数与缓存机制)', () => {
-    it('selectSessionMeta 返回解耦后的纯元数据切片，不携带高频 messages 和 agents', () => {
+  describe('选择器纯函数', () => {
+    it('标题、目录和置顶以标量读取，标识、归档态和时间戳仍从会话本体读取', () => {
       const msg1 = createMockMessage('m1', 'hello');
       const sess1 = createMockSession('sess-1', '会话一', [msg1]);
       sess1.isPinned = true;
       sess1.folder = '测试目录';
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
-      const meta = selectSessionMeta('sess-1')(useSessionStore.getState());
-      expect(meta).toBeDefined();
-      expect(meta?.id).toBe('sess-1');
-      expect(meta?.title).toBe('会话一');
-      expect(meta?.folder).toBe('测试目录');
-      expect(meta?.isPinned).toBe(true);
-      expect(meta?.isArchived).toBe(false);
-      expect(meta?.timestamp).toBe('2026-10-12T10:00:00.000Z');
+      const state = useSessionStore.getState();
+      const session = selectSession('sess-1')(state);
+      expect(session).toBeDefined();
+      expect(session?.id).toBe('sess-1');
+      expect(session?.isArchived).toBe(false);
+      expect(session?.timestamp).toBe('2026-10-12T10:00:00.000Z');
 
-      // 物理切除断言：元数据对象上不包含 messages 和 agents
-      expect((meta as any).messages).toBeUndefined();
-      expect((meta as any).agents).toBeUndefined();
+      const title = selectSessionTitle('sess-1')(state);
+      const folder = selectSessionFolder('sess-1')(state);
+      const pinned = selectSessionIsPinned('sess-1')(state);
+      expect(title).toBe('会话一');
+      expect(selectSessionTitle(state, 'sess-1')).toBe(title);
+      expect(folder).toBe('测试目录');
+      expect(selectSessionFolder(state, 'sess-1')).toBe(folder);
+      expect(pinned).toBe(true);
+      expect(selectSessionIsPinned(state, 'sess-1')).toBe(pinned);
+
+      // 标量不是消息数组，也不是子代理数组
+      expect(typeof title).toBe('string');
+      expect(typeof folder).toBe('string');
+      expect(typeof pinned).toBe('boolean');
+      expect(selectSessionMessages('sess-1')(state)).toHaveLength(1);
+      expect(selectSessionMessages(state, 'sess-1')).toHaveLength(1);
+      expect(selectSessionAgents('sess-1')(state)).toBe(EMPTY_AGENTS);
     });
 
-    it('selectSessionMeta 对不存在的会话返回 undefined', () => {
-      const meta = selectSessionMeta('non-existent')(
-        useSessionStore.getState()
-      );
-      expect(meta).toBeUndefined();
+    it('不存在的会话不返回会话本体，目录为空，标题与置顶走默认值', () => {
+      const state = useSessionStore.getState();
+      expect(selectSession('non-existent')(state)).toBeUndefined();
+      expect(selectSessionTitle('non-existent')(state)).toBe('');
+      expect(selectSessionTitle(state, 'non-existent')).toBe('');
+      expect(selectSessionFolder('non-existent')(state)).toBeUndefined();
+      expect(selectSessionFolder(state, 'non-existent')).toBeUndefined();
+      expect(selectSessionIsPinned('non-existent')(state)).toBe(false);
+      expect(selectSessionIsPinned(state, 'non-existent')).toBe(false);
     });
 
-    it('当会话进行消息流式推送（updateMessageText / updateMessageThinking）时，selectSessionMeta 返回值引用保持严格一致', () => {
+    it('消息流式推送时标题、目录和置顶保持全等', () => {
       const msg1 = createMockMessage('m1', 'initial text');
       const sess1 = createMockSession('sess-1', '流式测试', [msg1]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       const stateBefore = useSessionStore.getState();
-      const metaBefore = selectSessionMeta('sess-1')(stateBefore);
+      const titleBefore = selectSessionTitle('sess-1')(stateBefore);
+      const folderBefore = selectSessionFolder('sess-1')(stateBefore);
+      const pinnedBefore = selectSessionIsPinned('sess-1')(stateBefore);
 
-      // 模拟流式 Token 追加推送
       stateBefore.updateMessageText('sess-1', 'm1', 'initial text + token 1');
       const stateAfter1 = useSessionStore.getState();
-      const metaAfter1 = selectSessionMeta('sess-1')(stateAfter1);
+      expect(selectSessionTitle('sess-1')(stateAfter1)).toBe(titleBefore);
+      expect(selectSessionTitle(stateAfter1, 'sess-1')).toBe(titleBefore);
+      expect(selectSessionFolder('sess-1')(stateAfter1)).toBe(folderBefore);
+      expect(selectSessionFolder(stateAfter1, 'sess-1')).toBe(folderBefore);
+      expect(selectSessionIsPinned('sess-1')(stateAfter1)).toBe(pinnedBefore);
+      expect(selectSessionIsPinned(stateAfter1, 'sess-1')).toBe(pinnedBefore);
+      expect(titleBefore).toBe('流式测试');
 
-      // 验证引用绝对一致 (toBe)，杜绝 Object.is 判定失败导致的无效重渲染
-      expect(metaAfter1).toBe(metaBefore);
-      expect(metaAfter1?.title).toBe('流式测试');
-
-      // 继续模拟思考块流式推送
       stateAfter1.updateMessageThinking('sess-1', 'm1', 'thinking chunk...');
       const stateAfter2 = useSessionStore.getState();
-      const metaAfter2 = selectSessionMeta('sess-1')(stateAfter2);
-
-      expect(metaAfter2).toBe(metaBefore);
+      expect(selectSessionTitle('sess-1')(stateAfter2)).toBe(titleBefore);
+      expect(selectSessionFolder(stateAfter2, 'sess-1')).toBe(folderBefore);
+      expect(selectSessionIsPinned(stateAfter2, 'sess-1')).toBe(pinnedBefore);
     });
 
-    it('当会话元数据（如标题重命名）变更时，selectSessionMeta 精准返回新引用与最新值', () => {
+    it('重命名只更新标题，目录和置顶保持全等', () => {
       const msg1 = createMockMessage('m1', 'hello');
       const sess1 = createMockSession('sess-1', '旧标题', [msg1]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
-      const metaBefore = selectSessionMeta('sess-1')(
-        useSessionStore.getState()
-      );
-      expect(metaBefore?.title).toBe('旧标题');
+      const stateBefore = useSessionStore.getState();
+      const titleBefore = selectSessionTitle('sess-1')(stateBefore);
+      const folderBefore = selectSessionFolder('sess-1')(stateBefore);
+      const pinnedBefore = selectSessionIsPinned('sess-1')(stateBefore);
+      expect(titleBefore).toBe('旧标题');
 
-      // 重命名会话
       useSessionStore.getState().renameSession('sess-1', '新标题');
 
-      const metaAfter = selectSessionMeta('sess-1')(useSessionStore.getState());
-      expect(metaAfter).not.toBe(metaBefore);
-      expect(metaAfter?.title).toBe('新标题');
-      expect(metaAfter?.id).toBe('sess-1');
+      const stateAfter = useSessionStore.getState();
+      const titleAfter = selectSessionTitle('sess-1')(stateAfter);
+      expect(titleAfter).not.toBe(titleBefore);
+      expect(titleAfter).toBe('新标题');
+      expect(selectSessionTitle(stateAfter, 'sess-1')).toBe('新标题');
+      expect(selectSessionFolder('sess-1')(stateAfter)).toBe(folderBefore);
+      expect(selectSessionIsPinned(stateAfter, 'sess-1')).toBe(pinnedBefore);
+      expect(selectSession('sess-1')(stateAfter)?.id).toBe('sess-1');
     });
 
-    it('多会话隔离：当某会话新增消息时，其他会话的 selectSessionMessages 与 selectSessionMeta 保持严格引用一致', () => {
+    it('多会话隔离：向某一会话追加消息时，其他会话的消息、标题、目录和置顶保持全等', () => {
       const sess1 = createMockSession('sess-1', '会话1', [
         createMockMessage('m1-1', 'msg1'),
       ]);
@@ -196,78 +212,68 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         createMockMessage('m2-1', 'msg2'),
       ]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = {
-          [sess1.id]: sess1,
-          [sess2.id]: sess2,
-        };
-      });
+      installSessions([sess1, sess2]);
 
       const state0 = useSessionStore.getState();
       const sess1MessagesBefore = selectSessionMessages('sess-1')(state0);
       const sess2MessagesBefore = selectSessionMessages('sess-2')(state0);
-      const sess2MetaBefore = selectSessionMeta('sess-2')(state0);
+      const sess2Before = selectSession('sess-2')(state0);
+      const sess2TitleBefore = selectSessionTitle('sess-2')(state0);
+      const sess2FolderBefore = selectSessionFolder('sess-2')(state0);
+      const sess2PinnedBefore = selectSessionIsPinned('sess-2')(state0);
 
-      // 仅向 sess-1 追加新消息
       state0.addMessage('ws-1', 'sess-1', createMockMessage('m1-2', 'msg2'));
 
       const state1 = useSessionStore.getState();
       const sess1MessagesAfter = selectSessionMessages('sess-1')(state1);
       const sess2MessagesAfter = selectSessionMessages('sess-2')(state1);
-      const sess2MetaAfter = selectSessionMeta('sess-2')(state1);
 
-      // sess-1 消息数组引用更新
       expect(sess1MessagesAfter).not.toBe(sess1MessagesBefore);
       expect(sess1MessagesAfter).toHaveLength(2);
+      expect(selectSessionMessages(state1, 'sess-1')).toBe(sess1MessagesAfter);
 
-      // sess-2 消息数组与元数据引用严格不变 (===)
       expect(sess2MessagesAfter).toBe(sess2MessagesBefore);
-      expect(sess2MetaAfter).toBe(sess2MetaBefore);
+      expect(selectSessionMessages(state1, 'sess-2')).toBe(sess2MessagesBefore);
+      expect(selectSession('sess-2')(state1)).toBe(sess2Before);
+      expect(selectSessionTitle('sess-2')(state1)).toBe(sess2TitleBefore);
+      expect(selectSessionTitle(state1, 'sess-2')).toBe(sess2TitleBefore);
+      expect(selectSessionFolder('sess-2')(state1)).toBe(sess2FolderBefore);
+      expect(selectSessionFolder(state1, 'sess-2')).toBe(sess2FolderBefore);
+      expect(selectSessionIsPinned('sess-2')(state1)).toBe(sess2PinnedBefore);
+      expect(selectSessionIsPinned(state1, 'sess-2')).toBe(sess2PinnedBefore);
     });
 
     it('selectSessionMessages 当会话不存在时返回全局不可变常量 EMPTY_MESSAGES', () => {
-      const messages1 = selectSessionMessages('invalid-1')(
-        useSessionStore.getState()
-      );
-      const messages2 = selectSessionMessages('invalid-2')(
-        useSessionStore.getState()
-      );
+      const state = useSessionStore.getState();
+      const messages1 = selectSessionMessages('invalid-1')(state);
+      const messages1Dual = selectSessionMessages(state, 'invalid-1');
+      const messages2 = selectSessionMessages('invalid-2')(state);
 
       expect(messages1).toBe(EMPTY_MESSAGES);
+      expect(messages1Dual).toBe(EMPTY_MESSAGES);
       expect(messages2).toBe(EMPTY_MESSAGES);
       expect(messages1).toHaveLength(0);
       expect(Object.isFrozen(messages1)).toBe(true);
     });
 
-    it('selectSessionMessageCount 正确统计消息数量，未水合时回退至 messageCount', () => {
+    it('selectSessionMessageCount 有正文时取数组长度，空正文回退至 messageCount', () => {
       const sessWithMessages = createMockSession('sess-1', '有正文', [
         createMockMessage('m1', 'a'),
         createMockMessage('m2', 'b'),
       ]);
-      const sessLazyShell: SessionState = {
-        id: 'sess-lazy',
-        title: '懒加载壳',
-        folder: '常规会话',
-        isPinned: false,
-        isArchived: false,
-        timestamp: '2026-10-12T10:00:00.000Z',
-        messages: undefined as any,
-        messageCount: 42,
-      };
+      const sessLazyShell = createMockSession('sess-lazy', '懒加载壳');
+      sessLazyShell.messages = [];
+      sessLazyShell.messageCount = 42;
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sessWithMessages, sessLazyShell];
-        st.sessionsById = {
-          [sessWithMessages.id]: sessWithMessages,
-          [sessLazyShell.id]: sessLazyShell,
-        };
-      });
+      installSessions([sessWithMessages, sessLazyShell]);
 
       const state = useSessionStore.getState();
       expect(selectSessionMessageCount('sess-1')(state)).toBe(2);
+      expect(selectSessionMessageCount(state, 'sess-1')).toBe(2);
       expect(selectSessionMessageCount('sess-lazy')(state)).toBe(42);
+      expect(selectSessionMessageCount(state, 'sess-lazy')).toBe(42);
       expect(selectSessionMessageCount('not-found')(state)).toBe(0);
+      expect(selectSessionMessageCount(state, 'not-found')).toBe(0);
     });
 
     it('selectActiveSessionId 正确反映活跃会话', () => {
@@ -285,23 +291,22 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       sess1.folder = '项目A';
       sess1.isPinned = true;
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       const state = useSessionStore.getState();
       expect(selectSessionTitle('sess-1')(state)).toBe('原子标量标题');
+      expect(selectSessionTitle(state, 'sess-1')).toBe('原子标量标题');
       expect(selectSessionFolder('sess-1')(state)).toBe('项目A');
+      expect(selectSessionFolder(state, 'sess-1')).toBe('项目A');
       expect(selectSessionIsPinned('sess-1')(state)).toBe(true);
+      expect(selectSessionIsPinned(state, 'sess-1')).toBe(true);
 
-      // 不存在或空 sessionId 的安全回退
       expect(selectSessionTitle('not-found')(state)).toBe('');
-      expect(selectSessionTitle('')(state)).toBe('');
+      expect(selectSessionTitle(state, '')).toBe('');
       expect(selectSessionFolder('not-found')(state)).toBeUndefined();
-      expect(selectSessionFolder('')(state)).toBeUndefined();
+      expect(selectSessionFolder(state, '')).toBeUndefined();
       expect(selectSessionIsPinned('not-found')(state)).toBe(false);
-      expect(selectSessionIsPinned('')(state)).toBe(false);
+      expect(selectSessionIsPinned(state, '')).toBe(false);
     });
 
     it('selectSessionAgents 返回当前会话的 agents 数组，会话不存在或无 agents 时返回不可变常量 EMPTY_AGENTS', () => {
@@ -310,41 +315,36 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       sess1.agents = [agent1];
 
       const sess2 = createMockSession('sess-2', '会话二');
-      delete (sess2 as any).agents;
+      delete sess2.agents;
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = { [sess1.id]: sess1, [sess2.id]: sess2 };
-      });
+      installSessions([sess1, sess2]);
 
       const state = useSessionStore.getState();
       const agents1 = selectSessionAgents('sess-1')(state);
       expect(agents1).toEqual([agent1]);
-      expect(agents1[0].id).toBe('ag-1');
+      expect(selectSessionAgents(state, 'sess-1')).toBe(agents1);
+      expect(agents1[0]?.id).toBe('ag-1');
 
-      // sess2 无 agents 字段时安全回退至 EMPTY_AGENTS
       const agents2 = selectSessionAgents('sess-2')(state);
       expect(agents2).toBe(EMPTY_AGENTS);
 
-      // 不存在的会话返回 EMPTY_AGENTS，且不可修改
       const agentsNonExistent = selectSessionAgents('non-existent')(state);
       expect(agentsNonExistent).toBe(EMPTY_AGENTS);
+      expect(selectSessionAgents(state, 'non-existent')).toBe(EMPTY_AGENTS);
       expect(Object.isFrozen(agentsNonExistent)).toBe(true);
 
       const agentsEmptyId = selectSessionAgents('')(state);
       expect(agentsEmptyId).toBe(EMPTY_AGENTS);
+      expect(selectSessionAgents(state, '')).toBe(EMPTY_AGENTS);
     });
 
-    it('当会话进行高频消息推流 (updateMessageText / updateMessageThinking) 时，selectSessionAgents 保持引用一致', () => {
+    it('高频消息推流时 selectSessionAgents 保持引用一致', () => {
       const msg1 = createMockMessage('m1', 'hello');
       const agent1 = createMockAgent('ag-1', 'sess-1', '代码编写');
       const sess1 = createMockSession('sess-1', '流式隔离测试', [msg1]);
       sess1.agents = [agent1];
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       const stateBefore = useSessionStore.getState();
       const agentsBefore = selectSessionAgents('sess-1')(stateBefore);
@@ -353,34 +353,33 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       const stateAfter1 = useSessionStore.getState();
       const agentsAfter1 = selectSessionAgents('sess-1')(stateAfter1);
       expect(agentsAfter1).toBe(agentsBefore);
+      expect(selectSessionAgents(stateAfter1, 'sess-1')).toBe(agentsBefore);
 
       stateAfter1.updateMessageThinking('sess-1', 'm1', 'thinking...');
       const stateAfter2 = useSessionStore.getState();
       const agentsAfter2 = selectSessionAgents('sess-1')(stateAfter2);
       expect(agentsAfter2).toBe(agentsBefore);
+      expect(selectSessionAgents(stateAfter2, 'sess-1')).toBe(agentsBefore);
     });
   });
 
-  describe('React Hooks & Precise Re-render Invariants (细粒度订阅与重渲染拦截验证)', () => {
-    it('侧边栏仅监听 useSessionMeta 时，消息流式推送不会触发侧边栏组件重渲染', () => {
+  describe('细粒度订阅与重渲染', () => {
+    it('侧边栏仅监听 useSessionTitle 时，消息流式推送不会触发侧边栏组件重渲染', () => {
       const msg1 = createMockMessage('m1', 'initial text');
       const sess1 = createMockSession('sess-1', '侧边栏测试', [msg1]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       let sidebarRenderCount = 0;
       let chatRenderCount = 0;
 
       function SidebarRow({ sessionId }: { sessionId: string }) {
-        const meta = useSessionMeta(sessionId);
+        const title = useSessionTitle(sessionId);
         sidebarRenderCount++;
         return React.createElement(
           'div',
           { 'data-testid': 'sidebar-row' },
-          meta?.title
+          title
         );
       }
 
@@ -411,13 +410,11 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       render(React.createElement(TestApp));
 
-      // 初始首屏挂载渲染 1 次
       expect(sidebarRenderCount).toBe(1);
       expect(chatRenderCount).toBe(1);
       expect(screen.getByTestId('sidebar-row').textContent).toBe('侧边栏测试');
       expect(screen.getByTestId('msg-m1').textContent).toBe('initial text');
 
-      // 模拟多轮高频流式 Token 到达（连续 5 个 chunk）
       const chunks = [
         'initial text chunk 1',
         'initial text chunk 2',
@@ -432,31 +429,24 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         });
       }
 
-      // 关键核心断言：
-      // 1. 侧边栏组件重渲染次数仍然为 1（完全没有发生重渲染！）
       expect(sidebarRenderCount).toBe(1);
-      // 2. 对话视图组件正常按需更新渲染了 5 次流式更新
       expect(chatRenderCount).toBe(1 + chunks.length);
-      // 3. 视图内容呈现最新的流式文本
       expect(screen.getByTestId('msg-m1').textContent).toBe(
         'initial text final response complete'
       );
 
-      // 现在触发真正的元数据变更（重命名）
       act(() => {
         useSessionStore.getState().renameSession('sess-1', '改名后的标题');
       });
 
-      // 侧边栏精准响应元数据更新（重渲染计数增至 2）
       expect(sidebarRenderCount).toBe(2);
       expect(screen.getByTestId('sidebar-row').textContent).toBe(
         '改名后的标题'
       );
-      // 对话消息组件没有被干扰（依旧为之前的次数）
       expect(chatRenderCount).toBe(1 + chunks.length);
     });
 
-    it('多个会话共存时，对会话 1 推流不会引发会话 2 的侧边栏与消息视图重渲染', () => {
+    it('多个会话共存时，对会话 1 推流不会引发会话 2 的标题与消息视图重渲染', () => {
       const sess1 = createMockSession('sess-1', '会话一', [
         createMockMessage('m1', 'hello 1'),
       ]);
@@ -464,21 +454,15 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         createMockMessage('m2', 'hello 2'),
       ]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = {
-          [sess1.id]: sess1,
-          [sess2.id]: sess2,
-        };
-      });
+      installSessions([sess1, sess2]);
 
       let sess2SidebarRenders = 0;
       let sess2ChatRenders = 0;
 
       function Sess2Sidebar() {
-        const meta = useSessionMeta('sess-2');
+        const title = useSessionTitle('sess-2');
         sess2SidebarRenders++;
-        return React.createElement('div', null, meta?.title);
+        return React.createElement('div', null, title);
       }
 
       function Sess2Chat() {
@@ -499,7 +483,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(sess2SidebarRenders).toBe(1);
       expect(sess2ChatRenders).toBe(1);
 
-      // 向 sess-1 连续推送流式内容
       for (let i = 0; i < 10; i++) {
         act(() => {
           useSessionStore
@@ -508,7 +491,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         });
       }
 
-      // sess-2 的组件一次都没被惊扰！
       expect(sess2SidebarRenders).toBe(1);
       expect(sess2ChatRenders).toBe(1);
     });
@@ -517,10 +499,7 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       const msg1 = createMockMessage('m1', 'hello');
       const sess1 = createMockSession('sess-1', '计数测试', [msg1]);
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       let countRenderCount = 0;
 
@@ -539,7 +518,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(countRenderCount).toBe(1);
       expect(screen.getByTestId('count-badge').textContent).toBe('1');
 
-      // 流式修改文本：长度不变，不触发重渲染
       act(() => {
         useSessionStore
           .getState()
@@ -548,7 +526,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       expect(countRenderCount).toBe(1);
 
-      // 新增一条消息：长度从 1 变 2，精准触发 1 次重渲染
       act(() => {
         useSessionStore
           .getState()
@@ -563,12 +540,8 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       const sessA = createMockSession('sess-A', '会话A');
       const sessB = createMockSession('sess-B', '会话B');
 
+      installSessions([sessA, sessB]);
       useSessionStore.setState((st) => {
-        st.sessions = [sessA, sessB];
-        st.sessionsById = {
-          [sessA.id]: sessA,
-          [sessB.id]: sessB,
-        };
         st.activeSessionId = 'sess-A';
       });
 
@@ -589,7 +562,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(activeRenders).toBe(1);
       expect(screen.getByTestId('active-id').textContent).toBe('sess-A');
 
-      // 切换活跃会话
       act(() => {
         useSessionStore.getState().setActiveSessionId('sess-B');
       });
@@ -597,7 +569,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(activeRenders).toBe(2);
       expect(screen.getByTestId('active-id').textContent).toBe('sess-B');
 
-      // 设置相同活跃会话：不触发重渲染
       act(() => {
         useSessionStore.getState().setActiveSessionId('sess-B');
       });
@@ -611,10 +582,7 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       sess1.folder = '初始目录';
       sess1.isPinned = false;
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1];
-        st.sessionsById = { [sess1.id]: sess1 };
-      });
+      installSessions([sess1]);
 
       let titleRenderCount = 0;
       let folderRenderCount = 0;
@@ -667,7 +635,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(screen.getByTestId('scalar-folder').textContent).toBe('初始目录');
       expect(screen.getByTestId('scalar-pinned').textContent).toBe('unpinned');
 
-      // 1. 高频流式更新正文、思考块与追加新消息：三个标量组件均保持 0 重渲染
       for (let i = 0; i < 5; i++) {
         act(() => {
           useSessionStore
@@ -692,7 +659,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(folderRenderCount).toBe(1);
       expect(pinnedRenderCount).toBe(1);
 
-      // 2. 仅修改 title：只有 TitleCell 重渲染，FolderCell 与 PinnedCell 保持 0 额外重渲染
       act(() => {
         useSessionStore.getState().renameSession('sess-1', '更新后标题');
       });
@@ -702,7 +668,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(pinnedRenderCount).toBe(1);
       expect(screen.getByTestId('scalar-title').textContent).toBe('更新后标题');
 
-      // 3. 仅修改 folder：只有 FolderCell 重渲染，TitleCell 与 PinnedCell 不受影响
       act(() => {
         useSessionStore
           .getState()
@@ -714,7 +679,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(pinnedRenderCount).toBe(1);
       expect(screen.getByTestId('scalar-folder').textContent).toBe('目标目录');
 
-      // 4. 仅修改 isPinned：只有 PinnedCell 重渲染，TitleCell 与 FolderCell 不受影响
       act(() => {
         useSessionStore.getState().pinSession('sess-1');
       });
@@ -723,123 +687,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(folderRenderCount).toBe(2);
       expect(pinnedRenderCount).toBe(2);
       expect(screen.getByTestId('scalar-pinned').textContent).toBe('pinned');
-    });
-  });
-
-  describe('Revision Epoch Slots (标量版本代数槽位与单轨收敛验证)', () => {
-    it('bumpSessionEpoch / getSessionEpoch / selectSessionEpoch 维护 32 位整型代数版本号，消息引用不变时保持恒定整数', () => {
-      const msg1 = createMockMessage('m1', 'hello');
-      const sess1 = createMockSession('sess-1', '代数槽位测试', [msg1]);
-      const sess2 = createMockSession('sess-2', '旁路会话', [
-        createMockMessage('m2', 'world'),
-      ]);
-
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = {
-          [sess1.id]: sess1,
-          [sess2.id]: sess2,
-        };
-      });
-
-      // 空 sessionId 安全返回 0
-      expect(getSessionEpoch('')).toBe(0);
-      expect(bumpSessionEpoch('')).toBe(0);
-      expect(selectSessionEpoch('')(useSessionStore.getState())).toBe(0);
-
-      // 初始快照基线为 0，且同一状态重复调用严格幂等 (Object.is(number, number) === true)
-      const state0 = useSessionStore.getState();
-      const epoch0A = selectSessionEpoch('sess-1')(state0);
-      const epoch0B = selectSessionEpoch('sess-1')(state0);
-      expect(epoch0A).toBe(0);
-      expect(Object.is(epoch0A, epoch0B)).toBe(true);
-      expect(getSessionEpoch('sess-1')).toBe(0);
-
-      // 修改非消息元数据（重命名）或其他会话消息：sess-1 的 messages 引用未变，epoch 恒定不变
-      useSessionStore.getState().renameSession('sess-1', '新标题');
-      useSessionStore
-        .getState()
-        .updateMessageText('sess-2', 'm2', 'other session stream');
-      const stateMetaChanged = useSessionStore.getState();
-      const epochAfterMeta = selectSessionEpoch('sess-1')(stateMetaChanged);
-      expect(Object.is(epochAfterMeta, epoch0A)).toBe(true);
-
-      // 目标会话消息发生变更：messages 引用变化，epoch 递增为 1（且同状态多次读取幂等）
-      useSessionStore
-        .getState()
-        .updateMessageText('sess-1', 'm1', 'hello + token');
-      const stateMsgChanged = useSessionStore.getState();
-      const epoch1A = selectSessionEpoch('sess-1')(stateMsgChanged);
-      const epoch1B = selectSessionEpoch('sess-1')(stateMsgChanged);
-      expect(epoch1A).toBe(1);
-      expect(Object.is(epoch1A, epoch1B)).toBe(true);
-      expect(getSessionEpoch('sess-1')).toBe(1);
-
-      // 显式调用 bumpSessionEpoch：原地递增代数版本号
-      const bumped = bumpSessionEpoch('sess-1');
-      expect(bumped).toBe(2);
-      expect(getSessionEpoch('sess-1')).toBe(2);
-      expect(selectSessionEpoch('sess-1')(useSessionStore.getState())).toBe(2);
-
-      // clearSessionSelectorsCache 同步清空 epochBySessionId
-      clearSessionSelectorsCache();
-      expect(getSessionEpoch('sess-1')).toBe(0);
-    });
-
-    it('useSessionEpoch 仅在目标会话消息或显式代数递增时触发重渲染，元数据变更与其他会话推流保持 0 重渲染', () => {
-      const sess1 = createMockSession('sess-1', '会话1', [
-        createMockMessage('m1', 'init 1'),
-      ]);
-      const sess2 = createMockSession('sess-2', '会话2', [
-        createMockMessage('m2', 'init 2'),
-      ]);
-
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = {
-          [sess1.id]: sess1,
-          [sess2.id]: sess2,
-        };
-      });
-
-      let epochRenderCount = 0;
-
-      function EpochObserver({ sessionId }: { sessionId: string }) {
-        const epoch = useSessionEpoch(sessionId);
-        epochRenderCount++;
-        return React.createElement(
-          'span',
-          { 'data-testid': 'session-epoch' },
-          String(epoch)
-        );
-      }
-
-      render(React.createElement(EpochObserver, { sessionId: 'sess-1' }));
-
-      expect(epochRenderCount).toBe(1);
-      expect(screen.getByTestId('session-epoch').textContent).toBe('0');
-
-      // 1. 修改 sess-1 的标题、置顶态，以及向 sess-2 推流：sess-1 的 EpochObserver 保持 0 重渲染
-      act(() => {
-        useSessionStore.getState().renameSession('sess-1', '标题变更');
-        useSessionStore.getState().pinSession('sess-1');
-        useSessionStore
-          .getState()
-          .updateMessageText('sess-2', 'm2', 'sess-2 streaming');
-      });
-
-      expect(epochRenderCount).toBe(1);
-      expect(screen.getByTestId('session-epoch').textContent).toBe('0');
-
-      // 2. 向 sess-1 推送流式更新：epoch 递增至 1，精准重渲染 1 次
-      act(() => {
-        useSessionStore
-          .getState()
-          .updateMessageText('sess-1', 'm1', 'sess-1 token 1');
-      });
-
-      expect(epochRenderCount).toBe(2);
-      expect(screen.getByTestId('session-epoch').textContent).toBe('1');
     });
 
     it('useSessionAgents 仅在当前会话的 agents 真正变动时触发重渲染，消息流式推流与元数据变更保持 0 重渲染', () => {
@@ -853,13 +700,7 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       ]);
       sess2.agents = [];
 
-      useSessionStore.setState((st) => {
-        st.sessions = [sess1, sess2];
-        st.sessionsById = {
-          [sess1.id]: sess1,
-          [sess2.id]: sess2,
-        };
-      });
+      installSessions([sess1, sess2]);
 
       let overviewRenderCount = 0;
 
@@ -883,11 +724,9 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         React.createElement(OverviewAgentsObserver, { sessionId: 'sess-1' })
       );
 
-      // 1. 首屏渲染 1 次
       expect(overviewRenderCount).toBe(1);
       expect(screen.getByTestId('agent-ag-1').textContent).toBe('初始子代理');
 
-      // 2. 模拟高频流式 Token 追加推送 sess-1：Overview 必须保持 0 重渲染！
       act(() => {
         useSessionStore
           .getState()
@@ -902,7 +741,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       expect(overviewRenderCount).toBe(1);
 
-      // 3. 模拟 sess-1 元数据变更（重命名、置顶）：Overview 必须保持 0 重渲染！
       act(() => {
         useSessionStore.getState().renameSession('sess-1', '新标题');
         useSessionStore.getState().pinSession('sess-1');
@@ -910,7 +748,6 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       expect(overviewRenderCount).toBe(1);
 
-      // 4. 模拟向其他会话 (sess-2) 添加子 Agent：sess-1 订阅者保持 0 重渲染！
       act(() => {
         useSessionStore.setState((st) => {
           const s2 = st.sessionsById['sess-2'];
@@ -922,19 +759,18 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       expect(overviewRenderCount).toBe(1);
 
-      // 5. 模拟 useShallow 保护：赋入相同子代理元素的浅拷贝数组，由于元素未变保持 0 重渲染
+      // 元素相同但数组是新引用时，订阅者按引用重绘一次
       act(() => {
         useSessionStore.setState((st) => {
           const s1 = st.sessionsById['sess-1'];
-          if (s1 && s1.agents) {
+          if (s1?.agents) {
             s1.agents = [...s1.agents];
           }
         });
       });
 
-      expect(overviewRenderCount).toBe(1);
+      expect(overviewRenderCount).toBe(2);
 
-      // 6. 真实变动：为 sess-1 新增子 Agent，触发精准重渲染 1 次
       act(() => {
         useSessionStore.setState((st) => {
           const s1 = st.sessionsById['sess-1'];
@@ -947,11 +783,13 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
         });
       });
 
-      expect(overviewRenderCount).toBe(2);
+      expect(overviewRenderCount).toBe(3);
       expect(screen.getByTestId('agent-ag-new').textContent).toBe('新子代理');
     });
+  });
 
-    it('单轨架构锁死：过渡期伪兼容适配层 sessionStoreCompatibilityAdapter.ts 已物理下线', () => {
+  describe('单轨架构锁死', () => {
+    it('过渡期伪兼容适配层 sessionStoreCompatibilityAdapter.ts 已物理下线', () => {
       const currentDir = dirname(fileURLToPath(import.meta.url));
       const adapterPath = join(
         currentDir,

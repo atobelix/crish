@@ -50,7 +50,7 @@ vi.mock('../sessionStore', () => ({
       enterDraftMode: sessionEnterDraftMode,
       deleteSession: sessionDeleteSession,
       sessionsById: mockSessionsById,
-      sessions: Object.values(mockSessionsById),
+      sessionOrder: Object.keys(mockSessionsById),
       activeSessionId: '',
     }),
   },

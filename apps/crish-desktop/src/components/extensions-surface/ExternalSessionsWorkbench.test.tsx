@@ -11,10 +11,38 @@ import {
 import { ExternalSessionsWorkbench } from './ExternalSessionsWorkbench';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import * as externalSessionCache from '../../api/import/externalSessionCache';
+import { useSessionStore } from '../../store/sessionStore';
+import { listSessions, replaceSessions } from '../../store/sessionIndex';
+import type { SessionImportMeta, SessionState } from '../../store/types';
 import type {
   DetectedExternalSession,
   ExternalSessionScanBatch,
 } from '../../api/import/types';
+
+function indexedImport(input: {
+  id: string;
+  title: string;
+  importMeta: SessionImportMeta;
+}): SessionState {
+  return {
+    id: input.id,
+    title: input.title,
+    folder: '',
+    isPinned: false,
+    isArchived: false,
+    timestamp: new Date(0).toISOString(),
+    messages: [],
+    importMeta: input.importMeta,
+  };
+}
+
+function replaceIndexedSessions(sessions: SessionState[]): SessionState[] {
+  const previous = listSessions(useSessionStore.getState());
+  useSessionStore.setState((state) => {
+    replaceSessions(state, sessions);
+  });
+  return previous;
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -342,21 +370,13 @@ describe('ExternalSessionsWorkbench', () => {
       .spyOn(importSessionsModule, 'deleteImportedSession')
       .mockReturnValue(true);
 
-    const sessionStoreModule = await import('../../store/sessionStore');
-    vi.spyOn(sessionStoreModule, 'useSessionStore').mockImplementation(((
-      selector: any
-    ) => {
-      const state = {
-        sessions: [
-          {
-            id: 'real-session-1',
-            title: 'Fix issue in auth module',
-            importMeta: { source: 'claude-code', sourceSessionId: 'session-1' },
-          },
-        ],
-      };
-      return selector ? selector(state) : state;
-    }) as any);
+    const previous = replaceIndexedSessions([
+      indexedImport({
+        id: 'real-session-1',
+        title: 'Fix issue in auth module',
+        importMeta: { source: 'claude-code', sourceSessionId: 'session-1' },
+      }),
+    ]);
 
     render(
       <ToastProvider>
@@ -383,6 +403,7 @@ describe('ExternalSessionsWorkbench', () => {
     // Click delete
     fireEvent.click(deleteBtn);
     expect(deleteSpy).toHaveBeenCalledWith('real-session-1');
+    replaceIndexedSessions(previous);
   });
 
   it('does not falsely mark other sessions as 已接续 when sharing a parent directory with UUID', async () => {
@@ -415,25 +436,17 @@ describe('ExternalSessionsWorkbench', () => {
       'getOrScanExternalSessions'
     ).mockResolvedValue({ sessions: collisionMockSessions, issues: [] });
 
-    const sessionStoreModule = await import('../../store/sessionStore');
-    vi.spyOn(sessionStoreModule, 'useSessionStore').mockImplementation(((
-      selector: any
-    ) => {
-      const state = {
-        sessions: [
-          {
-            id: 'conex-alpha-id',
-            title: 'Alpha Session',
-            importMeta: {
-              source: 'claude-code',
-              sourceSessionId: 'session-alpha',
-              sourcePath: `/workspace/projects/${parentUuid}/session-alpha.jsonl`,
-            },
-          },
-        ],
-      };
-      return selector ? selector(state) : state;
-    }) as any);
+    const previous = replaceIndexedSessions([
+      indexedImport({
+        id: 'conex-alpha-id',
+        title: 'Alpha Session',
+        importMeta: {
+          source: 'claude-code',
+          sourceSessionId: 'session-alpha',
+          sourcePath: `/workspace/projects/${parentUuid}/session-alpha.jsonl`,
+        },
+      }),
+    ]);
 
     render(
       <ToastProvider>
@@ -457,5 +470,6 @@ describe('ExternalSessionsWorkbench', () => {
     expect(screen.queryByText('打开已接续对话')).toBeNull();
     expect(screen.queryByText('删除该接续对话')).toBeNull();
     expect(screen.getByText('导入并接续对话')).toBeDefined();
+    replaceIndexedSessions(previous);
   });
 });

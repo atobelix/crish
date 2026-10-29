@@ -1,6 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useLayoutStore } from '../../src/store/layoutStore';
 import { useSessionStore } from '../../src/store/sessionStore';
+import { listSessions, replaceSessions } from '../../src/store/sessionIndex';
+import type { SessionState } from '../../src/store/types';
+
+function raceSession(id: string, title: string): SessionState {
+  return {
+    id,
+    title,
+    folder: '对话',
+    isPinned: false,
+    isArchived: false,
+    timestamp: '',
+    messages: [],
+    agents: [],
+  };
+}
 
 describe('Store Race Conditions', () => {
   beforeEach(() => {
@@ -23,21 +38,24 @@ describe('Store Race Conditions', () => {
   it('handles concurrent session creation and deletion', async () => {
     const ops: (() => void)[] = [];
     for (let i = 0; i < 20; i++) {
-      ops.push(() => useSessionStore.setState((s: any) => {
-        if (!Array.isArray(s.sessions)) s.sessions = [];
-        s.sessions.push({ id: `sess-${i}`, title: `Session ${i}`, messages: [], agents: [] });
+      ops.push(() => useSessionStore.setState((s) => {
+        replaceSessions(s, [
+          ...listSessions(s),
+          raceSession(`sess-${i}`, `Session ${i}`),
+        ]);
       }));
-      ops.push(() => useSessionStore.setState((s: any) => {
-        if (Array.isArray(s.sessions)) {
-          s.sessions = s.sessions.filter((x: any) => x.id !== `sess-${i}`);
-        }
+      ops.push(() => useSessionStore.setState((s) => {
+        replaceSessions(
+          s,
+          listSessions(s).filter((x) => x.id !== `sess-${i}`)
+        );
       }));
     }
     
     await Promise.all(ops.map(fn => Promise.resolve().then(fn)));
     
     const state = useSessionStore.getState();
-    expect(state.sessions).toBeDefined();
+    expect(listSessions(state)).toBeDefined();
   });
 
   it('survives 100 rapid transactions without corruption', async () => {

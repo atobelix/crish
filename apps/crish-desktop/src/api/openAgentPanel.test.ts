@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // 会话域（sessions / activeAgentId / panelAgentId / createSession）已从 layoutStore
 // 物理拆分到独立 SessionStore 实例（sessionStore.ts:24-36）；本文件断言的是会话域状态。
 import { useSessionStore } from '../store/sessionStore';
+import { listSessions } from '../store/sessionIndex';
 // 布局域（workspaces / togglePanel / setTabModeEnabled）在 workspaceStore；
 // closeAgentSidePanel 同时改会话域焦点与工作区卡片，故两域都要读。
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -319,10 +320,10 @@ describe('openAgentPanel pure helpers', () => {
   describe('pure helpers do not touch session store', () => {
     it('plan / title / id gen leave activeAgentId & panelAgentId unchanged', () => {
       const st = useSessionStore.getState();
-      if (!st.sessions.length) {
+      if (!listSessions(st).length) {
         st.createSession({ title: 'pure-guard', id: `pure-${Date.now()}` });
       }
-      const sid = useSessionStore.getState().sessions[0]?.id;
+      const sid = listSessions(useSessionStore.getState())[0]?.id;
       if (sid) st.setActiveSessionId(sid);
       useSessionStore.setState({ panelAgentId: 'keep-me', activeAgentId: null });
 
@@ -349,10 +350,10 @@ describe('openAgentPanel pure helpers', () => {
 describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   beforeEach(() => {
     const st = useSessionStore.getState();
-    if (!st.sessions.length) {
+    if (!listSessions(st).length) {
       st.createSession({ title: 'agent-panel-test', id: `apt-sess-${Date.now()}` });
     }
-    const sid = useSessionStore.getState().sessions[0]?.id;
+    const sid = listSessions(useSessionStore.getState())[0]?.id;
     if (sid) st.setActiveSessionId(sid);
     // 经 API 清焦点（setActiveAgentId(null) 仅清主列字段）
     clearAgentPanelFocus();

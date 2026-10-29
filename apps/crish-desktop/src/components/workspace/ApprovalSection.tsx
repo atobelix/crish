@@ -8,7 +8,7 @@ import styles from './RuntimePanel.module.css';
 import { Button, Tooltip } from '@/components/ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 
 export type ApprovalSectionProps = {
   approvals: PendingApprovalInfo[];
@@ -22,7 +22,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
   onFocusSession,
 }) => {
   const { showToast } = useToast();
-  const sessions = useSessionStore((state) => state.sessions);
+  const sessions = useSessionStore(selectSessionList);
   /** 审批按钮防连点；成功静默，仅失败 toast */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const titleId = React.useId();

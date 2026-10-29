@@ -4,6 +4,7 @@ import { useRef, type ReactNode } from 'react';
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { useSessionStore } from '../store/sessionStore';
+import { replaceSessions } from '../store/sessionIndex';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -101,8 +102,7 @@ function bootstrapState(opts?: {
     agents: opts?.agents ?? [],
   };
   useSessionStore.setState((st) => {
-    st.sessions = [sess];
-    st.sessionsById = { [SESSION_ID]: sess };
+    replaceSessions(st, [sess]);
     st.activeSessionId = SESSION_ID;
     st.folderOrder = ['对话'];
   });
@@ -110,8 +110,7 @@ function bootstrapState(opts?: {
 
 afterEach(() => {
   useSessionStore.setState((st) => {
-    st.sessions = [];
-    st.sessionsById = {};
+    replaceSessions(st, []);
     st.activeSessionId = '';
     st.activeAgentId = null;
     st.panelAgentId = null;

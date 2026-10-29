@@ -7,6 +7,8 @@ import * as scanModule from '../../../api/import/scan';
 import * as pluginRegistry from '../../settings-extensions/pluginRegistryAdapter';
 import { slotCore } from '../../../services/view-registry/SlotCore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { buildSessionIndex } from '../../../store/sessionIndex';
+import type { SessionState } from '../../../store/types';
 import { useLayoutStore } from '../../../store/layoutStore';
 
 // 1. Mock IPC listener
@@ -88,9 +90,8 @@ describe('ChatCard Pluggable Lifecycle & Architectural Decoupling Suite', () => 
     vi.clearAllMocks();
     useLayoutStore.setState({ chatMainSurface: 'chat' });
     useSessionStore.setState({
-      sessions: [],
-      sessionsById: {},
-      activeSessionId: null,
+      ...buildSessionIndex([]),
+      activeSessionId: '',
     });
   });
 
@@ -201,47 +202,26 @@ describe('ChatCard Pluggable Lifecycle & Architectural Decoupling Suite', () => 
     expect(chatDocFlow?.getAttribute('data-empty')).toBe('true');
 
     // 2. 切换到有真实消息的活跃会话
-    useSessionStore.setState({
-      sessions: [
+    const activeSession: SessionState = {
+      id: 'sess-active-1',
+      title: '活跃会话',
+      folder: '默认',
+      isPinned: false,
+      isArchived: false,
+      timestamp: 't1',
+      messages: [
+        { id: 'm1', sender: 'user', timestamp: 100, text: '你好' },
         {
-          id: 'sess-active-1',
-          title: '活跃会话',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't1',
-          messages: [
-            { id: 'm1', sender: 'user', timestamp: 100, text: '你好' },
-            {
-              id: 'm2',
-              sender: 'assistant',
-              timestamp: 200,
-              text: '很高兴为你服务',
-            },
-          ],
-          agents: [],
-        } as any,
+          id: 'm2',
+          sender: 'assistant',
+          timestamp: 200,
+          text: '很高兴为你服务',
+        },
       ],
-      sessionsById: {
-        'sess-active-1': {
-          id: 'sess-active-1',
-          title: '活跃会话',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't1',
-          messages: [
-            { id: 'm1', sender: 'user', timestamp: 100, text: '你好' },
-            {
-              id: 'm2',
-              sender: 'assistant',
-              timestamp: 200,
-              text: '很高兴为你服务',
-            },
-          ],
-          agents: [],
-        } as any,
-      },
+      agents: [],
+    };
+    useSessionStore.setState({
+      ...buildSessionIndex([activeSession]),
       activeSessionId: 'sess-active-1',
     });
 

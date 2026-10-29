@@ -57,9 +57,10 @@ export function seedSessions(): { sessions: SessionState[]; activeSessionId: str
     };
   }
   const disk = hydrateSessionsFromDisk();
-  if (disk.sessions.length > 0) {
-    const activeCandidate = disk.activeSessionId && disk.sessions.some((s) => s.id === disk.activeSessionId) ? disk.activeSessionId : '';
-    const sessions = populateBlocksForSessions(disk.sessions, { keepSessionIds: activeCandidate ? [activeCandidate] : [] });
+  const diskSessions = disk.sessions;
+  if (diskSessions.length > 0) {
+    const activeCandidate = disk.activeSessionId && diskSessions.some((s) => s.id === disk.activeSessionId) ? disk.activeSessionId : '';
+    const sessions = populateBlocksForSessions(diskSessions, { keepSessionIds: activeCandidate ? [activeCandidate] : [] });
     const active = activeCandidate && sessions.some((s) => s.id === activeCandidate) ? activeCandidate : '';
     const fromSessions = Array.from(new Set(sessions.map((s) => s.folder)));
     const folders = disk.folderOrder && disk.folderOrder.length > 0

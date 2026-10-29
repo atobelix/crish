@@ -17,6 +17,7 @@ import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 // 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
+import { insertSessionAt, replaceSessions } from '../store/sessionIndex';
 import { getSessionAgent } from './storeAccess';
 import type {
   MessageToolCall,
@@ -65,16 +66,20 @@ function seedAgentSession(agentId: string, messages: SessionMessage[]) {
     startedAt: 1,
   };
   useSessionStore.setState((st) => {
-    st.sessions.push({
-      id: sid,
-      title: '子 agent 审批测试',
-      folder: '',
-      isPinned: false,
-      isArchived: false,
-      timestamp: String(Date.now()),
-      messages: [],
-      agents: [agent],
-    });
+    insertSessionAt(
+      st,
+      {
+        id: sid,
+        title: '子 agent 审批测试',
+        folder: '',
+        isPinned: false,
+        isArchived: false,
+        timestamp: String(Date.now()),
+        messages: [],
+        agents: [agent],
+      },
+      st.sessionOrder.length
+    );
     st.activeSessionId = sid;
   });
   return { sid, agentId };
@@ -91,7 +96,7 @@ beforeEach(() => {
   chatBridgeMock.engineApproveTool.mockReset();
   chatBridgeMock.engineDenyTool.mockReset();
   useSessionStore.setState((st) => {
-    st.sessions = [];
+    replaceSessions(st, []);
     st.activeSessionId = '';
   });
 });
@@ -321,7 +326,8 @@ describe('useAgentToolApproval 绑定与解绑', () => {
     const sidA = `parentA-${Math.random().toString(36).slice(2, 8)}`;
     const sidB = `parentB-${Math.random().toString(36).slice(2, 8)}`;
     useSessionStore.setState((st) => {
-      st.sessions.push(
+      insertSessionAt(
+        st,
         {
           id: sidA,
           title: 'a',
@@ -351,6 +357,10 @@ describe('useAgentToolApproval 绑定与解绑', () => {
             },
           ],
         },
+        st.sessionOrder.length
+      );
+      insertSessionAt(
+        st,
         {
           id: sidB,
           title: 'b',
@@ -379,7 +389,8 @@ describe('useAgentToolApproval 绑定与解绑', () => {
               startedAt: 1,
             },
           ],
-        }
+        },
+        st.sessionOrder.length
       );
     });
     const hookA = renderHook(() => useAgentToolApproval(sidA, 'ag-a'));

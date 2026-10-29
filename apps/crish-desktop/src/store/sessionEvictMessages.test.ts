@@ -4,17 +4,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSessionActions } from './sessionActions';
 import type { SessionActions, SessionStoreSlice } from './sessionActions';
+import { buildSessionIndex, isSessionsIndexConsistent, replaceSessions } from './sessionIndex';
 import type { SessionState } from './types';
 
-type Slice = SessionStoreSlice & Partial<SessionActions> & {
-  sessions: SessionState[];
-  sessionsById: Record<string, SessionState>;
-};
-
-function makeState(): Slice {
-  const base: SessionStoreSlice = {
-    sessions: [],
-    sessionsById: {},
+function makeState(): SessionStoreSlice {
+  return {
+    ...buildSessionIndex([]),
     folderOrder: [],
     activeSessionId: '',
     draftFolder: '',
@@ -22,7 +17,6 @@ function makeState(): Slice {
     panelAgentId: null,
     composerDrafts: {},
   };
-  return base as Slice;
 }
 
 function sess(
@@ -41,21 +35,21 @@ function sess(
 }
 
 describe('evictSessionMessages (D5)', () => {
-  let state: Slice;
+  let state: SessionStoreSlice;
   let actions: SessionActions;
 
   beforeEach(() => {
     state = makeState();
-    // @ts-expect-error test harness set
-    const set = (fn: (s: Slice) => void) => {
+    const set = (fn: (s: SessionStoreSlice) => void) => {
       fn(state);
     };
-    actions = createSessionActions(set as never, () => state) as SessionActions;
+    actions = createSessionActions(set, () => state);
   });
 
   it('驱逐后 messages=[]、messagesHydrated=false、无 hydratedFromEngine', () => {
-    state.sessions = [sess('s1', [{ id: 'm1', text: 'hi' } as never])];
-    state.sessionsById = { s1: state.sessions[0]! };
+    replaceSessions(state, [
+      sess('s1', [{ id: 'm1', sender: 'user', text: 'hi', timestamp: 1 }]),
+    ]);
 
     actions.evictSessionMessages(['s1']);
 
@@ -63,12 +57,14 @@ describe('evictSessionMessages (D5)', () => {
     expect(s.messages).toEqual([]);
     expect(s.messagesHydrated).toBe(false);
     expect('hydratedFromEngine' in s ? s.hydratedFromEngine : undefined).toBeUndefined();
+    expect(isSessionsIndexConsistent(state)).toBe(true);
   });
 
   it('空 id 与不存在会话为 no-op', () => {
-    state.sessions = [];
-    state.sessionsById = {};
+    replaceSessions(state, []);
     actions.evictSessionMessages(['', 'ghost']);
     expect(Object.keys(state.sessionsById)).toHaveLength(0);
+    expect(state.sessionOrder).toHaveLength(0);
+    expect(isSessionsIndexConsistent(state)).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { subagentDeltaKey } from '../api/compositeSessionKeys';
 
 import { MAX_MESSAGES_PER_AGENT } from '@crish/shared-utils/browser';
-import { getSessionForWrite, rebindSessionById } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import type {
   SessionActions,
   SessionStoreSlice,
@@ -198,7 +198,7 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
   return {
     upsertSessionAgent: (sessionId, agent) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (!sess.agents) sess.agents = [];
         const i = sess.agents.findIndex((a) => a.id === agent.id);
@@ -219,22 +219,20 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           sess.agents.unshift(agent);
           if (sess.agents.length > 40) sess.agents.length = 40;
         }
-        rebindSessionById(state, sessionId, sess);
       }),
 
     patchSessionAgent: (sessionId, agentId, patch) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
         applySessionAgentPatch(ag, patch);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     appendSessionAgentMessage: (sessionId, agentId, message) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
@@ -249,12 +247,11 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           );
         }
         upsertMessageById(ag.messages, message);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     patchAgentTool: (sessionId, agentId, toolCallId, patch) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag?.messages) return;
@@ -265,7 +262,6 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           const effective = sanitizeToolCallUpdates(tc, patch);
           if (!toolCallPatchHasChanges(tc, effective)) return;
           applyMessageToolCallPatch(tc, effective);
-          rebindSessionById(state, sessionId, sess);
           return;
         }
       }),
@@ -274,28 +270,26 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
 
     patchSessionAgentMessage: (sessionId, agentId, messageId, patch) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         const m = ag?.messages?.find((x) => x.id === messageId);
         if (!m) return;
         patch(m);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     applySubagentEventToAgent: (sessionId, agentId, event) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
         ag.messages = applySubagentEventToMessages(ag.messages || [], event);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     patchSessionAgentToolStatus: (sessionId, agentId, opts) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
@@ -328,12 +322,11 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
             tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
           }
         }
-        rebindSessionById(state, sessionId, sess);
       }),
 
     finalizeAgentMessages: (sessionId, agentId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag?.messages) return;
@@ -381,7 +374,6 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           archiveFinalAgentsToSession(sess, snapshots, false);
         }
 
-        rebindSessionById(state, sessionId, sess);
 
         // 走 Dual-Latch 双帧物理交接后精确清理当前 Agent 关联的消息流，严禁调用 clearSession(sessionId)
         if (finalizedMsgIds.length > 0) {

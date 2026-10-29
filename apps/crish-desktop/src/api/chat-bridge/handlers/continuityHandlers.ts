@@ -114,8 +114,7 @@ export function onRecoveryEscalated(
   // 子代理侧：失败卡片 kind/retries 投影（errorKind/retries 字段进 agent 行，
   // 渲染面见失败态卡片；subagentRunId 匹配定位 agent）
   const state = getSessionStoreState();
-  const sess =
-    state.sessionsById[sid] || state.sessions.find((s) => s.id === sid);
+  const sess = state.sessionsById[sid];
   const agent = sess?.agents?.find((a) => a.subagentRunId === subagentRunId);
   if (!agent) return;
   state.patchSessionAgent(sid, agent.id, {

@@ -129,14 +129,22 @@ const FORBIDDEN_LINE = [
   },
 ];
 
-/** 文件级：须存在 sessionsById 同步约定相关导出（sessionIndex） */
+/** 文件级：须存在 sessionsById + sessionOrder 同步约定相关导出（sessionIndex） */
 const SESSION_INDEX_REQUIRED = [
-  { re: /export\s+function\s+buildSessionsById\b/, label: 'buildSessionsById' },
-  { re: /export\s+function\s+reindexSessionsById\b/, label: 'reindexSessionsById' },
+  { re: /export\s+function\s+buildSessionIndex\b/, label: 'buildSessionIndex' },
+  { re: /export\s+function\s+replaceSessions\b/, label: 'replaceSessions' },
   { re: /export\s+function\s+getSessionById\b/, label: 'getSessionById' },
   { re: /export\s+function\s+checkSessionsIndex\b/, label: 'checkSessionsIndex' },
   { re: /export\s+function\s+isSessionsIndexConsistent\b/, label: 'isSessionsIndexConsistent' },
   { re: /export\s+function\s+assertSessionsIndexConsistent\b/, label: 'assertSessionsIndexConsistent' },
+];
+
+/** 旧索引别名不得回潮（双写与兼容垫片） */
+const SESSION_INDEX_FORBIDDEN = [
+  { re: /export\s+function\s+buildSessionsById\b/, label: 'buildSessionsById' },
+  { re: /export\s+function\s+reindexSessionsById\b/, label: 'reindexSessionsById' },
+  { re: /export\s+function\s+ensureSessionsById\b/, label: 'ensureSessionsById' },
+  { re: /export\s+function\s+getSessionForWrite\b/, label: 'getSessionForWrite' },
 ];
 
 /** layoutStore 须用泛型切片接线，禁止 any 遥测入参（遥测签名检查随 T11 迁至 settingsStore） */
@@ -368,6 +376,11 @@ for (const { dir, rel } of EXTRA_SCAN_DIRS) {
     for (const { re, label } of SESSION_INDEX_REQUIRED) {
       if (!re.test(src)) {
         fail(`${rel} missing required export/symbol: ${label}`);
+      }
+    }
+    for (const { re, label } of SESSION_INDEX_FORBIDDEN) {
+      if (re.test(src)) {
+        fail(`${rel} forbidden legacy export: ${label}`);
       }
     }
   }

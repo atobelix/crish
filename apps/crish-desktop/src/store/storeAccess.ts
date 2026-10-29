@@ -241,12 +241,13 @@ export {
   selectActiveAgentId,
   getSessionAgent,
   getSessionStoreState,
+  selectSessionList,
 } from './sessionStore';
 
 export {
   partitionSidebarSessions,
   groupUnpinnedByProject,
-} from './sessionIndex';
+} from './sessionSidebarProjection';
 
 export { useShallow } from './useShallowSelector';
 

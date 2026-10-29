@@ -31,10 +31,8 @@ import {
   EmptySanitizeBarrier,
 } from '../../api/session-persistence/sessionWriteBarriers';
 import { sessionDeltaWriteBarrier } from '../../api/session-persistence/sessionDeltaWriteBarrier';
-import {
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-} from '../../api/session-persistence/sessionThreeWayMerge';
+import { performThreeWaySessionMerge } from '../../api/session-persistence/sessionThreeWayMerge';
+import { listSessions } from '../sessionIndex';
 
 export function serializeWorkspaceLayout<
   S extends {
@@ -155,13 +153,14 @@ export function initStorePersistence<S extends PersistableStoreState>(
 
   const abortController = new AbortController();
   const initialState = store.getState();
+  const initialSessions = listSessions(initialState);
   const baseSessionIds = new Set<string>(
-    initialState.sessions.map((s) => s.id).filter(Boolean)
+    initialSessions.map((s) => s.id).filter(Boolean)
   );
   const knownPersistedIds = new Set<string>(baseSessionIds);
   const deltaBarrier = sessionDeltaWriteBarrier;
   deltaBarrier.seedFromSessions(
-    initialState.sessions,
+    initialSessions,
     initialState.activeSessionId,
     initialState.folderOrder
   );
@@ -185,13 +184,14 @@ export function initStorePersistence<S extends PersistableStoreState>(
     persistTimer = setTimeout(() => {
       try {
         const cur = store.getState();
+        const curSessions = listSessions(cur);
         if (BootHoldBarrier.shouldHold(cur)) {
           return;
         }
         // 写屏障 3（EmptySanitizeBarrier）：非空库未全墓碑时严禁写空数组
         if (
           EmptySanitizeBarrier.shouldBlockEmptyWrite(
-            cur.sessions,
+            curSessions,
             knownPersistedIds,
             isSessionTombstoned
           )
@@ -200,18 +200,18 @@ export function initStorePersistence<S extends PersistableStoreState>(
         }
         // 写屏障 2（SessionDeltaWriteBarrier 指纹差分）：无实质脏会话或元数据变化时跳过写盘
         const delta = deltaBarrier.computeDelta(
-          cur.sessions,
+          curSessions,
           cur.activeSessionId,
           cur.folderOrder
         );
         if (!delta.hasChanges) {
           return;
         }
-        for (const s of cur.sessions) {
+        for (const s of curSessions) {
           if (s?.id) knownPersistedIds.add(s.id);
         }
         void persistAllSessions(
-          cur.sessions,
+          curSessions,
           cur.activeSessionId,
           cur.folderOrder
         );
@@ -236,7 +236,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
 
       if (restored?.sessions?.length) {
         const blockedExternalIds = collectExternallyDeletedSessionIds([
-          ...store.getState().sessions,
+          ...listSessions(store.getState()),
           ...restored.sessions,
         ]);
         const tombstoneGuard = (id: string) =>
@@ -254,10 +254,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
           store.setActiveSessionId?.(id);
 
         store.setState((state: PersistableStoreState) => {
-          const wasEmpty = state.sessions.length === 0;
+          const wasEmpty = state.sessionOrder.length === 0;
           const mergeResult = performThreeWaySessionMerge(
             baseSessionIds,
-            state.sessions,
+            listSessions(state),
             restored.sessions,
             tombstoneGuard
           );
@@ -292,13 +292,12 @@ export function initStorePersistence<S extends PersistableStoreState>(
             folderOrder: mergedFolders,
           });
 
-          state.sessions = sanitized.sessions;
           state.sessionsById = sanitized.sessionsById;
+          state.sessionOrder = sanitized.sessionOrder;
           state.activeSessionId = sanitized.activeSessionId;
           state.folderOrder = sanitized.folderOrder.length
             ? sanitized.folderOrder
             : state.folderOrder;
-          syncOrthogonalSessionSubtrees(state, sanitized.sessions);
 
           if (wasEmpty) {
             state.activeAgentId = null;
@@ -315,8 +314,9 @@ export function initStorePersistence<S extends PersistableStoreState>(
         });
 
         const after = store.getState();
+        const afterSessions = listSessions(after);
         deltaBarrier.seedFromSessions(
-          after.sessions,
+          afterSessions,
           after.activeSessionId,
           after.folderOrder
         );
@@ -338,9 +338,9 @@ export function initStorePersistence<S extends PersistableStoreState>(
             s.activeSessionId = '';
           });
         }
-        if (appliedOrMerged && after.sessions.length > 0) {
+        if (appliedOrMerged && afterSessions.length > 0) {
           void persistAllSessions(
-            after.sessions,
+            afterSessions,
             after.activeSessionId,
             after.folderOrder
           );
@@ -359,19 +359,20 @@ export function initStorePersistence<S extends PersistableStoreState>(
           state.hydrationComplete = true;
         });
         const finalState = store.getState();
+        const finalSessions = listSessions(finalState);
         if (
-          finalState.sessions.length > 0 &&
+          finalSessions.length > 0 &&
           deltaBarrier.computeDelta(
-            finalState.sessions,
+            finalSessions,
             finalState.activeSessionId,
             finalState.folderOrder
           ).hasChanges
         ) {
-          for (const s of finalState.sessions) {
+          for (const s of finalSessions) {
             if (s?.id) knownPersistedIds.add(s.id);
           }
           void persistAllSessions(
-            finalState.sessions,
+            finalSessions,
             finalState.activeSessionId,
             finalState.folderOrder
           );

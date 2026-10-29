@@ -174,8 +174,13 @@ export async function ensureMigrated(): Promise<void> {
       }
       await setSessionMeta('migration_completed_at', String(Date.now()));
       // 不立即删除 localStorage（30 天回滚保险）
+      const {
+        sessions: migratedSessions,
+        messages: migratedMessages,
+        agents: migratedAgents,
+      } = stats;
       console.log(
-        `[migrate] localStorage → SQLite 完成: ${stats.sessions} sessions, ${stats.messages} messages, ${stats.agents} agents`
+        `[migrate] localStorage → SQLite 完成: ${migratedSessions} sessions, ${migratedMessages} messages, ${migratedAgents} agents`
       );
     }
     // stats === null 表示 invoke missing 或无数据 → 下次启动重试

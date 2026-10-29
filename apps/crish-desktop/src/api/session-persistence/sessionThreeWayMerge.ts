@@ -19,14 +19,6 @@ export interface ThreeWayMergeResult {
   skippedTombstonedCount: number;
 }
 
-/** 正交子树派生字段（存在才同步） */
-export interface OrthogonalSubtreeTarget {
-  metaById?: Record<string, Omit<SessionState, 'messages' | 'agents'>>;
-  messagesBySessionId?: Record<string, SessionMessage[]>;
-  agentsBySessionId?: Record<string, SessionAgent[]>;
-  sessionOrder?: string[];
-}
-
 function mergeMessagesCausally(
   remoteMessages: readonly SessionMessage[],
   localMessages: readonly SessionMessage[]
@@ -203,40 +195,4 @@ export function performThreeWaySessionMerge(
     filledBodiesCount,
     skippedTombstonedCount,
   };
-}
-
-/** 由合并后的会话列表重建正交子树派生字段（仅同步目标上已存在的字段） */
-export function syncOrthogonalSessionSubtrees(
-  state: OrthogonalSubtreeTarget,
-  sessions: readonly SessionState[]
-): void {
-  if (
-    !('metaById' in state) &&
-    !('messagesBySessionId' in state) &&
-    !('agentsBySessionId' in state) &&
-    !('sessionOrder' in state)
-  ) {
-    return;
-  }
-  const nextMeta: Record<
-    string,
-    Omit<SessionState, 'messages' | 'agents'>
-  > = {};
-  const nextMsgs: Record<string, SessionMessage[]> = {};
-  const nextAgents: Record<string, SessionAgent[]> = {};
-  const nextOrder: string[] = [];
-
-  for (const s of sessions) {
-    if (!s?.id) continue;
-    const { messages, agents, ...meta } = s;
-    nextMeta[s.id] = meta;
-    nextMsgs[s.id] = messages ?? [];
-    nextAgents[s.id] = agents ?? [];
-    nextOrder.push(s.id);
-  }
-
-  if ('metaById' in state) state.metaById = nextMeta;
-  if ('messagesBySessionId' in state) state.messagesBySessionId = nextMsgs;
-  if ('agentsBySessionId' in state) state.agentsBySessionId = nextAgents;
-  if ('sessionOrder' in state) state.sessionOrder = nextOrder;
 }

@@ -18,7 +18,11 @@ import { useChatApprovalHandlers } from '../components/chat-card/useChatApproval
 // 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
-import { reindexSessionsById } from '../store/sessionIndex';
+import {
+  getSessionById,
+  insertSessionAt,
+  replaceSessions,
+} from '../store/sessionIndex';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -59,33 +63,34 @@ function pendingMsg(id: string, toolCalls: MessageToolCall[]): SessionMessage {
 function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
   const sid = `sess-${Math.random().toString(36).slice(2, 10)}`;
   useSessionStore.setState((st) => {
-    st.sessions.push({
-      id: sid,
-      title: '审批测试',
-      folder: '',
-      isPinned: false,
-      isArchived: false,
-      timestamp: String(Date.now()),
-      messages,
-      agents,
-    });
-    reindexSessionsById(st);
+    insertSessionAt(
+      st,
+      {
+        id: sid,
+        title: '审批测试',
+        folder: '',
+        isPinned: false,
+        isArchived: false,
+        timestamp: String(Date.now()),
+        messages,
+        agents,
+      },
+      st.sessionOrder.length
+    );
     st.activeSessionId = sid;
   });
   return sid;
 }
 
 function readTool(sid: string, msgId: string, toolId: string) {
-  return useSessionStore
-    .getState()
-    .sessions.find((s) => s.id === sid)
+  return getSessionById(useSessionStore.getState(), sid)
     ?.messages.find((m) => m.id === msgId)
     ?.toolCalls?.find((t) => t.id === toolId);
 }
 
 function renderApproval(sid: string) {
   const utils = renderHook(() => {
-    const sess = useSessionStore.getState().sessions.find((s) => s.id === sid);
+    const sess = getSessionById(useSessionStore.getState(), sid);
     return useChatApprovalHandlers({
       activeSessionId: sid,
       messages: sess?.messages ?? [],
@@ -104,7 +109,7 @@ beforeEach(() => {
   chatBridgeMock.engineDenyTool.mockReset();
   toastMock.show.mockReset();
   useSessionStore.setState((st) => {
-    st.sessions = [];
+    replaceSessions(st, []);
     st.activeSessionId = '';
   });
 });
@@ -270,15 +275,13 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
 
     // 模拟在请求飞行期间，外部事件已将状态推进至 success
     useSessionStore.setState((st) => {
-      const tc = st.sessions
-        .find((s) => s.id === sid)
+      const tc = getSessionById(st, sid)
         ?.messages.find((m) => m.id === 'm1')
         ?.toolCalls?.find((t) => t.id === 'tc-1');
       if (tc) {
         tc.status = 'success';
         tc.output = '已完成真实输出';
       }
-      reindexSessionsById(st);
     });
 
     // 触发延迟 reject
@@ -311,15 +314,13 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
 
     // 模拟在请求飞行期间，外部事件已将状态推进至 running
     useSessionStore.setState((st) => {
-      const tc = st.sessions
-        .find((s) => s.id === sid)
+      const tc = getSessionById(st, sid)
         ?.messages.find((m) => m.id === 'm1')
         ?.toolCalls?.find((t) => t.id === 'tc-1');
       if (tc) {
         tc.status = 'running';
         tc.output = '并发已执行';
       }
-      reindexSessionsById(st);
     });
 
     // 触发延迟 reject
@@ -460,7 +461,7 @@ describe('useChatApprovalHandlers approval-resolved 恢复', () => {
 
     // 模拟 approval-resolved（allow）事件落地后 store 更新为终态
     useSessionStore.setState((st) => {
-      const m = st.sessions.find((s) => s.id === sid)?.messages[0];
+      const m = getSessionById(st, sid)?.messages[0];
       const tc = m?.toolCalls?.find((t) => t.id === 'tc-1');
       if (tc) {
         tc.status = 'success';

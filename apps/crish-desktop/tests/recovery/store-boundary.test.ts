@@ -1,6 +1,29 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSessionStore } from '../../src/store/sessionStore';
 import { useLayoutStore } from '../../src/store/layoutStore';
+import {
+  buildSessionIndex,
+  listSessions,
+  replaceSessions,
+} from '../../src/store/sessionIndex';
+import type { SessionMessage, SessionState } from '../../src/store/types';
+
+function boundarySession(
+  id: string,
+  title: string,
+  messages: SessionMessage[] = []
+): SessionState {
+  return {
+    id,
+    title,
+    folder: '对话',
+    isPinned: false,
+    isArchived: false,
+    timestamp: '',
+    messages,
+    agents: [],
+  };
+}
 
 describe('Store Boundary Conditions', () => {
   beforeEach(() => {
@@ -10,62 +33,57 @@ describe('Store Boundary Conditions', () => {
 
   it('handles creating 1000 sessions', () => {
     for (let i = 0; i < 1000; i++) {
-      useSessionStore.setState((_s) => ({
-        sessions: [
-          ..._s.sessions,
-          {
-            id: `sess-${i}`,
-            title: `Session ${i}`,
-            messages: [],
-            agents: [],
-          } as any,
-        ],
-      }));
+      useSessionStore.setState((s) => {
+        replaceSessions(s, [
+          ...listSessions(s),
+          boundarySession(`sess-${i}`, `Session ${i}`),
+        ]);
+      });
     }
     const state = useSessionStore.getState();
-    expect(state.sessions.length).toBe(1000);
+    expect(listSessions(state).length).toBe(1000);
   });
 
   it('handles empty session array', () => {
-    useSessionStore.setState({ sessions: [] });
+    useSessionStore.setState(buildSessionIndex([]));
     const state = useSessionStore.getState();
-    expect(state.sessions).toEqual([]);
+    expect(listSessions(state)).toEqual([]);
   });
 
   it('handles session with 10000 messages', () => {
-    const messages = Array.from({ length: 10000 }, (_, i) => ({
+    const messages: SessionMessage[] = Array.from({ length: 10000 }, (_, i) => ({
       id: `msg-${i}`,
-      role: 'user' as const,
-      content: `message ${i}`,
+      sender: 'user',
+      timestamp: i,
+      text: `message ${i}`,
     }));
-    useSessionStore.setState((_s) => ({
-      sessions: [
-        { id: 'big-session', title: 'Big', messages, agents: [] } as any,
-      ],
-    }));
+    useSessionStore.setState(
+      buildSessionIndex([boundarySession('big-session', 'Big', messages)])
+    );
     const state = useSessionStore.getState();
-    expect(state.sessions[0].messages.length).toBe(10000);
+    expect(listSessions(state)[0]!.messages.length).toBe(10000);
   });
 
   it('handles extremely long session title', () => {
     const longTitle = 'x'.repeat(10000);
-    useSessionStore.setState((_s) => ({
-      sessions: [
-        { id: 'long-title', title: longTitle, messages: [], agents: [] } as any,
-      ],
-    }));
+    useSessionStore.setState(
+      buildSessionIndex([boundarySession('long-title', longTitle)])
+    );
     const state = useSessionStore.getState();
-    expect(state.sessions[0].title.length).toBe(10000);
+    expect(listSessions(state)[0]!.title.length).toBe(10000);
   });
 
   it('handles session ID collision gracefully', () => {
-    useSessionStore.setState((_s) => ({
-      sessions: [
-        { id: 'dup', title: 'First', messages: [], agents: [] } as any,
-        { id: 'dup', title: 'Second', messages: [], agents: [] } as any,
-      ],
-    }));
+    useSessionStore.setState(
+      buildSessionIndex([
+        boundarySession('dup', 'First'),
+        boundarySession('dup', 'Second'),
+      ])
+    );
     const state = useSessionStore.getState();
-    expect(state.sessions.filter((s) => s.id === 'dup').length).toBe(2); // Zustand allows duplicates
+    const dups = listSessions(state).filter((s) => s.id === 'dup');
+    // 索引先到先得：重复 id 不进入 sessionOrder，不再保留两条数组副本
+    expect(dups.length).toBe(1);
+    expect(dups[0]!.title).toBe('First');
   });
 });

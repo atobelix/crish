@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { applyCompressionSummaryToStore } from '../sessionCompressionApply';
+import { buildSessionIndex, listSessions } from '../sessionIndex';
 import { useSessionStore } from '../sessionStore';
 import type { SessionMessage, SessionState } from '../types';
 
@@ -13,7 +14,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function createDummyMessage(id: string, metadata?: unknown): SessionMessage {
   return {
     id,
-    role: 'assistant',
+    sender: 'assistant',
     text: `Message ${id}`,
     timestamp: Date.now(),
     metadata,
@@ -40,8 +41,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
 
   beforeEach(() => {
     useSessionStore.setState({
-      sessions: [],
-      sessionsById: {},
+      ...buildSessionIndex([]),
       activeSessionId: sessionId,
     });
   });
@@ -144,7 +144,8 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       }).not.toThrow();
 
       const state = useSessionStore.getState();
-      expect(state.sessions).toHaveLength(0);
+      expect(listSessions(state)).toHaveLength(0);
+      expect(state.sessionOrder).toHaveLength(0);
     });
 
     it('safely initializes messages array in sessions[] if session.messages is undefined', () => {
@@ -154,10 +155,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       );
       delete (sess as Partial<SessionState>).messages;
 
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const summaryMsg = createDummyMessage('summary-block-1');
       expect(() => {
@@ -169,10 +167,10 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
         );
       }).not.toThrow();
 
-      const updatedSess = useSessionStore.getState().sessions[0];
-      expect(updatedSess.messages).toBeDefined();
-      expect(updatedSess.messages).toHaveLength(1);
-      expect(updatedSess.messages[0].id).toBe('summary-block-1');
+      const updatedSess = useSessionStore.getState().sessionsById[sessionId];
+      expect(updatedSess?.messages).toBeDefined();
+      expect(updatedSess?.messages).toHaveLength(1);
+      expect(updatedSess?.messages?.[0]?.id).toBe('summary-block-1');
     });
 
     it('updates in-place when blockId matches an existing message in the session', () => {
@@ -181,10 +179,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       const normalMsg = createDummyMessage('normal-msg-1');
 
       const sess = createSession(sessionId, [existingSummary, normalMsg]);
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const replacementSummary = createDummyMessage('summary-block-1');
       replacementSummary.text = 'Updated summary text';
@@ -197,11 +192,11 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
         []
       );
 
-      const updatedSess = useSessionStore.getState().sessions[0];
-      expect(updatedSess.messages).toHaveLength(2);
-      expect(updatedSess.messages[0].id).toBe('summary-block-1');
-      expect(updatedSess.messages[0].text).toBe('Updated summary text');
-      expect(updatedSess.messages[0].metadata).toEqual({
+      const updatedSess = useSessionStore.getState().sessionsById[sessionId];
+      expect(updatedSess?.messages).toHaveLength(2);
+      expect(updatedSess?.messages?.[0]?.id).toBe('summary-block-1');
+      expect(updatedSess?.messages?.[0]?.text).toBe('Updated summary text');
+      expect(updatedSess?.messages?.[0]?.metadata).toEqual({
         isCompactedSummary: true,
         version: 2,
       });
@@ -242,10 +237,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       ];
 
       const sess = createSession(sessionId, hostileMessages);
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const newSummary = createDummyMessage('summary-block-new');
       newSummary.metadata = { isCompactedSummary: true };
@@ -259,7 +251,8 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
         );
       }).not.toThrow();
 
-      const resultMsgs = useSessionStore.getState().sessions[0].messages;
+      const resultMsgs =
+        useSessionStore.getState().sessionsById[sessionId]?.messages ?? [];
 
       // msg-drop-1 must be dropped
       expect(resultMsgs.some((m) => m.id === 'msg-drop-1')).toBe(false);
@@ -289,7 +282,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
     it('demonstrates empirical behavior when a hostile getter throws on isCompactedSummary', () => {
       const explosiveMessage: SessionMessage = {
         id: 'msg-explosive',
-        role: 'assistant',
+        sender: 'assistant',
         text: 'boom',
         timestamp: Date.now(),
         metadata: {
@@ -302,10 +295,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       };
 
       const sess = createSession(sessionId, [explosiveMessage]);
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const newSummary = createDummyMessage('summary-block-boom');
 
@@ -321,16 +311,16 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
         );
       }).toThrow('Explosive getter on isCompactedSummary triggered!');
 
-      // Verify transaction rollback: state.sessions is not corrupted in an intermediate half-written state
-      const state = useSessionStore.getState().sessions[0];
-      expect(state.messages).toHaveLength(1);
-      expect(state.messages[0].id).toBe('msg-explosive');
+      // 事务回滚：索引中的会话不得停在半写入状态
+      const state = useSessionStore.getState().sessionsById[sessionId];
+      expect(state?.messages).toHaveLength(1);
+      expect(state?.messages?.[0]?.id).toBe('msg-explosive');
     });
 
     it('demonstrates empirical behavior when Immer auto-freeze encounters a throwing getter on metadata', () => {
       const explosiveOtherProp: SessionMessage = {
         id: 'msg-explosive-other',
-        role: 'assistant',
+        sender: 'assistant',
         text: 'boom-other',
         timestamp: Date.now(),
         metadata: {
@@ -342,10 +332,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       };
 
       const sess = createSession(sessionId, [explosiveOtherProp]);
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const newSummary = createDummyMessage('summary-block-freeze');
 
@@ -367,10 +354,7 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
       const normalMsg = createDummyMessage('normal-msg-1');
 
       const sess = createSession(sessionId, [existingSummary, normalMsg]);
-      useSessionStore.setState({
-        sessions: [sess],
-        sessionsById: { [sessionId]: sess },
-      });
+      useSessionStore.setState(buildSessionIndex([sess]));
 
       const replacementSummary = createDummyMessage('summary-block-1');
       replacementSummary.text = 'Updated summary text';
@@ -385,11 +369,10 @@ describe('Adversarial Stress Test: sessionCompressionApply & isRecord', () => {
 
       const state = useSessionStore.getState();
 
-      // Canonical sessions[] is updated:
-      expect(state.sessions[0].messages[0].text).toBe('Updated summary text');
-
-      // sessionsById map is rebound via rebindSessionById(state, sessionId, sess)
-      // to ensure sessionsById synchronizes with canonical sessions[].
+      expect(state.sessionOrder).toEqual([sessionId]);
+      expect(listSessions(state)[0]?.messages?.[0]?.text).toBe(
+        'Updated summary text'
+      );
       expect(state.sessionsById[sessionId]?.messages?.[0]?.text).toBe(
         'Updated summary text'
       );

@@ -9,7 +9,7 @@
 
 import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
 import { _activeVsmByScope } from '../api/virtualScrollScope';
-import { getSessionForWrite } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import type { SessionState } from './types';
 import {
   addOpenTabsInputToSet,
@@ -280,7 +280,6 @@ export function softEvictSessionToLazyShell(session: SessionState): void {
 export function applySoftEvictionInState<
   T extends {
     activeSessionId?: string;
-    sessions: SessionState[];
     sessionsById: Record<string, SessionState>;
   },
 >(
@@ -296,7 +295,7 @@ export function applySoftEvictionInState<
   for (const rawId of sessionIdsToEvict) {
     const id = typeof rawId === 'string' ? rawId.trim() : '';
     if (!id) continue;
-    const sess = getSessionForWrite(state, id);
+    const sess = getSessionById(state, id);
     if (!sess) continue;
     if (
       (activeId && id === activeId) ||

@@ -1,10 +1,18 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
+import { buildSessionIndex } from './sessionIndex';
 import { useSessionStore } from './sessionStore';
 import { useStreamingStore } from './streamingStore';
 import { useTerminalStore } from './terminalStore';
 import * as snapshotsBridge from './messageSnapshotsBridge';
 import type { SessionState } from './types';
+
+function seedSessions(sessions: SessionState[], activeSessionId: string): void {
+  useSessionStore.setState({
+    ...buildSessionIndex(sessions),
+    activeSessionId,
+  });
+}
 
 describe('SessionCoordinator', () => {
   beforeEach(() => {
@@ -34,11 +42,7 @@ describe('SessionCoordinator', () => {
     };
 
     // 1. Setup sessionStore
-    useSessionStore.setState({
-      sessions: [s1, s2],
-      sessionsById: { 'sess-1': s1, 'sess-2': s2 },
-      activeSessionId: 'sess-1',
-    });
+    seedSessions([s1, s2], 'sess-1');
 
     // 2. Setup streamingStore
     useStreamingStore.getState().setStreamText('sess-1', 'm1', 'Stream text 1');
@@ -70,8 +74,7 @@ describe('SessionCoordinator', () => {
     expect(deleted).toBe(true);
 
     // Assert sessionStore cleaned
-    const remainingSessions = useSessionStore.getState().sessions;
-    expect(remainingSessions.map((s) => s.id)).toEqual(['sess-2']);
+    expect(useSessionStore.getState().sessionOrder).toEqual(['sess-2']);
     expect(useSessionStore.getState().sessionsById['sess-1']).toBeUndefined();
 
     // Assert streamingStore cleaned
@@ -100,11 +103,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'sess-cascade-1': s1 },
-      activeSessionId: 'sess-cascade-1',
-    });
+    seedSessions([s1], 'sess-cascade-1');
 
     useStreamingStore
       .getState()
@@ -146,11 +145,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'double-del': s1 },
-      activeSessionId: 'double-del',
-    });
+    seedSessions([s1], 'double-del');
     useStreamingStore.getState().setStreamText('double-del', 'm1', 'text');
 
     const first = deleteSessionCascade('double-del');
@@ -173,11 +168,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'multi-stream': s1 },
-      activeSessionId: 'multi-stream',
-    });
+    seedSessions([s1], 'multi-stream');
     // 在同一 session 下设置多条消息的流
     useStreamingStore.getState().setStreamText('multi-stream', 'm1', 'text1');
     useStreamingStore.getState().setStreamText('multi-stream', 'm2', 'text2');
@@ -209,11 +200,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { s1 },
-      activeSessionId: 's1',
-    });
+    seedSessions([s1], 's1');
 
     expect(deleteSessionCascade('  ')).toBe(false);
     expect(deleteSessionCascade(' \t ')).toBe(false);
@@ -229,11 +216,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'trim-me': s1 },
-      activeSessionId: 'trim-me',
-    });
+    seedSessions([s1], 'trim-me');
 
     expect(deleteSessionCascade('  trim-me  ')).toBe(true);
     expect(useSessionStore.getState().sessionsById['trim-me']).toBeUndefined();
@@ -254,11 +237,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 2000,
       messages: [{ id: 'm2', sender: 'user', text: 'yo', timestamp: 2 }],
     };
-    useSessionStore.setState({
-      sessions: [s1, s2],
-      sessionsById: { 'active-sess': s1, 'fallback-sess': s2 },
-      activeSessionId: 'active-sess',
-    });
+    seedSessions([s1, s2], 'active-sess');
 
     deleteSessionCascade('active-sess');
 
@@ -283,11 +262,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 2000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1, s2],
-      sessionsById: { 'keep-active': s1, 'delete-me': s2 },
-      activeSessionId: 'keep-active',
-    });
+    seedSessions([s1, s2], 'keep-active');
 
     deleteSessionCascade('delete-me');
 
@@ -303,11 +278,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'pty-sess': s1 },
-      activeSessionId: 'pty-sess',
-    });
+    seedSessions([s1], 'pty-sess');
     useTerminalStore.getState().registerPtySession('pty-sess', {
       ptyId: 'p1',
       sessionKey: 'pty-sess',
@@ -330,11 +301,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'snap-sess': s1 },
-      activeSessionId: 'snap-sess',
-    });
+    seedSessions([s1], 'snap-sess');
 
     const spy = vi.spyOn(snapshotsBridge, 'clearMessageSnapshots');
     deleteSessionCascade('snap-sess');
@@ -357,11 +324,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 2000,
       messages: [{ id: 'm2', sender: 'user', text: 'b', timestamp: 2 }],
     };
-    useSessionStore.setState({
-      sessions: [s1, s2],
-      sessionsById: { 'conc-a': s1, 'conc-b': s2 },
-      activeSessionId: 'conc-a',
-    });
+    seedSessions([s1, s2], 'conc-a');
     useStreamingStore.getState().setStreamText('conc-a', 'm1', 'stream-a');
     useStreamingStore.getState().setStreamText('conc-b', 'm2', 'stream-b');
     useTerminalStore.getState().registerPtySession('conc-a', {
@@ -404,16 +367,12 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [{ id: 'm1', sender: 'user', text: 'x', timestamp: 1 }],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'last-sess': s1 },
-      activeSessionId: 'last-sess',
-    });
+    seedSessions([s1], 'last-sess');
 
     deleteSessionCascade('last-sess');
 
     const st = useSessionStore.getState();
-    expect(st.sessions).toHaveLength(0);
+    expect(st.sessionOrder).toHaveLength(0);
     // 不变量：activeSessionId 绝不为空字符串
     expect(st.activeSessionId).toBeTruthy();
     expect(st.activeSessionId.length).toBeGreaterThan(0);
@@ -427,11 +386,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'full-stream': s1 },
-      activeSessionId: 'full-stream',
-    });
+    seedSessions([s1], 'full-stream');
     useStreamingStore.getState().setStreamText('full-stream', 'm1', 'text');
     useStreamingStore.getState().setStreamThinking('full-stream', 'm1', 'think');
     useStreamingStore.getState().setStreamTool('full-stream', 'm1', 't1', {
@@ -457,11 +412,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 1000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1],
-      sessionsById: { 'parity-sess': s1 },
-      activeSessionId: 'parity-sess',
-    });
+    seedSessions([s1], 'parity-sess');
     useStreamingStore.getState().setStreamText('parity-sess', 'm1', 'p');
 
     // 两种调用路径（模块函数 vs 对象方法）应返回相同结果
@@ -489,11 +440,7 @@ describe('SessionCoordinator', () => {
       updatedAt: 2000,
       messages: [],
     };
-    useSessionStore.setState({
-      sessions: [s1, s2],
-      sessionsById: { sess: s1, 'sess-extended': s2 },
-      activeSessionId: 'sess',
-    });
+    seedSessions([s1, s2], 'sess');
     useStreamingStore.getState().setStreamText('sess', 'm1', 'short');
     useStreamingStore.getState().setStreamText('sess-extended', 'm1', 'extended');
 

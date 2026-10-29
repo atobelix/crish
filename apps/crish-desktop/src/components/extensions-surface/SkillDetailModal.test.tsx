@@ -17,6 +17,7 @@ import { SkillDetailWorkbench } from './SkillDetailWorkbench';
 import { ExternalImportWorkbench } from './ExternalImportWorkbench';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/sessionStore';
+import { listSessions } from '../../store/sessionIndex';
 import * as surfaceRouter from '../../store/surfaceRouter';
 import * as skillsApi from '../../api/skillsApi';
 import * as detectMcpApi from './detectExternalMcpServers';
@@ -269,8 +270,7 @@ Content loaded from disk successfully.`);
       });
       fireEvent.click(newChatBtn);
 
-      const sessions = useSessionStore.getState().sessions;
-      const created = Object.values(sessions).find(
+      const created = listSessions(useSessionStore.getState()).find(
         (s) => s.title === 'resume-master 对话'
       );
       expect(created).toBeDefined();
