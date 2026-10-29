@@ -139,7 +139,7 @@ await submitIntent(textIntent, collab.sink, { ime });
 - `submitIntent`：经 `ImeMachine.tryAcceptIntent` / `structureKeyGuard` 后调用 sink
 - composing 时 **结构 Intent**（`op` / `structure_key` / `request_slash`）拒绝
 - **`createCollabApplySink({ applyOps })`**：**生产默认**；Intent → wire → 真 apply 面
-- `createMockIntentSink()`：**仅**形状测；`calls` 可审计；**禁止**作生产默认 / 关 A-BLK
+- 测试替身 `createMockIntentSink()`：仅由测试直引 `src/leaves/intentBridge`，**不**从包入口导出；**禁止**作生产默认 / 关 A-BLK
 - 真 apply 库侧：`conex-doc-collab` 测 `w3_d_strict_text_and_structure_intent_true_apply`
 
 ### lineWindow（V6 / A-HUGE-03）
@@ -188,7 +188,7 @@ IntentSink（mock 或未来 RS IPC）
 1. **DOM 不是真相** — 投影与选区逻辑坐标才是呈现源；写必须 Intent→sink→RS
 2. **静默默认 L0** — chrome 按需（hover / 多选 / 命令态）
 3. **composing 禁 slash / 结构 op** — 注入 `isComposing` / `ImeMachine`，与 editor-kit 一致
-4. **假数据可加载不抛** — `createSilentFixture(n)` 对任意有限 n≥0 安全
+4. **假数据不进入生产入口** — `silentFixture.ts` 仅由测试直引，包入口不导出
 5. **多选是逻辑 id 列表** — 禁止像素测距选块（A-SEL-01）
 6. **超长叶必须窗口** — `≥ T_PM_NODE_SOFT` 禁止无窗口整段挂载（A-HUGE-03 骨架）
 7. **代码叶可聚焦才走严格编辑** — `tryApplyLocalEdit` 默认 `requireFocus`；只读硬拒绝
