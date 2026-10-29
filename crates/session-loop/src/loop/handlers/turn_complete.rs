@@ -257,6 +257,24 @@ mod tests {
         let mut state = create_test_state(1);
         assert_eq!(state.machine.context().turn_index, 1);
         let outcome = handle(&mut state).await.expect("handle success");
+        // 到限即收场，预算不被隐式续期
+        assert_eq!(state.machine.context().max_turns, 1);
+        assert_eq!(
+            outcome.end.as_ref().unwrap().reason,
+            AgentEndReason::MaxTurns
+        );
+        assert_eq!(state.machine.state(), S::Done);
+    }
+
+    /// 轮次硬限（Step 1）先于工具续轮（Step 3）：到限且本轮有工具推进，
+    /// 仍按 MaxTurns 收场（保留原租约用例中与租约无关的阶梯优先级断言）
+    #[tokio::test]
+    async fn test_turn_complete_max_turns_precedes_tool_continuation() {
+        let mut state = create_test_state(10);
+        state.machine.context_mut().turn_index = 10;
+        state.machine.context_mut().tool_call_count = 1;
+        let outcome = handle(&mut state).await.expect("handle success");
+        assert_eq!(state.machine.context().max_turns, 10);
         assert_eq!(
             outcome.end.as_ref().unwrap().reason,
             AgentEndReason::MaxTurns

@@ -71,6 +71,7 @@ impl ToolExecutor {
             .await;
         let duration_ms = start.elapsed().as_millis() as u64;
         let occurred_at_ms = conex_shared::time::unix_millis() as u64;
+        // 取消判定看工具令牌（语义见 race_execution 注释）
         if tool_ctx.abort_token.is_aborted() {
             let mut r = Self::cancelled_result(call, duration_ms);
             r.attempt = attempt;
@@ -124,7 +125,13 @@ impl ToolExecutor {
                 .await
             }
         };
-        // 工具令牌即 Run 信号的子令牌：Run 中止经令牌链立即唤醒竞速
+        // 取消语义：工具令牌是本次调用唯一的取消通道（Run 信号的子令牌）。
+        // - Run 中止沿令牌链级联，竞速立即醒来；
+        // - 工具自行 abort 自己的令牌同样视为本次调用被取消：agent-tools 执行器
+        //   （executor_run）见令牌中止即停止消费工具流、丢弃 Terminal 并返回
+        //   runtime.aborted，本就不存在可保留的「真实结果」；runtime.aborted 在
+        //   错误码映射中即 Cancelled，这里统一判为 Cancelled（基点把它落成
+        //   ExecutionFailed 属错分）。令牌中止不回传 Run 信号，批内其余调用照常执行。
         tokio::select! {
             biased;
             () = p.tool_ctx.abort_token.wait_aborted() => None,

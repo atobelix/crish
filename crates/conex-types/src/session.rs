@@ -174,11 +174,20 @@ mod tests {
 
         ctx.turn_index = u32::MAX;
         assert!(!ctx.should_stop_for_max_turns());
+
+        // 判定只读：0（无限）预算不被改写
+        assert_eq!(ctx.max_turns, 0);
     }
 
     #[test]
     fn test_max_turns_positive_threshold() {
         let mut ctx = AgentSessionContext::initial("test-sess", 10);
+        ctx.turn_index = 6;
+        assert!(!ctx.should_stop_for_max_turns());
+
+        ctx.turn_index = 7;
+        assert!(!ctx.should_stop_for_max_turns());
+
         ctx.turn_index = 9;
         assert!(!ctx.should_stop_for_max_turns());
 
