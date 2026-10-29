@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use conex_types::cron::{parse_cron, CronSchedule};
+use crate::sched::cron::{parse_cron, CronSchedule, SystemLocal};
 use conex_types::CoreError;
 
 use super::entry::{fire_delay_ms, spawn_fire_task, CronEntry};
@@ -106,7 +106,7 @@ impl SchedulerRegistry {
             .map_err(|error| SchedulerError::InvalidExpression(format!("{error:?}")))?;
         let now = now_ms();
         let next_fire_at_ms = schedule
-            .next_fire_after(now)
+            .next_fire_after(now, &SystemLocal)
             .ok_or_else(|| SchedulerError::NoNextFire(input.expression.clone()))?;
 
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
@@ -226,7 +226,7 @@ impl SchedulerRegistry {
 
             let schedule = parse_cron(&entry.task.expression)
                 .map_err(|e| CoreError::invalid_input(format!("cron 表达式非法：{e:?}")))?;
-            let next = schedule.next_fire_after(now).ok_or_else(|| {
+            let next = schedule.next_fire_after(now, &SystemLocal).ok_or_else(|| {
                 CoreError::invalid_input(format!(
                     "cron 表达式 {} 无未来触发时刻",
                     entry.task.expression
@@ -295,7 +295,7 @@ impl SchedulerRegistry {
                 if trimmed != entry.task.expression {
                     let schedule = parse_cron(&trimmed)
                         .map_err(|e| CoreError::invalid_input(format!("cron 表达式非法：{e:?}")))?;
-                    let next = schedule.next_fire_after(now).ok_or_else(|| {
+                    let next = schedule.next_fire_after(now, &SystemLocal).ok_or_else(|| {
                         CoreError::invalid_input(format!("cron 表达式 {trimmed} 无未来触发时刻"))
                     })?;
 

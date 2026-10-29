@@ -3,7 +3,7 @@
 use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
-use conex_types::cron::parse_cron;
+use crate::sched::cron::{parse_cron, SystemLocal};
 use tokio::time::Instant;
 
 use super::registry::SchedulerComponents;
@@ -383,7 +383,7 @@ pub fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<Fi
     updated.updated_at_ms = now;
     let mut no_next = false;
     match parse_cron(&task.expression) {
-        Ok(schedule) => match schedule.next_fire_after(now) {
+        Ok(schedule) => match schedule.next_fire_after(now, &SystemLocal) {
             Some(next) => updated.next_fire_at_ms = next,
             None => no_next = true,
         },
