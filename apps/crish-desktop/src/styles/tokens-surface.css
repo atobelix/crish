@@ -110,7 +110,6 @@ html[data-theme='light'] {
   --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-elevated: var(--surface-elevated); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-workspace: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-subtle: var(--surface-chrome); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-card-subtle: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
@@ -218,7 +217,6 @@ html[data-theme='dark'] {
   --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-elevated: var(--surface-elevated); /* 刚性对齐 e5 overlay */
   --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-workspace: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-subtle: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-card-subtle: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */

@@ -69,9 +69,7 @@
 | `npm run test:e2e`                        | `e2e`         | Playwright 全量 E2E（L2 mock 引擎，根 config tests/e2e） |
 | `cargo bench --workspace --locked`        | `bench`       | 基准（`crates/*/benches` 存在时自动生效）    |
 
-## 移动端与孤岛应用（T-DOC-07）
-
-### 移动端（`apps/crish-mobile`，CI job `mobile-check`，Node 24，与 `.nvmrc` 一致）
+## 移动端（T-DOC-07 · `apps/crish-mobile`，CI job `mobile-check`，Node 24，与 `.nvmrc` 一致）
 
 | 命令                                       | 内容                                        |
 | :----------------------------------------- | :------------------------------------------ |
@@ -79,10 +77,6 @@
 | `npm test -w @crish/crish-mobile -- --ci`  | jest-expo 单测（覆盖率阈值 60/75/70/60 见 `apps/crish-mobile/jest.config.js`） |
 
 **用户裁决暂缓项（2026-10-20，账本 §3.4-2；不因暂缓宣称「已覆盖」）**：Metro/Metro bundle 冒烟（`T-GAP-04` / `T-RUN-14`，deferred，解除条件 = 移动端恢复处理裁决）；移动端生产依赖审计 27 high（`T-SEC-03-a`，deferred，CI 的 `audit` job 不含 `@crish/crish-mobile`）。
-
-### 孤岛应用 `apps/avatar-studio`（暂缓项，须显式声明覆盖边界）
-
-`apps/avatar-studio` **不在** npm workspaces、CI、typecheck、lint 的覆盖范围（独立 `package-lock.json`，未接入任何门禁）。**用户裁决 2026-10-20（账本 §3.4-1）**：定位未决前暂缓处理（`T-GAP-05` / `T-BLK-03-a` / `T-DEBT-03-a` 均 deferred）；在解除裁决前，任何「全仓已覆盖」的宣称都不成立（R-14）——涉及该目录时必须显式写明「暂不覆盖 + 裁决引用」。
 
 ## Rust 全量（本地执行前置 · T-DOC-08）
 

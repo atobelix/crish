@@ -87,11 +87,8 @@ function argVal(name) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-/** 默认扫描根：桌面端 + avatar-studio（其余包未接入 token 体系，见方案 §2.3） */
-const defaultScans = () => [
-  resolve(root, 'apps/crish-desktop/src'),
-  resolve(root, 'apps/avatar-studio/src'),
-];
+/** 默认扫描根：桌面端（唯一接入 token 体系的前端源码树） */
+const defaultScans = () => [resolve(root, 'apps/crish-desktop/src')];
 
 const scans = (() => {
   const out = [];
