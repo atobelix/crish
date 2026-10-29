@@ -26,7 +26,6 @@ use conex_types::session::AgentSessionEvent as E;
 use futures::StreamExt;
 use std::sync::Arc;
 
-use crate::ids::new_message_id;
 use crate::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema};
 use crate::steering::metadata_kind_wire;
 use crate::stream::{
@@ -85,7 +84,7 @@ pub(crate) async fn handle(
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
     // 同一 id，保证 message-delta / message-start / message-end 的
     // message_id 对齐（前端按 messageId 累加）
-    let assistant_message_id = new_message_id("assistant");
+    let assistant_message_id = crate::ids::new_message_id("assistant");
 
     // 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射）＋
     //    消费后分类（diagnostics / usage / 响应分类分派，01 §2.4 步骤 4-7）。

@@ -44,7 +44,6 @@ use super::handlers::{compaction_shape_ok, record_message, streaming, LoopState}
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::compaction::{CacheInvarianceGuard, PinnedDecisionLedger};
-use crate::ids::new_message_id;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
 use crate::r#loop::summary_dispatch::{summarize_via_blocking_with_abort, SummaryDispatch};
 
@@ -815,7 +814,7 @@ pub(crate) async fn apply_compaction(
     // cache_boundary / details 为 T-31 块元数据织入面——R-H：字段级
     // 扩展不新增事件类型）
     let record = ContextCompressionRecord {
-        id: new_message_id("compaction"),
+        id: crate::ids::new_message_id("compaction"),
         trigger: info.trigger,
         reason: Some(info.reason),
         policy: Some(ContextCompressionPolicyMetadata {
