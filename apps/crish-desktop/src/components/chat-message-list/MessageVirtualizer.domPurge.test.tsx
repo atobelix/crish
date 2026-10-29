@@ -36,21 +36,19 @@ vi.mock('../../services/toast/ToastContext', () => ({
   ),
 }));
 
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: vi.fn(() => ({
+vi.mock('../../api/markdown/useMarkdownRender', () => {
+  const result = () => ({
     html: '<div class="heavy-markdown-tree"><code>const x = 1;</code><span>rendered</span></div>',
+    truncated: false,
     loading: false,
     failed: false,
-  })),
-  useStreamingMarkdownHtml: vi.fn(() => ''),
-  useWorkerMarkdownAst: vi.fn(() => ({
-    ast: null,
-    html: '',
-    loading: false,
-    failed: false,
-  })),
-  parseMarkdownToHtmlAsync: vi.fn(async () => '<p>prose</p>'),
-}));
+  });
+  return {
+    useMarkdownResult: vi.fn(result),
+    useStreamingMarkdownResult: vi.fn(result),
+    useMarkdownPrewarm: vi.fn(),
+  };
+});
 
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}

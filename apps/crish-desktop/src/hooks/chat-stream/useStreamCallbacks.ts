@@ -23,13 +23,13 @@ import { toast } from '../../services/toast/ToastContext';
 import type { UseChatStreamOptions } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import {
-  resolveStreamSessionId,
   commitStreamToolsToSession,
   commitStreamToSession,
   scheduleFinalMarkdownHtml,
   buildTerminalToolPatches,
-  settleStaleSessionProcessingMessages,
 } from './helpers';
+import { resolveStreamSessionId } from './streamRunState';
+import { settleStaleSessionProcessingMessages } from './staleSessionHealer';
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { useRunStreamingAssistant } from './useRunStreamingAssistant';
 import { buildMessageIndex } from './streamCallbacksInternals';

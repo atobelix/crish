@@ -24,7 +24,7 @@ import { useChatStream } from './chat-stream';
 
 export { useChatStream };
 
-export type { SendWhileRunningAction } from './chat-stream/helpers';
+export type { SendWhileRunningAction } from './chat-stream/streamRunState';
 
 export type {
   ChatAttachment,

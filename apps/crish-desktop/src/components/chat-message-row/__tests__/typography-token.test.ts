@@ -59,6 +59,7 @@ describe('Markdown Typography & Syntax Highlighting Tokens (Plan 06)', () => {
   const tokensCss = [
     fs.readFileSync(path.join(stylesDir, 'tokens.css'), 'utf-8'),
     fs.readFileSync(path.join(stylesDir, 'tokens-components.css'), 'utf-8'),
+    fs.readFileSync(path.join(stylesDir, 'tokens-type.css'), 'utf-8'),
   ].join('\n');
   const designSystemCss = fs.readFileSync(
     path.join(stylesDir, 'design-system.css'),
@@ -68,119 +69,101 @@ describe('Markdown Typography & Syntax Highlighting Tokens (Plan 06)', () => {
     path.join(componentDir, 'ChatMessageRow.module.css'),
     'utf-8'
   );
+  const markdownCss = fs.readFileSync(
+    path.join(stylesDir, 'markdown-typography.css'),
+    'utf-8'
+  );
 
   describe('1. Typography Scale 阶梯字号与段落垂直韵律断言', () => {
-    it('ChatMessageRow.module.css 必须包含完整的 H1~H6 独立阶梯规则', () => {
-      // H1 ~ H6 必须独立声明且绑定对应的 token 变量与 fallback 值
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h1)');
-      expect(chatMessageRowCss).toContain('--md-h1-size, 1.85em');
-
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h2)');
-      expect(chatMessageRowCss).toContain('--md-h2-size, 1.45em');
-
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h3)');
-      expect(chatMessageRowCss).toContain('--md-h3-size, 1.25em');
-
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h4)');
-      expect(chatMessageRowCss).toMatch(/--md-h4-size,\s*1\.(?:1|10)em/);
-
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h5)');
-      expect(chatMessageRowCss).toMatch(/--md-h5-size,\s*1(?:\.00?)?em/);
-
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-h6)');
-      expect(chatMessageRowCss).toMatch(/--md-h6-size,\s*0\.90?em/);
+    it('markdown-typography.css 必须包含完整的 H1~H6 独立阶梯规则', () => {
+      for (const level of [1, 2, 3, 4, 5, 6]) {
+        const sizeToken = `--md-h${level}-size`;
+        expect(markdownCss).toContain(`:is(h${level}, .md-h${level})`);
+        expect(markdownCss).toContain(`var(${sizeToken})`);
+      }
+      // 字号 token 必须区分 H4/H5/H6，且 H4/H5/H6 不再塌陷为 14/14/12
+      expect(tokensCss).toContain('--md-h4-size: calc(15px');
+      expect(tokensCss).toContain('--md-h5-size: calc(14px');
+      expect(tokensCss).toContain('--md-h6-size: calc(13px');
     });
 
-    it('必须消除历史粗暴的无 font-size 聚合 H1~H6 声明', () => {
-      const flatHeadingRegex =
-        /\.md-h1[\s\S]*?\.md-h2[\s\S]*?\.md-h3[\s\S]*?\.md-h4[\s\S]*?\.md-h5[\s\S]*?\.md-h6\s*\{(?![^}]*font-size)/;
-      expect(flatHeadingRegex.test(chatMessageRowCss)).toBe(false);
+    it('Callout 语义色必须使用语义 token，而不是语法高亮 token', () => {
+      const expectAccent = (kind: string, token: string) => {
+        const pattern = new RegExp(
+          `\\.md-callout-${kind}\\s*\\{[^}]*--callout-accent:\\s*var\\(${token}\\)`,
+          's'
+        );
+        expect(markdownCss).toMatch(pattern);
+      };
+      expectAccent('note', '--accent-blue');
+      expectAccent('tip', '--status-added');
+      expectAccent('important', '--accent-purple');
+      expectAccent('warning', '--status-modified');
+      expectAccent('caution', '--status-deleted');
     });
 
-    it('正文与段落必须正确绑定 --md-text-paragraph-gap 与末尾段落归零规则', () => {
-      expect(chatMessageRowCss).toContain('--md-text-paragraph-gap, 0.85em');
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-p:last-child)'
-      );
-      expect(chatMessageRowCss).toMatch(
-        /\.assistantText\s+:global\(\.md-p:last-child\)\s*\{\s*margin-bottom:\s*0;\s*\}/
+    it('标题字重必须区分 H1/H2 与 H3~H6，而不是全量 700', () => {
+      expect(markdownCss).toContain('var(--fw-strong)');
+      expect(markdownCss).toContain('var(--fw-semibold)');
+      expect(tokensCss).toContain('--fw-semibold: 600');
+    });
+
+    it('正文与段落必须绑定统一 flow token 与末尾段落归零规则', () => {
+      expect(markdownCss).toContain('var(--md-paragraph-margin-bottom)');
+      expect(markdownCss).toContain(
+        ':is(.conex-markdown, .md-rendered) > :last-child'
       );
     });
   });
 
   describe('2. 行内代码与交互胶囊微排版规范断言', () => {
     it('.md-inline-code 必须具备微内衬、圆角与换行克隆规则', () => {
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-inline-code)'
-      );
-      expect(chatMessageRowCss).toContain('3.5%');
-      expect(chatMessageRowCss).toContain('--md-code-inline-fg');
-      expect(chatMessageRowCss).toContain('box-decoration-break: clone');
-      expect(chatMessageRowCss).toContain(
-        '-webkit-box-decoration-break: clone'
-      );
+      expect(markdownCss).toContain(':is(code, .md-inline-code):not(pre code)');
+      expect(markdownCss).toContain('var(--md-code-inline-bg)');
+      expect(markdownCss).toContain('var(--md-code-inline-fg)');
+      expect(markdownCss).toContain('box-decoration-break: clone');
+      expect(markdownCss).toContain('-webkit-box-decoration-break: clone');
     });
 
-    it('.md-path-link 必须彻底重置原生 button UA 样式并应用现代交互微胶囊', () => {
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-path-link)'
-      );
-      expect(chatMessageRowCss).toContain('appearance: none');
-      expect(chatMessageRowCss).toContain('-webkit-appearance: none');
-      expect(chatMessageRowCss).toContain('--md-path-link-bg');
-      expect(chatMessageRowCss).toContain('--md-path-link-fg');
-      expect(chatMessageRowCss).toContain('--md-path-link-border');
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-path-link:hover)'
-      );
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-path-link:focus-visible)'
-      );
+    it('.md-path-link 必须重置原生 button UA 样式并应用现代交互微胶囊', () => {
+      expect(markdownCss).toContain('.md-path-link');
+      expect(markdownCss).toContain('appearance: none');
+      expect(markdownCss).toContain('-webkit-appearance: none');
+      expect(markdownCss).toContain('var(--md-path-link-bg)');
+      expect(markdownCss).toContain('var(--md-path-link-fg)');
+      expect(markdownCss).toContain('.md-path-link:hover');
+      expect(markdownCss).toContain('.md-path-link:focus-visible');
     });
 
-    it('超链接 .md-a 必须具备 3px 文本下划线偏移与悬浮过渡', () => {
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-a)');
-      expect(chatMessageRowCss).toContain('--md-link-underline-offset, 3px');
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-a:hover)'
-      );
+    it('超链接 .md-a 必须具备文本下划线偏移与悬浮过渡', () => {
+      expect(markdownCss).toContain(':is(a, .md-a)');
+      expect(markdownCss).toContain('var(--md-link-underline-offset)');
+      expect(markdownCss).toContain(':is(a, .md-a):hover');
     });
   });
 
   describe('3. 任务列表、引用块与代码块容器规范断言', () => {
-    it('.md-task-box 必须具备 14×14px 几何尺寸与对齐属性', () => {
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-task-box)'
-      );
-      expect(chatMessageRowCss).toContain('--md-task-box-size, 14px');
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-task-box.checked)'
-      );
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-task-item.done)'
+    it('.md-task-checkbox 必须具备 14×14px 几何尺寸与勾选态', () => {
+      expect(markdownCss).toContain('.md-task-checkbox');
+      expect(tokensCss).toContain('--md-task-box-size: 14px');
+      expect(markdownCss).toContain('.md-task-checkbox:checked');
+      expect(markdownCss).toContain(
+        '.md-task-item:has(.md-task-checkbox:checked)'
       );
     });
 
-    it('.md-quote 必须具备 3px 发丝边框与柔和底衬', () => {
-      expect(chatMessageRowCss).toContain('.assistantText :global(.md-quote)');
-      expect(chatMessageRowCss).toContain('--md-quote-border-width, 3px');
-      expect(chatMessageRowCss).toContain('--md-quote-border-color');
-      expect(chatMessageRowCss).toContain('--md-quote-bg');
+    it('.md-quote 必须具备发丝边框与柔和底衬', () => {
+      expect(markdownCss).toContain(':is(blockquote, .md-quote)');
+      expect(markdownCss).toContain('var(--md-quote-border)');
+      expect(tokensCss).toContain('--md-quote-border:');
+      expect(markdownCss).toContain('var(--md-quote-bg)');
     });
 
     it('.md-code-block 面包屑与复制按钮必须完整接线', () => {
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-code-breadcrumb)'
-      );
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-code-copy)'
-      );
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-code-copy.is-copied)'
-      );
-      expect(chatMessageRowCss).toContain(
-        '.assistantText :global(.md-code-pre)'
-      );
+      expect(markdownCss).toContain('.md-code-breadcrumb');
+      expect(markdownCss).toContain('.md-code-copy');
+      expect(markdownCss).toContain("[data-copied='true']");
+      expect(markdownCss).toContain('.md-code-pre');
     });
   });
 

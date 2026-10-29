@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { MessageContent } from './MessageContent';
 import {
@@ -8,16 +8,6 @@ import {
   type ChatNarrativeRenderThoughtArgs,
 } from './narrativeRenderSlots';
 import type { SessionMessage } from '../../store/types';
-
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (markdown: string) => ({
-    html: markdown ? `<p>${markdown}</p>` : '',
-    loading: false,
-  }),
-  useStreamingMarkdownHtml: (markdown: string) =>
-    markdown ? `<p>${markdown}</p>` : '',
-  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
-}));
 
 const thoughtMsg: SessionMessage = {
   id: 'msg-thought-1',
@@ -68,22 +58,30 @@ describe('MessageContent hideThinkingBlock', () => {
     const folded = render(
       <MessageContent msg={thoughtMsg} hideThinkingBlock />
     );
-    const foldedSection = folded.container.querySelector('[data-process-segment]');
+    const foldedSection = folded.container.querySelector(
+      '[data-process-segment]'
+    );
     expect(foldedSection).not.toBeNull();
     expect(foldedSection?.getAttribute('data-foldable')).toBe('true');
     expect(foldedSection?.getAttribute('data-expanded')).toBe('true');
     // 单思考段：物理切除已完成控制栏，直接直出思考行（不挂外层 hidden="until-found"，由思考行自身承载折叠展开）
-    const foldedSlot = foldedSection?.querySelector('[data-testid^="process-slot-"]');
+    const foldedSlot = foldedSection?.querySelector(
+      '[data-testid^="process-slot-"]'
+    );
     expect(foldedSlot?.getAttribute('hidden')).toBeNull();
     folded.unmount();
 
     const expanded = render(
       <MessageContent msg={thoughtMsg} hideThinkingBlock={false} />
     );
-    const expandedSection = expanded.container.querySelector('[data-process-segment]');
+    const expandedSection = expanded.container.querySelector(
+      '[data-process-segment]'
+    );
     expect(expandedSection).not.toBeNull();
     expect(expandedSection?.getAttribute('data-expanded')).toBe('true');
-    const expandedSlot = expandedSection?.querySelector('[data-testid^="process-slot-"]');
+    const expandedSlot = expandedSection?.querySelector(
+      '[data-testid^="process-slot-"]'
+    );
     expect(expandedSlot?.getAttribute('hidden')).toBeNull();
   });
 
@@ -226,14 +224,10 @@ describe('DIM-05 双阶段生命周期调度与思考折叠规范契约', () => 
     };
 
     const { queryByTestId } = render(
-      <MessageContent
-        msg={liveThoughtMsg}
-        isThinkingMsg={true}
-      />
+      <MessageContent msg={liveThoughtMsg} isThinkingMsg={true} />
     );
 
     // 顶层 top-live-header 必须让位（null），避免思考行与其共存产生双重状态
     expect(queryByTestId('top-live-header')).toBeNull();
   });
 });
-

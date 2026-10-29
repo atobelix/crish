@@ -10,7 +10,10 @@ import {
   deriveSessionTitle,
   isDefaultSessionTitle,
 } from '../../api/sessionTitle';
-import { canStreamLocalSession, decideSendWhileRunning } from './helpers';
+import {
+  canStreamLocalSession,
+  decideSendWhileRunning,
+} from './streamRunState';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';

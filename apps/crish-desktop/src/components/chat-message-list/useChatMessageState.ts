@@ -8,6 +8,7 @@ import type { PinnedItem } from './MessageVirtualizer';
 import { pinSnippet } from './useScrollAnchor';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
 import { useI18n } from '../../i18n';
+import { handleMarkdownEvent } from '../markdown/markdownInteractions';
 
 // Stable references for selector fallbacks (React 19 useSyncExternalStore requires
 // getSnapshot to return the same reference when the underlying data hasn't changed).
@@ -220,47 +221,17 @@ export function useChatMessageState({
   onOpenPathRef.current = onOpenPath;
 
   const handleMarkdownClick = useCallback(
-    (e: React.MouseEvent) => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      const copyBtn = target.closest('.md-code-copy');
-      if (copyBtn instanceof HTMLElement) {
-        e.preventDefault();
-        e.stopPropagation();
-        const text =
-          copyBtn.closest('.md-code-block')?.querySelector('pre')
-            ?.textContent ?? '';
-        if (!text) return;
-        void navigator.clipboard.writeText(text).then(
-          () => {
-            copyBtn.classList.add('is-copied');
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = t('common.copied');
-            copyBtn.setAttribute('aria-label', t('common.copied'));
-            window.setTimeout(() => {
-              copyBtn.classList.remove('is-copied');
-              copyBtn.textContent = originalText || t('common.copy');
-              copyBtn.setAttribute(
-                'aria-label',
-                originalText || t('common.copy')
-              );
-            }, 1500);
-          },
-          () => toast.show(t('common.copyFailed'))
-        );
-        return;
-      }
-      const pathBtn = target.closest('.md-path-link');
-      if (pathBtn instanceof HTMLElement) {
-        e.preventDefault();
-        e.stopPropagation();
-        const path =
-          pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
-        if (path.trim()) {
-          onOpenPathRef.current?.(path.trim());
-        }
-        return;
-      }
+    (e: React.MouseEvent<Element>) => {
+      handleMarkdownEvent(e, {
+        t,
+        ...(onOpenPathRef.current
+          ? { onOpenPath: (path: string) => onOpenPathRef.current?.(path) }
+          : {}),
+        onCopyFeedback: (kind: 'success' | 'error') => {
+          if (kind === 'error') toast.show(t('common.copyFailed'));
+        },
+        onBlockedPath: () => toast.show(t('common.markdownBlockedExecutable')),
+      });
     },
     [t]
   );

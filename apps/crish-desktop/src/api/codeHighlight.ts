@@ -5,7 +5,7 @@
  * 单路径设计：
  *   - `highlightCode(code, lang)` 同步入口：走 highlight.js + LRU 缓存
  *     用于无法异步的场景（markdownPlugins 内嵌、DiffCard 虚拟滚动同步渲染）
- *     与异步场景（Rust syntect 渲染由 markdownRenderAsync / 流式渲染路径接管）
+ *     与异步场景（Rust syntect 渲染由 markdown 渲染管线接管）
  *
  * JS 路径必须保留：旧壳 / 测试环境 / Rust 未注册时仍可用。
  */
@@ -32,7 +32,12 @@ import php from 'highlight.js/lib/languages/php';
 import swift from 'highlight.js/lib/languages/swift';
 import kotlin from 'highlight.js/lib/languages/kotlin';
 import dart from 'highlight.js/lib/languages/dart';
-import { LruCache, HIGHLIGHT_CACHE_ENTRIES, HIGHLIGHT_CACHE_BUDGET_BYTES, memoryManager } from '@crish/shared-utils/browser';
+import {
+  LruCache,
+  HIGHLIGHT_CACHE_ENTRIES,
+  HIGHLIGHT_CACHE_BUDGET_BYTES,
+  memoryManager,
+} from '@crish/shared-utils/browser';
 
 let registered = false;
 
@@ -123,7 +128,7 @@ const estimateSize = (key: string, value: string): number =>
 const highlightCache = new LruCache<string, string>(
   HIGHLIGHT_CACHE_ENTRIES,
   HIGHLIGHT_CACHE_BUDGET_BYTES,
-  estimateSize,
+  estimateSize
 );
 
 memoryManager.register(highlightCache);
@@ -132,7 +137,7 @@ export function highlightCode(code: string, langHint?: string): string {
   ensureLangs();
   const raw = code.replace(/\r\n/g, '\n');
   const lang = (langHint || '').toLowerCase().replace(/^\./, '').trim();
-  
+
   const cacheKey = `${lang}:${raw}`;
   const cached = highlightCache.get(cacheKey);
   if (cached !== undefined) return cached;
@@ -140,7 +145,10 @@ export function highlightCode(code: string, langHint?: string): string {
   let html = '';
   try {
     if (lang && hljs.getLanguage(lang)) {
-      html = hljs.highlight(raw, { language: lang, ignoreIllegals: true }).value;
+      html = hljs.highlight(raw, {
+        language: lang,
+        ignoreIllegals: true,
+      }).value;
     } else {
       // 避免 hljs.highlightAuto 带来的严重 CPU 卡顿，直接进行 Plain Text 的转义渲染
       html = escapeHtml(raw);
@@ -164,7 +172,10 @@ const HARD_DISABLE_HIGHLIGHT_CHARS = 4000;
  * 2. 1,500 ~ 4,000 字符切片混合着色；
  * 3. 极速转义，彻底免疫单行 JSON/min.js 死锁。
  */
-export function highlightCodeSafe(rawCode: string, langOrFilePath?: string): string {
+export function highlightCodeSafe(
+  rawCode: string,
+  langOrFilePath?: string
+): string {
   if (!rawCode) return '';
   const len = rawCode.length;
 

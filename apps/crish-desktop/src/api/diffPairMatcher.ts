@@ -2,7 +2,7 @@
  * apps/crish-desktop/src/api/diffPairMatcher.ts
  *
  * 差异比对对偶配对与 Unified Diff 解析核心引擎（单一真源 SSOT）
- * 供 DiffCard (useDiffData.ts) 与 <widget-diff> (WidgetDiff.tsx) 统一调用。
+ * 仅供 DiffCard（useDiffData.ts）统一调用。
  */
 
 export type DiffChangeType = 'add' | 'delete' | 'context' | 'header';
@@ -168,6 +168,8 @@ export function buildSplitPairsFromGeneric<T>(
 /**
  * 为 ParsedDiffLine 提供的快捷对偶配对入口
  */
-export function buildSplitLinePairs(lines: ParsedDiffLine[]): SplitLinePair<ParsedDiffLine>[] {
+export function buildSplitLinePairs(
+  lines: ParsedDiffLine[]
+): SplitLinePair<ParsedDiffLine>[] {
   return buildSplitPairsFromGeneric(lines, (l) => l.type);
 }

@@ -15,15 +15,19 @@ import type {
   MappedImportSession,
 } from '../../api/import/types';
 
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (markdown: string) => ({
+vi.mock('../../api/markdown/useMarkdownRender', () => {
+  const result = (markdown: string) => ({
     html: markdown ? `<p>${markdown}</p>` : '',
+    truncated: false,
     loading: false,
-  }),
-  useStreamingMarkdownHtml: (markdown: string) =>
-    markdown ? `<p>${markdown}</p>` : '',
-  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
-}));
+    failed: false,
+  });
+  return {
+    useMarkdownResult: (markdown: string) => result(markdown),
+    useStreamingMarkdownResult: (markdown: string) => result(markdown),
+    useMarkdownPrewarm: vi.fn(),
+  };
+});
 
 describe('SessionPreviewPane', () => {
   const mockSession: DetectedExternalSession = {

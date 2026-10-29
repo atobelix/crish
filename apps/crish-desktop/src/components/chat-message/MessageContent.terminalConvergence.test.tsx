@@ -14,7 +14,7 @@
  *   ④ 【铁律四】子代理段在任何阶段都不得被收起。
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   render,
   act,
@@ -28,16 +28,6 @@ import { MessageContent } from './MessageContent';
 import { useStreamMessageViewModel } from './streamMessageViewModel';
 import { useStreamingStore } from '../../store/streamingStore';
 import type { SessionMessage } from '../../store/types';
-
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (markdown: string) => ({
-    html: markdown ? `<p>${markdown}</p>` : '',
-    loading: false,
-  }),
-  useStreamingMarkdownHtml: (markdown: string) =>
-    markdown ? `<p>${markdown}</p>` : '',
-  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
-}));
 
 function Harness({
   msg,

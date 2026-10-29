@@ -6,7 +6,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { getSessionById } from '../../store/sessionStore';
 import { isPendingDraft } from '../../store/draftSession';
 import { deriveSessionTitle } from '../../api/sessionTitle';
-import { resolveStreamSessionId } from './helpers';
+import { resolveStreamSessionId } from './streamRunState';
 
 export interface DraftSnapshot {
   sessionId: string;

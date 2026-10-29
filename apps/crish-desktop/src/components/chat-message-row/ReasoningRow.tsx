@@ -21,9 +21,8 @@ import { Button } from '@/components/ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
-import { useStreamingMarkdownHtml } from '../../api/markdownRenderAsync';
-import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
-import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
+import { useStreamingMarkdownResult } from '../../api/markdown/useMarkdownRender';
+import { MarkdownSurface } from '../markdown/MarkdownSurface';
 import * as motionTokens from '../../utils/motionTokens';
 import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
@@ -61,23 +60,20 @@ function ReasoningSummaryMarkup({
   markdown: string;
   isLive: boolean;
 }) {
-  const incrementalUnitsRef = useRef<
-    readonly IncrementalMarkdownUnitSnapshot[] | null
-  >(null);
-  const html = useStreamingMarkdownHtml(
+  const { html } = useStreamingMarkdownResult(
     markdown,
-    Boolean(markdown),
-    Priority.Low,
-    incrementalUnitsRef
+    'chat',
+    Boolean(markdown)
   );
 
   return (
-    <ReconciledMarkdownHtml
+    <MarkdownSurface
       as="span"
+      variant="chat"
+      isActive={isLive}
       className={`${styles.summaryText} ${isLive ? styles.sweepShine : ''}`}
-      data-testid="reasoning-summary-markup"
       html={html}
-      incrementalUnits={incrementalUnitsRef.current}
+      dataAttributes={{ 'data-testid': 'reasoning-summary-markup' }}
     />
   );
 }

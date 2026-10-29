@@ -1,9 +1,4 @@
-import {
-  parseMarkdownToHtmlUncached,
-  highlightCode,
-  parseMarkdownToBlockAst,
-  parseMarkdownToBlockTokens,
-} from './markdown-render-standalone';
+import { highlightCode } from '../api/codeHighlight';
 import { StreamingCodeHighlighter } from '../api/streamingCodeHighlighter';
 import type { WorkerRequest, WorkerResponse } from './types';
 
@@ -15,54 +10,6 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
 
   try {
     switch (type) {
-      case 'markdown.render': {
-        const { raw } = payload as { raw: string };
-        const html = parseMarkdownToHtmlUncached(raw);
-        self.postMessage({
-          id,
-          type: 'success',
-          payload: html,
-          metrics: {
-            wallTime: performance.now() - t0,
-            cpuTime: 0,
-            transferredBytes: html.length,
-          },
-        } as WorkerResponse);
-        break;
-      }
-
-      case 'markdown.parse.ast': {
-        const { raw } = payload as { raw: string };
-        const ast = parseMarkdownToBlockAst(raw);
-        self.postMessage({
-          id,
-          type: 'success',
-          payload: ast,
-          metrics: {
-            wallTime: performance.now() - t0,
-            cpuTime: 0,
-            transferredBytes: 0,
-          },
-        } as WorkerResponse);
-        break;
-      }
-
-      case 'markdown.parse.tokens': {
-        const { raw } = payload as { raw: string };
-        const tokens = parseMarkdownToBlockTokens(raw);
-        self.postMessage({
-          id,
-          type: 'success',
-          payload: tokens,
-          metrics: {
-            wallTime: performance.now() - t0,
-            cpuTime: 0,
-            transferredBytes: 0,
-          },
-        } as WorkerResponse);
-        break;
-      }
-
       case 'highlight.code': {
         const { code, language } = payload as {
           code: string;

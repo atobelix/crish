@@ -1,21 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import React from 'react';
 import { MessageContent } from './MessageContent';
 import { useStreamMessageViewModel } from './streamMessageViewModel';
 import { useStreamingStore } from '../../store/streamingStore';
 import type { SessionMessage } from '../../store/types';
-
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (markdown: string) => ({
-    html: markdown ? `<p>${markdown}</p>` : '',
-    loading: false,
-  }),
-  useStreamingMarkdownHtml: (markdown: string) =>
-    markdown ? `<p>${markdown}</p>` : '',
-  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
-}));
 
 /**
  * T4 A1 测试装配壳层：复刻页面壳层 StreamingAssistantRow 的接线
@@ -208,7 +198,9 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
 
     const { container } = render(<MessageContent msg={errorMsg} />);
 
-    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="turn-error-node"]')
+    ).toBeNull();
     expect(container.querySelector('.errorBanner')).toBeNull();
     expect(container.textContent).not.toContain('后端请求超时');
   });
@@ -226,8 +218,12 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     const { container } = render(<MessageContent msg={errorWithThoughtMsg} />);
 
     expect(container.textContent).toContain('思考');
-    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
-    expect(container.querySelector('[data-testid="turn-interrupted-mark"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="turn-error-node"]')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="turn-interrupted-mark"]')
+    ).not.toBeNull();
     expect(container.textContent).not.toContain('模型生成阶段发生异常');
   });
 
@@ -240,11 +236,17 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       errorDetail: { message: '下游服务连接中断' },
     };
 
-    const { container } = render(<MessageContent msg={errorWithPartialTextMsg} />);
+    const { container } = render(
+      <MessageContent msg={errorWithPartialTextMsg} />
+    );
 
     expect(container.textContent).toContain('已完成前半部分数据收集。');
-    expect(container.querySelector('[data-testid="turn-error-node"]')).toBeNull();
-    const mark = container.querySelector('[data-testid="turn-interrupted-mark"]');
+    expect(
+      container.querySelector('[data-testid="turn-error-node"]')
+    ).toBeNull();
+    const mark = container.querySelector(
+      '[data-testid="turn-interrupted-mark"]'
+    );
     expect(mark).not.toBeNull();
     expect(mark!.querySelectorAll('button')).toHaveLength(0);
     expect(container.textContent).not.toContain('下游服务连接中断');
@@ -260,7 +262,9 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
 
     const { container } = render(<MessageContent msg={okMsg} />);
 
-    expect(container.querySelector('[data-testid="turn-interrupted-mark"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="turn-interrupted-mark"]')
+    ).toBeNull();
   });
 });
 
@@ -302,7 +306,9 @@ describe('DIM-05 双阶段生命周期调度与复合过程（工具 + 思考 + 
     );
 
     // 断言 Phase 1：正文流式呈现且思考与工具并存
-    expect(container.textContent).toContain('已完成文件分析，正在给出重构建议。');
+    expect(container.textContent).toContain(
+      '已完成文件分析，正在给出重构建议。'
+    );
     expect(container.textContent).toContain('分析问题依赖结构');
 
     // 阶段 2：轮次闭合，进入 completed 终态
@@ -328,7 +334,9 @@ describe('DIM-05 双阶段生命周期调度与复合过程（工具 + 思考 + 
     );
 
     // 断言 Phase 2：终态闭合后全量正文与前置过程完整，零内容截断
-    expect(container.textContent).toContain('已完成文件分析，正在给出重构建议。');
+    expect(container.textContent).toContain(
+      '已完成文件分析，正在给出重构建议。'
+    );
     expect(container.textContent).toContain('分析问题依赖结构');
   });
 
@@ -371,4 +379,3 @@ describe('DIM-05 双阶段生命周期调度与复合过程（工具 + 思考 + 
     expect(container).not.toBeNull();
   });
 });
-

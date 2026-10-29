@@ -2,27 +2,18 @@
  * 思考预览行：默认 48–64 字 + fade；展开才挂全文。
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactElement,
-} from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Button } from '@/components/ui';
-import {
-  useAsyncMarkdownHtml,
-  useStreamingMarkdownHtml,
-} from '../../api/markdownRenderAsync';
-import { Priority } from '../../workers';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { clipThinkingPreview } from './narrativeModel';
-import { ReconciledMarkdownHtml } from '../../components/markdown/ReconciledMarkdownHtml';
-import { handleSafeExternalLinkClick } from '../../api/markdown-render/markdownSanitizer';
-import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
+import { MarkdownSurface } from '../../components/markdown/MarkdownSurface';
+import {
+  useMarkdownResult,
+  useStreamingMarkdownResult,
+} from '../../api/markdown/useMarkdownRender';
+import { handleMarkdownEvent } from '../../components/markdown/markdownInteractions';
+import { useI18n } from '../../i18n';
 import styles from './narrative.module.css';
-
-export { handleSafeExternalLinkClick };
 
 export interface ThinkingBlockProps {
   content: string;
@@ -45,35 +36,24 @@ export function ThinkingBlock({
 }: ThinkingBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   const [liveSec, setLiveSec] = useState(0);
+  const { t } = useI18n();
   const shownPreview = preview?.trim() || clipThinkingPreview(content);
-  const previewRender = useAsyncMarkdownHtml(
-    !isLive && !open ? shownPreview : '',
-    Priority.Low
-  );
-  const previewUnitsRef = useRef<
-    readonly IncrementalMarkdownUnitSnapshot[] | null
-  >(null);
-  const fullUnitsRef = useRef<
-    readonly IncrementalMarkdownUnitSnapshot[] | null
-  >(null);
-  const livePreviewHtml = useStreamingMarkdownHtml(
+
+  const previewResult = useMarkdownResult(
     shownPreview,
-    isLive && !open,
-    Priority.Low,
-    previewUnitsRef
+    'chat',
+    !isLive && !open
   );
-  const fullRender = useAsyncMarkdownHtml(
-    !isLive && open ? content : '',
-    Priority.Low
+  const livePreview = useStreamingMarkdownResult(
+    shownPreview,
+    'chat',
+    isLive && !open
   );
-  const liveFullHtml = useStreamingMarkdownHtml(
-    content,
-    isLive && open,
-    Priority.Low,
-    fullUnitsRef
-  );
-  const previewHtml = isLive ? livePreviewHtml : previewRender.html;
-  const fullHtml = isLive ? liveFullHtml : fullRender.html;
+  const fullResult = useMarkdownResult(content, 'chat', !isLive && open);
+  const liveFull = useStreamingMarkdownResult(content, 'chat', isLive && open);
+
+  const previewHtml = isLive ? livePreview.html : previewResult.html;
+  const fullHtml = isLive ? liveFull.html : fullResult.html;
 
   useEffect(() => {
     if (!isLive) {
@@ -101,9 +81,9 @@ export function ThinkingBlock({
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
 
-      const anchor = target.closest('a');
-      if (anchor instanceof HTMLAnchorElement) {
-        if (onLinkClick) {
+      if (onLinkClick) {
+        const anchor = target.closest('a');
+        if (anchor instanceof HTMLAnchorElement) {
           const href = anchor.getAttribute('href');
           if (href) {
             e.preventDefault();
@@ -112,10 +92,10 @@ export function ThinkingBlock({
             return;
           }
         }
-        handleSafeExternalLinkClick(e, target);
       }
+      handleMarkdownEvent(e, { t });
     },
-    [onLinkClick]
+    [onLinkClick, t]
   );
 
   return (
@@ -143,24 +123,24 @@ export function ThinkingBlock({
         </Button>
       </div>
       {open ? (
-        <ReconciledMarkdownHtml
-          className={`${styles.thinkingFull} md-rendered`}
+        <MarkdownSurface
+          className={styles.thinkingFull}
+          variant="chat"
+          isActive={isLive && open}
           style={outputMax}
-          data-flow-thinking-full=""
           html={fullHtml}
-          incrementalUnits={isLive && open ? fullUnitsRef.current : undefined}
           onClick={handleContentClick}
+          dataAttributes={{ 'data-flow-thinking-full': '' }}
         />
       ) : (
         <div className={styles.previewWrap} data-flow-thinking-preview="">
-          <ReconciledMarkdownHtml
-            className={`${styles.previewText} md-rendered`}
-            data-flow-thinking-preview-content=""
+          <MarkdownSurface
+            className={styles.previewText}
+            variant="chat"
+            isActive={isLive && !open}
             html={previewHtml}
-            incrementalUnits={
-              isLive && !open ? previewUnitsRef.current : undefined
-            }
             onClick={handleContentClick}
+            dataAttributes={{ 'data-flow-thinking-preview-content': '' }}
           />
           <span className={styles.previewFade} aria-hidden />
         </div>

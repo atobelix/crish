@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSessionStore } from '../../store/sessionStore';
 import { SessionStreamManager } from '../../api/sessionStreamManager';
-import { isSessionAiBusy, settleStaleSessionProcessingMessages } from './helpers';
+import { isSessionAiBusy } from './streamRunState';
+import { settleStaleSessionProcessingMessages } from './staleSessionHealer';
 import type { Session, SessionMessage } from '../../store/sessionStore';
 
 const TEST_SESSION_ID = 'test-session-self-healing';
@@ -50,7 +51,12 @@ describe('helpers.ts - 对话流自愈与死锁根除断言 (Self-Healing & Anti
   it('当存在残留 processing/queued 且无真实流时，settleStaleSessionProcessingMessages 自动清理孤儿状态收束为 error/completed', () => {
     setupTestSession([
       { id: 'user-1', sender: 'user', text: '你好', status: 'completed' },
-      { id: 'asst-stale', sender: 'assistant', text: '部分生成的内容...', status: 'processing' },
+      {
+        id: 'asst-stale',
+        sender: 'assistant',
+        text: '部分生成的内容...',
+        status: 'processing',
+      },
       { id: 'asst-queued', sender: 'assistant', text: '', status: 'queued' },
     ]);
 
@@ -73,7 +79,12 @@ describe('helpers.ts - 对话流自愈与死锁根除断言 (Self-Healing & Anti
   it('当存在真实活跃流时，settleStaleSessionProcessingMessages 绝不误伤正在流式传输的消息', () => {
     setupTestSession([
       { id: 'user-1', sender: 'user', text: '你好', status: 'completed' },
-      { id: 'asst-live', sender: 'assistant', text: '正在实时流式生成...', status: 'processing' },
+      {
+        id: 'asst-live',
+        sender: 'assistant',
+        text: '正在实时流式生成...',
+        status: 'processing',
+      },
     ]);
 
     // 触发自愈（hasLiveStream = true）

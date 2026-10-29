@@ -7,8 +7,7 @@ import {
   updateMessageToolCall,
 } from '../../api/storeAccess';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
-import { parseMarkdownToHtmlAsync } from '../../api/markdownRenderAsync';
-import { isPendingDraft } from '../../store/draftSession';
+import { requestMarkdownResult } from '../../api/markdownRenderScheduler';
 import {
   clearStream,
   clearStreamTools,
@@ -21,7 +20,6 @@ import type { MessageToolCall } from '../../store/types';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import { TOOL_OUTPUT_BYTE_CAP } from '../../api/perfBudgets';
 import type { TerminalToolReason, TerminalToolPatch } from './types';
-
 
 type PublishToolDiffsFn =
   typeof import('../../api/publishToolDiffs').publishToolDiffs;
@@ -71,8 +69,9 @@ export function scheduleFinalMarkdownHtml(
     ? fullText || ''
     : stripThoughtPlaceholders(fullText || '');
   if (!cleaned.trim()) return;
-  void parseMarkdownToHtmlAsync(cleaned)
-    .then((html) => {
+  void requestMarkdownResult(cleaned, 'chat')
+    .then((result) => {
+      const html = result?.html;
       if (!html) return;
       const msg = getSessionById(sessionId)?.messages?.find(
         (m: SessionMessage) => m.id === messageId
@@ -180,7 +179,8 @@ export function commitToolPatchToSession(
     if (approvalMeta !== undefined) updates.approvalMeta = approvalMeta;
     if (diffs !== undefined) updates.diffs = diffs;
     if (startedAt !== undefined) updates.startedAt = startedAt;
-    if (resolvedDurationMs !== undefined) updates.durationMs = resolvedDurationMs;
+    if (resolvedDurationMs !== undefined)
+      updates.durationMs = resolvedDurationMs;
     if (status === 'success' || status === 'error') {
       updates.finishedAt = Date.now();
     }
@@ -196,8 +196,12 @@ export function commitToolPatchToSession(
       ...(approvalMeta !== undefined ? { approvalMeta } : {}),
       ...(diffs !== undefined ? { diffs } : {}),
       ...(startedAt !== undefined ? { startedAt } : {}),
-      ...(resolvedDurationMs !== undefined ? { durationMs: resolvedDurationMs } : {}),
-      ...(status === 'success' || status === 'error' ? { finishedAt: Date.now() } : {}),
+      ...(resolvedDurationMs !== undefined
+        ? { durationMs: resolvedDurationMs }
+        : {}),
+      ...(status === 'success' || status === 'error'
+        ? { finishedAt: Date.now() }
+        : {}),
     });
   }
 }
@@ -328,121 +332,13 @@ export function snapshotStreamThinkingToSession(
   return undefined;
 }
 
-export function resolveStreamSessionId(
-  override?: string | null,
-  activeId?: string | null
-): string | null {
-  const pick = (v?: string | null): string | null => {
-    if (typeof v !== 'string') return null;
-    const t = v.trim();
-    if (!t || isPendingDraft(t)) return null;
-    return t;
-  };
-  return pick(override) ?? pick(activeId);
-}
-
-export function isLiveStreamRun(
-  entry: { assistantMsgId: string } | null | undefined,
-  assistantMsgId: string
-): boolean {
-  return (
-    !!entry &&
-    typeof assistantMsgId === 'string' &&
-    assistantMsgId.length > 0 &&
-    entry.assistantMsgId === assistantMsgId
-  );
-}
-
-/**
- * 运行中再发的产品动作（对齐 pi followUp / L1 soft_inject）：
- * - start：空闲，立即开 stream
- * - follow_up：AI 忙，入队待 idle 交付，**禁止** abort 当前 stream
- *
- * 默认产品路径 = follow_up（等本轮结束再续），不是 force mid-stream 打断。
- * @see docs/architecture/run-control.md §1.1
- */
-export type SendWhileRunningAction = 'start' | 'follow_up';
-
-/**
- * 判定会话是否繁忙。
- * 核心不变量（用户裁决）：若 hasLiveStream 为 false，禁止单凭历史消息判定 busy，避免残留 processing 死锁！
- */
-export function isSessionAiBusy(opts: {
-  hasLiveStream: boolean;
-  messages?: Array<{ sender?: string; status?: string }> | null;
-}): boolean {
-  if (!opts.hasLiveStream) return false;
-  const msgs = opts.messages;
-  if (!Array.isArray(msgs) || msgs.length === 0) return true;
-  return msgs.some(
-    (m) => m.sender === 'assistant' && m.status === 'processing'
-  );
-}
-
-export { settleStaleSessionProcessingMessages } from './staleSessionHealer';
-
-/** 忙 → follow_up；闲 → start。永不返回 force abort。 */
-export function decideSendWhileRunning(
-  isAiBusy: boolean
-): SendWhileRunningAction {
-  return isAiBusy ? 'follow_up' : 'start';
-}
-
-/**
- * 安全调用 stream cancel。
- * @param mode cooperative=L2 / force=L3；省略则走 cancel 默认（兼容旧 () => void）
- */
-export function safeCancelStream(
-  cancel:
-    | ((opts?: { mode?: 'cooperative' | 'force' }) => void)
-    | (() => void)
-    | null
-    | undefined,
-  mode?: 'cooperative' | 'force'
-): boolean {
-  if (typeof cancel !== 'function') return false;
-  try {
-    if (mode) {
-      (cancel as (opts?: { mode?: 'cooperative' | 'force' }) => void)({ mode });
-    } else {
-      (cancel as () => void)();
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function canStreamLocalSession(
-  sessionId: string | null | undefined,
-  sessionExists: boolean
-): boolean {
-  const id = resolveStreamSessionId(sessionId, null);
-  return !!id && sessionExists === true;
-}
-
-/**
- * 停止时若无任何正文：返回 null（不写「已停止。」进气泡）。
- * 有正文则保留 partial；系统提示走 runNotice/toast。
- */
-export function stopAssistantPlaceholderText(
-  text: string | null | undefined
-): string | null {
-  // 有真实 partial 则不替换；无正文也不再注入系统句到 assistant 消息
-  return (text || '').trim() ? null : null;
-}
-
 /**
  * 软收口耗时固化：为「缺失 durationMs 的未终结工具」按真实挂钟补齐终点。
  *
- * 根因：后端 wire 未回报 `durationMs` 时，工具恒为 0，导致终态过程段
- * `segEnd = max(startTime + durationMs)` 退化为 `max(startTime)`，
- * 「工作 xx 时间」少算末项整段执行时长甚至归零。
- *
- * 口径（非魔术补偿，锚定唯一权威时钟）：
- *   - 已有正值 `durationMs` → 原样保留（后端回报优先）；
- *   - 缺失且存在 `startedAt` → `now - startedAt`；
- *   - 两者皆无 → 不产出字段（由调用方保持原状态，禁止伪造 0）。
+ * 口径（锚定唯一权威时钟）：
+ * - 已有正值 `durationMs` → 不产出（后端回报优先，保持原值）；
+ * - 缺失且存在 `startedAt` → `now - startedAt`；
+ * - 两者皆无 → 不产出（禁止伪造 0）。
  */
 export function resolveTerminalDurationMs(
   tc: { startedAt?: number | undefined; durationMs?: number | undefined },
@@ -507,14 +403,6 @@ export function buildTerminalToolPatches(
     });
   }
   return out;
-}
-
-export function ensureSessionMessages(
-  sess: { messages?: SessionMessage[] | null } | null | undefined
-): sess is { messages: SessionMessage[] } {
-  if (!sess) return false;
-  if (!Array.isArray(sess.messages)) sess.messages = [];
-  return true;
 }
 
 export { preloadPublishToolDiffs, publishToolDiffsLazy };

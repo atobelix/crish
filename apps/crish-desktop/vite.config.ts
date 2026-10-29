@@ -41,6 +41,33 @@ const PROD_CSP_BASE =
 const CHUNK_SIZE_GATE_KB = 600;
 
 /**
+ * 懒加载例外（白名单，不是全局放宽）：
+ * Mermaid 仅在 `[data-md-island="mermaid"]` 出现时动态 import，不进入首屏
+ * 静态图；其 core chunk 约 610KB，低于此单独阈值。其余 chunk 仍受 600KB 硬门禁。
+ */
+const LAZY_CHUNK_SIZE_LIMITS_KB: ReadonlyArray<{
+  pattern: RegExp;
+  limitKb: number;
+  reason: string;
+}> = [
+  {
+    pattern: /vendor-mermaid-[^/]+\.js$/,
+    limitKb: 4096,
+    reason: 'Mermaid diagram island dynamic import (not in startup graph)',
+  },
+  {
+    pattern: /mermaid\.core-[^/]+\.js$/,
+    limitKb: 1200,
+    reason: 'Mermaid diagram island dynamic import (not in startup graph)',
+  },
+  {
+    pattern: /cynefin-[^/]+\.js$/,
+    limitKb: 1200,
+    reason: 'Mermaid diagram island dynamic import (not in startup graph)',
+  },
+];
+
+/**
  * chunk 体积门禁（06-步骤2 / T-G 批次 7.1，P2-4/N4）：
  * vite 7 的 chunk 超限告警由 vite:reporter 在 generateBundle 直发 logger.warn
  * （无 CHUNK_SIZE_WARN 结构化 warning，rollupOptions.onwarn 捕获不到——
@@ -56,13 +83,16 @@ function chunkSizeGatePlugin(): Plugin {
     apply: 'build',
     generateBundle(_options, bundle) {
       for (const [name, chunk] of Object.entries(bundle)) {
-        if (
-          chunk.type === 'chunk' &&
-          chunk.code.length / 1e3 > CHUNK_SIZE_GATE_KB
-        ) {
+        if (chunk.type !== 'chunk') continue;
+        const exemption = LAZY_CHUNK_SIZE_LIMITS_KB.find((item) =>
+          item.pattern.test(name)
+        );
+        const limitKb = exemption?.limitKb ?? CHUNK_SIZE_GATE_KB;
+        if (chunk.code.length / 1e3 > limitKb) {
           this.error(
             `chunk size 超限门禁：${name} = ${(chunk.code.length / 1e3).toFixed(1)} kB ` +
-              `> ${CHUNK_SIZE_GATE_KB} kB —— 拆分或校准阈值后放行`
+              `> ${limitKb} kB —— 拆分或校准阈值后放行` +
+              (exemption ? `（${exemption.reason}）` : '')
           );
         }
       }
@@ -597,6 +627,21 @@ export default defineConfig({
         manualChunks(id) {
           const n = id.replace(/\\/g, '/');
           if (n.includes('node_modules')) {
+            // Mermaid 图表引擎及其独有依赖：仅由 mermaid island 动态 import，
+            // 合并为单一懒加载 vendor chunk，避免数十个 diagram 子 chunk 各自
+            // 触碰 600KB 门禁；该 chunk 不在首屏静态图内。
+            if (
+              n.includes('/node_modules/mermaid/') ||
+              n.includes('/node_modules/@mermaid-js/') ||
+              n.includes('/node_modules/cytoscape/') ||
+              n.includes('/node_modules/dagre') ||
+              n.includes('/node_modules/d3/') ||
+              n.includes('/node_modules/d3-') ||
+              n.includes('/node_modules/khroma/') ||
+              n.includes('/node_modules/elkjs/')
+            ) {
+              return 'vendor-mermaid';
+            }
             // /react/ 会误伤 @tiptap/react 与 zustand/esm/react/*（→ 循环 chunk
             // vendor-react↔vendor-tiptap/zustand），收窄为仅 react 包本体；
             // react-dom 及其浮层 peer（@floating-ui/react-dom 等）继续归 vendor-react

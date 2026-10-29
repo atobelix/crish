@@ -30,8 +30,8 @@ import {
   snapshotStreamTextToSession,
   snapshotStreamThinkingToSession,
   commitToolPatchToSession,
-  isLiveStreamRun,
 } from './helpers';
+import { isLiveStreamRun } from './streamRunState';
 import { markStreamingActive } from '../../api/streamStop';
 
 /** msgId → message 索引（O(1) 查表替代逐次 find）。 */

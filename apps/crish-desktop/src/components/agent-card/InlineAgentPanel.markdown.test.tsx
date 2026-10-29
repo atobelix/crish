@@ -73,18 +73,25 @@ vi.mock('../../api/markdownRenderLite', () => ({
   stripThoughtPlaceholders: (t: string) => t,
 }));
 
-vi.mock('../../api/markdownRenderAsync', () => {
+vi.mock('../../api/markdown/useMarkdownRender', () => {
   const render = (markdown: string) =>
     `<p>${markdown.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</p>`;
+  const result = (markdown: string, enabled: boolean) => ({
+    html: enabled && markdown ? render(markdown) : '',
+    truncated: false,
+    loading: false,
+    failed: false,
+  });
   return {
-    useAsyncMarkdownHtml: vi.fn((markdown: string) => ({
-      html: markdown ? render(markdown) : '',
-      loading: false,
-      failed: false,
-    })),
-    useStreamingMarkdownHtml: vi.fn((markdown: string, enabled: boolean) =>
-      enabled && markdown ? render(markdown) : ''
+    useMarkdownResult: vi.fn(
+      (markdown: string, _variant: string, enabled: boolean = true) =>
+        result(markdown, enabled)
     ),
+    useStreamingMarkdownResult: vi.fn(
+      (markdown: string, _variant: string, enabled: boolean = true) =>
+        result(markdown, enabled)
+    ),
+    useMarkdownPrewarm: vi.fn(),
   };
 });
 
@@ -148,9 +155,7 @@ describe('InlineAgentPanel markdown path (dedup #5)', () => {
     // 等待 Rust 异步 HTML 原子替换）。
     expect(blocks[0]!.textContent).not.toContain('**done**');
     // 全块范围内不得出现活跃尾块
-    expect(
-      document.querySelectorAll('[data-sealed="false"]').length
-    ).toBe(0);
+    expect(document.querySelectorAll('[data-sealed="false"]').length).toBe(0);
   });
 
   it('processing assistant text stays on the active-tail branch and shows rendered HTML only', () => {

@@ -18,8 +18,8 @@ import {
   resolveStreamSessionId,
   canStreamLocalSession,
   isLiveStreamRun,
-  snapshotStreamThinkingToSession,
-} from './helpers';
+} from './streamRunState';
+import { snapshotStreamThinkingToSession } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { useSessionExecutionTrackerStore } from '../../store/sessionExecutionTrackerStore';

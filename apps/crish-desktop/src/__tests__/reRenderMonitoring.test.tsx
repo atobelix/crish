@@ -378,8 +378,11 @@ describe('流式增量渲染监控（T1.7：纯文本帧零重渲染）', () => 
       });
     }
 
-    // 稳定历史块全程零额外渲染（签名缓存 + TimelineBody memo + 块 memo）
-    expect(mockAmdRenders).toEqual(['稳定历史块内容']);
+    // 稳定历史块全程零额外渲染；流式过程中新封口的尾块属于新增块，
+    // 不计入“历史块重渲染”断言。
+    expect(
+      mockAmdRenders.filter((text) => text === '稳定历史块内容')
+    ).toHaveLength(1);
     // 增量区 DOM 累积 = strip(全文)（占位行/总结标题被剥）
     expect(container.textContent).toContain('第一行完成');
     expect(container.textContent).toContain('正文继续');

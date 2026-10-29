@@ -5,16 +5,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionMessage } from '../store/layoutStore';
 import {
-  buildTerminalToolPatches,
   canStreamLocalSession,
   decideSendWhileRunning,
   ensureSessionMessages,
   isLiveStreamRun,
   isSessionAiBusy,
   resolveStreamSessionId,
-  resolveTerminalDurationMs,
   safeCancelStream,
   stopAssistantPlaceholderText,
+} from './chat-stream/streamRunState';
+import {
+  buildTerminalToolPatches,
+  resolveTerminalDurationMs,
 } from './chat-stream/helpers';
 
 describe('resolveStreamSessionId (empty session — no invent remote)', () => {
@@ -220,15 +222,24 @@ describe('软收口耗时固化 · resolveTerminalDurationMs / buildTerminalTool
   const NOW = 1_700_000_000_000;
 
   it('缺 durationMs + 有 startedAt → 按真实挂钟补齐', () => {
-    expect(resolveTerminalDurationMs({ startedAt: NOW - 4_500 }, NOW)).toBe(4_500);
+    expect(resolveTerminalDurationMs({ startedAt: NOW - 4_500 }, NOW)).toBe(
+      4_500
+    );
   });
 
   it('已有正值 durationMs → 返回 undefined（后端回报优先，禁止覆盖）', () => {
-    expect(resolveTerminalDurationMs({ startedAt: NOW - 4_500, durationMs: 1_200 }, NOW)).toBeUndefined();
+    expect(
+      resolveTerminalDurationMs(
+        { startedAt: NOW - 4_500, durationMs: 1_200 },
+        NOW
+      )
+    ).toBeUndefined();
   });
 
   it('durationMs = 0 视为缺失（wire 缺省值，不得当作真实 0 耗时）', () => {
-    expect(resolveTerminalDurationMs({ startedAt: NOW - 900, durationMs: 0 }, NOW)).toBe(900);
+    expect(
+      resolveTerminalDurationMs({ startedAt: NOW - 900, durationMs: 0 }, NOW)
+    ).toBe(900);
   });
 
   it('无 startedAt → 不产出字段（禁止伪造挂钟）', () => {

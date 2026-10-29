@@ -5,22 +5,29 @@ import path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 
-vi.mock('../../../api/markdownRenderAsync', () => {
+vi.mock('../../../api/markdown/useMarkdownRender', () => {
   const renderMarkdown = (markdown: string) => {
     const text = markdown
       .replace(/^#{1,6}\s+/, '')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     return `<p class="md-p">${text}</p>`;
   };
+  const result = (markdown: string, enabled: boolean) => ({
+    html: enabled && markdown ? renderMarkdown(markdown) : '',
+    truncated: false,
+    loading: false,
+    failed: false,
+  });
   return {
-    useAsyncMarkdownHtml: vi.fn((markdown: string) => ({
-      html: markdown ? renderMarkdown(markdown) : '',
-      loading: false,
-      failed: false,
-    })),
-    useStreamingMarkdownHtml: vi.fn((markdown: string, enabled: boolean) =>
-      enabled && markdown ? renderMarkdown(markdown) : ''
+    useMarkdownResult: vi.fn(
+      (markdown: string, _variant: string, enabled: boolean = true) =>
+        result(markdown, enabled)
     ),
+    useStreamingMarkdownResult: vi.fn(
+      (markdown: string, _variant: string, enabled: boolean = true) =>
+        result(markdown, enabled)
+    ),
+    useMarkdownPrewarm: vi.fn(),
   };
 });
 

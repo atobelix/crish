@@ -6,10 +6,8 @@ import { addContextInjection } from '../../api/storeAccess';
 import { addMessage } from '../../api/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import {
-  isSessionAiBusy,
-  settleStaleSessionProcessingMessages,
-} from './helpers';
+import { isSessionAiBusy } from './streamRunState';
+import { settleStaleSessionProcessingMessages } from './staleSessionHealer';
 import {
   takePendingContextState,
   readContextStateSnapshot,

@@ -3,7 +3,7 @@ import { useChatInput } from './useChatInput';
 import { useSlashMenu } from './useSlashMenu';
 import { useChatAttachments } from './useChatAttachments';
 import { useChatSend } from './useChatSend';
-import { settleStaleSessionProcessingMessages } from '../../hooks/chat-stream/helpers';
+import { settleStaleSessionProcessingMessages } from '../../hooks/chat-stream/staleSessionHealer';
 
 export interface UseChatComposerPropsOptions {
   wsId: string;

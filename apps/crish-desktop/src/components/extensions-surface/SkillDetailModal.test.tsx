@@ -27,14 +27,6 @@ vi.mock('../../store/surfaceRouter', () => ({
   navigateToSurface: vi.fn(),
 }));
 
-vi.mock('../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (content: string) => ({
-    html: content ? `<div class="rendered-markdown">${content}</div>` : '',
-    loading: false,
-    failed: false,
-  }),
-}));
-
 describe('SkillDetailModal & Skill Document Rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();

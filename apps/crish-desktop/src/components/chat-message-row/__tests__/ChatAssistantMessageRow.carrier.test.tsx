@@ -22,17 +22,6 @@ vi.mock('../../../store/storeAccess', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../api/markdownRenderAsync', () => ({
-  useAsyncMarkdownHtml: (markdown: string) => ({
-    html: markdown ? `<p>${markdown}</p>` : '',
-    loading: false,
-    failed: false,
-  }),
-  useStreamingMarkdownHtml: (markdown: string) =>
-    markdown ? '<p>live rendered content</p>' : '',
-  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
-}));
-
 function makeCarrierMessage(
   partial: Partial<SessionMessage> = {}
 ): SessionMessage {
