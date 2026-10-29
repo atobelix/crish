@@ -10,6 +10,10 @@ use crate::tokens::{count_agent_message_tokens, count_tokens};
 /// 摘要占位符 token 上限默认（P4 §3.4.2）
 pub const MAX_SUMMARY_TOKENS_DEFAULT: usize = 1_024;
 
+/// session_meta 键：摘要产出 token 上限（04 C9 第 2 条，默认 1500 由
+/// 调用方换算进 CompactionPolicy.max_summary_tokens）
+pub const SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS: &str = "compact_summary_max_tokens";
+
 /// 压缩策略（session-loop 注入 CompactionEngine，P4 §3.4.2）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactionPolicy {

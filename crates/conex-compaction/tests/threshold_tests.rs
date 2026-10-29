@@ -1,17 +1,15 @@
 mod common;
 
 use common::{amsg, text_block, thought_block, usage_msg};
-use conex_compaction::thresholds::parse_iso8601_epoch_ms;
 use conex_compaction::{
-    count_agent_message_tokens, count_tokens, CompactionEngine, CompactionThresholds,
-    EstimateSource, ThresholdDecision, COMPACT_CRITICAL_RATIO_DEFAULT,
-    COMPACT_THRESHOLD_RATIO_DEFAULT,
+    count_agent_message_tokens, count_tokens, CompactionEngine, EstimateSource,
 };
 use conex_types::AgentMessageRole;
 
-fn parse_ms(value: &str) -> i64 {
-    parse_iso8601_epoch_ms(value).expect("测试时间戳可解析")
-}
+/// 时间戳护栏用例的毫秒常量（与消息 `created_at` 一一对应）：
+/// `2026-08-03T10:00:01.500Z` / `2026-08-03T09:59:59.500Z`
+const GUARD_BOUNDARY_MS: i64 = 1_785_751_201_500;
+const GUARD_BEFORE_MS: i64 = 1_785_751_199_500;
 
 #[test]
 fn estimate_heuristic_mixed_ascii_cjk() {
@@ -133,7 +131,7 @@ fn estimate_usage_ignores_aborted_and_zero_usage() {
 fn estimate_timestamp_guard_invalidates_stale_usage() {
     let engine = CompactionEngine::new(0);
     let messages = vec![usage_msg("a1", "2026-08-03T10:00:00.000Z", 800, "old")];
-    let boundary = parse_ms("2026-08-03T10:00:01.500Z");
+    let boundary = GUARD_BOUNDARY_MS;
     let result = engine.estimate_context_tokens(&messages, None, None, Some(boundary));
     assert_eq!(result.source, EstimateSource::Heuristic);
     assert_eq!(result.usage_message_id, None);
@@ -142,12 +140,7 @@ fn estimate_timestamp_guard_invalidates_stale_usage() {
         count_agent_message_tokens(&messages[0]) as u64
     );
 
-    let result = engine.estimate_context_tokens(
-        &messages,
-        None,
-        None,
-        Some(parse_ms("2026-08-03T09:59:59.500Z")),
-    );
+    let result = engine.estimate_context_tokens(&messages, None, None, Some(GUARD_BEFORE_MS));
     assert_eq!(result.source, EstimateSource::Usage);
     assert_eq!(result.tokens, 800);
 }
@@ -194,26 +187,6 @@ fn estimate_empty_messages() {
 }
 
 #[test]
-fn parse_iso8601_timestamp() {
-    assert_eq!(
-        parse_iso8601_epoch_ms("2026-08-03T12:00:00.000Z"),
-        Some(1_785_758_400_000i64)
-    );
-    assert_eq!(
-        parse_iso8601_epoch_ms("2026-08-03T12:00:00Z"),
-        Some(1_785_758_400_000i64)
-    );
-    assert_eq!(
-        parse_iso8601_epoch_ms("2026-08-03T12:00:00.999Z"),
-        Some(1_785_758_400_999i64)
-    );
-    assert_eq!(parse_iso8601_epoch_ms(""), None);
-    assert_eq!(parse_iso8601_epoch_ms("2026-08-03 12:00:00Z"), None);
-    assert_eq!(parse_iso8601_epoch_ms("2026-13-03T12:00:00Z"), None);
-    assert_eq!(parse_iso8601_epoch_ms("2026-08-03T12:00:00+08:00"), None);
-}
-
-#[test]
 fn should_compact_threshold() {
     let engine = CompactionEngine::new(0);
     assert!(!engine.should_compact(999, 1000));
@@ -221,120 +194,4 @@ fn should_compact_threshold() {
     assert!(engine.should_compact(1001, 1000));
     let budget = 64_000u64 - 16_384u64;
     assert!(engine.should_compact(budget, budget));
-}
-
-#[test]
-fn threshold_classification_regular_and_critical() {
-    let thresholds = CompactionThresholds::default();
-    let window = 100_000u64;
-    assert_eq!(
-        thresholds.classify(0, window),
-        ThresholdDecision::UnderBudget
-    );
-    assert_eq!(
-        thresholds.classify(84_999, window),
-        ThresholdDecision::UnderBudget
-    );
-    assert_eq!(
-        thresholds.classify(85_000, window),
-        ThresholdDecision::Regular
-    );
-    assert_eq!(
-        thresholds.classify(94_999, window),
-        ThresholdDecision::Regular
-    );
-    assert_eq!(
-        thresholds.classify(95_000, window),
-        ThresholdDecision::Critical
-    );
-    assert_eq!(
-        thresholds.classify(100_000, window),
-        ThresholdDecision::Critical
-    );
-    assert_eq!(
-        thresholds.classify(200_000, window),
-        ThresholdDecision::Critical
-    );
-    assert_eq!(thresholds.classify(1, 0), ThresholdDecision::Critical);
-}
-
-#[test]
-fn threshold_configurable_ratios_change_decision() {
-    let window = 100_000u64;
-    let custom = CompactionThresholds {
-        regular_ratio: 0.70,
-        critical_ratio: 0.90,
-    };
-    assert_eq!(
-        custom.classify(60_000, window),
-        ThresholdDecision::UnderBudget
-    );
-    assert_eq!(custom.classify(80_000, window), ThresholdDecision::Regular);
-    assert_eq!(custom.classify(95_000, window), ThresholdDecision::Critical);
-    assert_eq!(
-        CompactionThresholds::default().classify(80_000, window),
-        ThresholdDecision::UnderBudget
-    );
-    let clamped = CompactionThresholds {
-        regular_ratio: 0.85,
-        critical_ratio: 0.5,
-    };
-    assert_eq!(clamped.normalized().critical_ratio, 0.85);
-}
-
-#[test]
-fn threshold_defaults_matched() {
-    let thresholds = CompactionThresholds::default();
-    assert_eq!(thresholds.regular_ratio, COMPACT_THRESHOLD_RATIO_DEFAULT);
-    assert_eq!(thresholds.critical_ratio, COMPACT_CRITICAL_RATIO_DEFAULT);
-    assert_eq!(COMPACT_THRESHOLD_RATIO_DEFAULT, 0.85);
-    assert_eq!(COMPACT_CRITICAL_RATIO_DEFAULT, 0.95);
-}
-
-#[test]
-fn test_dual_watermark_decision_helpers() {
-    let thresholds = CompactionThresholds::default();
-    let window = 100_000u64;
-
-    // < 85%: under budget
-    assert!(thresholds.is_under_budget(80_000, window));
-    assert!(!thresholds.should_preheat(80_000, window));
-    assert!(!thresholds.should_critical_defense(80_000, window));
-    assert!(!thresholds.classify(80_000, window).should_compact());
-
-    // 85% ~ 95%: regular preheat
-    assert!(!thresholds.is_under_budget(90_000, window));
-    assert!(thresholds.should_preheat(90_000, window));
-    assert!(!thresholds.should_critical_defense(90_000, window));
-    assert!(thresholds.classify(90_000, window).should_compact());
-
-    // >= 95%: critical defense
-    assert!(!thresholds.is_under_budget(96_000, window));
-    assert!(!thresholds.should_preheat(96_000, window));
-    assert!(thresholds.should_critical_defense(96_000, window));
-    assert!(thresholds.classify(96_000, window).should_compact());
-
-    // threshold_tokens
-    let (reg, crit) = thresholds.threshold_tokens(window);
-    assert_eq!(reg, 85_000);
-    assert_eq!(crit, 95_000);
-}
-
-#[test]
-fn test_adaptive_keep_recent_tokens() {
-    // 16k available: 16000 * 0.35 = 5600 -> in [4000, 40000]
-    assert_eq!(
-        CompactionThresholds::adaptive_keep_recent_tokens(16_000),
-        5_600
-    );
-    // tiny 8k available: 8000 * 0.35 = 2800 -> clamped to 4000
-    assert_eq!(
-        CompactionThresholds::adaptive_keep_recent_tokens(8_000),
-        4_000
-    );
-    // huge 200k available: 200000 * 0.35 = 70000 -> clamped to 40000
-    assert_eq!(
-        CompactionThresholds::adaptive_keep_recent_tokens(200_000),
-        40_000
-    );
 }

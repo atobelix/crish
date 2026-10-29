@@ -1,4 +1,8 @@
-//! 水位双阈值与元数据判定模型（conex-compaction）
+//! 上下文占用估算（conex-compaction）
+//!
+//! 双源统一输出：usage 实测优先（服务端口径，含缓存读/写），本地启发式兜底
+//! （ASCII 4 字符/token、CJK 逐字符、图片固定 token）；时间戳护栏保证压缩
+//! 插入新前缀后旧 usage 不再被误用。
 
 use std::sync::Arc;
 
@@ -6,143 +10,7 @@ use conex_types::AgentMessage;
 
 use crate::tokens::{count_agent_message_tokens, count_tokens};
 
-/// 常规线水位默认（85%，02 Top 4 / 04 C9 触发条件）
-pub const COMPACT_THRESHOLD_RATIO_DEFAULT: f64 = 0.85;
-/// 临界线水位默认（95%，02 Top 4：同步硬压缩防线）
-pub const COMPACT_CRITICAL_RATIO_DEFAULT: f64 = 0.95;
-/// session_meta 键：常规线水位（Q1 裁决：默认值配置面、覆盖走 session_meta）
-pub const SESSION_META_KEY_COMPACT_THRESHOLD_RATIO: &str = "compact_threshold_ratio";
-/// session_meta 键：临界线水位
-pub const SESSION_META_KEY_COMPACT_CRITICAL_RATIO: &str = "compact_critical_ratio";
-/// session_meta 键：摘要产出 token 上限（04 C9 第 2 条，默认 1500 由
-/// 调用方换算进 CompactionPolicy.max_summary_tokens）
-pub const SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS: &str = "compact_summary_max_tokens";
-
-/// 双阈值判定结果（M10/C9：85% 常规线 + 95% 临界线，02 Top 4）
-///
-/// 实现双阈值水位调度：
-/// - `UnderBudget` (< 85%)：在预算内，平滑早退，不触发压缩，保护 KV Cache 命中；
-/// - `Regular` (85% ~ 95%)：常规水位线，非阻塞触发后台异步摘要预热；
-/// - `Critical` (>= 95%)：临界水位线，同步硬防御门禁，阻止 400 Context Overflow。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThresholdDecision {
-    /// 预算内（无需压缩，平滑早退）
-    UnderBudget,
-    /// 常规线（默认 85% 预算水位线）：非阻塞异步预热 / 触发后台摘要任务
-    Regular,
-    /// 临界线（默认 95% 预算水位线）：同步硬防御门禁，阻止上下文击穿
-    Critical,
-}
-
-impl ThresholdDecision {
-    /// 是否在预算内安全（低于常规线 85%，可平滑早退，无需压缩）
-    #[inline]
-    pub fn is_under_budget(&self) -> bool {
-        matches!(self, ThresholdDecision::UnderBudget)
-    }
-
-    /// 是否处于常规水位（85% ~ 95%）：触发异步预热摘要，不阻塞主流程
-    #[inline]
-    pub fn is_regular(&self) -> bool {
-        matches!(self, ThresholdDecision::Regular)
-    }
-
-    /// 是否处于临界水位（>= 95%）：触发同步硬防御门禁，阻止 400 Context Overflow
-    #[inline]
-    pub fn is_critical(&self) -> bool {
-        matches!(self, ThresholdDecision::Critical)
-    }
-
-    /// 是否需要触发压缩流程（常规预热或临界硬防御）
-    #[inline]
-    pub fn should_compact(&self) -> bool {
-        !self.is_under_budget()
-    }
-}
-
-/// 双阈值配置（可配；session_meta 键
-/// `compact_threshold_ratio` / `compact_critical_ratio`，
-/// 04 §3.5 键命名空间 compact_*）
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct CompactionThresholds {
-    /// 常规线水位（默认 0.85）
-    pub regular_ratio: f64,
-    /// 临界线水位（默认 0.95；≥ 常规线）
-    pub critical_ratio: f64,
-}
-
-impl Default for CompactionThresholds {
-    fn default() -> Self {
-        Self {
-            regular_ratio: COMPACT_THRESHOLD_RATIO_DEFAULT,
-            critical_ratio: COMPACT_CRITICAL_RATIO_DEFAULT,
-        }
-    }
-}
-
-impl CompactionThresholds {
-    /// 边界钳制：常规线 ∈ (0, 1]、临界线 ∈ [常规线, 1]
-    pub fn normalized(&self) -> Self {
-        let regular = self.regular_ratio.clamp(0.0, 1.0);
-        let regular = if regular == 0.0 { 1.0 } else { regular };
-        Self {
-            regular_ratio: regular,
-            critical_ratio: self.critical_ratio.clamp(regular, 1.0),
-        }
-    }
-
-    /// 水位判定单点：`estimate / window` 与双阈值比较（window = 0 时保守判临界）
-    pub fn classify(&self, estimate: u64, window: u64) -> ThresholdDecision {
-        if window == 0 {
-            return ThresholdDecision::Critical;
-        }
-        let thresholds = self.normalized();
-        let ratio = estimate as f64 / window as f64;
-        if ratio >= thresholds.critical_ratio {
-            ThresholdDecision::Critical
-        } else if ratio >= thresholds.regular_ratio {
-            ThresholdDecision::Regular
-        } else {
-            ThresholdDecision::UnderBudget
-        }
-    }
-
-    /// 动态自适应滑动窗口（Adaptive Keep Recent Budget）
-    ///
-    /// 淘汰死板的 20,000 Token 硬保留，根据模型可用窗口动态计算保留预算：
-    /// `keep_recent_tokens = clamp(W_avail * 0.35, 4_000, 40_000)`
-    /// - 小窗口模型（16k/32k）：自适应保留 4,000 ~ 9,000 Tokens；
-    /// - 大窗口模型（128k/200k/1M）：保留 30,000 ~ 40,000 Tokens。
-    pub fn adaptive_keep_recent_tokens(available_window: usize) -> usize {
-        let target = (available_window as f64 * 0.35).round() as usize;
-        target.clamp(4_000, 40_000)
-    }
-
-    /// 计算给定可用窗口下的常规线与临界线 Token 阈值点
-    pub fn threshold_tokens(&self, available_window: u64) -> (u64, u64) {
-        let norm = self.normalized();
-        let regular = (available_window as f64 * norm.regular_ratio).round() as u64;
-        let critical = (available_window as f64 * norm.critical_ratio).round() as u64;
-        (regular, critical)
-    }
-
-    /// 预算内平滑早退判定：若估算值处于 UnderBudget，无需执行破坏性截断
-    pub fn is_under_budget(&self, estimate: u64, available_window: u64) -> bool {
-        self.classify(estimate, available_window).is_under_budget()
-    }
-
-    /// 是否应拉起后台异步摘要预热（达到常规线 85%）
-    pub fn should_preheat(&self, estimate: u64, available_window: u64) -> bool {
-        self.classify(estimate, available_window).is_regular()
-    }
-
-    /// 是否应执行同步临界硬防御压缩（达到临界线 95%）
-    pub fn should_critical_defense(&self, estimate: u64, available_window: u64) -> bool {
-        self.classify(estimate, available_window).is_critical()
-    }
-}
-
-/// 估算来源（usage 实测优先 / 本地启发式兜底，P4 §3.3.1）
+/// 估算来源（usage 实测优先 / 本地启发式兜底）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EstimateSource {
     /// usage 实测（服务端口径，含缓存）
@@ -151,7 +19,7 @@ pub enum EstimateSource {
     Heuristic,
 }
 
-/// 上下文占用估算结果（双源统一输出，P4 §3.3.1）
+/// 上下文占用估算结果（双源统一输出）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateContext {
     /// 估算的上下文占用（含缓存读/写；I6 口径）
@@ -162,7 +30,7 @@ pub struct EstimateContext {
     pub usage_message_id: Option<String>,
 }
 
-/// 从尾部向前找最近一条 usage 仍描述当前前缀的消息（P4 §3.3.1）
+/// 从尾部向前找最近一条 usage 仍描述当前前缀的消息
 ///
 /// 返回 `(消息索引, 归一化输入占用)`。判定规则：
 ///
@@ -274,7 +142,9 @@ pub(crate) fn estimate_with_usage(
 /// 期望形态：`YYYY-MM-DDTHH:MM:SS[.mmm]Z`（UTC，`now_iso_utc` 产出
 /// `YYYY-MM-DDTHH:MM:SS.mmmZ`）；小数秒缺省按 0 处理；仅接受 Z 结尾
 /// （带时区偏移的形态视为不可解析）。解析失败返回 None。
-pub fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
+///
+/// 只服务 usage 时间戳护栏，故保持本模块私有。
+fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
     let bytes = value.as_bytes();
     if bytes.len() < 20 {
         return None;
@@ -330,7 +200,7 @@ pub fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
 }
 
 /// 公历日期 → 1970-01-01 起天数（Howard Hinnant civil-from-days 逆运算）
-pub(crate) fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
+fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
     if month == 0 || day == 0 {
         return None;
     }
@@ -342,4 +212,70 @@ pub(crate) fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
         - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     Some(era * 146_097 + day_of_era - 719_468)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_iso8601_epoch_ms;
+
+    /// 合法形态：UTC + 可选小数秒（缺省按 0、超 3 位截断到毫秒）
+    #[test]
+    fn parse_iso8601_timestamp() {
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T12:00:00.000Z"),
+            Some(1_785_758_400_000i64)
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T12:00:00Z"),
+            Some(1_785_758_400_000i64)
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T12:00:00.999Z"),
+            Some(1_785_758_400_999i64)
+        );
+        // 小数秒不足 3 位补零（.5 → 500ms）
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T12:00:00.5Z"),
+            Some(1_785_758_400_500i64)
+        );
+        // 小数秒超 3 位截断（毫秒精度）
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T12:00:00.123456Z"),
+            Some(1_785_758_400_123i64)
+        );
+    }
+
+    /// epoch 零点与跨日边界（护栏比较用绝对毫秒，不允许时区漂移）
+    #[test]
+    fn parse_iso8601_epoch_origin_and_day_boundary() {
+        assert_eq!(parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"), Some(0));
+        assert_eq!(
+            parse_iso8601_epoch_ms("1970-01-01T00:00:01Z"),
+            Some(1_000i64)
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-04T00:00:00.000Z"),
+            Some(1_785_758_400_000i64 + 12 * 3_600 * 1_000)
+        );
+    }
+
+    /// 非法形态一律 None（护栏保守作废，不回退到「当成 0 时刻」）
+    #[test]
+    fn parse_iso8601_rejects_invalid_shapes() {
+        for bad in [
+            "",
+            "2026-08-03 12:00:00Z",
+            "2026-13-03T12:00:00Z",
+            "2026-08-03T12:00:00+08:00",
+            "2026-00-03T12:00:00Z",
+            "2026-08-00T12:00:00Z",
+            "2026-08-03T24:00:00Z",
+            "2026-08-03T12:60:00Z",
+            "2026-08-03T12:00:61Z",
+            "2026-08-03T12:00:00.Z",
+            "2026-08-03T12:00:00.500",
+        ] {
+            assert_eq!(parse_iso8601_epoch_ms(bad), None, "非法形态：{bad}");
+        }
+    }
 }

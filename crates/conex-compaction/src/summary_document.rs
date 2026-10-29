@@ -1,19 +1,15 @@
-//! 摘要文档（Schema V1）规范面：校验 / markdown 渲染投影 / 旧格式兼容解析
+//! 摘要文档（Schema V1）规范面：校验 / markdown 渲染投影
 //!
 //! 职责（04 §3.2 D1 / 00-plan §6.1）：
 //! - **JSON 为规范面**：required 骨架 + `additionalProperties: true`
 //!   （AI 自由扩展 custom），校验机器可读；
 //! - **markdown 渲染为确定性投影**：同文档同输出（无时间戳），同步成功
-//!   路径作为链文本写入对话（R-G 场景 A）；
-//! - **兼容解析**：旧 L1/stub 文本可解析为最低骨架文档（legacy 兼容，
-//!   不删旧接口面），使 existing 通道对历史摘要可读。
+//!   路径作为链文本写入对话（R-G 场景 A）。
 //!
 //! 本模块保持纯函数、无运行时依赖（既有 crate 定位）；JSON 化由本侧
 //! validate 兜底，不强求 LLM 必输 JSON（T-13 边界）。
 
 use std::fmt;
-
-pub use crate::ai_summary::push_critical_context;
 
 /// Schema V1 版本号（required 骨架变更需升版本）
 pub const SUMMARY_SCHEMA_VERSION: u32 = 1;
@@ -248,76 +244,10 @@ pub fn summary_to_markdown(doc: &serde_json::Value) -> String {
     out
 }
 
-/// 旧格式文本 → 最低骨架文档（legacy 兼容解析；04 §6.1 / 00-plan §6.1）
-///
-/// 识别形态：
-/// - L1 占位符 `[Compacted N earlier message(s) to fit context window]`；
-/// - 块引用行 `[Compacted N earlier message(s) · block {b} · generation {g}
-///   · 恢复: decompress_context(blockId="{b}")]`（01 §2.2）。
-///
-/// blockId/generation 从文本提取（缺失时 blockId 为空串、generation=0）；
-/// droppedIds 为空数组（原文信息熵已收缩，不伪造）；tier=legacy。
-pub fn parse_legacy_summary(text: &str) -> Option<serde_json::Value> {
-    let trimmed = text.trim();
-    if !trimmed.starts_with("[Compacted") {
-        return None;
-    }
-    Some(serde_json::json!({
-        "schemaVersion": SUMMARY_SCHEMA_VERSION,
-        "blockId": extract_block_id(trimmed).unwrap_or_default(),
-        "generation": extract_generation(trimmed).unwrap_or(0),
-        "droppedIds": [],
-        "height": 1,
-        "tier": "legacy",
-        "goal": trimmed,
-        "constraints": [],
-        "progress": [],
-        "decisions": [],
-        "nextSteps": [],
-        "criticalContext": "",
-    }))
-}
-
-/// 提取块 id：优先块引用行形态 `blockId="{...}"`；兜底中性 stub 形态
-/// `[Compacted({block_id}) ...]`（无正则依赖的手工扫描）
-fn extract_block_id(text: &str) -> Option<String> {
-    const MARK: &str = "blockId=\"";
-    if let Some(start) = text.find(MARK) {
-        let start = start + MARK.len();
-        if let Some(end) = text[start..].find('"') {
-            return Some(text[start..start + end].to_string());
-        }
-    }
-    const PAREN: &str = "Compacted(";
-    if let Some(start) = text.find(PAREN) {
-        let start = start + PAREN.len();
-        if let Some(end) = text[start..].find(')') {
-            return Some(text[start..start + end].to_string());
-        }
-    }
-    None
-}
-
-/// 提取 `generation {g}` 段中的代数（仅数字）
-fn extract_generation(text: &str) -> Option<u32> {
-    const MARK: &str = "generation ";
-    let start = text.find(MARK)? + MARK.len();
-    let digits: String = text[start..]
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    if digits.is_empty() {
-        None
-    } else {
-        digits.parse().ok()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_legacy_summary, summary_to_markdown, validate_summary_document, SummaryDocError,
-        SUMMARY_REQUIRED_FIELDS,
+        summary_to_markdown, validate_summary_document, SummaryDocError, SUMMARY_REQUIRED_FIELDS,
     };
 
     /// 合法 V1 文档（含 structured 扩展与 custom 自由键）
@@ -431,49 +361,6 @@ mod tests {
         assert!(first.contains("messagesDropped: 2"));
         // 无时间戳（确定性前提）
         assert!(!first.contains("timestamp") && !first.contains("createdAt"));
-    }
-
-    #[test]
-    fn legacy_placeholder_parses_to_skeleton_document() {
-        // L1 占位符：无块 id → 骨架最低形态
-        let l1 = "[Compacted 3 earlier message(s) to fit context window]";
-        let doc = parse_legacy_summary(l1).expect("L1 文本必须可解析");
-        assert_eq!(doc["blockId"], "");
-        assert_eq!(doc["generation"], 0);
-        assert_eq!(doc["tier"], "legacy");
-        assert!(doc["droppedIds"].as_array().unwrap().is_empty());
-        assert_eq!(doc["height"], 1);
-        // 骨架可过 Schema V1 校验（existing 通道可读）
-        assert!(validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096).is_ok());
-    }
-
-    #[test]
-    fn legacy_block_line_extracts_block_id_and_generation() {
-        let line = "[Compacted 7 earlier message(s) · block compacted-summary-1-3 · generation 1 · 恢复: decompress_context(blockId=\"compacted-summary-1-3\")]";
-        let doc = parse_legacy_summary(line).expect("块引用行必须可解析");
-        assert_eq!(doc["blockId"], "compacted-summary-1-3");
-        assert_eq!(doc["generation"], 1);
-        // 渲染确定性（骨架文档亦可投影）
-        let rendered = summary_to_markdown(&doc);
-        assert!(rendered.contains("## Goal"));
-    }
-
-    #[test]
-    fn legacy_stub_text_extracts_block_id_from_parens() {
-        // 中性 stub 形态（T-13）：块 id 在 Compacted(...) 括号内
-        let stub = "[Compacted(compacted-summary-1-1) 2 条消息 · 摘要见块表]";
-        let doc = parse_legacy_summary(stub).expect("stub 文本必须可解析");
-        assert_eq!(doc["blockId"], "compacted-summary-1-1");
-        assert_eq!(doc["generation"], 0);
-        assert_eq!(doc["tier"], "legacy");
-        // 骨架可过 Schema V1 校验（existing 通道可读）
-        assert!(validate_summary_document(&serde_json::to_string(&doc).unwrap(), 4096).is_ok());
-    }
-
-    #[test]
-    fn non_legacy_text_returns_none() {
-        assert!(parse_legacy_summary("## Goal\n(none)").is_none());
-        assert!(parse_legacy_summary("").is_none());
     }
 
     #[test]

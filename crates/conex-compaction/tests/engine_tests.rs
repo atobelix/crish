@@ -2,8 +2,7 @@ mod common;
 
 use common::{amsg, msg, summary_doc_json, text_block, tool_call_block, tool_result_block};
 use conex_compaction::{
-    count_agent_message_tokens, count_tokens, CompactionEngine, CompactionPolicy,
-    CompactionThresholds, Summarizer, ThresholdDecision,
+    count_agent_message_tokens, count_tokens, CompactionEngine, CompactionPolicy, Summarizer,
 };
 use conex_types::{AgentMessage, AgentMessageRole};
 
@@ -770,12 +769,7 @@ fn critical_line_hard_compression_deterministic_placeholder() {
         min_recent_turns: 1,
         ..CompactionPolicy::default()
     };
-    let window = 1_000u64;
-    let estimate = 960u64;
-    assert_eq!(
-        CompactionThresholds::default().classify(estimate, window),
-        ThresholdDecision::Critical
-    );
+    // 场景口径：estimate/window = 0.96 属调用方的临界水位触发
     let plan = engine.compact_agent_messages(&messages, 5, &policy, None);
     assert!(!plan.summary_is_llm);
     assert_eq!(
@@ -824,10 +818,7 @@ fn regular_line_ai_summary_document_into_conversation() {
         min_recent_turns: 1,
         ..CompactionPolicy::default()
     };
-    assert_eq!(
-        CompactionThresholds::default().classify(900, 1_000),
-        ThresholdDecision::Regular
-    );
+    // 场景口径：estimate/window = 0.90 属调用方的常规水位触发
     struct AiSummarizer;
     impl Summarizer for AiSummarizer {
         fn summarize(

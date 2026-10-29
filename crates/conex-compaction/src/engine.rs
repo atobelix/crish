@@ -5,12 +5,10 @@ use std::sync::Arc;
 use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, CompactionResult, Message};
 
 use crate::cut_point::find_cut_point_inner;
+use crate::estimate::{estimate_with_usage, find_usage_message, usage_occupancy, EstimateContext};
 use crate::plan::{
     llm_blocked_plan, noop_plan, stub_placeholder, summary_placeholder, truncate_summary,
     CompactionPlan, CompactionPolicy, StubPolicy, Summarizer,
-};
-use crate::thresholds::{
-    estimate_with_usage, find_usage_message, usage_occupancy, EstimateContext,
 };
 use crate::tokens::{count_agent_message_tokens, count_tokens};
 
