@@ -26,22 +26,13 @@
 //!   wire（T1a 定案；历史旧值已随 I1-α④ 枚举化收编，对齐 01 §3.5））；
 //! - [diagnostic_message]：诊断事件附带消息（emit-diagnostic 用）。
 
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
 };
 
+use crate::ids::new_message_id;
 use crate::steering::{metadata_kind_wire, SteeringReason};
-use conex_shared::time::{now_iso_utc, unix_millis};
-
-/// 消息 id 计数器（保证同毫秒内多次注入 id 唯一）
-static MESSAGE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-fn new_message_id(prefix: &str) -> String {
-    let n = MESSAGE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{prefix}-{}-{n}", unix_millis())
-}
+use conex_shared::time::now_iso_utc;
 
 /// 纠偏提示语（中英双语，对齐 TS runtimeSteeringText）
 ///

@@ -1,10 +1,9 @@
 //! 会话级工具执行上下文（R3 T9：Tool::execute 引入 Context）
 //!
-//! `ToolContext` 承载会话级数据：`session_id`、中止令牌（`abort_token`）、
-//! 审批回调通道（`ask`，R4 T10 由 session-loop 接线为真实审批通道
-//! [crate 外 ApprovalChannel]；Full 模式的免审批语义由
-//! session-loop `exec_verdict::call_verdict` 在判点层实现）、
-//! 工作区根目录（`workspace_root`）。
+//! `ToolContext` 承载会话级数据：`session_id`、中止令牌（`abort_token`，
+//! 执行器以 run 级信号的子令牌注入，父中止即级联）、工作区根目录
+//! （`workspace_root`）。审批裁决不经工具上下文：放行判定唯一入口在
+//! session-loop `exec_verdict::call_verdict`，等待审批由执行器审批门承担。
 //!
 //! I4-M3 起另承载写路径互斥注册表（`write_claims`，None = 未接线不强制）
 //! 与声明持有者（`write_claim_holder`，子代理 run id；None = 会话主身份）——
@@ -13,91 +12,89 @@
 //! 执行上下文）。
 //!
 //! 工具不再持有 workspace_root 等会话数据（原 BuiltinToolConfig 注入），
-//! 统一从 ctx 读取——R4 T10 权限规则引擎（requires_approval/dangerous
-//! 判定挂 ctx.ask 通道、审批等待期支持 abort_token 取消）已接线。
+//! 统一从 ctx 读取。
 
-use crate::definition::ToolError;
 use crate::permission::PermissionMode;
 use crate::write_paths::WritePathRegistry;
-use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::sync::Notify;
 
-/// 中止令牌（共享 `Arc<AtomicBool>` + `Arc<tokio::sync::Notify>`）
+/// 中止令牌：Clone 共享同一中止状态，支持父子级联。
 ///
-/// 支持同步状态查询（`is_aborted`）与零轮询异步等待通知唤醒（`wait_aborted`）。
-/// 可 Clone 传递，线程安全。
-#[derive(Debug, Clone)]
+/// - 同步状态查询（[Self::is_aborted]）与零轮询异步等待（[Self::wait_aborted]）；
+/// - [Self::child_of] 派生子令牌：父中止 ⇒ 子视为已中止且其等待方被唤醒；
+///   子中止不回传父。级联由子令牌持有父引用、在查询/等待时沿链判定实现——
+///   不派生后台监听任务，生命周期随令牌 drop 自然结束。
+/// - 同一令牌树共享一个 [Notify]：任一节点中止都广播到整棵树，等待方醒来
+///   后沿自身父链复查，非祖先节点的中止只造成一次虚假唤醒（随即继续等待）。
+///   换来的是等待零堆分配、与树深无关。
+#[derive(Debug, Clone, Default)]
 pub struct AbortToken {
-    aborted: Arc<AtomicBool>,
-    notify: Arc<tokio::sync::Notify>,
+    state: Arc<AbortState>,
 }
 
-impl Default for AbortToken {
-    fn default() -> Self {
-        Self {
-            aborted: Arc::new(AtomicBool::new(false)),
-            notify: Arc::new(tokio::sync::Notify::new()),
-        }
-    }
+/// 单个令牌节点的中止状态（`parent` 为级联来源）
+#[derive(Debug, Default)]
+struct AbortState {
+    aborted: AtomicBool,
+    /// 整棵令牌树共享的中止广播（根创建，子令牌克隆引用）
+    notify: Arc<Notify>,
+    parent: Option<AbortToken>,
 }
 
 impl AbortToken {
-    /// 新建未触发的中止令牌
+    /// 新建未触发的根令牌
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 触发中止（幂等且广播通知唤醒）
+    /// 派生 `parent` 的子令牌（父已中止则子创建即为已中止）
+    pub fn child_of(parent: &AbortToken) -> Self {
+        Self {
+            state: Arc::new(AbortState {
+                aborted: AtomicBool::new(false),
+                notify: parent.state.notify.clone(),
+                parent: Some(parent.clone()),
+            }),
+        }
+    }
+
+    /// 触发中止（幂等；广播唤醒本令牌及其后代令牌上的等待方）
     pub fn abort(&self) {
-        self.aborted.store(true, Ordering::SeqCst);
-        self.notify.notify_waiters();
+        self.state.aborted.store(true, Ordering::SeqCst);
+        self.state.notify.notify_waiters();
     }
 
-    /// 是否已触发中止
+    /// 本令牌或任一祖先令牌已触发中止
     pub fn is_aborted(&self) -> bool {
-        self.aborted.load(Ordering::SeqCst)
+        self.chain()
+            .any(|state| state.aborted.load(Ordering::SeqCst))
     }
 
-    /// 异步等待 abort 触发（已触发立即返回，零轮询）
+    /// 异步等待本令牌或任一祖先触发中止（已触发立即返回，零轮询、零堆分配）
     pub async fn wait_aborted(&self) {
-        if self.is_aborted() {
-            return;
+        loop {
+            // 先登记（enable）再复查：登记之后发生的 abort 必被接住，不丢唤醒
+            //（abort 侧先写标志再 notify_waiters）。
+            let mut notified = std::pin::pin!(self.state.notify.notified());
+            notified.as_mut().enable();
+            if self.is_aborted() {
+                return;
+            }
+            notified.await;
+            // 树内任一节点中止都会唤醒；非本链中止属虚假唤醒，回到循环继续等
         }
-        let notified = self.notify.notified();
-        if self.is_aborted() {
-            return;
-        }
-        notified.await;
+    }
+
+    /// 自本节点起沿父链向上的状态序列
+    fn chain(&self) -> impl Iterator<Item = &AbortState> {
+        std::iter::successors(Some(&*self.state), |state| {
+            state.parent.as_ref().map(|parent| &*parent.state)
+        })
     }
 }
-
-/// 审批裁决结果（T10 权限规则引擎消费；T9 仅类型/签名就位）
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AskDecision {
-    /// 放行执行
-    Allowed,
-    /// 拒绝执行（附原因）
-    Denied { reason: String },
-}
-
-/// 审批回调通道（T9 占位：类型与签名就位，具体审批逻辑 T10 接线）
-///
-/// 发起一次审批请求并等待裁决。`tool_name` / `args` 为待审批工具调用，
-/// 供裁决方构造审批请求事件（对齐 T10：approval 事件真实出站）。
-#[async_trait]
-pub trait AskChannel: Send + Sync + std::fmt::Debug {
-    /// 发起审批请求并等待裁决
-    async fn ask(
-        &self,
-        tool_name: &str,
-        args: &serde_json::Value,
-    ) -> Result<AskDecision, ToolError>;
-}
-
-/// 审批回调（trait 对象引用；`Option<AskCallback>` = 未接线）
-pub type AskCallback = Arc<dyn AskChannel>;
 
 /// 会话级工具执行上下文（Tool::execute 新签名入参，R3 T9）
 #[derive(Debug, Clone)]
@@ -174,7 +171,7 @@ pub struct ExploreDocsQuotaContext {
 }
 
 impl ToolContext {
-    /// 新建会话上下文（未触发中止令牌、未接线审批通道、未接线写路径互斥）
+    /// 新建会话上下文（未触发中止令牌、未接线写路径互斥）
     pub fn new(session_id: impl Into<String>, workspace_root: PathBuf) -> Self {
         Self {
             session_id: session_id.into(),
@@ -201,7 +198,7 @@ impl ToolContext {
 /// - workspace_root 为当前目录（路径类测试用
 ///   `ToolContext { workspace_root: <ws>, ..create_mock_tool_context() }`
 ///   覆盖）；
-/// - abort_token 未触发；ask 未接线（放行语义）。
+/// - abort_token 未触发。
 pub fn create_mock_tool_context() -> ToolContext {
     ToolContext {
         session_id: "mock-session".to_string(),
@@ -237,6 +234,135 @@ mod tests {
         // Clone 共享同一标志
         let clone = token.clone();
         assert!(clone.is_aborted());
+    }
+
+    /// R1：父中止 ⇒ 子已中止，且子上的等待方 100ms 内被唤醒
+    #[tokio::test]
+    async fn child_token_follows_parent_abort_and_wakes_waiter() {
+        let parent = AbortToken::new();
+        let child = AbortToken::child_of(&parent);
+        let waiter = {
+            let child = child.clone();
+            tokio::spawn(async move { child.wait_aborted().await })
+        };
+        tokio::task::yield_now().await;
+        assert!(!child.is_aborted());
+        parent.abort();
+        assert!(child.is_aborted());
+        tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
+            .await
+            .expect("父中止后子令牌等待方应在 100ms 内返回")
+            .expect("等待任务不应 panic");
+    }
+
+    /// R1：子中止不影响父
+    #[test]
+    fn child_abort_does_not_propagate_to_parent() {
+        let parent = AbortToken::new();
+        let child = AbortToken::child_of(&parent);
+        child.abort();
+        assert!(child.is_aborted());
+        assert!(!parent.is_aborted());
+    }
+
+    /// R1：自已中止的父派生的子令牌创建即为已中止，等待立即返回
+    #[tokio::test]
+    async fn child_of_aborted_parent_starts_aborted() {
+        let parent = AbortToken::new();
+        parent.abort();
+        let child = AbortToken::child_of(&parent);
+        assert!(child.is_aborted());
+        tokio::time::timeout(std::time::Duration::from_millis(100), child.wait_aborted())
+            .await
+            .expect("已中止令牌的等待应立即返回");
+    }
+
+    /// 多级级联：祖父中止唤醒孙令牌等待方
+    #[tokio::test]
+    async fn grandparent_abort_wakes_grandchild_waiter() {
+        let root = AbortToken::new();
+        let grandchild = AbortToken::child_of(&AbortToken::child_of(&root));
+        let waiter = {
+            let grandchild = grandchild.clone();
+            tokio::spawn(async move { grandchild.wait_aborted().await })
+        };
+        tokio::task::yield_now().await;
+        root.abort();
+        tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
+            .await
+            .expect("祖先中止后孙令牌等待方应在 100ms 内返回")
+            .expect("等待任务不应 panic");
+    }
+
+    /// 计数唤醒器：确定性地断言等待方是否被真正唤醒（不依赖调度与计时）
+    struct CountingWaker(std::sync::atomic::AtomicUsize);
+    impl std::task::Wake for CountingWaker {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    fn counting_waker() -> (Arc<CountingWaker>, std::task::Waker) {
+        let counter = Arc::new(CountingWaker(std::sync::atomic::AtomicUsize::new(0)));
+        let waker = std::task::Waker::from(counter.clone());
+        (counter, waker)
+    }
+
+    /// 已挂起的等待方：祖先中止必唤醒（计数唤醒器被调用）且复查后完成
+    #[test]
+    fn pending_waiter_is_woken_and_completes_on_ancestor_abort() {
+        use std::future::Future;
+        let root = AbortToken::new();
+        let grandchild = AbortToken::child_of(&AbortToken::child_of(&root));
+        let (counter, waker) = counting_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+        let mut wait = std::pin::pin!(grandchild.wait_aborted());
+        assert!(wait.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(counter.0.load(Ordering::SeqCst), 0);
+        root.abort();
+        assert!(
+            counter.0.load(Ordering::SeqCst) >= 1,
+            "祖先中止应唤醒等待方"
+        );
+        assert!(wait.as_mut().poll(&mut cx).is_ready());
+    }
+
+    /// 非祖先节点（子 / 兄弟）中止只造成虚假唤醒：等待方复查后继续挂起，
+    /// 之后真正的祖先中止仍能唤醒并完成
+    #[test]
+    fn non_ancestor_abort_does_not_complete_waiter() {
+        use std::future::Future;
+        let parent = AbortToken::new();
+        let child = AbortToken::child_of(&parent);
+        let sibling = AbortToken::child_of(&parent);
+        let (counter, waker) = counting_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+
+        let mut parent_wait = std::pin::pin!(parent.wait_aborted());
+        let mut sibling_wait = std::pin::pin!(sibling.wait_aborted());
+        assert!(parent_wait.as_mut().poll(&mut cx).is_pending());
+        assert!(sibling_wait.as_mut().poll(&mut cx).is_pending());
+
+        child.abort();
+        assert!(parent_wait.as_mut().poll(&mut cx).is_pending());
+        assert!(sibling_wait.as_mut().poll(&mut cx).is_pending());
+        assert!(!parent.is_aborted() && !sibling.is_aborted());
+
+        let woken_before = counter.0.load(Ordering::SeqCst);
+        parent.abort();
+        assert!(counter.0.load(Ordering::SeqCst) > woken_before);
+        assert!(parent_wait.as_mut().poll(&mut cx).is_ready());
+        assert!(sibling_wait.as_mut().poll(&mut cx).is_ready());
+    }
+
+    /// 级联不留存活引用：子令牌 drop 后父状态仅剩自身持有
+    #[test]
+    fn dropped_child_releases_parent() {
+        let parent = AbortToken::new();
+        let child = AbortToken::child_of(&parent);
+        assert_eq!(Arc::strong_count(&parent.state), 2);
+        drop(child);
+        assert_eq!(Arc::strong_count(&parent.state), 1);
     }
 
     #[test]

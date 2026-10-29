@@ -13,31 +13,30 @@
 //!   （steer 环 / followUp 环）
 //! - AbortSignal 已触发等价于 L3 强停，优先于总线内任何意图。
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use agent_tools::context::AbortToken;
 use conex_types::checkpoint::{
     CheckpointError, CheckpointPayload, CHECKPOINT_MARKER, CONEX_CHECKPOINT_MARKER,
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 #[cfg(test)]
 use conex_types::session::AgentEndReason;
-use tokio::sync::Notify;
 
 #[cfg(test)]
 use crate::control::{inject_ring_for_kind, RingChoice};
 use crate::control::{ControlBus, ControlDrainAction};
 
-/// 简易中止信号（对齐 TS AbortSignal 的 is_aborted 语义）
+/// Run 级中止信号（对齐 TS AbortSignal 的 is_aborted 语义）
 ///
-/// 共享 [AtomicBool] 状态 + 触发通知，可 Clone 传递；线程安全。
+/// 以 [AbortToken] 为根令牌并附带中止原因，可 Clone 传递；线程安全。
 /// [Self::wait_aborted] 供长等待方（工具执行 timeout 竞速等，T09.9 Q21）
-/// 在 abort 触发时及时醒来，避免等完整超时才生效。
+/// 在 abort 触发时及时醒来，避免等完整超时才生效；工具级令牌经
+/// [Self::tool_token] 派生为子令牌，中止沿令牌链级联（不派生监听任务）。
 #[derive(Debug, Clone, Default)]
 pub struct AbortSignal {
-    aborted: Arc<AtomicBool>,
-    /// 触发通知（notify_waiters 广播；wait_aborted 竞速等待用）
-    notify: Arc<Notify>,
+    /// Run 级根令牌
+    token: AbortToken,
     /// 可选的中止原因（保全人类可读原因）
     reason: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -50,8 +49,7 @@ impl AbortSignal {
 
     /// 触发中止
     pub fn abort(&self) {
-        self.aborted.store(true, Ordering::SeqCst);
-        self.notify.notify_waiters();
+        self.token.abort();
     }
 
     /// 携带原因触发中止
@@ -71,37 +69,21 @@ impl AbortSignal {
 
     /// 是否已触发
     pub fn is_aborted(&self) -> bool {
-        self.aborted.load(Ordering::SeqCst)
+        self.token.is_aborted()
     }
 
     /// 等待 abort 触发（已触发立即返回）。
     ///
     /// 竞速语义：与长等待 future（timeout 等）并置时 abort 触发即返回，
-    /// 调用方随即走取消收场（T09.9 Q21）。双重 is_aborted 复查兜住
-    /// Notify 注册窗口内触发的情形（tokio Notify 标准防丢通知模式）。
+    /// 调用方随即走取消收场（T09.9 Q21）。
     pub async fn wait_aborted(&self) {
-        if self.is_aborted() {
-            return;
-        }
-        let notified = self.notify.notified();
-        if self.is_aborted() {
-            return;
-        }
-        notified.await;
+        self.token.wait_aborted().await;
     }
 
-    /// 将 Run 级信号绑定至工具级 Token，实现原子级联联动（04A §3.1.1 / 04B §2.1.4）
-    pub fn bind_tool_token(&self, token: &agent_tools::context::AbortToken) {
-        if self.is_aborted() {
-            token.abort();
-            return;
-        }
-        let token_clone = token.clone();
-        let signal_clone = self.clone();
-        tokio::spawn(async move {
-            signal_clone.wait_aborted().await;
-            token_clone.abort();
-        });
+    /// 派生工具级令牌（04A §3.1.1 / 04B §2.1.4）：Run 中止即级联到令牌，
+    /// 令牌中止不回传 Run；无后台任务，令牌随工具上下文 drop 释放。
+    pub fn tool_token(&self) -> AbortToken {
+        AbortToken::child_of(&self.token)
     }
 }
 
@@ -526,12 +508,14 @@ mod tests {
         }
     }
 
-    /// 携带原因中止与工具令牌绑定
-    #[tokio::test]
-    async fn abort_with_reason_and_tool_token_binding() {
+    /// 携带原因中止（首个原因保留）与安全点 ForceCancel 映射
+    #[test]
+    fn abort_with_reason_maps_to_force_cancel() {
         let signal = AbortSignal::new();
         signal.abort_with_reason("custom abort reason");
         assert!(signal.is_aborted());
+        assert_eq!(signal.reason().as_deref(), Some("custom abort reason"));
+        signal.abort_with_reason("later reason");
         assert_eq!(signal.reason().as_deref(), Some("custom abort reason"));
 
         let mut bus = ControlBus::new();
@@ -542,20 +526,35 @@ mod tests {
                 reason: Some("custom abort reason".into())
             }
         );
+    }
 
-        // 测试 bind_tool_token
-        let token = agent_tools::context::AbortToken::new();
-        signal.bind_tool_token(&token);
-        assert!(token.is_aborted(), "绑定后已触发的信号应立即让 token abort");
+    /// SL-01：工具令牌是信号的子令牌——已触发信号派生即中止；后触发同步级联
+    /// 并唤醒令牌等待方；令牌中止不回传信号
+    #[tokio::test]
+    async fn tool_token_cascades_from_signal() {
+        let aborted = AbortSignal::new();
+        aborted.abort();
+        assert!(
+            aborted.tool_token().is_aborted(),
+            "已触发信号派生的令牌应即中止"
+        );
 
-        // 测试后触发的绑定
-        let signal2 = AbortSignal::new();
-        let token2 = agent_tools::context::AbortToken::new();
-        signal2.bind_tool_token(&token2);
-        assert!(!token2.is_aborted());
-        signal2.abort();
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        assert!(token2.is_aborted(), "signal2 abort 后 token2 应被级联置位");
+        let signal = AbortSignal::new();
+        let token = signal.tool_token();
+        assert!(!token.is_aborted());
+        let wait =
+            tokio::time::timeout(std::time::Duration::from_millis(100), token.wait_aborted());
+        let fire = async {
+            tokio::task::yield_now().await;
+            signal.abort();
+        };
+        let (waited, ()) = tokio::join!(wait, fire);
+        waited.expect("信号中止后令牌等待方应在 100ms 内返回");
+        assert!(token.is_aborted());
+
+        let independent = AbortSignal::new();
+        independent.tool_token().abort();
+        assert!(!independent.is_aborted(), "令牌中止不应回传信号");
     }
 
     /// 安全点优先级：force_cancel > cooperative_stop > soft_inject
@@ -652,14 +651,13 @@ mod tests {
     #[tokio::test]
     async fn wait_aborted_returns_when_abort_fires() {
         let signal = AbortSignal::new();
-        let waiter = signal.clone();
-        let handle = tokio::spawn(async move { waiter.wait_aborted().await });
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        signal.abort();
-        tokio::time::timeout(std::time::Duration::from_secs(1), handle)
-            .await
-            .expect("abort 后等待应立刻返回")
-            .expect("等待任务不应 panic");
+        let wait = tokio::time::timeout(std::time::Duration::from_secs(1), signal.wait_aborted());
+        let fire = async {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            signal.abort();
+        };
+        let (waited, ()) = tokio::join!(wait, fire);
+        waited.expect("abort 后等待应立刻返回");
     }
 
     /// T09.9 Q21：已触发的信号 wait_aborted 立即返回（不挂起）

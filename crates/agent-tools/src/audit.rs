@@ -69,7 +69,7 @@ impl SecurityAuditSink for RecordingAuditSink {
     }
 }
 
-/// 审计 sink 类型别名（`Arc` 共享；与 `AskCallback` 形态对齐）
+/// 审计 sink 类型别名（`Arc` 共享）
 pub type AuditSink = std::sync::Arc<dyn SecurityAuditSink>;
 
 /// 统计型审计 sink（G10：转发事件并累计 denied 决策计数）
