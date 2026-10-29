@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { TextLeafModel, type ApplyOpsAdapter } from '@crish/block-paper';
-import { createMockTurnIntoSink } from '../../../../../packages/block-paper/src/leaves/mdPrefixHost.audit';
+import { createMockTurnIntoSink } from '@crish/block-paper/testing';
 import {
   bindingFromStrictMdPrefixProps,
   commitProductMdPrefixFromLeaf,

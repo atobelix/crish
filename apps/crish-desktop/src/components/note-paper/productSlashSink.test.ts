@@ -15,7 +15,7 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
-import { createMockIntentSink } from '../../../../../packages/block-paper/src/leaves/intentBridge';
+import { createMockIntentSink } from '@crish/block-paper/testing';
 import {
   defaultEditSessionRegistry,
   isEditSessionOpen,
