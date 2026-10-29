@@ -6,7 +6,7 @@
 
 use super::delete_shape::is_root_target;
 use super::read_only::extract_path_targets;
-use super::{CommandClass, Semantics, Segment};
+use super::{CommandClass, Segment, Semantics};
 
 /// 显式红线命令：确定性毁灭目标。
 const REDLINE_COMMANDS: &[&str] = &[

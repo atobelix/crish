@@ -13,35 +13,15 @@ const CWD_IN: &str = "C:/work/project";
 const ROOT: &str = "C:/work/project";
 const CWD_OUT: &str = "C:/Windows/System32";
 
-/// 新裁决的精确形态。
-enum ExpectedPermission {
-    Allow,
-    Deny(&'static str),
-    RequireApproval {
-        category: &'static str,
-        summary: &'static str,
-    },
-}
-
-impl ExpectedPermission {
-    fn text(&self) -> String {
-        match self {
-            Self::Allow => "Allow".to_string(),
-            Self::Deny(reason) => format!("Deny:{reason}"),
-            Self::RequireApproval { category, summary } => {
-                format!("RequireApproval:{category}:{summary}")
-            }
-        }
-    }
-}
-
+/// 新裁决的精确文本，与 [`permission_text`] 同格式：
+/// `Allow` / `Deny:<reason>` / `RequireApproval:<category>:<summary>`。
 /// 一条与旧金样不同的行。所有承载字段显式写出，禁止只写差值。
 struct Expected {
     command: &'static str,
     gk: GatekeeperResult,
     gk_in: GatekeeperResult,
     gk_out: GatekeeperResult,
-    permission: ExpectedPermission,
+    permission: &'static str,
     pure_ro: bool,
     class: CommandClass,
     delete_targets: &'static [&'static str],
@@ -53,7 +33,618 @@ struct Expected {
 }
 
 /// 与旧金样不同的行。未列出的行必须逐字段等于旧值。
-const EXPECTED: &[Expected] = &[];
+///
+/// 表内每一行都完整写出新裁决的全部承载字段（含 gk/gk_in/gk_out）；
+/// `blocked_row!` 只用于三处地板均为 Blocked 的常规条目，不平移任何字段。
+const DENY_SEM: &str =
+    "Deny:系统毁灭性操作已被安全策略严格阻断（Redline）：语义分类判定为确定性毁灭目标";
+const DENY_DELETE: &str =
+    "Deny:系统毁灭性操作已被安全策略严格阻断（Redline）：禁止对根目录或系统核心路径执行破坏性删除";
+const DENY_NO_PRESERVE_ROOT: &str =
+    "Deny:系统毁灭性操作已被安全策略严格阻断（Redline）：禁止使用 --no-preserve-root";
+
+macro_rules! blocked_row {
+    ($command:expr, $permission:expr, $class:expr, $delete_targets:expr, $reason:expr) => {
+        Expected {
+            command: $command,
+            gk: GatekeeperResult::Blocked,
+            gk_in: GatekeeperResult::Blocked,
+            gk_out: GatekeeperResult::Blocked,
+            permission: $permission,
+            pure_ro: false,
+            class: $class,
+            delete_targets: $delete_targets,
+            indirect_delete: false,
+            git_forms: &[],
+            decoded: "",
+            reason: $reason,
+        }
+    };
+}
+
+const EXPECTED: &[Expected] = &[
+    blocked_row!(
+        "sudo rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：sudo 包裹内层 rm -rf /（旧 smart 仅给提权审批）"
+    ),
+    blocked_row!(
+        "sudo bash -c 'rm -rf /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：sudo→bash -c 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "eval rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：eval 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "r`i C:\\ -Recurse -Force",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：反引号归一为 ri→remove-item 后命中根目标+递归"
+    ),
+    blocked_row!(
+        "R`em`ove-Item C:\\ -Force -Recurse",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：反引号归一为 remove-item 后命中根目标+递归"
+    ),
+    blocked_row!(
+        "& cmd /c rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：& 调用运算符→cmd /c 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "& cmd.exe /c format D:",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：&→cmd.exe /c format 系统盘"
+    ),
+    blocked_row!(
+        "format",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：显式红线命令 format（旧 smart 仅审批）"
+    ),
+    blocked_row!(
+        "dd",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：显式红线命令 dd（旧 smart 仅审批）"
+    ),
+    blocked_row!(
+        "restart-computer",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：显式红线命令 restart-computer（旧 smart 仅对 -Force 拒绝）"
+    ),
+    blocked_row!(
+        "echo \"$(rm -rf -- /)\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：命令替换包裹内容递归命中"
+    ),
+    blocked_row!(
+        "echo \"$(bash -c 'rm -rf -- /')\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：命令替换内 bash -c 递归命中"
+    ),
+    blocked_row!(
+        "echo `rm -rf -- /`",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：反引号包裹内容递归命中"
+    ),
+    blocked_row!(
+        "iex 'rm -rf -- /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：iex 内层 rm -rf -- /"
+    ),
+    blocked_row!(
+        "Invoke-Expression 'rm -rf -- /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：Invoke-Expression 内层 rm -rf -- /"
+    ),
+    blocked_row!(
+        "IEX 'rm -rf -- /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：IEX 别名内层 rm -rf -- /"
+    ),
+    blocked_row!(
+        "iex.exe 'rm -rf -- /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：iex.exe 归一后内层 rm -rf -- /"
+    ),
+    blocked_row!(
+        "Start-Process cmd -ArgumentList '/c rm -rf -- /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：Start-Process→cmd /c 内层 rm -rf -- /"
+    ),
+    Expected {
+        command: "ri C:\\temp\\f.txt",
+        gk: GatekeeperResult::Allowed,
+        gk_in: GatekeeperResult::Allowed,
+        gk_out: GatekeeperResult::RequiresApproval,
+        permission: "RequireApproval:DestructiveDelete:破坏性删除：C:\\temp\\f.txt",
+        pure_ro: false,
+        class: CommandClass::DeleteShape,
+        delete_targets: &["C:\\temp\\f.txt"],
+        indirect_delete: false,
+        git_forms: &[],
+        decoded: "",
+        reason: "同级变化：统一 Segment 使 ri 归一为 remove-item，原因 UnsafeSideEffect→DestructiveDelete",
+    },
+    blocked_row!(
+        "ri C:\\ -Recurse -Force",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：ri 归一为 remove-item 后命中根目标+递归"
+    ),
+    blocked_row!(
+        "$x = Remove-Item C:\\ -Recurse -Force",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：赋值参数扫描命中 remove-item 根删除（语义层红线）"
+    ),
+    blocked_row!(
+        "$x = ri C:\\ -Recurse -Force",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：赋值参数扫描命中 ri→remove-item 根删除"
+    ),
+    Expected {
+        command: "rm C:\\my\\ dir\\a.txt",
+        gk: GatekeeperResult::Allowed,
+        gk_in: GatekeeperResult::Allowed,
+        gk_out: GatekeeperResult::RequiresApproval,
+        permission: "RequireApproval:DestructiveDelete:破坏性删除：C:\\my dir\\a.txt",
+        pure_ro: false,
+        class: CommandClass::DeleteShape,
+        delete_targets: &["C:\\my dir\\a.txt"],
+        indirect_delete: false,
+        git_forms: &[],
+        decoded: "",
+        reason: "同级变化：统一拆参把转义空白并入同一 token，审批目标文本由两个变为一个",
+    },
+    blocked_row!(
+        "[System.Diagnostics.Process]::Start('cmd.exe', '/c del /f /q C:\\*')",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：反射启动 [System.Diagnostics.Process]::Start"
+    ),
+    blocked_row!(
+        "rm -rf --no-preserve-root",
+        DENY_NO_PRESERVE_ROOT,
+        CommandClass::DeleteShape,
+        &[],
+        "floor 收口：旧 gatekeeper 未消费 smart 的 Deny，新地板 Blocked"
+    ),
+    blocked_row!(
+        "bash -lc \"rm -rf /\"",
+        DENY_DELETE,
+        CommandClass::Normal,
+        &[],
+        "floor 收口：bash -lc 内层红线纳入地板（旧 gatekeeper 只看语义 Normal）"
+    ),
+    blocked_row!(
+        "rm -r /etc",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/etc"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "dd if=a of=./out.img",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：dd 属显式红线命令（旧 smart 仅审批）"
+    ),
+    blocked_row!(
+        "Restart-Computer",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：显式红线命令 restart-computer"
+    ),
+    Expected {
+        command: "\"r`i\" C:\\",
+        gk: GatekeeperResult::Allowed,
+        gk_in: GatekeeperResult::Allowed,
+        gk_out: GatekeeperResult::RequiresApproval,
+        permission: "RequireApproval:DestructiveDelete:破坏性删除：C:\\",
+        pure_ro: false,
+        class: CommandClass::DeleteShape,
+        delete_targets: &["C:\\"],
+        indirect_delete: false,
+        git_forms: &[],
+        decoded: "",
+        reason: "同级变化：引号+反引号归一为 remove-item，原因 UnsafeSideEffect→DestructiveDelete",
+    },
+    blocked_row!(
+        "powershell -ec {}",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：编码载荷不可解码"
+    ),
+    blocked_row!(
+        "powershell -enc {}",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：编码载荷不可解码"
+    ),
+    blocked_row!(
+        "pwsh -EncodedCommand {}",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：编码载荷不可解码"
+    ),
+    blocked_row!(
+        "Write-Output x\nri C:\\ -Recurse -Force",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：换行后第二段 ri 归一为 remove-item 根删除"
+    ),
+    blocked_row!(
+        "rm -rf\\ /",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &[],
+        "floor 收口：转义空白并入 -rf / 后 smart 红线纳入地板（旧静态正则漏）"
+    ),
+    blocked_row!(
+        "rm -rf -- /usr",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/usr"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf -- /bin",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/bin"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /var",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/var"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /var/log",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/var/log"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /usr/bin",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/usr/bin"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /boot",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/boot"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /root",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/root"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /sys",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/sys"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /dev",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/dev"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "rm -rf /lib",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["/lib"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "env rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：env 参数扫描命中 rm -rf /（旧 smart 放行）"
+    ),
+    blocked_row!(
+        "env -i rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：env -i 参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "FOO=bar rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：赋值前缀参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "sudo env rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：sudo→env→rm 参数扫描"
+    ),
+    blocked_row!(
+        "sudo -u root rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：sudo 参数内层扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "sudo -- rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：sudo -- 参数内层扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "command rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：command 前缀参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "busybox rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：busybox 前缀参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "Sudo RM -RF /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：大小写变体归一后命中 rm -rf /"
+    ),
+    blocked_row!(
+        "SuDo bash -c 'rm -rf /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：大小写变体 sudo→bash -c 内层"
+    ),
+    blocked_row!(
+        "{ rm -rf /; }",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：scriptblock 包裹递归命中"
+    ),
+    blocked_row!(
+        "$(rm -rf /)",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：命令替换递归命中"
+    ),
+    blocked_row!(
+        "`rm -rf /`",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：反引号包裹+统一拆参后命中根目标"
+    ),
+    blocked_row!(
+        "bash -lc 'rm -rf /'",
+        DENY_DELETE,
+        CommandClass::Normal,
+        &[],
+        "floor 收口：bash -lc 内层红线纳入地板（旧 gatekeeper 只看语义 Normal）"
+    ),
+    blocked_row!(
+        "bash -c \"sudo rm -rf /\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：bash -c→sudo→rm -rf /"
+    ),
+    blocked_row!(
+        "eval \"eval rm -rf /\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：eval 嵌套内层 rm -rf /"
+    ),
+    blocked_row!(
+        "eval 'rm -rf /'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：eval 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "& \"Remove-Item\" C:\\ -Recurse -Force",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：& 调用运算符→Remove-Item 根删除"
+    ),
+    blocked_row!(
+        "& rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：& 调用运算符内层 rm -rf /"
+    ),
+    blocked_row!(
+        "iex \"rm -rf /\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：iex 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "Invoke-Expression \"Remove-Item C:\\ -Recurse -Force\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["C:\\"],
+        "语义红线：Invoke-Expression 内层 Remove-Item 根删除"
+    ),
+    blocked_row!(
+        "IEX \"rm -rf /\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：IEX 别名内层 rm -rf /"
+    ),
+    Expected {
+        command: "cmd /c del /f /q C:\\Windows\\Temp\\*",
+        gk: GatekeeperResult::Blocked,
+        gk_in: GatekeeperResult::Blocked,
+        gk_out: GatekeeperResult::Blocked,
+        permission: DENY_DELETE,
+        pure_ro: false,
+        class: CommandClass::Indirect,
+        delete_targets: &["C:\\Windows\\Temp\\*"],
+        indirect_delete: true,
+        git_forms: &[],
+        decoded: "",
+        reason: "floor 收口：间接删除的 smart 红线纳入地板（旧 gatekeeper 仅审批）",
+    },
+    blocked_row!(
+        "rm\u{a0}-rf /",
+        DENY_DELETE,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：U+00A0 空白变体经统一拆参识别为 rm -rf /"
+    ),
+    blocked_row!(
+        "dd if=/dev/zero of=./file bs=1 count=1",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：dd 属显式红线命令"
+    ),
+    blocked_row!(
+        "dd if=./a of=./b",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：dd 属显式红线命令"
+    ),
+    blocked_row!(
+        "Restart-Computer -WhatIf",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：restart-computer 显式红线（旧 smart 仅对 -Force 拒绝）"
+    ),
+    blocked_row!(
+        "Remove-Item -Path C:\\Windows\\* -Recurse -Force",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["C:\\Windows\\*"],
+        "floor 收口：smart 的系统核心路径红线纳入地板"
+    ),
+    blocked_row!(
+        "ri C:\\Windows -Recurse -Force",
+        DENY_DELETE,
+        CommandClass::DeleteShape,
+        &["C:\\Windows"],
+        "语义红线：ri 归一 remove-item 后命中系统核心路径；floor 同步 Blocked"
+    ),
+    blocked_row!(
+        "doas rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：doas 前缀参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "pkexec rm -rf /",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：pkexec 前缀参数扫描命中 rm -rf /"
+    ),
+    blocked_row!(
+        "bash -c 'echo $(rm -rf /)'",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：bash -c 内层命令替换递归"
+    ),
+    blocked_row!(
+        "pwsh -Command \"iex 'rm -rf /'\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &["/"],
+        "语义红线：pwsh -Command→iex 内层 rm -rf /"
+    ),
+    blocked_row!(
+        "echo \"`rm -rf /`\"",
+        DENY_SEM,
+        CommandClass::Redline,
+        &[],
+        "语义红线：双引号内反引号包裹递归命中"
+    ),
+];
 
 #[test]
 fn golden_rows_match_expected_or_old() {
@@ -187,8 +778,7 @@ fn assert_explicit(exp: &Expected, measured: &Measured) {
     assert_eq!(measured.gk_in, exp.gk_in, "{} gk_in", exp.command);
     assert_eq!(measured.gk_out, exp.gk_out, "{} gk_out", exp.command);
     assert_eq!(
-        measured.permission,
-        exp.permission.text(),
+        measured.permission, exp.permission,
         "{} permission",
         exp.command
     );
@@ -262,10 +852,7 @@ fn check_not_looser(row: &Row, measured: &Measured, loose: &mut Vec<String>) {
         ));
     }
     if row.sem_class != CommandClass::Normal && measured.class == CommandClass::Normal {
-        loose.push(format!(
-            "{} class {:?}→Normal",
-            row.command, row.sem_class
-        ));
+        loose.push(format!("{} class {:?}→Normal", row.command, row.sem_class));
     }
     let old_targets: Vec<&str> = if row.delete_targets.is_empty() {
         Vec::new()
@@ -284,9 +871,9 @@ fn check_not_looser(row: &Row, measured: &Measured, loose: &mut Vec<String>) {
 
 fn describe(row: &Row, measured: &Measured) -> String {
     format!(
-        "{} | 旧 gk {}/{:?}/{:?} perm {} pure {} class {:?} del [{}] ind {} git [{}] dec {:?} || 新 gk {:?}/{:?}/{:?} perm {} pure {} class {:?} del [{}] ind {} git [{}] dec {:?}",
+        "{} | 旧 gk {:?}/{:?}/{:?} perm {} pure {} class {:?} del [{}] ind {} git [{}] dec {:?} || 新 gk {:?}/{:?}/{:?} perm {} pure {} class {:?} del [{}] ind {} git [{}] dec {:?}",
         escape(&row.command),
-        format!("{:?}", row.gk),
+        row.gk,
         row.gk_in,
         row.gk_out,
         old_permission_text(row),
@@ -296,7 +883,7 @@ fn describe(row: &Row, measured: &Measured) -> String {
         row.indirect,
         row.git_forms.replace('\u{1f}', "|"),
         row.decoded,
-        format!("{:?}", measured.gk),
+        measured.gk,
         measured.gk_in,
         measured.gk_out,
         measured.permission,

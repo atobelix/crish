@@ -579,11 +579,10 @@ mod tests {
     #[test]
     fn target_extraction_from_segments() {
         let seg = |command: &str, args: &[&str]| Segment {
-            raw: command.to_string(),
             program: command.to_string(),
             args: args.iter().map(|s| s.to_string()).collect(),
             class: CommandClass::GitRevertShape,
-            targets: Vec::new(),
+            ..Segment::default()
         };
 
         let t = RevertTarget::from_segment(&seg("git", &["checkout", "abc1234"])).unwrap();

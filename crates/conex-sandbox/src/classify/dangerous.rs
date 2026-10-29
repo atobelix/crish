@@ -54,11 +54,7 @@ pub(crate) fn analyze_token_danger(token: &str) -> Option<ClassSignal> {
 }
 
 /// 段内语法与动态执行。深度达到上限时直接判危险。
-pub(crate) fn analyze_segment_ast(
-    command: &str,
-    args: &[String],
-    depth: usize,
-) -> CommandClass {
+pub(crate) fn analyze_segment_ast(command: &str, args: &[String], depth: usize) -> CommandClass {
     if depth >= MAX_RECURSION_DEPTH {
         return CommandClass::Dangerous;
     }
@@ -118,10 +114,7 @@ pub(crate) fn analyze_segment_ast(
 }
 
 /// 赋值形态或未知命令的参数里藏着清单命令时，按该命令的分类回升。
-pub(crate) fn scan_ps_command_tokens(
-    command: &str,
-    args: &[String],
-) -> Option<CommandClass> {
+pub(crate) fn scan_ps_command_tokens(command: &str, args: &[String]) -> Option<CommandClass> {
     let is_assignment = command.starts_with('$') && args.first().is_some_and(|arg| arg == "=");
     let is_known = is_indirect_command(command)
         || is_delete_command(command)

@@ -518,10 +518,7 @@ fn path_prefixed_cd_normalized() {
 #[test]
 fn classify_command_segments_entry_works() {
     // 公开入口（冻结签名）：单段放行
-    assert_eq!(
-        classify_chain(&["cd x".to_string()]),
-        CommandClass::Normal
-    );
+    assert_eq!(classify_chain(&["cd x".to_string()]), CommandClass::Normal);
     assert_eq!(
         classify_chain(&["Set-Location x".to_string()]),
         CommandClass::Normal

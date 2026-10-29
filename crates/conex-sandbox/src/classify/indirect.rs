@@ -3,9 +3,8 @@
 //! 段内 `program` / `args` 由唯一分词给出；本模块只负责把内层命令行重新交给
 //! 分析入口，不再对同一段二次拆参。
 
-use super::delete_shape::normalize_command;
 use super::redline::{deterministic_semantics, ClassSignal};
-use super::{analyze_depth, Semantics, Segment, MAX_RECURSION_DEPTH};
+use super::{analyze_depth, Segment, Semantics, MAX_RECURSION_DEPTH};
 use crate::powershell::{extract_and_decode_ps_payload, is_ps_encoded_command_flag};
 
 const INDIRECT_COMMANDS: &[&str] = &[

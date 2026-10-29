@@ -656,7 +656,7 @@ mod tests {
     #[test]
     fn smart_mode_uses_the_injected_assessment() {
         let mut reg = ToolRegistry::new();
-        let _ = reg.register(Arc::new(DummyShellTool));
+        assert!(reg.register(Arc::new(DummyShellTool)).is_ok());
         let exec = ToolExecutor::new(Arc::new(reg));
         let benign = conex_sandbox::assess("git status");
         let decision =

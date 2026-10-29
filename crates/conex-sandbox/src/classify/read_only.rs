@@ -13,11 +13,7 @@ pub(crate) fn smart_decision(command_line: &str, segments: &[Segment]) -> SmartD
     smart_decision_depth(command_line, segments, 0)
 }
 
-fn smart_decision_depth(
-    command_line: &str,
-    segments: &[Segment],
-    depth: usize,
-) -> SmartDecision {
+fn smart_decision_depth(command_line: &str, segments: &[Segment], depth: usize) -> SmartDecision {
     let trimmed = command_line.trim();
     if trimmed.is_empty() {
         return SmartDecision {

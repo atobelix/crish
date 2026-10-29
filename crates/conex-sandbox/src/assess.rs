@@ -3,7 +3,8 @@
 //! 红线只来自语义分类或智能拒绝理由。静态正则命中只影响门禁地板
 //! （[`Assessment::floor_verdict`]），不改变权限裁决。
 
-use crate::classify::{classify_semantics, redline, smart_decision, ApprovalReason, CommandClass};
+use crate::classify::read_only::smart_decision;
+use crate::classify::{classify_semantics, redline, ApprovalReason, CommandClass};
 use crate::verdict::{GatekeeperResult, PermissionVerdict, RedlineReason, WorkspaceCtx};
 
 pub use crate::classify::Segment;

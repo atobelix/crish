@@ -138,10 +138,7 @@ pub(crate) fn has_force(args: &[String]) -> bool {
 }
 
 /// 删除命令的形态信号。`git` 不在这里判定。
-pub(crate) fn classify_delete_command(
-    command: &str,
-    args: &[String],
-) -> Option<ClassSignal> {
+pub(crate) fn classify_delete_command(command: &str, args: &[String]) -> Option<ClassSignal> {
     if !is_delete_command(command) || command == "git" {
         return None;
     }

@@ -4,6 +4,4 @@ mod quote;
 mod tokenize;
 
 pub(crate) use quote::extract_wrapped_content;
-pub(crate) use tokenize::{
-    normalize_token, split_command_args_normalized, split_segments,
-};
+pub(crate) use tokenize::{normalize_token, split_command_args_normalized, split_segments};

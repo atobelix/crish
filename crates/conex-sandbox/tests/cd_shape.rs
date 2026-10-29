@@ -28,28 +28,16 @@ fn cd_x_allowed_as_normal() {
     assert_eq!(a.overall, CommandClass::Normal);
     assert_eq!(a.segments[0].class, CommandClass::Normal);
     // 公开入口（冻结签名）
-    assert_eq!(
-        classify_chain(&segs(&["cd x"])),
-        CommandClass::Normal
-    );
-    assert_eq!(
-        classify_chain(&segs(&["cd .."])),
-        CommandClass::Normal
-    );
-    assert_eq!(
-        classify_chain(&segs(&["cd /d C:\\"])),
-        CommandClass::Normal
-    );
+    assert_eq!(classify_chain(&segs(&["cd x"])), CommandClass::Normal);
+    assert_eq!(classify_chain(&segs(&["cd .."])), CommandClass::Normal);
+    assert_eq!(classify_chain(&segs(&["cd /d C:\\"])), CommandClass::Normal);
 }
 
 #[test]
 fn set_location_and_sl_allowed_as_normal() {
     let a = assess("Set-Location D:\\code");
     assert_eq!(a.overall, CommandClass::Normal);
-    assert_eq!(
-        classify_chain(&segs(&["sl sub"])),
-        CommandClass::Normal
-    );
+    assert_eq!(classify_chain(&segs(&["sl sub"])), CommandClass::Normal);
     assert_eq!(
         classify_chain(&segs(&["SET-LOCATION sub"])),
         CommandClass::Normal
@@ -60,14 +48,8 @@ fn set_location_and_sl_allowed_as_normal() {
 fn pushd_and_popd_allowed_as_normal() {
     assert_eq!(assess("pushd sub").overall, CommandClass::Normal);
     assert_eq!(assess("popd").overall, CommandClass::Normal);
-    assert_eq!(
-        classify_chain(&segs(&["pushd sub"])),
-        CommandClass::Normal
-    );
-    assert_eq!(
-        classify_chain(&segs(&["popd"])),
-        CommandClass::Normal
-    );
+    assert_eq!(classify_chain(&segs(&["pushd sub"])), CommandClass::Normal);
+    assert_eq!(classify_chain(&segs(&["popd"])), CommandClass::Normal);
 }
 
 // ===== 不依赖进程内目录状态的形态 =====

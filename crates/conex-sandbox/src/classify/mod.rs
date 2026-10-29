@@ -21,8 +21,8 @@ mod smart_tests_a;
 #[cfg(test)]
 mod smart_tests_b;
 
-use delete_shape::{classify_delete_command, extract_delete_targets, is_delete_command};
 use delete_shape::normalize_command;
+use delete_shape::{classify_delete_command, extract_delete_targets, is_delete_command};
 use git::classify_git_revert;
 use indirect::{analyze_inner, is_indirect_command};
 use redline::{overall, resolve, upgrade_wrapped, ClassSignal};
@@ -141,7 +141,7 @@ pub(crate) fn analyze_depth(command_line: &str, depth: usize) -> Semantics {
         let program = normalize_command(&command);
         // 间接执行的内层是独立命令行，按层重新解析；本段的 program/args 只拆这一次。
         let inner = if is_indirect_command(&program) {
-            analyze_inner(&program, &args, depth + 1)
+            Some(analyze_inner(&program, &args, depth + 1))
         } else {
             None
         };
