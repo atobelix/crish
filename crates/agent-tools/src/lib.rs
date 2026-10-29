@@ -113,12 +113,12 @@ pub use output::{
 };
 pub use registry::ToolRegistry;
 pub use revert::{
-    InMemoryRevertCounterStore, RevertArea, RevertAssessor, RevertCounterSnapshot,
-    RevertCounterStore, RevertPolicy, RevertTarget, RevertThresholds, SemanticRevertAssessor,
-    DEFAULT_REVERT_MAX_FILES, DEFAULT_REVERT_MAX_LINES, DEFAULT_REVERT_MAX_REF_AGE_HOURS,
-    REVERT_APPROVER, REVERT_GATE_GUIDANCE, SESSION_META_KEY_REVERT_MAX_FILES,
-    SESSION_META_KEY_REVERT_MAX_LINES, SESSION_META_KEY_REVERT_MAX_REF_AGE_HOURS,
-    SESSION_META_KEY_REVERT_STREAK_COUNT, SESSION_META_KEY_REVERT_STREAK_LAST_AT,
+    RevertArea, RevertAssessor, RevertCounterSnapshot, RevertCounterStore, RevertPolicy,
+    RevertTarget, RevertThresholds, SemanticRevertAssessor, DEFAULT_REVERT_MAX_FILES,
+    DEFAULT_REVERT_MAX_LINES, DEFAULT_REVERT_MAX_REF_AGE_HOURS, REVERT_APPROVER,
+    REVERT_GATE_GUIDANCE, SESSION_META_KEY_REVERT_MAX_FILES, SESSION_META_KEY_REVERT_MAX_LINES,
+    SESSION_META_KEY_REVERT_MAX_REF_AGE_HOURS, SESSION_META_KEY_REVERT_STREAK_COUNT,
+    SESSION_META_KEY_REVERT_STREAK_LAST_AT,
 };
 // I3-S7（C4 连续回退计数）：时窗归零 / 第 2 次必审批判定 / 统一回退护栏
 // （面积 + 连续合并），接线契约见 revert_guard 模块文档（S6 判定点挂载）

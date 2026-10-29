@@ -38,6 +38,10 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# X-06 T3：agent-tools 的测试替身（InMemoryExploreDocsQuotaStore）仅在其
+# test-support feature 下编译；本 crate 的 src cfg(test)（loop_tests_exec）
+# 与 tests/*.rs 经 dev-dependency 启用，生产依赖图不启用该 feature。
+agent-tools = { path = "../agent-tools", features = ["test-support"] }
 # 测试基础设施域（T11.7）：断言助手 + TestClock 虚拟时间护栏
 conex-test-utils = { path = "../conex-test-utils" }
 # 测试所需 feature（macros/rt/time）已由 workspace 最小集覆盖（PE-10 T10.3）；
