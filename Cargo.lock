@@ -1216,6 +1216,7 @@ name = "conex-fs"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "conex-shared",
  "conex-test-utils",
  "conex-types",
  "hex",
@@ -1299,6 +1300,7 @@ dependencies = [
  "agent-tools",
  "anyhow",
  "async-trait",
+ "chrono",
  "conex-agents",
  "conex-compaction",
  "conex-db",
@@ -1350,6 +1352,7 @@ dependencies = [
 name = "conex-telemetry"
 version = "0.1.1"
 dependencies = [
+ "conex-shared",
  "conex-types",
  "hex",
  "serde_json",
@@ -1362,6 +1365,7 @@ dependencies = [
 name = "conex-test-utils"
 version = "0.1.1"
 dependencies = [
+ "conex-shared",
  "conex-types",
  "serde",
  "serde_json",
@@ -1374,6 +1378,7 @@ dependencies = [
 name = "conex-types"
 version = "0.1.1"
 dependencies = [
+ "conex-shared",
  "once_cell",
  "serde",
  "serde_json",

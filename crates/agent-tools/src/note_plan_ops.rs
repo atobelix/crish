@@ -41,11 +41,9 @@
 //! - Memory 扁平列表；**≠** Store 真事务
 //! - **≠ EL-05**；**≠ W6-E Strict**；不宣称 Store 后端完成；**不**删除 Memory
 
-#[path = "note_plan_ops_kinds.rs"]
 mod kinds;
 
 #[cfg(test)]
-#[path = "note_plan_ops_tests.rs"]
 mod tests;
 
 use crate::note_types::{NoteBackendError, NoteBlockOp, NoteBlockOpKind, NoteBlockOpPreview};

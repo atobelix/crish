@@ -355,7 +355,7 @@ fn ctx(run_id: &str, kind: ProviderErrorKind, retries: u32, elapsed_ms: u64) -> 
         produced_content: false,
         from_leaf_id: Some("leaf-a".to_string()),
         // 创建时间 = 当前时刻前 1 秒（同窗口语义；注入 100B ≤ 窗口 10KB 的 80%）
-        started_at_ms: now_ms() - 1_000,
+        started_at_ms: SystemClock.now_ms() - 1_000,
         inject_bytes: 100,
         window_bytes: 10_000,
         capability_mode: None,

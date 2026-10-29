@@ -57,7 +57,6 @@
 //! 体系（Ask/FullAccess/Plan，permission.rs 三态）判定；upload 另有默认拒绝
 //! 能力位（`SensitiveCapabilities.upload`，17 §2.3 红线语义，任何模式直接 Deny）。
 
-pub mod codes;
 mod error;
 mod exec;
 /// MVP 域名门禁（pub：引擎侧 LazySessionOps 装配 RealSession 时复用同一

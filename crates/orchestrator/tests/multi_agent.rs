@@ -41,7 +41,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::subagent_inject::{
-    git_revert_caution_section, iso8601_from_epoch_ms, resolve_started_at, started_at_section,
+    git_revert_caution_section, resolve_started_at, started_at_section,
     subagent_session_injections, DEFAULT_REF_AGE_THRESHOLD_HOURS,
 };
 use agent_tools::tools::subagent::{
@@ -570,7 +570,7 @@ fn now_ms() -> i64 {
 }
 
 fn now_iso_utc_like() -> String {
-    iso8601_from_epoch_ms(now_ms())
+    conex_shared::time::format_iso_utc_ms(now_ms())
 }
 
 /// 超预算消息序列（C9 压缩环节输入）：1 条 system + 4 条对话消息

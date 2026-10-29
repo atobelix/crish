@@ -41,6 +41,8 @@
 //! 系统提示词与子代理注入面，主控已确定产出目录时 spawn 注入），本模块
 //! 只提供注入函数与快照断言。
 
+use conex_shared::time::format_iso_utc_ms;
+
 use crate::revert::DEFAULT_REVERT_MAX_REF_AGE_HOURS;
 
 /// `@dynamic` 标记（M1 约定）：时间戳类动态字段必须显式标记，
@@ -73,34 +75,6 @@ pub const PERMISSION_RELAY_TITLE_EN: &str = "Permission Request Guideline";
 pub const OUTPUT_DIR_SECTION_TITLE: &str = "文档产出目录";
 pub const OUTPUT_DIR_SECTION_TITLE_EN: &str = "Document Output Directory";
 
-/// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
-/// `conex-run::engine_provider::now_iso_utc` / session-loop hydrate.rs 同源的 Howard Hinnant
-/// civil-from-days 手工换算，不引入 chrono 依赖；负值经 div_euclid /
-/// rem_euclid 容错不 panic）
-pub fn iso8601_from_epoch_ms(epoch_ms: i64) -> String {
-    let secs = epoch_ms.div_euclid(1000);
-    let millis = epoch_ms.rem_euclid(1000);
-    let sec_of_day = secs.rem_euclid(86_400);
-    let (hours, minutes, sec) = (sec_of_day / 3600, sec_of_day / 60 % 60, sec_of_day % 60);
-    let (year, month, day) = civil_from_days(secs.div_euclid(86_400));
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{sec:02}.{millis:03}Z")
-}
-
-/// Unix 天数 → 公历年月日（Howard Hinnant 算法，与 session-loop / orchestrator
-/// 同源；负天数经负商/余数语义容错）
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (y + if m <= 2 { 1 } else { 0 }, m, d)
-}
-
 /// started_at 注入正文（不含标题行；`@dynamic` 标记 + ISO8601 + epoch ms +
 /// started_at 注入正文（不含标题行；`@dynamic` 标记 + ISO8601 + epoch ms +
 /// 隔离边界声明）。支持可选 locale 语言适配（en 时输出英文）。
@@ -111,7 +85,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 /// 挂载，标题由 M1 render 渲染为 `## {title}`。
 pub fn started_at_section_with_locale(started_at_ms: i64, locale: Option<&str>) -> String {
     let is_en = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
-    let iso = iso8601_from_epoch_ms(started_at_ms);
+    let iso = format_iso_utc_ms(started_at_ms);
     if is_en {
         format!(
             "{DYNAMIC_MARKER}: Timestamp field, exempt from byte-level consistency assertion\n\
@@ -349,17 +323,19 @@ mod tests {
     /// civil_from_days(20665) = 2026-07-31）
     const ANCHOR_MS: i64 = 1_785_456_000_000;
 
-    /// ISO8601 换算对齐全仓同源锚点（含毫秒 / 零点 / 负值容错）
+    /// ISO8601 换算对齐全仓同源锚点（经注入段走真源格式化：含毫秒 /
+    /// 零点 / 负值容错）
     #[test]
     fn iso8601_conversion_matches_known_anchors() {
-        assert_eq!(iso8601_from_epoch_ms(ANCHOR_MS), "2026-07-31T00:00:00.000Z");
-        assert_eq!(
-            iso8601_from_epoch_ms(ANCHOR_MS + 123),
-            "2026-07-31T00:00:00.123Z"
-        );
-        assert_eq!(iso8601_from_epoch_ms(0), "1970-01-01T00:00:00.000Z");
+        let contains_iso = |started_at_ms: i64, iso: &str| {
+            started_at_section(started_at_ms)
+                .contains(&format!("started_at（创建时间 ISO8601）：{iso}"))
+        };
+        assert!(contains_iso(ANCHOR_MS, "2026-07-31T00:00:00.000Z"));
+        assert!(contains_iso(ANCHOR_MS + 123, "2026-07-31T00:00:00.123Z"));
+        assert!(contains_iso(0, "1970-01-01T00:00:00.000Z"));
         // 负 epoch（容错：div_euclid/rem_euclid 不 panic）
-        assert_eq!(iso8601_from_epoch_ms(-1), "1969-12-31T23:59:59.999Z");
+        assert!(contains_iso(-1, "1969-12-31T23:59:59.999Z"));
     }
 
     /// C2 验收 1（mock M1 render 形态）：按 `## {title}\n{content}` 拼接

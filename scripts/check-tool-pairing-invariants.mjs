@@ -73,7 +73,7 @@ if (GUIDE) {
 // ── 扫描目标（约定路径；缺失即 Fail-Closed）────────────────────────────────
 const LOOP_EXEC = 'crates/session-loop/src/loop/loop_exec.rs';
 const EXECUTING_TOOLS = 'crates/session-loop/src/loop/handlers/executing_tools.rs';
-const RESTORE_MANAGER = 'crates/orchestrator/src/restore_manager.rs';
+const RESTORE_MANAGER = 'crates/orchestrator/src/restore/restore_manager.rs';
 
 function readRequired(rel) {
   const abs = resolve(root, rel);

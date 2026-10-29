@@ -13,7 +13,8 @@
 //! 本模块不依赖 request/parse 层；行为矩阵（T-19）、TTL 表（T-21）等上层只通过
 //! [ModelCatalog] 查询接口消费，禁止散落硬编码判定。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面模块。实现域拆分如下（测试旁挂 catalog_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面模块。实现域拆分如下（实现与测试同处 catalog/ 目录，
+//! 测试旁挂 catalog/tests/）：
 //! - [catalog_price]：长度分档/峰谷定价类型与纯函数（TieredPriceTier /
 //!   PriceDerivation / PeakPricingSchedule + tier_for_tokens / peak_pricing_2x_at）
 //! - [catalog_override]：扫描合并与覆盖变更面（ScannedCapabilities / ScannedModel /
@@ -23,9 +24,7 @@
 //! - [queries]：模型能力矩阵与四价查询接口
 //! - [live]：运行时 Unified 配置树快照与投影（LiveModels）
 
-#[path = "../catalog_override.rs"]
 mod catalog_override;
-#[path = "../catalog_price.rs"]
 mod catalog_price;
 
 mod entry;
@@ -47,5 +46,4 @@ use super::catalog_types::{ModelRef, ModelSpec, ProviderSpec, UnifiedModelsConfi
 use std::collections::BTreeMap;
 
 #[cfg(test)]
-#[path = "../catalog_tests/mod.rs"]
 mod tests;

@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use conex_shared::time::{civil_from_days, days_from_civil};
 use tracing_subscriber::fmt::writer::MakeWriter;
 
 use crate::format::truncate_string;
@@ -319,8 +320,7 @@ fn open_log_file(path: &Path) -> io::Result<fs::File> {
 
 /// 当前 UTC 日期键（YYYYMMDD）。
 ///
-/// 标准库无日期格式化；用「儒略日 → 公历」的 `civil_from_days` 算法
-/// （Howard Hinnant）自算，避免引入 chrono 依赖。日界取 UTC。
+/// 日期换算走 [`conex_shared::time::civil_from_days`]（唯一真源），日界取 UTC。
 pub(crate) fn today_key() -> String {
     let (year, month, day) = civil_from_days(today_days());
     format!("{:04}{:02}{:02}", year, month, day)
@@ -493,18 +493,6 @@ fn parse_day_key(key: &str) -> Option<i64> {
     Some(days_from_civil(year, month, day))
 }
 
-/// 公历 (年, 月, 日) → 距 1970-01-01 天数（Howard Hinnant 的
-/// `days_from_civil`，[`civil_from_days`] 的逆运算）
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (i64::from(m) + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
 /// 时间戳键（YYYYMMDD-HHMMSS，UTC），用于崩溃文件命名（T04.1-3）。
 pub(crate) fn timestamp_key() -> String {
     let secs = std::time::SystemTime::now()
@@ -521,22 +509,6 @@ pub(crate) fn timestamp_key() -> String {
         "{:04}{:02}{:02}-{:02}{:02}{:02}",
         year, month, day, hour, minute, second
     )
-}
-
-/// 天数（自 1970-01-01）→ 公历 (年, 月, 日)，UTC。
-fn civil_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
-    // Howard Hinnant 的 civil_from_days 算法（C++11 起 std::chrono 同款）
-    let z = days_since_epoch + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let year = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = if month <= 2 { year + 1 } else { year };
-    (year, month, day)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@
 //! - [`crate::store_hydrate`]：`ensure_session` / hydrate 冷热投影（SD-06，不重做）
 //! - [`crate::store_apply_md`]：`apply_md_fragment` 真路径 + lossy（SD-06，不重做）
 //! - [`crate::store_outline`]：大纲 DFS / 投影表（SD-06，不重做）
-//! - [`store_backend_tests`]：集成测旁挂（`#[cfg(test)]`）
+//! - [`tests`]：集成测旁挂（`#[cfg(test)]`）
 //!
 //! # hydrate 投影（与 query 分轨）
 //! - [`Self::hydrate_document_from_session`]：`load_doc` → **`DocSession::hydrate`**
@@ -363,5 +363,4 @@ impl NoteBackend for StoreNoteBackend {
 // 强制链接：本 crate 内 `mod store_*` 已在 lib.rs 声明。
 
 #[cfg(test)]
-#[path = "store_backend_tests.rs"]
 mod tests;

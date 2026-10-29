@@ -1,0 +1,911 @@
+{
+  "codes": [
+    {
+      "action": "action.agent.request_capability",
+      "category": "permanent",
+      "code": "agent.capability_denied",
+      "public": true,
+      "retryable": false,
+      "title": "代理能力受限"
+    },
+    {
+      "action": "action.agent.wait_capacity",
+      "category": "transient",
+      "code": "agent.capacity_pressure",
+      "public": true,
+      "retryable": true,
+      "title": "代理容量压力"
+    },
+    {
+      "action": "action.agent.retry_later",
+      "category": "transient",
+      "code": "agent.comm_throttled",
+      "public": true,
+      "retryable": true,
+      "title": "代理通信被限流"
+    },
+    {
+      "action": "action.agent.fix_config",
+      "category": "permanent",
+      "code": "agent.config_invalid",
+      "public": true,
+      "retryable": false,
+      "title": "代理配置非法"
+    },
+    {
+      "action": "action.agent.resume",
+      "category": "transient",
+      "code": "agent.interrupted",
+      "public": true,
+      "retryable": true,
+      "title": "代理执行被中断"
+    },
+    {
+      "action": "action.agent.review",
+      "category": "permanent",
+      "code": "agent.intervention_required",
+      "public": true,
+      "retryable": false,
+      "title": "需用户介入"
+    },
+    {
+      "action": "action.agent.increase_max_turns",
+      "category": "permanent",
+      "code": "agent.max_turns_reached",
+      "public": true,
+      "retryable": false,
+      "title": "达到最大轮次"
+    },
+    {
+      "action": "action.agent.configure_model",
+      "category": "transient",
+      "code": "agent.model_unavailable",
+      "public": true,
+      "retryable": true,
+      "title": "模型不可用"
+    },
+    {
+      "action": "action.agent.intervene",
+      "category": "permanent",
+      "code": "agent.no_progress",
+      "public": true,
+      "retryable": false,
+      "title": "Agent 无进展"
+    },
+    {
+      "action": "action.agent.retry_spawn",
+      "category": "transient",
+      "code": "agent.spawn_failed",
+      "public": true,
+      "retryable": true,
+      "title": "代理派发失败"
+    },
+    {
+      "action": "action.approval.modify_request",
+      "category": "permanent",
+      "code": "approval.rejected",
+      "public": true,
+      "retryable": false,
+      "title": "审批被拒"
+    },
+    {
+      "action": "action.approval.resubmit",
+      "category": "transient",
+      "code": "approval.timeout",
+      "public": true,
+      "retryable": true,
+      "title": "审批超时"
+    },
+    {
+      "action": "action.artifact.fix_uri",
+      "category": "protocol",
+      "code": "artifact.invalid_uri",
+      "public": true,
+      "retryable": false,
+      "title": "Artifact URI 非法"
+    },
+    {
+      "action": "action.artifact.check_uri",
+      "category": "permanent",
+      "code": "artifact.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "Artifact 未找到"
+    },
+    {
+      "action": "action.common.check_encoding",
+      "category": "permanent",
+      "code": "common.encoding",
+      "public": true,
+      "retryable": false,
+      "title": "编解码失败"
+    },
+    {
+      "action": "action.common.check_field",
+      "category": "permanent",
+      "code": "common.invalid_input",
+      "public": true,
+      "retryable": false,
+      "title": "参数非法"
+    },
+    {
+      "action": "action.common.check_resource",
+      "category": "permanent",
+      "code": "common.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "通用资源未找到"
+    },
+    {
+      "action": "action.common.report_bug",
+      "category": "permanent",
+      "code": "common.panic",
+      "public": false,
+      "retryable": false,
+      "title": "内部异常"
+    },
+    {
+      "action": "action.common.report_bug",
+      "category": "permanent",
+      "code": "common.unknown",
+      "public": true,
+      "retryable": false,
+      "title": "未知错误"
+    },
+    {
+      "action": "action.common.check_version",
+      "category": "permanent",
+      "code": "common.unsupported",
+      "public": true,
+      "retryable": false,
+      "title": "不支持的操作"
+    },
+    {
+      "action": "action.config.check_field",
+      "category": "permanent",
+      "code": "config.invalid",
+      "public": true,
+      "retryable": false,
+      "title": "配置项非法"
+    },
+    {
+      "action": "action.config.provide_value",
+      "category": "permanent",
+      "code": "config.missing",
+      "public": true,
+      "retryable": false,
+      "title": "配置缺失"
+    },
+    {
+      "action": "action.config.verify_syntax",
+      "category": "permanent",
+      "code": "config.parse_failed",
+      "public": true,
+      "retryable": false,
+      "title": "配置解析失败"
+    },
+    {
+      "action": "action.context.retry_compact",
+      "category": "transient",
+      "code": "context.compaction_failed",
+      "public": true,
+      "retryable": true,
+      "title": "上下文压缩失败"
+    },
+    {
+      "action": "action.context.manual_trim",
+      "category": "permanent",
+      "code": "context.heal_failed",
+      "public": true,
+      "retryable": false,
+      "title": "上下文修复失败"
+    },
+    {
+      "action": "action.context.compact",
+      "category": "protocol",
+      "code": "context.length_exceeded",
+      "public": true,
+      "retryable": true,
+      "title": "上下文超长"
+    },
+    {
+      "action": "action.event_store.retry_append",
+      "category": "transient",
+      "code": "event_store.append_failed",
+      "public": false,
+      "retryable": true,
+      "title": "事件追加失败"
+    },
+    {
+      "action": "action.event_store.rebuild_index",
+      "category": "permanent",
+      "code": "event_store.consistency_violation",
+      "public": false,
+      "retryable": false,
+      "title": "事件一致性违规"
+    },
+    {
+      "action": "action.event_store.check_disk",
+      "category": "permanent",
+      "code": "event_store.degraded",
+      "public": false,
+      "retryable": false,
+      "title": "事件存储降级"
+    },
+    {
+      "action": "action.event_store.retry_read",
+      "category": "transient",
+      "code": "event_store.read_failed",
+      "public": false,
+      "retryable": true,
+      "title": "事件读取失败"
+    },
+    {
+      "action": "action.goal.break_loop",
+      "category": "permanent",
+      "code": "goal.loop_detected",
+      "public": true,
+      "retryable": false,
+      "title": "Goal 循环签名重复"
+    },
+    {
+      "action": "action.goal.increase_max_rounds",
+      "category": "permanent",
+      "code": "goal.max_rounds",
+      "public": true,
+      "retryable": false,
+      "title": "Goal 达到最大轮次"
+    },
+    {
+      "action": "action.goal.review_progress",
+      "category": "permanent",
+      "code": "goal.stalled",
+      "public": true,
+      "retryable": false,
+      "title": "Goal 循环停滞"
+    },
+    {
+      "action": "action.log.retry_write",
+      "category": "transient",
+      "code": "log.write_failed",
+      "public": false,
+      "retryable": true,
+      "title": "日志写入失败"
+    },
+    {
+      "action": "action.mcp.check_server",
+      "category": "transient",
+      "code": "mcp.connection_failed",
+      "public": true,
+      "retryable": true,
+      "title": "MCP 连接失败"
+    },
+    {
+      "action": "action.mcp.report_bug",
+      "category": "protocol",
+      "code": "mcp.protocol_violation",
+      "public": true,
+      "retryable": false,
+      "title": "MCP 协议违规"
+    },
+    {
+      "action": "action.mcp.check_config",
+      "category": "permanent",
+      "code": "mcp.server_not_found",
+      "public": true,
+      "retryable": false,
+      "title": "MCP 服务器未找到"
+    },
+    {
+      "action": "action.network.restart_daemon",
+      "category": "permanent",
+      "code": "network.daemon_dead",
+      "public": true,
+      "retryable": false,
+      "title": "后台 Daemon 已死"
+    },
+    {
+      "action": "action.network.check_connection",
+      "category": "transient",
+      "code": "network.unreachable",
+      "public": true,
+      "retryable": true,
+      "title": "网络不可达"
+    },
+    {
+      "action": "action.plugin.check_manifest",
+      "category": "permanent",
+      "code": "plugin.activation_failed",
+      "public": true,
+      "retryable": false,
+      "title": "插件激活失败"
+    },
+    {
+      "action": "action.plugin.check_install",
+      "category": "permanent",
+      "code": "plugin.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "插件未找到"
+    },
+    {
+      "action": "action.plugin.grant_permission",
+      "category": "security",
+      "code": "plugin.permission_denied",
+      "public": true,
+      "retryable": false,
+      "title": "插件权限不足"
+    },
+    {
+      "action": "action.provider.check_api_key",
+      "category": "security",
+      "code": "provider.auth",
+      "public": true,
+      "retryable": false,
+      "title": "鉴权失败"
+    },
+    {
+      "action": "action.runtime.none",
+      "category": "permanent",
+      "code": "provider.cancelled",
+      "public": false,
+      "retryable": false,
+      "title": "请求取消"
+    },
+    {
+      "action": "action.provider.check_connection",
+      "category": "transient",
+      "code": "provider.connection_error",
+      "public": true,
+      "retryable": true,
+      "title": "Provider 连接错误"
+    },
+    {
+      "action": "action.provider.check_endpoint",
+      "category": "permanent",
+      "code": "provider.endpoint_unavailable",
+      "public": true,
+      "retryable": false,
+      "title": "端点不可用"
+    },
+    {
+      "action": "action.provider.report_bug",
+      "category": "permanent",
+      "code": "provider.fatal",
+      "public": true,
+      "retryable": false,
+      "title": "Provider 不可恢复错误"
+    },
+    {
+      "action": "action.provider.disable_proxy",
+      "category": "protocol",
+      "code": "provider.gateway_challenge",
+      "public": true,
+      "retryable": false,
+      "title": "网关质询拦截"
+    },
+    {
+      "action": "action.provider.check_network",
+      "category": "transient",
+      "code": "provider.network",
+      "public": true,
+      "retryable": true,
+      "title": "网络故障"
+    },
+    {
+      "action": "action.provider.reauth",
+      "category": "security",
+      "code": "provider.no_token",
+      "public": true,
+      "retryable": false,
+      "title": "OAuth 令牌缺失"
+    },
+    {
+      "action": "action.provider.top_up",
+      "category": "permanent",
+      "code": "provider.quota",
+      "public": true,
+      "retryable": false,
+      "title": "配额耗尽"
+    },
+    {
+      "action": "action.provider.wait_retry",
+      "category": "transient",
+      "code": "provider.rate_limit",
+      "public": true,
+      "retryable": true,
+      "title": "限流"
+    },
+    {
+      "action": "action.provider.reauth",
+      "category": "security",
+      "code": "provider.reauth_required",
+      "public": true,
+      "retryable": false,
+      "title": "需重新鉴权"
+    },
+    {
+      "action": "action.provider.reauth",
+      "category": "security",
+      "code": "provider.refresh_failed",
+      "public": true,
+      "retryable": false,
+      "title": "令牌刷新失败"
+    },
+    {
+      "action": "action.provider.fix_request",
+      "category": "protocol",
+      "code": "provider.schema",
+      "public": true,
+      "retryable": false,
+      "title": "请求 schema 非法"
+    },
+    {
+      "action": "action.provider.wait_retry",
+      "category": "transient",
+      "code": "provider.server",
+      "public": true,
+      "retryable": true,
+      "title": "服务端错误"
+    },
+    {
+      "action": "action.provider.retry",
+      "category": "transient",
+      "code": "provider.stream_interrupted",
+      "public": true,
+      "retryable": true,
+      "title": "流中断"
+    },
+    {
+      "action": "action.provider.retry",
+      "category": "transient",
+      "code": "provider.timeout",
+      "public": true,
+      "retryable": true,
+      "title": "请求超时"
+    },
+    {
+      "action": "action.provider.report_bug",
+      "category": "permanent",
+      "code": "provider.unknown",
+      "public": true,
+      "retryable": false,
+      "title": "未知 Provider 错误"
+    },
+    {
+      "action": "action.run.refresh",
+      "category": "protocol",
+      "code": "run.invalid_state",
+      "public": true,
+      "retryable": false,
+      "title": "Run 状态非法"
+    },
+    {
+      "action": "action.run.select_existing",
+      "category": "permanent",
+      "code": "run.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "Run 未找到"
+    },
+    {
+      "action": "action.run.use_goal_run",
+      "category": "protocol",
+      "code": "run.not_goal_run",
+      "public": true,
+      "retryable": false,
+      "title": "非 Goal Run"
+    },
+    {
+      "action": "action.runtime.none",
+      "category": "permanent",
+      "code": "runtime.aborted",
+      "public": true,
+      "retryable": false,
+      "title": "用户中止"
+    },
+    {
+      "action": "action.runtime.retry",
+      "category": "transient",
+      "code": "runtime.timeout",
+      "public": true,
+      "retryable": true,
+      "title": "运行时超时"
+    },
+    {
+      "action": "action.runtime.report_bug",
+      "category": "permanent",
+      "code": "runtime.transition_failed",
+      "public": true,
+      "retryable": false,
+      "title": "状态转移失败"
+    },
+    {
+      "action": "action.runtime.restart_session",
+      "category": "permanent",
+      "code": "runtime.unexpected_state",
+      "public": true,
+      "retryable": false,
+      "title": "运行时状态异常"
+    },
+    {
+      "action": "action.security.check_target",
+      "category": "security",
+      "code": "security.ssrf_rejected",
+      "public": false,
+      "retryable": false,
+      "title": "SSRF 拦截"
+    },
+    {
+      "action": "action.session.check_entry",
+      "category": "permanent",
+      "code": "session.invalid_entry",
+      "public": true,
+      "retryable": false,
+      "title": "会话条目非法"
+    },
+    {
+      "action": "action.session.restart",
+      "category": "permanent",
+      "code": "session.invalid_session",
+      "public": true,
+      "retryable": false,
+      "title": "会话数据非法"
+    },
+    {
+      "action": "action.session.refresh",
+      "category": "permanent",
+      "code": "session.invalid_state",
+      "public": true,
+      "retryable": false,
+      "title": "会话状态非法"
+    },
+    {
+      "action": "action.session.select_existing",
+      "category": "permanent",
+      "code": "session.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "会话未找到"
+    },
+    {
+      "action": "action.session.check_rewind_target",
+      "category": "permanent",
+      "code": "session.rewind_failed",
+      "public": true,
+      "retryable": false,
+      "title": "会话回滚失败"
+    },
+    {
+      "action": "action.session.retry_save",
+      "category": "transient",
+      "code": "session.storage_failed",
+      "public": true,
+      "retryable": true,
+      "title": "会话存储失败"
+    },
+    {
+      "action": "action.store.cleanup_or_expand",
+      "category": "permanent",
+      "code": "store.capacity_exceeded",
+      "public": true,
+      "retryable": false,
+      "title": "存储容量超限"
+    },
+    {
+      "action": "action.store.restore_backup",
+      "category": "permanent",
+      "code": "store.corrupted",
+      "public": true,
+      "retryable": false,
+      "title": "存储数据损坏"
+    },
+    {
+      "action": "action.store.retry_write",
+      "category": "transient",
+      "code": "store.io",
+      "public": true,
+      "retryable": true,
+      "title": "存储/IO 失败"
+    },
+    {
+      "action": "action.store.retry_read",
+      "category": "transient",
+      "code": "store.read_failed",
+      "public": true,
+      "retryable": true,
+      "title": "存储读取失败"
+    },
+    {
+      "action": "action.store.retry_write",
+      "category": "transient",
+      "code": "store.write_failed",
+      "public": true,
+      "retryable": true,
+      "title": "存储写入失败"
+    },
+    {
+      "action": "action.subagent.break_cycle",
+      "category": "permanent",
+      "code": "subagent.deadlock_detected",
+      "public": true,
+      "retryable": false,
+      "title": "子代理死锁"
+    },
+    {
+      "action": "action.subagent.reduce_depth",
+      "category": "permanent",
+      "code": "subagent.depth_exceeded",
+      "public": true,
+      "retryable": false,
+      "title": "子代理递归深度超限"
+    },
+    {
+      "action": "action.subagent.ask_main_agent",
+      "category": "permanent",
+      "code": "subagent.nesting_denied",
+      "public": true,
+      "retryable": false,
+      "title": "子代理嵌套禁止"
+    },
+    {
+      "action": "action.subagent.verify_id",
+      "category": "permanent",
+      "code": "subagent.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "子代理不存在"
+    },
+    {
+      "action": "action.subagent.retry",
+      "category": "transient",
+      "code": "subagent.timeout",
+      "public": true,
+      "retryable": true,
+      "title": "子代理超时"
+    },
+    {
+      "action": "action.telemetry.retry_export",
+      "category": "transient",
+      "code": "telemetry.export_failed",
+      "public": false,
+      "retryable": true,
+      "title": "观测数据导出失败"
+    },
+    {
+      "action": "action.telemetry.none",
+      "category": "permanent",
+      "code": "telemetry.trace_lost",
+      "public": false,
+      "retryable": false,
+      "title": "Trace 丢失"
+    },
+    {
+      "action": "action.tool.aborted_before_dispatch",
+      "category": "permanent",
+      "code": "tool.aborted_before_dispatch",
+      "public": true,
+      "retryable": false,
+      "title": "工具分发前已中止"
+    },
+    {
+      "action": "action.browser.none",
+      "category": "permanent",
+      "code": "tool.browser.cancelled",
+      "public": false,
+      "retryable": false,
+      "title": "浏览器动作已取消"
+    },
+    {
+      "action": "action.browser.enable_capability",
+      "category": "security",
+      "code": "tool.browser.capability_disabled",
+      "public": true,
+      "retryable": false,
+      "title": "能力未开启"
+    },
+    {
+      "action": "action.browser.check_eval_policy",
+      "category": "security",
+      "code": "tool.browser.eval_forbidden",
+      "public": true,
+      "retryable": false,
+      "title": "evaluate 被拒"
+    },
+    {
+      "action": "action.browser.check_domain",
+      "category": "security",
+      "code": "tool.browser.gate_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "域名门禁拦截"
+    },
+    {
+      "action": "action.browser.refresh_snapshot",
+      "category": "transient",
+      "code": "tool.browser.node_gone",
+      "public": true,
+      "retryable": true,
+      "title": "元素已过期"
+    },
+    {
+      "action": "action.browser.wait_recovery",
+      "category": "transient",
+      "code": "tool.browser.not_ready",
+      "public": true,
+      "retryable": true,
+      "title": "浏览器恢复中"
+    },
+    {
+      "action": "action.browser.refresh_snapshot",
+      "category": "transient",
+      "code": "tool.browser.stale_snapshot",
+      "public": true,
+      "retryable": true,
+      "title": "快照版本失效"
+    },
+    {
+      "action": "action.browser.close_tabs",
+      "category": "permanent",
+      "code": "tool.browser.tab_limit_exceeded",
+      "public": true,
+      "retryable": false,
+      "title": "标签数量超限"
+    },
+    {
+      "action": "action.browser.check_supported",
+      "category": "permanent",
+      "code": "tool.browser.unwired",
+      "public": true,
+      "retryable": false,
+      "title": "浏览器能力未接线"
+    },
+    {
+      "action": "action.tool.cancelled",
+      "category": "permanent",
+      "code": "tool.cancelled",
+      "public": true,
+      "retryable": false,
+      "title": "工具已被取消"
+    },
+    {
+      "action": "action.computer.none",
+      "category": "permanent",
+      "code": "tool.computer.cancelled",
+      "public": false,
+      "retryable": false,
+      "title": "电脑操作已取消"
+    },
+    {
+      "action": "action.computer.check_capability",
+      "category": "security",
+      "code": "tool.computer.capability_unavailable",
+      "public": true,
+      "retryable": false,
+      "title": "能力不可用"
+    },
+    {
+      "action": "action.computer.refresh_perception",
+      "category": "permanent",
+      "code": "tool.computer.coords_out_of_bounds",
+      "public": true,
+      "retryable": false,
+      "title": "坐标越界"
+    },
+    {
+      "action": "action.computer.manual_operation",
+      "category": "security",
+      "code": "tool.computer.elevated_window",
+      "public": true,
+      "retryable": false,
+      "title": "提权窗口拒绝"
+    },
+    {
+      "action": "action.computer.fix_input",
+      "category": "permanent",
+      "code": "tool.computer.invalid_params",
+      "public": true,
+      "retryable": false,
+      "title": "参数非法"
+    },
+    {
+      "action": "action.computer.enable_session",
+      "category": "permanent",
+      "code": "tool.computer.not_enabled",
+      "public": true,
+      "retryable": false,
+      "title": "会话未开启"
+    },
+    {
+      "action": "action.computer.wait_retry",
+      "category": "transient",
+      "code": "tool.computer.not_ready",
+      "public": true,
+      "retryable": true,
+      "title": "电脑会话未就绪"
+    },
+    {
+      "action": "action.computer.check_supported",
+      "category": "permanent",
+      "code": "tool.computer.unwired",
+      "public": true,
+      "retryable": false,
+      "title": "电脑能力未接线"
+    },
+    {
+      "action": "action.tool.retry",
+      "category": "transient",
+      "code": "tool.execution_failed",
+      "public": true,
+      "retryable": true,
+      "title": "工具执行失败"
+    },
+    {
+      "action": "action.tool.fix_input",
+      "category": "protocol",
+      "code": "tool.invalid_input",
+      "public": true,
+      "retryable": false,
+      "title": "工具入参非法"
+    },
+    {
+      "action": "action.tool.check_name",
+      "category": "permanent",
+      "code": "tool.not_found",
+      "public": true,
+      "retryable": false,
+      "title": "工具未找到"
+    },
+    {
+      "action": "action.tool.outcome_unknown",
+      "category": "permanent",
+      "code": "tool.outcome_unknown",
+      "public": true,
+      "retryable": false,
+      "title": "工具结果未知（崩溃自愈）"
+    },
+    {
+      "action": "action.tool.check_path",
+      "category": "security",
+      "code": "tool.path_escape",
+      "public": true,
+      "retryable": false,
+      "title": "路径越界"
+    },
+    {
+      "action": "action.session.wait_switch",
+      "category": "permanent",
+      "code": "tool.session.exclusive",
+      "public": true,
+      "retryable": false,
+      "title": "会话互斥"
+    },
+    {
+      "action": "action.tool.refresh_and_retry",
+      "category": "protocol",
+      "code": "tool.version_conflict",
+      "public": true,
+      "retryable": false,
+      "title": "文档版本冲突"
+    },
+    {
+      "action": "action.tool.request_path_allowance",
+      "category": "permanent",
+      "code": "tool.write_not_allowed",
+      "public": true,
+      "retryable": false,
+      "title": "写入路径不在允许范围内"
+    },
+    {
+      "action": "action.tool.wait_retry",
+      "category": "permanent",
+      "code": "tool.write_path_conflict",
+      "public": true,
+      "retryable": false,
+      "title": "写入路径互斥冲突"
+    }
+  ],
+  "contract": "error-codes",
+  "count": 113,
+  "schemaVersion": 1
+}

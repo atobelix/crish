@@ -2,8 +2,8 @@
 //!
 //! # 模块内聚（SD-17 · 黄带体积切开）
 //! - **本文件**：公开类型 / `apply_projection_diff` / commit 管线门面
-//! - [`tests`]（`projection_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::projection::*` / `lib` `pub use`）
+//! - [`tests`]（`projection/tests/mod.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::projection::*` / `lib` `pub use`）
 //!
 //! # 推荐管线
 //! ```ignore
@@ -273,5 +273,4 @@ pub fn export_mirror_now(
 }
 
 #[cfg(test)]
-#[path = "projection_tests.rs"]
 mod tests;

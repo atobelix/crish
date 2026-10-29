@@ -9,7 +9,7 @@
 //!   到期触发（steering 注入 + CronFired 事件）——本模块经委托槽
 //!   [WorkflowBackend::registry] 对接（`CronTaskInput` 冻结入参形状）；
 //! - 表达式校验与 next_fire 计算复用 T-CF-08 解析器
-//!   `conex_types::cron::parse_cron`（真实 Rust 侧错误文案，
+//!   `crate::sched::cron::parse_cron`（真实 Rust 侧错误文案，
 //!   前端「双重校验」的第二道就是它）；
 //! - 持久化键 `sched_<cronId>`（session_meta 表，与 sched.rs 键形状同构）；
 //! - steering 条目（group_id = `cron-<id>`）与触发文案按 §4.8 冻结模板

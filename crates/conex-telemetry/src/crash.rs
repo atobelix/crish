@@ -30,7 +30,10 @@
 
 use std::panic::{self, UnwindSafe};
 
-use conex_types::error::{CrishErrorCategory, CrishErrorPayload};
+use conex_shared::time::{Clock, SystemClock};
+use conex_types::error::{
+    codes, error_info, CrishErrorCategory, CrishErrorInfo, CrishErrorPayload,
+};
 
 /// Wrap `f` so that a panic inside it becomes a structured error payload.
 ///
@@ -70,18 +73,27 @@ fn payload_to_panic_error(payload: &Box<dyn std::any::Any + Send>) -> CrishError
         .map(str::to_string)
         .unwrap_or_else(|| "<unnamed>".to_string());
 
-    CrishErrorPayload {
-        code: "common.panic".to_string(),
-        message: format!("panic: {}", message),
+    let fallback = CrishErrorInfo {
+        code: codes::COMMON_PANIC,
+        title: "内部异常",
         category: CrishErrorCategory::Permanent,
         retryable: false,
         is_public: false,
-        action: "action.common.report_bug".to_string(),
+        action: "action.common.report_bug",
+    };
+    let info = error_info(codes::COMMON_PANIC).unwrap_or(&fallback);
+    CrishErrorPayload {
+        code: info.code.to_string(),
+        message: format!("panic: {}", message),
+        category: info.category,
+        retryable: info.retryable,
+        is_public: info.is_public,
+        action: info.action.to_string(),
         params: None,
         metadata: Some(serde_json::json!({ "thread": thread })),
         cause: None,
         stack: None,
-        timestamp: now_millis(),
+        timestamp: SystemClock.now_ms(),
     }
 }
 
@@ -98,16 +110,4 @@ fn extract_panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
         return s.clone();
     }
     "<unknown panic payload>".to_string()
-}
-
-/// Current Unix epoch time in milliseconds.
-///
-/// Mirrors the `now_millis()` helper in `conex-types/src/error.rs` so this
-/// crate does not need to import that private function. Falls back to `0` if
-/// the system clock is before `UNIX_EPOCH`.
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }

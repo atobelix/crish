@@ -37,18 +37,6 @@ impl Default for CleanupOptions {
     }
 }
 
-impl CleanupOptions {
-    /// Wire 协议投影层专用配置：纯净脱色、收敛空行、绝不截断代码与 JSON
-    pub fn wire_safe() -> Self {
-        Self {
-            max_line_width: 0,
-            collapse_empty_lines: true,
-            collapse_duplicate_lines: false,
-            compact_json: false,
-        }
-    }
-}
-
 /// 清洗结果（规则命中记录 + token 收益）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleanupResult {
@@ -68,7 +56,7 @@ const R5_TRUNC: &str = "R5 超长行截断";
 const R6_JSON: &str = "R6 JSON 压缩";
 
 /// R4 重复行折叠标记（N = 折叠掉的行数 = 原连续数 - 1）
-pub fn duplicate_fold_marker(folded_away: usize) -> String {
+fn duplicate_fold_marker(folded_away: usize) -> String {
     format!("… 重复 {folded_away} 行 …")
 }
 
@@ -376,8 +364,14 @@ mod tests {
     }
 
     #[test]
-    fn wire_safe_never_truncates_lines_or_modifies_json() {
-        let opts = CleanupOptions::wire_safe();
+    fn wire_projection_options_never_truncate_lines_or_modify_json() {
+        // Wire 协议投影层专用配置：纯净脱色、收敛空行、绝不截断代码与 JSON
+        let opts = CleanupOptions {
+            max_line_width: 0,
+            collapse_empty_lines: true,
+            collapse_duplicate_lines: false,
+            compact_json: false,
+        };
         let long_code = "fn very_long_identifier_that_spans_more_than_one_hundred_and_twenty_characters_in_a_single_line_of_rust_code() -> bool { true }";
         let raw_json = "{\n  \"nested\": {\n    \"key\": \"value\"\n  }\n}";
         let raw = format!("\x1b[33m{}\x1b[0m\n\n\n{}", long_code, raw_json);
@@ -385,13 +379,16 @@ mod tests {
         let result = clean_output(&raw, &opts);
         assert!(
             result.cleaned.contains(long_code),
-            "wire_safe 绝不截断长代码行"
+            "wire 投影面绝不截断长代码行"
         );
         assert!(
             result.cleaned.contains(raw_json),
-            "wire_safe 绝不折叠多行 JSON"
+            "wire 投影面绝不折叠多行 JSON"
         );
-        assert!(!result.cleaned.contains("\x1b"), "wire_safe 剥离 ANSI 颜色");
+        assert!(
+            !result.cleaned.contains("\x1b"),
+            "wire 投影面剥离 ANSI 颜色"
+        );
         assert_eq!(result.cleaned, format!("{}\n\n{}", long_code, raw_json));
     }
 

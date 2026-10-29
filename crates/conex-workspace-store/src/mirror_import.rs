@@ -2,9 +2,9 @@
 //!
 //! # 模块内聚（**SD-26** 策略/X-05 门面 · **SD-37** 块级 diff 再抽）
 //! - **本文件**：策略 / 入参 / 结果 / `import_mirror_proposal` / X-05 门禁
-//! - [`propose`]（`mirror_import_propose.rs`）：`propose_block_level_ops` 块级 diff
-//! - [`tests`]（`mirror_import_tests.rs`）：单元测外置（**SD-26**）
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::mirror_import::*` / `mirror` re-export）
+//! - [`propose`]（`mirror_import/propose.rs`）：`propose_block_level_ops` 块级 diff
+//! - [`tests`]（`mirror_import/tests.rs`）：单元测外置（**SD-26**）
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::mirror_import::*` / `mirror` re-export）
 //!
 //! # X-05 / 禁静默覆盖（不回退）
 //! - `unpushed_op_count > 0` 且策略非显式 [`ThreeWayStrategy::DropUnacked`] →
@@ -23,7 +23,6 @@ use conex_doc_collab::{BlockTree, Op};
 use conex_md_ast::parse_document_detailed;
 
 /// 块级 diff 提案（**SD-37**）：`propose_block_level_ops`（**非** fullRemount）。
-#[path = "mirror_import_propose.rs"]
 mod propose;
 
 use propose::propose_block_level_ops;
@@ -296,5 +295,4 @@ impl WorkspaceStore {
 // ── 测试（SD-26 外置） ─────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "mirror_import_tests.rs"]
 mod tests;

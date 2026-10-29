@@ -4,8 +4,8 @@
 //!
 //! # 模块内聚（**SD-21** · 黄带体积切开）
 //! - **本文件**：`PersistencePlugin for WorkspaceStore` / `SharedWorkspaceStore` / compact
-//! - [`tests`]（`persist_plugin_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::persist_plugin::*` / `lib` `pub use`）
+//! - [`tests`]（`persist_plugin/tests.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::persist_plugin::*` / `lib` `pub use`）
 //!
 //! **诚实**：**≠ EL-04**（本包只切 persist 体积，不关 EL）；**≠ EL-03**（恢复/打开产品叙事分属 W3 等）。
 //! 不静默改 snapshot / updates 语义；**≠** 切 refs / os_watch。
@@ -301,5 +301,4 @@ fn decode_encoded_update(blob: Vec<u8>, kind: &str) -> Result<EncodedUpdate, Per
 }
 
 #[cfg(test)]
-#[path = "persist_plugin_tests.rs"]
 mod tests;

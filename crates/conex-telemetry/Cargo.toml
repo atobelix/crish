@@ -24,7 +24,8 @@ serde_json = { workspace = true }
 # conex-telemetry 仍保持 leaf-level（不引入更高层 crate）
 sha2 = { workspace = true }
 hex = { workspace = true }
-# CrishErrorPayload / CrishErrorCategory are produced by Agent 10-A in
-# crates/conex-types/src/error.rs (ROUND-10-rust.md §3.2). This dependency is
-# the sole bridge to conex-types; conex-telemetry otherwise stays leaf-level.
+# CrishErrorPayload / CrishErrorCategory 来自 conex-types（ROUND-10-rust.md §3.2）；
+# conex-shared 提供日志日期键与崩溃时间戳的时间真源。两者均为内部叶子依赖。
 conex-types = { path = "../conex-types" }
+# 时间真源（X-03）：公历换算与当前毫秒统一走 conex_shared::time，禁止本地副本
+conex-shared = { path = "../conex-shared" }

@@ -7,14 +7,12 @@ use serde::{Deserialize, Serialize};
 pub mod attachment;
 pub mod checkpoint;
 pub mod context;
-pub mod cron;
 pub mod denied_stats;
 pub mod device;
 pub mod error;
 pub mod events;
 pub mod history;
 pub mod impact;
-pub mod injection_card;
 pub mod message;
 pub mod response;
 pub mod session;
@@ -22,17 +20,11 @@ pub mod timer;
 pub mod tool;
 pub mod transition;
 
-// 附件/注入卡片契约（战役 prompt-injection-pipeline：详案 04 §2.1.1 +
-// 详案 02 §2.1.2，00-总方案 §三 统一契约裁决）——attachment 承载
-// MessageContextInjection.metadata 的类型化子结构 schema（非顶层卡片实体）；
-// injection_card 为唯一时间线卡片契约的 Rust wire 镜像。两形并存惯例：
-// 模块路径与根级重导出。
+// 附件契约（战役 prompt-injection-pipeline：详案 04 §2.1.1）——
+// attachment 承载 MessageContextInjection.metadata 的类型化子结构 schema。
 pub use attachment::{
     CodeSnippetMeta, ContextAttachmentKind, ContextAttachmentPayload, DiffSnapshotMeta,
     MultimodalImageMeta, TerminalLogMeta, TruncationInfo,
-};
-pub use injection_card::{
-    ContextInjectionCardKind, ContextInjectionCardPayload, ContextInjectionStatus,
 };
 
 // codes 常量集在 error/codes.rs（`pub mod codes`），根级重导出供
@@ -42,14 +34,13 @@ pub use checkpoint::{
     CHECKPOINT_MARKER, CHECKPOINT_PAYLOAD_KEY, CHECKPOINT_PRESENT_SIGNAL, CONEX_CHECKPOINT_MARKER,
 };
 pub use context::{ContextBudget, SessionContextMeta, CONTEXT_SAFETY_TOKENS};
-pub use cron::{CronError, CronField, CronSchedule};
 pub use denied_stats::{global_denied_stats, DeniedStats, DeniedStatsSummary};
 pub use device::PermissionMode;
 pub use error::codes;
 
 pub use error::{
-    migrate_error_code, CrishError, CrishErrorCategory, CrishErrorPayload, MigrateErrorContext,
-    ProviderErrorKind, RunTerminal, RunTerminalError,
+    CrishError, CrishErrorCategory, CrishErrorPayload, ProviderErrorKind, RunTerminal,
+    RunTerminalError,
 };
 pub use events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, DropClass, EventPolicy,

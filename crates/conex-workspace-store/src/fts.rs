@@ -2,10 +2,10 @@
 //!
 //! # 模块内聚（SD-16 · 黄带体积切开）
 //! - **本文件**：公开类型 / `WorkspaceStore` 方法门面（reindex / search / rebuild / attr）
-//! - [`search`]（`fts_search.rs`）：`build_fts_query` / `contains_cjk` / CJK `instr` 路径
-//! - [`index`]（`fts_index.rs`）：`reindex_block_conn` / remove / `rebuild_fts_conn`
-//! - [`tests`]（`fts_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::fts::*` / `lib` `pub use`）
+//! - [`search`]（`fts/search.rs`）：`build_fts_query` / `contains_cjk` / CJK `instr` 路径
+//! - [`index`]（`fts/index.rs`）：`reindex_block_conn` / remove / `rebuild_fts_conn`
+//! - [`tests`]（`fts/tests.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::fts::*` / `lib` `pub use`）
 //!
 //! SD-02：自 `lib.rs` 门面拆出 search/rebuild/CJK/reindex。
 //! **诚实**：**≠ A-PERF-10 数值满关**；**≠ EL-03**（本包仅为结构切开，不静默改查询语义）。
@@ -14,11 +14,9 @@ use crate::{StoreError, WorkspaceStore};
 use rusqlite::{params, OptionalExtension};
 
 /// 查询辅助：MATCH 表达式 / CJK 检测 / `instr` 路径（SD-16）。
-#[path = "fts_search.rs"]
 mod search;
 
 /// 索引写路径：reindex / remove / rebuild（SD-16）。
-#[path = "fts_index.rs"]
 mod index;
 
 // ── 子模 re-export：保持 `crate::fts::{…}` 与 `lib` `pub(crate) use` 路径稳定 ──
@@ -342,5 +340,4 @@ impl WorkspaceStore {
 }
 
 #[cfg(test)]
-#[path = "fts_tests.rs"]
 mod tests;

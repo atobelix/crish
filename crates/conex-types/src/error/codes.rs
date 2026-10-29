@@ -21,6 +21,14 @@ pub const TOOL_SESSION_EXCLUSIVE: &str = "tool.session.exclusive";
 pub const AGENT_MAX_TURNS_REACHED: &str = "agent.max_turns_reached";
 pub const AGENT_NO_PROGRESS: &str = "agent.no_progress";
 pub const AGENT_INTERVENTION_REQUIRED: &str = "agent.intervention_required";
+// ── agent 运行时故障（conex-agents fault codes，X04 P2 补登）──
+pub const AGENT_CAPACITY_PRESSURE: &str = "agent.capacity_pressure";
+pub const AGENT_CAPABILITY_DENIED: &str = "agent.capability_denied";
+pub const AGENT_MODEL_UNAVAILABLE: &str = "agent.model_unavailable";
+pub const AGENT_COMM_THROTTLED: &str = "agent.comm_throttled";
+pub const AGENT_CONFIG_INVALID: &str = "agent.config_invalid";
+pub const AGENT_INTERRUPTED: &str = "agent.interrupted";
+pub const AGENT_SPAWN_FAILED: &str = "agent.spawn_failed";
 // ── runtime 域（4 正式码）──
 pub const RUNTIME_UNEXPECTED_STATE: &str = "runtime.unexpected_state";
 pub const RUNTIME_TRANSITION_FAILED: &str = "runtime.transition_failed";
@@ -157,6 +165,8 @@ pub const COMMON_UNSUPPORTED: &str = "common.unsupported";
 pub const COMMON_NOT_FOUND: &str = "common.not_found";
 pub const COMMON_INVALID_INPUT: &str = "common.invalid_input";
 pub const COMMON_ENCODING: &str = "common.encoding";
+/// 未捕获 panic（telemetry 崩溃捕获，X04 P2 补登）
+pub const COMMON_PANIC: &str = "common.panic";
 // ── store 域（5 正式码，PE-03 T03.3 新增 io）──
 pub const STORE_IO: &str = "store.io";
 // ── security 域（1 正式码）──

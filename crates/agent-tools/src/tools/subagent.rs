@@ -38,7 +38,7 @@
 //! - `contract`：spawn 契约域（请求/结果/错误/spawner 通道 + 工具面防护 + 伪造审批防护）；
 //! - `tool`：run_subagent 工具域（入参解析/单发/批量/Tool 实现）；
 //!
-//! 测试外置 `subagent/subagent_tests.rs`（`#[path]` 旁挂，无孤儿）；
+//! 测试外置 `subagent/tests/`（`mod` 旁挂，无孤儿）；
 //! 公开 API 经本文件 `pub use` 保持不 break（tools/mod.rs 注册不变）。
 
 mod contract;
@@ -64,8 +64,7 @@ pub use defs::{
 };
 pub(crate) use tool::RunSubagentTool;
 
-// ── 测试（SR-06a 外置；`#[path]` 旁挂，无孤儿）───────────────────
+// ── 测试（SR-06a 外置；`mod` 旁挂，无孤儿）───────────────────
 
 #[cfg(test)]
-#[path = "subagent/subagent_tests.rs"]
 mod tests;

@@ -128,31 +128,14 @@ impl AgentFault {
     }
 }
 
-/// 错误码（`agent.*` 命名空间；既有 `subagent.*` 继续用于守卫/死锁）
-pub mod codes {
-    /// 容量/限流压力（数量或 provider 压力导致）
-    pub const CAPACITY_PRESSURE: &str = "agent.capacity_pressure";
-    /// 能力不足（只读子代理尝试写/执行）
-    pub const CAPABILITY_DENIED: &str = "agent.capability_denied";
-    /// 模型不可用/未配置
-    pub const MODEL_UNAVAILABLE: &str = "agent.model_unavailable";
-    /// 通信被节流/合并
-    pub const COMM_THROTTLED: &str = "agent.comm_throttled";
-    /// 策略配置非法
-    pub const CONFIG_INVALID: &str = "agent.config_invalid";
-    /// 代理被中断（进程重启/宿主断开）
-    pub const INTERRUPTED: &str = "agent.interrupted";
-    /// 派发失败（非策略原因）
-    pub const SPAWN_FAILED: &str = "agent.spawn_failed";
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_types::error::codes;
 
     #[test]
     fn fault_round_trips_with_actions() {
-        let fault = AgentFault::new(codes::CAPACITY_PRESSURE, AgentFaultScope::Spawn)
+        let fault = AgentFault::new(codes::AGENT_CAPACITY_PRESSURE, AgentFaultScope::Spawn)
             .with_load(AgentLoad {
                 active_agents: 20,
                 active_siblings: 20,

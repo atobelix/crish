@@ -1,5 +1,7 @@
 use super::*;
 
+use conex_shared::time::parse_iso8601_ms;
+
 /// 会话记录往返：to_session_record → from_session_record 保持结构与叶子
 #[test]
 fn session_record_roundtrip_preserves_tree() {
@@ -71,7 +73,7 @@ fn session_record_context_meta_roundtrip() {
 #[test]
 fn apply_compression_end_updates_guards() {
     let mut record = tree().to_session_record();
-    let boundary = parse_iso8601_epoch_ms("2026-08-03T10:00:00.000Z").unwrap();
+    let boundary = parse_iso8601_ms("2026-08-03T10:00:00.000Z").unwrap();
     // 首次压缩：从无护栏建立
     assert!(record.apply_compression_end(7, "2026-08-03T10:00:00.000Z"));
     let meta = record.context_meta().expect("首次压缩必须建立护栏");
@@ -80,7 +82,7 @@ fn apply_compression_end_updates_guards() {
     assert_eq!(meta.last_compaction_generation, Some(1), "首次压缩代数 = 1");
     assert_eq!(meta.compression_retries, 0);
     // 第二次压缩：边界推进、序列更新、代数 +1
-    let boundary2 = parse_iso8601_epoch_ms("2026-08-03T12:30:00.000Z").unwrap();
+    let boundary2 = parse_iso8601_ms("2026-08-03T12:30:00.000Z").unwrap();
     assert!(record.apply_compression_end(15, "2026-08-03T12:30:00.000Z"));
     let meta = record.context_meta().expect("护栏持续存在");
     assert_eq!(
@@ -110,22 +112,19 @@ fn apply_compression_end_ignores_unparseable_timestamp() {
     assert_eq!(meta.last_compaction_generation, Some(1));
 }
 
-/// ISO 时间戳解析精度：毫秒、缺毫秒、非法形态
+/// ISO 时间戳解析精度（`conex_shared::time` 真源）：毫秒、缺毫秒、非法形态
 #[test]
-fn parse_iso8601_epoch_ms_precision() {
-    assert_eq!(parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"), Some(0));
+fn iso_timestamp_parse_precision() {
+    assert_eq!(parse_iso8601_ms("1970-01-01T00:00:00.000Z"), Some(0));
+    assert_eq!(parse_iso8601_ms("1970-01-01T00:00:00.500Z"), Some(500));
     assert_eq!(
-        parse_iso8601_epoch_ms("1970-01-01T00:00:00.500Z"),
-        Some(500)
-    );
-    assert_eq!(
-        parse_iso8601_epoch_ms("1970-01-01T00:00:01Z"),
+        parse_iso8601_ms("1970-01-01T00:00:01Z"),
         Some(1_000),
         "缺毫秒按 0 处理"
     );
     assert_eq!(
-        parse_iso8601_epoch_ms("2026-08-03T11:30:00.500Z"),
-        parse_iso8601_epoch_ms("2026-08-03T11:30:00.5Z"),
+        parse_iso8601_ms("2026-08-03T11:30:00.500Z"),
+        parse_iso8601_ms("2026-08-03T11:30:00.5Z"),
         "毫秒补零一致"
     );
     for bad in [
@@ -136,6 +135,6 @@ fn parse_iso8601_epoch_ms_precision() {
         "garbage",
         "",
     ] {
-        assert_eq!(parse_iso8601_epoch_ms(bad), None, "非法形态：{bad}");
+        assert_eq!(parse_iso8601_ms(bad), None, "非法形态：{bad}");
     }
 }

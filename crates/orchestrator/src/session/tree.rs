@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use conex_shared::time::{Clock, SystemClock};
 use conex_types::checkpoint::{CheckpointPayload, LeafCheckpointState, CHECKPOINT_PAYLOAD_KEY};
 
 use super::{SessionRecord, SessionTreeEntry, SessionTreeEntryKind, SessionTreeError};
@@ -190,7 +191,7 @@ impl SessionTree {
         let entry = SessionTreeEntry {
             id,
             parent_id: target,
-            created_at: crate::now_ms(),
+            created_at: SystemClock.now_ms(),
             kind: SessionTreeEntryKind::BranchSummary {
                 summary: summary.into(),
                 abandoned_leaf_id: self.current_leaf_id.clone(),

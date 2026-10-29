@@ -1,6 +1,7 @@
 //! CrishError 与 IPC 负载 CrishErrorPayload（构造、序列化、std::error 互操作）
 
-use super::{codes, info, now_millis, CrishErrorCategory, CRISH_ERROR_CAUSE_MAX_DEPTH};
+use super::{codes, info, CrishErrorCategory, CRISH_ERROR_CAUSE_MAX_DEPTH};
+use conex_shared::time::{Clock, SystemClock};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,7 +39,7 @@ impl CrishError {
             params: None,
             metadata: None,
             cause: None,
-            timestamp: now_millis(),
+            timestamp: SystemClock.now_ms(),
         }
     }
 
@@ -106,7 +107,7 @@ impl CrishError {
                 metadata: Some(serde_json::json!({ "truncated": true })),
                 cause: None,
                 stack: None,
-                timestamp: now_millis(),
+                timestamp: SystemClock.now_ms(),
             };
         }
         let info_val = info(&self.code);
@@ -195,7 +196,7 @@ impl CrishErrorPayload {
             metadata: None,
             cause: None,
             stack: None,
-            timestamp: now_millis(),
+            timestamp: SystemClock.now_ms(),
         }
     }
 

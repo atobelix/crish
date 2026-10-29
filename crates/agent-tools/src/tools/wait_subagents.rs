@@ -33,25 +33,22 @@
 //!   [wait_for_terminal_events] 原语）；
 //! - `wait_tool`：工具域（[WaitSubagentsTool] + Tool 实现）；
 //!
-//! 测试外置 `wait_subagents_tests.rs`（`#[path]` 旁挂，无孤儿）；
+//! 测试外置 `wait_subagents/tests/`（`mod` 旁挂，无孤儿）；
 //! 公开 API 经本文件 `pub use` 保持不 break（tools/mod.rs 注册不变）。
 //!
 //! 诚实边界：仅结构拆分，等待/收束语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
 // ==================== 拆分接线（SR-06a-3 · 结构拆分 · ≠ EL）====================
 //
-// 本文件为薄门面：全部实现按逻辑域拆入三个子模块（扁平文件必须 #[path]
-// 显式接线，吸取 SR-06d 教训）：
+// 本文件为薄门面：全部实现按逻辑域拆入三个子模块（子模块位于同目录，`mod`
+// 直接接线）：
 //   wait_defs（定义与结果聚合域：类型 / 常量 / 契约 / 产出收集）
 //   wait_events（事件驱动等待域：终态事件信封 + 等待原语）
 //   wait_tool（工具域：WaitSubagentsTool + Tool 实现）
-// 测试整体外置 wait_subagents_tests.rs（#[path] 接线，零删除）。
+// 测试整体外置 `wait_subagents/tests/`（`mod` 接线，零删除）。
 // 诚实边界：仅结构拆分，语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
-#[path = "wait_defs.rs"]
 mod wait_defs;
-#[path = "wait_events.rs"]
 mod wait_events;
-#[path = "wait_tool.rs"]
 mod wait_tool;
 
 pub use wait_defs::{
@@ -64,8 +61,7 @@ pub use wait_defs::{
 pub use wait_events::{wait_for_terminal_events, SubagentTerminalEvent};
 pub(crate) use wait_tool::WaitSubagentsTool;
 
-// ── 测试（SR-06a-3 外置；`#[path]` 旁挂，无孤儿）───────────────────
+// ── 测试（SR-06a-3 外置；`mod` 旁挂，无孤儿）───────────────────
 
 #[cfg(test)]
-#[path = "wait_subagents_tests/mod.rs"]
 mod tests;

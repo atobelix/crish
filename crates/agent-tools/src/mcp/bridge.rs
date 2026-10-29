@@ -14,7 +14,7 @@
 //! 请求超时 → runtime.timeout；server 未运行 → mcp.connection_failed。
 //!
 //! 结构（SR-06a-6 · 拆分 · ≠ EL）：本文件为薄门面，实现按逻辑域拆 3 个子模
-//! （扁平文件必须 `#[path]` 显式接线）：
+//! （子模块位于同目录，`mod` 直接接线）：
 //! - `bridge_protocol`：协议与参数适配域（协议常量 / `McpToolInfo` wire 形状 /
 //!   名称前缀与净化 / 工具枚举与调用结果适配 / JSON-RPC 响应解析）
 //! - `bridge_session`：进程/会话/调用执行域（stdio 子进程生命周期 /
@@ -22,8 +22,8 @@
 //! - `bridge_registry`：生命周期/注册域（`McpClientBridge` 会话表 /
 //!   `McpToolAdapter` 本地 Tool 适配器）
 //!
-//! 测试按域旁挂（`bridge_protocol_tests` / `bridge_session_tests` /
-//! `bridge_registry_tests`，`#[path]` 接线，无孤儿，零删除）；
+//! 测试按域旁挂（`bridge/bridge_protocol/tests`、`bridge/bridge_session/tests`、
+//! `bridge/bridge_registry/tests`，`mod` 接线，无孤儿，零删除）；
 //! 公开 API 经本文件 `pub use` 保持不 break（mcp/mod.rs 与调用方零改动）。
 //!
 //! 诚实边界：仅结构拆分，MCP 桥语义（list/call 注册、鉴权、参数校验）
@@ -31,11 +31,8 @@
 
 // ==================== 拆分接线（SR-06a-6 · 结构拆分 · ≠ EL）====================
 
-#[path = "bridge_protocol.rs"]
 mod bridge_protocol;
-#[path = "bridge_registry.rs"]
 mod bridge_registry;
-#[path = "bridge_session.rs"]
 mod bridge_session;
 
 pub use bridge_protocol::{

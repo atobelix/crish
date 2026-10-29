@@ -51,8 +51,8 @@ pub use action::{
     ACTION_TOTAL_TIMEOUT, MAX_ATTEMPTS, TYPE_CHUNK_SIZE,
 };
 pub use gate::{
-    blocked_urls, FormalDomainGate, GateClock, HostResolver, SetBlockedSender, SystemClock,
-    SystemResolver, TransportGate, REBINDING_WINDOW,
+    blocked_urls, FormalDomainGate, HostResolver, SetBlockedSender, SystemResolver, TransportGate,
+    REBINDING_WINDOW,
 };
 
 pub use browser::args::EngineMode;
