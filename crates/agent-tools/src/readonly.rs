@@ -141,7 +141,7 @@ pub fn filter_registry_for_task_type(
 /// `ShellCommandTool::prepare`，作为任务类型安全刚性防线：
 /// - `commit` → 仅 `git` 命令（严格前缀过滤：命令首词必须为 git/git.exe，除 git 外禁止执行任何 shell 命令，杜绝 commit 代理越权）；
 /// - `implementation` → 构建/测试类命令白名单：复用语义层
-///   `semantics::analyze` 的 CommandClass 分类，整体分类必须为 Normal，且不被既有门禁判定为需审批/拦截；
+///   assess 的 CommandClass 分类，整体分类必须为 Normal，且不被既有门禁判定为需审批/拦截；
 /// - 其余 / 未知 → 一律拒绝（无命令执行权）。
 pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> bool {
     let cmd = command_line.trim();
@@ -152,10 +152,10 @@ pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> boo
         "commit" => first_token(cmd) == "git",
         "implementation" => {
             use conex_sandbox::gatekeeper::{GatekeeperResult, SHARED_GATEKEEPER};
-            use conex_sandbox::semantics::{analyze, CommandClass};
+            use conex_sandbox::CommandClass;
             // 语义层分类：非普通命令（红线/危险/删除/回退/间接/cd 形态）一律拒绝
-            let analysis = analyze(cmd);
-            if analysis.overall_class != CommandClass::Normal {
+            let analysis = conex_sandbox::assess(cmd);
+            if analysis.overall != CommandClass::Normal {
                 return false;
             }
             // 既有门禁兜底：网络发布 / 提权 / 强推等需审批形态不进默认集

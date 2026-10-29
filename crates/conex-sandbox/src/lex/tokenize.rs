@@ -3,7 +3,7 @@
 use super::quote::is_escape_requiring;
 
 /// 复合命令拆段：`&&`、`;`、`||`、`|`、`|&`、换行。引号内与转义后不拆。
-pub fn split_segments(line: &str) -> Vec<String> {
+pub(crate) fn split_segments(line: &str) -> Vec<String> {
     let mut segments = Vec::new();
     let mut current = String::new();
     let mut chars = line.chars().peekable();
@@ -38,7 +38,12 @@ pub fn split_segments(line: &str) -> Vec<String> {
                     chars.next();
                     push_trimmed(&mut segments, &current);
                     current = String::new();
-                } else if current.trim().is_empty() {
+                } else if current.trim().is_empty()
+                    || current.ends_with('>')
+                    || current.ends_with('<')
+                    || chars.peek() == Some(&'>')
+                {
+                    // 行首与号是调用运算符。紧贴重定向符的与号属于重定向，不是后台分隔。
                     current.push('&');
                 } else {
                     push_trimmed(&mut segments, &current);
@@ -74,7 +79,7 @@ fn push_trimmed(segments: &mut Vec<String>, current: &str) {
 }
 
 /// 段内拆参：剥离引号，还原反引号转义，保留 Windows 路径反斜杠。
-pub fn split_command_args_normalized(segment: &str) -> (String, Vec<String>) {
+pub(crate) fn split_command_args_normalized(segment: &str) -> (String, Vec<String>) {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
@@ -161,20 +166,8 @@ pub fn split_command_args_normalized(segment: &str) -> (String, Vec<String>) {
     }
 }
 
-/// 段内词法切分。命令名在前，其余为参数。空白段返回空向量。
-pub fn tokenize_segment(segment: &str) -> Vec<String> {
-    let (command, args) = split_command_args_normalized(segment);
-    if command.is_empty() && args.is_empty() {
-        return Vec::new();
-    }
-    let mut tokens = Vec::with_capacity(1 + args.len());
-    tokens.push(command);
-    tokens.extend(args);
-    tokens
-}
-
 /// 命令名规范化：去引号、去路径、去可执行文件后缀、小写，并归一常见别名。
-pub fn normalize_token(token: &str) -> String {
+pub(crate) fn normalize_token(token: &str) -> String {
     let trimmed = token.trim();
     let name = if (trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2)
         || (trimmed.starts_with('\'') && trimmed.ends_with('\'') && trimmed.len() >= 2)
@@ -204,4 +197,37 @@ pub fn normalize_token(token: &str) -> String {
         return "invoke-command".to_string();
     }
     lower
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_segments;
+
+    #[test]
+    fn redirect_ampersand_stays_inside_the_segment() {
+        assert_eq!(
+            split_segments("echo x >&2; exit 7"),
+            vec!["echo x >&2".to_string(), "exit 7".to_string()]
+        );
+        assert_eq!(
+            split_segments("echo x 2>&1; exit 7"),
+            vec!["echo x 2>&1".to_string(), "exit 7".to_string()]
+        );
+        assert_eq!(
+            split_segments("echo x &>file; exit 7"),
+            vec!["echo x &>file".to_string(), "exit 7".to_string()]
+        );
+        assert_eq!(
+            split_segments("echo x <&0; exit 7"),
+            vec!["echo x <&0".to_string(), "exit 7".to_string()]
+        );
+    }
+
+    #[test]
+    fn bare_ampersand_still_separates_background_commands() {
+        assert_eq!(
+            split_segments("sleep 1 & echo x"),
+            vec!["sleep 1".to_string(), "echo x".to_string()]
+        );
+    }
 }

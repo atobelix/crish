@@ -220,7 +220,7 @@ impl ShellCommandTool {
         let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
 
         // ── 执行行为安全门（与权限模式无关的物理底线）──────────────
-        let analysis = conex_sandbox::semantics::analyze(&command);
+        let analysis = conex_sandbox::assess(&command);
         let full_line = command.clone();
         let gate_result = conex_sandbox::gatekeeper::SHARED_GATEKEEPER
             .check_command_with_context_and_analysis(
@@ -250,7 +250,7 @@ impl ShellCommandTool {
         }
 
         // 删除形态 → 回收站（任何模式都不得物理抹除）
-        if analysis.overall_class == conex_sandbox::semantics::CommandClass::DeleteShape
+        if analysis.overall == conex_sandbox::CommandClass::DeleteShape
             || analysis.has_indirect_delete
         {
             return Prepared::Done(shell_redirect::redirect_or_intercept_delete(

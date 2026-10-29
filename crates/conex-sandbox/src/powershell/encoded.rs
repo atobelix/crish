@@ -30,12 +30,16 @@ fn decode_base64_payload(input: &str) -> Option<Vec<u8>> {
             buf.push(((accumulator >> bits) & 0xFF) as u8);
         }
     }
-    if buf.is_empty() { None } else { Some(buf) }
+    if buf.is_empty() {
+        None
+    } else {
+        Some(buf)
+    }
 }
 
 fn decode_text(bytes: Vec<u8>) -> Option<String> {
     let has_null = bytes.contains(&0);
-    if has_null && bytes.len() % 2 == 0 {
+    if has_null && bytes.len().is_multiple_of(2) {
         if let Some(text) = utf16_le(&bytes) {
             return Some(text);
         }
@@ -45,7 +49,7 @@ fn decode_text(bytes: Vec<u8>) -> Option<String> {
             return Some(utf8_str);
         }
     }
-    if bytes.len() % 2 == 0 {
+    if bytes.len().is_multiple_of(2) {
         return utf16_le(&bytes);
     }
     None

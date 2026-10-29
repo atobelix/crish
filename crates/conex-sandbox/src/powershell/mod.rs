@@ -3,5 +3,6 @@
 mod encoded;
 mod flags;
 
-pub use encoded::extract_and_decode_ps_payload;
-pub use flags::{is_ps_encoded_command_flag, is_ps_working_directory_flag};
+pub(crate) use encoded::extract_and_decode_ps_payload;
+pub(crate) use flags::is_ps_encoded_command_flag;
+pub use flags::is_ps_working_directory_flag;
