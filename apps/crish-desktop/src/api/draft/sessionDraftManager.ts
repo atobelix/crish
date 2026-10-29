@@ -13,8 +13,10 @@
  * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import { getSessionStoreState } from '../../store/sessionStore';
-import { setComposerDraft } from '../../store/sessionAccess';
+import {
+  getSessionStoreState,
+  setComposerDraft,
+} from '../../store/storeAccess';
 
 /** 草稿注入模式 */
 export type DraftInjectionMode =
