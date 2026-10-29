@@ -98,76 +98,11 @@ export {
 } from './logger';
 export type { LogLevel, LogEntry, LogTransport, LoggerOptions } from './logger';
 
-export { ObjectPool } from './object-pool';
-
-// ── 可观测性 ──
-export { PrometheusMetricsExporter } from './prometheus-exporter';
-export type { MetricsExporter } from './metrics-exporter';
-
 // ── 技能 ID 算法（与 agent-runtime 一致） ──
 export { skillStableId, ruleStableId, hashTextSha256Hex } from './skill-id';
 
 // ── 背压系统 ──
 export { TokenBucket } from './backpressure';
-
-// ── 平台自适应层 ──
-export { detectHardware } from './hardware-profile';
-export type {
-  HardwareProfile,
-  HardwareProfileInit,
-  HardwareProfileChangeListener,
-} from './hardware-profile';
-
-export {
-  PerformanceLevel,
-  assignTier,
-  shouldDowngrade,
-  shouldUpgrade,
-  TIER_CONFIGS,
-} from './performance-tier';
-export type { TierConfig, TierAssignment } from './performance-tier';
-
-export {
-  DynamicAdaptationEngine,
-  createAdaptationEngine,
-} from './dynamic-adaptation';
-export type {
-  RuntimeMetrics,
-  MetricEvent,
-  MetricEventType,
-  AdaptationListener,
-  DynamicAdaptationOptions,
-} from './dynamic-adaptation';
-
-export {
-  getFullAdaptation,
-  applyRenderAdaptation,
-  RENDER_ADAPTATIONS,
-  COMPUTE_ADAPTATIONS,
-  NETWORK_ADAPTATIONS,
-  STORAGE_ADAPTATIONS,
-} from './platform-adaptation';
-export type {
-  RenderAdaptation,
-  DomStrategy,
-  ComputeAdaptation,
-  CpuPerformanceTargets,
-  GpuAccelerationGains,
-  NetworkAdaptation,
-  StorageAdaptation,
-  FullPlatformAdaptation,
-} from './platform-adaptation';
-
-export {
-  PlatformAdaptationCtx,
-  usePlatformAdaptationCtx,
-  usePlatformAdaptation,
-} from './use-platform-adaptation';
-export type {
-  PlatformAdaptationState,
-  PlatformAdaptationOptions,
-  UsePlatformAdaptationResult,
-} from './use-platform-adaptation';
 
 // ── 缓存优化（P6：TS 侧规范实现真源，规则 R1-R5 见 P6 §3.1） ──
 // 注：目录与既有 `./cache.ts`（LruCache）同名，模块解析文件优先于目录，

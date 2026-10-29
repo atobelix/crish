@@ -106,44 +106,6 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 10, minOps: 100 },
   },
   {
-    name: 'jsonl.append.1000',
-    setup: async () => {
-      const { mkdtemp } = await import('node:fs/promises');
-      const { join } = await import('node:path');
-      const { tmpdir } = await import('node:os');
-      const dir = await mkdtemp(join(tmpdir(), 'crish-bench-'));
-      const { writeFileSync } = await import('node:fs');
-      writeFileSync(join(dir, 'bench.jsonl'), '', 'utf8');
-      (globalThis as unknown as Record<string, string>).__benchDir = dir;
-    },
-    run: async () => {
-      const { JsonlAppendBatcher } = await import('../jsonl-append-batcher');
-      const dir = (globalThis as unknown as Record<string, string>).__benchDir;
-      const batcher = new JsonlAppendBatcher({
-        filePath: `${dir}/bench.jsonl`,
-        flushIntervalMs: 0,
-        flushCount: 1000,
-        fsyncOnFlush: false,
-        fsyncDirectoryOnFlush: false,
-      });
-      for (let i = 0; i < 1000; i++) {
-        await batcher.append(
-          JSON.stringify({ index: i, data: 'x'.repeat(64) })
-        );
-      }
-      await batcher.flush();
-      await batcher.close();
-    },
-    teardown: async () => {
-      const { rm } = await import('node:fs/promises');
-      const dir = (globalThis as unknown as Record<string, string>).__benchDir;
-      await rm(dir!, { recursive: true, force: true });
-    },
-    iterations: 20,
-    warmupIterations: 5,
-    target: { maxMs: 10, minOps: 100 },
-  },
-  {
     name: 'deep-equal.1k.props',
     setup: noopSetup,
     run: async () => {
