@@ -8,15 +8,12 @@
 //! 语义来源：05 §2.3 输出预算、05 §5.5 工具幂等（stream-recovery.test.ts:188-229）。
 //!
 //! SR-06a-4 拆分：本文件为薄门面——类型面 `executor_types`、幂等键面
-//! `executor_idem`、执行面 `executor_run`，`#[path]` 显式接线（无孤儿）；
-//! 测试整体外置 `executor_tests.rs`（`#[path]` 旁挂，零删除）。
+//! `executor_idem`、执行面 `executor_run`，`mod` 直接接线（无孤儿）；
+//! 测试整体外置 `executor/tests.rs`（`mod` 旁挂，零删除）。
 //! 诚实边界：仅结构拆分，语义零改动（≠ EL-01…10 / ≠ 结构债清零）。
 
-#[path = "executor_idem.rs"]
 mod executor_idem;
-#[path = "executor_run.rs"]
 mod executor_run;
-#[path = "executor_types.rs"]
 mod executor_types;
 
 pub use executor_run::{execute_stream_with_output_policy, execute_with_output_policy};
@@ -36,5 +33,4 @@ use conex_types::error::codes;
 use serde_json::Value;
 
 #[cfg(test)]
-#[path = "executor_tests.rs"]
 mod tests;

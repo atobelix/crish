@@ -2,8 +2,8 @@
 //!
 //! # 模块内聚（**SD-31** · 测旁挂）
 //! - **本文件**：`migrate` / `ensure_blocks_fts` / `ensure_column`（schema 语义不变）
-//! - [`tests`]（`migrate_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::migrate::*` / `lib` `pub use`）
+//! - [`tests`]（`migrate/tests.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::migrate::*` / `lib` `pub use`）
 //!
 //! SD-02：自 `lib.rs` 门面拆出。
 //! **诚实**：**SD-31** · **≠ EL-03** · **≠ Wave 2 存储完成**；本包仅为测旁挂，**不**静默改 schema。
@@ -346,5 +346,4 @@ pub(crate) fn ensure_column(
 // ── 测试（SD-31 外置） ─────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "migrate_tests.rs"]
 mod tests;

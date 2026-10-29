@@ -23,7 +23,6 @@ mod time;
 mod tree;
 
 #[cfg(test)]
-#[path = "tree_tests.rs"]
 mod tree_tests;
 
 pub use record::{

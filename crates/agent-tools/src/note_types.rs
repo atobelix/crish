@@ -14,13 +14,9 @@
 //! - **≠** 宣称 Store 后端完成（本模块仅为叶子契约形状）
 //! - **≠** 重做 plan kinds / set_attr
 
-#[path = "note_types_batch.rs"]
 mod batch;
-#[path = "note_types_block.rs"]
 mod block;
-#[path = "note_types_error.rs"]
 mod error;
-#[path = "note_types_ops.rs"]
 mod ops;
 
 pub use batch::{NoteBatchTokens, DEFAULT_BATCH_TOKEN_TTL};

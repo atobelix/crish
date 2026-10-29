@@ -11,7 +11,8 @@
 //!
 //! 全部为纯数据结构/纯函数（无 HTTP、无 IO），单测驱动。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 cache_tests/）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（实现与测试同处 cache/ 目录，
+//! 测试旁挂 cache/tests/）：
 //! - [cache_policy]：断点预算分配（allocate_breakpoints）、缓存策略组装
 //!   （build_cache_policy）与厂商能力兜底表（infer_cache_capability / CACHE_CAPABILITY_TABLE）
 //! - [cache_wire]：wire 施加面（apply_cache_controls / cache_control_for_ttl /
@@ -22,9 +23,7 @@ use serde_json::{json, Value};
 #[cfg(test)]
 pub(crate) use crate::request::messages::{ChatContent, ChatContentPart, ChatMessage};
 
-#[path = "cache_policy.rs"]
 mod cache_policy;
-#[path = "cache_wire.rs"]
 mod cache_wire;
 
 pub use cache_policy::{
@@ -174,5 +173,4 @@ pub struct BreakpointReport {
 }
 
 #[cfg(test)]
-#[path = "cache_tests/mod.rs"]
 mod tests;

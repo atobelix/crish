@@ -2,11 +2,11 @@
 //!
 //! # 模块内聚（SD-19 · **SD-36** 路径·分类 / **SD-51** 胶水再抽）
 //! - **本文件**：OS 事件模型 / `MirrorOsWatcher` / 事件源 trait
-//! - [`path`]（`mirror_os_watch_path.rs`）：路径规范化 / `classify_notify_event` / `interest_allows`（**SD-36**；本轮不改）
-//! - [`fake`]（`mirror_os_watch_fake.rs`）：`FakeMirrorOsEventSource`（**SD-51**）
-//! - [`glue`]（`mirror_os_watch_glue.rs`）：`detect_if_os_event_hits_mirror` / `poll_on_os_hint`（**SD-51**）
-//! - [`tests`]（`mirror_os_watch_tests.rs`）：单元测外置
-//! - 接线：`#[path]` 子模，无孤儿；公开 API 路径不变（`crate::mirror_os_watch::*` / `lib` `pub use`）
+//! - [`path`]（`mirror_os_watch/path.rs`）：路径规范化 / `classify_notify_event` / `interest_allows`（**SD-36**；本轮不改）
+//! - [`fake`]（`mirror_os_watch/fake.rs`）：`FakeMirrorOsEventSource`（**SD-51**）
+//! - [`glue`]（`mirror_os_watch/glue.rs`）：`detect_if_os_event_hits_mirror` / `poll_on_os_hint`（**SD-51**）
+//! - [`tests`]（`mirror_os_watch/tests.rs`）：单元测外置
+//! - 接线：同目录 `mod` 子模，无孤儿；公开 API 路径不变（`crate::mirror_os_watch::*` / `lib` `pub use`）
 //!
 //! # 与 poll 子集的关系（并存，不互抹，≠ 默认双开）
 //! - 既有 [`crate::MirrorWatchHandle`] / [`crate::MirrorWatcher`] / [`crate::poll_mirror_once`]
@@ -38,18 +38,15 @@ use std::time::Duration;
 use thiserror::Error;
 
 /// 路径规范化 / notify 分类 / interest 过滤（SD-36；**≠** 占 SD-19 / **≠** EL-03）。
-#[path = "mirror_os_watch_path.rs"]
 mod path;
 
 use path::{classify_notify_event, interest_allows, normalize_abs_path, path_compare_key};
 
 /// Fake 事件源（**SD-51**；**≠** OS inotify 满关；**≠** 占 SD-19/36）。
-#[path = "mirror_os_watch_fake.rs"]
 mod fake;
 pub use fake::FakeMirrorOsEventSource;
 
 /// detect / poll 胶水（**SD-51**；不 apply；**≠** 默认双开；**≠** EL-03）。
-#[path = "mirror_os_watch_glue.rs"]
 mod glue;
 pub use glue::{detect_if_os_event_hits_mirror, poll_on_os_hint};
 
@@ -272,5 +269,4 @@ impl MirrorOsEventSource for MirrorOsWatcher {
 }
 
 #[cfg(test)]
-#[path = "mirror_os_watch_tests.rs"]
 mod tests;

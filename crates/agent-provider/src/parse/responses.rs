@@ -24,7 +24,8 @@
 //! 与 chat/Anthropic/Gemini 解析器行为一致（有意分歧，注释记录）。
 //!
 //! SR-06e · 拆分 · ≠ EL：门面文件。共享类型（[ResponsesParser] /
-//! [ResponsePendingToolCall]）留本文件，实现域拆分如下（测试旁挂 responses_tests.rs）：
+//! [ResponsePendingToolCall]）留本文件，实现域拆分如下（实现与测试同处
+//! responses/ 目录，测试旁挂 responses/tests.rs）：
 //! - [responses_core]：状态机（push_frame / finish / 终态与错误帧映射）
 //! - [responses_tool_call]：pending function_call 管理（merge_item / merge_arguments /
 //!   find_pending / emit_tool_call）
@@ -33,9 +34,7 @@ use std::collections::HashSet;
 
 use crate::events::{ProviderUsage, StopReason, StreamParser};
 
-#[path = "responses_core.rs"]
 mod responses_core;
-#[path = "responses_tool_call.rs"]
 mod responses_tool_call;
 
 pub use responses_core::response_status_to_stop;
@@ -100,5 +99,4 @@ impl Default for ResponsesParser {
 }
 
 #[cfg(test)]
-#[path = "responses_tests.rs"]
 mod tests;
