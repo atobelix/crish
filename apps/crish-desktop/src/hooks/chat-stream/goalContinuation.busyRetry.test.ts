@@ -6,14 +6,15 @@
  * - 无计数的普通排队追问：microtask 立即发（行为不变）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGoalMode } from './useGoalMode';
+import { drainQueuedAfterComplete } from './goalContinuation';
 import {
   BUSY_RETRY_MAX_ATTEMPTS,
-  SessionStreamManager,
   clearBusy,
   getBusyAttempt,
   noteBusy,
   resetBusyRetryForTests,
+  sessionStreams,
+  type StreamStarter,
 } from '../../api/sessionStreamManager';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
@@ -38,7 +39,11 @@ function statusOf(sid: string, id: string) {
 }
 
 /** 模拟 streamSession S7 分支：noteBusy + processing→queued(force)，随后 complete 触发 drain */
-function rejectAsBusy(sid: string, userId: string, drain: (sid: string) => void) {
+function rejectAsBusy(
+  sid: string,
+  userId: string,
+  drain: (sid: string) => void
+) {
   noteBusy(sid, userId);
   getCompositionRoot()
     .session.getState()
@@ -49,6 +54,10 @@ function rejectAsBusy(sid: string, userId: string, drain: (sid: string) => void)
 describe('drainQueuedAfterComplete · 串行守卫退避重试（P1-d 方案 B）', () => {
   let sid = '';
   const userId = 'u-busy';
+  let unbind: (() => void) | null = null;
+  const bindStarter = (starter: StreamStarter) => {
+    unbind = sessionStreams.bindStarter(sid, starter);
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -59,18 +68,19 @@ describe('drainQueuedAfterComplete · 串行守卫退避重试（P1-d 方案 B�
   });
 
   afterEach(() => {
+    unbind?.();
+    unbind = null;
+    sessionStreams.clearSession(sid);
     vi.useRealTimers();
     resetBusyRetryForTests();
   });
 
   it('连续被拒 N(>上限) 次：重发次数 = 上限，退避 300/600/1200/2400ms，最终 error + ComposerErrorBar', async () => {
-    const mgr = new SessionStreamManager();
-    const { drainQueuedAfterComplete } = useGoalMode({ current: mgr });
     const startTimes: number[] = [];
     const t0 = Date.now();
-    mgr.bindStarter((_text, uid, s) => {
+    bindStarter((s, _text, uid) => {
       startTimes.push(Date.now() - t0);
-      rejectAsBusy(s ?? sid, uid, drainQueuedAfterComplete);
+      rejectAsBusy(s, uid, drainQueuedAfterComplete);
     });
 
     // 首次发送被拒
@@ -94,12 +104,9 @@ describe('drainQueuedAfterComplete · 串行守卫退避重试（P1-d 方案 B�
   });
 
   it('被拒 2 次后成功：计数清零、消息 completed、无失败条', async () => {
-    const mgr = new SessionStreamManager();
-    const { drainQueuedAfterComplete } = useGoalMode({ current: mgr });
     let calls = 0;
-    mgr.bindStarter((_text, uid, s) => {
+    bindStarter((target, _text, uid) => {
       calls += 1;
-      const target = s ?? sid;
       if (calls < 2) {
         rejectAsBusy(target, uid, drainQueuedAfterComplete);
         return;
@@ -117,20 +124,22 @@ describe('drainQueuedAfterComplete · 串行守卫退避重试（P1-d 方案 B�
     expect(calls).toBe(2);
     expect(getBusyAttempt(userId)).toBe(0);
     expect(statusOf(sid, userId)).toBe('completed');
-    expect(useSessionRuntimeStatusStore.getState().statusBySession[sid]).toBeUndefined();
+    expect(
+      useSessionRuntimeStatusStore.getState().statusBySession[sid]
+    ).toBeUndefined();
   });
 
   it('无 busy 计数的普通排队追问：microtask 立即发（不退避）', async () => {
-    const mgr = new SessionStreamManager();
-    const { drainQueuedAfterComplete } = useGoalMode({ current: mgr });
-    const starter = vi.fn();
-    mgr.bindStarter(starter);
+    const starter = vi.fn<StreamStarter>();
+    bindStarter(starter);
     getCompositionRoot()
       .session.getState()
-      .setSessionMessageStatus(sid, userId, 'queued', undefined, { force: true });
+      .setSessionMessageStatus(sid, userId, 'queued', undefined, {
+        force: true,
+      });
     drainQueuedAfterComplete(sid);
     await Promise.resolve();
-    expect(starter).toHaveBeenCalledTimes(1);
+    expect(starter).toHaveBeenCalledExactlyOnceWith(sid, '帮我看看', userId);
     expect(statusOf(sid, userId)).toBe('processing');
   });
 });

@@ -5,6 +5,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { ImportPluginSettingsModal } from './ImportPluginSettingsModal';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import * as importRootSettings from '../../api/import/importRootSettings';
+import { useSessionStore } from '../../store/sessionStore';
+import { listSessions, replaceSessions } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 
 describe('ImportPluginSettingsModal', () => {
   const onClose = vi.fn();
@@ -166,21 +169,32 @@ describe('ImportPluginSettingsModal', () => {
       .spyOn(importSessionsModule, 'cleanAllImportedExternalSessions')
       .mockResolvedValue(5);
 
-    const sessionStoreModule = await import('../../store/sessionStore');
-    vi.spyOn(sessionStoreModule, 'useSessionStore').mockImplementation(((
-      selector: any
-    ) => {
-      const state = {
-        sessions: [
-          {
-            id: '1',
-            importMeta: { source: 'claude-code', sourceSessionId: 'c1' },
-          },
-          { id: '2', importMeta: { source: 'codex', sourceSessionId: 'x1' } },
-        ],
-      };
-      return selector ? selector(state) : state;
-    }) as any);
+    const imported: SessionState[] = [
+      {
+        id: '1',
+        title: 'claude',
+        folder: '',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date(0).toISOString(),
+        messages: [],
+        importMeta: { source: 'claude-code', sourceSessionId: 'c1' },
+      },
+      {
+        id: '2',
+        title: 'codex',
+        folder: '',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date(0).toISOString(),
+        messages: [],
+        importMeta: { source: 'codex', sourceSessionId: 'x1' },
+      },
+    ];
+    const previous = listSessions(useSessionStore.getState());
+    useSessionStore.setState((state) => {
+      replaceSessions(state, imported);
+    });
 
     render(
       <ToastProvider>
@@ -209,5 +223,8 @@ describe('ImportPluginSettingsModal', () => {
     fireEvent.click(confirmBtn);
 
     expect(cleanSpy).toHaveBeenCalled();
+    useSessionStore.setState((state) => {
+      replaceSessions(state, previous);
+    });
   });
 });

@@ -4,7 +4,8 @@ import { GENERAL_FOLDER } from '../api/projectStore';
 import { shouldListSessionInSidebar } from '../api/sessionTitle';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
 import { useTerminalStore } from './terminalStore';
-import { buildSessionsById, filterSidebarSessions } from './sessionIndex';
+import { buildSessionIndex, listSessions } from './sessionIndex';
+import { filterSidebarSessions } from './sessionSidebarProjection';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import type { SessionMessage, SessionState } from './types';
 
@@ -76,8 +77,7 @@ function makeStateFromSessions(
   draftFolder = ''
 ): SessionStoreSlice {
   return {
-    sessions,
-    sessionsById: buildSessionsById(sessions),
+    ...buildSessionIndex(sessions),
     folderOrder: Array.from(new Set(sessions.map((s) => s.folder))),
     activeSessionId,
     draftFolder,
@@ -218,8 +218,8 @@ describe('sessionActions create/prune paths', () => {
         'active'
       )
     );
-    h.actions.setSessions(h.getState().sessions);
-    const ids = h.getState().sessions.map((s) => s.id);
+    h.actions.setSessions(listSessions(h.getState()));
+    const ids = listSessions(h.getState()).map((s) => s.id);
     expect(ids).toContain('active');
     expect(ids).toContain('sched');
     expect(ids).toContain('content');
@@ -249,7 +249,7 @@ describe('sessionActions create/prune paths', () => {
     expect(st.activeSessionId).toBe('active-shell');
     expect(st.sessionsById['wf-sched-1']?.title).toBe('定时 · 每日 PR 总结');
     // activate:false 后台建壳不误删用户空壳 / 其它幽灵
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(
       ['active-shell', 'other-ghost', 'wf-sched-1'].sort()
     );
   });
@@ -279,7 +279,7 @@ describe('sessionActions create/prune paths', () => {
     expect(newId).toBe('brand-new');
     const st = h.getState();
     expect(st.activeSessionId).toBe('brand-new');
-    const ids = st.sessions.map((s) => s.id);
+    const ids = listSessions(st).map((s) => s.id);
     expect(ids).toContain('brand-new');
     expect(ids).toContain('kept-content');
     expect(ids).toContain('old-active');
@@ -326,7 +326,7 @@ describe('sessionActions create/prune paths', () => {
     const st = h.getState();
     expect(st.activeSessionId).toBe('b');
     // 切换只改焦点，空「新会话」仍保留（用户可再点回来）
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(
       ['a', 'b', 'sched'].sort()
     );
   });
@@ -397,7 +397,7 @@ describe('sessionActions create/prune paths', () => {
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     // 切换不 prune：空壳 a 与 pinned 都保留
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(
       ['a', 'b', 'pinned-ghost'].sort()
     );
   });
@@ -420,7 +420,7 @@ describe('sessionActions create/prune paths', () => {
     expect(id).toBe('target');
     const st = h.getState();
     expect(st.activeSessionId).toBe('target');
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(
       ['sched', 'target'].sort()
     );
   });
@@ -489,15 +489,15 @@ describe('sessionActions create/prune paths', () => {
         'hist'
       )
     );
-    const beforeLen = h.getState().sessions.length;
+    const beforeLen = listSessions(h.getState()).length;
     h.actions.enterDraftMode('proj-a');
     const st = h.getState();
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
     expect(st.activeSessionId).toBe('__pending_draft__');
     expect(isPendingDraft(st.activeSessionId)).toBe(true);
     expect(st.draftFolder).toBe('proj-a');
-    expect(st.sessions).toHaveLength(beforeLen);
-    expect(st.sessions).toHaveLength(1);
+    expect(listSessions(st)).toHaveLength(beforeLen);
+    expect(listSessions(st)).toHaveLength(1);
     expect(st.sessionsById.hist).toBeDefined();
     expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
     expect(st.activeAgentId).toBeNull();
@@ -517,13 +517,13 @@ describe('sessionActions create/prune paths', () => {
         'hist'
       )
     );
-    const beforeIds = h.getState().sessions.map((s) => s.id);
+    const beforeIds = listSessions(h.getState()).map((s) => s.id);
     h.actions.enterDraftMode('f-a');
     h.actions.enterDraftMode('f-b');
     h.actions.enterDraftMode('f-c');
     const st = h.getState();
-    expect(st.sessions).toHaveLength(beforeIds.length);
-    expect(st.sessions.map((s) => s.id)).toEqual(beforeIds);
+    expect(listSessions(st)).toHaveLength(beforeIds.length);
+    expect(listSessions(st).map((s) => s.id)).toEqual(beforeIds);
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
     // 最后一次 enter 的 folder 生效
     expect(st.draftFolder).toBe('f-c');
@@ -579,9 +579,8 @@ describe('sessionActions create/prune paths', () => {
       emptyShell({ id: 'ghost-b' }),
       emptyShell({ id: 'sched', title: '定时 · keep' }),
     ]);
-    const ids = h
-      .getState()
-      .sessions.map((s) => s.id)
+    const ids = listSessions(h.getState())
+      .map((s) => s.id)
       .sort();
     expect(ids).toEqual(['hist', 'sched'].sort());
     expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
@@ -602,10 +601,10 @@ describe('sessionActions create/prune paths', () => {
     );
     // 非草稿：返回当前真实 active，sessions 不变
     expect(h.actions.commitDraftIfNeeded()).toBe('real');
-    expect(h.getState().sessions).toHaveLength(1);
+    expect(listSessions(h.getState())).toHaveLength(1);
 
     h.actions.enterDraftMode('proj-commit');
-    expect(h.getState().sessions).toHaveLength(1);
+    expect(listSessions(h.getState())).toHaveLength(1);
     expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
 
     const id = h.actions.commitDraftIfNeeded({ title: '首条标题' });
@@ -618,8 +617,8 @@ describe('sessionActions create/prune paths', () => {
     expect(st.draftFolder).toBe('');
     expect(st.sessionsById[id]?.title).toBe('首条标题');
     // 历史 + 新 mint
-    expect(st.sessions).toHaveLength(2);
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(['real', id].sort());
+    expect(listSessions(st)).toHaveLength(2);
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(['real', id].sort());
   });
 
   it('commitDraftIfNeeded uses draftFolder as sess.folder', () => {
@@ -652,14 +651,14 @@ describe('sessionActions create/prune paths', () => {
   it('commitDraftIfNeeded on dirty active always mints real id (no createSession fallback needed)', () => {
     // 脏 active（空 / 指向不存在）：commit 必须直接 mint，调用方无需 createSession 兜底
     const h = makeHarnessFromState(makeStateFromSessions([], ''));
-    const beforeLen = h.getState().sessions.length;
+    const beforeLen = listSessions(h.getState()).length;
     const id = h.actions.commitDraftIfNeeded({ title: '首条发送' });
     expect(id).toBeTruthy();
     expect(isPendingDraft(id)).toBe(false);
     expect(id).not.toBe(PENDING_DRAFT_SESSION_ID);
     const st = h.getState();
     expect(st.activeSessionId).toBe(id);
-    expect(st.sessions).toHaveLength(beforeLen + 1);
+    expect(listSessions(st)).toHaveLength(beforeLen + 1);
     expect(st.sessionsById[id]?.title).toBe('首条发送');
 
     // 未知 active id 同样 mint，不返回空串
@@ -707,7 +706,7 @@ describe('sessionActions create/prune paths', () => {
     expect(isPendingDraft(st.activeSessionId)).toBe(true);
     // 仍在草稿态时不强制清 draftFolder（仅切到真实/空才清）
     expect(st.draftFolder).toBe('pre-existing');
-    expect(st.sessions).toHaveLength(1);
+    expect(listSessions(st)).toHaveLength(1);
     expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
   });
 
@@ -752,7 +751,7 @@ describe('sessionActions create/prune paths', () => {
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     // 会话与各会话 PTY 会话均保留
-    expect(st.sessions.map((s) => s.id).sort()).toEqual(
+    expect(listSessions(st).map((s) => s.id).sort()).toEqual(
       ['a', 'b', 'ghost'].sort()
     );
     const t = useTerminalStore.getState();
@@ -835,7 +834,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     expect(h.actions.deleteSession('')).toBe(false);
     expect(h.actions.deleteSession('nope')).toBe(false);
     expect(h.getState().activeSessionId).toBe('only');
-    expect(h.getState().sessions).toHaveLength(1);
+    expect(listSessions(h.getState())).toHaveLength(1);
   });
 
   it('setActiveSessionId ignores unknown id (no ghost active)', () => {
@@ -1121,7 +1120,7 @@ describe('sessionActions failure branches (C8)', () => {
     );
     expect(h.actions.deleteSession('   ')).toBe(false);
     expect(h.actions.deleteSession(' \t ')).toBe(false);
-    expect(h.getState().sessions).toHaveLength(1);
+    expect(listSessions(h.getState())).toHaveLength(1);
     expect(h.getState().activeSessionId).toBe('only');
   });
 
@@ -1216,10 +1215,10 @@ describe('sessionActions failure branches (C8)', () => {
         'real'
       )
     );
-    const beforeLen = h.getState().sessions.length;
+    const beforeLen = listSessions(h.getState()).length;
     const id = h.actions.commitDraftIfNeeded();
     expect(id).toBe('real');
-    expect(h.getState().sessions.length).toBe(beforeLen);
+    expect(listSessions(h.getState()).length).toBe(beforeLen);
   });
 
   it('branchSession on missing source session is a silent no-op', () => {
@@ -1238,7 +1237,7 @@ describe('sessionActions failure branches (C8)', () => {
     const before = h.getState();
     h.actions.branchSession('no-such-src', '分叉');
     expect(h.getState()).toBe(before);
-    expect(h.getState().sessions).toHaveLength(1);
+    expect(listSessions(h.getState())).toHaveLength(1);
     expect(h.getState().activeSessionId).toBe('src');
   });
 
@@ -1335,7 +1334,7 @@ describe('sessionActions failure branches (C8)', () => {
     expect(h.actions.deleteSession('only')).toBe(true);
     const st = h.getState();
     expect(st.sessionsById.only).toBeUndefined();
-    expect(st.sessions).toHaveLength(0);
+    expect(listSessions(st)).toHaveLength(0);
     // 彻底消灭悬垂指针与空字符串白屏
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
   });
@@ -1410,7 +1409,7 @@ describe('sessionActions failure branches (C8)', () => {
 
       // 1. 将 s3 移到 s1 前面 (向前拖动)
       h.actions.moveSessionRealtime('s3', 's1', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+      expect(listSessions(h.getState()).map((s) => s.id)).toEqual([
         's3',
         's1',
         's2',
@@ -1418,7 +1417,7 @@ describe('sessionActions failure branches (C8)', () => {
 
       // 2. 将 s3 移到 s1 后面 (通过插入在 s2 之前)
       h.actions.moveSessionRealtime('s3', 's2', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+      expect(listSessions(h.getState()).map((s) => s.id)).toEqual([
         's1',
         's3',
         's2',
@@ -1426,7 +1425,7 @@ describe('sessionActions failure branches (C8)', () => {
 
       // 3. 将 s1 移到末尾 (通过 after:s2 语法)
       h.actions.moveSessionRealtime('s1', 'after:s2', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+      expect(listSessions(h.getState()).map((s) => s.id)).toEqual([
         's3',
         's2',
         's1',
@@ -1435,7 +1434,7 @@ describe('sessionActions failure branches (C8)', () => {
       // 4. 将 s2 置顶
       h.actions.moveSessionRealtime('s2', 's3', 'general', true);
       expect(getSessionOrThrow(h.getState(), 's2').isPinned).toBe(true);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+      expect(listSessions(h.getState()).map((s) => s.id)).toEqual([
         's2',
         's3',
         's1',

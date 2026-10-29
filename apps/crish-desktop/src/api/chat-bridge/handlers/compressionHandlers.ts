@@ -6,8 +6,8 @@
  */
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { addContextInjection } from '../../storeAccess';
-import { applyCompressionSummaryToStore } from '../../storeAccess';
+import { addContextInjection } from '../../../store/sessionAccess';
+import { applyCompressionSummaryToStore } from '../../../store/sessionCompressionApply';
 import type { SessionMessage } from '../../../store/types';
 
 export function onContextCompressionStart(

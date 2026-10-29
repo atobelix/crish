@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSessionStore } from '../../store/sessionStore';
-import { SessionStreamManager } from '../../api/sessionStreamManager';
+import { buildSessionIndex } from '../../store/sessionIndex';
 import { isSessionAiBusy } from './streamRunState';
 import { settleStaleSessionProcessingMessages } from './staleSessionHealer';
-import type { Session, SessionMessage } from '../../store/sessionStore';
+import type { SessionMessage, SessionState } from '../../store/sessionStore';
 
 const TEST_SESSION_ID = 'test-session-self-healing';
 
 function setupTestSession(messages: Partial<SessionMessage>[] = []) {
-  const session: Session = {
+  const session: SessionState = {
     id: TEST_SESSION_ID,
     title: 'Self Healing Test Session',
     folder: 'general',
@@ -24,27 +24,20 @@ function setupTestSession(messages: Partial<SessionMessage>[] = []) {
       status: m.status || 'completed',
       thinking: m.thinking,
       errorDetail: m.errorDetail,
-    })) as SessionMessage[],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    })),
   };
 
-  useSessionStore.setState((state) => ({
-    sessionsById: {
-      ...state.sessionsById,
-      [TEST_SESSION_ID]: session,
-    },
-    sessions: [session],
+  useSessionStore.setState({
+    ...buildSessionIndex([session]),
     activeSessionId: TEST_SESSION_ID,
-  }));
+  });
 }
 
 describe('helpers.ts - 对话流自愈与死锁根除断言 (Self-Healing & Anti-Deadlock)', () => {
   beforeEach(() => {
     useSessionStore.setState({
-      sessionsById: {},
-      sessions: [],
-      activeSessionId: null,
+      ...buildSessionIndex([]),
+      activeSessionId: '',
     });
   });
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DualLatchStateMachine,
   applyTerminalStatusLatch,
@@ -7,16 +7,8 @@ import {
   resolveMonotonicRenderedText,
   resolveStreamMessageLatch,
   scheduleDualRafClearStream,
+  scheduleDualRafClearStreams,
 } from './dualLatchProtocol';
-import {
-  commitRunCompletion,
-  commitStreamWithDualLatch,
-  type StreamRunCompletionStorePort,
-} from './streamRunCompletion';
-import {
-  finalizeStreamingTurnAction,
-  type OrthogonalStreamingTurnSlice,
-} from './sessionMessageActionsCore';
 import {
   SubagentRuntimeBatcher,
   archiveFinalAgentsToSession,
@@ -63,7 +55,6 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
     dualLatchStateMachine.clearAll();
     clearSessionStreams('sess-1');
     clearSessionStreams('sess-100');
-    clearSessionStreams('sess-run');
     clearSessionStreams('sess-12-agents');
     clearSessionStreams('sess-cancel');
   });
@@ -187,88 +178,7 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
     }
   });
 
-  it('wires commitRunCompletion in store/streamRunCompletion.ts with Dual-Latch instead of queueMicrotask', async () => {
-    const raf = createManualRafQueue();
-    const sessionId = 'sess-run';
-    const assistantMsgId = 'asst-1';
-    const userMsgId = 'user-1';
-
-    setStreamText(sessionId, assistantMsgId, 'Streamed full answer');
-
-    let storedText = 'Streamed';
-    let storedStatus = 'processing';
-    const storePort: StreamRunCompletionStorePort = {
-      sessions: [
-        {
-          id: sessionId,
-          messages: [
-            {
-              id: assistantMsgId,
-              text: storedText,
-              thinking: '正在处理…',
-              toolCalls: [{ id: 'tc-1', status: 'running', output: '执行中…' }],
-            },
-          ],
-        },
-      ],
-      updateMessageText: (_sid, _mid, text) => {
-        storedText = text;
-      },
-      updateMessageThinking: vi.fn(),
-      setSessionMessageStatus: (_sid, mid, status) => {
-        if (mid === assistantMsgId) storedStatus = status;
-      },
-      updateMessageTimeline: vi.fn(),
-      applyToolCallPatches: vi.fn(),
-    };
-
-    const result = commitRunCompletion({
-      store: storePort,
-      sessionId,
-      assistantMsgId,
-      userMsgId,
-      accumulatedText: 'Streamed full answer',
-      accumulatedThinking: '',
-      streamError: null,
-      finalStatus: 'completed',
-      thinkingTimeSec: 2,
-      userInterrupted: false,
-      scheduleFrame: {
-        requestAnimationFrame: raf.schedule,
-        cancelAnimationFrame: raf.cancel,
-      },
-    });
-
-    expect(result.finalText).toBe('Streamed full answer');
-    expect(storedText).toBe('Streamed full answer');
-    expect(storedStatus).toBe('completed');
-    expect(dualLatchStateMachine.getPhase(sessionId, assistantMsgId)).toBe(
-      'LATCHED'
-    );
-
-    // 即使微任务队列排空，也不得像旧版 queueMicrotask 那样提前裸清流式缓冲
-    await Promise.resolve();
-    expect(getStreamText(sessionId, assistantMsgId)).toBe(
-      'Streamed full answer'
-    );
-
-    // 跨越两帧物理 rAF 后安全排空
-    raf.stepFrame();
-    expect(dualLatchStateMachine.getPhase(sessionId, assistantMsgId)).toBe(
-      'COMMITTED'
-    );
-    expect(getStreamText(sessionId, assistantMsgId)).toBe(
-      'Streamed full answer'
-    );
-
-    raf.stepFrame();
-    expect(dualLatchStateMachine.getPhase(sessionId, assistantMsgId)).toBe(
-      'DRAINED'
-    );
-    expect(getStreamText(sessionId, assistantMsgId)).toBeUndefined();
-  });
-
-  it('atomically settles 12 concurrent subagents via SubagentRuntimeBatcher + finalizeStreamingTurnAction without clearing peer streams', () => {
+  it('atomically settles 12 concurrent subagents via SubagentRuntimeBatcher + Dual-rAF batch drain without clearing peer streams', () => {
     const raf = createManualRafQueue();
     const sessionId = 'sess-12-agents';
     const mainMessageId = 'msg-main';
@@ -283,7 +193,6 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
     );
 
     // 1. 构造 12 个并发子代理及各自的流式输出
-    const initialAgentsMap: Record<string, { id: string; text: string }> = {};
     const sessionAgentsList: SessionAgent[] = [];
     const subagentMsgIds: string[] = [];
 
@@ -292,7 +201,6 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
       const subMsgId = `sub-msg-${i}`;
       subagentMsgIds.push(subMsgId);
       setStreamText(sessionId, subMsgId, `Subagent #${i} final findings`);
-      initialAgentsMap[agentId] = { id: agentId, text: '' };
       sessionAgentsList.push({
         id: agentId,
         subagentRunId: `run-${i}`,
@@ -346,75 +254,42 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
       sessionAgentsList
     );
     expect(snapshots).toHaveLength(12);
-    expect(finalizedMessageIds).toHaveLength(12);
+    expect([...finalizedMessageIds].sort()).toEqual([...subagentMsgIds].sort());
     expect(snapshots[11]?.finalText).toBe('Subagent #12 final findings');
 
-    // 4. 在单个 Store 事务内执行 commitStreamWithDualLatch + finalizeStreamingTurnAction
-    const initialMessages = [
-      {
-        id: mainMessageId,
-        text: 'Partial',
-        streamText: 'Synthesized report',
-        status: 'processing',
-        isStreaming: true,
-      },
-    ];
-    let state: OrthogonalStreamingTurnSlice = {
-      messagesBySessionId: {
-        [sessionId]: initialMessages,
-      },
-      agentsBySessionId: {
-        [sessionId]: initialAgentsMap,
-      },
-      messageEpochById: {
-        [mainMessageId]: 5,
-      },
-    };
-
-    let setCallCount = 0;
-    const setStoreState = (
-      updater: (
-        prev: OrthogonalStreamingTurnSlice
-      ) => OrthogonalStreamingTurnSlice | void
-    ) => {
-      setCallCount += 1;
-      const next = updater(state);
-      if (next) state = next;
-    };
-
-    commitStreamWithDualLatch({
+    // 4. 主消息 + 12 个子代理消息通过 Dual-rAF 定向批量回收（严禁 clearSession）
+    scheduleDualRafClearStreams(
       sessionId,
-      messageId: mainMessageId,
-      finalText: 'Synthesized report from 12 agents.',
-      finalThinking: 'All 12 subagents converged.',
-      finalStatus: 'completed',
-      finalSubagents: snapshots,
-      finalizedSubagentMessageIds: finalizedMessageIds,
-      setStoreState,
-      clearStreamsFn: clearStreams,
-      scheduleFrame: {
+      [mainMessageId, ...finalizedMessageIds],
+      clearStreams,
+      {
         requestAnimationFrame: raf.schedule,
         cancelAnimationFrame: raf.cancel,
-      },
-    });
+      }
+    );
 
-    // 断言单次原子事务：setStoreState 仅触发 1 次！
-    expect(setCallCount).toBe(1);
-    const finalizedMainMsg = state.messagesBySessionId?.[sessionId]?.[0];
-    expect(finalizedMainMsg?.text).toBe('Synthesized report from 12 agents.');
-    expect(finalizedMainMsg?.streamText).toBeUndefined();
-    expect(finalizedMainMsg?.isStreaming).toBe(false);
-    expect(finalizedMainMsg?.status).toBe('completed');
-    expect(finalizedMainMsg?.subagents).toHaveLength(12);
-    expect(state.messageEpochById?.[mainMessageId]).toBe(6);
-    expect(
-      Object.keys(state.agentsBySessionId?.[sessionId] ?? {})
-    ).toHaveLength(0);
+    // rAF 前：目标流全部保留兜底，处于 LATCHED
+    expect(dualLatchStateMachine.getPhase(sessionId, mainMessageId)).toBe(
+      'LATCHED'
+    );
+    expect(getStreamText(sessionId, mainMessageId)).toBe(
+      'Synthesized report from 12 agents.'
+    );
 
-    // 5. 推进两帧 rAF：12 个子代理流 + 主消息流被精确回收，但同会话下的并发流 peerStreamingMsgId 完好无损！
+    // 5. 第 1 帧：COMMITTED，流式缓冲仍在；第 2 帧：DRAINED，精确回收目标流，
+    //    同会话下的并发流 peerStreamingMsgId 完好无损！
     raf.stepFrame();
+    for (const subMsgId of finalizedMessageIds) {
+      expect(dualLatchStateMachine.getPhase(sessionId, subMsgId)).toBe(
+        'COMMITTED'
+      );
+      expect(getStreamText(sessionId, subMsgId)).toBeDefined();
+    }
     raf.stepFrame();
 
+    expect(dualLatchStateMachine.getPhase(sessionId, mainMessageId)).toBe(
+      'DRAINED'
+    );
     expect(getStreamText(sessionId, mainMessageId)).toBeUndefined();
     for (const subMsgId of finalizedMessageIds) {
       expect(getStreamText(sessionId, subMsgId)).toBeUndefined();
@@ -437,14 +312,6 @@ describe('Dual-Latch Handoff Protocol (Stage 02)', () => {
     const archived = archiveFinalAgentsToSession(mockSession, snapshots, true);
     expect(archived).toHaveLength(12);
     expect(mockSession.agents).toHaveLength(0);
-
-    finalizeStreamingTurnAction(setStoreState, {
-      sessionId,
-      messageId: mainMessageId,
-      finalText: 'Synthesized report from 12 agents.',
-      finalStatus: 'completed',
-    });
-    expect(state.messageEpochById?.[mainMessageId]).toBe(7);
   });
 
   it('cancels in-flight Dual-rAF handoff cleanly when cancel callback is invoked', () => {

@@ -17,7 +17,8 @@
  *   导致同一次 action 的 instrumented set 嵌套触发（mark 名固定时内层 clearMarks
  *   会清掉外层 start mark → 外层 measure 抛 SyntaxError → 中断业务 action）。
  * - 修复 1：mark 名带每次调用的唯一序号，嵌套调用互不覆盖。
- * - 修复 2：measure / budget 整体 try-catch，观测失败绝不向业务层抛异常。
+ * - 修复 2：measure 前显式判别两个 mark 均存在（被外部清除时跳过本次观测），
+ *   观测缺失绝不向业务层抛异常。
  *
  * 性能注意：
  * - measure 后立即 clearMarks / clearMeasures，避免 getEntriesByName 随调用次数 O(N) 增长
@@ -38,10 +39,16 @@ function topLevelKeys(state: unknown): string[] {
   return [];
 }
 
+function hasPerfMark(name: string): boolean {
+  return performance.getEntriesByName(name, 'mark').length > 0;
+}
+
 function isStreamingActive(): boolean {
   return (
     typeof window !== 'undefined' &&
-    Boolean((window as Window & { __streamingActive?: boolean }).__streamingActive)
+    Boolean(
+      (window as Window & { __streamingActive?: boolean }).__streamingActive
+    )
   );
 }
 
@@ -50,7 +57,7 @@ export const withLogger = <
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
   Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
-  config: StateCreator<T, Mps, Mcs>,
+  config: StateCreator<T, Mps, Mcs>
 ): StateCreator<T, Mps, Mcs> => {
   const wrapped: StateCreator<T, Mps, Mcs> = (set, get, api) => {
     if (process.env.NODE_ENV !== 'development') {
@@ -75,12 +82,10 @@ export const withLogger = <
         performance.mark(endMark);
         let last: PerformanceEntry | undefined;
         try {
-          performance.measure(markName, startMark, endMark);
-          const measures = performance.getEntriesByName(markName);
-          last = measures[measures.length - 1];
-          if (last) checkBudget('store:transaction', last.duration);
-        } catch {
-          // 观测失败（mark 被外部清除 / 环境差异）绝不中断业务 action
+          if (hasPerfMark(startMark) && hasPerfMark(endMark)) {
+            last = performance.measure(markName, startMark, endMark);
+            checkBudget('store:transaction', last.duration);
+          }
         } finally {
           // Prevent unbounded PerformanceEntry accumulation (O(N) getEntriesByName growth)
           performance.clearMarks(startMark);
@@ -103,7 +108,7 @@ export const withLogger = <
         const prevKeys = topLevelKeys(prev);
         const nextKeys = topLevelKeys(next);
         console.groupCollapsed(
-          `[Store] ${actionName} ${durationMs}ms keys=${nextKeys.length}`,
+          `[Store] ${actionName} ${durationMs}ms keys=${nextKeys.length}`
         );
         console.log('prev keys:', prevKeys);
         console.log('next keys:', nextKeys);

@@ -6,7 +6,8 @@
  */
 import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
-import { getPermissionMode, getSessionStoreState } from '../storeAccess';
+import { getSessionStoreState } from '../../store/sessionStore';
+import { getPermissionMode } from '../../store/storeAccess';
 import {
   classifyErrorDomain,
   logInternalError,
@@ -201,7 +202,7 @@ export async function createStreamSession(
 
     if (isSessionBusy) {
       logInternalError('stream-start-busy-queued', e);
-      // P1-d 方案 B：只走前端 drain（useGoalMode 按 busyRetry 计数退避重发，
+      // P1-d 方案 B：只走前端 drain（goalContinuation 按 busyRetry 计数退避重发，
       // 用尽后 queued → error + ComposerErrorBar）。不再 followUp：runId 为空
       // 的 core_run_control 到不了后端 follow_up 环（静默空调用）。
       try {

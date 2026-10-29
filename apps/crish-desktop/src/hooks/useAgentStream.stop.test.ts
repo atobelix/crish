@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAgentPanel } from './useAgentStream';
 import { useSessionStore } from '../store/sessionStore';
+import { listSessions, replaceSessions } from '../store/sessionIndex';
+import type { SessionAgent, SessionState } from '../store/types';
 import { resetCompositionRoot } from '../app/compositionRoot';
 import { streamCollaboratorRun } from '../api/subagentApi';
 
@@ -38,36 +40,33 @@ const RUN = 'run-agent-stop-1';
 
 function seedRunningAgent() {
   useSessionStore.setState((st) => {
-    const agent = {
+    const agent: SessionAgent = {
       id: AGENT,
       description: 'test agent',
-      mode: 'implement' as const,
-      status: 'running' as const,
+      mode: 'implement',
+      status: 'running',
       subagentRunId: RUN,
+      parentSessionId: PARENT,
+      parentRunId: RUN,
       summary: 'working',
       messages: [],
-      createdAt: Date.now(),
+      startedAt: Date.now(),
     };
-    const sess = {
+    const sess: SessionState = {
       id: PARENT,
       title: 'parent',
+      folder: 'general',
+      isPinned: false,
+      isArchived: false,
+      timestamp: new Date(0).toISOString(),
       messages: [],
       agents: [agent],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
     };
-    // minimal session shape for getSubagentRunId / patchSessionAgent
-    (st as any).sessionsById = {
-      ...(st as any).sessionsById,
-      [PARENT]: sess,
-    };
-    const list = Array.isArray((st as any).sessions)
-      ? [...(st as any).sessions]
-      : [];
-    const idx = list.findIndex((s: { id: string }) => s.id === PARENT);
+    const list = listSessions(st);
+    const idx = list.findIndex((s) => s.id === PARENT);
     if (idx >= 0) list[idx] = sess;
     else list.push(sess);
-    (st as any).sessions = list;
+    replaceSessions(st, list);
   });
 }
 

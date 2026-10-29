@@ -7,7 +7,7 @@
  * 若会话已有 importMeta 匹配同一 source+sourceSessionId，则跳过，不覆盖。
  */
 
-import { getSessionStoreState } from '../../store';
+import { getSessionStoreState, selectSessionList } from '../../store';
 import type {
   SessionImportMeta,
   SessionMessage,
@@ -86,7 +86,7 @@ function resolveDeps(deps?: ImportSessionsDeps) {
     wsId: deps?.wsId ?? '__global__',
     listSessions:
       deps?.listSessions ??
-      (() => st.sessions as Array<Pick<SessionState, 'id' | 'importMeta'>>),
+      (() => selectSessionList(getSessionStoreState())),
     duplicatePolicy: deps?.duplicatePolicy ?? 'skip',
     nowIso: deps?.nowIso ?? (() => new Date().toISOString()),
   };
@@ -240,7 +240,7 @@ export async function importDetectedSessions(
  */
 export async function cleanAllImportedExternalSessions(): Promise<number> {
   const store = getSessionStoreState();
-  const sessions = store.sessions || [];
+  const sessions = selectSessionList(store);
   const targetSessions = sessions.filter((s) => Boolean(s.importMeta?.source));
   if (!targetSessions.length) return 0;
 
@@ -266,7 +266,7 @@ export async function cleanAllImportedExternalSessions(): Promise<number> {
  */
 export function deleteImportedSession(sessionId: string): boolean {
   const store = getSessionStoreState();
-  const session = store.sessions?.find((s) => s.id === sessionId);
+  const session = store.sessionsById[sessionId];
   if (session?.importMeta?.source && session?.importMeta?.sourceSessionId) {
     recordDeletedExternalSession(
       session.importMeta.source,

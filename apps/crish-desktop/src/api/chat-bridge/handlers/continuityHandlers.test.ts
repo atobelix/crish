@@ -7,7 +7,7 @@ import {
   applyGoalRoundEventToGoalMode,
   goalDecisionToStatus,
   isGoalDecisionTerminal,
-} from '../../../hooks/chat-stream/useGoalMode';
+} from '../../../hooks/chat-stream/goalContinuation';
 import type { SessionGoalMode } from '../../../store/types';
 
 /** 前端 0-based iteration 语义：round=1 → iteration=0（第一轮） */

@@ -185,17 +185,13 @@ export function createSessionDraftActions<T extends SessionStoreSlice>(
             delete state.composerDrafts[effectiveDraftId];
           }
         });
-        try {
-          if (sessionRuntimeRegistry.exists(effectiveDraftId)) {
-            const runtimeState = sessionRuntimeRegistry.get(effectiveDraftId);
-            sessionRuntimeRegistry.save(id, {
-              attachments: runtimeState.attachments,
-              thinkingTitle: runtimeState.thinkingTitle,
-            });
-            sessionRuntimeRegistry.remove(effectiveDraftId);
-          }
-        } catch {
-          /* ignore */
+        if (sessionRuntimeRegistry.exists(effectiveDraftId)) {
+          const runtimeState = sessionRuntimeRegistry.get(effectiveDraftId);
+          sessionRuntimeRegistry.save(id, {
+            attachments: runtimeState.attachments,
+            thinkingTitle: runtimeState.thinkingTitle,
+          });
+          sessionRuntimeRegistry.remove(effectiveDraftId);
         }
         draftFolderRegistry.delete(effectiveDraftId);
       }

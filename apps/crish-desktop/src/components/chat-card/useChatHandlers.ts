@@ -14,7 +14,7 @@ import {
   reportRuntimeStatus,
   useSettingsField,
 } from '../../store/storeAccess';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import type {
   ChatContentPart,
   StreamAttachmentMeta,

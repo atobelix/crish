@@ -1,17 +1,15 @@
 import { useLayoutStore } from './layoutStore';
 import { useSessionStore } from './sessionStore';
-import { useWorkspaceStore } from './workspaceStore';
-import { useSettingsUiStore } from './settingsUiStore';
 import { useTerminalStore } from './terminalStore';
 import { useWorkerStore } from './workerStore';
 import { usePermissionStore } from './permissionStore';
 import { useSettingsStore } from './settingsStore';
-import { initStoreAccess } from '../api/storeAccess';
+import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
 import { MessageSnapshots } from '../api/MessageSnapshots';
 import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
 import { logger, toErrMeta } from '../services/LoggerService';
 import { initTabModeProjection } from './tabModeApply';
-import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import { sessionDraftManager } from '../api/draft/sessionDraftManager';
 import { bindDraftManagerForEviction } from './sessionDeleteTransition';
 
@@ -114,6 +112,11 @@ export function bootstrapStores(): () => void {
   const unsubs: (() => void)[] = [];
   _setupFrequencyLogging();
 
+  // U-PERSIST-A（D4 票 A）：persist 键迁移必须在任何 persist 读写前完成一次——
+  // 旧全量 sessions 镜像剥离为轻量 meta 壳；正文唯一来源 = SQLite hydrate。
+  // 显式启动序列调用（原为 sessionStore import 期副作用，SS-P6b 移除）。
+  ensureSessionStoreShellKeyMigrated();
+
   // Note: Facade stores share the same underlying LayoutStore instance in Phase 0/1,
   // so no inter-store subscribe sync is required. Single listener for frequency metrics:
   unsubs.push(
@@ -142,8 +145,6 @@ export function bootstrapStores(): () => void {
     _wrapSubscriberCounting(domainHooks[i]!, _STORE_NAMES[4 + i]!);
   }
 
-  initStoreAccess(useSessionStore, useWorkspaceStore, useSettingsUiStore);
-
   unsubs.push(initTabModeProjection());
 
   // 快照桥接线（P0-1）：注入真实 MessageSnapshots 单例，恢复撤回/归档前的破坏性操作数据保护。
@@ -171,16 +172,11 @@ export function bootstrapStores(): () => void {
   }
 
   // Double-Lock 墓碑与存活探针（E3-01）：为流式调度器注入会话在 Store 中的存活判定闭包
-  sharedSessionStreamManager.bindSessionAliveOracle((sessionId: string) => {
-    const state = useSessionStore.getState();
-    return Boolean(
-      state.sessionsById[sessionId] ||
-      state.sessions?.some((s) => s.id === sessionId)
-    );
-  });
-  unsubs.push(() => {
-    sharedSessionStreamManager.bindSessionAliveOracle(null);
-  });
+  unsubs.push(
+    sessionStreams.bindSessionAliveOracle((sessionId: string) =>
+      Boolean(useSessionStore.getState().sessionsById[sessionId])
+    )
+  );
 
   // 草稿管理器驱逐单向解耦（E3-04）：为 store 会话删除注入草稿管理器实例
   bindDraftManagerForEviction(sessionDraftManager);

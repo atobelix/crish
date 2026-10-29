@@ -84,7 +84,7 @@ export function buildGoalModePrefix(
   const openBlock = formatOpenGoalTasksForPrompt(tasks);
   // 主控复核裁决：GOAL_MODE_PROMPT.render() 产物严禁回拼进 System Prompt。
   // 维度一阶段仅替换文本来源、维持既有消费路径——渲染产物仍是「前缀文本」
-  // （消费方 slashSendPreflight / useGoalMode 原样拼接，见详案 01 裁决注记）。
+  // （消费方 slashSendPreflight / goalContinuation 原样拼接，见详案 01 裁决注记）。
   // 保留尾部换行：既有消费方 `${prefix}${text}` 依赖 `---\n` 分隔语义。
   const rendered = GOAL_MODE_PROMPT.render({
     goal,

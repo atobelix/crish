@@ -18,7 +18,7 @@ import {
 import { listMcpServers, type McpServerInfo } from '../../api/mcpApi';
 import { discoverSkills, type DesktopSkill } from '../../api/skillsApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { setAppSettings } from '../../api/storeAccess';
+import { setAppSettings } from '../../store/storeAccess';
 import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import {
   listPluginCardStates,

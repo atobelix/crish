@@ -8,7 +8,7 @@ import React, {
 import { Button, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 import {
   importDetectedSessions,
   deleteImportedSession,
@@ -48,7 +48,7 @@ export const ExternalSessionsWorkbench: React.FC<
   ExternalSessionsWorkbenchProps
 > = ({ onBackToChat: _onBackToChat, onRefresh }) => {
   const { showToast } = useToast();
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessions = useSessionStore(selectSessionList);
 
   // 0ms 瞬时水合：优先读取持久化缓存，杜绝每次打开重复全盘扫描
   const [detected, setDetected] = useState<DetectedExternalSession[]>(() => {
@@ -149,20 +149,20 @@ export const ExternalSessionsWorkbench: React.FC<
       setLoading(true);
       setScanIssues([]);
       try {
-        const result = await getOrScanExternalSessions(force);
+        const { sessions: found, issues } = await getOrScanExternalSessions(force);
         if (requestId !== scanRequestIdRef.current) return;
         initialScanCompletedRef.current = true;
-        setDetected(result.sessions);
-        setScanIssues(result.issues);
+        setDetected(found);
+        setScanIssues(issues);
         onRefresh?.();
         if (force) {
-          if (result.issues.length > 0) {
+          if (issues.length > 0) {
             showToast(
-              /* i18n-allow */ `扫描未完成，共发现 ${result.sessions.length} 条记录，${result.issues.length} 项目录或文件需要检查`
+              /* i18n-allow */ `扫描未完成，共发现 ${found.length} 条记录，${issues.length} 项目录或文件需要检查`
             );
           } else {
             showToast(
-              `扫描完成，共检测到 ${result.sessions.length} 个外部对话记录`
+              `扫描完成，共检测到 ${found.length} 个外部对话记录`
             );
           }
         }

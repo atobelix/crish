@@ -10,7 +10,7 @@ import {
   getSessionAgent,
   getSessionById,
   patchAgentTool,
-} from '../api/storeAccess';
+} from '../store/storeAccess';
 import type { MessageToolCallStatus } from '../store/types';
 import {
   shouldSkipApprovalRollback,

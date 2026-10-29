@@ -38,7 +38,8 @@ import {
 } from '../../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../../api/modelsCatalogTypes';
 
-vi.mock('../../../api/storeAccess', () => ({
+vi.mock('../../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../store/storeAccess')>()),
   openSettings: vi.fn(),
 }));
 

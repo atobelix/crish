@@ -18,6 +18,7 @@ import { useCallback } from 'react';
 import { create } from 'zustand';
 import { listWorkflows, type WorkflowDefinition } from '../api/workflowApi';
 import { listenWorkflowEvents } from '../api/workflow-api/workflowEvents';
+import { logger, toErrMeta } from '../services/LoggerService';
 
 export type WorkflowDef = WorkflowDefinition & {
   targetSessionId?: string | null;
@@ -209,8 +210,14 @@ async function refreshScheduleBadgeStoreFromBackend(
     useSessionScheduleBadgeStore
       .getState()
       .syncFromWorkflows(workflows as WorkflowDef[]);
-  } catch {
-    /* swallow-ok: 非 Tauri 环境或单测未 mock listWorkflows 时静默兜底 */
+  } catch (err) {
+    logger.debug(
+      '[scheduleBadge] workflow list unavailable, badges unchanged',
+      {
+        module: 'sessionScheduleBadgeStore',
+        err: toErrMeta(err),
+      }
+    );
   }
 }
 
@@ -235,8 +242,11 @@ export function ensureScheduleBadgeStoreHydrated(): void {
       }
       unlistenWorkflowEvents = unlisten;
     })
-    .catch(() => {
-      /* swallow-ok: 非 Tauri 环境事件订阅失败时静默降级 */
+    .catch((err: unknown) => {
+      logger.debug('[scheduleBadge] workflow event subscription unavailable', {
+        module: 'sessionScheduleBadgeStore',
+        err: toErrMeta(err),
+      });
     });
 }
 
@@ -247,11 +257,7 @@ export function resetScheduleBadgeStoreHydrationForTest(): void {
   isHydrated = false;
   hasExternalSync = false;
   if (unlistenWorkflowEvents) {
-    try {
-      unlistenWorkflowEvents();
-    } catch {
-      /* swallow-ok: 测试卸载回调异常忽略 */
-    }
+    unlistenWorkflowEvents();
     unlistenWorkflowEvents = null;
   }
   useSessionScheduleBadgeStore.getState().clear();

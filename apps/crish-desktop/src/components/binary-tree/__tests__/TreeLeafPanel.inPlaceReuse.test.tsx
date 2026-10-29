@@ -6,6 +6,7 @@ import { TreeLeafPanel } from '../TreeLeafPanel';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { replaceSessions } from '../../../store/sessionIndex';
 import { useWorkspaceShellStore } from '../../../store/workspace-shell';
 import { useSessionExecutionTrackerStore } from '../../../store/sessionExecutionTrackerStore';
 import {
@@ -78,19 +79,21 @@ describe('TreeLeafPanel In-Place Session Reuse & Tab Conservation Suite (R1 / M5
       id: `session-${i + 1}`,
       title: `会话 ${i + 1}`,
       folder: '默认',
+      isPinned: false,
+      isArchived: false,
+      timestamp: '2026-01-01T00:00:00.000Z',
       messages: [
         {
           id: `m-${i}`,
-          sender: 'user',
+          sender: 'user' as const,
           text: `Message in session ${i + 1}`,
           timestamp: 100,
         },
       ],
     }));
-    useSessionStore.setState({
-      sessions: sessions as any,
-      sessionsById: Object.fromEntries(sessions.map((s) => [s.id, s])) as any,
-      activeSessionId: 'session-1',
+    useSessionStore.setState((st) => {
+      replaceSessions(st, sessions);
+      st.activeSessionId = 'session-1';
     });
 
     useLayoutTreeStore.setState({

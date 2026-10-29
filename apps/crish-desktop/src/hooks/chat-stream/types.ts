@@ -35,6 +35,8 @@ export interface QueuedMessage {
 }
 
 export interface UseChatStreamOptions {
+  /** 显式会话（分屏叶子）；缺省时取 LeafScope / 全局活跃会话 */
+  sessionId?: string | null;
   wsId: string;
   handleGlobalTabClick: (cardId: string) => void;
   chatInput: string;

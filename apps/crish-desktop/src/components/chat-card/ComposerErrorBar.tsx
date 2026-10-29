@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { Button, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { emitUiEvent } from '../../api/uiEvents';
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 import { useI18n } from '../../i18n';
 import {
   clearRuntimeStatus,

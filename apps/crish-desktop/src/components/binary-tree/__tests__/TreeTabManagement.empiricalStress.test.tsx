@@ -6,6 +6,7 @@ import { TreeLeafPanel } from '../TreeLeafPanel';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { replaceSessions } from '../../../store/sessionIndex';
 import { useWorkspaceShellStore } from '../../../store/workspace-shell';
 import { useSessionExecutionTrackerStore } from '../../../store/sessionExecutionTrackerStore';
 import {
@@ -183,19 +184,24 @@ describe('TreeTabManagement Empirical Stress & Invariant Fuzzing Harness', () =>
         id: `session-init-${i + 1}`,
         title: `Session ${i + 1}`,
         folder: '默认',
+        isPinned: false,
+        isArchived: false,
+        timestamp: '2026-01-01T00:00:00.000Z',
         messages: [],
       }));
       const poolSessions = Array.from({ length: 30 }, (_, i) => ({
         id: `session-pool-${i + 1}`,
         title: `Pool Session ${i + 1}`,
         folder: '默认',
+        isPinned: false,
+        isArchived: false,
+        timestamp: '2026-01-01T00:00:00.000Z',
         messages: [],
       }));
       const sessions = [...initSessions, ...poolSessions];
-      useSessionStore.setState({
-        sessions: sessions as any,
-        sessionsById: Object.fromEntries(sessions.map((s) => [s.id, s])) as any,
-        activeSessionId: 'session-init-1',
+      useSessionStore.setState((st) => {
+        replaceSessions(st, sessions);
+        st.activeSessionId = 'session-init-1';
       });
 
       // Pseudo-random deterministic generator for repeatability

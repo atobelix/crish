@@ -27,7 +27,7 @@ import {
   type DagNode,
 } from './flowDagLayout';
 import { invokeTyped } from '../../api/tauriInvoke';
-import { getActiveSessionId } from '../../api/storeAccess';
+import { getActiveSessionId } from '../../store/storeAccess';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { Tooltip } from '@/components/ui';
 

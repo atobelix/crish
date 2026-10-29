@@ -19,9 +19,10 @@ import {
 } from '@testing-library/react';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import styles from './ComposePlusMenu.module.css';
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   openSettings: vi.fn(),
 }));
 

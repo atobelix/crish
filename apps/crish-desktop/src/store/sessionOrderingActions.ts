@@ -6,8 +6,9 @@ import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionState } from './types';
 import {
   getSessionById,
-  getSessionForWrite,
   getSessionIndex,
+  insertSessionAt,
+  listSessions,
 } from './sessionIndex';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
 import {
@@ -36,35 +37,28 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
     pinSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        // 走 sessions 数组下标，确保 immer 对 sessions 引用变更可被 useSidebarSessions 感知
-        const idx = getSessionIndex(state, sessionId);
-        if (idx < 0) return;
-        const sess = state.sessions[idx]!;
+        const sess = getSessionById(state, sessionId);
+        if (!sess) return;
         sess.isPinned = true;
-        // 移到 sessions 顶部，置顶区稳定「最近 pin 在上」
-        state.sessions.splice(idx, 1);
-        state.sessions.splice(0, 0, sess);
-        state.sessionsById[sess.id] = sess;
+        // 移到顺序顶部，置顶区稳定「最近 pin 在上」
+        insertSessionAt(state, sess, 0);
       }),
 
     unpinSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const idx = getSessionIndex(state, sessionId);
-        if (idx < 0) return;
-        const sess = state.sessions[idx]!;
+        const sess = getSessionById(state, sessionId);
+        if (!sess) return;
         // 仅取消置顶，folder 保持原样，由 groupUnpinnedByProject 归入项目/通用
         sess.isPinned = false;
-        state.sessionsById[sess.id] = sess;
       }),
 
     archiveSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess || sess.isArchived) return;
         sess.isArchived = true;
-        state.sessionsById[sessionId] = sess;
         if (state.activeSessionId === sessionId) {
           const idx = getSessionIndex(state, sessionId);
           const fallback = pickFallbackActiveSessionId(
@@ -86,10 +80,9 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
     unarchiveSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess || !sess.isArchived) return;
         sess.isArchived = false;
-        state.sessionsById[sessionId] = sess;
       }),
 
     branchSession: (sessionId: string, newTitle: string) =>
@@ -118,12 +111,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
             : {}),
         };
         const idx = getSessionIndex(state, sessionId);
-        if (idx < 0) {
-          state.sessions.unshift(newSess);
-        } else {
-          state.sessions.splice(idx + 1, 0, newSess);
-        }
-        state.sessionsById[newSess.id] = newSess;
+        insertSessionAt(state, newSess, idx < 0 ? 0 : idx + 1);
         state.activeSessionId = newSess.id;
         state.activeAgentId = null;
         state.panelAgentId = null;
@@ -141,12 +129,10 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
       isPinned: boolean
     ) =>
       set((state) => {
+        const sess = getSessionById(state, sessionId);
         const sessIdx = getSessionIndex(state, sessionId);
-        if (sessIdx === -1) return;
-
-        const removed = state.sessions.splice(sessIdx, 1);
-        const sess = removed[0];
-        if (!sess) return;
+        if (!sess || sessIdx === -1) return;
+        state.sessionOrder.splice(sessIdx, 1);
 
         const folder =
           typeof targetFolder === 'string' && targetFolder.trim()
@@ -165,15 +151,13 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
 
           const tIdx = getSessionIndex(state, cleanTargetId);
           if (tIdx !== -1) {
-            const insertIdx = isAfter ? tIdx + 1 : tIdx;
-            state.sessions.splice(insertIdx, 0, sess);
+            state.sessionOrder.splice(isAfter ? tIdx + 1 : tIdx, 0, sess.id);
           } else {
-            state.sessions.push(sess);
+            state.sessionOrder.push(sess.id);
           }
         } else {
-          state.sessions.push(sess);
+          state.sessionOrder.push(sess.id);
         }
-        state.sessionsById[sess.id] = sess;
       }),
 
     moveFolderRealtime: (
@@ -198,7 +182,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
 
     pinFolderSessions: (folderName: string) =>
       set((state) => {
-        state.sessions.forEach((s) => {
+        listSessions(state).forEach((s) => {
           if (s.folder === folderName) {
             s.isPinned = true;
           }
@@ -207,7 +191,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
 
     unpinFolderSessions: (folderName: string) =>
       set((state) => {
-        state.sessions.forEach((s) => {
+        listSessions(state).forEach((s) => {
           if (s.folder === folderName) {
             s.isPinned = false;
           }

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Message, SessionState } from './types';
+import type { SessionMessage, SessionState } from './types';
 import {
   BootHoldBarrier,
-  DeltaWriteBarrier,
   EmptySanitizeBarrier,
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-  type PersistableStoreState,
-} from './store-persistence';
+} from '../api/session-persistence/sessionWriteBarriers';
+import { SessionDeltaWriteBarrier } from '../api/session-persistence/sessionDeltaWriteBarrier';
+import { performThreeWaySessionMerge } from '../api/session-persistence/sessionThreeWayMerge';
+import { replaceSessions } from './sessionIndex';
 import { initStorePersistence } from './layout-helpers/store-persistence';
+import type { PersistableStoreState } from './layout-helpers/store-persistence-types';
 import {
   isSessionTombstoned,
   markSessionTombstone,
@@ -40,19 +40,19 @@ vi.mock('../api/sessionPersistence', async (importOriginal) => {
   };
 });
 
-function makeMessage(id: string, content: string, timestamp = 1000): Message {
+function makeMessage(id: string, text: string, timestamp = 1000): SessionMessage {
   return {
     id,
-    role: 'user',
-    content,
-    timestamp: String(timestamp),
+    sender: 'user',
+    text,
+    timestamp,
   };
 }
 
 function makeSession(
   id: string,
   title: string,
-  messages: Message[] = [],
+  messages: SessionMessage[] = [],
   overrides: Partial<SessionState> = {}
 ): SessionState {
   return {
@@ -83,7 +83,12 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
         ])
       );
 
-      const result = performThreeWaySessionMerge([], [localNew], remoteHistory);
+      const result = performThreeWaySessionMerge(
+        [],
+        [localNew],
+        remoteHistory,
+        isSessionTombstoned
+      );
 
       expect(result.mergedSessions).toHaveLength(51);
       expect(result.preservedLocalNewCount).toBe(1);
@@ -93,7 +98,7 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       expect(result.mergedById['disk-hist-50']?.title).toBe('Historical #50');
     });
 
-    it('supports both 2/3-argument and 4-argument overload signatures seamlessly', () => {
+    it('fills empty local body from disk and appends remote-only sessions when baseIds is empty', () => {
       const sLocal = makeSession('s-1', 'Local S1', []);
       const sRemote1 = makeSession('s-1', 'Remote S1', [
         makeMessage('m-1', 'from disk'),
@@ -102,14 +107,16 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
         makeMessage('m-2', 'also from disk'),
       ]);
 
-      const res2Arg = performThreeWaySessionMerge(
+      const merged = performThreeWaySessionMerge(
+        [],
         [sLocal],
-        [sRemote1, sRemote2]
+        [sRemote1, sRemote2],
+        isSessionTombstoned
       );
-      expect(res2Arg.mergedSessions).toHaveLength(2);
-      expect(res2Arg.filledBodiesCount).toBe(1);
-      expect(res2Arg.addedFromRemoteCount).toBe(1);
-      expect(res2Arg.mergedById['s-1']?.messages).toHaveLength(1);
+      expect(merged.mergedSessions).toHaveLength(2);
+      expect(merged.filledBodiesCount).toBe(1);
+      expect(merged.addedFromRemoteCount).toBe(1);
+      expect(merged.mergedById['s-1']?.messages).toHaveLength(1);
     });
 
     it('merges overlapping sessions with causal message deduplication when both local and remote have messages', () => {
@@ -129,7 +136,8 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       const result = performThreeWaySessionMerge(
         ['shared-session'],
         [localSession],
-        [remoteSession]
+        [remoteSession],
+        isSessionTombstoned
       );
 
       expect(result.mergedSessions).toHaveLength(1);
@@ -186,7 +194,8 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       const result = performThreeWaySessionMerge(
         baseIds,
         localSessions,
-        remoteSessions
+        remoteSessions,
+        isSessionTombstoned
       );
 
       expect(result.mergedSessions.map((s) => s.id)).toEqual([
@@ -197,7 +206,7 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
     });
   });
 
-  describe('Triple Write Barrier (BootHoldBarrier / DeltaWriteBarrier / EmptySanitizeBarrier)', () => {
+  describe('Triple Write Barrier (BootHoldBarrier / SessionDeltaWriteBarrier / EmptySanitizeBarrier)', () => {
     it('BootHoldBarrier holds persistence while hydrationComplete is false', () => {
       expect(BootHoldBarrier.shouldHold({ hydrationComplete: false })).toBe(
         true
@@ -207,8 +216,8 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       );
     });
 
-    it('DeltaWriteBarrier detects single-session dirty mutations and skips no-op writes', () => {
-      const barrier = new DeltaWriteBarrier();
+    it('SessionDeltaWriteBarrier detects single-session dirty mutations and skips no-op writes', () => {
+      const barrier = new SessionDeltaWriteBarrier();
       const s1 = makeSession('s1', 'Session 1', [makeMessage('m1', 'hi')]);
       const s2 = makeSession('s2', 'Session 2', [makeMessage('m2', 'yo')]);
 
@@ -236,9 +245,13 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       const knownIds = new Set(['s-persisted-1', 's-persisted-2']);
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      expect(EmptySanitizeBarrier.shouldBlockEmptyWrite([], knownIds)).toBe(
-        true
-      );
+      expect(
+        EmptySanitizeBarrier.shouldBlockEmptyWrite(
+          [],
+          knownIds,
+          isSessionTombstoned
+        )
+      ).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('FATAL_CORRUPTION_GUARD')
       );
@@ -246,9 +259,13 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       // If user explicitly tombstoned all known sessions, empty write is permitted
       markSessionTombstone('s-persisted-1');
       markSessionTombstone('s-persisted-2');
-      expect(EmptySanitizeBarrier.shouldBlockEmptyWrite([], knownIds)).toBe(
-        false
-      );
+      expect(
+        EmptySanitizeBarrier.shouldBlockEmptyWrite(
+          [],
+          knownIds,
+          isSessionTombstoned
+        )
+      ).toBe(false);
 
       warnSpy.mockRestore();
     });
@@ -269,16 +286,12 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
 
       const listeners = new Set<(state: PersistableStoreState) => void>();
       const state: PersistableStoreState = {
-        sessions: [],
         sessionsById: {},
         activeSessionId: '',
         folderOrder: [],
         hydrationComplete: false,
         activeAgentId: null,
         panelAgentId: null,
-        metaById: {},
-        messagesBySessionId: {},
-        agentsBySessionId: {},
         sessionOrder: [],
       };
 
@@ -313,10 +326,8 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
         makeMessage('m-fast', 'quick question'),
       ]);
       store.setState((s) => {
-        s.sessions = [fastLocal];
-        s.sessionsById = { [fastLocal.id]: fastLocal };
+        replaceSessions(s, [fastLocal]);
         s.activeSessionId = fastLocal.id;
-        syncOrthogonalSessionSubtrees(s, s.sessions);
       });
 
       // BootHoldBarrier must hold persistence while hydrationComplete === false
@@ -336,19 +347,13 @@ describe('Stage 10 · 3-Way Session Merge & Triple Write Barrier', () => {
       await new Promise((r) => setTimeout(r, 30));
 
       expect(state.hydrationComplete).toBe(true);
-      expect(state.sessions.map((s) => s.id)).toEqual([
-        'fast-local-session',
-        'hist-1',
-        'hist-2',
-        'hist-3',
-      ]);
       expect(state.sessionOrder).toEqual([
         'fast-local-session',
         'hist-1',
         'hist-2',
         'hist-3',
       ]);
-      expect(state.messagesBySessionId?.['hist-2']?.[0]?.content).toBe('old 2');
+      expect(state.sessionsById['hist-2']?.messages?.[0]?.text).toBe('old 2');
       expect(mockPersistAllSessions).toHaveBeenCalledTimes(1);
 
       cleanup();

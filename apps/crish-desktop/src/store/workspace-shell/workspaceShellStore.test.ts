@@ -22,15 +22,7 @@ vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
   canonicalSessionFolder: (k?: string) => (k || '').trim() || 'general',
   getActiveProjectId: () => null,
-}));
-
-vi.mock('../../api/storeAccess', () => ({
-  enterDraftMode: vi.fn(),
-  setActiveSessionId: vi.fn(),
-  getSessionStoreState: vi.fn(() => ({})),
-  getActiveSessionId: vi.fn(() => null),
-  getWorkspaceStoreState: vi.fn(() => ({})),
-  getLayoutState: vi.fn(() => ({})),
+  activateWorkspaceForSessionFolder: vi.fn(async () => undefined),
 }));
 
 const sessionSetActiveSessionId = vi.fn();
@@ -49,7 +41,7 @@ vi.mock('../sessionStore', () => ({
       enterDraftMode: sessionEnterDraftMode,
       deleteSession: sessionDeleteSession,
       sessionsById: mockSessionsById,
-      sessions: Object.values(mockSessionsById),
+      sessionOrder: Object.keys(mockSessionsById),
       activeSessionId: '',
     }),
   },

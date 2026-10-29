@@ -22,6 +22,10 @@ import {
 import type { HandlerEnv } from './handlerEnv';
 import type { StreamState } from './streamState';
 import { useSessionStore } from '../../../store/sessionStore';
+import {
+  deleteSessionFromIndexed,
+  insertSessionAt,
+} from '../../../store/sessionIndex';
 import type { SessionMessage, SessionState } from '../../../store/types';
 
 function makeEnv() {
@@ -250,7 +254,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
   const MSG = 'asst-cache-1';
 
   function seedSession(msgs: SessionMessage[]) {
-    const session = {
+    const session: SessionState = {
       id: SESS,
       title: '缓存链路测试',
       folder: '常规会话',
@@ -258,13 +262,10 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
       isArchived: false,
       timestamp: new Date().toISOString(),
       messages: msgs,
-    } as unknown as SessionState;
-    // sessions[] 为 autoIndex 的 canonical 数组（handler 经其写入）；
-    // sessionsById 由中间件重建，测试里同时种子两者避免索引漂移
-    useSessionStore.setState((state) => ({
-      sessions: [...state.sessions.filter((s) => s.id !== SESS), session],
-      sessionsById: { ...state.sessionsById, [SESS]: session },
-    }));
+    };
+    useSessionStore.setState((state) => {
+      insertSessionAt(state, session, state.sessionOrder.length);
+    });
   }
 
   beforeEach(() => {
@@ -282,12 +283,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
 
   afterEach(() => {
     useSessionStore.setState((state) => {
-      const next = { ...state.sessionsById };
-      delete next[SESS];
-      return {
-        sessions: state.sessions.filter((s) => s.id !== SESS),
-        sessionsById: next,
-      };
+      deleteSessionFromIndexed(state, SESS);
     });
   });
 

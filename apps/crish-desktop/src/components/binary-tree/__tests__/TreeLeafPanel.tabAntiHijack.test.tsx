@@ -11,6 +11,8 @@ import {
 import { TreeLeafPanel } from '../TreeLeafPanel';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { useSessionStore } from '../../../store/sessionStore';
+import { buildSessionIndex } from '../../../store/sessionIndex';
+import type { SessionState } from '../../../store/types';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { useWorkspaceShellStore } from '../../../store/workspace-shell';
 import {
@@ -130,9 +132,9 @@ vi.mock('../../../api/import/autoSyncExternalSessions', () => ({
 }));
 
 // 5. Mock external provider & vision helpers for ChatCard
-vi.mock('../../../api/storeAccess', async (importOriginal) => {
+vi.mock('../../../store/storeAccess', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../api/storeAccess')>();
+    await importOriginal<typeof import('../../../store/storeAccess')>();
   return {
     ...actual,
     openSettings: vi.fn(),
@@ -221,35 +223,20 @@ describe('TreeLeafPanel Tab Anti-Hijack & Sacred Blank Slate Suite', () => {
     });
 
     useLayoutStore.setState({ chatMainSurface: 'chat' });
-    useSessionStore.setState({
-      sessions: [
-        {
-          id: 'sess-init-1',
-          title: '已有对话 1',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't1',
-          messages: [
-            { id: 'm0', sender: 'user', timestamp: 100, text: '已有对话内容' },
-          ],
-          agents: [],
-        } as any,
+    const seeded: SessionState = {
+      id: 'sess-init-1',
+      title: '已有对话 1',
+      folder: '默认',
+      isPinned: false,
+      isArchived: false,
+      timestamp: 't1',
+      messages: [
+        { id: 'm0', sender: 'user', timestamp: 100, text: '已有对话内容' },
       ],
-      sessionsById: {
-        'sess-init-1': {
-          id: 'sess-init-1',
-          title: '已有对话 1',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't1',
-          messages: [
-            { id: 'm0', sender: 'user', timestamp: 100, text: '已有对话内容' },
-          ],
-          agents: [],
-        } as any,
-      },
+      agents: [],
+    };
+    useSessionStore.setState({
+      ...buildSessionIndex([seeded]),
       activeSessionId: 'sess-init-1',
     });
   });

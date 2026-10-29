@@ -62,10 +62,8 @@ import {
   hydrateSessionsFromRust,
   persistAllSessionsRust,
 } from './sessionRustDbHydrate';
-import {
-  sessionDeltaWriteBarrier,
-  reconcileLateArrivalSnapshot,
-} from './sessionDeltaWriteBarrier';
+import { sessionDeltaWriteBarrier } from './sessionDeltaWriteBarrier';
+import { reconcileLateArrivalSnapshot } from './sessionLateArrivalMerge';
 import { VirtualScrollManager } from '../VirtualScrollManager';
 import {
   hydrateSessionMessagesFromEngine,

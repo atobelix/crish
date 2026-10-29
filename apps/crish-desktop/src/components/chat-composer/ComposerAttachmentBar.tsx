@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import styles from './ComposerAttachmentBar.module.css';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import {
   AttachmentCard,

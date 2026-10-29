@@ -23,6 +23,10 @@ import { onMessageDelta, onMessageEnd } from '../messageHandlers';
 import type { HandlerEnv } from '../handlerEnv';
 import type { StreamState } from '../streamState';
 import { useSessionStore } from '../../../../store/sessionStore';
+import {
+  deleteSessionFromIndexed,
+  insertSessionAt,
+} from '../../../../store/sessionIndex';
 import type { SessionMessage, SessionState } from '../../../../store/types';
 
 function makeEnv(sessionId = 'sess-idempotent-test') {
@@ -72,7 +76,7 @@ describe('messageHandlers 幂等性与单生产者防线（messageHandlers.idemp
   const MSG_ID = 'asst-msg-idempotent-1';
 
   function seedSession(msgs: SessionMessage[] = []) {
-    const session = {
+    const session: SessionState = {
       id: SESS_ID,
       title: '幂等性单测会话',
       folder: '常规会话',
@@ -80,11 +84,10 @@ describe('messageHandlers 幂等性与单生产者防线（messageHandlers.idemp
       isArchived: false,
       timestamp: new Date().toISOString(),
       messages: msgs,
-    } as unknown as SessionState;
-    useSessionStore.setState((st) => ({
-      sessions: [...st.sessions.filter((s) => s.id !== SESS_ID), session],
-      sessionsById: { ...st.sessionsById, [SESS_ID]: session },
-    }));
+    };
+    useSessionStore.setState((st) => {
+      insertSessionAt(st, session, st.sessionOrder.length);
+    });
   }
 
   beforeEach(() => {
@@ -102,12 +105,7 @@ describe('messageHandlers 幂等性与单生产者防线（messageHandlers.idemp
 
   afterEach(() => {
     useSessionStore.setState((st) => {
-      const next = { ...st.sessionsById };
-      delete next[SESS_ID];
-      return {
-        sessions: st.sessions.filter((s) => s.id !== SESS_ID),
-        sessionsById: next,
-      };
+      deleteSessionFromIndexed(st, SESS_ID);
     });
   });
 

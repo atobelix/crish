@@ -3,14 +3,14 @@
  * apps/crish-desktop/src/components/chat-composer/composerTypes.ts
  * tiptap 输入域类型契约（40 方案 T2/T11 收敛后）：
  * - PermissionMode 以 api/permissionModes 为单一真相源（re-export，消除两源 hack）；
- * - ChatAttachment 以 hooks/useChatStream（宿主）为准，本域不再自声明；
+ * - ChatAttachment 以 hooks/chat-stream（宿主）为准，本域不再自声明；
  * - TiptapComposerContainer / useTiptapComposerState 退役后，其专属类型一并移除。
  * CI Guardrail: Max 800 lines of effective code
  */
 
 import type React from 'react';
 import type { PermissionMode } from '../../api/permissionModes';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import type { ComposerNotice } from './composerNoticeTypes';
 import type { ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
 

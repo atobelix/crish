@@ -13,7 +13,7 @@ export type {
   ChatNarrativeRenderTools,
   ChatNarrativeRenderToolsArgs,
 } from '../chat-message/narrativeRenderSlots';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 
 /** 消息列表数据域（展示消息/全量消息/agents/会话ID/过滤开关收敛为单一子对象） */
 export interface ChatMessageListMessagesProps {

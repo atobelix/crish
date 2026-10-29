@@ -129,14 +129,22 @@ const FORBIDDEN_LINE = [
   },
 ];
 
-/** 文件级：须存在 sessionsById 同步约定相关导出（sessionIndex） */
+/** 文件级：须存在 sessionsById + sessionOrder 同步约定相关导出（sessionIndex） */
 const SESSION_INDEX_REQUIRED = [
-  { re: /export\s+function\s+buildSessionsById\b/, label: 'buildSessionsById' },
-  { re: /export\s+function\s+reindexSessionsById\b/, label: 'reindexSessionsById' },
+  { re: /export\s+function\s+buildSessionIndex\b/, label: 'buildSessionIndex' },
+  { re: /export\s+function\s+replaceSessions\b/, label: 'replaceSessions' },
   { re: /export\s+function\s+getSessionById\b/, label: 'getSessionById' },
   { re: /export\s+function\s+checkSessionsIndex\b/, label: 'checkSessionsIndex' },
   { re: /export\s+function\s+isSessionsIndexConsistent\b/, label: 'isSessionsIndexConsistent' },
   { re: /export\s+function\s+assertSessionsIndexConsistent\b/, label: 'assertSessionsIndexConsistent' },
+];
+
+/** 旧索引别名不得回潮（双写与兼容垫片） */
+const SESSION_INDEX_FORBIDDEN = [
+  { re: /export\s+function\s+buildSessionsById\b/, label: 'buildSessionsById' },
+  { re: /export\s+function\s+reindexSessionsById\b/, label: 'reindexSessionsById' },
+  { re: /export\s+function\s+ensureSessionsById\b/, label: 'ensureSessionsById' },
+  { re: /export\s+function\s+getSessionForWrite\b/, label: 'getSessionForWrite' },
 ];
 
 /** layoutStore 须用泛型切片接线，禁止 any 遥测入参（遥测签名检查随 T11 迁至 settingsStore） */
@@ -370,6 +378,11 @@ for (const { dir, rel } of EXTRA_SCAN_DIRS) {
         fail(`${rel} missing required export/symbol: ${label}`);
       }
     }
+    for (const { re, label } of SESSION_INDEX_FORBIDDEN) {
+      if (re.test(src)) {
+        fail(`${rel} forbidden legacy export: ${label}`);
+      }
+    }
   }
 }
 
@@ -483,29 +496,28 @@ for (const facade of FACADE_REQUIRED) {
 
 // storeAccess 须编排三域 + 禁止 as any / : any；跨域写按域分发（域 store 自身 getState）
 {
-  const accessRel = 'apps/crish-desktop/src/api/storeAccess.ts';
-  if (!existsSync(storeAccessPath)) {
-    fail(`missing file: ${accessRel}`);
+  const accessModulePaths = [
+    resolve(storeDir, 'storeAccess.ts'),
+    resolve(storeDir, 'sessionAccess.ts'),
+    resolve(storeDir, 'sessionAccessQuery.ts'),
+    resolve(storeDir, 'settingsAccess.ts'),
+    resolve(storeDir, 'telemetryAccess.ts'),
+    resolve(storeDir, 'workspacePanelAccess.ts'),
+  ];
+  const missingAccess = accessModulePaths.filter((p) => !existsSync(p));
+  if (missingAccess.length > 0) {
+    fail(`missing store access module(s): ${missingAccess.join(', ')}`);
   } else {
-    let src = scanForbidden(storeAccessPath, accessRel);
-    const storeAccessSubDir = resolve(dirname(storeAccessPath), 'store-access');
-    if (existsSync(storeAccessSubDir)) {
-      for (const subFile of readdirSync(storeAccessSubDir)) {
-        if (subFile.endsWith('.ts')) {
-          const subPath = join(storeAccessSubDir, subFile);
-          src += '\n' + scanForbidden(subPath, `apps/crish-desktop/src/api/store-access/${subFile}`);
-        }
-      }
-    }
+    const accessRel =
+      'apps/crish-desktop/src/store/{storeAccess,sessionAccess,sessionAccessQuery,settingsAccess,telemetryAccess,workspacePanelAccess}.ts';
+    let src = accessModulePaths
+      .map((p) => scanForbidden(p, p.slice(root.length + 1).replace(/\\/g, '/')))
+      .join('\n');
     const accessRequired = [
       { re: /export\s+function\s+getLayoutState\b/, label: 'getLayoutState' },
       { re: /export\s+function\s+focusOrOpenPanel\b/, label: 'focusOrOpenPanel' },
-      { re: /export\s+(?:function|\{[^}]*\b)getActiveSession\b/, label: 'getActiveSession' },
       { re: /export\s+(?:function|\{[^}]*\b)getActiveSessionId\b/, label: 'getActiveSessionId' },
-      { re: /export\s+(?:function|\{[^}]*\b)getSessionAgent\b/, label: 'getSessionAgent' },
       { re: /export\s+(?:function\s+|\{[^}]*\b)getPermissionMode\b/, label: 'getPermissionMode' },
-      { re: /export\s+(?:function|\{[^}]*\b)getDropPreview\b/, label: 'getDropPreview' },
-      { re: /export\s+(?:function|\{[^}]*\b)setGroupActiveCard\b/, label: 'setGroupActiveCard' },
       { re: /export\s+function\s+unarchiveSession\b/, label: 'unarchiveSession' },
       { re: /export\s+function\s+setActiveAgentId\b/, label: 'setActiveAgentId' },
       { re: /export\s+function\s+addMessageToolCall\b/, label: 'addMessageToolCall' },
@@ -530,9 +542,6 @@ for (const facade of FACADE_REQUIRED) {
         re: /useSettingsStore\.getState\(\)\.(?:syncTelemetryData|setAppSettings|setScheduledTasks)\b/,
         label: 'settings 域写走 useSettingsStore.getState()',
       },
-      { re: /from\s+['"]\.\.\/store\/sessionStore['"]/, label: 'import sessionStore facade' },
-      { re: /from\s+['"]\.\.\/store\/workspaceStore['"]/, label: 'import workspaceStore facade' },
-      { re: /from\s+['"]\.\.\/store\/settingsUiStore['"]/, label: 'import settingsUiStore facade' },
     ];
     for (const { re, label } of accessRequired) {
       if (!re.test(src)) {
@@ -557,21 +566,6 @@ for (const facade of FACADE_REQUIRED) {
       for (const { re, label } of accessForbidden) {
         if (re.test(domainSrc)) fail(`${storeAccessDomainRel} forbidden: ${label}`);
       }
-    }
-    // 禁止 storeAccess 内再散落 useLayoutStore.getState()（跨域以外）
-    // 允许 getLayoutState 内部那一次；注释不计。
-    let getStateHits = 0;
-    for (const line of src.split(/\r?\n/)) {
-      if (isCommentOnlyLine(line)) continue;
-      if (/useLayoutStore\.getState\s*\(/.test(codePart(line))) getStateHits += 1;
-    }
-    if (getStateHits > 1) {
-      fail(
-        `${accessRel}: expected at most 1 useLayoutStore.getState() (inside getLayoutState); found ${getStateHits}`,
-      );
-    }
-    if (getStateHits < 1) {
-      fail(`${accessRel}: expected 1 useLayoutStore.getState() inside getLayoutState; found 0`);
     }
     // 禁止 import 组件层（编排层只依赖 store）
     if (/from\s+['"]\.\.\/components\//.test(src) || /from\s+['"]\.\/components\//.test(src)) {

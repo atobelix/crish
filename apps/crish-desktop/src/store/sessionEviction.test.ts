@@ -33,6 +33,7 @@ import {
   useLayoutTreeStore,
 } from './layout-tree';
 import { createBranch } from './layout-tree/types';
+import { buildSessionIndex } from './sessionIndex';
 import { useStreamingStore } from './streamingStore';
 import type { SessionMessage } from './types';
 import { useWorkspaceShellStore } from './workspace-shell/workspaceShellStore';
@@ -474,13 +475,7 @@ describe('sessionEviction — 标签栏感知三级保活软驱逐状态机 (W1-
 
       const state = {
         activeSessionId: 's-active',
-        sessions: [sActive, sStreaming, sOpenTab, sCandidate],
-        sessionsById: {
-          's-active': sActive,
-          's-streaming': sStreaming,
-          's-open-tab': sOpenTab,
-          's-candidate': sCandidate,
-        },
+        ...buildSessionIndex([sActive, sStreaming, sOpenTab, sCandidate]),
       };
 
       const actuallyEvicted = applySoftEvictionInState(

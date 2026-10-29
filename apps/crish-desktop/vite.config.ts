@@ -737,15 +737,13 @@ export default defineConfig({
           // 2.3 核心会话状态切块（解耦会话状态与运行时流传输）
           if (
             n.includes('/src/store/sessionStore') ||
-            n.includes('/src/store/sessionSubtreeModel') ||
             n.includes('/src/store/sessionActions') ||
             n.includes('/src/store/sessionIndex') ||
             n.includes('/src/store/sessionListEqual') ||
             n.includes('/src/store/sessionMessage') ||
             n.includes('/src/store/sessionCrud') ||
             n.includes('/src/store/layout-helpers/') ||
-            n.includes('/src/store/middleware/') ||
-            n.includes('/src/api/storeAccess')
+            n.includes('/src/store/middleware/')
           ) {
             return 'store-session-core';
           }

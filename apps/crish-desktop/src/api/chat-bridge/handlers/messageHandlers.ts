@@ -9,7 +9,7 @@
 import { blockText } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { getSessionStoreState } from '../../storeAccess';
+import { getSessionStoreState } from '../../../store/sessionStore';
 import { projectAgentMessageContent } from '../../messageProjection';
 
 /**
@@ -23,8 +23,7 @@ import { projectAgentMessageContent } from '../../messageProjection';
  *   渲染层隐藏而非显示 0%）。
  *
  * T-E 步骤 3（M1）：raw setState 直写 → setMessageCacheMetrics action——
- * 「必须经 sessions[] canonical 写」的手工纪律（autoIndex 中间件索引保障）
- * 内建为 action 实现（getSessionForWrite + rebindSessionById）。
+ * 会话写入纪律内建为 action 实现（sessionsById 单一源）。
  */
 function attachCacheMetricsToStoreMessage(
   sessionId: string,
@@ -243,9 +242,7 @@ export function onMessageEnd(
 
     // 权威落盘账本：将本轮权威文本同步落盘至 sessionStore（对齐 03 详案与因果时序）
     if (env.sessionId) {
-      const sess = getSessionStoreState().sessions.find(
-        (s) => s.id === env.sessionId
-      );
+      const sess = getSessionStoreState().sessionsById[env.sessionId];
       if (sess?.messages) {
         let target = msg.id
           ? sess.messages.find((m) => m.id === msg.id)

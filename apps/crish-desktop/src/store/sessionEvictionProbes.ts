@@ -271,16 +271,11 @@ export function isSessionStreaming(
     return true;
   }
 
-  try {
-    const byKey = useStreamingStore.getState()?.byKey;
-    if (byKey) {
-      const prefix = `${sid}::`;
-      for (const [key, entry] of Object.entries(byKey)) {
-        if (entry?.sessionId === sid || key.startsWith(prefix)) return true;
-      }
-    }
-  } catch {
-    /* ignore */
+  const prefix = `${sid}::`;
+  for (const [key, entry] of Object.entries(
+    useStreamingStore.getState().byKey
+  )) {
+    if (entry?.sessionId === sid || key.startsWith(prefix)) return true;
   }
 
   if (Array.isArray(session.messages)) {
@@ -315,16 +310,9 @@ export function getActiveStreamingSessionIds(
 ): Set<string> {
   const streaming = new Set<string>();
   addOpenTabsInputToSet(explicitStreamingIds as OpenTabsInput, streaming);
-  try {
-    const byKey = useStreamingStore.getState()?.byKey;
-    if (byKey) {
-      for (const entry of Object.values(byKey)) {
-        if (isValidRealSessionId(entry?.sessionId))
-          streaming.add(entry.sessionId.trim());
-      }
-    }
-  } catch {
-    /* ignore */
+  for (const entry of Object.values(useStreamingStore.getState().byKey)) {
+    if (isValidRealSessionId(entry?.sessionId))
+      streaming.add(entry.sessionId.trim());
   }
   for (const [id, sess] of Object.entries(sessionsById)) {
     if (sess && isSessionStreaming(sess, streaming)) streaming.add(id);

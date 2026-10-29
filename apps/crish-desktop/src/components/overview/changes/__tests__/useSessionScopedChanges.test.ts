@@ -3,35 +3,28 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSessionScopedChanges } from '../useSessionScopedChanges';
 import { useSessionStore } from '../../../../store/sessionStore';
+import {
+  buildSessionIndex,
+  getSessionById,
+  replaceSessions,
+} from '../../../../store/sessionIndex';
 import { useTerminalStore } from '../../../../store/terminalStore';
 import type { SessionState, SessionMessage } from '../../../../store/types';
 
 describe('useSessionScopedChanges — 会话作用域文件改动隔离测试', () => {
   beforeEach(() => {
+    const session: SessionState = {
+      id: 'sess-1',
+      title: '会话 1',
+      folder: 'conex',
+      isPinned: false,
+      isArchived: false,
+      timestamp: new Date().toISOString(),
+      messages: [],
+    };
     useSessionStore.setState({
       activeSessionId: 'sess-1',
-      sessions: [
-        {
-          id: 'sess-1',
-          title: '会话 1',
-          folder: 'conex',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-        },
-      ] as SessionState[],
-      sessionsById: {
-        'sess-1': {
-          id: 'sess-1',
-          title: '会话 1',
-          folder: 'conex',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-        } as SessionState,
-      },
+      ...buildSessionIndex([session]),
     });
 
     useTerminalStore.setState({
@@ -72,10 +65,8 @@ describe('useSessionScopedChanges — 会话作用域文件改动隔离测试', 
     ];
 
     useSessionStore.setState((s) => {
-      const sess = s.sessions.find((x) => x.id === 'sess-1');
+      const sess = getSessionById(s, 'sess-1');
       if (sess) sess.messages = messages;
-      const sessById = s.sessionsById['sess-1'];
-      if (sessById) sessById.messages = messages;
     });
 
     const { result } = renderHook(() => useSessionScopedChanges());
@@ -109,6 +100,7 @@ describe('useSessionScopedChanges — 会话作用域文件改动隔离测试', 
           id: 'agent-1',
           parentSessionId: 'sess-1',
           parentRunId: 'run-1',
+          subagentRunId: 'run-1',
           description: '测试 Agent',
           mode: 'implement',
           status: 'completed' as const,
@@ -116,15 +108,10 @@ describe('useSessionScopedChanges — 会话作用域文件改动隔离测试', 
           messages: agentMessages,
         },
       ];
-      const sess = s.sessions.find((x) => x.id === 'sess-1');
+      const sess = getSessionById(s, 'sess-1');
       if (sess) {
         sess.messages = messages;
         sess.agents = agents;
-      }
-      const sessById = s.sessionsById['sess-1'];
-      if (sessById) {
-        sessById.messages = messages;
-        sessById.agents = agents;
       }
     });
 
@@ -134,19 +121,18 @@ describe('useSessionScopedChanges — 会话作用域文件改动隔离测试', 
   });
 
   it('会话切换时，改动列表即时重置为目标会话数据，绝不跨会话残留', () => {
-    useSessionStore.setState({
-      activeSessionId: 'sess-2',
-      sessionsById: {
-        'sess-2': {
-          id: 'sess-2',
-          title: '会话 2',
-          folder: 'conex',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-        } as SessionState,
-      },
+    const next: SessionState = {
+      id: 'sess-2',
+      title: '会话 2',
+      folder: 'conex',
+      isPinned: false,
+      isArchived: false,
+      timestamp: new Date().toISOString(),
+      messages: [],
+    };
+    useSessionStore.setState((s) => {
+      replaceSessions(s, [next]);
+      s.activeSessionId = 'sess-2';
     });
 
     const { result } = renderHook(() => useSessionScopedChanges());

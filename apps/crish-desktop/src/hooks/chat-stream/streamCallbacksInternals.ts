@@ -24,8 +24,8 @@ import type {
   StreamValueBatcher,
 } from '../../api/streamTextBatcher';
 import type { StreamRequestOptions } from '../../api/chatApi';
-import type { SessionStreamManager } from '../../api/sessionStreamManager';
-import type { MutableRefObject } from 'react';
+import { sessionStreams } from '../../api/sessionStreamManager';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   snapshotStreamTextToSession,
   snapshotStreamThinkingToSession,
@@ -76,15 +76,12 @@ export type StreamRunState = {
 /**
  * onComplete 分发（T2.2 drain 语义 + 预算式收口触发）：
  * - 已被新 run 接管 → 置 runClosed，不碰 streamingActive；
- * - 否则置 draining，同步释放 streamManager entry，flushFinal 后无残余同步收口。
+ * - 否则置 draining，同步释放 sessionStreams 句柄，flushFinal 后无残余同步收口。
  */
 export function createCompleteHandler(opts: {
   sid: string;
   assistantMsgId: string;
   state: StreamRunState;
-  refs: {
-    streamManagerRef: MutableRefObject<SessionStreamManager | null>;
-  };
   flushStreamBatchers: () => void;
   finishComplete: () => void;
   buffer: { bufferedLength: () => number; flushFinal: () => void };
@@ -93,16 +90,13 @@ export function createCompleteHandler(opts: {
     sid,
     assistantMsgId,
     state,
-    refs,
     flushStreamBatchers,
     finishComplete,
     buffer,
   } = opts;
   const onComplete = () => {
     if (state.runClosed) return;
-    if (
-      !isLiveStreamRun(refs.streamManagerRef.current?.get(sid), assistantMsgId)
-    ) {
+    if (!isLiveStreamRun(sessionStreams.get(sid), assistantMsgId)) {
       state.runClosed = true;
       // Replaced by a newer run — that run owns streamingActive; do not clear.
       return;
@@ -112,13 +106,10 @@ export function createCompleteHandler(opts: {
     // 最终版」跳跃感）；isFinal 帧到达后由 finishComplete 收口。
     state.draining = true;
     markStreamingActive(false);
-    // streamManager entry 同步释放：L1 follow_up 拒绝窗口以 streamManager
-    // 为门，drain 期间新发送可入队不误拒；generationMap 保留到
-    // finishComplete（drain 中间帧需通过 myGen 守卫）。
-    const curStream = refs.streamManagerRef.current?.get(sid);
-    if (curStream?.assistantMsgId === assistantMsgId) {
-      refs.streamManagerRef.current?.delete(sid);
-    }
+    // 句柄同步释放：L1 follow_up 拒绝窗口以 sessionStreams 为门，drain 期间
+    // 新发送可入队不误拒；generationMap 保留到 finishComplete（drain 中间帧需
+    // 通过 myGen 守卫）。release 不重置渲染缓冲，下方 flushFinal 照常排空。
+    sessionStreams.release(sid, assistantMsgId);
     const hadPending = buffer.bufferedLength() > 0;
     // 预算式收口（T2.1 flushFinal）：≤2 帧同步刷完（isFinal 帧同步到达 →
     // finishComplete 同步执行）；大残余走 rAF 预算循环。
@@ -199,8 +190,12 @@ export function createToolPatchQueue(opts: {
     if (immediate || isImmediateToolStatus(patch.status)) {
       try {
         toolBatcher?.flushNow();
-      } catch {
-        /* ignore */
+      } catch (err) {
+        logger.warn('[chat-stream] tool patch flush failed', {
+          module: 'chat-stream',
+          sessionId: sid,
+          err: toErrMeta(err),
+        });
       }
     }
   };

@@ -30,7 +30,7 @@ import {
   type AttachmentItem,
 } from '../chat-attachment/AttachmentCard';
 import { AppIcon } from '@/components/ui/icons';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { isBusyRetryPending } from '../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
 import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';

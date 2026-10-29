@@ -3,7 +3,7 @@
  * 锚定到最新压缩摘要块，再交给 buildHistoryMessages 生成引擎入参。
  */
 import type { SessionMessage } from '../../store/types';
-import { getSessionById } from '../storeAccess';
+import { getSessionById } from '../../store/sessionStore';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
 
 /** 压缩折叠摘要消息：id 前缀 compacted-summary 或 metadata.isCompactedSummary 为真。 */

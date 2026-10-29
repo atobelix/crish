@@ -4,7 +4,7 @@
  * 职责域：
  * - decideEmptyRunNotice：空回复横幅裁决 + 展示动作；
  * - commitRunCompletion：complete 收口第一步（durable commit + diag 微任务）；
- * - finalizeAssistantMessageText：收口第二步（占位清理 + 时间线 + HTML 调度）；
+ * - finalizeAssistantMessageText：收口第二步（占位清理 + 时间线）；
  * - finalizeRunCompletionStatuses：收口第三步（状态置 completed + silent complete 检测）。
  *
  * 行为与原 streamCallbacksInternals 内联实现逐条等价，仅按职责域拆分，
@@ -22,7 +22,10 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { checkAndAlertSilentComplete } from '../../api/silentComplete';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { commitStreamToSession } from './helpers';
-import { buildMessageIndex, type MessageIndex } from './streamCallbacksInternals';
+import {
+  buildMessageIndex,
+  type MessageIndex,
+} from './streamCallbacksInternals';
 
 /**
  * 空回复提示（单轨收敛 §2.4）：全局 toast 一次性承载（5s TTL），不占 composer 区。
@@ -42,10 +45,10 @@ export function decideEmptyRunNotice(opts: {
         t.status === 'success' || t.status === 'error' || t.status === 'running'
     );
     if (!hasTools) {
-      toast.show(
-        '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
-        { type: 'info', ttlMs: 5000 }
-      );
+      toast.show('这一轮没有文字回复。若刚改过配置，请检查模型与网络。', {
+        type: 'info',
+        ttlMs: 5000,
+      });
     }
   }
 }
@@ -115,27 +118,23 @@ export function commitRunCompletion(opts: {
 }
 
 /**
- * complete 收口第二步：正文/思考占位清理 + 时间线收口 + 最终 HTML 调度。
- * 返回预清理后的最终正文（N6 单次化，helpers 不再二次 strip）。
+ * complete 收口第二步：正文/思考占位清理 + 时间线收口。
  */
 export function finalizeAssistantMessageText(opts: {
   sid: string;
   assistantMsgId: string;
   committedText: string;
   streamedFullText: string;
-  scheduleRunFinalHtml: (fullText: string) => void;
   thinkingBatcher: { drop: (key: string) => void } | null | undefined;
-}): string {
+}): void {
   const {
     sid,
     assistantMsgId,
     committedText,
     streamedFullText,
-    scheduleRunFinalHtml,
     thinkingBatcher,
   } = opts;
   const st = getCompositionRoot().session.getState();
-  let finalTextForHtml = '';
   try {
     const latest = buildMessageIndex(getSessionById(sid)).get(assistantMsgId);
     const raw = latest?.text || committedText || streamedFullText || '';
@@ -143,7 +142,6 @@ export function finalizeAssistantMessageText(opts: {
     if (cleaned !== raw && latest?.text !== cleaned) {
       st.updateMessageText(sid, assistantMsgId, cleaned);
     }
-    finalTextForHtml = cleaned || raw;
     const th = latest?.thinking || '';
     if (th === '正在处理…' || th === '正在思考中...') {
       thinkingBatcher?.drop(streamBatchKey(sid, assistantMsgId));
@@ -156,9 +154,6 @@ export function finalizeAssistantMessageText(opts: {
   } catch {
     /* ignore */
   }
-  // N6 单次化：finalTextForHtml 已预清理，helpers 不再二次 strip
-  scheduleRunFinalHtml(finalTextForHtml);
-  return finalTextForHtml;
 }
 
 /**

@@ -9,7 +9,7 @@
  * api 层不得直引 store 内部实现，统一经 storeAccess 公共面暴露）。
  */
 
-import { getSessionForWrite, rebindSessionById } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import { useSessionStore } from './sessionStore';
 import type { SessionMessage } from './types';
 
@@ -26,7 +26,7 @@ export function applyCompressionSummaryToStore(
   const droppedSet = new Set(droppedIds);
 
   useSessionStore.setState((state) => {
-    const sess = getSessionForWrite(state, sessionId);
+    const sess = getSessionById(state, sessionId);
     if (!sess) return;
     if (!sess.messages) sess.messages = [];
 
@@ -39,7 +39,6 @@ export function applyCompressionSummaryToStore(
         metadata: summaryMessage.metadata,
         blocks: summaryMessage.blocks,
       };
-      rebindSessionById(state, sessionId, sess);
     } else {
       // 过滤已被压缩丢弃的消息，并在首条普通消息前安全插入摘要块
       const filtered = sess.messages.filter((m) => !droppedSet.has(m.id));
@@ -54,7 +53,6 @@ export function applyCompressionSummaryToStore(
         filtered.push(summaryMessage);
       }
       sess.messages = filtered;
-      rebindSessionById(state, sessionId, sess);
     }
   });
 }

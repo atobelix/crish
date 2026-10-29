@@ -95,7 +95,7 @@ export function registerCrishMcpBridge(): void {
             workspaceKey: t.workspaceKey,
           })),
           globalActiveSessionId: sessions.activeSessionId,
-          sessionCount: sessions.sessions?.length ?? 0,
+          sessionCount: sessions.sessionOrder.length,
         };
       },
       'Snapshot workspace shell tabs + active session ids.'

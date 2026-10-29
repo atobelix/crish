@@ -1,16 +1,16 @@
 /**
  * chat-stream 流式执行与收口纯辅助函数（streamExecutionHelper）。
  *
- * 封装并发流冲突检测、Markdown HTML 单次调度、思考占位清理与完成终态收口逻辑。
+ * 封装并发流冲突检测、思考占位清理与完成终态收口逻辑。
  */
 import type { MutableRefObject } from 'react';
 import type { StreamTextBatcher } from '../../api/streamTextBatcher';
-import type { SessionStreamManager } from '../../api/sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
 import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
-import { scheduleFinalMarkdownHtml, buildTerminalToolPatches } from './helpers';
+import { buildTerminalToolPatches } from './helpers';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { getStreamThinking, setStreamText } from '../../store/streamingStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -23,57 +23,36 @@ import {
 import { type StreamRunState } from './streamCallbacksInternals';
 import { applyRunUsageSnapshot } from './streamCallbacksUsage';
 import { maybeRequestAiSessionTitle } from '../../api/sessionAiTitle';
+import { logger } from '../../services/LoggerService';
+import {
+  drainQueuedAfterComplete,
+  maybeContinueGoalMode,
+} from './goalContinuation';
 
 /**
  * 检查当前会话是否已有正在运行的流。
  * 若存在活动流，则将当前 user 消息置为 queued 状态并提示警告，阻止重复启动。
  */
-export function handleStreamConflict(
-  sid: string,
-  userMsgId: string,
-  streamManager: SessionStreamManager | null | undefined
-): boolean {
-  const prevStream = streamManager?.get(sid);
-  if (!prevStream) return false;
+export function handleStreamConflict(sid: string, userMsgId: string): boolean {
+  if (!sessionStreams.get(sid)) return false;
 
-  try {
-    const st = getCompositionRoot().session.getState();
-    const userMsg = getSessionById(sid)?.messages?.find(
-      (m: SessionMessage) => m.id === userMsgId
-    );
-    if (userMsg?.sender === 'user' && userMsg.status === 'processing') {
-      // processing → queued 属于守卫表中的 force 转换（串行守卫 S7 自动排队）；
-      // 不带 force 会被 validateStatusTransition 拒绝，消息卡在 processing。
-      st.setSessionMessageStatus(sid, userMsgId, 'queued', undefined, {
+  const userMsg = getSessionById(sid)?.messages?.find(
+    (m: SessionMessage) => m.id === userMsgId
+  );
+  if (userMsg?.sender === 'user' && userMsg.status === 'processing') {
+    // processing → queued 属于守卫表中的 force 转换（串行守卫 S7 自动排队）；
+    // 不带 force 会被 validateStatusTransition 拒绝，消息卡在 processing。
+    getCompositionRoot()
+      .session.getState()
+      .setSessionMessageStatus(sid, userMsgId, 'queued', undefined, {
         force: true,
       });
-    }
-  } catch {
-    /* ignore */
   }
-  console.warn(
+  logger.warn(
     '[runStreamingAssistant] refuse start while stream live (L1 follow_up, no abort)',
-    sid,
-    userMsgId
+    { module: 'chat-stream', sessionId: sid }
   );
   return true;
-}
-
-/**
- * 构造针对单次 assistant 运行的 Markdown HTML 调度器（单次触发，防止重复调度）。
- */
-export function createFinalHtmlScheduler(
-  sid: string,
-  assistantMsgId: string
-): (fullText: string) => void {
-  let finalHtmlScheduled = false;
-  return (fullText: string) => {
-    if (finalHtmlScheduled || !(fullText || '').trim()) return;
-    finalHtmlScheduled = true;
-    scheduleFinalMarkdownHtml(sid, assistantMsgId, fullText, {
-      preCleaned: true,
-    });
-  };
 }
 
 /**
@@ -121,13 +100,10 @@ export interface StreamCompletionContext {
   localRunId: string | null;
   gotRealText: boolean;
   runEndedWithNetworkError: boolean;
-  scheduleRunFinalHtml: (fullText: string) => void;
   thinkingBatcher: StreamTextBatcher | null | undefined;
   flushStreamBatchers: () => void;
   generationMapRef: MutableRefObject<Map<string, number>>;
   state: StreamRunState;
-  maybeContinueGoalMode: (sid: string, assistantMsgId: string) => boolean;
-  drainQueuedAfterComplete: (sid: string) => void;
 }
 
 /**
@@ -144,13 +120,10 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     localRunId,
     gotRealText,
     runEndedWithNetworkError,
-    scheduleRunFinalHtml,
     thinkingBatcher,
     flushStreamBatchers,
     generationMapRef,
     state,
-    maybeContinueGoalMode,
-    drainQueuedAfterComplete,
   } = ctx;
 
   markStreamingActive(false);
@@ -182,7 +155,6 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
     assistantMsgId,
     committedText,
     streamedFullText,
-    scheduleRunFinalHtml,
     thinkingBatcher,
   });
   // 首条成功的助手回复后异步要标题。失败保留现有标题，策略在 sessionAiTitle。
@@ -215,21 +187,18 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
 }
 
 /**
- * 初始化并启动流式渲染缓冲器（StreamRenderBuffer），
- * 绑定帧刷新与生命周期守卫，返回当前缓冲器实例。
+ * 为单轮 run 创建并启动独占的流式渲染缓冲器（StreamRenderBuffer），
+ * 绑定帧刷新与生命周期守卫；缓冲器随 run 句柄登记进 sessionStreams。
  */
 export function setupStreamRenderBuffer(opts: {
   sid: string;
   assistantMsgId: string;
-  renderBufferRef: MutableRefObject<StreamRenderBuffer | null>;
   generationMapRef: MutableRefObject<Map<string, number>>;
   state: StreamRunState;
   assertLive: () => boolean;
   finishComplete: () => void;
 }): StreamRenderBuffer {
   const buffer = new StreamRenderBuffer();
-  opts.renderBufferRef.current = buffer;
-  buffer.reset();
 
   const myGen = (opts.generationMapRef.current.get(opts.sid) ?? 0) + 1;
   opts.generationMapRef.current.set(opts.sid, myGen);

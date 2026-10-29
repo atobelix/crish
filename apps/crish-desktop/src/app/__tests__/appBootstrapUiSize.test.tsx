@@ -60,7 +60,7 @@ vi.mock('../../store/codeIndentProjection', () => ({
 vi.mock('../../api/providerProfiles', () => ({
   migrateLegacyProfiles: () => Promise.resolve(),
 }));
-vi.mock('../../api/storeAccess', () => ({ syncTelemetryData: () => {} }));
+vi.mock('../../store/storeAccess', () => ({ syncTelemetryData: () => {} }));
 vi.mock('../../api/uiEvents', () => ({
   emitUiEvent: vi.fn(),
   onUiEvent: () => () => {},

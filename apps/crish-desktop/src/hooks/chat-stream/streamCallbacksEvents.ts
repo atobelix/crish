@@ -15,7 +15,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { recordStreamDiag } from '../../api/streamDiag';
 import type { StreamCallbacks } from '../../api/chatApi';
-import type { SessionStreamManager } from '../../api/sessionStreamManager';
+import { sessionStreams } from '../../api/sessionStreamManager';
 import type { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import {
@@ -284,8 +284,7 @@ export function handleRunError(opts: {
   detail: string | undefined;
   flushStreamBatchers: () => void;
   refs: {
-    renderBuffer: StreamRenderBuffer | null;
-    streamManager?: SessionStreamManager | null;
+    renderBuffer: StreamRenderBuffer;
     generationMap: Map<string, number>;
   };
 }): { hadNetworkError: boolean } {
@@ -368,9 +367,8 @@ export function handleRunError(opts: {
   // R-11（08-detail T5.4）：error 收口补清理——先预算刷残余帧
   //（避免残余文本被 gen 守卫丢弃），再按 complete 同语义删 gen
   //（entry 匹配守卫：被新 run 接管时不误删新 run 的 generationMap）
-  refs.renderBuffer?.flush(false);
-  const errCur = refs.streamManager?.get(sid);
-  if (errCur?.assistantMsgId === assistantMsgId) {
+  refs.renderBuffer.flush(false);
+  if (sessionStreams.get(sid)?.assistantMsgId === assistantMsgId) {
     refs.generationMap.delete(sid);
   }
   return { hadNetworkError: isNetwork };

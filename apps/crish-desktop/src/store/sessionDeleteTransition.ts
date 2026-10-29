@@ -1,30 +1,18 @@
 /**
  * apps/crish-desktop/src/store/sessionDeleteTransition.ts
  *
- * 会话生命周期转换、DualLatch 终态清理与 Double-Lock 墓碑协调器 (Stage 03 / E3-01)
+ * 会话删除转换与 Double-Lock 墓碑守卫 (Stage 03 / E3-01)
  *
  * 核心职责：
  * 1. 焦点与工作区迁移：会话删除时的邻近会话推导与工作区目录同步预激活，消除悬垂指针与白屏；
- * 2. DualLatch 终态清理协议：在会话关闭、删除或切换时，注销所有监听器、排空消息缓冲、断开流连接、解引用 DOM 节点；
- * 3. Double-Lock 双重锁墓碑（Tombstone Guard）：墓碑黑名单 + Store 存活性二次校验，彻底杜绝已删除/销毁会话被异步消息、推送或网络重试"幽灵复活"；
- * 4. 多分栏复合草稿与定时器收口：对称清理 `${sessionId}` 与 `${sessionId}::${leafId}` 复合键，取消防抖定时器，清退内存泄漏闭包。
+ * 2. Double-Lock 双重锁墓碑（Tombstone Guard）：墓碑黑名单 + Store 存活性二次校验，彻底杜绝已删除/销毁会话被异步消息、推送或网络重试"幽灵复活"；
+ * 3. 多分栏复合草稿与定时器收口：对称清理 `${sessionId}` 与 `${sessionId}::${leafId}` 复合键，取消防抖定时器，清退内存泄漏闭包。
+ *
+ * 流取消、DualLatch / 流式缓冲清理与后端中止统一由 `sessionCascadeCancellation`（deleteSession 首步）单通道完成。
  */
 
-import { dualLatchStateMachine } from './dualLatchProtocol';
-import {
-  isSessionTombstoned,
-  markSessionTombstone,
-} from '../utils/lifecycle/ScopedLifecycleRegistry';
-import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
-import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
-import {
-  sharedSessionStreamManager,
-  abortSessionRenderBuffer,
-} from '../hooks/chat-stream/sessionStreamManager';
-import { useStreamingStore } from './streamingStore';
-import { sessionCascadeCancellation } from './sessionCascadeCancellation';
-import { clearMessageSnapshots } from './messageSnapshotsBridge';
-import { clearRuntimeStatus } from './sessionRuntimeStatusStore';
+import { isSessionTombstoned } from '../utils/lifecycle/ScopedLifecycleRegistry';
+import { logger, toErrMeta } from '../services/LoggerService';
 
 export interface DraftEvictable {
   evictSession: (sessionId: string) => void;
@@ -144,145 +132,11 @@ export function evictSessionDraftsAndTimers(sessionId: string): void {
     try {
       _draftManager.evictSession(id);
     } catch (err) {
-      console.error(
-        `[sessionDeleteTransition] Failed to evict session draft for ${id}:`,
-        err
-      );
+      logger.error('[sessionDeleteTransition] draft eviction failed', {
+        module: 'sessionDeleteTransition',
+        sessionId: id,
+        err: toErrMeta(err),
+      });
     }
   }
-}
-
-/**
- * 【DualLatch 终态清理协议】
- * 刚性注销所有流式监听、清理消息缓冲区、断开连接、解引用 DOM 节点并排空锁存记录。
- */
-export function executeDualLatchFinalCleanup(sessionId: string): {
-  dualLatchRecordsAborted: boolean;
-  domTargetsDereferenced: boolean;
-  renderBufferAborted: boolean;
-  streamingStoreCleared: boolean;
-} {
-  const id = typeof sessionId === 'string' ? sessionId.trim() : '';
-  if (!id) {
-    return {
-      dualLatchRecordsAborted: false,
-      domTargetsDereferenced: false,
-      renderBufferAborted: false,
-      streamingStoreCleared: false,
-    };
-  }
-
-  // 1. DualLatch 状态机：清退全部 records、清空 snapshotText、取消 pending rAF
-  let dualLatchRecordsAborted = false;
-  try {
-    dualLatchStateMachine.abortSession(id);
-    dualLatchRecordsAborted = true;
-  } catch (err) {
-    console.error(`[DualLatchCleanup] abortSession failed for ${id}:`, err);
-  }
-
-  // 2. DOM 节点解引用：彻底清除 StreamDirect 引擎中的 DOM Text 节点引用与影子槽位
-  let domTargetsDereferenced = false;
-  try {
-    streamDirectEngine.abortSession(id);
-    streamDirectDomEngine.releaseSession(id);
-    domTargetsDereferenced = true;
-  } catch (err) {
-    console.error(
-      `[DualLatchCleanup] StreamDirect DOM dereference failed for ${id}:`,
-      err
-    );
-  }
-
-  // 3. 流式渲染缓冲：取消未决 rAF 分帧刷新并重置清空
-  let renderBufferAborted = false;
-  try {
-    abortSessionRenderBuffer(id);
-    renderBufferAborted = true;
-  } catch (err) {
-    console.error(
-      `[DualLatchCleanup] abortSessionRenderBuffer failed for ${id}:`,
-      err
-    );
-  }
-
-  // 4. 清理前端流式状态缓冲（防残留追加）
-  let streamingStoreCleared = false;
-  try {
-    useStreamingStore.getState().clearSession(id);
-    streamingStoreCleared = true;
-  } catch (err) {
-    console.error(`[DualLatchCleanup] clearSession failed for ${id}:`, err);
-  }
-
-  return {
-    dualLatchRecordsAborted,
-    domTargetsDereferenced,
-    renderBufferAborted,
-    streamingStoreCleared,
-  };
-}
-
-/**
- * 【会话终态全生命周期原子清理执行器】
- * 统筹级联总线、DualLatch 协议、Double-Lock 墓碑注册、复合草稿清空与运行时快照注销。
- */
-export function executeSessionDeleteLifecycle(sessionId: string): {
-  sessionId: string;
-  tombstoned: boolean;
-  dualLatchCleaned: boolean;
-  streamCancelled: boolean;
-  draftsEvicted: boolean;
-} {
-  const id = typeof sessionId === 'string' ? sessionId.trim() : '';
-  if (!id) {
-    return {
-      sessionId: '',
-      tombstoned: false,
-      dualLatchCleaned: false,
-      streamCancelled: false,
-      draftsEvicted: false,
-    };
-  }
-
-  // 1. 触发三级级联取消总线（Tier 1 计算强杀 / Tier 2 通信中止 / Tier 3 500 容量 LRU 墓碑拦截）
-  sessionCascadeCancellation.cancelSessionCascade(id);
-  markSessionTombstone(id);
-
-  // 2. 刚性执行 DualLatch 终态清理协议（DOM 节点解引用 + rAF 排空）
-  const dualLatchResult = executeDualLatchFinalCleanup(id);
-
-  // 3. 本地会话流式句柄强行中止与清理
-  let streamCancelled = false;
-  try {
-    sharedSessionStreamManager.cancelSession(id);
-    sharedSessionStreamManager.clearSession(id);
-    streamCancelled = true;
-  } catch (err) {
-    console.error(
-      `[sessionDeleteLifecycle] Stream cancel failed for ${id}:`,
-      err
-    );
-  }
-
-  // 4. 彻底回收 SessionDraftManager 中的内存草稿与挂起防抖定时器
-  evictSessionDraftsAndTimers(id);
-
-  // 5. 跨 Store 运行时瞬态状态清空（快照栈与状态机）
-  try {
-    clearMessageSnapshots(id);
-    clearRuntimeStatus(id);
-  } catch {
-    // 容错处理
-  }
-
-  return {
-    sessionId: id,
-    tombstoned: isSessionTombstoned(id),
-    dualLatchCleaned:
-      dualLatchResult.dualLatchRecordsAborted &&
-      dualLatchResult.domTargetsDereferenced,
-    streamCancelled,
-    draftsEvicted: true,
-  };
 }

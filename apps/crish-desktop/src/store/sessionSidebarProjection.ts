@@ -1,6 +1,6 @@
 /**
  * 侧栏投影域：空壳标志 / 轻量搜索 filter / 侧栏分区 / 按项目归组。
- * 从 sessionIndex 拆出（纯函数，无对核心索引的依赖），hub 仍经 sessionIndex 再导出。
+ * 从 sessionIndex 拆出（纯函数，无对核心索引的依赖）。再导出由 sessionStoreReexports 承担。
  *
  * 含：
  * - 空壳 / 占位「新会话」标志（与 sessionTitle 同源）

@@ -8,7 +8,11 @@ import {
 } from '../api/sessionTitle';
 import { PENDING_DRAFT_SESSION_ID } from './draftSession';
 import type { SessionState } from './types';
-import { reindexSessionsById, type SessionsIndexed } from './sessionIndex';
+import {
+  listSessions,
+  replaceSessions,
+  type SessionsIndexed,
+} from './sessionIndex';
 import type { SessionStoreSlice } from './sessionActions';
 import { useTerminalStore } from './terminalStore';
 
@@ -40,7 +44,6 @@ const MANUAL_SESSION_TITLE_MAX_LEN = 48;
  * 设计（非丢消息 bug）：
  * - 本地落盘 / SQLite hydrate 会带全量 messages（eager）
  * - daemon list-sessions 插入的远程壳只有 title，messages=[]（lazy）
- * - sessions[] 与 sessionsById 同引用；空 messages 两边同时可见
  * - setActiveSessionId 在 !hydratedFromEngine && messages 为空时拉 session-events
  *
  * 因此 MCP / 调试看到「有 title、messages.length===0」对未 activate 的远程壳是预期态。
@@ -78,7 +81,7 @@ export function pickFallbackActiveSessionId(
   removedId: string,
   removedIndex: number
 ): string {
-  const sessions = state.sessions;
+  const sessions = listSessions(state);
   const isCandidate = (s: SessionState | undefined): s is SessionState =>
     Boolean(s && s.id && s.id !== removedId);
 
@@ -132,11 +135,9 @@ export function pruneEmptyShellsInPlace(
   state: SessionStoreSlice,
   keepIds: Iterable<string>
 ): void {
-  const pruned = pruneEmptyShellSessions(state.sessions, { keepIds });
-  if (pruned !== state.sessions) {
-    state.sessions = pruned;
-    reindexSessionsById(state);
-  }
+  const current = listSessions(state);
+  const pruned = pruneEmptyShellSessions(current, { keepIds });
+  if (pruned.length !== current.length) replaceSessions(state, pruned);
   useTerminalStore
     .getState()
     .pruneTerminalSessions(Object.keys(state.sessionsById));

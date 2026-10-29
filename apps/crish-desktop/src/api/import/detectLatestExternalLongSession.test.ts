@@ -6,6 +6,8 @@ import * as map from './map';
 import * as workspace from '../workspaceFsApi';
 import * as tombstones from './externalSessionTombstone';
 import { useSessionStore } from '../../store/sessionStore';
+import { replaceSessions } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 import type { DetectedExternalSession, MappedImportSession } from './types';
 
 const sourceScan = (
@@ -29,7 +31,10 @@ describe('detectLatestExternalLongSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState((st) => {
+      replaceSessions(st, []);
+      st.activeSessionId = '';
+    });
     vi.mocked(pluginRegistry.isPluginEnabled).mockReturnValue(true);
     vi.mocked(workspace.getWorkspacePath).mockReturnValue('/workspaces/my-app');
   });
@@ -107,19 +112,22 @@ describe('detectLatestExternalLongSession', () => {
   });
 
   it('ignores sessions that have already been imported', async () => {
-    useSessionStore.setState({
-      sessions: [
-        {
-          id: 'local-1',
-          title: '已存在',
-          messages: [],
-          importMeta: {
-            source: 'claude-code',
-            sourceSessionId: 'already-imported',
-            importedAt: '2026-08-01T00:00:00Z',
-          },
-        } as never,
-      ],
+    const imported: SessionState = {
+      id: 'local-1',
+      title: '已存在',
+      folder: '',
+      isPinned: false,
+      isArchived: false,
+      timestamp: '2026-08-01T00:00:00.000Z',
+      messages: [],
+      importMeta: {
+        source: 'claude-code',
+        sourceSessionId: 'already-imported',
+        importedAt: '2026-08-01T00:00:00Z',
+      },
+    };
+    useSessionStore.setState((st) => {
+      replaceSessions(st, [imported]);
     });
 
     const mockSessions: DetectedExternalSession[] = [

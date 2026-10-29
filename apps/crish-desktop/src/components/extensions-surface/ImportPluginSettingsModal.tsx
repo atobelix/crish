@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, Button, Input, Switch } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 import { cleanAllImportedExternalSessions } from '../../api/import/importSessions';
 import {
   getPersistedImportRoots,
@@ -25,7 +25,7 @@ export const ImportPluginSettingsModal: React.FC<
   ImportPluginSettingsModalProps
 > = ({ open, onClose, onScanNeeded }) => {
   const { showToast } = useToast();
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessions = useSessionStore(selectSessionList);
 
   const [autoDetectEnabled, setAutoDetectEnabled] = useState(true);
   const [claudeCustomPath, setClaudeCustomPath] = useState('');

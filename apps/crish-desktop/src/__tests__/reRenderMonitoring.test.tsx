@@ -18,6 +18,7 @@ import {
 } from 'vitest';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
+import { listSessions, replaceSessions } from '../store/sessionIndex';
 import { DiffCard } from '../components/diff/DiffCard';
 import { MessageContent } from '../components/chat-message/MessageContent';
 import { useStreamMessageViewModel } from '../components/chat-message/streamMessageViewModel';
@@ -158,7 +159,7 @@ function bootstrapStoreState() {
   });
 
   useSessionStore.setState((st) => {
-    st.sessions = [
+    replaceSessions(st, [
       {
         id: 'sess-rr-1',
         title: 'ReRender Session',
@@ -169,7 +170,7 @@ function bootstrapStoreState() {
         messages: [],
         agents: [],
       },
-    ];
+    ]);
     st.activeSessionId = 'sess-rr-1';
   });
 }
@@ -224,16 +225,19 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
     // 变更后台无关会话内容 (非当前 activeSession)
     act(() => {
       useSessionStore.setState((st) => {
-        st.sessions.push({
-          id: 'sess-background-99',
-          title: 'Unrelated Background Session',
-          folder: '对话',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-          agents: [],
-        });
+        replaceSessions(st, [
+          ...listSessions(st),
+          {
+            id: 'sess-background-99',
+            title: 'Unrelated Background Session',
+            folder: '对话',
+            isPinned: false,
+            isArchived: false,
+            timestamp: new Date().toISOString(),
+            messages: [],
+            agents: [],
+          },
+        ]);
       });
     });
 

@@ -26,7 +26,7 @@ vi.mock('../sessionStore', () => ({
       enterDraftMode: vi.fn(),
       deleteSession: vi.fn(() => true),
       sessionsById: {},
-      sessions: [],
+      sessionOrder: [],
       activeSessionId: '',
     }),
   },

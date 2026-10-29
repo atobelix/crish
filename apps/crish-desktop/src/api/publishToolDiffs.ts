@@ -10,7 +10,7 @@
  * - 同 path 不同原始写法（src\a vs src/a）推送前清 alias，避免列表重复
  */
 import type { FileDiff } from '../store/types';
-import { getDiffFiles, pushDiffFile } from './storeAccess';
+import { getDiffFiles, pushDiffFile } from '../store/telemetryAccess';
 import { useTerminalStore } from '../store';
 import {
   coalescePublishableDiffs,

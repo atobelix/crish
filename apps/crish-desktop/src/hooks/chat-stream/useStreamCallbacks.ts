@@ -11,13 +11,12 @@
  */
 import { useEffect, useRef } from 'react';
 import { getSessionById } from '../../store/sessionStore';
-import { patchSession } from '../../api/storeAccess';
+import { patchSession } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { clearStream, getStreamText } from '../../store/streamingStore';
-import {
-  markStreamingActive,
-  dispatchStreamStopCancel,
-} from '../../api/streamStop';
+import { markStreamingActive, cancelModeFromForce } from '../../api/streamStop';
+import { sessionStreams } from '../../api/sessionStreamManager';
+import { logger } from '../../services/LoggerService';
 import { recordStreamDiag } from '../../api/streamDiag';
 import { toast } from '../../services/toast/ToastContext';
 import type { UseChatStreamOptions } from './types';
@@ -25,7 +24,6 @@ import type { StreamBatcherRefs } from './useStreamBatchers';
 import {
   commitStreamToolsToSession,
   commitStreamToSession,
-  scheduleFinalMarkdownHtml,
   buildTerminalToolPatches,
 } from './helpers';
 import { resolveStreamSessionId } from './streamRunState';
@@ -43,10 +41,6 @@ import {
   useLeafScope,
 } from '../../contexts/LeafScopeContext';
 import { onScopedUiEvent } from '../useLeafUiEvent';
-import {
-  getSessionRenderBuffer,
-  flushAndRemoveSessionRenderBuffer,
-} from './sessionStreamManager';
 import type { SessionMessage } from '../../store/types';
 
 /**
@@ -186,7 +180,7 @@ export function commitStreamWithDualLatch(
 }
 
 export function useStreamCallbacks(
-  options: UseChatStreamOptions & { sessionId?: string | null },
+  options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
   queryHelpers: StreamRunQueryHelpers
 ): {
@@ -198,7 +192,7 @@ export function useStreamCallbacks(
 } {
   const scopedSessionId = useScopedSessionId(options.sessionId);
   const scope = useLeafScope();
-  const { streamManagerRef, renderBufferRef, flushStreamBatchers } = refs;
+  const { flushStreamBatchers } = refs;
 
   const generationMapRef = useRef<Map<string, number>>(new Map());
   const { runStreamingAssistant } = useRunStreamingAssistant(
@@ -211,8 +205,8 @@ export function useStreamCallbacks(
   /**
    * 停止生成：默认 L2 cooperative；force=true 时 L3。
    * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()。
-   * 共享 wire：api/streamStop.dispatchStreamStopCancel → createStreamCancel / compositionRoot
-   *（Wave C：core_run_control 单一命令面，cancel-run 双线已删）。
+   * wire：收口完成后 sessionStreams.cancel(sid, mode) → 句柄 cancel（createStreamCancel →
+   * compositionRoot，core_run_control 单一命令面）。
    * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
    */
   const finalizeStopGeneration = (force: boolean, targetSessionId?: string) => {
@@ -221,7 +215,7 @@ export function useStreamCallbacks(
       null
     );
     if (!sid) return;
-    const cur = streamManagerRef.current?.get(sid);
+    const cur = sessionStreams.get(sid);
 
     if (!cur) {
       // 无物理内存句柄时的安全兜底（如已被后端阻断、排队挂起或竞态已回收）：
@@ -253,11 +247,7 @@ export function useStreamCallbacks(
       // 2. 清理流式标记与运行时状态
       markStreamingActive(false);
       generationMapRef.current.delete(sid);
-      try {
-        clearRuntimeStatus(sid);
-      } catch {
-        /* ignore */
-      }
+      clearRuntimeStatus(sid);
       // 3. 彻底清扫会话中残留的 processing 和 queued 状态消息，解除输入框锁定
       settleStaleSessionProcessingMessages(sid, false);
       toast.show(force ? '已强制停止本轮任务。' : '已停止任务并清空排队。', {
@@ -266,29 +256,23 @@ export function useStreamCallbacks(
       return;
     }
 
-    streamManagerRef.current?.delete(sid);
     generationMapRef.current.delete(sid);
     markStreamingActive(false);
-    const scopedBuf = getSessionRenderBuffer(sid);
-    const stopBuf = scopedBuf || renderBufferRef.current;
-    // T2.2：stop 路径走预算式收口（常态 ≤2 帧同步刷完，行为不变；
-    // 大残余分帧，isFinal 帧落盘后收口仍由本函数自管）
-    // F1a（R2-4）：不再调用 stopBuf?.stop()——它 cancelScheduledFlush 中断预算
-    // 循环，大残余（>16KB）时 isFinal 帧永不到达（P2-1 截断根因）。buffer 已
-    // finalMarked，后续 push 被拒绝，预算循环至多 N 帧自然收口于 isFinal 帧。
-    stopBuf?.flushFinal();
-    flushAndRemoveSessionRenderBuffer(sid, scopedBuf);
+    // T2.2：stop 路径先预算式刷帧（常态 ≤2 帧同步刷完），再取全文。
+    // F1b（R2-4）：currentText() = fullText + pending，恒为完整全文；
+    // getStreamText 是「停止前最后一帧」写入的陈旧截断值，降为兜底（P2-1 截断根因）。
+    cur.renderBuffer.flushFinal();
+    const stopBufFull = cur.renderBuffer.currentText();
+    // L2/L3 wire：唯一取消入口（移除句柄 + live cancel + 重置渲染缓冲）；
+    // 句柄先于收口移除，收口期间的新发送不被 L1 拒绝窗口误拦。
+    sessionStreams.cancel(sid, cancelModeFromForce(force));
     flushStreamBatchers();
     const st = getCompositionRoot().session.getState();
     if (getSessionById(sid)?.goalMode?.active) {
-      streamManagerRef.current?.markGoalCancelled(sid);
+      sessionStreams.markGoalCancelled(sid);
       patchSession(sid, { goalMode: null });
     }
     // Persist partial stream text only（禁止把「已停止」等系统句写入气泡）
-    // F1b（R2-4）：stopBuf.currentText() 优先——它 = fullText + pending.join('')
-    // 恒为完整全文（大残余首帧同步刷入 ≤8KB 后剩余仍在 pending 中）；
-    // getStreamText 是「停止前最后一帧」写入的陈旧截断值，降为兜底（P2-1 截断根因）。
-    const stopBufFull = stopBuf?.currentText() ?? '';
     const partialText =
       stopBufFull ||
       getStreamText(sid, cur.assistantMsgId) ||
@@ -301,8 +285,9 @@ export function useStreamCallbacks(
       // F1d（R2-4）：截断防御断言——commit 文本不得短于 buffer 完整终稿，
       // 正常路径恒等，为将来任何 drain 回归的哨兵
       if (stopBufFull && stopText.length < stopBufFull.length) {
-        console.warn(
-          `[crish-desktop][stop-truncation] stop 终稿截断：committed=${stopText.length} buffered=${stopBufFull.length}`
+        logger.warn(
+          `[stop-truncation] committed=${stopText.length} buffered=${stopBufFull.length}`,
+          { module: 'chat-stream', sessionId: sid }
         );
         recordStreamDiag({
           kind: 'stop-truncation',
@@ -321,9 +306,6 @@ export function useStreamCallbacks(
     const asst = buildMessageIndex(getSessionById(sid)).get(cur.assistantMsgId);
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
     st.setSessionMessageStatus(sid, cur.assistantMsgId, 'completed');
-    if (stopText) {
-      scheduleFinalMarkdownHtml(sid, cur.assistantMsgId, stopText);
-    }
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
       // T-E 步骤 3（U5）：raw setState → applyToolCallPatches action（批量终态）
@@ -339,18 +321,7 @@ export function useStreamCallbacks(
     });
     // 关键收口：无论当前消息是否已停止，同时清扫该会话内所有可能处于 processing 或 queued 态的消息
     settleStaleSessionProcessingMessages(sid, false);
-    try {
-      clearRuntimeStatus(sid);
-    } catch {
-      /* ignore */
-    }
-    // L2/L3 wire：shared helper（chat has live cancel; no runId double-dispatch）
-    dispatchStreamStopCancel({
-      force,
-      cancel: cur.cancel,
-      sessionId: sid,
-      runId: cur.runId,
-    });
+    clearRuntimeStatus(sid);
   };
 
   /** 默认 Stop = L2 cooperative_stop */

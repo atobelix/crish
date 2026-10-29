@@ -10,7 +10,7 @@
  * 注意：beforeunload 事件中只能使用同步 API（localStorage 同步，IndexedDB 不行）。
  */
 
-import { getSessionStoreState } from '../store';
+import { getSessionStoreState, selectSessionList } from '../store';
 import { persistAllSessionsSync } from './sessionPersistence';
 import { type StreamTextBatcher, type StreamValueBatcher } from './streamTextBatcher';
 import { errorStore } from '../services/ErrorStore';
@@ -89,7 +89,11 @@ export function installBeforeunloadFlush(): () => void {
     // 票 A：meta-only 同步镜像——不再传全量 body 写口；正文由 350ms debounce
     // persistAllSessionsRust 承担（既有语义）。sessions 仅用于索引壳投影。
     const state = getSessionStoreState();
-    persistAllSessionsSync(state.sessions, state.activeSessionId, state.folderOrder);
+    persistAllSessionsSync(
+      selectSessionList(state),
+      state.activeSessionId,
+      state.folderOrder,
+    );
 
     flushErrorQueue();
   };

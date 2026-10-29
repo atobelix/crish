@@ -28,8 +28,11 @@ const h = vi.hoisted(() => {
   return { drafts, setComposerDraft };
 });
 
-vi.mock('../../storeAccess', () => ({
+vi.mock('../../../store/sessionStore', () => ({
   getSessionStoreState: () => ({ composerDrafts: h.drafts }),
+}));
+
+vi.mock('../../../store/sessionAccess', () => ({
   setComposerDraft: h.setComposerDraft,
 }));
 

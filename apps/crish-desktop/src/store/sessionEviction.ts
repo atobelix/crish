@@ -9,7 +9,7 @@
 
 import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
 import { _activeVsmByScope } from '../api/virtualScrollScope';
-import { getSessionForWrite } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import type { SessionState } from './types';
 import {
   addOpenTabsInputToSet,
@@ -30,13 +30,6 @@ import {
   type SessionEvictionPlan,
   type SessionEvictionTier,
 } from './sessionEvictionProbes';
-import { isPendingDraft } from './draftSession';
-import { evictSessionMessagesInState } from './sessionStateActions';
-import type {
-  SessionImmerSet,
-  SessionStoreGet,
-  SessionStoreSlice,
-} from './sessionActions';
 
 export {
   addOpenTabsInputToSet,
@@ -287,7 +280,6 @@ export function softEvictSessionToLazyShell(session: SessionState): void {
 export function applySoftEvictionInState<
   T extends {
     activeSessionId?: string;
-    sessions: SessionState[];
     sessionsById: Record<string, SessionState>;
   },
 >(
@@ -303,7 +295,7 @@ export function applySoftEvictionInState<
   for (const rawId of sessionIdsToEvict) {
     const id = typeof rawId === 'string' ? rawId.trim() : '';
     if (!id) continue;
-    const sess = getSessionForWrite(state, id);
+    const sess = getSessionById(state, id);
     if (!sess) continue;
     if (
       (activeId && id === activeId) ||
@@ -318,74 +310,4 @@ export function applySoftEvictionInState<
     evicted.push(id);
   }
   return evicted;
-}
-
-/**
- * D5 激活后软驱逐调度：会话切换成功后于 microtask 重新读取状态，
- * 收集受保护会话（实时 active + 分屏叶当前激活/打开的 Tab），
- * 按 LRU 软驱逐非活跃已水合消息（原 sessionCrudActions 内联块抽出，行为不变）。
- */
-export function scheduleSoftEvictionAfterActivation<
-  T extends SessionStoreSlice,
->(nextId: string, get: SessionStoreGet<T>, set: SessionImmerSet<T>): void {
-  queueMicrotask(async () => {
-    const state = get();
-    const currentActiveId = (state.activeSessionId || nextId || '').trim();
-    // 收集受保护的会话 ID：实时 activeSessionId 及所有分屏叶当前激活或打开的 Tab
-    const protectedSessionIds = new Set<string>();
-    if (currentActiveId && !isPendingDraft(currentActiveId)) {
-      protectedSessionIds.add(currentActiveId);
-    }
-    try {
-      const { useLayoutTreeStore, listChatLeaves } =
-        await import('./layout-tree');
-      const { ownedChatLeaves } =
-        await import('./workspace-shell/treeSessionQuery');
-      const treeRoot = useLayoutTreeStore.getState()?.tree?.root;
-      if (treeRoot) {
-        for (const owned of ownedChatLeaves(treeRoot)) {
-          if (owned.tabs && Array.isArray(owned.tabs)) {
-            for (const t of owned.tabs) {
-              if (t.sessionId && !isPendingDraft(t.sessionId)) {
-                protectedSessionIds.add(t.sessionId);
-              }
-            }
-          }
-        }
-        for (const leaf of listChatLeaves(treeRoot)) {
-          if (Array.isArray(leaf.tabs)) {
-            for (const t of leaf.tabs) {
-              const sid = (t as { sessionId?: string })?.sessionId;
-              if (sid && !isPendingDraft(sid)) {
-                protectedSessionIds.add(sid);
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // 容错守卫
-    }
-
-    try {
-      const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
-        currentActiveId,
-        new Set(),
-        state.sessions || [],
-        state.sessionsById || {},
-        SESSION_HYDRATE_KEEP_K,
-        {
-          openTabs: protectedSessionIds,
-          visibleSplitSessionIds: protectedSessionIds,
-        }
-      ).filter((id) => !protectedSessionIds.has(id));
-
-      if (evictedSessionIds.length === 0) return;
-      set((current) => {
-        evictSessionMessagesInState(current, evictedSessionIds);
-      });
-    } catch {
-      // 容错守卫
-    }
-  });
 }

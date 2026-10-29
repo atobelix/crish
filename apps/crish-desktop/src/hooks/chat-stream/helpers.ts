@@ -5,9 +5,7 @@ import {
   updateMessageText,
   updateMessageThinking,
   updateMessageToolCall,
-} from '../../api/storeAccess';
-import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
-import { requestMarkdownResult } from '../../api/markdownRenderScheduler';
+} from '../../store/storeAccess';
 import {
   clearStream,
   clearStreamTools,
@@ -54,46 +52,12 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
     });
 }
 
-export function scheduleFinalMarkdownHtml(
-  sessionId: string,
-  messageId: string,
-  fullText: string,
-  options?: {
-    /** true = fullText 已由调用方预清理（N6 单次化，08-detail 3.3），不再二次 strip */
-    preCleaned?: boolean;
-  }
-): void {
-  // N6：complete 路径已预清理（onComplete 算一次 strip），本处不再重复；
-  // 未预清理调用方（stop 等）保持原行为
-  const cleaned = options?.preCleaned
-    ? fullText || ''
-    : stripThoughtPlaceholders(fullText || '');
-  if (!cleaned.trim()) return;
-  void requestMarkdownResult(cleaned, 'chat')
-    .then((result) => {
-      const html = result?.html;
-      if (!html) return;
-      const msg = getSessionById(sessionId)?.messages?.find(
-        (m: SessionMessage) => m.id === messageId
-      );
-      if (!msg) return;
-      const now = msg.text || '';
-      const nowClean = stripThoughtPlaceholders(now);
-      if (nowClean !== cleaned && now !== cleaned && now !== fullText) return;
-      const textToKeep = nowClean === cleaned ? now || cleaned : cleaned;
-      updateMessageText(sessionId, messageId, textToKeep, html);
-    })
-    .catch(() => {
-      /* Worker fail: AsyncMarkdown sync fallback */
-    });
-}
-
 /**
  * Apply one tool patch into session messages (immer once).
  * Merges any lite-store intermediate fields so success patches that omit
  * name/args still land a complete durable row.
  *
- * T4 A3：写入统一走 `api/storeAccess` 编排单点（sessionAccess 门面），
+ * T4 A3：写入统一走 `store/storeAccess` 编排单点（sessionAccess 门面），
  * 不再直写 layoutStore（单一写入通道语义，check:store-writes 对齐）。
  */
 export function commitToolPatchToSession(

@@ -5,27 +5,30 @@
 
 export {
   getSessionById as getSessionByIdFromState,
-  getSessionMetaById,
-  buildSessionsById,
-  reindexSessionsById,
+  buildSessionIndex,
+  selectSessionList,
   reorderSessionOrderById,
   reorderSessionOrderByIdList,
   checkSessionsIndex,
   isSessionsIndexConsistent,
   assertSessionsIndexConsistent,
+} from './sessionIndex';
+
+export {
   filterSidebarSessions,
   partitionSidebarSessions,
   groupUnpinnedByProject,
   isPlaceholderEmptySession,
   isSessionEmpty,
-} from './sessionIndex';
+} from './sessionSidebarProjection';
+
+export type { SessionsIndexIssue } from './sessionIndex';
 
 export type {
-  SessionsIndexIssue,
   FilterSidebarSessionsOpts,
   PartitionSidebarSessionsOpts,
   PartitionedSidebarSessions,
-} from './sessionIndex';
+} from './sessionSidebarProjection';
 
 export {
   sessionShellEqual,
@@ -36,5 +39,5 @@ export {
 } from './sessionListEqual';
 
 export type { SessionActions } from './sessionActions';
-export type { SessionMeta, SessionSubtreeSlice } from './sessionSubtreeModel';
+export type { SessionMeta } from './sessionMeta';
 export type { SessionState, SessionAgent, SessionMessage } from './types';

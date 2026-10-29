@@ -7,7 +7,7 @@ import type { FileDiff } from '../../store/types';
 import {
   focusOrOpenPanel,
   setActiveDiffSource as setActiveDiffSourceAccess,
-} from '../../api/storeAccess';
+} from '../../store/storeAccess';
 import { openFileInPanel } from '../../api/workspaceFsApi';
 import { useActiveWorkspace } from '../../store/storeAccess';
 

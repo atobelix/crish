@@ -19,11 +19,6 @@ import {
   setSessionThinkingTitle,
 } from '../SessionRuntimeRegistry';
 
-vi.mock('../storeAccess', () => ({
-  getPermissionMode: () => 'ask',
-  getAppSettings: () => ({ defaultThinkingLevel: 'medium' }),
-}));
-
 describe('contextStatePending（I1-α② context-state 产生器）', () => {
   beforeEach(() => {
     localStorage.clear();

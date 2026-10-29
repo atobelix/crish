@@ -28,6 +28,8 @@ import {
 } from '../../api/modelsCatalogStore';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import { useSessionStore } from '../../store/sessionStore';
+import { buildSessionIndex, getSessionById } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 import {
   recordPendingContextState,
   PENDING_CONTEXT_STATE_KEY,
@@ -35,6 +37,25 @@ import {
 import { flushContextStateBeforeSend } from '../../hooks/chat-stream/slashSendQueueHelper';
 
 const CATALOG_PATH = 'C:\\tmp\\models.yaml';
+
+function activeThinkingSession(): SessionState {
+  return {
+    id: 'sess-active',
+    title: '活跃会话',
+    folder: '对话',
+    isPinned: false,
+    isArchived: false,
+    timestamp: new Date().toISOString(),
+    messages: [
+      {
+        id: 'm1',
+        sender: 'user',
+        text: '你好',
+        timestamp: Date.now(),
+      },
+    ],
+  };
+}
 
 function mockReadOk(providers: Record<string, ProviderSpec>): void {
   mockTauriCommand('workbench_read_models_yaml', () => ({
@@ -60,38 +81,7 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
     localStorage.clear();
     sessionRuntimeRegistry.clearAll();
     useSessionStore.setState({
-      sessions: [
-        {
-          id: 'sess-active',
-          title: '活跃会话',
-          messages: [
-            {
-              id: 'm1',
-              sender: 'user',
-              text: '你好',
-              timestamp: Date.now(),
-            },
-          ],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ],
-      sessionsById: {
-        'sess-active': {
-          id: 'sess-active',
-          title: '活跃会话',
-          messages: [
-            {
-              id: 'm1',
-              sender: 'user',
-              text: '你好',
-              timestamp: Date.now(),
-            },
-          ],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      },
+      ...buildSessionIndex([activeThinkingSession()]),
       activeSessionId: 'sess-active',
     });
 
@@ -144,7 +134,10 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
   afterEach(() => {
     localStorage.clear();
     sessionRuntimeRegistry.clearAll();
-    useSessionStore.setState({ sessions: [], sessionsById: {}, activeSessionId: '' });
+    useSessionStore.setState({
+      ...buildSessionIndex([]),
+      activeSessionId: '',
+    });
   });
 
   it('物证 1：用户设置优先——选定 High 后，创建新会话（草稿态）绝不回退为 Low', () => {
@@ -214,7 +207,7 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
   it('物证 3：状态提示仅在用户点击发送时带上，且物理位置位于用户消息上方', () => {
     const sid = 'sess-active';
     const store = useSessionStore.getState();
-    const initialMsgCount = store.sessions.find((s) => s.id === sid)!.messages.length;
+    const initialMsgCount = getSessionById(store, sid)!.messages.length;
 
     // 1. 用户在菜单或胶囊中切换模型和思考档位
     localStorage.setItem('crish_active_model_id', 'claude-sonnet');
@@ -223,7 +216,7 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
     recordPendingContextState(sid);
 
     // 严密断言（用户裁决）：切换瞬间绝不向消息列表追加卡片，消息数完全不变
-    const sessAfterSwitch = store.sessions.find((s) => s.id === sid);
+    const sessAfterSwitch = getSessionById(store, sid);
     expect(sessAfterSwitch!.messages.length).toBe(initialMsgCount);
 
     // 2. 用户点击发送按钮（触发 flushContextStateBeforeSend 并压入 userMsg）
@@ -239,9 +232,7 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
       status: 'processing',
     });
 
-    const sessAfterSend = useSessionStore
-      .getState()
-      .sessions.find((s) => s.id === sid);
+    const sessAfterSend = getSessionById(useSessionStore.getState(), sid);
     const msgs = sessAfterSend!.messages;
     // 应当新增了 2 条消息：[居中提示 carrier] 与 [用户消息 user]
     expect(msgs.length).toBe(initialMsgCount + 2);
@@ -270,9 +261,7 @@ describe('模型思考强度全局记忆与平移继承契约', () => {
       status: 'processing',
     });
 
-    const sessAfterSecond = useSessionStore
-      .getState()
-      .sessions.find((s) => s.id === sid);
+    const sessAfterSecond = getSessionById(useSessionStore.getState(), sid);
     // 仅追加用户消息，绝不重复生成提示
     expect(sessAfterSecond!.messages.length).toBe(initialMsgCount + 3);
     expect(sessAfterSecond!.messages[sessAfterSecond!.messages.length - 1]!.id).toBe('user-send-2');

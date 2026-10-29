@@ -35,7 +35,8 @@ vi.mock('../../api/workflowApi', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   createSession: vi.fn(),
   getSessionById: vi.fn(() => null),
   renameSession: vi.fn(),

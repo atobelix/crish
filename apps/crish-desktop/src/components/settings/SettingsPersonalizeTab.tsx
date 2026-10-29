@@ -23,7 +23,7 @@ import type { SchemaSection } from './SettingsSchemaRenderer';
 import {
   normalizeSendShortcut,
   persistSendShortcut,
-} from '../../api/store-access/settingsAccess';
+} from '../../store/storeAccess';
 import { telemetry } from '../../services/TelemetryService';
 import {
   setShowOnboardingOnStartup,

@@ -11,7 +11,7 @@
 
 import { isPendingDraft } from './draftSession';
 import type { SessionImmerSet, SessionStoreGet } from './sessionActions';
-import { getSessionById, getSessionForWrite } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import { maybeAutoTitleSession } from './sessionSharedHelpers';
 import type { SessionState } from './types';
 import {
@@ -150,7 +150,7 @@ export function triggerSessionMessageHydrateIfNeeded(
 
         if (localLoaded.messages.length > 0) {
           set((draft) => {
-            const s = getSessionForWrite(draft, sessionId);
+            const s = getSessionById(draft, sessionId);
             if (!s) return;
             s.messages = mergeMessagesById(
               s.messages || [],
@@ -224,7 +224,7 @@ export function triggerSessionMessageHydrateIfNeeded(
         }
 
         set((draft) => {
-          const s = getSessionForWrite(draft, sessionId);
+          const s = getSessionById(draft, sessionId);
           if (!s) return;
           if (engineMessages.length > 0) {
             s.messages = mergeMessagesById(s.messages || [], engineMessages);

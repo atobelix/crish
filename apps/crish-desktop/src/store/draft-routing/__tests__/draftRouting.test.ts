@@ -1,17 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { draftFolderRegistry } from '../draftFolderRegistry';
 import { resolveMostActiveProjectFolder } from '../draftProjectResolver';
+import { buildSessionIndex } from '../../sessionIndex';
 import { useSessionStore } from '../../sessionStore';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
+import type { SessionState } from '../../types';
+
+function installSessions(list: SessionState[], activeSessionId: string): void {
+  const indexed = buildSessionIndex(list);
+  useSessionStore.setState({
+    sessionsById: indexed.sessionsById,
+    sessionOrder: indexed.sessionOrder,
+    activeSessionId,
+  });
+}
 
 describe('draft-routing 模块分组与确定性项目绑定套件', () => {
   beforeEach(() => {
     draftFolderRegistry.clear();
     localStorage.clear();
     useSessionStore.setState({
-      sessions: [],
       sessionsById: {},
-      activeSessionId: null,
+      sessionOrder: [],
+      activeSessionId: '',
       draftFolder: GENERAL_FOLDER,
     });
   });
@@ -51,8 +62,8 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
 
   describe('2. draftProjectResolver 最近活跃项目纯逻辑解析', () => {
     it('优先返回当前处于活动状态的真实会话所属项目', () => {
-      useSessionStore.setState({
-        sessions: [
+      installSessions(
+        [
           {
             id: 'sess-active',
             title: '活跃会话',
@@ -60,6 +71,7 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
             timestamp: new Date().toISOString(),
             isPinned: false,
             isArchived: false,
+            messages: [],
           },
           {
             id: 'sess-other',
@@ -68,20 +80,11 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
             timestamp: new Date(Date.now() - 100000).toISOString(),
             isPinned: false,
             isArchived: false,
+            messages: [],
           },
         ],
-        sessionsById: {
-          'sess-active': {
-            id: 'sess-active',
-            title: '活跃会话',
-            folder: 'conex',
-            timestamp: new Date().toISOString(),
-            isPinned: false,
-            isArchived: false,
-          },
-        },
-        activeSessionId: 'sess-active',
-      });
+        'sess-active'
+      );
 
       expect(resolveMostActiveProjectFolder()).toBe('conex');
     });
@@ -90,8 +93,8 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
       const olderTime = new Date('2026-08-01T10:00:00Z').toISOString();
       const newerTime = new Date('2026-08-10T12:00:00Z').toISOString();
 
-      useSessionStore.setState({
-        sessions: [
+      installSessions(
+        [
           {
             id: 'sess-1',
             title: '较旧会话',
@@ -99,6 +102,7 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
             timestamp: olderTime,
             isPinned: false,
             isArchived: false,
+            messages: [],
           },
           {
             id: 'sess-2',
@@ -107,19 +111,17 @@ describe('draft-routing 模块分组与确定性项目绑定套件', () => {
             timestamp: newerTime,
             isPinned: false,
             isArchived: false,
+            messages: [],
           },
         ],
-        activeSessionId: null,
-      });
+        ''
+      );
 
       expect(resolveMostActiveProjectFolder()).toBe('latest-project');
     });
 
     it('当所有会话均无项目或列表为空时，兜底 GENERAL_FOLDER', () => {
-      useSessionStore.setState({
-        sessions: [],
-        activeSessionId: null,
-      });
+      installSessions([], '');
 
       expect(resolveMostActiveProjectFolder()).toBe(GENERAL_FOLDER);
     });

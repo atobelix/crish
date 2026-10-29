@@ -54,11 +54,10 @@ describe('onRecoveryEscalated（子代理侧投影）', () => {
       updatedAt: Date.now(),
     };
 
-    useSessionStore.setState((s) => ({
-      ...s,
-      sessions: [testSession as never],
+    useSessionStore.setState({
       sessionsById: { s1: testSession as never },
-    }));
+      sessionOrder: ['s1'],
+    });
 
     onRecoveryEscalated(
       {} as never,

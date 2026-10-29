@@ -9,7 +9,7 @@
  * 1. buffer.flushFrame     —— StreamRenderBuffer 单帧预算吞吐（8192B，100KB 输入）
  * 2. batcher.merge         —— StreamTextBatcher 批量合并
  * 3. vsm.rebuildOffsets    —— VirtualScrollManager offset 重建（1500 行）
- * 4. stripper.perFrame     —— IncrementalThoughtStripper.next 单帧增量 vs 全量 strip
+ * 4. strip.full            —— stripThoughtPlaceholders 全量 strip（100KB）
  * 5. timeline.cachedHit    —— buildAssistantTimelineCached 签名命中 vs 未命中
  *
  * 运行：
@@ -188,20 +188,7 @@ async function main(): Promise<void> {
     )
   );
 
-  // 4. stripper 单帧增量 vs 全量 strip（12KB/帧 的 100KB 流）
-  entries.push(
-    measure(
-      'stripper.perFrame.100KB',
-      () => {
-        const s = new lite.IncrementalThoughtStripper();
-        const chunk = 12 * 1024;
-        for (let i = 0; i < bigText.length; i += chunk) {
-          s.next(bigText.slice(0, Math.min(i + chunk, bigText.length)));
-        }
-      },
-      20
-    )
-  );
+  // 4. 全量 strip（100KB）
   entries.push(
     measure(
       'strip.full.100KB',

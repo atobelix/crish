@@ -9,7 +9,9 @@
  */
 
 import { isPendingDraft } from '../draftSession';
+import { listSessions } from '../sessionIndex';
 import type { SessionState } from '../types';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   GENERAL_FOLDER,
   getActiveProjectId,
@@ -19,8 +21,8 @@ import {
 
 export interface SessionStateResolverInput {
   activeSessionId?: string | null;
-  sessions?: SessionState[];
   sessionsById?: Record<string, SessionState>;
+  sessionOrder?: string[];
 }
 
 let sessionStateProvider: (() => SessionStateResolverInput | undefined) | null =
@@ -67,9 +69,7 @@ export function resolveMostActiveProjectFolder(
 
       // 1. 优先取当前活动真会话所属项目
       if (activeId && !isPendingDraft(activeId)) {
-        const activeSession =
-          sessionState.sessionsById?.[activeId] ??
-          sessionState.sessions?.find((s) => s.id === activeId);
+        const activeSession = sessionState.sessionsById?.[activeId];
         if (isValidProjectFolder(activeSession?.folder)) {
           return (
             resolveFolderToProjectId(activeSession!.folder!) ||
@@ -79,7 +79,13 @@ export function resolveMostActiveProjectFolder(
       }
 
       // 2. 其次遍历全量会话列表，按时间降序查找最近活跃的项目
-      const sessions = sessionState.sessions || [];
+      const sessions =
+        sessionState.sessionsById && sessionState.sessionOrder
+          ? listSessions({
+              sessionsById: sessionState.sessionsById,
+              sessionOrder: sessionState.sessionOrder,
+            })
+          : [];
       const sorted = [...sessions].sort(
         (a, b) =>
           (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)
@@ -96,8 +102,11 @@ export function resolveMostActiveProjectFolder(
     if (isValidProjectFolder(activeProj)) {
       return activeProj!;
     }
-  } catch {
-    /* ignore error */
+  } catch (err) {
+    logger.warn('[draftProjectResolver] project resolution failed', {
+      module: 'draftProjectResolver',
+      err: toErrMeta(err),
+    });
   }
 
   // 4. 兜底通用对话

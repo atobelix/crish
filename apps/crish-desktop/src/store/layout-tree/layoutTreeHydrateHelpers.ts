@@ -96,14 +96,8 @@ export function performRedo(
 }
 
 export function readRestoreLastWorkspaceFlag(): boolean {
-  try {
-    const raw = localStorage.getItem(RESTORE_LAST_WORKSPACE_LS_KEY);
-    if (raw === 'true' || raw === '1') return true;
-    if (raw === 'false' || raw === '0') return false;
-  } catch {
-    /* private mode / SSR */
-  }
-  return false;
+  const raw = localStorage.getItem(RESTORE_LAST_WORKSPACE_LS_KEY);
+  return raw === 'true' || raw === '1';
 }
 
 export function loadLegacyOpenTabsMap(): Record<string, string[]> {

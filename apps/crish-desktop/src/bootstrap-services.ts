@@ -22,7 +22,7 @@ import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
 import { WindowResizeBridge } from './services/WindowResizeBridge';
 import { sessionRuntimeRegistry } from './api/SessionRuntimeRegistry';
-import { getActiveSessionId } from './api/storeAccess';
+import { getActiveSessionId } from './store/sessionStore';
 import { getWorkspacePath } from './api/projectStore';
 import { registerLayoutAnimationBridge } from './store/layoutAnimationStore';
 import { registerTreeDockSync } from './store/workspace-shell/workspaceShellStore';

@@ -40,17 +40,17 @@ import {
   type PtyKillFn,
   type PtySpawnFn,
 } from '../api/ptyRegistry';
-// 读路径：compositionRoot 经 api/storeAccess 编排层取 session/workspace/layout
-// getState + enterDraft（写编排）；permission/settings 读快照走 store/storeAccess。
-// （维度 3 步骤 1 / 3-L 双 storeAccess 决策树：本文件混用——api 侧写编排 +
-// store 侧读快照。）
+// 读/写编排：compositionRoot 直接消费 store 域模块（session / workspace / layout），
+// 不经 store/storeAccess 门面——门面自身 re-export 了本文件，走门面会形成
+// store 门面 ↔ app 编排的双向依赖（SS-P6c 门面合一时切直连）。
 import {
-  enterDraftMode,
   getSessionStoreState,
   getActiveSessionId,
-  getWorkspaceStoreState,
-  getLayoutState,
-} from '../api/storeAccess';
+  selectSessionList,
+} from '../store/sessionStore';
+import { enterDraftMode } from '../store/sessionAccess';
+import { getWorkspaceStoreState } from '../store/workspaceStore';
+import { getLayoutState } from '../store/storeAccess';
 import {
   dispatchRunControl,
   requestCooperativeStop,
@@ -235,7 +235,7 @@ let root: CompositionRoot | null = null;
 function buildDefaultLayoutFacade(): LayoutFacade {
   return {
     getState: getLayoutState,
-    getSessions: () => getSessionStoreState().sessions,
+    getSessions: () => selectSessionList(getSessionStoreState()),
     setSessions: (sessions) => getSessionStoreState().setSessions(sessions),
     setTabModeEnabled: (enabled) => getLayoutState().setTabModeEnabled(enabled),
     getSidebarCollapsed: () => getLayoutState().sidebarCollapsed,
