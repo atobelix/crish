@@ -1,5 +1,6 @@
 import type { WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   ensureMigrated,
   hydrateSessionsFromRust,
@@ -120,34 +121,34 @@ function syncActiveSessionToEmptyLayoutLeaf(
   if (!sessionId || isSessionTabClosed(sessionId)) return;
   void import('../layout-tree')
     .then((mod) => {
-      try {
-        if (isSessionTabClosed(sessionId)) return;
-        const { useLayoutTreeStore, collectLeaves } = mod;
-        if (typeof useLayoutTreeStore?.getState !== 'function') return;
-        const treeState = useLayoutTreeStore.getState();
-        const root = treeState?.tree?.root;
-        if (!root) return;
-        if (sessionTitle && typeof treeState.updateTabTitle === 'function') {
-          treeState.updateTabTitle(sessionId, sessionTitle);
+      if (isSessionTabClosed(sessionId)) return;
+      const { useLayoutTreeStore, collectLeaves } = mod;
+      if (typeof useLayoutTreeStore?.getState !== 'function') return;
+      const treeState = useLayoutTreeStore.getState();
+      const root = treeState?.tree?.root;
+      if (!root) return;
+      if (sessionTitle && typeof treeState.updateTabTitle === 'function') {
+        treeState.updateTabTitle(sessionId, sessionTitle);
+      }
+      const leaves = collectLeaves(root);
+      const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
+      if (!activeLeafId) return;
+      const activeLeaf = leaves.find((l) => l.id === activeLeafId);
+      if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
+        if (typeof treeState.openSession === 'function') {
+          treeState.openSession(sessionId, {
+            activeLeafId,
+            title: sessionTitle || '',
+          });
         }
-        const leaves = collectLeaves(root);
-        const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
-        if (!activeLeafId) return;
-        const activeLeaf = leaves.find((l) => l.id === activeLeafId);
-        if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
-          if (typeof treeState.openSession === 'function') {
-            treeState.openSession(sessionId, {
-              activeLeafId,
-              title: sessionTitle || '',
-            });
-          }
-        }
-      } catch {
-        /* ignore */
       }
     })
-    .catch(() => {
-      /* ignore */
+    .catch((err: unknown) => {
+      logger.warn('[sessionPersistence] layout leaf sync failed', {
+        module: 'store-persistence',
+        sessionId,
+        err: toErrMeta(err),
+      });
     });
 }
 
@@ -222,8 +223,11 @@ export function initStorePersistence<S extends PersistableStoreState>(
           cur.activeSessionId,
           cur.folderOrder
         );
-      } catch (e) {
-        console.warn('[sessionPersistence] save failed', e);
+      } catch (err) {
+        logger.warn('[sessionPersistence] save failed', {
+          module: 'store-persistence',
+          err: toErrMeta(err),
+        });
       }
     }, STORAGE_PERSIST_DEBOUNCE_MS);
   });
@@ -318,45 +322,44 @@ export function initStorePersistence<S extends PersistableStoreState>(
           appliedOrMerged = true;
         });
 
-        try {
-          const after = store.getState();
-          deltaBarrier.seedFromSessions(
+        const after = store.getState();
+        deltaBarrier.seedFromSessions(
+          after.sessions,
+          after.activeSessionId,
+          after.folderOrder
+        );
+        const isClosed = Boolean(
+          after.activeSessionId && isSessionTabClosed(after.activeSessionId)
+        );
+        if (
+          after.activeSessionId &&
+          after.sessionsById[after.activeSessionId] &&
+          !isClosed
+        ) {
+          setActiveSessionId(after.activeSessionId);
+          syncActiveSessionToEmptyLayoutLeaf(
+            after.activeSessionId,
+            after.sessionsById[after.activeSessionId]?.title
+          );
+        } else if (isClosed) {
+          store.setState((s: PersistableStoreState) => {
+            s.activeSessionId = '';
+          });
+        }
+        if (appliedOrMerged && after.sessions.length > 0) {
+          void persistAllSessions(
             after.sessions,
             after.activeSessionId,
             after.folderOrder
           );
-          const isClosed = Boolean(
-            after.activeSessionId && isSessionTabClosed(after.activeSessionId)
-          );
-          if (
-            after.activeSessionId &&
-            after.sessionsById[after.activeSessionId] &&
-            !isClosed
-          ) {
-            setActiveSessionId(after.activeSessionId);
-            syncActiveSessionToEmptyLayoutLeaf(
-              after.activeSessionId,
-              after.sessionsById[after.activeSessionId]?.title
-            );
-          } else if (isClosed) {
-            store.setState((s: PersistableStoreState) => {
-              s.activeSessionId = '';
-            });
-          }
-          if (appliedOrMerged && after.sessions.length > 0) {
-            void persistAllSessions(
-              after.sessions,
-              after.activeSessionId,
-              after.folderOrder
-            );
-          }
-        } catch {
-          /* ignore */
         }
       }
     })
-    .catch((e) => {
-      console.warn('[sessionPersistence] migrate/hydrate failed', e);
+    .catch((err: unknown) => {
+      logger.warn('[sessionPersistence] migrate/hydrate failed', {
+        module: 'store-persistence',
+        err: toErrMeta(err),
+      });
     })
     .finally(() => {
       if (!abortController.signal.aborted) {

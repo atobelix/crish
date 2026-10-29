@@ -11,6 +11,7 @@
 
 import { useLayoutStore } from '../layoutStore';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import {
   canonicalSessionFolder,
@@ -40,11 +41,7 @@ export function navigateToNewDraft(
 
   // 1. 切回 chat 主功能表面并清理侧边栏焦点
   useLayoutStore.getState().setChatMainSurface('chat');
-  try {
-    clearAgentPanelFocus();
-  } catch {
-    /* ignore in tests where session root might not be fully wired */
-  }
+  clearAgentPanelFocus();
 
   // 2. 确定目标项目 folder（显式指定优先，否则动态解析最近活跃项目）
   const rawFolder = opts.workspaceKey?.trim();
@@ -53,11 +50,12 @@ export function navigateToNewDraft(
     : resolveMostActiveProjectFolder();
 
   // 3. 同步底层工作区环境（cwd 与 activeProjectId）
-  try {
-    void activateWorkspaceForSessionFolder(targetFolder);
-  } catch {
-    /* ignore if environment is headless */
-  }
+  activateWorkspaceForSessionFolder(targetFolder).catch((err: unknown) => {
+    logger.warn('[draftLifecycle] workspace activation failed', {
+      module: 'draftLifecycle',
+      err: toErrMeta(err),
+    });
+  });
 
   // 4. 调度 Shell 打开新草稿 Tab
   const root = getCompositionRoot();

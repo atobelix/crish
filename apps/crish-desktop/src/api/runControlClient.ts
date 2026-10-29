@@ -30,6 +30,7 @@ import { getTransport, type Transport } from './transport';
 import { eventBus } from '../services/EventBus';
 import { recordRunControlLevel } from './controlMetrics';
 import { logInternalError } from './userFacingErrors';
+import { logger, toErrMeta } from '../services/LoggerService';
 
 /**
  * Stream cancel mode 字面量（**唯一真源**）。
@@ -48,14 +49,18 @@ export type RunControlRequest = {
 };
 
 /** wire level → cancel mode（仅终止类有意义；流内 cancel 路径用，不触发第二 wire） */
-export function cancelModeForLevel(level: RunControlLevel): StreamCancelMode | null {
+export function cancelModeForLevel(
+  level: RunControlLevel
+): StreamCancelMode | null {
   if (level === RUN_CONTROL_LEVEL.L2) return 'cooperative';
   if (level === RUN_CONTROL_LEVEL.L3) return 'force';
   return null;
 }
 
 /** 构造协议载荷（可测纯函数） */
-export function buildRunControlWireMessage(req: RunControlRequest): Record<string, unknown> {
+export function buildRunControlWireMessage(
+  req: RunControlRequest
+): Record<string, unknown> {
   const intent = createRunControlIntent(req.level, {
     ...(req.runId ? { runId: req.runId } : {}),
     ...(req.sessionId ? { sessionId: req.sessionId } : {}),
@@ -75,7 +80,7 @@ export function buildRunControlWireMessage(req: RunControlRequest): Record<strin
 /** 把 WS 形状 wire 消息经 transport.send 发出（剥离 type 后按命令名调用） */
 function sendWireViaTransport(
   transport: Transport,
-  msg: Record<string, unknown>,
+  msg: Record<string, unknown>
 ): Promise<void> {
   const type = String(msg.type ?? '');
   // Wave C（D-F07）：唯一出站命令 = core_run_control；cancel-run 双线已删
@@ -90,7 +95,9 @@ function sendWireViaTransport(
  *
  * L0–L3 一律仅发 `run-control`（core_run_control 单一命令面）。
  */
-export async function dispatchRunControl(req: RunControlRequest): Promise<boolean> {
+export async function dispatchRunControl(
+  req: RunControlRequest
+): Promise<boolean> {
   const intent = createRunControlIntent(req.level, {
     ...(req.runId ? { runId: req.runId } : {}),
     ...(req.sessionId ? { sessionId: req.sessionId } : {}),
@@ -212,5 +219,27 @@ export function requestSoftInject(opts: {
       kind,
       ...(opts.text !== undefined ? { text: opts.text } : {}),
     },
+  });
+}
+
+/**
+ * 会话级后端中止（`workbench_abort_run`）：删除会话 / 级联取消时终止该会话在 Rust 侧的运行。
+ * 唯一出站入口，store 层禁止直连 Tauri invoke。
+ * 结构化三态显式判别：`missing`（非 Tauri 宿主 / 命令未登记）记 debug；`error` 记 warn；永不 reject。
+ */
+export async function abortSessionRun(sessionId: string): Promise<void> {
+  const res = await getTransport().call('workbench_abort_run', { sessionId });
+  if (res.status === 'ok') return;
+  if (res.status === 'missing') {
+    logger.debug('[runControl] workbench_abort_run unavailable on this host', {
+      module: 'runControl',
+      sessionId,
+    });
+    return;
+  }
+  logger.warn('[runControl] workbench_abort_run failed', {
+    module: 'runControl',
+    sessionId,
+    err: toErrMeta(res.raw ?? new Error(res.message)),
   });
 }

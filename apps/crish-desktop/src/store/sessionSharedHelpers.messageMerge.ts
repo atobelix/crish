@@ -177,13 +177,16 @@ export function applySessionAgentPatch(
   if (patch.needsUser !== undefined) target.needsUser = patch.needsUser;
 }
 
+/** structuredClone 遇到 Immer 草稿代理或不可克隆值时抛 DataCloneError，此时退回 JSON 深拷贝。 */
+function isDataCloneError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'DataCloneError';
+}
+
 export function cloneMessages(messages: SessionMessage[]): SessionMessage[] {
   try {
-    if (typeof structuredClone === 'function') {
-      return structuredClone(messages);
-    }
-  } catch {
-    /* fallback when Immer proxy or non-cloneable objects are present */
+    return structuredClone(messages);
+  } catch (err) {
+    if (!isDataCloneError(err)) throw err;
   }
   return JSON.parse(JSON.stringify(messages)) as SessionMessage[];
 }

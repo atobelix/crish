@@ -10,6 +10,7 @@
 
 import { isPendingDraft } from '../draftSession';
 import type { SessionState } from '../types';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   GENERAL_FOLDER,
   getActiveProjectId,
@@ -96,8 +97,11 @@ export function resolveMostActiveProjectFolder(
     if (isValidProjectFolder(activeProj)) {
       return activeProj!;
     }
-  } catch {
-    /* ignore error */
+  } catch (err) {
+    logger.warn('[draftProjectResolver] project resolution failed', {
+      module: 'draftProjectResolver',
+      err: toErrMeta(err),
+    });
   }
 
   // 4. 兜底通用对话

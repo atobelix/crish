@@ -22,6 +22,7 @@ vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
   canonicalSessionFolder: (k?: string) => (k || '').trim() || 'general',
   getActiveProjectId: () => null,
+  activateWorkspaceForSessionFolder: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../api/storeAccess', () => ({

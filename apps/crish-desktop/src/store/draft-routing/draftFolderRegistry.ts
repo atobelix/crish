@@ -10,6 +10,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { logger, toErrMeta } from '../../services/LoggerService';
 
 type Listener = () => void;
 
@@ -77,8 +78,11 @@ export class DraftFolderRegistry {
     for (const listener of this.listeners) {
       try {
         listener();
-      } catch {
-        /* ignore listener errors */
+      } catch (err) {
+        logger.warn('[draftFolderRegistry] listener failed', {
+          module: 'draftFolderRegistry',
+          err: toErrMeta(err),
+        });
       }
     }
   }

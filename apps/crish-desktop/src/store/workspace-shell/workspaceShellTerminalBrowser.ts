@@ -15,6 +15,7 @@ import {
 } from '../../api/sessionTitle';
 import { useSessionStore } from '../sessionStore';
 import { useLayoutStore } from '../layoutStore';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import { isPendingDraft, mintDraftSessionId } from '../draftSession';
 import { draftFolderRegistry } from '../draft-routing/draftFolderRegistry';
 import { resolveMostActiveProjectFolder } from '../draft-routing/draftProjectResolver';
@@ -315,11 +316,12 @@ export function openNewDraftTabHelper(
     draftSessionId: draftId,
   });
   draftFolderRegistry.set(draftId, workspaceKey);
-  try {
-    void activateWorkspaceForSessionFolder(workspaceKey);
-  } catch {
-    /* ignore */
-  }
+  activateWorkspaceForSessionFolder(workspaceKey).catch((err: unknown) => {
+    logger.warn('[workspaceShell] workspace activation failed', {
+      module: 'workspaceShellTerminalBrowser',
+      err: toErrMeta(err),
+    });
+  });
 }
 
 export function resetToCleanDraftHelper(

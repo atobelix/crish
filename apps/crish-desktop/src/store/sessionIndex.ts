@@ -6,7 +6,7 @@
  * 按项目归组）已拆至 ./sessionSidebarProjection，此处再导出以保持 import 路径不变。
  */
 
-import { original } from 'immer';
+import { isDraft, original } from 'immer';
 import {
   extractSessionMeta,
   shallowArrayEqual,
@@ -42,14 +42,9 @@ function isSameSessionBase(
 ): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
-  try {
-    const oa = original(a);
-    const ob = original(b);
-    if (oa !== undefined && ob !== undefined && oa === ob) return true;
-  } catch {
-    /* non-draft / frozen */
-  }
-  return false;
+  const oa = isDraft(a) ? original(a) : a;
+  const ob = isDraft(b) ? original(b) : b;
+  return oa !== undefined && oa === ob;
 }
 
 export type SessionsIndexed = {
@@ -123,13 +118,8 @@ export function getSessionById(
     if (hit) return hit;
   }
   const found = state.sessions.find((s) => s.id === sessionId);
-  if (found && byId && Object.isExtensible(byId)) {
-    try {
-      byId[sessionId] = found;
-    } catch {
-      /* frozen / sealed */
-    }
-  }
+  // 冻结/密封的索引不可扩展：显式判别后跳过回填
+  if (found && byId && Object.isExtensible(byId)) byId[sessionId] = found;
   return found;
 }
 
@@ -146,11 +136,7 @@ export function getSessionForWrite(
   if (idx < 0) return undefined;
   const sess = state.sessions[idx]!;
   if (byId && Object.isExtensible(byId) && !isSameSessionBase(hit, sess)) {
-    try {
-      byId[sessionId] = sess;
-    } catch {
-      /* frozen / sealed */
-    }
+    byId[sessionId] = sess;
   }
   return sess;
 }
@@ -164,11 +150,7 @@ export function rebindSessionById(
   if (!sessionId || !state.sessionsById) return;
   const target = sess ?? state.sessions.find((s) => s?.id === sessionId);
   if (!target || !Object.isExtensible(state.sessionsById)) return;
-  try {
-    state.sessionsById[sessionId] = target;
-  } catch {
-    /* frozen / sealed */
-  }
+  state.sessionsById[sessionId] = target;
 }
 
 /** 数组下标（需要重排时）；优先索引定位 */

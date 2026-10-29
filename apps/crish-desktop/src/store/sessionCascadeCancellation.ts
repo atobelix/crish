@@ -8,11 +8,13 @@
  *
  * 三级取消保证：
  * - Tier 1 计算级 (Compute Tier)：通知 WorkerPool 立即终止属于该会话的计算/排队任务。
- * - Tier 2 通信级 (Transport Tier)：向 Rust 发送 abort 信号，注销流式监听并丢弃在途帧。
+ * - Tier 2 通信级 (Transport Tier)：force 取消本地流句柄、清理流式缓冲，并经 runControlClient.abortSessionRun 通知 Rust 中止。
  * - Tier 3 存储屏障级 (Storage Barrier Tier)：维护容量为 500 的 LRU 墓碑集合，拦截一切迟到落盘。
  */
 
+import { abortSessionRun } from '../api/runControlClient';
 import { sessionStreams } from '../api/sessionStreamManager';
+import { logger, toErrMeta } from '../services/LoggerService';
 import {
   DEFAULT_TOMBSTONE_CAPACITY,
   bindSessionTombstoneOracle,
@@ -33,6 +35,43 @@ export type TransportAbortCallback = (
 export type StorageBarrierCallback = (
   sessionId: string
 ) => void | Promise<void>;
+
+type CascadeTier = 'Tier1' | 'Tier2' | 'Tier3';
+
+function reportCascadeFailure(
+  tier: CascadeTier,
+  step: string,
+  sessionId: string,
+  err: unknown
+): void {
+  logger.error(`[cascadeCancel:${tier}] ${step} failed`, {
+    module: 'sessionCascadeCancellation',
+    sessionId,
+    err: toErrMeta(err),
+  });
+}
+
+/**
+ * 级联各步相互隔离：单步（同步抛错或异步 reject）失败只记录，不阻断后续步骤，
+ * 保证删除会话时取消链完整走完。
+ */
+function runIsolated(
+  tier: CascadeTier,
+  step: string,
+  sessionId: string,
+  fn: () => void | Promise<void>
+): void {
+  try {
+    const pending = fn();
+    if (pending instanceof Promise) {
+      pending.catch((err: unknown) => {
+        reportCascadeFailure(tier, step, sessionId, err);
+      });
+    }
+  } catch (err) {
+    reportCascadeFailure(tier, step, sessionId, err);
+  }
+}
 
 export interface WorkerCancelablePool {
   cancelBySession(sessionId: string): void;
@@ -181,7 +220,7 @@ export class SessionCascadeCancellation {
   /**
    * 原子广播三级级联取消：
    * 1. Tier 1 计算级：通知 WorkerPool 取消正在计算的该会话任务；
-   * 2. Tier 2 通信级：向 Rust 后端发出 abort 信号（调用 workbench_abort_run 或注销流监听），并在墓碑集合中登记 sessionId；
+   * 2. Tier 2 通信级：登记墓碑，force 取消本地流句柄，经 abortSessionRun 通知 Rust 中止；
    * 3. Tier 3 存储屏障级：向所有持久化写通道提供 isSessionTombstoned 拦截与广播通知。
    */
   public cancelSessionCascade(sessionId: string): void {
@@ -206,42 +245,21 @@ export class SessionCascadeCancellation {
   }
 
   private executeTier1(sessionId: string): void {
-    if (
-      this.workerPool &&
-      typeof this.workerPool.cancelBySession === 'function'
-    ) {
-      try {
-        this.workerPool.cancelBySession(sessionId);
-      } catch (err) {
-        console.error(
-          `[sessionCascadeCancellation:Tier1] WorkerPool cancel failed for ${sessionId}:`,
-          err
-        );
-      }
+    const pool = this.workerPool;
+    if (pool && typeof pool.cancelBySession === 'function') {
+      runIsolated('Tier1', 'worker pool cancel', sessionId, () =>
+        pool.cancelBySession(sessionId)
+      );
     }
-
     for (const cb of this.workerCancelCallbacks) {
-      try {
-        void cb(sessionId);
-      } catch (err) {
-        console.error(
-          `[sessionCascadeCancellation:Tier1] Callback failed for ${sessionId}:`,
-          err
-        );
-      }
+      runIsolated('Tier1', 'callback', sessionId, () => cb(sessionId));
     }
-
     for (const sub of this.subscribers.values()) {
-      if (sub.onWorkerCancel) {
-        try {
-          sub.onWorkerCancel(sessionId);
-        } catch (err) {
-          console.error(
-            `[sessionCascadeCancellation:Tier1] Subscriber ${sub.id} failed for ${sessionId}:`,
-            err
-          );
-        }
-      }
+      const onWorkerCancel = sub.onWorkerCancel;
+      if (!onWorkerCancel) continue;
+      runIsolated('Tier1', `subscriber ${sub.id}`, sessionId, () =>
+        onWorkerCancel(sessionId)
+      );
     }
   }
 
@@ -251,96 +269,45 @@ export class SessionCascadeCancellation {
     sessionStreams.clearSession(sessionId);
 
     // 2. 清理前端流式状态缓冲（防追加）
-    try {
-      useStreamingStore.getState().clearSession(sessionId);
-    } catch {
-      // 容错处理
-    }
+    useStreamingStore.getState().clearSession(sessionId);
 
-    // 4. 【P0 重构落地：激活死代码，彻底清空 DualLatch 历史记录与挂起 rAF】
-    try {
-      dualLatchStateMachine.abortSession(sessionId);
-    } catch (err) {
-      console.error(
-        `[sessionCascadeCancellation:Tier2] DualLatch abort failed for ${sessionId}:`,
-        err
-      );
-    }
+    // 3. 清空 DualLatch 历史记录与挂起 rAF
+    runIsolated('Tier2', 'dual latch abort', sessionId, () =>
+      dualLatchStateMachine.abortSession(sessionId)
+    );
 
-    // 5. 【DOM 节点解引用：彻底解引用 DOM Text 节点与直写影子槽位，杜绝内存泄漏】
-    try {
+    // 4. 解引用 DOM Text 节点与直写影子槽位
+    runIsolated('Tier2', 'stream direct DOM abort', sessionId, () => {
       streamDirectEngine.abortSession(sessionId);
       streamDirectDomEngine.releaseSession(sessionId);
-    } catch (err) {
-      console.error(
-        `[sessionCascadeCancellation:Tier2] StreamDirect DOM abort failed for ${sessionId}:`,
-        err
+    });
+
+    // 5. 通信级回调与订阅者通知
+    for (const cb of this.transportAbortCallbacks) {
+      runIsolated('Tier2', 'callback', sessionId, () => cb(sessionId));
+    }
+    for (const sub of this.subscribers.values()) {
+      const onTransportAbort = sub.onTransportAbort;
+      if (!onTransportAbort) continue;
+      runIsolated('Tier2', `subscriber ${sub.id}`, sessionId, () =>
+        onTransportAbort(sessionId)
       );
     }
 
-    // 6. 通信级回调与订阅者通知
-    for (const cb of this.transportAbortCallbacks) {
-      try {
-        void cb(sessionId);
-      } catch (err) {
-        console.error(
-          `[sessionCascadeCancellation:Tier2] Callback failed for ${sessionId}:`,
-          err
-        );
-      }
-    }
-
-    for (const sub of this.subscribers.values()) {
-      if (sub.onTransportAbort) {
-        try {
-          sub.onTransportAbort(sessionId);
-        } catch (err) {
-          console.error(
-            `[sessionCascadeCancellation:Tier2] Subscriber ${sub.id} failed for ${sessionId}:`,
-            err
-          );
-        }
-      }
-    }
-
-    // 4. 发出 Rust 后端 abort 信号（workbench_abort_run）
-    this.sendRustAbortSignal(sessionId);
-  }
-
-  private sendRustAbortSignal(sessionId: string): void {
-    void (async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('workbench_abort_run', { sessionId });
-      } catch {
-        // 在开发环境或非 Tauri 宿主中静默容错
-      }
-    })();
+    // 6. 通知 Rust 后端中止该会话运行（单一出站通道；abortSessionRun 永不 reject）
+    void abortSessionRun(sessionId);
   }
 
   private executeTier3(sessionId: string): void {
     for (const cb of this.storageBarrierCallbacks) {
-      try {
-        void cb(sessionId);
-      } catch (err) {
-        console.error(
-          `[sessionCascadeCancellation:Tier3] Callback failed for ${sessionId}:`,
-          err
-        );
-      }
+      runIsolated('Tier3', 'callback', sessionId, () => cb(sessionId));
     }
-
     for (const sub of this.subscribers.values()) {
-      if (sub.onStorageBarrier) {
-        try {
-          sub.onStorageBarrier(sessionId);
-        } catch (err) {
-          console.error(
-            `[sessionCascadeCancellation:Tier3] Subscriber ${sub.id} failed for ${sessionId}:`,
-            err
-          );
-        }
-      }
+      const onStorageBarrier = sub.onStorageBarrier;
+      if (!onStorageBarrier) continue;
+      runIsolated('Tier3', `subscriber ${sub.id}`, sessionId, () =>
+        onStorageBarrier(sessionId)
+      );
     }
   }
 

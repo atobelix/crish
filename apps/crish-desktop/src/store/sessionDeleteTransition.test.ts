@@ -7,8 +7,6 @@ import {
   cleanSessionCompoundDraftsInStore,
   evictSessionDraftsAndTimers,
   bindDraftManagerForEviction,
-  executeDualLatchFinalCleanup,
-  executeSessionDeleteLifecycle,
 } from './sessionDeleteTransition';
 import {
   dualLatchStateMachine,
@@ -19,12 +17,16 @@ import {
   isSessionTombstoned,
   markSessionTombstone,
 } from './sessionCascadeCancellation';
-import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
-import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
 import { sessionDraftManager } from '../api/draft/sessionDraftManager';
 import { sessionStreams } from '../api/sessionStreamManager';
 import { StreamRenderBuffer } from '../api/StreamRenderBuffer';
 import { useStreamingStore } from './streamingStore';
+import { abortSessionRun } from '../api/runControlClient';
+
+vi.mock('../api/runControlClient', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/runControlClient')>()),
+  abortSessionRun: vi.fn(async () => undefined),
+}));
 
 describe('sessionDeleteTransition · 核心生命周期与焦点转移', () => {
   const sessions = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
@@ -120,7 +122,6 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
   beforeEach(() => {
     dualLatchStateMachine.clearAll();
     useStreamingStore.getState().clearSession('mem-leak-check-session');
-    useStreamingStore.getState().clearSession('sess-cleanup-test');
   });
 
   it('markDrained 终态瞬间清空 snapshotText，并在微任务阶段彻底从 records Map 剔除', async () => {
@@ -146,69 +147,6 @@ describe('DualLatch 终态清理协议与内存泄漏彻底清退', () => {
 
     // 微任务执行后记录彻底从 Map 中 delete，内存归零
     expect(sm.getRecordCount()).toBe(0);
-  });
-
-  it('executeDualLatchFinalCleanup 刚性执行：abortSession、DOM 节点解引用与流式 store 清退', () => {
-    const sessionId = 'sess-cleanup-test';
-    const messageId = 'msg-dom-test';
-
-    // 1. 注入 DualLatch 记录
-    dualLatchStateMachine.latch(sessionId, messageId, '测试生成文本');
-    expect(dualLatchStateMachine.getRecordCount()).toBe(1);
-
-    // 2. 模拟 StreamDirectDomEngine 注册原生 Text 节点
-    const mockTextNode = {
-      data: 'Hello DOM',
-      nodeType: 3,
-      isConnected: true,
-      appendData: vi.fn(),
-    } as unknown as Text;
-
-    const mockContainer = {
-      isConnected: true,
-      childNodes: [mockTextNode],
-      ownerDocument: {
-        createTextNode: vi.fn(() => mockTextNode),
-      },
-    } as unknown as HTMLElement;
-    (mockTextNode as any).parentNode = mockContainer;
-
-    streamDirectDomEngine.bindContainer(
-      sessionId,
-      messageId,
-      mockContainer,
-      mockTextNode
-    );
-    expect(streamDirectDomEngine.size).toBe(1);
-
-    // 3. 设置流式文本
-    useStreamingStore
-      .getState()
-      .setStreamText(sessionId, messageId, 'Streaming buffer text');
-    expect(
-      useStreamingStore.getState().getStreamText(sessionId, messageId)
-    ).toBe('Streaming buffer text');
-
-    // 执行 DualLatch 终态清理协议
-    const cleanupResult = executeDualLatchFinalCleanup(sessionId);
-
-    expect(cleanupResult.dualLatchRecordsAborted).toBe(true);
-    expect(cleanupResult.domTargetsDereferenced).toBe(true);
-    expect(cleanupResult.streamingStoreCleared).toBe(true);
-
-    // 断言 DualLatch records 彻底清除
-    expect(dualLatchStateMachine.getRecordCount()).toBe(0);
-    expect(
-      dualLatchStateMachine.getRecord(sessionId, messageId)
-    ).toBeUndefined();
-
-    // 断言 DOM 引擎槽位被释放且节点解除引用
-    expect(streamDirectDomEngine.size).toBe(0);
-
-    // 断言流式 store 被清退
-    expect(
-      useStreamingStore.getState().getStreamText(sessionId, messageId)
-    ).toBeUndefined();
   });
 });
 
@@ -260,16 +198,16 @@ describe('多分栏复合草稿与防抖定时器生命周期治理', () => {
   });
 });
 
-describe('executeSessionDeleteLifecycle · 全生命周期终态原子协调', () => {
+describe('删除会话取消链 · 级联 Tier 2 单通道', () => {
   beforeEach(() => {
     sessionCascadeCancellation.resetForTest();
     dualLatchStateMachine.clearAll();
+    vi.mocked(abortSessionRun).mockClear();
   });
 
-  it('原子协调：触发级联总线、登记墓碑、DualLatch 清理、流中止与草稿回收', () => {
+  it('cancelSessionCascade：force 取消在途流、重置渲染缓冲、清空 DualLatch、通知后端中止并登记墓碑', () => {
     const sessionId = 'atomic-delete-session';
 
-    // 准备活跃流与状态
     dualLatchStateMachine.latch(sessionId, 'msg-1', '测试文本');
     expect(dualLatchStateMachine.getRecordCount()).toBe(1);
     const cancel = vi.fn();
@@ -283,23 +221,14 @@ describe('executeSessionDeleteLifecycle · 全生命周期终态原子协调', (
       cancel,
     });
 
-    const lifecycleResult = executeSessionDeleteLifecycle(sessionId);
+    sessionCascadeCancellation.cancelSessionCascade(sessionId);
 
-    expect(lifecycleResult.sessionId).toBe(sessionId);
-    expect(lifecycleResult.tombstoned).toBe(true);
-    expect(lifecycleResult.dualLatchCleaned).toBe(true);
-    expect(lifecycleResult.draftsEvicted).toBe(true);
-
-    // 流断言：删会话经进程级注册表 force 取消在途流并重置其渲染缓冲（仅一次）
     expect(cancel).toHaveBeenCalledExactlyOnceWith('force');
     expect(resetSpy).toHaveBeenCalledTimes(1);
     expect(sessionStreams.get(sessionId)).toBeUndefined();
-
-    // 双重锁断言：会话已被永久打上墓碑，严禁复活
+    expect(abortSessionRun).toHaveBeenCalledExactlyOnceWith(sessionId);
+    expect(dualLatchStateMachine.getRecordCount()).toBe(0);
     expect(isSessionTombstoned(sessionId)).toBe(true);
     expect(isSessionEligibleForContinuation(sessionId)).toBe(false);
-
-    // 内存断言：DualLatch records 归零
-    expect(dualLatchStateMachine.getRecordCount()).toBe(0);
   });
 });
