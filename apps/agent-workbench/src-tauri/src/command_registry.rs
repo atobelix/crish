@@ -326,7 +326,6 @@ command_registry![
     ("get_flow_snapshot", session_commands::get_flow_snapshot),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
-    ("core_md_render", markdown_commands::md_render),
     ("core_md_render_batch", markdown_commands::md_render_batch),
     ("core_md_render_stream", markdown_commands::md_render_stream),
     // ── 工具 Worker 组（E，§2.2）──
