@@ -17,14 +17,14 @@ const STORE_IDENT: &str = "StoreNoteBackend";
 
 /// Memory 集成测（夹具 / 形状 / 双后端对齐）。绿 ≠ 关 EL-05。
 const MEMORY_INTEGRATION_PINS: &[&str] = &[
-    "crates/agent-tools/src/note_backend_tests.rs",
-    "crates/agent-tools/src/note_backend_tests_memory.rs",
-    "crates/agent-tools/src/note_backend_tests_result.rs",
-    "crates/agent-tools/src/note_plan_ops_tests.rs",
+    "crates/agent-tools/src/note_backend/tests/mod.rs",
+    "crates/agent-tools/src/note_backend/tests/memory.rs",
+    "crates/agent-tools/src/note_backend/tests/result.rs",
+    "crates/agent-tools/src/note_plan_ops/tests.rs",
     "crates/agent-tools/src/note_memory.rs",
-    "crates/agent-tools/src/note_memory_query.rs",
-    "crates/agent-tools/src/note_memory_apply.rs",
-    "crates/agent-tools/src/note_memory_batch.rs",
+    "crates/agent-tools/src/note_memory/query.rs",
+    "crates/agent-tools/src/note_memory/apply.rs",
+    "crates/agent-tools/src/note_memory/batch.rs",
     "crates/agent-tools/src/note_stress_guard.rs",
     "crates/conex-note-runtime/tests/note_plan_parity.rs",
     "crates/agent-tools/src/tools/note_query_blocks.rs",

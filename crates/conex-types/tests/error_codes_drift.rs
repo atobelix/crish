@@ -59,6 +59,32 @@ fn catalog_has_no_duplicate_codes() {
     );
 }
 
+/// `codes.rs` 的每个码常量必须在 catalog 中有且只有一条元信息，
+/// 反之 catalog 的每条 code 也必须来自 `codes.rs`。
+#[test]
+fn code_constants_and_catalog_are_bijective() {
+    let source = include_str!("../src/error/codes.rs");
+    let mut constants = BTreeSet::new();
+    for line in source.lines() {
+        let Some(rest) = line.trim().strip_prefix("pub const ") else {
+            continue;
+        };
+        let Some((_, rest)) = rest.split_once(": &str = \"") else {
+            continue;
+        };
+        let Some((code, _)) = rest.split_once('"') else {
+            continue;
+        };
+        constants.insert(code.to_string());
+    }
+
+    let catalog: BTreeSet<String> = error_catalog().map(|info| info.code.to_string()).collect();
+    assert_eq!(
+        constants, catalog,
+        "codes.rs 常量与 error catalog 必须一一对应（新增码需同时登记元信息）"
+    );
+}
+
 #[test]
 fn contract_json_matches_catalog() {
     let actual = build_contract();
