@@ -13,8 +13,10 @@ import {
   modelsCatalogStore,
   selectProvider,
 } from '../../api/modelsCatalogStore';
+import { providerProbeScanModels } from '../../api/provider-profiles/rustProfileStore';
 import { modelRefKey } from '../../api/modelsCatalogTypes';
 import { ensureProviderShell } from './catalogWriteGate';
+import { t } from '../../i18n';
 
 export interface ModelProviderActionsArgs {
   selected: ProviderProfile | null;
@@ -112,11 +114,26 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
         loadProfiles().find((p) => p.id === selected.id) || selected;
       const firstModel =
         selectProvider(selected.id)?.models[0]?.id || fresh.models[0] || '';
-      const r = await testProviderModel(fresh, firstModel);
-      if (r.ok) {
-        notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
+      if (firstModel) {
+        // 有模型：执行实际模型轻量短文本对话探活
+        const r = await testProviderModel(fresh, firstModel);
+        if (r.ok) {
+          notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
+        } else {
+          notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
+        }
       } else {
-        notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
+        // 无模型：自动降级为调用 /models 握手探活端点（验证 Base URL 与 Key 有效性），打破死锁
+        const r = await providerProbeScanModels(fresh.id);
+        if (r.status === 'ok' && r.data.ok) {
+          notify(true, t('models.probe.handshakeOk'));
+        } else {
+          const err =
+            r.status === 'error'
+              ? r.message
+              : (r.status === 'ok' && r.data.error) || 'Failed';
+          notify(false, t('models.probe.checkFailed', { error: err }));
+        }
       }
     } catch (e) {
       notify(false, e instanceof Error ? e.message : String(e));

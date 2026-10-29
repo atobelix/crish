@@ -21,16 +21,24 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
     vi.clearAllMocks();
   });
 
-  it('config_secret_set → invoke("config_secret_set", { profileId, apiKey })', async () => {
+  it('config_secret_set → invoke("config_secret_set", { providerId, apiKey, expectedRevision })', async () => {
     const impl = vi.fn(async () => ({ ok: true, hasKey: true }));
     mockTauriCommand('config_secret_set', impl);
     const res = await configSecretSet('openai', 'sk-x');
     expect(res.status).toBe('ok');
-    expect(impl).toHaveBeenCalledWith({ profileId: 'openai', apiKey: 'sk-x' });
+    expect(impl).toHaveBeenCalledWith({
+      providerId: 'openai',
+      apiKey: 'sk-x',
+      expectedRevision: '',
+    });
   });
 
-  it('config_secret_get → invoke("config_secret_get", { profileId })（K-02 last4 语义）', async () => {
-    const impl = vi.fn(async () => ({ ok: true, hasKey: true, apiKeyLast4: 'alue' }));
+  it('config_secret_get → invoke("config_secret_get", { providerId })（K-02 last4 语义）', async () => {
+    const impl = vi.fn(async () => ({
+      ok: true,
+      hasKey: true,
+      apiKeyLast4: 'alue',
+    }));
     mockTauriCommand('config_secret_get', impl);
     const res = await configSecretGet('openai');
     expect(res.status).toBe('ok');
@@ -38,17 +46,25 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
       expect(res.data.apiKeyLast4).toBe('alue');
       expect('apiKey' in res.data).toBe(false);
     }
-    expect(impl).toHaveBeenCalledWith({ profileId: 'openai' });
+    expect(impl).toHaveBeenCalledWith({ providerId: 'openai' });
   });
 
   it('config_secret_has / config_secret_clear wire 形状', async () => {
-    mockTauriCommand('config_secret_has', vi.fn(async () => ({ ok: true, hasKey: true })));
+    const hasImpl = vi.fn(async () => ({ ok: true, hasKey: true }));
+    mockTauriCommand('config_secret_has', hasImpl);
     const has = await configSecretHas('deepseek');
     expect(has.status).toBe('ok');
-    mockTauriCommand('config_secret_clear', vi.fn(async () => ({ ok: true, hasKey: false })));
+    expect(hasImpl).toHaveBeenCalledWith({ providerId: 'deepseek' });
+
+    const clearImpl = vi.fn(async () => ({ ok: true, hasKey: false }));
+    mockTauriCommand('config_secret_clear', clearImpl);
     const cleared = await configSecretClear('deepseek');
     expect(cleared.status).toBe('ok');
     if (cleared.status === 'ok') expect(cleared.data.hasKey).toBe(false);
+    expect(clearImpl).toHaveBeenCalledWith({
+      providerId: 'deepseek',
+      expectedRevision: '',
+    });
   });
 
   it('config_secret_reveal：uiConfirm 参数透传（true 才回明文）', async () => {
@@ -63,7 +79,10 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
     const res = await configSecretReveal('openai', true);
     expect(res.status).toBe('ok');
     if (res.status === 'ok') expect(res.data.apiKey).toBe('sk-plain');
-    expect(impl).toHaveBeenCalledWith({ profileId: 'openai', uiConfirm: true });
+    expect(impl).toHaveBeenCalledWith({
+      providerId: 'openai',
+      uiConfirm: true,
+    });
   });
 
   it('config_profile_apply：旧命令已退役，本模块不再产出该字面量', async () => {
@@ -75,7 +94,10 @@ describe('rustProfileStore（config_secret_* / config_profile_apply）', () => {
   });
 
   it('error 三态：CoreError 形状透传（kind/message）', async () => {
-    mockTauriError('config_secret_set', { kind: 'InvalidInput', detail: 'bad profileId' });
+    mockTauriError('config_secret_set', {
+      kind: 'InvalidInput',
+      detail: 'bad profileId',
+    });
     const res = await configSecretSet('../evil', 'sk-x');
     expect(res.status).toBe('error');
     if (res.status === 'error') {

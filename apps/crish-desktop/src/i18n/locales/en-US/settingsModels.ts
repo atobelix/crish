@@ -62,4 +62,10 @@ export const settingsPartModels = {
   'models.profileList.missingKey': 'Missing API key',
   'models.profileList.disabled': 'Disabled',
   'models.profileList.ready': 'Configured and enabled',
+  // ── Probe and form validation (models.probe.*) ──
+  'models.probe.vendorNameEmpty': 'Vendor name cannot be empty',
+  'models.probe.vendorNameSaveFailed': 'Failed to save vendor name',
+  'models.probe.handshakeOk':
+    'Provider handshake successful (URL and credentials verified, click "Fetch" to add models)',
+  'models.probe.checkFailed': 'Connection check failed: {error}',
 };

@@ -334,14 +334,30 @@ pub async fn probe_scan_models_core(req: ProbeScanRequest) -> ProbeScanResult {
         ProtocolKind::GoogleGenerateContent => format!("{endpoint}/models"),
     };
     let req_builder = match config.provider.protocol {
-        ProtocolKind::AnthropicMessages => client.get(url).header("x-api-key", api_key).header(
-            "anthropic-version",
-            agent_provider::request::ANTHROPIC_VERSION,
-        ),
-        ProtocolKind::GoogleGenerateContent => client.get(url).header("x-goog-api-key", api_key),
-        ProtocolKind::OpenAiChat | ProtocolKind::OpenAiResponses => client
-            .get(url)
-            .header(AUTHORIZATION, format!("Bearer {api_key}")),
+        ProtocolKind::AnthropicMessages => {
+            let mut b = client.get(url).header(
+                "anthropic-version",
+                agent_provider::request::ANTHROPIC_VERSION,
+            );
+            if !api_key.trim().is_empty() {
+                b = b.header("x-api-key", api_key);
+            }
+            b
+        }
+        ProtocolKind::GoogleGenerateContent => {
+            let mut b = client.get(url);
+            if !api_key.trim().is_empty() {
+                b = b.header("x-goog-api-key", api_key);
+            }
+            b
+        }
+        ProtocolKind::OpenAiChat | ProtocolKind::OpenAiResponses => {
+            let mut b = client.get(url);
+            if !api_key.trim().is_empty() {
+                b = b.header(AUTHORIZATION, format!("Bearer {api_key}"));
+            }
+            b
+        }
     };
 
     let resp = match req_builder.send().await {

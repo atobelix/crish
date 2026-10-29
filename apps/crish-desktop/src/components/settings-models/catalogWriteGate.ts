@@ -62,7 +62,7 @@ export async function prepareCatalogWrite(): Promise<
 export async function ensureProviderShell(args: {
   providerId: string;
   displayName: string;
-  baseUrl: string;
+  baseUrl?: string;
   protocol?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const ready = await prepareCatalogWrite();
@@ -70,9 +70,10 @@ export async function ensureProviderShell(args: {
   const id = args.providerId.trim();
   if (!id) return { ok: false, error: '供应商 id 为空' };
   if (selectProvider(id)) return { ok: true };
+  const cleanBaseUrl = args.baseUrl?.trim() || undefined;
   return modelsCatalogStore.addProvider(id, {
     displayName: args.displayName,
-    baseUrl: args.baseUrl,
+    baseUrl: cleanBaseUrl,
     protocol: protocolForProviderWrite(args.protocol),
     stream: true,
     enabled: true,

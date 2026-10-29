@@ -13,7 +13,11 @@ import * as workspaceShellModule from '../../store/workspace-shell';
 import * as storeAccess from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
-import { createDefaultDock } from '../../store/layout-tree/sessionTabModel';
+import {
+  createDefaultDock,
+  findNodeById,
+  isDockTreeEmpty,
+} from '../../store/storeAccess';
 import type { LayoutLeaf, SessionState } from '../../store/types';
 import {
   registerBuiltInViews,
@@ -546,5 +550,49 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
         (k) => k.startsWith('dtab_terminal') || k === 'session-123'
       )
     ).toBe(true);
+  });
+
+  it('点击展开右侧工具栏按钮时，若 dock 为空树则自动装填 overview 视图并展开', async () => {
+    const leaf = makeChatLeaf({
+      id: 'dock-toggle-leaf',
+      sessionId: 'session-toggle-dock',
+      dock: {
+        collapsed: true,
+        tree: null,
+      },
+    });
+    useLayoutTreeStore.setState({
+      activeLeafId: leaf.id,
+      tree: { root: leaf, version: 1 },
+    });
+
+    render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const toggleBtn = await screen.findByRole('button', {
+      name: '展开右侧工具栏',
+    });
+    fireEvent.click(toggleBtn);
+
+    await waitFor(() => {
+      const currentLeaf = findNodeById(
+        useLayoutTreeStore.getState().tree.root,
+        leaf.id
+      ) as LayoutLeaf;
+      const activeDock =
+        currentLeaf?.tabs?.find((t) => t.tabId === currentLeaf.activeTabId)
+          ?.dock ?? currentLeaf?.dock;
+      expect(activeDock?.collapsed).toBe(false);
+      expect(activeDock?.tree).not.toBeNull();
+      if (activeDock && activeDock.tree) {
+        expect(isDockTreeEmpty(activeDock.tree)).toBe(false);
+      }
+    });
   });
 });
