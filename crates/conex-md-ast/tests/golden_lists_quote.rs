@@ -126,17 +126,9 @@ fn ordered_list_start_values_survive_parse_serialize_parse() {
         .find(|node| node.text_snapshot.as_deref() == Some("列表分隔段落"))
         .expect("paragraph separating lists");
     assert_eq!(paragraph.kind, BlockKind::Paragraph);
-    let paragraph_parent = tree
-        .get(
-            &paragraph
-                .parent
-                .expect("following paragraph belongs to the preceding item"),
-        )
-        .expect("preceding ordered list item");
-    assert_eq!(paragraph_parent.kind, BlockKind::OrderedItem);
     assert_eq!(
-        paragraph_parent.text_snapshot.as_deref(),
-        Some("连续编号六")
+        paragraph.parent, None,
+        "GFM：列表后的未缩进段落是根兄弟，不挂列表项"
     );
     for text in ["无序列表甲", "无序列表乙"] {
         let unordered = tree
@@ -151,7 +143,7 @@ fn ordered_list_start_values_survive_parse_serialize_parse() {
             .attrs
             .contains_key(ORDERED_LIST_ITEM_NUMBER_ATTR));
     }
-    assert_eq!(tree.root_children.len(), 6, "分隔段落作为前一列表项的子块");
+    assert_eq!(tree.root_children.len(), 7, "全部块均为根兄弟");
     assert!(tree
         .root_children
         .iter()
@@ -186,7 +178,7 @@ fn ordered_list_start_values_survive_parse_serialize_parse() {
             "reparsed number for {text}"
         );
     }
-    assert_eq!(reparsed.root_children.len(), 6);
+    assert_eq!(reparsed.root_children.len(), 7);
     assert!(reparsed
         .root_children
         .iter()
@@ -293,15 +285,15 @@ fn golden_blockquote_structure_and_text() {
     assert!(structure_eq(&tree, &tree2), "rt md2=\n{md2}");
 }
 
-/// 列表项作为容器：后续段落挂为子块（秩=10 容器模型）。
+/// 列表项作为容器：缩进段落挂为子块。
 #[test]
 fn bullet_item_nests_following_paragraph() {
     let md = "\
 <!--c:11111111-1111-4111-a111-111111111111-->
 - 父列表项
 
-<!--c:22222222-2222-4222-a222-222222222222-->
-子段落挂在列表项下
+  <!--c:22222222-2222-4222-a222-222222222222-->
+  子段落挂在列表项下
 ";
     let tree = parse_document(md).unwrap();
     let bullet = bid("11111111-1111-4111-a111-111111111111");

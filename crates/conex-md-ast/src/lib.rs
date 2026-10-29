@@ -15,18 +15,13 @@
 //! - [`strip_conex_id_comments`]（pure-gfm 辅助；mode 面优先用 [`serialize_md`]）
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
 //!
-//! # 诚实边界（W2-A / W2-B / W2-A 扩表 / gfm-core 加深 / W2-A 续加深 / A-MD 诚实加深）
+//! # 诚实边界
 //! - **已接线** markdown-rs 为 GFM P 主路径（W2-A）
 //! - **已交付** ApplyReport 透出 lossy（W2-B）；失败整批 Err、不 mutate target
-//! - **已交付** mode 一等 + normalize 最低集 + 码/列表 golden 加深（W2-A 扩表）
-//! - **已加深** gfm-core Table/TaskItem **kind 方向**：collab IR **无** `Table`/`TaskItem` 变体 →
-//!   表=Paragraph+`structure_note`（行列/对齐 plain）；任务=Bullet/Ordered+勾选 plain+列表级 note
-//! - **已续加深**（W2-A 本包）：任务项嵌套段落；围栏 lang/meta → `structure_note`（不进 Code 载荷）；
-//!   嵌套 blockquote 扁平 plain；同秩嵌套列表扁平为兄弟（真嵌套列表语义未关）
-//! - **已再加深**（A-MD 诚实加深 · **≠ EL-06 / ≠ A-MD 全集**）：任务项嵌套 GFM 表
-//!   （`gfm-core/task_nested_table`：表降 Paragraph 叶子挂 BulletItem + 双 structure_note）
-//! - **未关闭**：**≠ A-MD 全表** / **≠ A-MD-01 全集** / **≠ EL-06**；Table/TaskItem kind **未入 collab**；
-//!   围栏 info **未** 进 kind；**禁止** 本批 golden 关 EL-06
+//! - **结构无损**（Phase 6）：任务列表 / 表格 / 嵌套列表 / 嵌套引用 / callout /
+//!   块级数学 / 脚注定义 / 围栏 lang·meta 均进 IR 并 P∘S 往返
+//! - **未关闭**：inline 富文本（强调 / 代码 span / 链接目标）仍折叠为 plain；
+//!   链接定义与 frontmatter 记 `structure_note`；HTML 不升格结构块
 //! - **≠ A-MD-04**：零半树 ≠ merge 后 P∘S≡ 联测全集
 //!
 //! # 权威
@@ -40,7 +35,6 @@ pub use conex_doc_collab::{
 };
 
 mod apply;
-mod assemble;
 mod mode;
 mod parse;
 mod parse_mdast;
@@ -113,6 +107,18 @@ pub const BLOCK_ID_COMMENT_PREFIX: &str = "<!--c:";
 /// 以便 P/S 往返保留非默认起始编号。
 pub const ORDERED_LIST_ITEM_NUMBER_ATTR: &str = "conex_md_ordered_item_number";
 
+/// 围栏代码语言标签（`BlockKind::Code` 的 `BlockProps.attrs` 键）。
+pub const CODE_LANG_ATTR: &str = "conex_md_code_lang";
+
+/// 围栏代码 info 中语言之后的附加元数据（`BlockKind::Code` 的 attrs 键）。
+pub const CODE_META_ATTR: &str = "conex_md_code_meta";
+
+/// 任务列表项勾选态（`BlockKind::TaskItem` 的 attrs 键，bool）。
+pub const TASK_CHECKED_ATTR: &str = "conex_md_task_checked";
+
+/// 脚注定义标签（`BlockKind::FootnoteDefinition` 的 attrs 键）。
+pub const FOOTNOTE_LABEL_ATTR: &str = "conex_md_footnote_label";
+
 /// 将块 ID 编码为 MD 起始注释行。
 pub fn encode_block_id_line(id: &BlockId) -> String {
     id.to_html_comment()
@@ -156,7 +162,7 @@ pub fn strip_conex_id_comments_detailed(md: &str) -> (String, LossyReport) {
     (body, report)
 }
 
-/// 结构等价比较（ID / kind / 父子 / plain 文本；**忽略** order 字符串）。
+/// 结构等价比较（ID / kind / props / 父子 / plain 文本；**忽略** order 字符串）。
 /// 用于往返与 golden 断言。
 pub fn structure_eq(a: &BlockTree, b: &BlockTree) -> bool {
     if a.root_children != b.root_children {
@@ -169,7 +175,11 @@ pub fn structure_eq(a: &BlockTree, b: &BlockTree) -> bool {
         let Some(nb) = b.get(id) else {
             return false;
         };
-        if na.parent != nb.parent || na.kind != nb.kind || na.children != nb.children {
+        if na.parent != nb.parent
+            || na.kind != nb.kind
+            || na.props != nb.props
+            || na.children != nb.children
+        {
             return false;
         }
         if na.text_snapshot != nb.text_snapshot {

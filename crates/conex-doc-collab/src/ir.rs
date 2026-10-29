@@ -18,14 +18,31 @@ pub enum BlockKind {
     },
     BulletItem,
     OrderedItem,
+    /// GFM 任务列表项；bullet / ordered 由 `ordered` 区分，勾选态在
+    /// `conex_md_task_checked` attr（可变状态不进 kind，避免每次勾选触发 turn_into）。
+    TaskItem {
+        ordered: bool,
+    },
+    /// 围栏代码；语言 / meta 在 `conex_md_code_lang` / `conex_md_code_meta` attrs。
     Code,
     Quote,
     Divider,
+    /// GFM 表格；正文快照为规范化表格源（含对齐分隔行）。
+    Table,
+    /// 块级数学（`$$`）；正文为公式源。
+    Math,
+    /// GFM / 常见 callout 引用；`kind` 为 note / tip / important / warning / caution 等。
+    Callout {
+        kind: String,
+    },
+    /// 脚注定义块；标签在 `conex_md_footnote_label` attr，正文为首段文本。
+    FootnoteDefinition,
     /// 未知 flavour 占位
     Unknown {
         flavour: String,
     },
 }
+
 
 impl BlockKind {
     /// 纸面 flavour / slash catalog id → [`BlockKind`]。
@@ -55,6 +72,9 @@ impl BlockKind {
             "bullet" | "bullet_item" | "bullet-item" | "list" | "ul" => BlockKind::BulletItem,
             "ordered" | "ordered_item" | "ordered-item" | "numbered" | "ol" => {
                 BlockKind::OrderedItem
+            }
+            "task" | "task_item" | "task-item" | "todo" | "checkbox" => {
+                BlockKind::TaskItem { ordered: false }
             }
             "code" | "code_block" | "code-block" => BlockKind::Code,
             "quote" | "blockquote" => BlockKind::Quote,

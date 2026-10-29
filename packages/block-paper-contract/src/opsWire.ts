@@ -22,8 +22,9 @@ import type { UnicodeScalarOffset } from './coordinates';
 
 /**
  * 块种类 wire。
- * - 单元变体：字符串字面量（paragraph / bullet_item / …）
- * - 带字段：外部标签对象 `{ heading: { level } }` / `{ unknown: { flavour } }`
+ * - 单元变体：字符串字面量（paragraph / bullet_item / … / table / math …）
+ * - 带字段：外部标签对象 `{ heading: { level } }` / `{ task_item: { ordered } }` /
+ *   `{ callout: { kind } }` / `{ unknown: { flavour } }`
  */
 export type CollabBlockKindWire =
   | 'paragraph'
@@ -32,7 +33,12 @@ export type CollabBlockKindWire =
   | 'code'
   | 'quote'
   | 'divider'
+  | 'table'
+  | 'math'
+  | 'footnote_definition'
   | { heading: { level: number } }
+  | { task_item: { ordered: boolean } }
+  | { callout: { kind: string } }
   | { unknown: { flavour: string } };
 
 /** 块属性：`attrs` 为任意 JSON 值表（含 collapsed 等） */
@@ -170,6 +176,15 @@ export function flavourToCollabKind(flavour: string): CollabBlockKindWire {
   if (f === 'divider' || f === 'hr' || f === 'horizontal_rule') {
     return 'divider';
   }
+  if (
+    f === 'task' ||
+    f === 'task_item' ||
+    f === 'task-item' ||
+    f === 'todo' ||
+    f === 'checkbox'
+  ) {
+    return { task_item: { ordered: false } };
+  }
   return { unknown: { flavour: flavour || f } };
 }
 
@@ -218,7 +233,10 @@ function isKindWire(v: unknown): v is CollabBlockKindWire {
       v === 'ordered_item' ||
       v === 'code' ||
       v === 'quote' ||
-      v === 'divider'
+      v === 'divider' ||
+      v === 'table' ||
+      v === 'math' ||
+      v === 'footnote_definition'
     );
   }
   if (!isPlainObject(v)) return false;
@@ -228,6 +246,19 @@ function isKindWire(v: unknown): v is CollabBlockKindWire {
       isPlainObject(h) &&
       typeof (h as { level?: unknown }).level === 'number' &&
       Number.isFinite((h as { level: number }).level)
+    );
+  }
+  if ('task_item' in v) {
+    const t = (v as { task_item?: unknown }).task_item;
+    return (
+      isPlainObject(t) &&
+      typeof (t as { ordered?: unknown }).ordered === 'boolean'
+    );
+  }
+  if ('callout' in v) {
+    const c = (v as { callout?: unknown }).callout;
+    return (
+      isPlainObject(c) && typeof (c as { kind?: unknown }).kind === 'string'
     );
   }
   if ('unknown' in v) {

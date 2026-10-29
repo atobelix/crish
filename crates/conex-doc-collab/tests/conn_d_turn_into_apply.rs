@@ -261,6 +261,10 @@ fn conn_d_block_kind_from_flavour_mapping() {
     );
     assert_eq!(BlockKind::from_flavour("bullet"), BlockKind::BulletItem);
     assert_eq!(BlockKind::from_flavour("ordered"), BlockKind::OrderedItem);
+    assert_eq!(
+        BlockKind::from_flavour("task"),
+        BlockKind::TaskItem { ordered: false }
+    );
     assert_eq!(BlockKind::from_flavour("quote"), BlockKind::Quote);
     assert_eq!(BlockKind::from_flavour("code"), BlockKind::Code);
     assert_eq!(BlockKind::from_flavour("paragraph"), BlockKind::Paragraph);

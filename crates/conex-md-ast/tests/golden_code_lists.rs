@@ -69,7 +69,7 @@ fn golden_nested_list_paragraph_and_quote() {
     assert_eq!(tree.get(&child).unwrap().parent, Some(b1));
     assert_eq!(
         tree.get(&child).unwrap().text_snapshot.as_deref(),
-        Some("子段落挂在列表项下（容器秩模型）")
+        Some("子段落挂在列表项下（真嵌套）")
     );
 
     let n_b2 = tree.get(&b2).unwrap();

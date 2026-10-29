@@ -170,9 +170,15 @@ pub fn block_kind_to_store_str(kind: &BlockKind) -> String {
         BlockKind::Heading { level } => format!("heading:{level}"),
         BlockKind::BulletItem => "bullet_item".into(),
         BlockKind::OrderedItem => "ordered_item".into(),
+        BlockKind::TaskItem { ordered: false } => "task_item".into(),
+        BlockKind::TaskItem { ordered: true } => "ordered_task_item".into(),
         BlockKind::Code => "code".into(),
         BlockKind::Quote => "quote".into(),
         BlockKind::Divider => "divider".into(),
+        BlockKind::Table => "table".into(),
+        BlockKind::Math => "math".into(),
+        BlockKind::Callout { kind } => format!("callout:{kind}"),
+        BlockKind::FootnoteDefinition => "footnote_definition".into(),
         BlockKind::Unknown { flavour } => {
             if flavour.is_empty() {
                 "unknown".into()

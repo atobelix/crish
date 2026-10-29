@@ -28,6 +28,9 @@ describe('opsWire · flavour / order', () => {
     });
     expect(flavourToCollabKind('code')).toBe('code');
     expect(flavourToCollabKind('bullet')).toBe('bullet_item');
+    expect(flavourToCollabKind('task')).toEqual({
+      task_item: { ordered: false },
+    });
     expect(flavourToCollabKind('callout')).toEqual({
       unknown: { flavour: 'callout' },
     });
@@ -84,6 +87,30 @@ describe('opsWire · 形状守卫与字段齐全', () => {
       parent: null,
       order: 'a1',
       kind: { heading: { level: 1 } },
+      props: emptyCollabProps(),
+    },
+    {
+      op: 'insert',
+      id: SAMPLE_ID,
+      parent: null,
+      order: 'a2',
+      kind: { task_item: { ordered: true } },
+      props: emptyCollabProps(),
+    },
+    {
+      op: 'insert',
+      id: SAMPLE_ID,
+      parent: null,
+      order: 'a3',
+      kind: 'table',
+      props: emptyCollabProps(),
+    },
+    {
+      op: 'insert',
+      id: SAMPLE_ID,
+      parent: null,
+      order: 'a4',
+      kind: { callout: { kind: 'note' } },
       props: emptyCollabProps(),
     },
   ];

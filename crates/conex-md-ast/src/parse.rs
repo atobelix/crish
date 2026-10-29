@@ -1,22 +1,21 @@
 //! Conex-MD 解析：契约字符串 → `BlockTree`。
 //!
 //! # W2-A · markdown-rs 接线（主路径）
-//! - **默认 P**：`markdown`（markdown-rs）`to_mdast` + `parse_mdast` lowering → 容器栈组装
+//! - **默认 P**：`markdown`（markdown-rs）`to_mdast` + `parse_mdast` 递归 lowering
 //! - **S**：仍为自研 [`crate::serialize`]（不信任库 to_md 当契约）
-//! - **手写行解析**：[`crate::parse_handwritten`] 已退役为非默认对照/回退，**禁止**当作权威 P
 //!
 //! # 诚实边界
-//! - **已交付**：GFM P 主路径接线 + 结构 golden 子集 + ID 注释 lowering
-//! - **mode / N**：见 [`crate::parse_md`] / [`crate::normalize_md`]（W2-A 扩表）
-//! - **gfm-core 加深**：`tests/golden/gfm-core/**`（表/任务/删除线·autolink/Divider·wiki plain/**任务嵌套表**；**≠ EL-06 / ≠ A-MD 全集**）
-//! - **未关闭**：**≠ A-MD-01 全集** / **≠ EL-06** / 表格专用 kind / gfm-core 目录全集
+//! - **已交付**：GFM P 主路径接线 + 结构 golden + ID 注释 lowering
+//! - **mode / N**：见 [`crate::parse_md`] / [`crate::normalize_md`]
+//! - **gfm-core**：`tests/golden/gfm-core/**` 覆盖表 / 任务 / 删除线·autolink /
+//!   Divider / wiki plain / 嵌套容器 / callout / math / footnote
+//! - **未关闭**：inline 富文本；链接定义 / frontmatter 记 `structure_note`
 //!
-//! # 嵌套规则（容器栈 · 与 S DFS 对齐）
-//! - **容器**：`Heading{level}`（秩=level）、`BulletItem` / `OrderedItem` / `Quote`（秩=10）
-//! - **叶子**：`Paragraph`、`Code`、`Divider`、`Unknown`
-//! - 限：树中不在叶子 kind 下挂子节点；golden / 往返测遵守此模型
+//! # 嵌套规则
+//! - **标题**：Conex 章节约定——更高级标题挂到上一标题下，同/低级标题回上级
+//! - **列表项 / 引用**：按 mdast 显式缩进嵌套；子块挂容器节点
+//! - 叶子（段落 / 代码 / 分割线 / 表格 / 数学）默认无子块
 
-use crate::assemble::assemble_tree;
 use crate::{BlockTree, LossyReport, MdError};
 
 /// 解析后端标识（接线验收 / 测试断言用）。
@@ -34,8 +33,7 @@ pub fn parse_document(md: &str) -> Result<BlockTree, MdError> {
 /// 解析并附带有损点报告。
 pub fn parse_document_detailed(md: &str) -> Result<ParseOutput, MdError> {
     let mut lossy = LossyReport::default();
-    let blocks = crate::parse_mdast::lower_md_to_raw_blocks(md, &mut lossy)?;
-    let tree = assemble_tree(&blocks)?;
+    let tree = crate::parse_mdast::lower_md_to_tree(md, &mut lossy)?;
     Ok(ParseOutput { tree, lossy })
 }
 
@@ -177,7 +175,7 @@ beta
     }
 
     #[test]
-    fn lossy_structure_note_table_like() {
+    fn table_lowered_to_table_kind_without_lossy() {
         let md = "\
 <!--c:11111111-1111-4111-a111-111111111111-->
 | a | b |
@@ -185,15 +183,9 @@ beta
 | 1 | 2 |
 ";
         let out = parse_document_detailed(md).unwrap();
-        let note = out
-            .lossy
-            .items
-            .iter()
-            .find(|i| i.code == "structure_note")
-            .expect("structure_note for table");
-        assert!(note.detail.contains("表格"));
+        assert!(out.lossy.is_empty(), "table is lossless: {:?}", out.lossy);
         let id = &out.tree.root_children[0];
-        assert_eq!(out.tree.get(id).unwrap().kind, BlockKind::Paragraph);
+        assert_eq!(out.tree.get(id).unwrap().kind, BlockKind::Table);
         assert!(out
             .tree
             .get(id)

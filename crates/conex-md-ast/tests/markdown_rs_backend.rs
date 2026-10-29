@@ -31,7 +31,7 @@ before ~~gone~~ after
 }
 
 #[test]
-fn gfm_table_structure_note_via_mdast() {
+fn gfm_table_kind_via_mdast() {
     let md = "\
 <!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
 | h1 | h2 |
@@ -39,14 +39,10 @@ fn gfm_table_structure_note_via_mdast() {
 | c1 | c2 |
 ";
     let out = parse_document_detailed(md).unwrap();
-    assert!(out
-        .lossy
-        .items
-        .iter()
-        .any(|i| i.code == "structure_note" && i.detail.contains("表格")));
+    assert!(out.lossy.is_empty(), "lossy={:?}", out.lossy);
     assert_eq!(
         out.tree.get(&out.tree.root_children[0]).unwrap().kind,
-        BlockKind::Paragraph
+        BlockKind::Table
     );
 }
 

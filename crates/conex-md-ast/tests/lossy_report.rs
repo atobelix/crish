@@ -1,4 +1,4 @@
-//! Round6 · LossyReport 补测：pure-gfm 剥离、缺/重 ID、表格 note、禁止 HTML 反推。
+//! Round6 · LossyReport 补测：pure-gfm 剥离、缺/重 ID、表格无损、禁止 HTML 反推。
 
 use conex_md_ast::{
     encode_block_id_line, parse_document_detailed, strip_conex_id_comments_detailed, BlockKind,
@@ -50,7 +50,7 @@ B
 }
 
 #[test]
-fn parse_lossy_table_structure_note() {
+fn parse_table_is_lossless_table_kind() {
     let md = "\
 <!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
 | col1 | col2 |
@@ -58,17 +58,11 @@ fn parse_lossy_table_structure_note() {
 | x | y |
 ";
     let out = parse_document_detailed(md).unwrap();
-    let note = out
-        .lossy
-        .items
-        .iter()
-        .find(|i| i.code == "structure_note")
-        .expect("table-like structure_note");
-    assert!(note.detail.contains("表格") || note.detail.contains("段落"));
+    assert!(out.lossy.is_empty(), "table is lossless: {:?}", out.lossy);
     assert_eq!(out.tree.root_children.len(), 1);
     assert_eq!(
         out.tree.get(&out.tree.root_children[0]).unwrap().kind,
-        BlockKind::Paragraph
+        BlockKind::Table
     );
 }
 
