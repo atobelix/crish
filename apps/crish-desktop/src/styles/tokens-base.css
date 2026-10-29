@@ -133,7 +133,6 @@ html[data-theme='dark'] {
 /* ── B 类运行期量 · 静态默认声明（对齐 scripts/token-registry.json bClass[].staticDefault） ── */
 :root {
   --tooltip-translate: translate(0);
-  --tree-level: 0;
   --toast-index: 0;
   --toast-offset-y: 0px;
   --toast-swipe-movement-x: 0px;

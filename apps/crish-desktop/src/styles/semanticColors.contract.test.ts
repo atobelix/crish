@@ -106,15 +106,6 @@ describe('固定语义色契约', () => {
         'var(--warning-soft-bg)'
       );
       expect(decl(block, '--color-info-bg'), theme).toBe('var(--info-soft-bg)');
-      expect(decl(block, '--filetree-badge-add-fg'), theme).toBe(
-        'var(--status-added)'
-      );
-      expect(decl(block, '--filetree-badge-mod-fg'), theme).toBe(
-        'var(--status-modified)'
-      );
-      expect(decl(block, '--filetree-badge-del-fg'), theme).toBe(
-        'var(--status-deleted)'
-      );
     }
   });
 

@@ -163,7 +163,9 @@ html[data-theme='light'] {
   --md-text-size: var(--font-size-body, 14px);
   --md-text-line-height: var(--lh-prose, 1.55);
   --md-text-color: var(--text-primary, #121212);
-  --md-text-paragraph-gap: 0.88em;
+  --md-measure: 760px;
+  --md-block-gap: 0.65em;
+  --md-flow-space: 0.88em;
 
   --md-h1-size: var(--font-size-title, 22px);
   --md-h1-margin: 0.85em 0 0.36em;
@@ -173,18 +175,14 @@ html[data-theme='light'] {
   --md-h2-border: none;
   --md-h3-size: var(--font-size-subhead, 16px);
   --md-h3-margin: 0.65em 0 0.26em;
-  --md-h4-size: var(--font-size-body, 14px);
+  --md-h4-size: calc(15px + var(--font-size-adjust, 0px));
   --md-h4-margin: 0.55em 0 0.22em;
-  --md-h5-size: var(--font-size-body, 14px);
+  --md-h5-size: calc(14px + var(--font-size-adjust, 0px));
   --md-h5-margin: 0.45em 0 0.18em;
-  --md-h6-size: var(--font-size-meta, 12px);
+  --md-h6-size: calc(13px + var(--font-size-adjust, 0px));
   --md-h6-margin: 0.38em 0 0.15em;
 
-  --md-heading-font-weight: var(--fw-strong, 700);
-  --md-heading-line-height: var(--lh-ui, 1.35);
   --md-heading-color: var(--text-primary);
-  --md-heading-margin-top: 0.65em;
-  --md-heading-margin-bottom: 0.28em;
 
   --md-code-inline-bg: var(--surface-shell);
   --md-code-inline-fg: var(--text-primary);
@@ -206,10 +204,13 @@ html[data-theme='light'] {
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
+  --md-code-line-height: 1.55;
+  --md-code-line-number-width: 2.5em;
+  --md-code-action-size: 22px;
+  --md-code-fold-max-height: 24em;
 
   --md-path-link-bg: transparent;
   --md-path-link-fg: var(--text-secondary);
-  --md-path-link-border: transparent;
 
   --md-task-box-size: 14px;
   --md-task-box-radius: var(--radius-row);
@@ -217,20 +218,17 @@ html[data-theme='light'] {
 
   --md-list-padding-left: 1.6em;
   --md-list-item-margin: 0.28em 0;
-  --md-list-item-gap: 0.28em;
-  --md-list-indent: 1.5em;
 
   --md-quote-border: 3px solid var(--border-color);
-  --md-quote-border-color: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    var(--border-color)
-  );
-  --md-quote-border-width: 3px;
   --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 33%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
+  --md-footnote-border: var(--border-subtle);
+  --md-math-bg: var(--surface-shell);
+  --md-math-border: var(--border-subtle);
+  --md-table-col-min-width: 9em;
+  --md-table-cols: 2;
 
   --md-link-color: var(--color-link);
   --md-link-hover-color: var(--color-link-hover);
@@ -249,37 +247,7 @@ html[data-theme='light'] {
   --md-table-cell-padding-compact: 8px 10px;
   --md-table-radius: var(--radius-control);
 
-  --md-table-bg: var(--surface-shell);
-  --md-table-border-width: var(--hairline-width, 1px);
-  --md-table-row-border: var(--hairline, var(--border-subtle));
-  --md-table-header-fg: var(--text-primary);
-  --md-table-header-font-weight: var(--fw-strong, 700);
-  --md-table-header-border: var(--hairline-strong, var(--border-color));
-  --md-table-row-even-bg: var(--md-table-row-alt-bg);
-  --md-table-font-size: var(--font-size-body, 14px);
-  --md-table-line-height: var(--lh-prose, 1.55);
-
-  --stream-table-active-bg: color-mix(in srgb, var(--brand) 4%, transparent);
-  --stream-table-intrinsic-h: 320px;
-
-  /* Artifacts (Light) */
-  --artifact-card-bg: var(--surface-card);
-  --artifact-card-border: var(--border-color);
-  --artifact-card-border-hover: color-mix(
-    in srgb,
-    var(--border-subtle) 95%,
-    var(--text-primary) 5%
-  );
-  --artifact-card-radius: var(--radius-card);
-  --artifact-header-bg: var(--surface-shell);
-  --artifact-header-border: var(--border-subtle);
-  --artifact-btn-hover-bg: var(--state-hover);
-  --artifact-btn-hover-border: color-mix(
-    in srgb,
-    var(--border-subtle) 92%,
-    var(--text-primary) 8%
-  );
-  --artifact-btn-active-bg: var(--state-active);
+  --skill-tag-color: hsl(198 85% 36%);
 
   /* Diff Comparison (Light) */
   --diff-add-bg: oklch(0.6 0.17 152 / 0.08);
@@ -295,65 +263,9 @@ html[data-theme='light'] {
   --diff-del-indicator: var(--diff-del-fg);
 
   --diff-gutter-bg: var(--surface-card);
-  --diff-split-divider: color-mix(
-    in srgb,
-    var(--border-subtle) 25%,
-    transparent
-  );
-  --diff-bg-header: var(--diff-split-header-bg);
   --diff-gutter-width-unified: 40px;
   --diff-gutter-marker-width: 20px;
   --diff-gutter-width-split: 36px;
-  --diff-split-header-bg: var(--surface-shell);
-  --diff-split-header-fg: var(--text-secondary);
-  --diff-mode-segmented-bg: var(--seg-track-bg);
-  --diff-mode-item-active-bg: var(--seg-slider-bg);
-  --diff-mode-item-active-fg: var(--text-primary, #111111);
-
-  /* FileTree (Light) */
-  --filetree-indent-unit: 14px;
-  --filetree-node-hover-bg: var(--state-hover);
-  --filetree-node-active-bg: color-mix(in srgb, var(--brand) 10%, transparent);
-  --filetree-node-active-fg: var(--text-primary);
-  --filetree-node-fg: var(--text-secondary);
-  --filetree-icon-color: var(--text-tertiary);
-  --filetree-badge-add-bg: hsl(142 71% 45% / 0.12);
-  --filetree-badge-add-fg: var(--status-added);
-  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.12);
-  --filetree-badge-mod-fg: var(--status-modified);
-  --filetree-badge-del-bg: hsl(0 84% 60% / 0.12);
-  --filetree-badge-del-fg: var(--status-deleted);
-
-  /* AI Step Card (Light) */
-  --aicard-status-running: var(--brand);
-  --aicard-status-success: var(--text-secondary, #555555);
-  --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
-  --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
-  --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --aicard-badge-fg: var(--text-tertiary);
-
-  /* Streaming Caret & Pulse (Light) */
-  --stream-caret-color: var(--brand-deep);
-  --skill-tag-color: hsl(198 85% 36%);
-  --stream-caret-width: 2px;
-  --stream-caret-height: 0.95em;
-  --stream-caret-radius: 1px;
-  --stream-caret-margin-left: var(--space-0_5, 2px);
-  --stream-caret-blink-dur: 800ms;
-
-  --stream-anim-word-fade: 100ms;
-  --stream-anim-word-offset-y: 2px;
-  --stream-anim-marker-fade: 120ms;
-  --stream-anim-easing: var(--ease-emphasized);
-
-  --stream-pulse-glow: 0 0 0 3px
-    color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
-  --stream-pulse-bg: color-mix(
-    in srgb,
-    var(--brand, hsl(160 84% 39%)) 3%,
-    transparent
-  );
-  --stream-pulse-duration: 1.6s;
 }
 
 html[data-theme='dark'] {
@@ -478,7 +390,9 @@ html[data-theme='dark'] {
   --md-text-size: var(--font-size-body, 14px);
   --md-text-line-height: var(--lh-prose, 1.55);
   --md-text-color: var(--text-primary, #f5f5f5);
-  --md-text-paragraph-gap: 0.88em;
+  --md-measure: 760px;
+  --md-block-gap: 0.65em;
+  --md-flow-space: 0.88em;
 
   --md-h1-size: var(--font-size-title, 22px);
   --md-h1-margin: 0.85em 0 0.36em;
@@ -488,18 +402,14 @@ html[data-theme='dark'] {
   --md-h2-border: none;
   --md-h3-size: var(--font-size-subhead, 16px);
   --md-h3-margin: 0.65em 0 0.26em;
-  --md-h4-size: var(--font-size-body, 14px);
+  --md-h4-size: calc(15px + var(--font-size-adjust, 0px));
   --md-h4-margin: 0.55em 0 0.22em;
-  --md-h5-size: var(--font-size-body, 14px);
+  --md-h5-size: calc(14px + var(--font-size-adjust, 0px));
   --md-h5-margin: 0.45em 0 0.18em;
-  --md-h6-size: var(--font-size-meta, 12px);
+  --md-h6-size: calc(13px + var(--font-size-adjust, 0px));
   --md-h6-margin: 0.38em 0 0.15em;
 
-  --md-heading-font-weight: var(--fw-strong, 700);
-  --md-heading-line-height: var(--lh-ui, 1.35);
   --md-heading-color: var(--text-primary);
-  --md-heading-margin-top: 0.65em;
-  --md-heading-margin-bottom: 0.28em;
 
   --md-code-inline-bg: var(--surface-shell);
   --md-code-inline-fg: var(--text-primary);
@@ -521,10 +431,13 @@ html[data-theme='dark'] {
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
+  --md-code-line-height: 1.55;
+  --md-code-line-number-width: 2.5em;
+  --md-code-action-size: 22px;
+  --md-code-fold-max-height: 24em;
 
   --md-path-link-bg: transparent;
   --md-path-link-fg: var(--text-secondary);
-  --md-path-link-border: transparent;
 
   --md-task-box-size: 14px;
   --md-task-box-radius: var(--radius-row);
@@ -532,20 +445,17 @@ html[data-theme='dark'] {
 
   --md-list-padding-left: 1.6em;
   --md-list-item-margin: 0.28em 0;
-  --md-list-item-gap: 0.28em;
-  --md-list-indent: 1.5em;
 
   --md-quote-border: 3px solid var(--border-color);
-  --md-quote-border-color: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    var(--border-color)
-  );
-  --md-quote-border-width: 3px;
   --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 64%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
+  --md-footnote-border: var(--border-subtle);
+  --md-math-bg: var(--surface-shell);
+  --md-math-border: var(--border-subtle);
+  --md-table-col-min-width: 9em;
+  --md-table-cols: 2;
 
   --md-link-color: var(--color-link);
   --md-link-hover-color: var(--color-link-hover);
@@ -564,38 +474,6 @@ html[data-theme='dark'] {
   --md-table-cell-padding-compact: 8px 10px;
   --md-table-radius: var(--radius-control);
 
-  --md-table-bg: var(--surface-shell);
-  --md-table-border-width: var(--hairline-width, 1px);
-  --md-table-row-border: var(--hairline, var(--border-subtle));
-  --md-table-header-fg: var(--text-primary);
-  --md-table-header-font-weight: var(--fw-strong, 700);
-  --md-table-header-border: var(--hairline-strong, var(--border-color));
-  --md-table-row-even-bg: var(--md-table-row-alt-bg);
-  --md-table-font-size: var(--font-size-body, 14px);
-  --md-table-line-height: var(--lh-prose, 1.55);
-
-  --stream-table-active-bg: color-mix(in srgb, var(--brand) 6%, transparent);
-  --stream-table-intrinsic-h: 320px;
-
-  /* Artifacts (Dark) */
-  --artifact-card-bg: var(--surface-card);
-  --artifact-card-border: var(--border-color);
-  --artifact-card-border-hover: color-mix(
-    in srgb,
-    var(--border-subtle) 94%,
-    var(--text-primary) 6%
-  );
-  --artifact-card-radius: var(--radius-card);
-  --artifact-header-bg: var(--surface-shell);
-  --artifact-header-border: var(--border-subtle);
-  --artifact-btn-hover-bg: var(--state-hover);
-  --artifact-btn-hover-border: color-mix(
-    in srgb,
-    var(--border-subtle) 90%,
-    var(--text-primary) 10%
-  );
-  --artifact-btn-active-bg: var(--state-active);
-
   /* Diff Comparison (Dark) */
   --diff-add-bg: oklch(0.76 0.16 152 / 0.14);
   --diff-add-fg: oklch(0.76 0.16 152);
@@ -610,60 +488,6 @@ html[data-theme='dark'] {
   --diff-del-indicator: var(--diff-del-fg);
 
   --diff-gutter-bg: var(--surface-card);
-  --diff-split-divider: color-mix(
-    in srgb,
-    var(--border-subtle) 25%,
-    transparent
-  );
-  --diff-split-header-bg: var(--surface-shell);
-  --diff-split-header-fg: var(--text-secondary);
-  --diff-mode-segmented-bg: var(--seg-track-bg);
-  --diff-mode-item-active-bg: var(--seg-slider-bg);
-  --diff-mode-item-active-fg: var(--text-primary, #f0f0f0);
-
-  /* FileTree (Dark) */
-  --filetree-indent-unit: 14px;
-  --filetree-node-hover-bg: var(--state-hover);
-  --filetree-node-active-bg: color-mix(in srgb, var(--brand) 14%, transparent);
-  --filetree-node-active-fg: var(--text-primary);
-  --filetree-node-fg: var(--text-secondary);
-  --filetree-icon-color: var(--text-tertiary);
-  --filetree-badge-add-bg: hsl(142 60% 45% / 0.2);
-  --filetree-badge-add-fg: var(--status-added);
-  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.2);
-  --filetree-badge-mod-fg: var(--status-modified);
-  --filetree-badge-del-bg: hsl(0 75% 55% / 0.2);
-  --filetree-badge-del-fg: var(--status-deleted);
-
-  /* AI Step Card (Dark) */
-  --aicard-status-running: var(--brand);
-  --aicard-status-success: var(--text-secondary, #a3a3a3);
-  --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
-  --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
-  --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
-  --aicard-badge-fg: var(--text-tertiary);
-
-  /* Streaming Caret & Pulse (Dark) */
-  --stream-caret-color: var(--brand);
-  --stream-caret-width: 2px;
-  --stream-caret-height: 0.95em;
-  --stream-caret-radius: 1px;
-  --stream-caret-margin-left: var(--space-0_5, 2px);
-  --stream-caret-blink-dur: 800ms;
-
-  --stream-anim-word-fade: 100ms;
-  --stream-anim-word-offset-y: 2px;
-  --stream-anim-marker-fade: 120ms;
-  --stream-anim-easing: var(--ease-emphasized);
-
-  --stream-pulse-glow: 0 0 0 3px
-    color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 20%, transparent);
-  --stream-pulse-bg: color-mix(
-    in srgb,
-    var(--brand, hsl(160 84% 45%)) 5%,
-    transparent
-  );
-  --stream-pulse-duration: 1.6s;
 
   /* Usage Dashboard (Dark) */
   --usage-capsule-outer-radius: var(--radius-pill);
@@ -735,47 +559,11 @@ html[data-theme='dark'] {
 html[data-ui-size='small'] {
   --md-text-size: 12px;
   --md-code-font-size: 11px;
-  --md-table-font-size: 12px;
 }
 
 html[data-ui-size='large'] {
   --md-text-size: 16px;
   --md-code-font-size: 14px;
-  --md-table-font-size: 16px;
-}
-
-html[data-perf-tier='balanced'] {
-  --stream-anim-word-fade: 80ms;
-  --stream-anim-word-offset-y: 1px;
-  --stream-anim-marker-fade: 100ms;
-}
-
-html[data-perf-tier='eco'] {
-  --stream-anim-word-fade: 0ms;
-  --stream-anim-marker-fade: 0ms;
-  --stream-anim-word-offset-y: 0px;
-  --stream-caret-blink-dur: 0ms;
-  --stream-pulse-duration: 0ms;
-  --stream-pulse-glow: none;
-  --stream-pulse-bg: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root,
-  html[data-theme='default'],
-  html[data-theme='light'],
-  html[data-theme='dark'],
-  html[data-perf-tier='high'],
-  html[data-perf-tier='balanced'],
-  html[data-perf-tier='eco'] {
-    --stream-anim-word-fade: 0ms;
-    --stream-anim-marker-fade: 0ms;
-    --stream-anim-word-offset-y: 0px;
-    --stream-caret-blink-dur: 0ms;
-    --stream-pulse-duration: 0ms;
-    --stream-pulse-glow: none;
-    --stream-pulse-bg: transparent;
-  }
 }
 
 @supports (color: oklch(0 0 0)) {

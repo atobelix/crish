@@ -118,9 +118,6 @@ describe('三档底色契约', () => {
 
       // 组件 hover/active 统一收敛至正典 state tokens
       for (const [name, expected] of [
-        ['--filetree-node-hover-bg', 'var(--state-hover)'],
-        ['--artifact-btn-hover-bg', 'var(--state-hover)'],
-        ['--artifact-btn-active-bg', 'var(--state-active)'],
         ['--md-code-copy-hover-bg', 'var(--state-hover)'],
         ['--md-table-row-hover-bg', 'var(--state-hover)'],
       ] as const) {

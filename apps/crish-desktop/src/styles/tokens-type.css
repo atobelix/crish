@@ -52,8 +52,10 @@ html[data-theme='light'] {
   --font-size-heading: calc(18px + var(--font-size-adjust, 0px));
   --font-size-title: calc(22px + var(--font-size-adjust, 0px));
 
-  /* 字重两档化（SSOT） */
+  /* 字重四档（SSOT）：Medium/Semibold 恢复，避免标题与正文全部 700 */
   --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
   --fw-strong: 700;
 
   /* 4 档行高阶梯（SSOT · P3 裁定定值） */
@@ -84,9 +86,9 @@ html[data-theme='light'] {
 
   --font-weight-normal: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
   --font-weight-code: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
-  --font-weight-medium: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-medium: var(--fw-medium); /* [WAVE2-DEPRECATED-ALIAS] */
   --font-weight-content: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
-  --font-weight-semibold: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-semibold: var(--fw-semibold); /* [WAVE2-DEPRECATED-ALIAS] */
   --font-weight-heavy: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
 
   --line-height-dense: var(--lh-dense); /* [WAVE2-DEPRECATED-ALIAS] */
