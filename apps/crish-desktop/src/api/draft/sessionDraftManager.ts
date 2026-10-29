@@ -13,10 +13,8 @@
  * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import {
-  getSessionStoreState,
-  setComposerDraft,
-} from '../../store/storeAccess';
+import { getSessionStoreState } from '../../store/sessionStore';
+import { setComposerDraft } from '../../store/sessionAccess';
 
 /** 草稿注入模式 */
 export type DraftInjectionMode =
@@ -91,9 +89,8 @@ export function makeDraftScopeKey(
   sessionId: string | null | undefined,
   leafId?: string | null
 ): string {
-  const safeSession =
-    sessionId && sessionId.trim().length > 0 ? sessionId.trim() : 'default';
-  const safeLeaf = leafId && leafId.trim().length > 0 ? leafId.trim() : '';
+  const safeSession = sessionId?.trim() || 'default';
+  const safeLeaf = leafId?.trim() || '';
   if (!safeLeaf || safeLeaf === 'default') {
     return safeSession;
   }
