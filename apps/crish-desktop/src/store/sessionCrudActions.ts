@@ -179,9 +179,9 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         return;
       }
       // D5：切换成功后在 microtask 中重新读取状态并软驱逐非活跃已水合消息。
-      // 实现体位于 sessionEviction.scheduleSoftEvictionAfterActivation（懒加载，保持既有代码分割边界）。
+      // 实现体位于 sessionSoftEvictionScheduler（懒加载，保持既有代码分割边界）。
       queueMicrotask(() => {
-        void import('./sessionEviction').then(
+        void import('./sessionSoftEvictionScheduler').then(
           ({ scheduleSoftEvictionAfterActivation }) => {
             scheduleSoftEvictionAfterActivation(nextId, get, set);
           }

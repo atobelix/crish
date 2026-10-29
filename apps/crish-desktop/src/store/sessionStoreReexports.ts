@@ -36,5 +36,6 @@ export {
 } from './sessionListEqual';
 
 export type { SessionActions } from './sessionActions';
-export type { SessionMeta, SessionSubtreeSlice } from './sessionSubtreeModel';
+export type { SessionMeta } from './sessionMeta';
+export type { SessionSubtreeSlice } from './sessionSubtreeModel';
 export type { SessionState, SessionAgent, SessionMessage } from './types';

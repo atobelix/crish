@@ -12,9 +12,11 @@ import { useShallow } from '../store/useShallowSelector';
 import {
   initStorePersistence,
   waitForStoreHydration,
-  type SessionActivatableStore,
-  type StoreApiLike,
 } from './layout-helpers/store-persistence';
+import type {
+  SessionActivatableStore,
+  StoreApiLike,
+} from './layout-helpers/store-persistence-types';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
@@ -26,13 +28,13 @@ import { registerSessionStateProvider } from './draft-routing/draftProjectResolv
 import {
   bumpEpochScalar,
   createInitialSubtreeSlice,
-  EMPTY_MESSAGES,
   patchSubtreeSessionMeta,
   syncSubtreeFromIndexedState,
   updateSubtreeMessageText,
-  type SessionMeta,
   type SessionSubtreeSlice,
 } from './sessionSubtreeModel';
+import { EMPTY_MESSAGES } from './persistenceConstants';
+import type { SessionMeta } from './sessionMeta';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
 
 export interface SessionStoreState extends SessionSubtreeSlice {

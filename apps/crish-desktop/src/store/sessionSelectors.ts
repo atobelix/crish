@@ -21,15 +21,13 @@ import {
   useSessionStore,
   type SessionStoreState,
 } from './sessionStore';
+import { EMPTY_AGENTS, EMPTY_MESSAGES } from './persistenceConstants';
 import {
-  bumpEpochScalar,
-  EMPTY_AGENTS,
-  EMPTY_MESSAGES,
   extractSessionMeta,
-  isSessionMetaEqual,
   type SessionMeta,
   type SessionMetaExtensions,
-} from './sessionSubtreeModel';
+} from './sessionMeta';
+import { bumpEpochScalar, isSessionMetaEqual } from './sessionSubtreeModel';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
 
 export {

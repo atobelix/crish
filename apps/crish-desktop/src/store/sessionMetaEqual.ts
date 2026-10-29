@@ -1,5 +1,5 @@
 import type { SessionState } from './sessionStore';
-import type { SessionMeta, SessionMetaExtensions } from './sessionSubtreeModel';
+import type { SessionMeta, SessionMetaExtensions } from './sessionMeta';
 
 /** 浅比较一维数组元素引用一致性 */
 export function shallowArrayEqual<T>(

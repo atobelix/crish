@@ -20,9 +20,11 @@ import type {
 import {
   sessionDeltaWriteBarrier,
   SessionDeltaWriteBarrier,
+} from './sessionDeltaWriteBarrier';
+import {
   reconcileLateArrivalSnapshot,
   getSessionActivityTime,
-} from './sessionDeltaWriteBarrier';
+} from './sessionLateArrivalMerge';
 import {
   hydrateSessionsFromRust,
   persistAllSessionsRust,

@@ -40,20 +40,9 @@ import { errorStore } from '../../services/ErrorStore';
 import { parseFolderOrder, safeParseJson } from './sessionHydration';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 import { logger } from '../../services/LoggerService';
-import {
-  sessionDeltaWriteBarrier,
-  reconcileLateArrivalSnapshot,
-  SessionDeltaWriteBarrier,
-  DeltaWriteBarrier,
-} from './sessionDeltaWriteBarrier';
+import { sessionDeltaWriteBarrier } from './sessionDeltaWriteBarrier';
+import { reconcileLateArrivalSnapshot } from './sessionLateArrivalMerge';
 import { omitExternallyDeletedSessions } from '../import/externalSessionTombstone';
-
-export {
-  reconcileLateArrivalSnapshot,
-  sessionDeltaWriteBarrier,
-  SessionDeltaWriteBarrier,
-  DeltaWriteBarrier,
-};
 
 import {
   isLazySessionShell,
@@ -344,7 +333,7 @@ export async function persistAllSessionsRust(
     // 写屏障保护：在初始空数据状态或降级期间，拦截对全盘持久化的盲目冲刷 (VULN-06)
     if (sessionDeltaWriteBarrier.shouldBlockWrite('full_session_index', list)) {
       logger.warn(
-        `[persistAllSessionsRust] Blocked empty full flush (${list.length}) by DeltaWriteBarrier`,
+        `[persistAllSessionsRust] Blocked empty full flush (${list.length}) by SessionDeltaWriteBarrier`,
         {
           module: 'persist',
         }
@@ -428,7 +417,7 @@ export async function persistAllSessionsRust(
         sessionDeltaWriteBarrier.shouldBlockWrite('orphan_cleanup', keepIds)
       ) {
         logger.warn(
-          `[persistAllSessionsRust] Blocked orphan cleanup (${keepIds.size}) by DeltaWriteBarrier`,
+          `[persistAllSessionsRust] Blocked orphan cleanup (${keepIds.size}) by SessionDeltaWriteBarrier`,
           {
             module: 'persist',
           }

@@ -5,31 +5,11 @@
  * 1. 正交三子树物理拓扑 (metaById + messagesBySessionId + agentsBySessionId + sessionOrder)
  * 2. 内置寄存器级双标量代数槽位 (metaEpochById + messageEpochById)，支持 ((prev + 1) | 0) 32位整型原子递增
  * 3. 零反射固定 Schema 元数据提取与比对，流式推流期间 metaById 引用 100% 恒定不变 (===)
- * 4. 集合论 3-Way Subtree Merge 无损增量恢复算法 (performThreeWaySubtreeMerge)
- * 5. 三道物理增量写屏障与 CAS 世代版本号守卫协调器 (SessionPersistenceCoordinator)
  */
 
-import {
-  EMPTY_AGENTS,
-  EMPTY_MESSAGES,
-  extractSessionMeta,
-  type SessionMeta,
-} from './persistenceConstants';
+import { EMPTY_AGENTS, EMPTY_MESSAGES } from './persistenceConstants';
+import { extractSessionMeta, type SessionMeta } from './sessionMeta';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
-
-export {
-  EMPTY_AGENTS,
-  EMPTY_MESSAGES,
-  extractSessionMeta,
-  performThreeWaySubtreeMerge,
-  SessionPersistenceCoordinator,
-  type PersistCoordinatorState,
-  type SessionMeta,
-  type SessionMetaExtensions,
-  type SotaPersistPayload,
-  type SubtreeMergeInput,
-  type SubtreeMergeResult,
-} from './persistenceConstants';
 
 /** 正交三子树与内置双标量版本代数槽位核心切片 */
 export interface SessionSubtreeSlice {

@@ -7,11 +7,8 @@
  */
 
 import { isDraft, original } from 'immer';
-import {
-  extractSessionMeta,
-  shallowArrayEqual,
-  type SessionMeta,
-} from './sessionSubtreeModel';
+import { extractSessionMeta, type SessionMeta } from './sessionMeta';
+import { shallowArrayEqual } from './sessionSubtreeModel';
 import type { SessionState } from './types';
 
 // 侧栏投影域再导出（保持外部 import 路径 `./sessionIndex` 不变）

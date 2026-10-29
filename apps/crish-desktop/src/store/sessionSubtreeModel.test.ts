@@ -2,7 +2,7 @@
 import { act, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORAGE_PERSIST_DEBOUNCE_MS } from './persistenceConstants';
+import { EMPTY_AGENTS, EMPTY_MESSAGES } from './persistenceConstants';
 import {
   getSessionMetaById,
   reorderSessionOrderById,
@@ -26,19 +26,13 @@ import {
   useSessionTitle,
 } from './sessionSelectors';
 import { useSessionStore } from './sessionStore';
+import { extractSessionMeta } from './sessionMeta';
 import {
   bumpEpochScalar,
   createInitialSubtreeSlice,
-  EMPTY_AGENTS,
-  EMPTY_MESSAGES,
-  extractSessionMeta,
   isSessionMetaEqual,
   patchSubtreeSessionMeta,
-  performThreeWaySubtreeMerge,
-  SessionPersistenceCoordinator,
   updateSubtreeMessageText,
-  type PersistCoordinatorState,
-  type SotaPersistPayload,
 } from './sessionSubtreeModel';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
 
@@ -318,190 +312,6 @@ describe('Stage 01 — sessionSubtreeModel & Orthogonal 3-Subtree Architecture',
     expect(selectSessionMessageEpoch(undefined)(state)).toBe(0);
     expect(selectSessionOrder(state)).toEqual([]);
     expect(selectHydrationComplete(state)).toBe(true);
-  });
-
-  it('ASSERT-01-05: performThreeWaySubtreeMerge 集合论无损合并内存新增会话、重叠流式会话、磁盘历史会话并拦截墓碑会话', () => {
-    const localNewMeta = extractSessionMeta(
-      makeSession('local-new', '内存新建会话')
-    );
-    const sharedLocalMeta = extractSessionMeta({
-      ...makeSession('shared-1', '用户手动改名'),
-      titleSource: 'user',
-      timestamp: '2026-10-13T02:00:00.000Z',
-    });
-
-    const localInput = {
-      metaById: {
-        'local-new': localNewMeta,
-        'shared-1': sharedLocalMeta,
-      },
-      messagesBySessionId: {
-        'local-new': [makeMessage('m-local-1', 'local draft msg')],
-        'shared-1': [
-          makeMessage('m-shared-1', 'updated in memory'),
-          makeMessage('m-shared-2', 'streaming chunk'),
-        ],
-      },
-      agentsBySessionId: {
-        'local-new': EMPTY_AGENTS,
-        'shared-1': EMPTY_AGENTS,
-      },
-      sessionOrder: ['local-new', 'shared-1'],
-    };
-
-    const diskSessions: SessionState[] = [
-      {
-        ...makeSession('shared-1', '旧磁盘标题', [
-          makeMessage('m-shared-0', 'older disk msg'),
-          makeMessage('m-shared-1', 'stale disk copy'),
-        ]),
-        timestamp: '2026-10-13T01:00:00.000Z',
-        engineCursor: 88,
-        engineLastRunId: 'run-88',
-      },
-      makeSession('disk-history-1', '磁盘历史会话', [
-        makeMessage('m-disk-1', 'from sqlite'),
-      ]),
-      makeSession('disk-tombstoned', '已删除墓碑会话', [
-        makeMessage('m-dead', 'should not revive'),
-      ]),
-    ];
-
-    const tombstones = new Set(['disk-tombstoned']);
-    const merged = performThreeWaySubtreeMerge(localInput, diskSessions, (id) =>
-      tombstones.has(id)
-    );
-
-    // 1. 顺序保序且墓碑会话被彻底物理拦截
-    expect(merged.sessionOrder).toEqual([
-      'local-new',
-      'shared-1',
-      'disk-history-1',
-    ]);
-    expect(merged.metaById['disk-tombstoned']).toBeUndefined();
-    expect(merged.restoredFromDiskCount).toBe(1);
-
-    // 2. 重叠会话消息按 ID 去重保序合并，内存最新文本优先于磁盘旧副本
-    const sharedMsgs = merged.messagesBySessionId['shared-1']!;
-    expect(sharedMsgs.map((m) => m.id)).toEqual([
-      'm-shared-0',
-      'm-shared-1',
-      'm-shared-2',
-    ]);
-    expect(sharedMsgs[1]?.text).toBe('updated in memory');
-
-    // 3. 重叠会话元数据保留用户手动命名与最新时间戳，并无损合入磁盘 engineCursor
-    expect(merged.metaById['shared-1']?.title).toBe('用户手动改名');
-    expect(merged.metaById['shared-1']?.timestamp).toBe(
-      '2026-10-13T02:00:00.000Z'
-    );
-    expect(merged.metaById['shared-1']?.engineCursor).toBe(88);
-    expect(merged.metaById['shared-1']?.engineLastRunId).toBe('run-88');
-    expect(merged.metaById['shared-1']?.messageCount).toBe(3);
-
-    // 4. 磁盘独有历史会话完整恢复
-    expect(merged.metaById['disk-history-1']?.title).toBe('磁盘历史会话');
-    expect(merged.messagesBySessionId['disk-history-1']).toHaveLength(1);
-  });
-
-  it('ASSERT-01-06: SessionPersistenceCoordinator 三道物理写屏障与 CAS 世代号单飞锁验证', async () => {
-    vi.useFakeTimers();
-    expect(STORAGE_PERSIST_DEBOUNCE_MS).toBe(300);
-
-    const asyncWrites: SotaPersistPayload[] = [];
-    const syncWrites: SotaPersistPayload[] = [];
-    let resolveInFlight: (() => void) | null = null;
-
-    const coordinator = new SessionPersistenceCoordinator({
-      asyncWriter: (payload) => {
-        asyncWrites.push(payload);
-        return new Promise<void>((resolve) => {
-          resolveInFlight = resolve;
-        });
-      },
-      syncWriter: (payload) => {
-        syncWrites.push(payload);
-      },
-    });
-
-    let mockState: PersistCoordinatorState = {
-      metaById: {},
-      sessionOrder: [],
-      activeSessionId: '',
-      folderOrder: ['默认项目'],
-      hydrationComplete: false,
-    };
-    const storeLike = { getState: () => mockState };
-
-    // 屏障 1: hydrationComplete === false 期间绝对阻断防抖写盘与同步写盘
-    coordinator.schedulePersist(storeLike);
-    coordinator.flushPersistenceSync(storeLike);
-    vi.advanceTimersByTime(500);
-    expect(asyncWrites).toHaveLength(0);
-    expect(syncWrites).toHaveLength(0);
-
-    // 开启水合并写入首个有效会话
-    const meta1 = extractSessionMeta(makeSession('s1', '会话1'));
-    mockState = {
-      metaById: { s1: meta1 },
-      sessionOrder: ['s1'],
-      activeSessionId: 's1',
-      folderOrder: ['默认项目'],
-      hydrationComplete: true,
-    };
-
-    // 连续高频触发 5 次 schedulePersist，300ms 防抖合并为 1 次 IO
-    for (let i = 0; i < 5; i++) coordinator.schedulePersist(storeLike);
-    expect(asyncWrites).toHaveLength(0);
-
-    vi.advanceTimersByTime(300);
-    expect(asyncWrites).toHaveLength(1);
-    expect(coordinator.getGenerationSnapshot().isPersisting).toBe(true);
-
-    // 在首次异步写盘尚未完成 (in-flight) 期间产生新状态变更：验证 CAS 世代号尾随重排
-    const meta2 = extractSessionMeta(makeSession('s2', '会话2'));
-    mockState = {
-      ...mockState,
-      metaById: { s1: meta1, s2: meta2 },
-      sessionOrder: ['s1', 's2'],
-    };
-    coordinator.schedulePersist(storeLike);
-    vi.advanceTimersByTime(300);
-    // 单飞锁生效：前序写盘未完成前不并发重入
-    expect(asyncWrites).toHaveLength(1);
-
-    // 完成首次写盘后，自动触发尾随世代补写
-    resolveInFlight?.();
-    await Promise.resolve();
-    await Promise.resolve();
-    vi.advanceTimersByTime(300);
-    expect(asyncWrites).toHaveLength(2);
-    expect(asyncWrites[1]?.sessionOrder).toEqual(['s1', 's2']);
-    resolveInFlight?.();
-    await Promise.resolve();
-
-    // 屏障 2: 已确立非空基线后，异常空状态被刚性熔断，绝不覆写磁盘
-    mockState = {
-      ...mockState,
-      metaById: {},
-      sessionOrder: [],
-    };
-    coordinator.schedulePersist(storeLike);
-    vi.advanceTimersByTime(300);
-    coordinator.flushPersistenceSync(storeLike);
-    expect(asyncWrites).toHaveLength(2);
-    expect(syncWrites).toHaveLength(0);
-
-    // 屏障 3: BeforeUnload 终态同步排空 (flushPersistenceSync)
-    mockState = {
-      ...mockState,
-      metaById: { s1: meta1 },
-      sessionOrder: ['s1'],
-    };
-    coordinator.schedulePersist(storeLike);
-    coordinator.flushPersistenceSync(storeLike);
-    expect(syncWrites).toHaveLength(1);
-    expect(syncWrites[0]?.sessionOrder).toEqual(['s1']);
   });
 
   it('sessionIndex 纯 ID 顺序重排 (reorderSessionOrderById / reorderSessionOrderByIdList) 与 getSessionMetaById 验证', () => {

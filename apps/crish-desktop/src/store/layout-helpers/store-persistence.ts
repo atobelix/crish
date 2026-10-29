@@ -1,4 +1,8 @@
 import type { WorkspaceState } from '../types';
+import type {
+  PersistableStoreState,
+  SessionActivatableStore,
+} from './store-persistence-types';
 import { isDemoMode } from '../../api/appMode';
 import { logger, toErrMeta } from '../../services/LoggerService';
 import {
@@ -24,26 +28,13 @@ import { collectExternallyDeletedSessionIds } from '../../api/import/externalSes
 import { isSessionTabClosed } from '../workspace-shell/closedSessionTabs';
 import {
   BootHoldBarrier,
-  DeltaWriteBarrier,
   EmptySanitizeBarrier,
+} from '../../api/session-persistence/sessionWriteBarriers';
+import { sessionDeltaWriteBarrier } from '../../api/session-persistence/sessionDeltaWriteBarrier';
+import {
   performThreeWaySessionMerge,
   syncOrthogonalSessionSubtrees,
-  type PersistableStoreState,
-  type SessionActivatableStore,
-} from '../store-persistence';
-
-export {
-  BootHoldBarrier,
-  DeltaWriteBarrier,
-  EmptySanitizeBarrier,
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-  type PersistableStoreState,
-  type SessionActivatableStore,
-  type SessionWriteDelta,
-  type StoreApiLike,
-  type ThreeWayMergeResult,
-} from '../store-persistence';
+} from '../../api/session-persistence/sessionThreeWayMerge';
 
 export function serializeWorkspaceLayout<
   S extends {
@@ -168,7 +159,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
     initialState.sessions.map((s) => s.id).filter(Boolean)
   );
   const knownPersistedIds = new Set<string>(baseSessionIds);
-  const deltaBarrier = new DeltaWriteBarrier();
+  const deltaBarrier = sessionDeltaWriteBarrier;
   deltaBarrier.seedFromSessions(
     initialState.sessions,
     initialState.activeSessionId,
@@ -201,12 +192,13 @@ export function initStorePersistence<S extends PersistableStoreState>(
         if (
           EmptySanitizeBarrier.shouldBlockEmptyWrite(
             cur.sessions,
-            knownPersistedIds
+            knownPersistedIds,
+            isSessionTombstoned
           )
         ) {
           return;
         }
-        // 写屏障 2（DeltaWriteBarrier）：无实质脏会话或元数据变化时跳过写盘
+        // 写屏障 2（SessionDeltaWriteBarrier 指纹差分）：无实质脏会话或元数据变化时跳过写盘
         const delta = deltaBarrier.computeDelta(
           cur.sessions,
           cur.activeSessionId,
