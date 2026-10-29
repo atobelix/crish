@@ -133,11 +133,6 @@ pub mod fuzzy {
             let prepared = self.prepare_query(query);
             self.score_and_indices_prepared(&prepared, target)
         }
-
-        /// Simple score-only interface (backward compatible).
-        pub fn score(&self, query: &str, target: &str) -> i32 {
-            self.score_and_indices(query, target).0
-        }
     }
 
     // 折叠 case 时逐字符构建「折叠后位置 → 原始位置」映射（F3-03 根因修复）：
