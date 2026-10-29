@@ -18,7 +18,7 @@ import {
   assertCollabOpsWire,
 } from '@crish/block-paper-contract';
 import { guardStructureIntent } from '@crish/editor-kit';
-import { resetIntentIdSeqForTests, nextIntentId } from './TextLeafModel';
+import { resetIntentIdSeqForTests, nextIntentId } from '../intentId';
 import {
   matchMdPrefix,
   shouldTriggerMdPrefix,

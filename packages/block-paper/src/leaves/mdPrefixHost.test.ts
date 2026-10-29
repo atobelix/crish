@@ -13,7 +13,7 @@
  * - 不回退 direction 纯函数测；composing 拒 / 与 slash 不互抹 本文件钉死
  */
 import { describe, expect, it, beforeEach } from 'vitest';
-import { resetIntentIdSeqForTests } from './TextLeafModel';
+import { resetIntentIdSeqForTests } from '../intentId';
 import {
   buildSlashInsertIntent,
   type SlashInsertIntent,
@@ -24,10 +24,10 @@ import {
   commitMdPrefixFromLeaf,
   simulateMdPrefixSubmit,
   tryMdPrefixAfterLeafEdit,
-  createMockTurnIntoSink,
   createTurnIntoProvisionalCollabSink,
   createProductIntentAuditSinks,
 } from './mdPrefixHost';
+import { createMockTurnIntoSink } from './mdPrefixHost.audit';
 import { TextLeafModel } from './TextLeafModel';
 
 beforeEach(() => {

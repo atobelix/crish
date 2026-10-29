@@ -77,17 +77,6 @@ export {
   type ApplyDiffResult,
 } from './diff/applyProjectionDiff';
 
-export {
-  diffToReplace,
-  isHighSurrogate,
-  isLowSurrogate,
-  isSurrogateCodePoint,
-  utf16OffsetToUnicodeScalar,
-  unicodeScalarToUtf16Offset,
-  countUnicodeScalars,
-  type DiffReplaceResult,
-} from './diff/diffToReplace';
-
 // Selection（W3-B）
 export {
   SelectionStore,
@@ -142,7 +131,6 @@ export {
   IME_MATRIX_CELLS,
   IME_MATRIX_ASSERTS,
   IME_MATRIX_STATUS_GLYPH,
-  IME_MATRIX_PACKAGE_TRACK,
   imeMatrixStatusGlyph,
   imeMatrixCellsFor,
   imeMatrixCellsForPlatform,
@@ -154,7 +142,6 @@ export {
   imeMatrixL1PlusReady,
   imeMatrixL1AssertIds,
   imeMatrixL1PlusAssertIds,
-  type ImeMatrixPackageTrack,
   type ImeMatrixAssertId,
   type ImeMatrixPlatform,
   type ImeMatrixRequirement,

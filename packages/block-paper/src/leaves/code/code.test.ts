@@ -8,9 +8,10 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import type { TextEditIntent } from '@crish/block-paper-contract';
-import { resetIntentIdSeqForTests, nextIntentId } from '../TextLeafModel';
+import { resetIntentIdSeqForTests, nextIntentId } from '../../intentId';
 import { createMockIntentSink, submitIntent } from '../intentBridge';
-import { CodeLeafModel, createMockCodeLeafHost, mountCodeLeaf } from './index';
+import { CodeLeafModel, mountCodeLeaf } from './index';
+import { createMockCodeLeafHost } from './CodeLeafHost';
 
 describe('CodeLeafModel', () => {
   beforeEach(() => {

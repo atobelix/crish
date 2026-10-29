@@ -49,10 +49,8 @@ export {
 
 // mock / provisional / 双通道审计
 export {
-  createMockTurnIntoSink,
   createTurnIntoProvisionalCollabSink,
   createProductIntentAuditSinks,
-  type MockTurnIntoSink,
   type TurnIntoProvisionalCollabSink,
   type ProductIntentAuditEntry,
   type ProductIntentAuditSinks,

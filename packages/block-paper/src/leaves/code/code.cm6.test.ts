@@ -21,8 +21,9 @@ import {
   Cm6CodeLeafHost,
   isCm6CodeLeafHost,
 } from './Cm6CodeLeafHost';
-import { CodeLeafModel, createMockCodeLeafHost, mountCodeLeaf } from './index';
-import { resetIntentIdSeqForTests } from '../TextLeafModel';
+import { CodeLeafModel, mountCodeLeaf } from './index';
+import { createMockCodeLeafHost } from './CodeLeafHost';
+import { resetIntentIdSeqForTests } from '../../intentId';
 
 // ---------------------------------------------------------------------------
 // 依赖接线：真实 CM6 包可 import + EditorState 可构造

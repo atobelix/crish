@@ -7,7 +7,7 @@ import {
   utf16OffsetToUnicodeScalar,
   unicodeScalarToUtf16Offset,
   countUnicodeScalars,
-} from './diffToReplace';
+} from '@crish/block-paper-contract';
 
 describe('diffToReplace - Surrogate Aware & Scalar Calculations', () => {
   describe('代理项判定工具', () => {

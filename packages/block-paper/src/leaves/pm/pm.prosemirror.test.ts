@@ -16,7 +16,10 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import type { TextEditIntent } from '@crish/block-paper-contract';
+import {
+  diffToReplace,
+  type TextEditIntent,
+} from '@crish/block-paper-contract';
 import { ImeMachine } from '@crish/editor-kit';
 
 import {
@@ -26,18 +29,14 @@ import {
   textOffsetToPmPos,
   pmPosToTextOffset,
   PmTextLeaf,
-  diffToReplace,
   isPmTextLeaf,
   PmTextLeafHost,
   createPmLeafEditorState,
   isPmTextLeafHost,
 } from './index';
 import { createMockIntentSink, submitIntent } from '../intentBridge';
-import {
-  TextLeafModel,
-  nextIntentId,
-  resetIntentIdSeqForTests,
-} from '../TextLeafModel';
+import { TextLeafModel } from '../TextLeafModel';
+import { nextIntentId, resetIntentIdSeqForTests } from '../../intentId';
 
 // ---------------------------------------------------------------------------
 // 依赖接线：真实 prosemirror-* 可 import

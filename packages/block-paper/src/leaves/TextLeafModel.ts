@@ -19,9 +19,8 @@ import {
   asUtf16Offset,
   utf16OffsetToUnicodeScalar,
 } from '@crish/block-paper-contract';
-// SD-05：id 生成在中性 `intentId.ts`；本文件 re-export 保持 leaves 既有 import 路径
+// SD-05：id 生成在中性 `intentId.ts`
 import { nextIntentId } from '../intentId';
-export { nextIntentId, resetIntentIdSeqForTests } from '../intentId';
 
 // ---------------------------------------------------------------------------
 // 工具

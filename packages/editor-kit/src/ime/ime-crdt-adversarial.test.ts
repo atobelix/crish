@@ -23,7 +23,7 @@ import {
   utf16OffsetToUnicodeScalar,
   unicodeScalarToUtf16Offset,
   countUnicodeScalars,
-} from '../diff/diffToReplace';
+} from '@crish/block-paper-contract';
 
 /**
  * 校验指定字符串中绝无任何撕裂的代理项（高位无低位跟从、或低位无高位先导）。

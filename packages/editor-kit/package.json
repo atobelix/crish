@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "块纸面投影控制面：Viewport/HeightMap/pin/Diff + SelectionStore + IME 状态机（W3-A/B）",
+  "description": "视口、pin、投影 diff、选区与 IME 状态机。",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -2,7 +2,7 @@
  * IME 矩阵契约测试（Round8 + Round9 + **W6-B-S** Skeleton · 可执行化子集）
  *
  * 映射文档：`docs/block-workspace-architecture/plans/specs/ime-matrix.md`
- * 常量：`IME_MATRIX_CELLS` / `IME_MATRIX_PACKAGE_TRACK`
+ * 常量：`IME_MATRIX_CELLS`
  *
  * ## 包轨（强制）
  * - 本文件 = **W6-B-S**（L0/L1/L1+ 自动化与矩阵契约加深）
@@ -34,7 +34,6 @@ import type { ImeRemotePatch } from './remotePatchGuard';
 import {
   IME_MATRIX_ASSERTS,
   IME_MATRIX_CELLS,
-  IME_MATRIX_PACKAGE_TRACK,
   IME_MATRIX_STATUS_GLYPH,
   imeMatrixAnyE2e,
   imeMatrixCellsByStatus,
@@ -160,14 +159,6 @@ describe('IME matrix · L0 常量成型', () => {
  * - **≠ EL**：本 describe 仅断言矩阵常量与机测语义，不写 EL 关闭
  */
 describe('IME matrix · W6-B-S 包轨与矩阵格抽样（≠ W6-B / ≠ 叶子核 / ≠ EL）', () => {
-  it('W6-B-S: 包轨字面量钉死为 W6-B-S（带 -S），禁止无 -S 别名', () => {
-    expect(IME_MATRIX_PACKAGE_TRACK).toBe('W6-B-S');
-    // 可证伪：去 -S 或改 Strict 字样即失败
-    expect(IME_MATRIX_PACKAGE_TRACK.endsWith('-S')).toBe(true);
-    expect(IME_MATRIX_PACKAGE_TRACK).not.toBe('W6-B');
-    expect(IME_MATRIX_PACKAGE_TRACK.includes('Strict')).toBe(false);
-  });
-
   it('W6-B-S: L1 与 L1+ 就绪；L2/叶子核未关（无 e2e · openRequired>0）', () => {
     expect(imeMatrixL1Ready()).toBe(true);
     expect(imeMatrixL1PlusReady()).toBe(true);
@@ -927,7 +918,6 @@ describe('IME matrix · A-IME-06 合成中远端/Agent 暂缓与禁 remount', ()
       expect(cell.status).not.toBe('e2e');
     }
     // 包轨与 L2/L3 边界不回退
-    expect(IME_MATRIX_PACKAGE_TRACK).toBe('W6-B-S');
     expect(imeMatrixAnyE2e()).toBe(false);
     expect(imeMatrixLeafCoreLockEligible()).toBe(false);
     // 07/08 仍 open —— 未假关全矩阵

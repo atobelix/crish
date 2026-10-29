@@ -1,53 +1,10 @@
 /**
  * @crish/block-paper
  *
- * 块纸面呈现层（W3-C chrome + W3-D 叶子 Intent + W3-E 代码叶 + W3-E′ 选区/多选/焦点 + W3-F 结构 Intent + W3-H 方向）：
- * - BlockChromeModel：把手 / 折叠 / 多选高亮 / 静默 L0 / 批量结构 Intent
- * - **W3-E′** `BlockSelectionBridge`：跨块 multi + anchor/head + focus 交互（可点名可测；**≠ EL-01**）
- * - SlashMenuModel：slash 打开·过滤·关闭·选中 → slash_insert；composing 禁开/禁交
- * - structureIntents：insert/delete/move/collapse/slash_insert + PaperIntent 联合
- * - silentFixture：N 块假文档投影（ProjectionDiff / MemoryBlock）
- * - TextLeafModel / intentBridge / lineWindow：plain 叶子 Intent（W3-D-S 形状测可用 mock）
- * - **PmTextLeaf / PmTextLeafHost**：真 prosemirror 叶 → TextEditIntent（**W3-D-PM**）
- * - **`createCollabApplySink`**：**生产默认** Intent → wire → 注入 `applyOps`（真 apply 形状）
- * - CodeLeafModel / mountCodeLeaf / Cm6CodeLeafHost：代码叶（可聚焦 + text_edit + 真 CM6 host）
- * - codeFlavourMap / ReadonlyCodePresentation：flavour/fence↔collab kind + 只读呈现
- * - `submitStructureToCollabWire`：PaperIntent → collab wire JSON（喂 RS `ops_from_json`）
- * - **W3-H 方向**：`mdPrefix` / `turnInto` / `unknownFlavourPlaceholder`（A-BLK-08/09/11 方向）
- *
- * **包边界 / 写锥（G-INV-3）**：
- * - **生产写路径**：`createCollabApplySink({ applyOps })` → IPC/库 → `DocSession::apply`
- * - `createMockIntentSink` **仅**形状测；**不得**再当生产默认
- * - 真 apply 库侧绿：`conex-doc-collab` 集成测 `w3_d_*`（TextEdit + Structure → 树/`read_text`）
- * - 禁止 serialize(DOM/pmDoc) 持久化；禁止 DOM 当真相
- * - **轨**：
- *   - **W3-D-S** = plain TextLeaf + mock（形状）
- *   - **W3-D-PM** = 真 PM 适配器入库；单独 **≠** W3-D 终局
- *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
- *   - **W3-E 方向子集** = 代码叶 Model + 真 CM6 host + flavour/fence→kind 映射 + 只读呈现；
- *     测 `leaves/code/*.test.ts`；**≠** A-BLK-14 产品 e2e；**≠** EL-01
- *   - **W3-E′ 选区/多选/焦点方向** = `BlockSelectionBridge`（跨块 multi + anchor/head + focus 交互）；
- *     测 `chrome/blockSelection.multiSelect.test.ts`；**≠ EL-01**；**≠** Notion 框选 e2e
- *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.shape.test.ts`）
- *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
- *     （`chrome.apply.test.ts` + RS `w3_f_*`）
- *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主/拖拽预览子集）；
- *     测 `chrome.dom.test.ts` · `chrome.drag.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
- *   - **slash 选中→sink** = `selectSlashItemAndSubmit` / `groupSlashCatalogItems`（React 浮层共用写路径）
- *   - 桌面 **React slash 浮层** = `apps/crish-desktop/.../SlashMenuOverlay`（包内无 React 依赖）
- *   - **W3-G PaperList** = 仅窗口∪pin 挂 DOM（`list/PaperList` + `buildMountPlan`）；
- *     测 `paperList.test.ts`；结构门 DOM 上界；假数据 **≠** 权威；**≠** EL-01 / A-PERF 数值
- *   - **W3-H 方向子集** = MD 前缀快路径 + turn-into Intent + 未知 flavour 占位；
- *     composing 禁前缀；测 `leaves/direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
- *   - **W3-H 产品接线** = `mdPrefixHost`：叶输入 → `commitMdPrefixFromLeaf` /
- *     `simulateMdPrefixSubmit` → 可注入 TurnInto sink（mock / provisional collab）；
- *     与 slash_insert **双通道不互抹**；CONN-D：RS 消费 pending / `Op::TurnInto` 改 kind；
- *     测 `leaves/mdPrefixHost.test.ts` + RS `conn_d_turn_into_apply`
- *   - **chrome 视觉皮** = `@crish/block-paper/chrome.css`（落点线/slash/把手热区 token 化）；
- *     **视觉皮 ≠ EL-01**
- *   - **PaperList 视觉皮** = `@crish/block-paper/paper-list.css`（列表 gap/pad/gutter/滚动/块行）；
- *     与 chrome / note-paper module 同温；**皮 ≠ EL-01 / ≠ A-PERF**
- *   - **≠ EL-01**；**≠ A-BLK 全表 e2e**；**≠** 块工作区完成
+ * 块纸面呈现层：chrome（把手 / 折叠 / 多选）、slash 菜单、结构 Intent、文本叶（plain / ProseMirror）
+ * 与代码叶（CM6）、MD 前缀与 turn-into、PaperList 窗口挂载。
+ * 生产写路径：Intent → collab wire → 注入 `applyOps`（RS `DocSession::apply`）；禁止 serialize(DOM) 持久化。
+ * 假数据工厂与 mock sink 只留在各实现文件里，不在本入口导出（测试直引实现文件）。
  */
 
 // Block chrome 状态
@@ -160,22 +117,9 @@ export {
   type BuildSlashInsertInput,
 } from './chrome/structureIntents';
 
-// 静默假数据
-export {
-  createSilentFixture,
-  createSilentProjectionDiff,
-  listSilentBlocks,
-  type SilentBlockProps,
-  type SilentFixtureOptions,
-  type SilentFixture,
-} from './chrome/silentFixture';
-
 // ---------------------------------------------------------------------------
 // W3-D：叶子文本 Intent + 真 apply sink 工厂
 // ---------------------------------------------------------------------------
-
-// SD-05：中性 intentId（chrome/leaves 同向依赖；禁止 chrome→TextLeafModel 仅为 id）
-export { nextIntentId, resetIntentIdSeqForTests } from './intentId';
 
 export {
   TextLeafModel,
@@ -188,15 +132,12 @@ export {
   /** 生产默认：Intent → wire → applyOps（DocSession::apply 等价） */
   createCollabApplySink,
   createDocSessionApplySink,
-  /** 仅测形状；禁止作生产默认写路径 */
-  createMockIntentSink,
   type IntentSink,
   type IntentSinkResult,
   type SubmitIntentOptions,
   type SubmitIntentResult,
   type SubmitIntentRejectCode,
   type SubmittableIntent,
-  type MockIntentSink,
   type ApplyOpsAdapter,
   type CollabApplySinkOptions,
   type CollabApplySink,
@@ -229,7 +170,6 @@ export {
   textOffsetToPmPos,
   pmPosToTextOffset,
   PmTextLeaf,
-  diffToReplace,
   isPmTextLeaf,
   PmTextLeafHost,
   createPmLeafEditorState,
@@ -272,7 +212,6 @@ export {
 
 export {
   CodeLeafModel,
-  createMockCodeLeafHost,
   DomCodeLeafHost,
   mountCodeLeaf,
   Cm6CodeLeafHost,
@@ -301,8 +240,6 @@ export {
   type CodeEditRejectCode,
   type CodeEditAttempt,
   type CodeLeafHost,
-  type MockCodeLeafHost,
-  type MockCodeLeafHostOptions,
   type MountCodeLeafOptions,
   type CodeLeafMount,
   type Cm6CodeLeafHostOptions,
@@ -369,7 +306,6 @@ export {
   commitMdPrefixFromLeaf,
   simulateMdPrefixSubmit,
   tryMdPrefixAfterLeafEdit,
-  createMockTurnIntoSink,
   createTurnIntoProvisionalCollabSink,
   createProductIntentAuditSinks,
   type MdPrefixLeafSnapshot,
@@ -379,7 +315,6 @@ export {
   type MdPrefixCommitResult,
   type SimulateMdPrefixSubmitInput,
   type SimulateMdPrefixSubmitResult,
-  type MockTurnIntoSink,
   type TurnIntoProvisionalCollabSink,
   type ProductIntentAuditEntry,
   type ProductIntentAuditSinks,

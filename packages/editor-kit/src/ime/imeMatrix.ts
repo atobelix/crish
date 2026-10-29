@@ -3,13 +3,6 @@
  *
  * 权威文档：`docs/block-workspace-architecture/plans/specs/ime-matrix.md`
  *
- * ## 包轨钉死（W6-B-S）
- * - 本模块轨 = **W6-B-S**（必须带 `-S`）：L0 矩阵成型 + L1/L1+ 语义自动化可测加深
- * - **W6-B 方向加深**：A-IME-06 可标 🟨automated（语义子集）；**仍禁止**写 e2e / 去 `-S`
- * - **≠ W6-B** Strict：WebView L2 必测格 e2e / 叶子核锁定门禁属 W6-B，本文件不得冒充
- * - **≠ 叶子核锁定门禁**：L3「叶子核=PM」仅在 L2 必测全 `e2e` 后；`imeMatrixLeafCoreLockEligible` 在 Skeleton 下应恒 false
- * - **≠ EL**：不关闭任何 EL（IME 锁定相关仅认 **W6-B** + 真 PM）；见 EL-dashboard 表 E
- *
  * 状态语义：
  * - `open` → 文档表 `☐`
  * - `automated` → `🟨自动化`（纯逻辑/契约；不替代 WebView e2e）
@@ -17,21 +10,6 @@
  *
  * 关闭「叶子核=PM」仅认必测格 `e2e`，见矩阵 L2/L3——**W6-B-S 永不写 e2e**。
  */
-
-// ---------------------------------------------------------------------------
-// 包轨（W6-B-S Skeleton · 程序可读）
-// ---------------------------------------------------------------------------
-
-/**
- * IME 矩阵当前交付包轨。
- *
- * - 值必须为 **`W6-B-S`**（带 `-S`），禁止去 `-S` 冒充 W6-B Strict
- * - 本常量仅标识 L0/L1 自动化骨架轨，**不**表示 L2 e2e / L3 锁核 / EL 关闭
- */
-export const IME_MATRIX_PACKAGE_TRACK = 'W6-B-S' as const;
-
-/** 包轨字面量类型（钉死 W6-B-S，拒绝无 `-S` 别名） */
-export type ImeMatrixPackageTrack = typeof IME_MATRIX_PACKAGE_TRACK;
 
 // ---------------------------------------------------------------------------
 // 类型

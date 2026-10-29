@@ -25,6 +25,7 @@ import {
   type IntentId,
   type TextEditIntent,
   asUtf16Offset,
+  diffToReplace,
   utf16OffsetToUnicodeScalar,
 } from '@crish/block-paper-contract';
 import { nextIntentId } from '../../intentId';
@@ -35,9 +36,6 @@ import {
   textOffsetToPmPos,
   pmPosToTextOffset,
 } from './schema';
-import { diffToReplace } from './diffToReplace';
-
-export { diffToReplace };
 
 // ---------------------------------------------------------------------------
 // 类型
