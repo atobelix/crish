@@ -16,15 +16,14 @@ impl ToolExecutor {
         cx: &PostExecContext<'_>,
         timing: ExecTiming,
         exec_input: Value,
-        recorded: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+    ) -> ClassifiedToolResult {
         match outcome {
             None => {
                 let mut r = Self::cancelled_result(cx.call, timing.duration_ms);
                 r.attempt = timing.attempt;
                 r.executed_input = Some(exec_input);
                 r.occurred_at_ms = Some(timing.occurred_at_ms);
-                (r, recorded)
+                r
             }
             Some(Err(_)) => {
                 let mut r = ClassifiedToolResult::error(
@@ -41,27 +40,18 @@ impl ToolExecutor {
                 r.attempt = timing.attempt;
                 r.executed_input = Some(exec_input);
                 r.occurred_at_ms = Some(timing.occurred_at_ms);
-                (r, recorded)
+                r
             }
             Some(Ok(Ok(tool_result))) => {
                 if tool_result.deduplicated {
-                    self.handle_dedup_success(tool_result, cx, timing, exec_input, recorded)
+                    self.handle_dedup_success(tool_result, cx, timing, exec_input)
                         .await
                 } else {
-                    self.handle_success_with_middleware(
-                        tool_result,
-                        cx,
-                        timing,
-                        exec_input,
-                        recorded,
-                    )
-                    .await
+                    self.handle_success_with_middleware(tool_result, cx, timing, exec_input)
+                        .await
                 }
             }
-            Some(Ok(Err(err))) => {
-                self.handle_error_branch(err, cx, timing, exec_input, recorded)
-                    .await
-            }
+            Some(Ok(Err(err))) => self.handle_error_branch(err, cx, timing, exec_input).await,
         }
     }
 
@@ -71,8 +61,7 @@ impl ToolExecutor {
         cx: &PostExecContext<'_>,
         timing: ExecTiming,
         exec_input: Value,
-        recorded: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+    ) -> ClassifiedToolResult {
         if let Some(hooks) = &self.hooks {
             // 观察面分派：失败只记日志，不阻断工具结果（BLK-05：不得丢弃赋值吞错）
             if let Err(err) = hooks
@@ -100,7 +89,7 @@ impl ToolExecutor {
         // SL-PERF-12：直接移交所有权，避免 Value 深克隆
         r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(timing.occurred_at_ms);
-        (r, recorded)
+        r
     }
 
     async fn handle_success_with_middleware(
@@ -109,8 +98,7 @@ impl ToolExecutor {
         cx: &PostExecContext<'_>,
         timing: ExecTiming,
         exec_input: Value,
-        recorded: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+    ) -> ClassifiedToolResult {
         // U-OUT-RS：中间件链仍操作 Value；ok() 收口时包 Arc 作出口共享
         // SL-PERF-12：无中间件时直接使用工具原生输出，不进入链式处理
         let final_output = if self.middleware.is_empty() {
@@ -148,7 +136,7 @@ impl ToolExecutor {
         // SL-PERF-12：直接移交所有权，避免 Value 深克隆
         r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(timing.occurred_at_ms);
-        (r, recorded)
+        r
     }
 
     pub(super) async fn apply_on_result_chain(
@@ -191,8 +179,7 @@ impl ToolExecutor {
         cx: &PostExecContext<'_>,
         timing: ExecTiming,
         exec_input: Value,
-        recorded: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+    ) -> ClassifiedToolResult {
         if !self.middleware.is_empty() {
             self.apply_on_error_chain(cx.tool, &exec_input, &err, cx.mw_ctx)
                 .await;
@@ -243,7 +230,7 @@ impl ToolExecutor {
         // SL-PERF-12：直接移交所有权，避免 Value 深克隆
         r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(timing.occurred_at_ms);
-        (r, recorded)
+        r
     }
 
     pub(super) async fn apply_on_error_chain(

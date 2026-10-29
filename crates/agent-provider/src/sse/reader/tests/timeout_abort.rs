@@ -65,6 +65,29 @@ async fn abort_interrupts_pending_read() {
     );
 }
 
+/// abort_on：触发源完成即中继 abort
+#[tokio::test]
+async fn abort_on_relays_trigger() {
+    let (flag, mut abort) = AbortFlag::new();
+    let relay = tokio::spawn(flag.abort_on(async {}));
+    tokio::time::timeout(Duration::from_millis(100), abort.wait_abort())
+        .await
+        .expect("触发源完成后观察柄应收到 abort");
+    relay.await.unwrap();
+}
+
+/// abort_on：观察柄全部释放（流已结束）即退出，触发源永不完成也不常驻
+#[tokio::test]
+async fn abort_on_exits_when_handles_dropped() {
+    let (flag, abort) = AbortFlag::new();
+    let relay = tokio::spawn(flag.abort_on(std::future::pending()));
+    drop(abort);
+    tokio::time::timeout(Duration::from_millis(100), relay)
+        .await
+        .expect("观察柄释放后中继任务应退出")
+        .unwrap();
+}
+
 #[tokio::test]
 async fn abort_before_start_returns_aborted() {
     let (flag, mut abort) = AbortFlag::new();

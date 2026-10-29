@@ -49,7 +49,6 @@ pub(super) struct RaceExecParams<'a> {
     pub guard: Option<&'a ToolIdempotencyGuard>,
     pub policy: &'a ToolExecutionPolicy,
     pub timeout: std::time::Duration,
-    pub abort: Option<&'a crate::safe_point::AbortSignal>,
 }
 
 /// 后置执行中间件与收尾上下文聚合

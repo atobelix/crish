@@ -17,7 +17,7 @@
 //!   预加后一次判定），任一拒绝 → 整体失败零 run（session_agents 无新增行）；
 //!   批量与 DAG 调度器（flow_graph.rs）并存，两机制不互斥，编排权在主 Agent；
 //! - 伪造审批防护（结果信封层边界声明，ref-analysis 01 Top 3）；
-//! - 写操作挂 I3 审批基础设施（AskChannel 接线面原样挂靠，不重建）。
+//! - 写操作挂 I3 审批基础设施（执行器判点 + 审批门，不重建）。
 //!
 //! 接线契约（对齐 I3-S7 revert_guard 模式）：agent-tools 是叶子 crate，
 //! 生产代码不依赖 conex-db / orchestrator——session_agents 落库与独立 run

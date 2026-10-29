@@ -18,7 +18,9 @@
 //!   工具问询）/ Smart（敏感命令升级审批）/ Full（除物理红线外全部放行）；
 //!   requires_approval
 //!   错误分类为 ApprovalRequired（不再折叠 SoftDeny），走真实审批——用户
-//!   同意后重试执行，拒绝返回明确拒绝结果；ctx.ask 接线 ApprovalChannel；
+//!   同意后重试执行，拒绝返回明确拒绝结果；
+//! - 中止链（SL-01）：工具上下文的 abort_token 为 Run 级 AbortSignal 的子令牌，
+//!   Run 中止即级联取消在途工具，不派生监听任务；
 //! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）；
 //! - 中间件链 + 插件钩子（ToolMiddleware / HookRegistry，见模块中部「中间件与
 //!   审批的优先级语义」）：
@@ -49,7 +51,6 @@
 // 统一豁免该 lint 保持接线完整。
 #![allow(unused_imports)]
 
-use crate::approval::ApprovalChannel;
 use crate::approval_router::{
     approval_reason_from_args, relay_denied_message, requester_from_context,
 };

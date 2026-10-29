@@ -589,16 +589,12 @@ impl ProviderCall for HttpProviderCall {
         //      直接解析完整 candidates 与 usage，杜绝无 data: 前缀导致的空流假错误；
         //    - 否则：走标准增量 SSE 分帧读取流。
         let (abort_flag, abort_handle) = AbortFlag::new();
-        if let Some(signal) = &abort_signal {
+        if let Some(signal) = abort_signal {
             if signal.is_aborted() {
                 abort_flag.abort();
             } else {
-                let sig = signal.clone();
-                let flag = abort_flag.clone();
-                tokio::spawn(async move {
-                    sig.wait_aborted().await;
-                    flag.abort();
-                });
+                // 中继以流的观察柄为界：流结束/丢弃即退出，不随请求累积常驻任务
+                tokio::spawn(abort_flag.abort_on(async move { signal.wait_aborted().await }));
             }
         }
 
