@@ -72,7 +72,7 @@ Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
 
 | Facade | hook | 覆盖 | 命令式 |
 |--------|------|------|--------|
-| 会话 | `useSessionStore` / `useSessionField` / `useActiveSession*` | sessions、sessionsById、activeSession*、SessionActions | `getSessionStoreState` / `getSessionById` / `getSessionAgent` |
+| 会话 | `useSessionStore` / `useSessionField` / `useActiveSession*` | sessionsById、sessionOrder、activeSession*、SessionActions | `getSessionStoreState` / `getSessionById` / `getSessionAgent` / `selectSessionList` |
 | 工作区 | `useWorkspaceStore` / `useWorkspaceField` / `useActiveWorkspace*` | workspaces、draggedTab、dropPreview、WorkspaceActions | `getWorkspaceStoreState` / `getActiveWorkspace` / `setGroupActiveCard` / `setDropPreview` / `focusExistingPanelCard` |
 | 设置 UI | `useSettingsUiStore` / `useSettingsUiField` / `usePermissionMode`… | showSettingsOverlay、settings tab（layout 直读）；permission/plan 经 permissionStore 委托 | `getSettingsUiState` / `openSettings` / `closeSettings` / `toggleSettingsOverlay` / `setPermissionMode`（→permissionStore） |
 
@@ -83,7 +83,7 @@ Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
 
 | 状态 | 归属 | 说明 |
 |------|------|------|
-| sessions / sessionsById / folderOrder / activeSession* / agents | 会话域（layoutStore 切片） | 高频；后续波次拆独立 store |
+| sessionsById / sessionOrder / folderOrder / activeSession* / agents | 会话域（sessionStore） | 高频；sessionOrder 不进 partialize |
 | workspaces / draggedTab / dropPreview / tabMode | 工作区域（layoutStore 切片） | DnD 与布局 |
 | uiSize / shellChromeMode / chatMainSurface / sidebarCollapsed | 布局 chrome（layoutStore） | 壳层 UI |
 | showSettingsOverlay / settingsActiveTab / openSettings | 布局 chrome（layoutStore） | 设置浮层 = 布局 UI |
@@ -109,10 +109,10 @@ api/* 可 → store；store 避免 → 组件
 
 ## `sessionsById` 索引
 
-- `sessions: SessionState[]`：保序（侧栏、拖拽重排）。
-- `sessionsById: Record<string, SessionState>`：热路径 **O(1)**；**与数组元素同一对象引用**（immer 要求）。
-- 结构变更后：`reindexSessionsById` / `buildSessionsById` / create·branch 时点写索引。
-- 查找：`getSessionById`（索引未命中则线性回退并回填）。
+- 唯一集合真源：`sessionsById: Record<string, SessionState>` + `sessionOrder: string[]`（侧栏顺序，不进 partialize）。
+- 有序列表：`listSessions` / `selectSessionList`（单槽 memo，键是这两份引用）。
+- 结构写入：`replaceSessions` / `insertSessionAt` / `deleteSessionFromIndexed` / `reorderSessionOrderById`。
+- 查找：`getSessionById`（只读 map）。
 - 一致性：`checkSessionsIndex` / `isSessionsIndexConsistent` / `assertSessionsIndexConsistent`（测试与调试；热路径勿 assert）。
 
 ## 会话消息水合（lazy vs eager）
@@ -124,21 +124,18 @@ api/* 可 → store；store 避免 → 组件
 | `setActiveSessionId` | 空且 `!hydratedFromEngine` → 拉 `session-events` | `needsEngineMessageHydrate` |
 | `prepareSessionsForUi` | **不** strip messages | 只补默认标题 + prune 幽灵空壳（I-DRAFT） |
 
-因此调试/MCP 见 `sessions[].messages` 全 length 0 而 titles 存在：**对未 activate 的远程壳是预期**，不是 sessions 丢消息。
-activate 后 `sessions[]` 与 `sessionsById` 同引用同时有正文；`hydratedFromEngine=true`。
+因此调试/MCP 见未 activate 会话的 messages 全 length 0 而 titles 存在：**对未 activate 的远程壳是预期**，不是丢消息。
+activate 后 `sessionsById[id]` 上有正文；`hydratedFromEngine=true`。
 
-**Immer 写路径注意**：只经 `sessionsById[id]` mutate 时，immer 可能把 map 值 fork 成新对象，
-`sessions[]` 仍持旧引用 → 看起来像「列表丢消息」。activate 水合与结构性写入须用
-`getSessionForWrite`（优先 `sessions[]` 再 rebind map），或依赖 `withAutoIndex` 在
-sessions 数组引用变化时从数组重建 map。
+**Immer 写路径**：单条变更直接改 `sessionsById[id]`；增删与重排走 `insertSessionAt` / `replaceSessions` / `reorderSessionOrderById`。
 
 ```ts
-// ✅
-const s = getSessionById(id);
+// 按 id 读
+const snap = getSessionById(id);
 const active = useSessionField(selectActiveSession);
 
-// ❌ 组件内整表订阅 + find
-const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
+// 需要有序列表时订阅 selectSessionList，不要在组件里对整表 find
+const ordered = useSessionStore(selectSessionList);
 ```
 
 ## getState 约定
@@ -166,7 +163,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 | `TerminalCard.tsx` | 已用 `getSessionStoreState`（既有） |
 | `hooks/useTabDrag.ts` | dropPreview / draggedTab → workspace facade get*/set* |
 | `hooks/useAgentToolApproval.ts` | getSessionById / getSessionAgent / addCommandPermission |
-| `hooks/useChatStream.ts` | updateMessageThinking / getActiveSessionId / setPermissionMode |
+| `hooks/chat-stream/useChatStream.ts` | updateMessageThinking / getActiveSessionId / setPermissionMode |
 | `api/chat-bridge/ConnectionLifecycle.ts`、`handlers/approvalHandlers.ts` | getPermissionMode / getCommandPermissions（经 `api/storeAccess`） |
 | `SettingsPanel.tsx` | setAppSettings → storeAccess |
 
@@ -174,7 +171,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 
 | 位置 | 原因 |
 |------|------|
-| `hooks/useChatStream.ts` | 部分已迁（thinking / permission / activeSessionId）；其余 setState 仍可续迁 |
+| `hooks/chat-stream/useChatStream.ts` | 部分已迁（thinking / permission / activeSessionId）；其余 setState 仍可续迁 |
 | `components/Sidebar.tsx` | sidebarCollapsed 拖拽折叠；壳层 chrome，非三域 facade |
 | `components/AgentCard.tsx` / `InlineAgentPanel.tsx` | 局部 immer setState 写 agent 消息 |
 | `components/Settings*Tab.tsx` | 部分合并写；SettingsPanel 已用 storeAccess.setAppSettings |
@@ -187,7 +184,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
   → env.callbacks（handlerEnv）
   → hooks（useStreamCallbacks / useAgentStream）或全局面（subagentHandlers Global*）
   → layoutStore action（跨域经 api/storeAccess 编排；命令热路径经 compositionRoot.layout.getState()）
-  → 写 store（immer + getSessionForWrite/rebindSessionById 索引保障内建）
+  → 写 store（immer；单条经 sessionsById，结构经 sessionIndex）
 ```
 
 - **规则**：生产代码 `*Store.setState` 零残留（`npm run check:store-writes` 强制；
@@ -258,7 +255,7 @@ npm run check:desktop         # crish-desktop tsc
 ### 约束
 
 - **不要**为了拆分一次性改光全仓 `useLayoutStore` import。
-- **不要**未同步 `sessionsById` 就改 `sessions` 结构。
+- **不要**绕过 `sessionOrder` 直接改 `sessionsById` 的键集合。
 - demo 模式不落盘；持久化见 `initLayoutStorePersistence`。
 - workspace DnD 纯逻辑进 `layoutHelpers`（`findGroupInWorkspace` / `extractCardFromGroup` 等），actions 只编排。
 - 新组件 **禁止** 在 render 中 `useLayoutStore.getState()`；事件回调走 `storeAccess`。

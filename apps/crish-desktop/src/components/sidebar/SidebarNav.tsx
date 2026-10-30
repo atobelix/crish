@@ -4,7 +4,7 @@ import styles from './SidebarNav.module.css';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 
 export interface SidebarNavProps {
   activeNav: string;

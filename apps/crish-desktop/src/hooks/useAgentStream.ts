@@ -131,9 +131,7 @@ export function useAgentPanel(
     if (!parentSessionId || !agentId) return null;
     // 命令式读：compositionRoot.session（= session facade / layout alias）
     const state = getCompositionRoot().session.getState();
-    const sess =
-      state.sessionsById[parentSessionId] ||
-      state.sessions.find((s) => s.id === parentSessionId);
+    const sess = state.sessionsById[parentSessionId];
     const ag = sess?.agents?.find((a) => a.id === agentId);
     return ag?.subagentRunId ?? null;
   }, [parentSessionId, agentId]);
@@ -324,9 +322,7 @@ export function useAgentPanel(
         if (!st || cancelled) return;
         if (st.status && st.status !== 'running' && st.status !== 'unknown') {
           const state = getCompositionRoot().session.getState();
-          const sess =
-            state.sessionsById[parentSessionId] ||
-            state.sessions.find((s) => s.id === parentSessionId);
+          const sess = state.sessionsById[parentSessionId];
           if (!sess) return;
           const live = sess.agents?.find((a) => a.id === agentId);
           if (!live || live.status !== 'running') return;

@@ -20,6 +20,7 @@ import {
 import { eventBus } from '../services/EventBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
+import { replaceSessions } from '../store/sessionIndex';
 import { DiffCard } from '../components/diff/DiffCard';
 import { MessageVirtualizer } from '../components/chat-message-list/MessageVirtualizer';
 import {
@@ -86,7 +87,7 @@ function bootstrapStoreState() {
   });
 
   useSessionStore.setState((st) => {
-    st.sessions = [
+    replaceSessions(st, [
       {
         id: 'sess-mem-1',
         title: 'Memory Test Session',
@@ -97,7 +98,7 @@ function bootstrapStoreState() {
         messages: [],
         agents: [],
       },
-    ];
+    ]);
     st.activeSessionId = 'sess-mem-1';
   });
 }

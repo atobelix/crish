@@ -12,7 +12,7 @@ import {
   compareMessageOrder,
   getMessageOrderKey,
   isSortedByMessageOrder,
-} from '../store-access/helperAccess';
+} from '../../store/messageOrderKey';
 import type {
   FileDiff,
   MessageContextInjection,

@@ -1,13 +1,15 @@
 /**
  * 遥测、Diff 与统计/定时任务门面 (Telemetry & Statistics Access Facade)
+ *
+ * 自 api/store-access/telemetryAccess.ts 迁入 store 域（SS-P6c 门面合一）。
  */
-import type { TelemetrySyncPayload } from '../../store/layoutStore';
-import type { TokenUsageState } from '../../store/layoutStore';
-import type { DiffChange, FileDiff } from '../../store/types';
-import type { CronJob } from '../clientApi';
-import { useTerminalStore } from '../../store/terminalStore';
-import { useSettingsStore } from '../../store/settingsStore';
-import { logger } from '../../services/LoggerService';
+import type { TelemetrySyncPayload } from './layoutStore';
+import type { TokenUsageState } from './layoutStore';
+import type { DiffChange, FileDiff } from './types';
+import type { CronJob } from '../api/clientApi';
+import { useTerminalStore } from './terminalStore';
+import { useSettingsStore } from './settingsStore';
+import { logger } from '../services/LoggerService';
 
 export type DiffFileInfo = FileDiff;
 

@@ -1,5 +1,8 @@
-import type { SessionState as Session, SessionGoalTask } from '../store/layoutStore';
-import { getStreamTools } from './store-access/helperAccess';
+import type {
+  SessionState as Session,
+  SessionGoalTask,
+} from '../store/layoutStore';
+import { getStreamTools } from '../store/streamingStore';
 import { toolHumanLabel } from './toolPresentation';
 
 export interface ProgressSummary {
@@ -49,7 +52,9 @@ function parseMarkdownChecklist(text: string): SessionGoalTask[] {
  * 确定当前会话的有效进度清单项：
  * goalMode.tasks 优先，否则使用最近一条包含 checklist 的助手消息
  */
-export function resolveSessionProgressItems(session: Session | null | undefined): SessionGoalTask[] {
+export function resolveSessionProgressItems(
+  session: Session | null | undefined
+): SessionGoalTask[] {
   if (!session) return [];
   if (session.goalMode?.active && (session.goalMode.tasks?.length ?? 0) > 0) {
     return session.goalMode.tasks || [];
@@ -70,7 +75,9 @@ export function resolveSessionProgressItems(session: Session | null | undefined)
 /**
  * 计算进度分布与完成百分比
  */
-export function computeChecklistProgress(items: SessionGoalTask[] | null | undefined): ProgressSummary {
+export function computeChecklistProgress(
+  items: SessionGoalTask[] | null | undefined
+): ProgressSummary {
   if (!items || items.length === 0) {
     return { done: 0, total: 0, pct: 0, open: 0, allDone: false };
   }
@@ -87,7 +94,9 @@ export function computeChecklistProgress(items: SessionGoalTask[] | null | undef
  * Durable session toolCalls first; intermediate running tools may live only
  * in streamingStore (tool-stream-lite-store path).
  */
-export function findCurrentLiveTool(session: Session | null | undefined): LiveToolInfo | null {
+export function findCurrentLiveTool(
+  session: Session | null | undefined
+): LiveToolInfo | null {
   if (!session?.messages?.length) return null;
   const lastMsg = session.messages[session.messages.length - 1];
   if (!lastMsg || lastMsg.sender !== 'assistant') return null;

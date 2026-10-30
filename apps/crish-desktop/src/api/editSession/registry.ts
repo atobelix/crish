@@ -30,7 +30,7 @@ import type {
 
 /** 编辑会话注册表（会话级记账 + 内存事件总线） */
 export class EditSessionRegistry {
-  private sessions = new Map<string, EditSessionState>();
+  private byObjectId = new Map<string, EditSessionState>();
   private listeners = new Set<EditSessionListener>();
 
   /**
@@ -39,7 +39,7 @@ export class EditSessionRegistry {
    * 已持有 → `already_open`（保留原会话，首个持有者为准）。
    */
   open(objectId: string, baseRev?: number): EditSessionOpenResult {
-    const existing = this.sessions.get(objectId);
+    const existing = this.byObjectId.get(objectId);
     if (existing) {
       return { ok: false, code: 'already_open', session: existing };
     }
@@ -48,7 +48,7 @@ export class EditSessionRegistry {
       baseRev,
       openedAtMs: Date.now(),
     };
-    this.sessions.set(objectId, session);
+    this.byObjectId.set(objectId, session);
     this.emit({ type: 'opened', objectId, baseRev });
     return { ok: true, session };
   }
@@ -66,7 +66,7 @@ export class EditSessionRegistry {
     objectId: string,
     options?: EditSessionCommitOptions
   ): EditSessionCommitResult {
-    const session = this.sessions.get(objectId);
+    const session = this.byObjectId.get(objectId);
     if (!session) {
       return { ok: false, code: 'not_open' };
     }
@@ -81,7 +81,7 @@ export class EditSessionRegistry {
         baseRev: session.baseRev,
       };
     }
-    this.sessions.delete(objectId);
+    this.byObjectId.delete(objectId);
     // rev 推进：baseRev 未知（未接线真实 rev）→ 占位 0；已知 → 单调 +1
     const committedRev =
       session.baseRev === undefined ? 0 : session.baseRev + 1;
@@ -98,10 +98,10 @@ export class EditSessionRegistry {
     objectId: string,
     reason: EditSessionInvalidateReason = 'external'
   ): EditSessionInvalidateResult {
-    const session = this.sessions.get(objectId);
+    const session = this.byObjectId.get(objectId);
     const hadSession = session !== undefined;
     if (session) {
-      this.sessions.delete(objectId);
+      this.byObjectId.delete(objectId);
     }
     this.emit({ type: 'invalidated', objectId, reason, hadSession });
     return { ok: true, hadSession };
@@ -109,22 +109,22 @@ export class EditSessionRegistry {
 
   /** 该 id 当前是否有未关闭的编辑会话 */
   isOpen(objectId: string): boolean {
-    return this.sessions.has(objectId);
+    return this.byObjectId.has(objectId);
   }
 
   /** 读取指定 id 的会话状态（无 → undefined） */
   get(objectId: string): EditSessionState | undefined {
-    return this.sessions.get(objectId);
+    return this.byObjectId.get(objectId);
   }
 
   /** 当前存活会话数 */
   activeCount(): number {
-    return this.sessions.size;
+    return this.byObjectId.size;
   }
 
   /** 当前存活会话清单（R2-b 失效传播遍历用；返回副本） */
   listActive(): EditSessionState[] {
-    return [...this.sessions.values()];
+    return [...this.byObjectId.values()];
   }
 
   /** 订阅事件总线；返回退订函数 */
@@ -137,7 +137,7 @@ export class EditSessionRegistry {
 
   /** 清空全部会话（测试隔离 / 会话销毁） */
   clearAll(): void {
-    this.sessions.clear();
+    this.byObjectId.clear();
   }
 
   private emit(event: EditSessionEvent): void {

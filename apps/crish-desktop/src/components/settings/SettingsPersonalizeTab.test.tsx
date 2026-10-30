@@ -9,7 +9,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { DEFAULT_SETTINGS } from '../../api/clientApiDefaultSettings';
-import { readSendShortcut } from '../../api/store-access/settingsAccess';
+import { readSendShortcut } from '../../store/storeAccess';
 
 const {
   getSettingsEx,
@@ -46,7 +46,8 @@ vi.mock('../../services/toast/ToastContext', () => ({
   toast: { show: showToast },
 }));
 
-vi.mock('../../store/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   closeSettings: (...args: unknown[]) => closeSettings(...args),
   useLayoutStore: (
     sel: (s: { setTabModeEnabled: typeof setTabModeEnabled }) => unknown

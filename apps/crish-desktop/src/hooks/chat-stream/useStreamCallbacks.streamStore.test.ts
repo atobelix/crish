@@ -35,10 +35,11 @@ const updateMessageToolCall = vi.fn();
 const addMessageToolCall = vi.fn();
 const updateMessageThinking = vi.fn();
 
-// T4 A3：helpers 写入统一走 api/storeAccess 编排单点（sessionAccess 门面），
-// 故工具行收口 spy 挂在 api/storeAccess 上（不再直写 layoutStore）。
-vi.mock('../../api/storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/storeAccess')>();
+// T4 A3：helpers 写入统一走 store/storeAccess 编排单点（sessionAccess 门面），
+// 故工具行收口 spy 挂在 store/storeAccess 上（不再直写 layoutStore）。
+vi.mock('../../store/storeAccess', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../store/storeAccess')>();
   return {
     ...actual,
     updateMessageText: (...args: unknown[]) => updateMessageText(...args),

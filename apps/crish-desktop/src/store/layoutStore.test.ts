@@ -266,6 +266,7 @@ describe('empty workspace seed & no ghost panels', () => {
     });
     expect(a.activeSessionId).toBe('s1');
     expect(a.sessionsById.s1?.id).toBe('s1');
+    expect(a.sessionOrder).toEqual(['s1']);
     expect(a.folderOrder).toEqual(['f', 'g']);
 
     const empty = sanitizeSessionSeed({
@@ -275,6 +276,7 @@ describe('empty workspace seed & no ghost panels', () => {
     });
     expect(empty.activeSessionId).toBe('__pending_draft__');
     expect(Object.keys(empty.sessionsById)).toHaveLength(0);
+    expect(empty.sessionOrder).toEqual([]);
   });
 
   it('sanitizeSessionSeed clears pending draft sentinel', () => {
@@ -295,6 +297,7 @@ describe('empty workspace seed & no ghost panels', () => {
     });
     expect(s.activeSessionId).toBe('s1');
     expect(s.sessionsById.s1?.id).toBe('s1');
+    expect(s.sessionOrder).toEqual(['s1']);
   });
 });
 

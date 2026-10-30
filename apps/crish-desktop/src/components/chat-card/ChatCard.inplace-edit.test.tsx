@@ -111,7 +111,8 @@ vi.mock('../../services/toast/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   openSettings: vi.fn(),
   patchSession: vi.fn(),
 }));

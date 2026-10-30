@@ -178,8 +178,7 @@ export interface SessionActions {
   updateMessageText: (
     sessionId: string,
     messageId: string,
-    text: string,
-    precomputedHtml?: string
+    text: string
   ) => void;
   updateMessageThinking: (
     sessionId: string,

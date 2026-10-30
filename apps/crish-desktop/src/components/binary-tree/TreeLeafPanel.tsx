@@ -34,7 +34,6 @@ import {
   useLayoutStore,
   useSessionStore,
   useLayoutTreeStore,
-  getCompositionRoot,
   isPendingDraft,
   isDockTreeEmpty,
   findSpatialNode,
@@ -42,6 +41,7 @@ import {
   openToolInDock,
   type DockLeaf,
 } from '../../store/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { LeafScopeProvider } from '../../contexts/LeafScopeContext';
 import { resolveTabView } from './tabViewAdapter';
 import {

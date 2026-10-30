@@ -1,5 +1,10 @@
 import type { WorkspaceState } from '../types';
+import type {
+  PersistableStoreState,
+  SessionActivatableStore,
+} from './store-persistence-types';
 import { isDemoMode } from '../../api/appMode';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   ensureMigrated,
   hydrateSessionsFromRust,
@@ -23,26 +28,11 @@ import { collectExternallyDeletedSessionIds } from '../../api/import/externalSes
 import { isSessionTabClosed } from '../workspace-shell/closedSessionTabs';
 import {
   BootHoldBarrier,
-  DeltaWriteBarrier,
   EmptySanitizeBarrier,
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-  type PersistableStoreState,
-  type SessionActivatableStore,
-} from '../store-persistence';
-
-export {
-  BootHoldBarrier,
-  DeltaWriteBarrier,
-  EmptySanitizeBarrier,
-  performThreeWaySessionMerge,
-  syncOrthogonalSessionSubtrees,
-  type PersistableStoreState,
-  type SessionActivatableStore,
-  type SessionWriteDelta,
-  type StoreApiLike,
-  type ThreeWayMergeResult,
-} from '../store-persistence';
+} from '../../api/session-persistence/sessionWriteBarriers';
+import { sessionDeltaWriteBarrier } from '../../api/session-persistence/sessionDeltaWriteBarrier';
+import { performThreeWaySessionMerge } from '../../api/session-persistence/sessionThreeWayMerge';
+import { listSessions } from '../sessionIndex';
 
 export function serializeWorkspaceLayout<
   S extends {
@@ -120,34 +110,34 @@ function syncActiveSessionToEmptyLayoutLeaf(
   if (!sessionId || isSessionTabClosed(sessionId)) return;
   void import('../layout-tree')
     .then((mod) => {
-      try {
-        if (isSessionTabClosed(sessionId)) return;
-        const { useLayoutTreeStore, collectLeaves } = mod;
-        if (typeof useLayoutTreeStore?.getState !== 'function') return;
-        const treeState = useLayoutTreeStore.getState();
-        const root = treeState?.tree?.root;
-        if (!root) return;
-        if (sessionTitle && typeof treeState.updateTabTitle === 'function') {
-          treeState.updateTabTitle(sessionId, sessionTitle);
+      if (isSessionTabClosed(sessionId)) return;
+      const { useLayoutTreeStore, collectLeaves } = mod;
+      if (typeof useLayoutTreeStore?.getState !== 'function') return;
+      const treeState = useLayoutTreeStore.getState();
+      const root = treeState?.tree?.root;
+      if (!root) return;
+      if (sessionTitle && typeof treeState.updateTabTitle === 'function') {
+        treeState.updateTabTitle(sessionId, sessionTitle);
+      }
+      const leaves = collectLeaves(root);
+      const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
+      if (!activeLeafId) return;
+      const activeLeaf = leaves.find((l) => l.id === activeLeafId);
+      if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
+        if (typeof treeState.openSession === 'function') {
+          treeState.openSession(sessionId, {
+            activeLeafId,
+            title: sessionTitle || '',
+          });
         }
-        const leaves = collectLeaves(root);
-        const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
-        if (!activeLeafId) return;
-        const activeLeaf = leaves.find((l) => l.id === activeLeafId);
-        if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
-          if (typeof treeState.openSession === 'function') {
-            treeState.openSession(sessionId, {
-              activeLeafId,
-              title: sessionTitle || '',
-            });
-          }
-        }
-      } catch {
-        /* ignore */
       }
     })
-    .catch(() => {
-      /* ignore */
+    .catch((err: unknown) => {
+      logger.warn('[sessionPersistence] layout leaf sync failed', {
+        module: 'store-persistence',
+        sessionId,
+        err: toErrMeta(err),
+      });
     });
 }
 
@@ -163,13 +153,14 @@ export function initStorePersistence<S extends PersistableStoreState>(
 
   const abortController = new AbortController();
   const initialState = store.getState();
+  const initialSessions = listSessions(initialState);
   const baseSessionIds = new Set<string>(
-    initialState.sessions.map((s) => s.id).filter(Boolean)
+    initialSessions.map((s) => s.id).filter(Boolean)
   );
   const knownPersistedIds = new Set<string>(baseSessionIds);
-  const deltaBarrier = new DeltaWriteBarrier();
+  const deltaBarrier = sessionDeltaWriteBarrier;
   deltaBarrier.seedFromSessions(
-    initialState.sessions,
+    initialSessions,
     initialState.activeSessionId,
     initialState.folderOrder
   );
@@ -193,37 +184,42 @@ export function initStorePersistence<S extends PersistableStoreState>(
     persistTimer = setTimeout(() => {
       try {
         const cur = store.getState();
+        const curSessions = listSessions(cur);
         if (BootHoldBarrier.shouldHold(cur)) {
           return;
         }
         // 写屏障 3（EmptySanitizeBarrier）：非空库未全墓碑时严禁写空数组
         if (
           EmptySanitizeBarrier.shouldBlockEmptyWrite(
-            cur.sessions,
-            knownPersistedIds
+            curSessions,
+            knownPersistedIds,
+            isSessionTombstoned
           )
         ) {
           return;
         }
-        // 写屏障 2（DeltaWriteBarrier）：无实质脏会话或元数据变化时跳过写盘
+        // 写屏障 2（SessionDeltaWriteBarrier 指纹差分）：无实质脏会话或元数据变化时跳过写盘
         const delta = deltaBarrier.computeDelta(
-          cur.sessions,
+          curSessions,
           cur.activeSessionId,
           cur.folderOrder
         );
         if (!delta.hasChanges) {
           return;
         }
-        for (const s of cur.sessions) {
+        for (const s of curSessions) {
           if (s?.id) knownPersistedIds.add(s.id);
         }
         void persistAllSessions(
-          cur.sessions,
+          curSessions,
           cur.activeSessionId,
           cur.folderOrder
         );
-      } catch (e) {
-        console.warn('[sessionPersistence] save failed', e);
+      } catch (err) {
+        logger.warn('[sessionPersistence] save failed', {
+          module: 'store-persistence',
+          err: toErrMeta(err),
+        });
       }
     }, STORAGE_PERSIST_DEBOUNCE_MS);
   });
@@ -240,7 +236,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
 
       if (restored?.sessions?.length) {
         const blockedExternalIds = collectExternallyDeletedSessionIds([
-          ...store.getState().sessions,
+          ...listSessions(store.getState()),
           ...restored.sessions,
         ]);
         const tombstoneGuard = (id: string) =>
@@ -258,10 +254,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
           store.setActiveSessionId?.(id);
 
         store.setState((state: PersistableStoreState) => {
-          const wasEmpty = state.sessions.length === 0;
+          const wasEmpty = state.sessionOrder.length === 0;
           const mergeResult = performThreeWaySessionMerge(
             baseSessionIds,
-            state.sessions,
+            listSessions(state),
             restored.sessions,
             tombstoneGuard
           );
@@ -296,13 +292,12 @@ export function initStorePersistence<S extends PersistableStoreState>(
             folderOrder: mergedFolders,
           });
 
-          state.sessions = sanitized.sessions;
           state.sessionsById = sanitized.sessionsById;
+          state.sessionOrder = sanitized.sessionOrder;
           state.activeSessionId = sanitized.activeSessionId;
           state.folderOrder = sanitized.folderOrder.length
             ? sanitized.folderOrder
             : state.folderOrder;
-          syncOrthogonalSessionSubtrees(state, sanitized.sessions);
 
           if (wasEmpty) {
             state.activeAgentId = null;
@@ -318,45 +313,45 @@ export function initStorePersistence<S extends PersistableStoreState>(
           appliedOrMerged = true;
         });
 
-        try {
-          const after = store.getState();
-          deltaBarrier.seedFromSessions(
-            after.sessions,
+        const after = store.getState();
+        const afterSessions = listSessions(after);
+        deltaBarrier.seedFromSessions(
+          afterSessions,
+          after.activeSessionId,
+          after.folderOrder
+        );
+        const isClosed = Boolean(
+          after.activeSessionId && isSessionTabClosed(after.activeSessionId)
+        );
+        if (
+          after.activeSessionId &&
+          after.sessionsById[after.activeSessionId] &&
+          !isClosed
+        ) {
+          setActiveSessionId(after.activeSessionId);
+          syncActiveSessionToEmptyLayoutLeaf(
+            after.activeSessionId,
+            after.sessionsById[after.activeSessionId]?.title
+          );
+        } else if (isClosed) {
+          store.setState((s: PersistableStoreState) => {
+            s.activeSessionId = '';
+          });
+        }
+        if (appliedOrMerged && afterSessions.length > 0) {
+          void persistAllSessions(
+            afterSessions,
             after.activeSessionId,
             after.folderOrder
           );
-          const isClosed = Boolean(
-            after.activeSessionId && isSessionTabClosed(after.activeSessionId)
-          );
-          if (
-            after.activeSessionId &&
-            after.sessionsById[after.activeSessionId] &&
-            !isClosed
-          ) {
-            setActiveSessionId(after.activeSessionId);
-            syncActiveSessionToEmptyLayoutLeaf(
-              after.activeSessionId,
-              after.sessionsById[after.activeSessionId]?.title
-            );
-          } else if (isClosed) {
-            store.setState((s: PersistableStoreState) => {
-              s.activeSessionId = '';
-            });
-          }
-          if (appliedOrMerged && after.sessions.length > 0) {
-            void persistAllSessions(
-              after.sessions,
-              after.activeSessionId,
-              after.folderOrder
-            );
-          }
-        } catch {
-          /* ignore */
         }
       }
     })
-    .catch((e) => {
-      console.warn('[sessionPersistence] migrate/hydrate failed', e);
+    .catch((err: unknown) => {
+      logger.warn('[sessionPersistence] migrate/hydrate failed', {
+        module: 'store-persistence',
+        err: toErrMeta(err),
+      });
     })
     .finally(() => {
       if (!abortController.signal.aborted) {
@@ -364,19 +359,20 @@ export function initStorePersistence<S extends PersistableStoreState>(
           state.hydrationComplete = true;
         });
         const finalState = store.getState();
+        const finalSessions = listSessions(finalState);
         if (
-          finalState.sessions.length > 0 &&
+          finalSessions.length > 0 &&
           deltaBarrier.computeDelta(
-            finalState.sessions,
+            finalSessions,
             finalState.activeSessionId,
             finalState.folderOrder
           ).hasChanges
         ) {
-          for (const s of finalState.sessions) {
+          for (const s of finalSessions) {
             if (s?.id) knownPersistedIds.add(s.id);
           }
           void persistAllSessions(
-            finalState.sessions,
+            finalSessions,
             finalState.activeSessionId,
             finalState.folderOrder
           );

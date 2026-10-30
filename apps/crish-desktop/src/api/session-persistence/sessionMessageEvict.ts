@@ -10,6 +10,7 @@
 import {
   findInactiveHydratedSessionIdsToEvict,
   needsEngineMessageHydrate,
+  selectSessionList,
   useSessionStore,
 } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
@@ -29,8 +30,8 @@ export function evictInactiveHydratedSessionsWithGuards(
   const evicted = findInactiveHydratedSessionIdsToEvict(
     activeSessionId,
     streamingSessionIds,
-    store.sessions || [],
-    store.sessionsById || {},
+    selectSessionList(store),
+    store.sessionsById,
     SESSION_HYDRATE_KEEP_K
   );
   if (evicted.length === 0) return [];

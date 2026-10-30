@@ -5,7 +5,7 @@
  *
  * ## 为什么存在
  * 历史上 `${sessionId}::${messageId}` 形状的复合键在 streamTextBatcher /
- * streamingStoreCore / streamDirectDomEngine / dualLatchProtocol 等 4+ 个
+ * streamingStoreCore / dualLatchProtocol 等多个
  * 文件里各自实现了一遍（构造、前缀清理、反解各一份），每新增一个使用方
  * 都要在 check-provider-single-track.mjs 的 D5_WHITELIST 登记一次（打地鼠）。
  * 本模块把**形状契约**收敛为唯一定义：构造 / 反解 / 前缀清理三件套，
@@ -22,7 +22,7 @@
 /** 分隔符（本模块唯一权威；各域不得自拼字面量） */
 export const COMPOSITE_KEY_SEPARATOR = '::';
 
-/** 空会话兜底标识（dualLatch / streamDirectDom 既有语义） */
+/** 空会话兜底标识（dualLatch 既有语义） */
 export const DEFAULT_SESSION_ID = '__default__';
 
 /**

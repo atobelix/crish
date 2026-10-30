@@ -1,14 +1,11 @@
-// 会话纯查询与 id 规范化函数（从 sessionAccess.ts 拆分，纯结构性重构）。
+// 会话纯查询与 id 规范化函数（自 api/store-access/sessionAccessQuery.ts 迁入 store 域）。
 // 这些函数不依赖写入门面的 getSessionStoreState()，仅依赖只读 store 访问，
-// 便于在纯查询/校验场景下单独复用。hub（sessionAccess.ts）re-export 保持 import 路径稳定。
-import type {
-  SessionAgent,
-  SessionState,
-} from '../../store/types';
+// 便于在纯查询/校验场景下单独复用。sessionAccess 门面 re-export 保持 import 路径稳定。
+import type { SessionAgent, SessionState } from './types';
 import {
   getActiveSessionId as getActiveSessionIdFromFacade,
   getSessionById,
-} from '../../store/sessionStore';
+} from './sessionStore';
 
 export function isNonEmptySessionId(
   sessionId: string | null | undefined

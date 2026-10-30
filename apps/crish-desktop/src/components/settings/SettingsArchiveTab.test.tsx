@@ -3,6 +3,8 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { SettingsArchiveTab } from './SettingsArchiveTab';
+import { buildSessionIndex } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 
 const mockShowToast = vi.fn();
 vi.mock('../../services/toast/ToastContext', () => ({
@@ -19,13 +21,17 @@ vi.mock('../sidebar/session-list/sessionListUtils', () => ({
     folder === 'proj-1' ? 'Work Project' : '常规会话',
 }));
 
-vi.mock('../../store/storeAccess', () => ({
-  closeSettings: () => mockCloseSettings(),
-  deleteSessionCascade: (id: string) => mockDeleteSessionCascade(id),
-  listProjects: () => [{ id: 'proj-1', name: 'Work Project' }],
-  useSessionStore: (selector: (state: unknown) => unknown) =>
-    selector(mockSessionStoreState),
-}));
+vi.mock('../../store/storeAccess', async () => {
+  const { selectSessionList } = await import('../../store/sessionIndex');
+  return {
+    closeSettings: () => mockCloseSettings(),
+    deleteSessionCascade: (id: string) => mockDeleteSessionCascade(id),
+    listProjects: () => [{ id: 'proj-1', name: 'Work Project' }],
+    selectSessionList,
+    useSessionStore: (selector: (state: typeof mockSessionStoreState) => unknown) =>
+      selector(mockSessionStoreState),
+  };
+});
 
 vi.mock('../../app/compositionRoot', () => ({
   getCompositionRoot: () => ({
@@ -38,23 +44,42 @@ vi.mock('../../app/compositionRoot', () => ({
   }),
 }));
 
-let mockSessionStoreState = {
-  sessions: [] as Array<{
-    id: string;
-    title: string;
-    isArchived?: boolean;
-    folder?: string;
-    updatedAt?: number;
-    messages?: Array<{ text: string }>;
-  }>,
+type ArchiveSeed = {
+  id: string;
+  title: string;
+  isArchived?: boolean;
+  folder?: string;
+  updatedAt?: number;
+  messages?: Array<{ text: string }>;
 };
+
+function toArchiveSession(seed: ArchiveSeed): SessionState {
+  return {
+    id: seed.id,
+    title: seed.title,
+    folder: seed.folder ?? '',
+    isPinned: false,
+    isArchived: seed.isArchived === true,
+    timestamp: new Date(seed.updatedAt ?? 0).toISOString(),
+    messages: (seed.messages ?? []).map((message, index) => ({
+      id: `${seed.id}-msg-${index}`,
+      sender: 'user',
+      text: message.text,
+      timestamp: seed.updatedAt ?? 0,
+    })),
+  };
+}
+
+let mockSessionStoreState = buildSessionIndex([]);
+
+function setArchiveSessions(list: ArchiveSeed[]) {
+  mockSessionStoreState = buildSessionIndex(list.map(toArchiveSession));
+}
 
 describe('SettingsArchiveTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSessionStoreState = {
-      sessions: [],
-    };
+    mockSessionStoreState = buildSessionIndex([]);
   });
 
   it('空状态：无已归档对话时展示空态提示', () => {
@@ -65,7 +90,7 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('展示归档列表并支持关键字搜索过滤', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       {
         id: 'sess-1',
         title: '架构重构规划',
@@ -87,7 +112,7 @@ describe('SettingsArchiveTab', () => {
         isArchived: false,
         updatedAt: 3000,
       },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     expect(screen.getByText('架构重构规划')).toBeInTheDocument();
@@ -105,14 +130,14 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('点击“打开”：解归档并打开会话且关闭设置', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       {
         id: 'sess-1',
         title: '测试归档',
         isArchived: true,
         folder: 'proj-1',
       },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     const openBtn = screen.getByTestId('archive-open-sess-1');
@@ -127,13 +152,13 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('点击“还原”：还原单条会话至侧栏', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       {
         id: 'sess-1',
         title: '测试还原',
         isArchived: true,
       },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     const restoreBtn = screen.getByTestId('archive-restore-sess-1');
@@ -146,10 +171,10 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('点击“全部还原”：批量还原全部归档会话', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       { id: 'sess-1', title: '会话 1', isArchived: true },
       { id: 'sess-2', title: '会话 2', isArchived: true },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     const restoreAllBtn = screen.getByTestId('archive-restore-all');
@@ -163,9 +188,9 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('点击删除并确认：触发级联删除与 Toast', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       { id: 'sess-1', title: '待删除会话', isArchived: true },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     const deleteBtn = screen.getByTestId('archive-delete-sess-1');
@@ -186,10 +211,10 @@ describe('SettingsArchiveTab', () => {
   });
 
   it('清空全部并确认：触发批量级联删除', () => {
-    mockSessionStoreState.sessions = [
+    setArchiveSessions([
       { id: 'sess-1', title: '会话 1', isArchived: true },
       { id: 'sess-2', title: '会话 2', isArchived: true },
-    ];
+    ]);
 
     render(<SettingsArchiveTab />);
     const clearAllBtn = screen.getByTestId('archive-clear-all');

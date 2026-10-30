@@ -19,8 +19,8 @@ import {
 import {
   deleteSessionFromIndexed,
   getSessionById,
-  getSessionForWrite,
-  reindexSessionsById,
+  insertSessionAt,
+  listSessions,
 } from './sessionIndex';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
@@ -179,9 +179,9 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         return;
       }
       // D5：切换成功后在 microtask 中重新读取状态并软驱逐非活跃已水合消息。
-      // 实现体位于 sessionEviction.scheduleSoftEvictionAfterActivation（懒加载，保持既有代码分割边界）。
+      // 实现体位于 sessionSoftEvictionScheduler（懒加载，保持既有代码分割边界）。
       queueMicrotask(() => {
-        void import('./sessionEviction').then(
+        void import('./sessionSoftEvictionScheduler').then(
           ({ scheduleSoftEvictionAfterActivation }) => {
             scheduleSoftEvictionAfterActivation(nextId, get, set);
           }
@@ -217,7 +217,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
 
     renameSession: (sessionId: string, title: string) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         const next = normalizeWritableSessionTitle(title);
         if (!next) return;
@@ -229,7 +229,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
 
     applyGeneratedSessionTitle: (sessionId: string, title: string) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess || sess.titleSource === 'user') return;
         const next = normalizeWritableSessionTitle(title);
         if (!next) return;
@@ -310,8 +310,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           messages: [],
           ...(importMeta ? { importMeta } : {}),
         };
-        state.sessions.unshift(sess);
-        reindexSessionsById(state);
+        insertSessionAt(state, sess, 0);
         if (
           !state.folderOrder.includes(sess.folder) &&
           state.folderOrder.length < MAX_FOLDERS
@@ -337,7 +336,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       if (!id) return false;
 
       // 若被删除会话为外部导入对话，永久登记墓碑黑名单，阻断重启自动复活
-      const existingTarget = get().sessions.find((s) => s.id === id);
+      const existingTarget = getSessionById(get(), id);
       if (
         existingTarget?.importMeta?.source &&
         existingTarget.importMeta.sourceSessionId
@@ -356,7 +355,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       const stateBeforeDelete = get();
       if (isDeletingActive && getSessionById(stateBeforeDelete, id)) {
         nextActiveIdToSwitch = prepareSessionDeletionTransition(
-          stateBeforeDelete.sessions,
+          listSessions(stateBeforeDelete),
           id,
           isDemoMode,
           activateWorkspaceForSessionFolder
@@ -383,9 +382,9 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             state.activeAgentId = null;
             state.panelAgentId = null;
             syncActiveTerminalSession(nextActiveIdToSwitch);
-          } else if (state.sessions.length > 0 && state.sessions[0]) {
+          } else if (state.sessionOrder.length > 0 && state.sessionOrder[0]) {
             // 兜底：若邻居未命中但仍有剩余会话，切到首个有效会话
-            const fallbackId = state.sessions[0].id;
+            const fallbackId = state.sessionOrder[0];
             state.activeSessionId = fallbackId;
             state.draftFolder = '';
             state.activeAgentId = null;
@@ -430,7 +429,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         };
         if (existingTarget?.importMeta && afterDelete.hydrationComplete) {
           persistAllSessionsSync(
-            afterDelete.sessions,
+            listSessions(afterDelete),
             afterDelete.activeSessionId,
             afterDelete.folderOrder
           );

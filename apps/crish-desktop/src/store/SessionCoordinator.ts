@@ -15,7 +15,6 @@ import { useTerminalStore } from './terminalStore';
 import { getShellReadApi } from './workspace-shell/shellReadBridge';
 import { clearRuntimeStatus } from './sessionRuntimeStatusStore';
 import { clearWorkflowConfirmSignaturesForSession } from '../api/workflow-api/workflowConfirmSignatures';
-import { cancelSessionCascade } from './sessionCascadeCancellation';
 
 export const SessionCoordinator = {
   /**
@@ -28,13 +27,11 @@ export const SessionCoordinator = {
     const id = String(sessionId || '').trim();
     if (!id) return false;
 
-    // 首行接入三级级联取消总线（Tier 1 计算强杀 / Tier 2 流与 IPC 中止 / Tier 3 500 容量 LRU 墓碑拦截）
-    cancelSessionCascade(id);
-
     // 0. 树上有该 session 的 tab 则摘掉（经 shell 桥，避免 Coordinator ↔ store 环）
     getShellReadApi()?.closeTabBySessionId?.(id);
 
-    // 1. 清理 sessionStore 中的持久数据（返回是否真实命中并删除）
+    // 1. 清理 sessionStore 中的持久数据（返回是否真实命中并删除）；
+    //    deleteSession 首步即三级级联取消（流句柄 force 取消 + 后端中止 + 墓碑），此处不重复触发
     const removed = useSessionStore.getState().deleteSession(id);
 
     // 2. 清理 streamingStore 中的内存流式缓冲

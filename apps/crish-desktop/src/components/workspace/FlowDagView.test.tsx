@@ -24,17 +24,42 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 vi.mock('../../api/tauriInvoke', () => ({
-  invokeTyped: vi.fn(async () => ({ status: 'ok' as const, data: { nodes: [] } })),
+  invokeTyped: vi.fn(async () => ({
+    status: 'ok' as const,
+    data: { nodes: [] },
+  })),
 }));
 
-vi.mock('../../api/storeAccess', () => ({
+vi.mock('../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
   getActiveSessionId: vi.fn(() => 'sess-test'),
 }));
 
 const chain: DagNode[] = [
-  { id: 'a', task: '任务 A', dependsOn: [], parallel: false, isComposite: false, state: 'completed' },
-  { id: 'b', task: '任务 B', dependsOn: ['a'], parallel: false, isComposite: false, state: 'running' },
-  { id: 'c', task: '任务 C', dependsOn: ['b'], parallel: false, isComposite: false, state: 'pending' },
+  {
+    id: 'a',
+    task: '任务 A',
+    dependsOn: [],
+    parallel: false,
+    isComposite: false,
+    state: 'completed',
+  },
+  {
+    id: 'b',
+    task: '任务 B',
+    dependsOn: ['a'],
+    parallel: false,
+    isComposite: false,
+    state: 'running',
+  },
+  {
+    id: 'c',
+    task: '任务 C',
+    dependsOn: ['b'],
+    parallel: false,
+    isComposite: false,
+    state: 'pending',
+  },
 ];
 
 describe('FlowDagGraph 渲染', () => {
@@ -50,8 +75,22 @@ describe('FlowDagGraph 渲染', () => {
 
   it('并行节点同层渲染', () => {
     const parallel: DagNode[] = [
-      { id: 'a', task: 'A', dependsOn: [], parallel: true, isComposite: false, state: 'pending' },
-      { id: 'b', task: 'B', dependsOn: ['a'], parallel: true, isComposite: false, state: 'pending' },
+      {
+        id: 'a',
+        task: 'A',
+        dependsOn: [],
+        parallel: true,
+        isComposite: false,
+        state: 'pending',
+      },
+      {
+        id: 'b',
+        task: 'B',
+        dependsOn: ['a'],
+        parallel: true,
+        isComposite: false,
+        state: 'pending',
+      },
     ];
     render(<FlowDagGraph nodes={parallel} />);
     expect(screen.getAllByTestId('dag-node')).toHaveLength(2);

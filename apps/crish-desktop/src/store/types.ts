@@ -546,8 +546,6 @@ export interface SessionMessage extends Pick<
   seq?: number | undefined;
   toolCalls?: MessageToolCall[] | undefined;
   status?: SessionMessageStatus | undefined;
-  /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */
-  precomputedHtml?: string | undefined;
   /**
    * 工具调用结果回执：本消息作为某些 toolCall 的结果时，
    * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。
@@ -725,7 +723,7 @@ export type SessionImportMeta = {
 };
 
 /**
- * 侧栏/主区会话权威形状（sessions[] 与 sessionsById 同引用）。
+ * 侧栏与主区的单条会话形状。集合真源是 sessionsById 与 sessionOrder。
  * 持久化索引字段见 sessionPersistence.SessionIndexEntry（子集 + messageCount 等）。
  */
 export interface SessionState {

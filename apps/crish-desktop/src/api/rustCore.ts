@@ -215,27 +215,6 @@ export interface MarkdownRenderResult {
 }
 
 /**
- * 单段 markdown → HTML（core_md_render）。
- * 命令缺失或失败时返回 null；调用方不得再回退到 JS Markdown 渲染器。
- */
-export async function renderMarkdown(
-  text: string,
-  variant: MarkdownVariant
-): Promise<MarkdownRenderResult | null> {
-  const res = await invokeResult<MarkdownRenderResult>('core_md_render', {
-    text,
-    variant,
-  });
-  if (res.status === 'ok' && res.data && typeof res.data.html === 'string') {
-    return {
-      html: res.data.html,
-      truncated: Boolean(res.data.truncated),
-    };
-  }
-  return null;
-}
-
-/**
  * 批量渲染 markdown → 结果数组（core_md_render_batch）。
  * 首屏/历史消息应走这里，避免 N 次 IPC。命令缺失或失败时返回 null 数组。
  */

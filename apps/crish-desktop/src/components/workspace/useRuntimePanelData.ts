@@ -4,15 +4,18 @@
  * 渲染层（RuntimeSection 基座 + 4 个业务 Section）不持有这些派生逻辑。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 import {
   useSettingsField,
   selectScheduledTasks,
   selectTokenUsage,
 } from '../../store/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
-import { setActiveSessionId } from '../../api/storeAccess';
-import { resolveDisplayModelId } from '../../api/providerProfiles';
+import { setActiveSessionId } from '../../store/storeAccess';
+import {
+  getActiveModelId,
+  resolveDisplayModelId,
+} from '../../api/providerProfiles';
 import { useEngineState } from '../../hooks/useEngineState';
 import { formatSectionCount } from './runtimePanelLib';
 
@@ -42,7 +45,7 @@ export type UseRuntimePanelDataResult = {
 export function useRuntimePanelData(): UseRuntimePanelDataResult {
   const cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
-  const sessions = useSessionStore((state) => state.sessions);
+  const sessions = useSessionStore(selectSessionList);
   const ds = useEngineState();
 
   const [now, setNow] = useState(() => Date.now());
@@ -106,7 +109,7 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
     }
   };
 
-  const modelId = resolveDisplayModelId() || 'unknown';
+  const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
   // plans/05 T5.4：费用只渲染引擎三态（formattedTotal / 未定价 / 免费），
   // 禁止 JS 估算与 `$` + toFixed
   const estimated =

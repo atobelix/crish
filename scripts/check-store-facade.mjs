@@ -19,7 +19,7 @@
 // 以 0 违规为门槛。
 //
 // Run: npm run check:store-facade [--baseline]
-import { readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,6 +45,19 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src', 'components');
 const SRC_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src');
 const BASELINE_FILE = join(REPO_ROOT, 'scripts', 'components-store-direct-imports.json');
+
+// SS-P6c：双门面合一后，api/storeAccess.ts 与 api/store-access/ 不得重新创建。
+for (const legacyPath of [
+  join(SRC_DIR, 'api', 'storeAccess.ts'),
+  join(SRC_DIR, 'api', 'store-access'),
+]) {
+  if (existsSync(legacyPath)) {
+    console.error(
+      `[check-store-facade] FAIL: legacy store facade exists: ${legacyPath}（SS-P6c 已物理删除，不得重建）`
+    );
+    process.exit(1);
+  }
+}
 
 const IMPORT_RE =
   /(?:import\s+(?:[^'"]*?\s+from\s+)?|require\s*\(\s*|import\s*\()\s*['"]([^'"]+)['"]/g;

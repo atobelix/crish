@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { resolveChatEmptyKind } from '../api/chatEmptyState';
 import { messageHasSubstance } from '../api/sessionTitle';
 import { StreamTextBatcher } from '../api/streamTextBatcher';
-import { globalPretextCache, validatePreparedText } from '../api/pretextCache';
 
 describe('chat invariants', () => {
   it('1. resolveChatEmptyKind - when message count > 0, empty state route must return null', () => {
@@ -223,26 +222,6 @@ describe('chat invariants', () => {
     expect(flushed.get(key)).toBe('Hello World!');
     expect(batcher.pendingCount()).toBe(0);
     expect(batcher.bufferedSize()).toBe(0);
-  });
-
-  it('12. Pretext 字体测量与回退计算不变量测试', () => {
-    expect(validatePreparedText({ boxWidth: NaN, boxHeight: 10 })).toBe(false);
-    expect(validatePreparedText({ boxWidth: 10, boxHeight: Infinity })).toBe(
-      false
-    );
-    expect(validatePreparedText({ boxWidth: 100, boxHeight: 200 })).toBe(true);
-    expect(validatePreparedText(null)).toBe(false);
-
-    globalPretextCache.clear();
-    const mockPrepared = { boxWidth: 50, boxHeight: 20 } as any;
-    globalPretextCache.set('msg-1', 'hello', '14px Inter', mockPrepared);
-
-    const cachedResult = globalPretextCache.getOrCreate(
-      'msg-1',
-      'hello',
-      '14px Inter'
-    );
-    expect(cachedResult).toBe(mockPrepared);
   });
 
   it('13. 草稿模式 (isPendingDraft) 新建对话 0 秒卡顿与 messagesLoadingCandidate 不变量测试', () => {

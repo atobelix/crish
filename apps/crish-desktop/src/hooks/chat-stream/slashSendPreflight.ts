@@ -6,7 +6,7 @@ import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecy
 import { resolveSendThinkingFields } from '../../api/chat-bridge/readiness';
 import { useSessionStore } from '../../store/sessionStore';
 import { navigateToNewDraft } from '../../store/storeAccess';
-import { openSettings, patchSession } from '../../api/storeAccess';
+import { openSettings, patchSession } from '../../store/storeAccess';
 import {
   resolveSlashCommand,
   isNavigationSlash,

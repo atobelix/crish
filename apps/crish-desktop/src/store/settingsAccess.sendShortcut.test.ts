@@ -6,7 +6,7 @@ import {
   readSendShortcut,
   SEND_SHORTCUT_CHANGED_EVENT,
 } from './settingsAccess';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from './settingsStore';
 
 describe('sendShortcut 单钥匙', () => {
   beforeEach(() => {
@@ -37,6 +37,8 @@ describe('sendShortcut 单钥匙', () => {
     window.removeEventListener(SEND_SHORTCUT_CHANGED_EVENT, onChange);
     expect(readSendShortcut()).toBe('ctrlEnter');
     expect(seen).toEqual(['ctrlEnter']);
-    expect(useSettingsStore.getState().appSettings?.sendShortcut).toBe('ctrlEnter');
+    expect(useSettingsStore.getState().appSettings?.sendShortcut).toBe(
+      'ctrlEnter'
+    );
   });
 });

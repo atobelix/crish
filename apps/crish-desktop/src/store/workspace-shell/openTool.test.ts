@@ -24,15 +24,6 @@ vi.mock('../../api/projectStore', () => ({
   getActiveProjectId: () => null,
 }));
 
-vi.mock('../../api/storeAccess', () => ({
-  enterDraftMode: vi.fn(),
-  setActiveSessionId: vi.fn(),
-  getSessionStoreState: vi.fn(() => ({})),
-  getActiveSessionId: vi.fn(() => null),
-  getWorkspaceStoreState: vi.fn(() => ({})),
-  getLayoutState: vi.fn(() => ({})),
-}));
-
 vi.mock('../../api/workspaceChromeTabs', () => ({
   closeSessionTab: vi.fn(),
   openSessionTab: vi.fn(),

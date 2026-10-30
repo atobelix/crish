@@ -10,9 +10,11 @@ import {
   findInsertIndex,
   isSortedByMessageOrder,
   messageOrderKey,
+} from '../store/messageOrderKey';
+import {
   mergeSessionMessageFields,
   sortMessagesByOrder,
-} from './store-access/helperAccess';
+} from '../store/sessionSharedHelpers';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
 import { blockText } from './chat-bridge/handlers/eventUtils';
@@ -125,10 +127,7 @@ export function projectEventsToMessages(events: unknown[]): {
   let maxSequence = 0;
   let msgSeq = 0;
   const messageIndex = new Map<string, number>();
-  const turnTextByMessage = new Map<
-    string,
-    { turnIndex: number; text: string }
-  >();
+  const turnTextByMessage = new Map<string, { turnIndex: number; text: string }>();
 
   const pushUser = (
     msg: AgentMessage,

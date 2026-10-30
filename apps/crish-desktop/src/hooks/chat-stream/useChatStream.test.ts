@@ -8,8 +8,9 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useChatStream } from './index';
+import { useChatStream } from './useChatStream';
 import { useSessionRuntimeStatusStore } from '../../store/sessionRuntimeStatusStore';
+import { sessionStreams } from '../../api/sessionStreamManager';
 import type { UseChatStreamOptions } from './types';
 
 const h = vi.hoisted(() => {
@@ -90,7 +91,6 @@ function makeSession(messages: Array<Record<string, unknown>> = []) {
   return { id: 'sess-1', goalMode: null, agents: [], messages };
 }
 
-
 describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-convergence §2.0）', () => {
   beforeEach(() => {
     showToastMock.mockClear();
@@ -102,12 +102,15 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
     h.transport.onMessage.mockClear();
     h.getSessionById.mockReturnValue(makeSession());
     useSessionRuntimeStatusStore.getState().clearAll();
+    // 进程级流注册表：上一用例只触发 onRunError（未 onComplete）时句柄仍在，按会话清空以隔离用例
+    sessionStreams.clearSession('sess-1');
   });
 
   /** 读取状态机相位（无则 null） */
   function runtimePhase(sid = 'sess-1') {
     return (
-      useSessionRuntimeStatusStore.getState().statusBySession[sid]?.phase ?? null
+      useSessionRuntimeStatusStore.getState().statusBySession[sid]?.phase ??
+      null
     );
   }
 
@@ -118,11 +121,7 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
       result.current.runStreamingAssistant('你好', 'user-1', 'sess-1');
     });
     const callbacks = h.streamAssistantResponseApi.mock.calls[0]?.[1] as {
-      onRunError: (
-        message: string,
-        kind?: string,
-        detail?: unknown
-      ) => void;
+      onRunError: (message: string, kind?: string, detail?: unknown) => void;
     };
     const addedMsg = h.layoutState.addMessage.mock.calls[0]?.[2] as {
       id: string;
@@ -159,7 +158,8 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
     );
     expect(h.layoutState.setSessionMessageStatus).not.toHaveBeenCalled(); // 不写气泡
     expect(runtimePhase()).toBe('failed'); // 唯一承载体：状态机
-    const st = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    const st =
+      useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
     if (st?.phase === 'failed') expect(st.kind).toBe('network');
 
     // 恢复即消失：transport connected → network 类失败自动清空
@@ -187,7 +187,10 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
     );
 
     act(() => {
-      callbacks.onRunError('服务暂时不可用，正在自动恢复，请稍后再试。', 'network');
+      callbacks.onRunError(
+        '服务暂时不可用，正在自动恢复，请稍后再试。',
+        'network'
+      );
     });
 
     expect(h.layoutState.withdrawMessage).not.toHaveBeenCalled();
@@ -226,12 +229,16 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
       'error'
     );
     // 错误唯一承载体：状态机 failed 相位，只带消息定位、不缓存提问文本
-    const status = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    const status =
+      useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
     expect(status?.phase).toBe('failed');
     if (status?.phase === 'failed') {
       expect(status.message).toBe('这一轮任务中断了，请稍后重试。');
       expect(status.kind).toBe('generic');
-      expect(status.turn).toEqual({ userMsgId: 'user-1', assistantMsgId: addedMsg.id });
+      expect(status.turn).toEqual({
+        userMsgId: 'user-1',
+        assistantMsgId: addedMsg.id,
+      });
       expect('promptText' in status).toBe(false);
     }
   });
@@ -241,7 +248,13 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
     h.getSessionById.mockReturnValue(
       makeSession([
         { id: 'user-1', sender: 'user', text: '你好', status: 'processing' },
-        { id: addedMsg.id, sender: 'assistant', text: '', status: 'processing', toolCalls: [] },
+        {
+          id: addedMsg.id,
+          sender: 'assistant',
+          text: '',
+          status: 'processing',
+          toolCalls: [],
+        },
       ])
     );
 
@@ -284,11 +297,15 @@ describe('useChatStream onRunError 单轨分发（端到端，docs/chat-notice-c
     const { result, callbacks } = startRunAndGetErrorHandler();
 
     act(() => {
-      callbacks.onRunError('该操作未获允许（可能被安全策略或计划模式拦截）。', 'blocked');
+      callbacks.onRunError(
+        '该操作未获允许（可能被安全策略或计划模式拦截）。',
+        'blocked'
+      );
     });
 
     expect(showToastMock).not.toHaveBeenCalled();
-    const status = useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
+    const status =
+      useSessionRuntimeStatusStore.getState().statusBySession['sess-1'];
     expect(status?.phase).toBe('failed');
     if (status?.phase === 'failed') {
       expect(status.kind).toBe('generic'); // blocked 不在状态机 kind 枚举内 → generic

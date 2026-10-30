@@ -15,8 +15,9 @@ import {
 import '../../api/modelsCatalogLive';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 
-vi.mock('../../api/storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/storeAccess')>();
+vi.mock('../../store/storeAccess', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../store/storeAccess')>();
   return {
     ...actual,
     patchSession: vi.fn(),

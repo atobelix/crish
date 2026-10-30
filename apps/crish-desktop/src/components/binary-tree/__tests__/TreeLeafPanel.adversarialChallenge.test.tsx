@@ -11,6 +11,8 @@ import {
 import { TreeLeafPanel } from '../TreeLeafPanel';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import { useSessionStore } from '../../../store/sessionStore';
+import { buildSessionIndex } from '../../../store/sessionIndex';
+import type { SessionState } from '../../../store/types';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { useWorkspaceShellStore } from '../../../store/workspace-shell';
 import {
@@ -129,9 +131,9 @@ vi.mock('../../../api/import/autoSyncExternalSessions', () => ({
 }));
 
 // 5. Provider and model mocks
-vi.mock('../../../api/storeAccess', async (importOriginal) => {
+vi.mock('../../../store/storeAccess', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../api/storeAccess')>();
+    await importOriginal<typeof import('../../../store/storeAccess')>();
   return {
     ...actual,
     openSettings: vi.fn(),
@@ -217,57 +219,31 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
     });
 
     useLayoutStore.setState({ chatMainSurface: 'chat' });
-    useSessionStore.setState({
-      sessions: [
+    const seeded: SessionState = {
+      id: 'sess-adv-1',
+      title: '已存主对话',
+      folder: '默认',
+      isPinned: false,
+      isArchived: false,
+      timestamp: 't-adv',
+      messages: [
         {
-          id: 'sess-adv-1',
-          title: '已存主对话',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't-adv',
-          messages: [
-            {
-              id: 'm1',
-              sender: 'user',
-              timestamp: 100,
-              text: '主对话历史输入',
-            },
-            {
-              id: 'm2',
-              sender: 'assistant',
-              timestamp: 101,
-              text: '主对话历史回复',
-            },
-          ],
-          agents: [],
-        } as any,
+          id: 'm1',
+          sender: 'user',
+          timestamp: 100,
+          text: '主对话历史输入',
+        },
+        {
+          id: 'm2',
+          sender: 'assistant',
+          timestamp: 101,
+          text: '主对话历史回复',
+        },
       ],
-      sessionsById: {
-        'sess-adv-1': {
-          id: 'sess-adv-1',
-          title: '已存主对话',
-          folder: '默认',
-          isPinned: false,
-          isArchived: false,
-          timestamp: 't-adv',
-          messages: [
-            {
-              id: 'm1',
-              sender: 'user',
-              timestamp: 100,
-              text: '主对话历史输入',
-            },
-            {
-              id: 'm2',
-              sender: 'assistant',
-              timestamp: 101,
-              text: '主对话历史回复',
-            },
-          ],
-          agents: [],
-        } as any,
-      },
+      agents: [],
+    };
+    useSessionStore.setState({
+      ...buildSessionIndex([seeded]),
       activeSessionId: 'sess-adv-1',
     });
   });

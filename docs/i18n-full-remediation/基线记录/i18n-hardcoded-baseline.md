@@ -101,7 +101,6 @@ apps/crish-desktop/src/api/resolveSlashCommand.ts 19
 apps/crish-desktop/src/api/rulesApi.ts 1
 apps/crish-desktop/src/api/runControlClient.ts 1
 apps/crish-desktop/src/api/rustCore.ts 1
-apps/crish-desktop/src/api/session-persistence/sessionDeltaWriteBarrier.ts 3
 apps/crish-desktop/src/api/session-persistence/sessionHydrationAgents.ts 1
 apps/crish-desktop/src/api/session-persistence/sessionHydrationMessages.ts 2
 apps/crish-desktop/src/api/session-persistence/sessionPersistenceTypes.ts 1
@@ -118,7 +117,7 @@ apps/crish-desktop/src/api/sessionTitleSource.ts 3
 apps/crish-desktop/src/api/silentComplete.ts 2
 apps/crish-desktop/src/api/skillsApi.ts 9
 apps/crish-desktop/src/api/skillsApiCreate.ts 12
-apps/crish-desktop/src/api/store-access/telemetryAccess.ts 1
+apps/crish-desktop/src/store/telemetryAccess.ts 1
 apps/crish-desktop/src/api/streamDiag.ts 10
 apps/crish-desktop/src/api/subagentApi.ts 1
 apps/crish-desktop/src/api/subagentTimeline.ts 1
@@ -553,7 +552,6 @@ apps/crish-desktop/src/store/sessionAgentActions.ts 4
 apps/crish-desktop/src/store/sessionCrudActions.ts 1
 apps/crish-desktop/src/store/sessionInjectionMount.ts 2
 apps/crish-desktop/src/store/sessionMessageActionsCore.ts 2
-apps/crish-desktop/src/store/streamRunCompletion.ts 3
 apps/crish-desktop/src/store/surfaceRouter.ts 3
 apps/crish-desktop/src/store/workspace-shell/treeSessionCommands.ts 4
 apps/crish-desktop/src/store/workspace-shell/treeSessionQuery.ts 1

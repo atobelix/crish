@@ -12,7 +12,7 @@ import type {
   LegacyEventType,
 } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { getSessionStoreState } from '../../storeAccess';
+import { getSessionStoreState } from '../../../store/sessionStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { invalidateEditObjects } from '../editSessionConsumer';
 import { logger } from '../../../services/LoggerService';
@@ -187,9 +187,10 @@ export function onTimelineTruncate(
   } catch (err) {
     logger.warn('[dispatch] timeline-truncate 消费失败', {
       module: 'dispatch',
-      err: err instanceof Error
-        ? { message: err.message, stack: err.stack, name: err.name }
-        : { message: String(err) },
+      err:
+        err instanceof Error
+          ? { message: err.message, stack: err.stack, name: err.name }
+          : { message: String(err) },
     });
   }
 }

@@ -1,6 +1,9 @@
 /**
  * 会话与消息操作门面 (Session & Message Access Facade)
  *
+ * 自 api/store-access/sessionAccess.ts 迁入 store 域：会话写入门面归 store 自身所有，
+ * api 层不得再维护第二份会话写门面（SS-P6c 门面合一）。
+ *
  * 纯查询/校验函数已拆分到 ./sessionAccessQuery（纯结构性重构）；
  * 本文件 re-export 以保持外部 import 路径稳定，并保留依赖 getSessionStoreState() 的写入门面。
  */
@@ -11,8 +14,8 @@ import type {
   SessionGoalMode,
   SessionMessage,
   SessionMessageStatus,
-} from '../../store/types';
-import { getSessionStoreState } from '../../store/sessionStore';
+} from './types';
+import { getSessionStoreState } from './sessionStore';
 // 本文件门面内部用到的纯查询/校验函数从拆分文件引入；
 // 其余纯查询函数仅 re-export（外部消费方 import 路径不变）。
 import {
@@ -35,7 +38,7 @@ export {
 } from './sessionAccessQuery';
 
 /**
- * 创建 / 附加真会话（写入 sessions[]）。
+ * 创建 / 附加真会话（写入 sessionsById + sessionOrder）。
  *
  * **允许**：commitDraftIfNeeded、系统/定时占位（建议带真实 title + activate:false）、
  * 测试、显式 id attach。
@@ -159,17 +162,11 @@ export function addMessage(
 export function updateMessageText(
   sessionId: string,
   messageId: string,
-  text: string,
-  precomputedHtml?: string
+  text: string
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
-  getSessionStoreState().updateMessageText(
-    sid,
-    messageId,
-    text,
-    precomputedHtml
-  );
+  getSessionStoreState().updateMessageText(sid, messageId, text);
 }
 
 export function updateMessageThinking(

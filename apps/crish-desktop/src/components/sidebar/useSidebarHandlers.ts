@@ -1,7 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import { useSessionStore, useMainSurface } from '../../store/storeAccess';
 import { getActiveProjectId } from '../../api/projectStore';
-import { setDraftFolder } from '../../api/storeAccess';
+import { setDraftFolder } from '../../store/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';

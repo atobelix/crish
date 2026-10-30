@@ -11,12 +11,6 @@
  * - reset 清空累计状态（切会话/新 run 时调用）
  * - isFinal=true 的帧不会再有后续 delta
  * - 统一单一时钟源与 Unicode Grapheme 簇边界截断（Intl.Segmenter）
- *
- * 字段演进：
- * - frame.html：预留 JS 增量解析器（IncrementalMarkdownParser）产出的 HTML；
- *   当前阶段解析器尚未接入，flush 暂写 ''，待解析器接入后由调用方在 onFrame
- *   之前填充。消费方应同时支持 '' 与非空字符串两条路径。
- * - frame.chunkUpdates：chunk 级 DOM 更新通道，当前不用，保留以备细粒度 patch。
  */
 
 import { logger } from '../services/LoggerService';
@@ -27,10 +21,6 @@ export interface RenderFrame {
   lastOffset: number;
   isFinal: boolean;
   timestamp: number;
-  /** JS 增量解析器产出的 HTML（流式期渲染用）；解析器接入前为 '' */
-  html: string;
-  /** chunk 级 DOM 更新（保留字段，当前不用） */
-  chunkUpdates: never[];
   /** 当积压超过 maxBacklogBytes 且非 force 时为 true，表示跳帧降级 */
   degraded: boolean;
 }
@@ -240,8 +230,6 @@ export class StreamRenderBuffer {
           lastOffset: this.flushedLength,
           isFinal: true,
           timestamp: performance.now(),
-          html: '',
-          chunkUpdates: [],
           degraded: false,
         });
       }
@@ -264,7 +252,7 @@ export class StreamRenderBuffer {
         `[StreamRenderBuffer] 帧预算超限：${frameElapsed.toFixed(1)}ms > ${this.frameBudgetMs}ms (overrun #${this.frameOverrunCount})`,
         {
           module: 'StreamRenderBuffer',
-        },
+        }
       );
     }
     this.pending = remaining;
@@ -291,8 +279,6 @@ export class StreamRenderBuffer {
         lastOffset: this.flushedLength,
         isFinal: isLastFrame,
         timestamp: performance.now(),
-        html: '',
-        chunkUpdates: [],
         degraded,
       };
       this.onFrame?.(frame);

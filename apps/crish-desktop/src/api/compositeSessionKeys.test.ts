@@ -3,7 +3,7 @@
  *
  * 钉死四件事：
  * 1. 形状逐字节兼容（迁移自 streamTextBatcher / streamingStoreCore /
- *    streamDirectDomEngine / dualLatchProtocol 的历史实现，严禁漂移）；
+ *    dualLatchProtocol 的历史实现，严禁漂移）；
  * 2. 空会话归一语义（`__default__` 变体与纯拼接变体的分工）；
  * 3. 三段工具键的解析往返（first/last `::` 切分，messageId 允许含 `::`）；
  * 4. 前缀清理语义（startsWith 批量驱逐契约）。

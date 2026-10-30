@@ -23,7 +23,7 @@ import {
   createSession,
   getSessionById,
   renameSession,
-} from '../../api/storeAccess';
+} from '../../store/storeAccess';
 import { useSessionStore } from '../../store/storeAccess';
 import {
   readWorkflowsCache,

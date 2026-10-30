@@ -1,10 +1,9 @@
 /**
  * Markdown IPC 契约与搜索索引三态测试。
  *
- * Markdown 2.0 只有三条命令：core_md_render / core_md_render_batch /
- * core_md_render_stream，统一携带 variant（chat/document），统一返回
- * `{ html, truncated }`。命令缺失或失败时返回 null（批量返回 null 数组），
- * 严禁回退 JS 渲染器。
+ * 前端封装 core_md_render_batch / core_md_render_stream 两条命令，统一携带
+ * variant（chat/document），统一返回 `{ html, truncated }`。命令缺失或失败
+ * 时返回 null（批量返回 null 数组），严禁回退 JS 渲染器。
  *
  * 可观测面口径：`logInternalError` 已收敛为唯一走 `logger.warn`
  * （userFacingErrors.ts「删除 console.warn 裸调」），而 LoggerService
@@ -16,7 +15,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invokeResult } from './tauriInvoke';
 import {
   rebuildSearchIndex,
-  renderMarkdown,
   renderMarkdownBatch,
   renderMarkdownStream,
 } from './rustCore';
@@ -35,55 +33,6 @@ const mockedInvokeResult = vi.mocked(invokeResult);
 beforeEach(() => {
   mockedInvokeResult.mockReset();
   logger.clearLogs();
-});
-
-describe('core_md_render', () => {
-  it('ok → 返回 html/truncated 并携带 variant', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({
-      status: 'ok',
-      data: { html: '<p>a</p>', truncated: false },
-    });
-    await expect(renderMarkdown('a', 'chat')).resolves.toEqual({
-      html: '<p>a</p>',
-      truncated: false,
-    });
-    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render', {
-      text: 'a',
-      variant: 'chat',
-    });
-  });
-
-  it('truncated 标记透传给调用方', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({
-      status: 'ok',
-      data: { html: '<p>long</p>', truncated: true },
-    });
-    await expect(renderMarkdown('long', 'document')).resolves.toEqual({
-      html: '<p>long</p>',
-      truncated: true,
-    });
-  });
-
-  it('missing → null', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
-    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
-  });
-
-  it('error → null', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({
-      status: 'error',
-      message: 'boom',
-    });
-    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
-  });
-
-  it('畸形载荷（缺 html）→ null', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({
-      status: 'ok',
-      data: { truncated: false },
-    });
-    await expect(renderMarkdown('a', 'chat')).resolves.toBeNull();
-  });
 });
 
 describe('core_md_render_batch', () => {

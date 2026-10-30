@@ -8,10 +8,12 @@
  * 合并 delta → 写回原子完成）。红测试原为对旧模式的竞态复现（最终 20 ≠ 30），
  * 修复后 hook 不再走读-改-写模式，测试改经新入口验证同一契约：
  * 并发增量最终全部累计。
+ *
+ * SS-P6c：随 telemetryAccess 门面迁入 store 域，断言零改动。
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { useSettingsStore } from '../../store/settingsStore';
-import { useWorkerStore } from '../../store/workerStore';
+import { useSettingsStore } from './settingsStore';
+import { useWorkerStore } from './workerStore';
 import {
   accumulateTokenUsage,
   mergeTokenUsageDelta,

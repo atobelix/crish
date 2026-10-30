@@ -321,7 +321,7 @@ export function shouldBlockWindowedSessionBodySave(
     })
   ) {
     logger.warn(
-      `[persistAllSessionsRust] Blocked windowed session body truncate for ${s.id} (${currentMsgCount}/${s.messageCount}) by DeltaWriteBarrier`,
+      `[persistAllSessionsRust] Blocked windowed session body truncate for ${s.id} (${currentMsgCount}/${s.messageCount}) by SessionDeltaWriteBarrier`,
       { module: 'persist' }
     );
     return true;

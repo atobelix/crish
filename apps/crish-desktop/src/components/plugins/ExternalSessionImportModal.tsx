@@ -8,7 +8,7 @@ import React, {
 import { Dialog, Button, Tooltip, Input, Switch } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSessionStore } from '../../store/storeAccess';
+import { selectSessionList, useSessionStore } from '../../store/storeAccess';
 import {
   combineExternalSessionScans,
   scanClaudeCodeSessions,
@@ -44,7 +44,7 @@ export const ExternalSessionImportModal: React.FC<
   ExternalSessionImportModalProps
 > = ({ open, onClose }) => {
   const { showToast } = useToast();
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessions = useSessionStore(selectSessionList);
   const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
 
   const [loading, setLoading] = useState(false);

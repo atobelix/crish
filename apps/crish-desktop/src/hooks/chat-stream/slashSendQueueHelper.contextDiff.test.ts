@@ -15,6 +15,8 @@ import {
   setSessionThinkingTitle,
 } from '../../api/SessionRuntimeRegistry';
 import { useSessionStore } from '../../store/sessionStore';
+import { buildSessionIndex, getSessionById } from '../../store/sessionIndex';
+import type { SessionState } from '../../store/types';
 import { usePermissionStore } from '../../store/permissionStore';
 import { formatContextStateDisplayText } from '../../components/chat-message/contextStateUtils';
 import { permissionModeLabel } from '../../api/permissionModes';
@@ -22,25 +24,23 @@ import { permissionModeLabel } from '../../api/permissionModes';
 const SID = 'sess-diff';
 
 function seedSession(): void {
-  const session = {
+  const session: SessionState = {
     id: SID,
     title: '差分',
-    messages: [{ id: 'm0', sender: 'user' as const, text: 'hi', timestamp: 1 }],
-    createdAt: 1,
-    updatedAt: 1,
+    folder: 'general',
+    isPinned: false,
+    isArchived: false,
+    timestamp: new Date(0).toISOString(),
+    messages: [{ id: 'm0', sender: 'user', text: 'hi', timestamp: 1 }],
   };
   useSessionStore.setState({
-    sessions: [session],
-    sessionsById: { [SID]: session },
+    ...buildSessionIndex([session]),
     activeSessionId: SID,
   });
 }
 
 function messages() {
-  return (
-    useSessionStore.getState().sessions.find((s) => s.id === SID)?.messages ??
-    []
-  );
+  return getSessionById(useSessionStore.getState(), SID)?.messages ?? [];
 }
 
 function lastContextMetadata(): Record<string, unknown> | undefined {

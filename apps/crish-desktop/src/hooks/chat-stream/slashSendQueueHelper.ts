@@ -2,8 +2,8 @@
  * apps/crish-desktop/src/hooks/chat-stream/slashSendQueueHelper.ts
  * 负责并发检测、排队消息入库与 Follow-up 队列调度（单一职责叶）
  */
-import { addContextInjection } from '../../api/storeAccess';
-import { addMessage } from '../../api/storeAccess';
+import { addContextInjection } from '../../store/storeAccess';
+import { addMessage } from '../../store/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { isSessionAiBusy } from './streamRunState';

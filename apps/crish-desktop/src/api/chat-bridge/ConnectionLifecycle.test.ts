@@ -84,14 +84,6 @@ vi.mock('../projectStore', async (importOriginal) => {
   };
 });
 
-vi.mock('../storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../storeAccess')>();
-  return {
-    ...actual,
-    getPermissionMode: () => 'ask',
-  };
-});
-
 vi.mock('../clientApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../clientApi')>();
   return {

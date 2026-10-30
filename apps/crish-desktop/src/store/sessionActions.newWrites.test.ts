@@ -2,7 +2,11 @@ import { produce } from 'immer';
 import { describe, expect, it, vi } from 'vitest';
 import { GENERAL_FOLDER } from '../api/projectStore';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import {
+  buildSessionIndex,
+  isSessionsIndexConsistent,
+  listSessions,
+} from './sessionIndex';
 import type { MessageToolCall, SessionMessage, SessionState } from './types';
 
 /**
@@ -65,8 +69,7 @@ function makeStateFromSessions(
   folderOrder: string[] = [],
 ): SessionStoreSlice {
   return {
-    sessions,
-    sessionsById: buildSessionsById(sessions),
+    ...buildSessionIndex(sessions),
     folderOrder,
     activeSessionId,
     draftFolder: '',
@@ -87,15 +90,16 @@ function makeHarnessFromState(initial: SessionStoreSlice) {
 }
 
 describe('T-E 新 action：setEngineLastRunId / updateMessageTimeline / applyToolCallPatches', () => {
-  it('setEngineLastRunId 经 canonical 写（sessionsById 与 sessions[] 同引用）', () => {
+  it('setEngineLastRunId 经 canonical 写（sessionsById 与列表同引用）', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions([makeSession({ id: 's1' })], 's1'),
     );
     h.actions.setEngineLastRunId('s1', 'run-9');
     const st = h.getState();
+    const listed = listSessions(st)[0]!;
     expect(st.sessionsById['s1']!.engineLastRunId).toBe('run-9');
-    expect(st.sessions[0]!.engineLastRunId).toBe('run-9');
-    expect(st.sessionsById['s1']).toBe(st.sessions[0]);
+    expect(listed.engineLastRunId).toBe('run-9');
+    expect(st.sessionsById['s1']).toBe(listed);
   });
 
   it('updateMessageTimeline 归一 blocks/toolCalls（sender 非 assistant 早退）', () => {
@@ -250,7 +254,7 @@ describe('T-E 新 action：setMessageCacheMetrics（canonical 写回归）', () 
     inputTotal: 500,
   };
 
-  it('按 messageId 命中写入；sessions[] canonical 与索引同引用', () => {
+  it('按 messageId 命中写入；列表与 sessionsById 同引用', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
         [
@@ -270,14 +274,17 @@ describe('T-E 新 action：setMessageCacheMetrics（canonical 写回归）', () 
     );
     h.actions.setMessageCacheMetrics('s1', 'm1', metrics);
     const st = h.getState();
-    const sess = st.sessions[0]!;
+    const sess = listSessions(st)[0]!;
     expect(sess.messages[0]!.cacheMetrics).toEqual({
       metrics,
       source: 'engine-message-end',
     });
-    // canonical 写回归：sessions[] 持引用，索引重建（buildSessionsById）不丢字段
-    const rebuilt = buildSessionsById(st.sessions);
-    expect(rebuilt['s1']!.messages[0]!.cacheMetrics).toEqual({
+    expect(st.sessionsById['s1']).toBe(sess);
+    expect(isSessionsIndexConsistent(st)).toBe(true);
+    // 有序列表与 sessionsById 同引用，重建索引不丢字段
+    const rebuilt = buildSessionIndex(listSessions(st));
+    expect(rebuilt.sessionsById['s1']).toBe(sess);
+    expect(rebuilt.sessionsById['s1']!.messages[0]!.cacheMetrics).toEqual({
       metrics,
       source: 'engine-message-end',
     });

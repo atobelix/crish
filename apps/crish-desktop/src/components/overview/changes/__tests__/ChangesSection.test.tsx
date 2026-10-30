@@ -4,6 +4,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChangesSection } from '../ChangesSection';
 import { useSessionStore } from '../../../../store/sessionStore';
+import { buildSessionIndex } from '../../../../store/sessionIndex';
+import type { SessionState } from '../../../../store/types';
 import type { GitStatusResult } from '../../../../api/gitApi';
 
 describe('ChangesSection — 会话改动面板组件化集成测试', () => {
@@ -23,30 +25,18 @@ describe('ChangesSection — 会话改动面板组件化集成测试', () => {
   };
 
   beforeEach(() => {
+    const session: SessionState = {
+      id: 'sess-empty',
+      title: '空白新会话',
+      folder: 'conex',
+      isPinned: false,
+      isArchived: false,
+      timestamp: new Date().toISOString(),
+      messages: [],
+    };
     useSessionStore.setState({
       activeSessionId: 'sess-empty',
-      sessions: [
-        {
-          id: 'sess-empty',
-          title: '空白新会话',
-          folder: 'conex',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-        },
-      ],
-      sessionsById: {
-        'sess-empty': {
-          id: 'sess-empty',
-          title: '空白新会话',
-          folder: 'conex',
-          isPinned: false,
-          isArchived: false,
-          timestamp: new Date().toISOString(),
-          messages: [],
-        },
-      },
+      ...buildSessionIndex([session]),
     });
   });
 

@@ -37,7 +37,8 @@ vi.mock('../../../app/compositionRoot', () => ({
   }),
 }));
 
-vi.mock('../../../api/storeAccess', () => ({
+vi.mock('../../../store/storeAccess', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../store/storeAccess')>()),
   openSettings: vi.fn(),
 }));
 

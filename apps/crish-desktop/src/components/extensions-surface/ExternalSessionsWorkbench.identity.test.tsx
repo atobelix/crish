@@ -36,11 +36,17 @@ vi.mock('../../api/import/importSessions', () => ({
   deleteImportedSession: vi.fn(),
 }));
 
-vi.mock('../../store/storeAccess', () => ({
-  useSessionStore: (selector: (state: { sessions: never[] }) => unknown) =>
-    selector({ sessions: [] }),
-  navigateToChatSession: vi.fn(),
-}));
+vi.mock('../../store/storeAccess', async () => {
+  const { buildSessionIndex, selectSessionList } = await import(
+    '../../store/sessionIndex'
+  );
+  const state = buildSessionIndex([]);
+  return {
+    useSessionStore: (selector: (s: typeof state) => unknown) => selector(state),
+    selectSessionList,
+    navigateToChatSession: vi.fn(),
+  };
+});
 
 vi.mock('./SessionPreviewPane', () => ({
   SessionPreviewPane: ({

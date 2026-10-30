@@ -8,9 +8,9 @@ import {
   sessionCascadeCancellation,
 } from './sessionCascadeCancellation';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import { buildSessionIndex } from './sessionIndex';
 import type { SessionState } from './types';
-import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import { sessionStreams } from '../api/sessionStreamManager';
 import { useStreamingStore } from './streamingStore';
 
 function makeStateFromSessions(
@@ -18,8 +18,7 @@ function makeStateFromSessions(
   activeSessionId: string
 ): SessionStoreSlice {
   return {
-    sessions,
-    sessionsById: buildSessionsById(sessions),
+    ...buildSessionIndex(sessions),
     folderOrder: Array.from(new Set(sessions.map((s) => s.folder))),
     activeSessionId,
     draftFolder: '',
@@ -202,15 +201,9 @@ describe('SessionCascadeCancellation (三级级联取消总线 W2-3 / VULN-05)',
       expect(workerHandler).toHaveBeenCalledTimes(1);
     });
 
-    it('Tier 2 通信级：通知 TransportAbortHandler 并清理 sharedSessionStreamManager 和 useStreamingStore', () => {
-      const streamCancelSpy = vi.spyOn(
-        sharedSessionStreamManager,
-        'cancelSession'
-      );
-      const streamClearSpy = vi.spyOn(
-        sharedSessionStreamManager,
-        'clearSession'
-      );
+    it('Tier 2 通信级：通知 TransportAbortHandler 并清理 sessionStreams 和 useStreamingStore', () => {
+      const streamCancelSpy = vi.spyOn(sessionStreams, 'cancel');
+      const streamClearSpy = vi.spyOn(sessionStreams, 'clearSession');
       const streamingStoreSpy = vi.spyOn(
         useStreamingStore.getState(),
         'clearSession'
@@ -225,7 +218,7 @@ describe('SessionCascadeCancellation (三级级联取消总线 W2-3 / VULN-05)',
       sessionCascadeCancellation.cancelSessionCascade('sess-transport');
 
       expect(transportHandler).toHaveBeenCalledWith('sess-transport');
-      expect(streamCancelSpy).toHaveBeenCalledWith('sess-transport');
+      expect(streamCancelSpy).toHaveBeenCalledWith('sess-transport', 'force');
       expect(streamClearSpy).toHaveBeenCalledWith('sess-transport');
       expect(streamingStoreSpy).toHaveBeenCalledWith('sess-transport');
 

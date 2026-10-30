@@ -5,7 +5,6 @@
  * 扫描 apps/crish-desktop/src 下生产文件（排除 *.test.* / *.spec.*）的
  * `*Store.setState(` 调用点。允许面：
  *   - `src/store/` 目录（store 自身 action 定义 / 中间件 / index 重建等）；
- *   - `src/api/store-access/`（编排层，T11 域写分发点）；
  *   - `src/store/bootstrapStores.ts`（装配注入点）；
  *   - dev-only 分支（`import.meta.env.DEV` 包裹，dev 调试用）。
  *
@@ -28,7 +27,7 @@ const __debt08GuideFlag = process.argv.includes('--guide');
 if (__debt08GuideFlag) {
   const __debt08Guide = [
     "违反项：生产代码（apps/crish-desktop/src，排除 *.test.*/ *.spec.*）出现 `*Store.setState(` 直调。",
-    "允许面：src/store/ 自身、src/api/store-access/（T11 编排层）、src/store/bootstrapStores.ts、import.meta.env.DEV 分支。",
+    "允许面：src/store/ 自身、src/store/bootstrapStores.ts、import.meta.env.DEV 分支。",
     "文件:行号 / 当前值：FAIL 逐条给出文件:行号；当前值 = 命中数。",
     "阈值：允许面之外 0。",
     "正确做法：把状态变更封装为 store action 或经 store-access 编排；读路径经 facade hook，禁止组件直写。",
@@ -49,7 +48,6 @@ const STORE_SETSTATE_RE =
 /** 允许面目录（相对 SRC_DIR，posix 分隔） */
 const ALLOWED_DIRS = [
   'store/', // store 自身 action 定义
-  'api/store-access/', // 编排层
   'store/bootstrapStores.ts', // 装配注入点（目录前缀已含，此处仅文档化）
 ];
 
@@ -117,7 +115,7 @@ if (!statSync(bootstrapPath).isFile()) {
 
 if (failed) {
   console.error(
-    '[check:store-writes] FAIL: 生产代码 `*Store.setState` 应归零（白名单 = store/ 自身 + api/store-access/ + bootstrapStores + 测试 + dev-only）；事件写入必须走 layoutStore action 单一通道',
+    '[check:store-writes] FAIL: 生产代码 `*Store.setState` 应归零（白名单 = store/ 自身 + bootstrapStores + 测试 + dev-only）；事件写入必须走 layoutStore action 单一通道',
   );
   process.exit(1);
 }

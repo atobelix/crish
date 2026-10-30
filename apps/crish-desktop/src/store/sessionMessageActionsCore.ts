@@ -7,7 +7,7 @@
  */
 
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
-import { getSessionForWrite, rebindSessionById } from './sessionIndex';
+import { getSessionById } from './sessionIndex';
 import { saveMessageSnapshot } from './messageSnapshotsBridge';
 import type {
   SessionActions,
@@ -38,8 +38,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
   return {
     addMessage: (_wsId, sessionId, message) =>
       set((state) => {
-        // getSessionForWrite：经 sessions[] 写，避免 immer 只 fork sessionsById
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
@@ -72,12 +71,11 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         sess.timestamp = new Date(timestamp).toISOString();
         if (sess.timestampSource !== 'local') sess.timestampSource = 'local';
         if (message.sender === 'user') maybeAutoTitleSession(state, sess);
-        rebindSessionById(state, sessionId, sess);
       }),
 
     withdrawMessage: (_wsId, sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.messages) return;
         const idx = sess.messages.findIndex((m) => m.id === messageId);
         if (idx === -1) return;
@@ -133,7 +131,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           },
           { afterMessages: sess.messages }
         );
-        rebindSessionById(state, sessionId, sess);
         // 被撤回消息对象失效广播（仅失效被摘除的节点集合）
         invalidateEditObjects([...toRemove], 'withdraw');
       }),
@@ -142,7 +139,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
 
     applyTimelineTruncate: (sessionId, boundarySeq, targetMessageId) =>
       set((state) => {
-        const sess = getSessionForWrite(state, sessionId);
+        const sess = getSessionById(state, sessionId);
         if (!sess?.messages) return;
         // 投影重放至 boundary：保留边界 user 节点（seq == boundary_seq，
         // 事件流只追加语义下其起始即边界），丢弃其后的全部节点
@@ -172,7 +169,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
           },
           { afterMessages: sess.messages }
         );
-        rebindSessionById(state, sessionId, sess);
       }),
 
     respondToApproval: (sessionId, messageId, toolCallId, decision) =>
@@ -181,20 +177,15 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const tc = hit?.message.toolCalls?.find((t) => t.id === toolCallId);
         if (hit && tc && tc.approvalDecision !== decision) {
           tc.approvalDecision = decision;
-          rebindSessionById(state, sessionId, hit.session);
         }
       }),
 
-    updateMessageText: (sessionId, messageId, text, precomputedHtml) =>
+    updateMessageText: (sessionId, messageId, text) =>
       set((state) => {
         const hit = getSessionMessage(state, sessionId, messageId);
         if (!hit) return;
         const msg = hit.message;
-        const htmlChanged =
-          precomputedHtml !== undefined &&
-          msg.precomputedHtml !== precomputedHtml;
-        if (htmlChanged) msg.precomputedHtml = precomputedHtml;
-        if (msg.text === text && !htmlChanged) return;
+        if (msg.text === text) return;
         const prev = msg.text || '';
         msg.text = text;
         if (!msg.blocks) msg.blocks = [];
@@ -253,7 +244,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             durationMs: 0,
           });
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
 
     updateMessageThinking: (sessionId, messageId, thinking, turnIndex = 0) =>
@@ -375,7 +365,6 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             msg.blocks.push(newBlock);
           }
         }
-        rebindSessionById(state, sessionId, hit.session);
       }),
   };
 }
@@ -389,208 +378,4 @@ export interface FinalSubagentSnapshot {
   readonly finalText: string;
   readonly finalThinking?: string;
   readonly completedAt: number;
-}
-
-/** 流式回合终态单事务提交载荷（消息终态 + 子代理归档 + Epoch 递增原子合并） */
-export interface StreamingTurnFinalizePayload {
-  readonly sessionId: string;
-  readonly messageId: string;
-  readonly finalText: string;
-  readonly finalThinking?: string;
-  readonly finalStatus: 'completed' | 'error' | 'cancelled';
-  readonly completedAt?: number;
-  readonly finalSubagents?: readonly FinalSubagentSnapshot[];
-}
-
-export interface OrthogonalMessageRecord {
-  id: string;
-  text?: string;
-  streamText?: string;
-  thinking?: string;
-  status?: string;
-  isStreaming?: boolean;
-  completedAt?: number;
-  subagents?: readonly FinalSubagentSnapshot[];
-  blocks?: Array<{
-    type: string;
-    content?: string;
-    isStreaming?: boolean;
-    durationMs?: number;
-    startTime?: number;
-  }>;
-  thinkingTurns?: Array<{
-    turnIndex: number;
-    content: string;
-    isStreaming?: boolean;
-    durationMs?: number;
-  }>;
-}
-
-export interface OrthogonalStreamingTurnSlice {
-  messagesBySessionId?: Record<string, readonly OrthogonalMessageRecord[]>;
-  agentsBySessionId?: Record<string, Readonly<Record<string, unknown>>>;
-  messageEpochById?: Record<string, number>;
-  sessions?: SessionStoreSlice['sessions'];
-  sessionsById?: SessionStoreSlice['sessionsById'];
-}
-
-export type StreamingTurnStateSetter<
-  S extends OrthogonalStreamingTurnSlice = OrthogonalStreamingTurnSlice,
-> = (updater: (state: S) => S | void) => void;
-
-/**
- * 在单个 Store 事务内原子结算：
- * 1. 持久消息 `msg.text` 锁定最终完整文本（单调不退化）并清除 `streamText`（Dual-Latch 语义自锁存）；
- * 2. 落盘 `finalThinking`、`status`、`isStreaming = false` 及关联块终态；
- * 3. 归档 `finalSubagents` 并从运行期 `agentsBySessionId` / `session.agents` 摘除已完成子代理；
- * 4. 递增 `messageEpochById[messageId]`。
- */
-export function finalizeStreamingTurnState<
-  S extends OrthogonalStreamingTurnSlice,
->(state: S, payload: StreamingTurnFinalizePayload): S {
-  const {
-    sessionId,
-    messageId,
-    finalText,
-    finalThinking,
-    finalStatus,
-    finalSubagents,
-  } = payload;
-  const completedAt = payload.completedAt ?? Date.now();
-  let mutatedOrthogonal = false;
-  const shallowNext: OrthogonalStreamingTurnSlice = { ...state };
-
-  const sessionMessages = state.messagesBySessionId?.[sessionId];
-  if (sessionMessages) {
-    const msgIdx = sessionMessages.findIndex((m) => m.id === messageId);
-    if (msgIdx !== -1) {
-      const targetMsg = sessionMessages[msgIdx]!;
-      const prevText = targetMsg.text ?? '';
-      const resolvedText =
-        finalText.length >= prevText.length || !prevText.startsWith(finalText)
-          ? finalText
-          : prevText;
-      const nextMsg: OrthogonalMessageRecord = {
-        ...targetMsg,
-        text: resolvedText,
-        streamText: undefined,
-        thinking:
-          finalThinking !== undefined ? finalThinking : targetMsg.thinking,
-        status: finalStatus,
-        isStreaming: false,
-        completedAt,
-        ...(finalSubagents && finalSubagents.length > 0
-          ? { subagents: finalSubagents }
-          : {}),
-      };
-      if (targetMsg.blocks)
-        nextMsg.blocks = targetMsg.blocks.map((b) =>
-          b.isStreaming ? { ...b, isStreaming: false } : b
-        );
-      if (targetMsg.thinkingTurns)
-        nextMsg.thinkingTurns = targetMsg.thinkingTurns.map((tt) =>
-          tt.isStreaming ? { ...tt, isStreaming: false } : tt
-        );
-      const nextMessages = sessionMessages.slice();
-      nextMessages[msgIdx] = nextMsg;
-      shallowNext.messagesBySessionId = {
-        ...state.messagesBySessionId,
-        [sessionId]: nextMessages,
-      };
-      const prevEpoch = state.messageEpochById?.[messageId] ?? 0;
-      shallowNext.messageEpochById = {
-        ...(state.messageEpochById ?? {}),
-        [messageId]: (prevEpoch + 1) | 0,
-      };
-      mutatedOrthogonal = true;
-    }
-  }
-
-  if (
-    finalSubagents &&
-    finalSubagents.length > 0 &&
-    state.agentsBySessionId?.[sessionId]
-  ) {
-    const currentAgents = { ...state.agentsBySessionId[sessionId] };
-    for (const sub of finalSubagents) delete currentAgents[sub.id];
-    shallowNext.agentsBySessionId = {
-      ...state.agentsBySessionId,
-      [sessionId]: currentAgents,
-    };
-    mutatedOrthogonal = true;
-  }
-
-  if (Array.isArray(state.sessions)) {
-    const sliceState: SessionStoreSlice = {
-      sessions: state.sessions,
-      sessionsById: state.sessionsById ?? {},
-      folderOrder: [],
-      activeSessionId: '',
-      draftFolder: '',
-      activeAgentId: null,
-      panelAgentId: null,
-      composerDrafts: {},
-    };
-    const sess = getSessionForWrite(sliceState, sessionId);
-    if (sess) {
-      const msg = sess.messages
-        ? getMessageById(sess.messages, messageId)
-        : undefined;
-      if (msg) {
-        const prevText = msg.text || '';
-        msg.text =
-          finalText.length >= prevText.length || !prevText.startsWith(finalText)
-            ? finalText
-            : prevText;
-        Reflect.deleteProperty(msg, 'streamText');
-        if (finalThinking !== undefined) msg.thinking = finalThinking;
-        msg.status = finalStatus === 'cancelled' ? 'completed' : finalStatus;
-        msg.blocks?.forEach((b) => {
-          if (b.isStreaming) b.isStreaming = false;
-        });
-        msg.thinkingTurns?.forEach((tt) => {
-          if (tt.isStreaming) tt.isStreaming = false;
-        });
-        if (finalSubagents && finalSubagents.length > 0) {
-          const msgCarrier: {
-            id: string;
-            subagents?: readonly FinalSubagentSnapshot[];
-          } = msg;
-          msgCarrier.subagents = finalSubagents;
-        }
-      }
-      if (finalSubagents && finalSubagents.length > 0) {
-        const sessCarrier: {
-          id: string;
-          finalAgents?: FinalSubagentSnapshot[];
-        } = sess;
-        const archiveList = sessCarrier.finalAgents
-          ? sessCarrier.finalAgents.slice()
-          : [];
-        const archivedIds = new Set<string>();
-        for (const snap of finalSubagents) {
-          archivedIds.add(snap.id);
-          const existingIdx = archiveList.findIndex((a) => a.id === snap.id);
-          if (existingIdx >= 0) archiveList[existingIdx] = snap;
-          else archiveList.push(snap);
-        }
-        sessCarrier.finalAgents = archiveList;
-        if (Array.isArray(sess.agents))
-          sess.agents = sess.agents.filter((ag) => !archivedIds.has(ag.id));
-      }
-      rebindSessionById(sliceState, sessionId, sess);
-    }
-  }
-
-  return mutatedOrthogonal ? Object.assign({}, state, shallowNext) : state;
-}
-
-/** 触发单事务流式回合终态提交（合并主消息文本、思考、终态、子代理归档与 Epoch 递增） */
-export function finalizeStreamingTurnAction<
-  S extends OrthogonalStreamingTurnSlice,
->(
-  set: StreamingTurnStateSetter<S>,
-  payload: StreamingTurnFinalizePayload
-): void {
-  set((state) => finalizeStreamingTurnState(state, payload));
 }

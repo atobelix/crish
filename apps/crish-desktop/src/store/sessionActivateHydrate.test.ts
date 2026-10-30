@@ -23,7 +23,7 @@ import {
   type SessionStoreGet,
   type SessionStoreSlice,
 } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import { buildSessionIndex, listSessions } from './sessionIndex';
 import { needsEngineMessageHydrate } from './sessionSharedHelpers';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
 
@@ -188,8 +188,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: true,
     });
     const h = makeHarness({
-      sessions: [current, target],
-      sessionsById: buildSessionsById([current, target]),
+      ...buildSessionIndex([current, target]),
       folderOrder: [GENERAL_FOLDER, 'proj-target'],
       activeSessionId: current.id,
       draftFolder: '',
@@ -233,8 +232,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: true,
     });
     const h = makeHarness({
-      sessions: [left, current, right],
-      sessionsById: buildSessionsById([left, current, right]),
+      ...buildSessionIndex([left, current, right]),
       folderOrder: [GENERAL_FOLDER, 'proj-left', 'proj-current', 'proj-right'],
       activeSessionId: current.id,
       draftFolder: '',
@@ -264,8 +262,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: true,
     });
     const h = makeHarness({
-      sessions: [remaining],
-      sessionsById: buildSessionsById([remaining]),
+      ...buildSessionIndex([remaining]),
       folderOrder: [GENERAL_FOLDER, 'proj-remaining'],
       activeSessionId: 'stale-active-session',
       draftFolder: '',
@@ -278,7 +275,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
     expect(activateWorkspaceMock).not.toHaveBeenCalled();
   });
 
-  it('activate empty remote shell merges daemon messages into sessions[] and sessionsById', async () => {
+  it('activate empty remote shell merges daemon messages into the session index', async () => {
     const remote = emptyRemoteShell({
       id: 'engine-sess-1',
       title: '从引擎恢复的任务',
@@ -288,8 +285,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       title: '另一个未激活远程壳',
     });
     const h = makeHarness({
-      sessions: [remote, peer],
-      sessionsById: buildSessionsById([remote, peer]),
+      ...buildSessionIndex([remote, peer]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: peer.id,
       draftFolder: '',
@@ -299,10 +295,10 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
     });
 
     // MCP 观测点：activate 前 titles 在、messages 全空（lazy 预期）
-    expect(h.getState().sessions.every((s) => s.messages.length === 0)).toBe(
+    expect(listSessions(h.getState()).every((s) => s.messages.length === 0)).toBe(
       true
     );
-    expect(h.getState().sessions.map((s) => s.title)).toEqual([
+    expect(listSessions(h.getState()).map((s) => s.title)).toEqual([
       '从引擎恢复的任务',
       '另一个未激活远程壳',
     ]);
@@ -341,12 +337,12 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
 
     const st = h.getState();
     const byId = st.sessionsById['engine-sess-1'];
-    const inArr = st.sessions.find((s) => s.id === 'engine-sess-1');
+    const inList = listSessions(st).find((s) => s.id === 'engine-sess-1');
     expect(byId).toBeDefined();
-    expect(inArr).toBeDefined();
-    // 同引用：sessions[] 与 sessionsById 两边都有正文（防 immer map-only fork）
-    expect(byId).toBe(inArr);
-    expect(inArr!.messages.map((m) => m.id)).toEqual([
+    expect(inList).toBeDefined();
+    // 同引用：有序列表与 sessionsById 两边都有正文（防 immer 只改 map 分叉）
+    expect(byId).toBe(inList);
+    expect(inList!.messages.map((m) => m.id)).toEqual([
       'msg-user-1',
       'msg-asst-1',
     ]);
@@ -358,9 +354,9 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
     expect(byId!.hydratedFromEngine).toBe(true);
     expect(byId!.engineCursor).toBe(42);
     expect(byId!.engineLastRunId).toBe('run-9');
-    // MCP 观测点：activate 后 sessions[].messages 不再全 0
+    // MCP 观测点：activate 后列表中的 messages 不再全 0
     expect(
-      st.sessions.find((s) => s.id === 'engine-sess-1')?.messages.length
+      listSessions(st).find((s) => s.id === 'engine-sess-1')?.messages.length
     ).toBe(2);
 
     // 未 activate 的 peer 仍保持 lazy 空壳
@@ -378,8 +374,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       hydratedFromEngine: true,
     });
     const h = makeHarness({
-      sessions: [sess],
-      sessionsById: buildSessionsById([sess]),
+      ...buildSessionIndex([sess]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: 'other',
       draftFolder: '',
@@ -400,8 +395,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       title: '截断远程会话',
     });
     const h = makeHarness({
-      sessions: [remote],
-      sessionsById: buildSessionsById([remote]),
+      ...buildSessionIndex([remote]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: remote.id,
       draftFolder: '',
@@ -438,8 +432,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       hydrateTruncated: true,
     });
     const h = makeHarness({
-      sessions: [remote],
-      sessionsById: buildSessionsById([remote]),
+      ...buildSessionIndex([remote]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: remote.id,
       draftFolder: '',
@@ -478,8 +471,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messages: [{ id: 'm1', sender: 'user', text: 'local', timestamp: 1 }],
     };
     const h = makeHarness({
-      sessions: [sess],
-      sessionsById: buildSessionsById([sess]),
+      ...buildSessionIndex([sess]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: 'local-full',
       draftFolder: '',
@@ -502,8 +494,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: false,
     });
     const h = makeHarness({
-      sessions: [lazyShell],
-      sessionsById: buildSessionsById([lazyShell]),
+      ...buildSessionIndex([lazyShell]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: lazyShell.id,
       draftFolder: '',
@@ -570,8 +561,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: false,
     });
     const h = makeHarness({
-      sessions: [emptySess],
-      sessionsById: buildSessionsById([emptySess]),
+      ...buildSessionIndex([emptySess]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: emptySess.id,
       draftFolder: '',
@@ -627,8 +617,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: false,
     });
     const h = makeHarness({
-      sessions: [sessA, sessB],
-      sessionsById: buildSessionsById([sessA, sessB]),
+      ...buildSessionIndex([sessA, sessB]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: 'sess-A',
       draftFolder: '',
@@ -729,8 +718,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       hydratedFromEngine: true, // 曾被旧 bug 擦空 session_messages 但保留了 hydratedFromEngine=1
     });
     const h = makeHarness({
-      sessions: [remote],
-      sessionsById: buildSessionsById([remote]),
+      ...buildSessionIndex([remote]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: remote.id,
       draftFolder: '',
@@ -782,8 +770,7 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       messagesHydrated: false,
     });
     const h = makeHarness({
-      sessions: [remote],
-      sessionsById: buildSessionsById([remote]),
+      ...buildSessionIndex([remote]),
       folderOrder: [GENERAL_FOLDER],
       activeSessionId: remote.id,
       draftFolder: '',

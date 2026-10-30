@@ -17,7 +17,7 @@ import {
 import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getActiveProjectId } from '../../api/projectStore';
-import type { ChatAttachment } from '../../hooks/useChatStream';
+import type { ChatAttachment } from '../../hooks/chat-stream';
 import { useChatHandlers } from './useChatHandlers';
 
 interface ComposerPropsLike {

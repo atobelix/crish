@@ -14,6 +14,7 @@ import {
   closeSettings,
   deleteSessionCascade,
   listProjects,
+  selectSessionList,
   useSessionStore,
 } from '../../store/storeAccess';
 import { sessionListProjectLabel } from '../sidebar/session-list/sessionListUtils';
@@ -42,7 +43,7 @@ export const SettingsArchiveTab: React.FC<Props> = ({
 }) => {
   const { t } = useI18n();
   const { showToast } = useToast();
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessions = useSessionStore(selectSessionList);
   const [query, setQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteState>(null);
 

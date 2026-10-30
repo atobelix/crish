@@ -155,9 +155,7 @@ export function useSidebarContextMenu({
     if (!sessionId) return;
     const root = getCompositionRoot();
     const store = root.session.getState();
-    const targetSession =
-      store.sessionsById[sessionId] ??
-      store.sessions.find((s) => s.id === sessionId);
+    const targetSession = store.sessionsById[sessionId];
     setContextMenu(null);
     if (!targetSession) return;
 
