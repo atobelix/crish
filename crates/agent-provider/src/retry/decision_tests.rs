@@ -1,4 +1,4 @@
-//! retry.rs 决策域测试旁挂（SR-06e · 拆分 · ≠ EL；retry/ 目录内直接 mod 声明）
+//! retry.rs 决策域测试旁挂（SR-06e · 拆分 · ≠ EL；经 #[path] 接线，非直接 mod）
 //!
 //! 原 retry.rs `mod tests` 的决策域部分（策略 / 退避 / 决策表 / Retry-After 解析 /
 //! 预算耗尽）整段搬入，零删除零合并；测试名与断言形状不变。
@@ -17,7 +17,10 @@ fn default_policy() -> RetryPolicy {
 }
 
 fn server_error() -> ProviderError {
-    ProviderError::Server { status: Some(503) }
+    ProviderError::Server {
+        status: Some(503),
+        body_hint: None,
+    }
 }
 
 // ── 退避序列 ──
@@ -52,7 +55,13 @@ async fn should_retry_decision_table() {
             },
             true,
         ),
-        (ProviderError::Server { status: Some(503) }, true),
+        (
+            ProviderError::Server {
+                status: Some(503),
+                body_hint: None,
+            },
+            true,
+        ),
         (
             ProviderError::Timeout {
                 kind: TimeoutKind::Request,

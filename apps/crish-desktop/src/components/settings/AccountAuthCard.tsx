@@ -1,17 +1,16 @@
 /**
  * 设置 ·「账户」分区的账号区：未登录显示「未登录 + 登录」，已登录显示账号概览。
- * 登录弹窗与退出 / 注销确认弹窗常驻在此挂载：登录态切换后概览卸载，弹窗仍能完成退场动画。
+ * 登录弹窗为应用级单实例（AppGlobalDialogs 挂载），此处只负责打开；
+ * 退出 / 注销确认弹窗常驻在此挂载：登录态切换后概览卸载，弹窗仍能完成退场动画。
  */
 import React, { useEffect, useState } from 'react';
-import { AppIcon, Button, cn } from '@/components/ui';
+import { AppIcon, Button } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import { useAuthField } from '../../store/storeAccess';
 import { useAccountUiStore } from '../../store/accountUiStore';
-import { AccountCenterDialog } from '../account/AccountCenterDialog';
 import { AccountProfilePane } from '../account/AccountProfilePane';
 import { DeleteAccountDialog } from '../account/DeleteAccountDialog';
 import { SignOutConfirmDialog } from '../account/SignOutConfirmDialog';
-import controls from '../account/accountControls.module.css';
 import styles from '../account/account.module.css';
 
 type ConfirmKind = 'signOut' | 'delete';
@@ -52,19 +51,15 @@ export const AccountAuthCard: React.FC = () => {
               </div>
             </div>
             <div className={styles.actions}>
-              <Button
-                variant="unstyled"
-                type="button"
-                className={cn(controls.button, controls.primary)}
-                onClick={openLogin}
-              >
+              {/* 全局原子 Button（primary variant / 设计 token）——账户区不再
+                  私设 unstyled 黑底按钮；登录弹窗为应用级单实例（AppGlobalDialogs） */}
+              <Button variant="primary" type="button" onClick={openLogin}>
                 {t('settings.account.signIn')}
               </Button>
             </div>
           </div>
         </div>
       )}
-      <AccountCenterDialog />
       <SignOutConfirmDialog
         open={confirm === 'signOut'}
         onClose={closeConfirm}

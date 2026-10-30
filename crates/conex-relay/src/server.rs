@@ -604,12 +604,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
 #[serde(tag = "type")]
 enum ClientRelayMessage {
     #[serde(rename = "relay.data")]
-    RelayData { payload: Value },
+    Data { payload: Value },
     #[serde(rename = "relay.ping")]
-    RelayPing { ts: Option<u64> },
+    Ping { ts: Option<u64> },
     #[serde(rename = "relay.pong")]
     #[allow(dead_code)]
-    RelayPong { ts: Option<u64> },
+    Pong { ts: Option<u64> },
 }
 
 fn handle_client_text(
@@ -637,7 +637,7 @@ fn handle_client_text(
         }
     };
     match message {
-        ClientRelayMessage::RelayData { payload } => {
+        ClientRelayMessage::Data { payload } => {
             let forwarded = json!({
                 "type": "relay.data",
                 "from": claims.role.as_str(),
@@ -676,7 +676,7 @@ fn handle_client_text(
                 Err(HubError::Closed) | Err(HubError::MissingTarget) => false,
             }
         }
-        ClientRelayMessage::RelayPing { ts } => {
+        ClientRelayMessage::Ping { ts } => {
             send_best_effort(
                 state,
                 tx,
@@ -684,7 +684,7 @@ fn handle_client_text(
             );
             true
         }
-        ClientRelayMessage::RelayPong { .. } => true,
+        ClientRelayMessage::Pong { .. } => true,
     }
 }
 
@@ -752,10 +752,10 @@ pub fn config_from_env() -> anyhow::Result<(SocketAddr, RelayConfig)> {
         .parse()
         .map_err(|error| anyhow::anyhow!("invalid RELAY_BIND: {error}"))?;
     let secret = std::env::var("RELAY_SECRET").unwrap_or_default();
-    if secret.as_bytes().len() < 32 {
+    if secret.len() < 32 {
         return Err(anyhow::anyhow!(
             "RELAY_SECRET must be at least 32 bytes (got {})",
-            secret.as_bytes().len()
+            secret.len()
         ));
     }
     let auth_base_url =
