@@ -41,16 +41,6 @@ vi.mock('../../api/modelVisionSupport', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../api/providerProfiles')>();
-  return {
-    ...actual,
-    getActiveModelId: () => 'test-model',
-    getActiveProfileId: () => 'test-profile',
-  };
-});
-
 vi.mock('../../api/workspaceFsApi', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../api/workspaceFsApi')>();
