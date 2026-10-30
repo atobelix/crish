@@ -66,7 +66,7 @@ async fn test_error_stop_with_tool_calls_triggers_isolation_firewall() {
         })
     );
 
-    let outcome = consume_classify(&mut state, &consumed, "a1", false)
+    let outcome = consume_classify(&mut state, &consumed, "a1", false, false)
         .await
         .expect("consume_classify 应处理并返回结果");
 
@@ -124,7 +124,7 @@ async fn test_error_stop_without_tool_calls_salvages_and_completes_turn_for_resu
         false,
     );
 
-    let outcome = consume_classify(&mut state, &consumed, "a1", false)
+    let outcome = consume_classify(&mut state, &consumed, "a1", false, false)
         .await
         .expect("consume_classify 应处理并返回结果");
 

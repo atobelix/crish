@@ -17,7 +17,10 @@ fn default_policy() -> RetryPolicy {
 }
 
 fn server_error() -> ProviderError {
-    ProviderError::Server { status: Some(503) }
+    ProviderError::Server {
+        status: Some(503),
+        body_hint: None,
+    }
 }
 
 // ── 退避序列 ──
@@ -52,7 +55,13 @@ async fn should_retry_decision_table() {
             },
             true,
         ),
-        (ProviderError::Server { status: Some(503) }, true),
+        (
+            ProviderError::Server {
+                status: Some(503),
+                body_hint: None,
+            },
+            true,
+        ),
         (
             ProviderError::Timeout {
                 kind: TimeoutKind::Request,

@@ -234,6 +234,17 @@ pub(super) const fn is_server_status(status: Option<u16>) -> bool {
     matches!(status, Some(500..=599))
 }
 
+/// 服务端错误响应体摘要（≤200 字符，去首尾空白）：随 [crate::error::ProviderError::Server]
+/// 的 body_hint 透传上游原因——「该模型无可用上游」等服务端语义直达用户，
+/// 而非裸状态码；空响应体返回 None（不拼尾部提示）
+pub(super) fn server_body_hint(body_text: &str) -> Option<String> {
+    let trimmed = body_text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.chars().take(200).collect())
+}
+
 /// server 消息字样（:283-293）：统一覆盖 HTTP 5xx 状态码整词与 HTTP/RPC 服务端瞬态文案
 pub(super) fn detect_server_message(lower: &str) -> bool {
     [

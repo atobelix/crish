@@ -25,7 +25,7 @@ import { normalizeModelIdText } from './modelCatalogPure';
 import type {
   CatalogSnapshotEntryWire,
   CatalogSnapshotWire,
-} from './modelCatalogTypes';
+} from './pricingTypes';
 import { toCatalogCacheSnapshot } from './modelCatalogIpc';
 import {
   applyCatalogCacheSnapshot,
@@ -129,7 +129,10 @@ function conflictedKeysOf(
       e.cacheWriteFree ?? null,
       e.currency ?? null,
     ]);
-    for (const key of [normalizeModelIdText(e.model), normalizeModelIdText(e.apiModel)]) {
+    for (const key of [
+      normalizeModelIdText(e.model),
+      normalizeModelIdText(e.apiModel),
+    ]) {
       if (!key) continue;
       if (!signatures.has(key)) signatures.set(key, new Set());
       signatures.get(key)!.add(signature);
@@ -324,7 +327,13 @@ describe('③ 未收录 ≠ 0 成本（阶段 3 关键不变量）', () => {
 
   it('空快照 + 树无声明 → 估算返回 null（不得为 0）', () => {
     const unknown = ref('openai', 'no-such-model');
-    const cost4d = estimateCostUsd4d(unknown, 1_000_000, 1_000_000, 100_000, 100_000);
+    const cost4d = estimateCostUsd4d(
+      unknown,
+      1_000_000,
+      1_000_000,
+      100_000,
+      100_000
+    );
     expect(cost4d).toBeNull();
     expect(cost4d).not.toBe(0);
     expect(estimateCostUsd(unknown, 1_000_000, 1_000_000)).toBeNull();
@@ -391,7 +400,8 @@ describe('③ 未收录 ≠ 0 成本（阶段 3 关键不变量）', () => {
     });
     // 精确 id 命中
     expect(
-      resolveCatalogCachePrices(ref('deepseek', 'deepseek-v4-flash'))?.readPerMTok
+      resolveCatalogCachePrices(ref('deepseek', 'deepseek-v4-flash'))
+        ?.readPerMTok
     ).toBeCloseTo(0.0028, 10);
     // 设计变更：字典是厂商维度出厂目录，配置树 providerId 是用户侧键，
     // 两者不同命名空间且树无 vendor 字段 → 字典查找**与 provider 无关**：
@@ -567,7 +577,9 @@ describe('出厂字典真源驱动（catalog.json → 快照 → 估算）', () 
 
     // provider 缺失**不构成**「未收录」：价格决议只认 id
     applyCatalogCacheSnapshot(snap);
-    expect(resolveSnapshotPrice(ref('any-provider', 'orphan-model'))).not.toBeNull();
+    expect(
+      resolveSnapshotPrice(ref('any-provider', 'orphan-model'))
+    ).not.toBeNull();
     expect(
       resolve4dPrices(ref('any-provider', 'orphan-model'))?.inputPerMTok
     ).toBe(1);
@@ -634,22 +646,23 @@ describe('出厂字典真源驱动（catalog.json → 快照 → 估算）', () 
     // 估算面同样按「未收录」呈现：不得回落冲突条目任一侧价格
     applyCatalogCacheSnapshot(snap);
     expect(resolveSnapshotPrice(ref('openai', 'conflict-model'))).toBeNull();
-    expect(resolveCatalogCachePrices(ref('openai', 'conflict-model'))).toBeNull();
+    expect(
+      resolveCatalogCachePrices(ref('openai', 'conflict-model'))
+    ).toBeNull();
     expect(resolveCatalogCachePrices(ref('zai', 'conflict-model'))).toBeNull();
     expect(resolve4dPrices(ref('openai', 'conflict-model'))).toBeNull();
-    expect(estimateCostUsd4d(ref('openai', 'conflict-model'), 1e6, 0, 0, 0)).toBeNull();
+    expect(
+      estimateCostUsd4d(ref('openai', 'conflict-model'), 1e6, 0, 0, 0)
+    ).toBeNull();
     expect(estimateCostUsd(ref('openai', 'conflict-model'), 1e6, 0)).toBeNull();
-    expect(resolve4dPrices(ref('openai', 'stable-model'))?.inputPerMTok).toBe(5);
+    expect(resolve4dPrices(ref('openai', 'stable-model'))?.inputPerMTok).toBe(
+      5
+    );
   });
 
   it('前端独有旧 id 已随静态表消亡 → 未收录（漂移清零，不得回落本地表）', () => {
     // 旧静态表独有键（Rust 出厂字典无此 id、无同名 apiModel 别名）
-    for (const model of [
-      'gpt-5.6',
-      'grok-4-5',
-      'gemini-3-1-pro',
-      'grok-4-3',
-    ]) {
+    for (const model of ['gpt-5.6', 'grok-4-5', 'gemini-3-1-pro', 'grok-4-3']) {
       expect(resolveCatalogCachePrices(ref('openai', model))).toBeNull();
       expect(resolveCatalogCachePrices(ref('xai', model))).toBeNull();
       expect(resolveCatalogCachePrices(ref('google', model))).toBeNull();
@@ -676,7 +689,9 @@ describe('出厂字典真源驱动（catalog.json → 快照 → 估算）', () 
     expect(resolveTierForTokens(qwen, 256_000)?.cacheWritePerMTok).toBe(10);
 
     // 无 tier 模型：任意长度恒基础价
-    expect(resolveTierForTokens(ref('deepseek', 'deepseek-v4-flash'), 1e6)).toBeNull();
+    expect(
+      resolveTierForTokens(ref('deepseek', 'deepseek-v4-flash'), 1e6)
+    ).toBeNull();
   });
 
   it('估算消费出厂字典（写免费 / 币种 / 2D 与 4D 同源）', () => {
@@ -756,8 +771,6 @@ describe('出厂字典真源驱动（catalog.json → 快照 → 估算）', () 
     // 结构断言：字典内 id 无重复（「id 作唯一键」的前提）
     expect(new Set(modelIds).size).toBe(modelIds.length);
     // 结构断言：别名不新增 id 语义 —— 键数 ≤ 主张者集合大小
-    expect(Object.keys(snap.prices).length).toBeLessThanOrEqual(
-      claimants.size
-    );
+    expect(Object.keys(snap.prices).length).toBeLessThanOrEqual(claimants.size);
   });
 });

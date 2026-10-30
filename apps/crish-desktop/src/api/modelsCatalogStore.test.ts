@@ -427,11 +427,11 @@ describe('外部冲突、通知与增量追加', () => {
         })
       ).ok
     ).toBe(false);
-    expect(modelsCatalogStore.getState().tree).toBe(previous);
+    expect(modelsCatalogStore.getState().tree).toEqual(previous);
     expect(modelsCatalogStore.getState().lastError?.kind).toBe(
       'REVISION_CONFLICT'
     );
-    expect(modelsCatalogStore.getState().loaded).toBe(false);
+    expect(modelsCatalogStore.getState().loaded).toBe(true);
   });
   it('广播失败仍保留已提交成功，单独展示同步告警', async () => {
     await modelsCatalogStore.ensureLoaded();

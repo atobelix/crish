@@ -20,7 +20,7 @@ import type {
   ProviderSpec,
   ModelsYamlTree,
   ModelProtocol,
-} from '../api/modelCatalogTypes';
+} from '../api/modelsCatalogTypes';
 import baselineData from './modelsAutofillBaselineData.json';
 
 export interface CommonProviderSeedSuggestion {

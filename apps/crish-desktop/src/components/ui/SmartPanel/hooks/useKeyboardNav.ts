@@ -41,7 +41,8 @@ export function useKeyboardNav({
       return;
     }
     const firstValid = items.findIndex(
-      (item) => item.type !== 'divider' && item.type !== 'group' && !item.disabled
+      (item) =>
+        item.type !== 'divider' && item.type !== 'group' && !item.disabled
     );
     setFocusedIndex(firstValid >= 0 ? firstValid : -1);
   }, [isOpen, items, enableSearch, searchInputRef]);
@@ -49,14 +50,33 @@ export function useKeyboardNav({
   // Sync DOM focus and scroll into view
   useEffect(() => {
     if (focusedIndex >= 0 && contentRef.current) {
-      const itemElements = contentRef.current.querySelectorAll<HTMLElement>(
-        '[role="menuitem"], [role="menuitemcheckbox"], [role="option"]'
-      );
-      const target = itemElements[focusedIndex];
+      const curItem = items[focusedIndex];
+      let target: HTMLElement | null = null;
+      if (curItem) {
+        const actionKey = (curItem['data-action'] as string) || curItem.id;
+        if (actionKey) {
+          try {
+            target = contentRef.current.querySelector<HTMLElement>(
+              `[data-action="${CSS.escape(actionKey)}"]`
+            );
+          } catch {
+            // CSS.escape fallback
+          }
+        }
+      }
+      if (!target) {
+        const domIndex = items
+          .slice(0, focusedIndex)
+          .filter((it) => it.type !== 'divider' && it.type !== 'group').length;
+        const itemElements = contentRef.current.querySelectorAll<HTMLElement>(
+          '[role="menuitem"], [role="menuitemcheckbox"], [role="option"]'
+        );
+        target = itemElements[domIndex] ?? null;
+      }
       target?.focus();
       target?.scrollIntoView?.({ block: 'nearest' });
     }
-  }, [focusedIndex, contentRef]);
+  }, [focusedIndex, contentRef, items]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -68,9 +88,16 @@ export function useKeyboardNav({
         return;
       }
 
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return;
+      }
+
       const validIndices = items
         .map((item, idx) =>
-          item.type !== 'divider' && item.type !== 'group' && !item.disabled ? idx : -1
+          item.type !== 'divider' && item.type !== 'group' && !item.disabled
+            ? idx
+            : -1
         )
         .filter((idx) => idx !== -1);
 
@@ -99,7 +126,8 @@ export function useKeyboardNav({
         } else if (currentPos <= 0) {
           setFocusedIndex(validIndices[validIndices.length - 1] ?? 0);
         } else {
-          const prevPos = (currentPos - 1 + validIndices.length) % validIndices.length;
+          const prevPos =
+            (currentPos - 1 + validIndices.length) % validIndices.length;
           setFocusedIndex(validIndices[prevPos] ?? 0);
         }
       } else if (e.key === 'Home') {
@@ -110,7 +138,11 @@ export function useKeyboardNav({
         setFocusedIndex(validIndices[validIndices.length - 1] ?? 0);
       } else if (e.key === 'ArrowRight') {
         const curItem = items[focusedIndex];
-        if (curItem && (curItem.type === 'submenu' || (curItem.children && curItem.children.length > 0))) {
+        if (
+          curItem &&
+          (curItem.type === 'submenu' ||
+            (curItem.children && curItem.children.length > 0))
+        ) {
           e.preventDefault();
           if (curItem.type === 'collapsible') {
             onToggleCollapsible?.(curItem);

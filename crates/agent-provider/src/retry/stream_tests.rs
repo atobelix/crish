@@ -24,7 +24,10 @@ fn default_policy() -> RetryPolicy {
 }
 
 fn server_error() -> ProviderError {
-    ProviderError::Server { status: Some(503) }
+    ProviderError::Server {
+        status: Some(503),
+        body_hint: None,
+    }
 }
 
 /// 测试 sleeper：记录每次等待时长并立即完成（不耗真实时间）

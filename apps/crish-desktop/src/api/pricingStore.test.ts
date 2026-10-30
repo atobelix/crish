@@ -33,7 +33,7 @@ import type {
   CatalogCacheSnapshot,
   CatalogSnapshotPrice,
 } from './pricingTypes';
-import type { CatalogSnapshotEntryWire } from './modelCatalogTypes';
+import type { CatalogSnapshotEntryWire } from './pricingTypes';
 import { toCatalogCacheSnapshot } from './modelCatalogIpc';
 
 const CACHE_OPTS_KEY = 'crish_cache_price_opts_v1';

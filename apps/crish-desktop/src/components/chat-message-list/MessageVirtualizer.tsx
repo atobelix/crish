@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
+import type { SessionMessage } from '../../store/types';
 import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
@@ -457,7 +458,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                         isEditing={row.isEditing}
                         onStartEdit={
                           composer?.onStartEditMessage
-                            ? () => composer.onStartEditMessage?.(msg)
+                            ? // 透传行内 sanitized 消息（信封剥离后的用户原文）；
+                              // 无参调用回落原始 msg（信封 SSOT：编辑预填永不带信封）
+                              (sanitized?: SessionMessage) =>
+                                composer.onStartEditMessage?.(sanitized ?? msg)
                             : undefined
                         }
                         onCancelEdit={composer?.onCancelEditMessage}

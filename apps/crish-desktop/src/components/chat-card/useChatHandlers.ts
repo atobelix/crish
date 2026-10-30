@@ -26,6 +26,8 @@ export interface UseChatHandlersOptions {
   activeSessionId: string | null;
   activeSessionTitle: string | undefined;
   handleStopGeneration: () => void;
+  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  handleSilentStopGeneration?: () => void;
   setChatInput: (textOrFn: React.SetStateAction<string>) => void;
   runStreamingAssistant: (
     text: string,
@@ -51,6 +53,7 @@ export function useChatHandlers({
   activeSessionId,
   activeSessionTitle,
   handleStopGeneration,
+  handleSilentStopGeneration,
   setChatInput,
   runStreamingAssistant,
   handleSendChat,
@@ -248,7 +251,10 @@ export function useChatHandlers({
         return;
       }
       retryCountRef.current[sid] = 0;
-      handleStopGeneration();
+      // 编辑重发的先行停止走静默收口：停止是手段，不弹「已停止任务并清空
+      // 排队。」之类用户可见语义（该 toast 属停止按钮语境，编辑场景观感
+      // 即「已清空…」误报）
+      (handleSilentStopGeneration ?? handleStopGeneration)();
       suppressRetractBackfillRef.current = true;
 
       try {
@@ -277,7 +283,13 @@ export function useChatHandlers({
         await handleSendChat(false, newText, newAttachments);
       }
     },
-    [activeSessionId, handleStopGeneration, wsId, handleSendChat]
+    [
+      activeSessionId,
+      handleStopGeneration,
+      handleSilentStopGeneration,
+      wsId,
+      handleSendChat,
+    ]
   );
 
   /**

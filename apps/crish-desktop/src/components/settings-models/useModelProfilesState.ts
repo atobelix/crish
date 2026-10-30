@@ -1,7 +1,6 @@
 import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  createCustomProfile,
   normalizeModelIds,
   profileDisplayLabel,
   profileHasKey,
@@ -16,9 +15,8 @@ import {
   getLiveModel,
   getLiveProvider,
   listLiveProviders,
-  providerHasKey,
+  toProviderView,
 } from '../../api/modelsCatalogLive';
-import type { IndexedProviderEntry } from '../../api/modelsCatalogTypes';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import {
   emptyAddDraft,
@@ -34,9 +32,15 @@ import {
 } from './modelProfilesHelpers';
 import { useModelConfigSession } from './useModelConfigSession';
 import { useModelProviderActions } from './useModelProviderActions';
-import { addDraftToModelInput, ensureProviderShell } from './catalogWriteGate';
+import {
+  addDraftToModelInput,
+  ensureProviderShell,
+  prepareCatalogWrite,
+  DEFAULT_YAML_PROTOCOL,
+} from './catalogWriteGate';
 import {
   DEFAULT_PROTOCOL,
+  normalizeProtocol,
   thinkingVocabularyDiagnostic,
 } from '../../api/modelsNormalize';
 
@@ -60,25 +64,12 @@ function readStoredSelectedProfileId(): string | null {
   }
 }
 
-/** 统一树 provider → 设置页与配置编辑器消费的 ProviderProfile 视图。 */
-function toSettingsProfile(entry: IndexedProviderEntry): ProviderProfile {
-  return {
-    id: entry.providerId,
-    name: entry.provider.displayName?.trim() || entry.providerId,
-    baseUrl: entry.provider.baseUrl ?? '',
-    protocol: entry.provider.protocol,
-    models: entry.provider.models.map((model) => model.id),
-    hasKey: providerHasKey(entry.providerId),
-    enabled: entry.provider.enabled !== false,
-  };
-}
-
 export function useModelProfilesState() {
   const catalogVersion = useModelsCatalogVersion();
 
   // 服务商名单唯一来源 = 统一树 providers 面（含停用项，保持配置文件顺序）。
   const profiles = useMemo<ProviderProfile[]>(
-    () => listLiveProviders().map(toSettingsProfile),
+    () => listLiveProviders().map(toProviderView),
     [catalogVersion]
   );
 
@@ -309,6 +300,7 @@ export function useModelProfilesState() {
   /**
    * 直接添加空白服务商：不预置任何官方/第三方 URL 或厂商名。
    * 点击后立即选中并进入右侧配置（名称/Base URL/密钥/协议由用户填写）。
+   * 单轨：只写统一树（addProvider），不再维护 LS 档案副本。
    */
   const addCustomProvider = useCallback(
     async (params: {
@@ -318,28 +310,34 @@ export function useModelProfilesState() {
       protocol?: string;
     }) => {
       return await runAsLocalMutation(async () => {
-        const p = createCustomProfile({
-          name: params.name?.trim() || '自定义服务商',
-          ...(params.baseUrl?.trim() ? { baseUrl: params.baseUrl.trim() } : {}),
-          models: [],
-          protocol:
-            (params.protocol as ProviderProfile['protocol']) ||
-            DEFAULT_PROTOCOL,
-        });
-        refresh();
-        setSelectedIdState(p.id);
-        setAddOpen(false);
+        const id = `custom-${Date.now().toString(36)}`;
+        const name = params.name?.trim() || '自定义服务商';
+        const protocol =
+          (params.protocol as ProviderProfile['protocol']) || DEFAULT_PROTOCOL;
 
-        const shell = await ensureProviderShell({
-          providerId: p.id,
-          displayName: p.name,
-          baseUrl: p.baseUrl,
-          protocol: p.protocol ?? DEFAULT_PROTOCOL,
+        const ready = await prepareCatalogWrite();
+        if (!ready.ok) {
+          notify(false, ready.error);
+          return null;
+        }
+        const shell = await modelsCatalogStore.addProvider(id, {
+          displayName: name,
+          baseUrl: params.baseUrl?.trim() || '',
+          protocol: normalizeProtocol(protocol) ?? DEFAULT_YAML_PROTOCOL,
+          stream: true,
+          enabled: true,
+          models: [],
         });
-        if (!shell.ok) notify(false, shell.error || '写入服务商失败');
+        if (!shell.ok) {
+          notify(false, shell.error || '写入服务商失败');
+          return null;
+        }
+
+        setAddOpen(false);
+        setSelectedIdState(id);
 
         if (params.apiKey?.trim()) {
-          const keyRes = await saveProfileKey(p.id, params.apiKey.trim());
+          const keyRes = await saveProfileKey(id, params.apiKey.trim());
           if (!keyRes.ok) {
             notify(false, `API Key 保存失败: ${keyRes.error || '未知错误'}`);
           } else {
@@ -348,7 +346,7 @@ export function useModelProfilesState() {
           }
         }
         refresh();
-        return p;
+        return { id, name } as ProviderProfile;
       });
     },
     [refresh, runAsLocalMutation, notify, runScan]

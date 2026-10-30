@@ -16,7 +16,7 @@ export async function bootstrapFull(): Promise<void> {
     //    内部降级静态表 / 提供方默认，恒不抛）
     // 本维可不删；生产思考 UI 不得等它们、不得读它们（独立分支，不挡 yaml 水合）
     (async () => {
-      const { fetchCatalogSnapshot } = await import('./api/modelCatalog');
+      const { fetchCatalogSnapshot } = await import('./api/modelCatalogIpc');
       await fetchCatalogSnapshot();
       const { fetchDescribeEffortsSnapshot } =
         await import('./api/thinkingGear');
@@ -25,9 +25,8 @@ export async function bootstrapFull(): Promise<void> {
 
     // 3. yaml 镜像水合（plans/03 §3.5 / §3.6#15）：主界面不打开设置也能列出 yaml 模型
     (async () => {
-      const { ensureModelsCatalogLoaded } = await import(
-        './api/modelsCatalogStore'
-      );
+      const { ensureModelsCatalogLoaded } =
+        await import('./api/modelsCatalogStore');
       await ensureModelsCatalogLoaded().catch(() => {
         /* 失败：store 空树 + lastError + catalog-changed；Picker 空列表，不得回落 LS 种子。 */
       });
@@ -39,9 +38,8 @@ export async function bootstrapFull(): Promise<void> {
       //     放在启动期而非仅价格页挂载——否则用户不开该页面时旧价永不迁移，
       //     价格页会把用户的既有单价呈现成「字典预估」（等同丢价）。
       try {
-        const { migrateLegacyLsPrices } = await import(
-          './api/modelPricingSource'
-        );
+        const { migrateLegacyLsPrices } =
+          await import('./api/modelPricingSource');
         await migrateLegacyLsPrices();
       } catch (e) {
         // 迁移失败不阻塞启动：原 LS 键保持不动，由价格页挂载时重试并显式提示
@@ -51,9 +49,8 @@ export async function bootstrapFull(): Promise<void> {
 
     // 4. OAuth token 调度器（自 bootstrap-core 闲时迁移；Stage 3 首屏不拉起）
     (async () => {
-      const { initOAuthTokenScheduler } = await import(
-        './api/oauthTokenManager'
-      );
+      const { initOAuthTokenScheduler } =
+        await import('./api/oauthTokenManager');
       initOAuthTokenScheduler();
     })(),
   ]);

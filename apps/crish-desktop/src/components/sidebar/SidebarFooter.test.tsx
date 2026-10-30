@@ -137,7 +137,7 @@ describe('UserProfileCard 头像：账户入口与展示', () => {
     useSettingsUiStore.setState({ showSettingsOverlay: false });
   });
 
-  it('未登录：中性占位头像，点击打开设置「账户」分区概览，不浮出登录弹窗', () => {
+  it('未登录：中性占位头像，点击直登（应用级登录弹窗单实例），不打开设置', () => {
     render(<UserProfileCard />);
     const avatar = screen.getByTestId('user-avatar-button');
     expect(avatar).toHaveAttribute('data-avatar', 'placeholder');
@@ -146,11 +146,11 @@ describe('UserProfileCard 头像：账户入口与展示', () => {
 
     fireEvent.click(avatar);
 
+    // 未登录直登：登录弹窗由 AppGlobalDialogs 单实例挂载（loginOpen 驱动），
+    // 本组件树不渲染 dialog；设置浮层不打开（账户分区入口是登录后路径）
+    expect(useAccountUiStore.getState().loginOpen).toBe(true);
     const settings = useSettingsUiStore.getState();
-    expect(settings.showSettingsOverlay).toBe(true);
-    expect(settings.settingsActiveTab).toBe('profile');
-    expect(useAccountUiStore.getState().view).toBe('overview');
-    expect(useAccountUiStore.getState().loginOpen).toBe(false);
+    expect(settings.showSettingsOverlay).toBe(false);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByRole('menu')).toBeNull();
   });

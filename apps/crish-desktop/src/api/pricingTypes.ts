@@ -189,3 +189,41 @@ export interface Resolved4dPrices {
   /** 快照条目是否带 1h 写价档（Anthropic；TTL=1h 时启用） */
   hasWrite1hTier: boolean;
 }
+
+/**
+ * 出厂能力字典 wire 条目（Rust `ModelCatalogEntry` camelCase 子集：定价/身份面字段）。
+ *
+ * `provider` = 出厂字典的通道/厂商标识（Rust `pub provider: String`），
+ * 与 `model`/`apiModel` 共同构成出厂字典侧身份键的 provider 侧
+ * （与配置树的 `(providerId, modelId)` 不同命名空间，见 toCatalogCacheSnapshot）。
+ */
+export interface CatalogSnapshotEntryWire {
+  provider?: string;
+  model?: string;
+  apiModel?: string;
+  currency?: string | null;
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+  cacheReadPrice?: number | null;
+  cacheWritePrice?: number | null;
+  /** Anthropic 系 5m TTL 写入价（Rust cache_write_price_5m） */
+  cacheWritePrice5m?: number | null;
+  /** Anthropic 系 1h TTL 写入价（Rust cache_write_price_1h） */
+  cacheWritePrice1h?: number | null;
+  /** 写免费显式位（Rust cache_write_free） */
+  cacheWriteFree?: boolean | null;
+  tieredPricing?: Array<{
+    minTokens?: number;
+    maxTokens?: number | null;
+    inputPrice?: number | null;
+    outputPrice?: number | null;
+    cacheReadPrice?: number | null;
+    cacheWritePrice?: number | null;
+  }> | null;
+}
+
+/** 出厂能力字典 wire 快照（Rust `BundledCatalogSnapshot` camelCase） */
+export interface CatalogSnapshotWire {
+  version?: number;
+  entries?: CatalogSnapshotEntryWire[];
+}

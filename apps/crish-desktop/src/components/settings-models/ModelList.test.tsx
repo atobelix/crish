@@ -118,14 +118,16 @@ describe('ModelList 启用开关写 yaml', () => {
     expect(node?.thinking).toEqual({ Low: 'low' });
   });
 
-  it('展示名/开关/窗口读 selectModel，getModelMeta 仅 lastTest', () => {
+  it('展示名/开关/窗口读 selectModel，探测面仅 lastTest', () => {
     expect(LIST_SRC).toMatch(/\bgetLiveModel\s*\(/);
     expect(LIST_SRC).toMatch(/model\?\.displayName/);
     expect(LIST_SRC).toMatch(/model\?\.enabled/);
     expect(LIST_SRC).toMatch(/model\?\.contextWindow/);
+    // 配置声明一律读树；探测面（getProbeResult）只供 lastTest
     expect(LIST_SRC).not.toMatch(
       /getModelMeta\([^)]+\)\.(enabled|displayName|contextWindow|contextLength)/
     );
-    expect(LIST_SRC).toMatch(/getModelMeta\([^)]+\)\.lastTest/);
+    expect(LIST_SRC).toMatch(/getProbeResult\([^)]+\)/);
+    expect(LIST_SRC).not.toMatch(/getModelMeta/);
   });
 });

@@ -190,29 +190,30 @@ describe('useModelProfilesState', () => {
   });
 
   it('addCustomProvider 直接创建空白服务商并选中（无预置 URL）', async () => {
-    profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
     await act(async () => {
       await result.current.addCustomProvider({});
-      await Promise.resolve();
     });
 
-    expect(profileMocks.createCustomProfile).toHaveBeenCalledTimes(1);
-    const arg = profileMocks.createCustomProfile.mock.calls[0]?.[0] as {
-      name?: string;
-      baseUrl?: string;
+    // 单轨：只写统一树（addProvider），不再维护 LS 档案副本
+    const saved = JSON.parse(lastSavedYaml(saveImpl)) as {
+      providers: Record<string, { displayName: string; baseUrl: string }>;
     };
-    expect(arg.name).toBe('自定义服务商');
+    const newIds = Object.keys(saved.providers).filter((id) =>
+      id.startsWith('custom-')
+    );
+    expect(newIds).toHaveLength(1);
+    const entry = saved.providers[newIds[0]!];
+    expect(entry.displayName).toBe('自定义服务商');
     // 中立：不预填任何官方 URL
-    expect(arg.baseUrl ?? '').not.toContain('openai.com');
+    expect(entry.baseUrl ?? '').not.toContain('openai.com');
     await waitFor(() => {
-      expect(result.current.selectedId).toBe('custom-123');
+      expect(result.current.selectedId).toBe(newIds[0]);
     });
   });
 
   it('addCustomProvider 可带自定义名称与 Base URL', async () => {
-    profileMocks.createCustomProfile.mockClear();
     const { result } = renderHook(() => useModelProfilesState());
 
     await act(async () => {
@@ -221,16 +222,23 @@ describe('useModelProfilesState', () => {
         baseUrl: 'https://gw.example.com/v1',
         protocol: 'anthropic/messages',
       });
-      await Promise.resolve();
     });
 
-    expect(profileMocks.createCustomProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: '公司网关',
-        baseUrl: 'https://gw.example.com/v1',
-        protocol: 'anthropic/messages',
-      })
-    );
+    const saved = JSON.parse(lastSavedYaml(saveImpl)) as {
+      providers: Record<
+        string,
+        { displayName: string; baseUrl: string; protocol: string }
+      >;
+    };
+    const newId = Object.keys(saved.providers).find((id) =>
+      id.startsWith('custom-')
+    )!;
+    expect(saved.providers[newId]).toMatchObject({
+      displayName: '公司网关',
+      baseUrl: 'https://gw.example.com/v1',
+      protocol: 'anthropic/messages',
+    });
+    expect(result.current.selectedId).toBe(newId);
   });
 
   // 说明（2026-09-15 单轨收敛）：旧实现按展示名折叠并「把被折叠的拷贝改绑胜者」，

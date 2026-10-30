@@ -15,7 +15,7 @@
  * - 全 localStorage 键扫描断言：迁移后不得残留含 apiKey 字段的 profile JSON。
  */
 
-import { configProfileApply } from './rustProfileStore';
+import { configSecretSet } from './rustProfileStore';
 import { emitUiEvent } from '../uiEvents';
 import { logger } from '../../services/LoggerService';
 import { redactSecrets } from '@crish/shared-utils';
@@ -24,8 +24,6 @@ import { redactSecrets } from '@crish/shared-utils';
 export const LEGACY_MIGRATION_FLAG_KEY = 'crish_profiles_secrets_migrated_v1';
 /** 旧明文 profile 存储键（K-01 源） */
 export const LEGACY_PROFILES_KEY = 'crish_provider_profiles_v1';
-/** 活动 profile id 键（排序用：活动 profile 最后 apply，引擎最终持有其密钥） */
-const ACTIVE_PROFILE_ID_KEY = 'crish_active_profile_id';
 
 /**
  * 历史无主明文键：更早版本遗留的 profile 存储键，当前代码已无任何读写点
@@ -218,44 +216,26 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
     return { ...outcome, skipped: true, residualKeys: [LEGACY_PROFILES_KEY] };
   }
 
-  const activeId = readActiveProfileId();
-  // 活动 profile 最后 apply：引擎最终持有活动 profile 的密钥（对齐旧启动同步语义）
-  const keyed = profiles
-    .map((p, index) => ({ p, index }))
-    .filter(
-      ({ p }) => typeof p.apiKey === 'string' && (p.apiKey as string).trim()
-    )
-    .sort((a, b) => {
-      if (String(a.p.id) === activeId) return 1;
-      if (String(b.p.id) === activeId) return -1;
-      return a.index - b.index;
-    });
+  // 密钥按档案顺序逐条迁入 DPAPI 凭据槽；成功即落盘（与配置事务原子提交）
+  const keyed = profiles.filter(
+    (p) => typeof p.apiKey === 'string' && (p.apiKey as string).trim()
+  );
 
   let changed = false;
-  for (const { p } of keyed) {
+  for (const p of keyed) {
     const apiKey = (p.apiKey as string).trim();
     const profileId = String(p.id ?? '').trim();
     if (!profileId) {
       outcome.failed.push('<empty-id>');
       continue;
     }
-    const res = await configProfileApply({ profileId, apiKey });
-    if (
-      res.status === 'ok' &&
-      res.data?.ok === true &&
-      res.data.hasApiKey === true
-    ) {
-      if (res.data.credentialPersistence === 'persisted') {
-        // DPAPI 落盘确认 → 剥离明文（保留 hasKey 标记）
-        delete p.apiKey;
-        p.hasKey = true;
-        changed = true;
-        outcome.migrated += 1;
-      } else {
-        // 降级/内存态：DPAPI 未落盘 → 保留明文，下次启动重试（防密钥丢失）
-        p.hasKey = true;
-        outcome.degraded += 1;
-      }
+    const res = await configSecretSet(profileId, apiKey);
+    if (res.status === 'ok' && res.data?.hasKey === true) {
+      // DPAPI 落盘确认（与配置事务原子提交）→ 剥离明文（保留 hasKey 标记）
+      delete p.apiKey;
+      p.hasKey = true;
+      changed = true;
+      outcome.migrated += 1;
     } else {
       // 写入失败：明文保留可重试
       outcome.failed.push(profileId);
@@ -322,14 +302,6 @@ function stripApiKeyDeep(value: unknown): unknown {
     return out;
   }
   return value;
-}
-
-function readActiveProfileId(): string | null {
-  try {
-    return localStorage.getItem(ACTIVE_PROFILE_ID_KEY);
-  } catch {
-    return null;
-  }
 }
 
 /** 测试钩子：重置模块级迁移门控（vitest 用例间隔离） */

@@ -28,7 +28,7 @@ vi.mock('./api/chatBridge', () => ({
   ensureEngineConnected: mocks.ensureEngineConnected,
 }));
 
-vi.mock('./api/modelCatalog', () => ({
+vi.mock('./api/modelCatalogIpc', () => ({
   fetchCatalogSnapshot: mocks.fetchCatalogSnapshot,
 }));
 
@@ -38,6 +38,12 @@ vi.mock('./api/thinkingGear', () => ({
 
 vi.mock('./api/modelsCatalogStore', () => ({
   ensureModelsCatalogLoaded: mocks.ensureModelsCatalogLoaded,
+  // modelPricingSource（迁移链）经镜像读身份；bootstrap 单测只需要不抛
+  modelsCatalogStore: {
+    getState: vi.fn(() => ({ loaded: true, revision: 'rev-0' })),
+    ensureLoaded: vi.fn(async () => true),
+    updateTree: vi.fn(async () => ({ ok: true })),
+  },
 }));
 
 vi.mock('./api/oauthTokenManager', () => ({

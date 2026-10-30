@@ -2,8 +2,6 @@ import React from 'react';
 
 import {
   removeProfile,
-  setProfileEnabled,
-  upsertProfile,
   type ProviderProfile,
 } from '../../api/providerProfiles';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
@@ -21,8 +19,8 @@ import styles from './ModelsSettingsTab.module.css';
  * `deepseek` / `ollama`）判为「不可删除」，导致用户无法清理不需要的供应商；
  * 该门禁已移除（用户裁决 2026-09-15）。
  *
- * 启用与删除以统一树为准（`updateProvider` / `removeProvider`），同时把旧档案
- * 存储的同名字段一并更新——它仍是扫描与连通性 IPC 的凭据载体。
+ * 启用与删除以统一树为准（`updateProvider` / `removeProvider`）。删除时顺带
+ * 清掉同名 OAuth 档案（LS 档案轨只承载 OAuth 身份，apiKey 供应商无档案记录）。
  */
 export const ProfileHeader: React.FC<{
   selected: ProviderProfile;
@@ -55,7 +53,6 @@ export const ProfileHeader: React.FC<{
       notify(false, ready.error);
       return;
     }
-    setProfileEnabled(selected.id, enabled);
     const res = await modelsCatalogStore.updateProvider(selected.id, {
       enabled,
     });
@@ -89,7 +86,6 @@ export const ProfileHeader: React.FC<{
             onBlur={async () => {
               const trimmed = nameDraft.trim();
               if (trimmed && trimmed !== selected.name) {
-                upsertProfile({ ...selected, name: trimmed });
                 await modelsCatalogStore.updateProvider(selected.id, {
                   displayName: trimmed,
                 });
@@ -100,7 +96,6 @@ export const ProfileHeader: React.FC<{
             onEnter={async (val) => {
               const trimmed = (val !== undefined ? val : nameDraft).trim();
               if (trimmed && trimmed !== selected.name) {
-                upsertProfile({ ...selected, name: trimmed });
                 await modelsCatalogStore.updateProvider(selected.id, {
                   displayName: trimmed,
                 });

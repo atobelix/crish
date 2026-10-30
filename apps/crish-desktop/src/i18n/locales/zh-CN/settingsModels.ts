@@ -64,4 +64,6 @@ export const settingsPartModels = {
   'models.probe.handshakeOk':
     '服务商握手正常（已验证服务地址与凭据有效，可点击右侧「自动获取」添加模型）',
   'models.probe.checkFailed': '连通检查失败：{error}',
+  'models.probe.contextWindowWriteFailed':
+    '扫描到的上下文长度写入统一树失败：{error}',
 };

@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { StreamRenderBuffer } from '../api/StreamRenderBuffer';
 import { sessionHasListableContent } from '../api/sessionTitle';
-import {
-  canonicalizeJsonSchema,
-  formatStableTools,
-  buildStableCacheKey,
-} from '../api/directFetchBridge';
+// directFetchBridge 已物理删除；纯函数唯一实现在 shared-utils，
+// 本探针直接钉 shared-utils 的契约（键语义 = derivePromptCacheKey）。
+import { canonicalizeJsonSchema, formatStableTools } from '@crish/shared-utils';
+import { derivePromptCacheKey as buildStableCacheKey } from '@crish/shared-utils';
 import { derivePromptCacheKey } from '@crish/shared-utils';
 
 describe('Destructive Stress & Mutation Probing Pipeline', () => {

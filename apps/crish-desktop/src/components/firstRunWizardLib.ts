@@ -5,11 +5,9 @@
  * 注意：isFirstRunDone / markFirstRunDone / shouldShowFirstRunWizard 会读写
  * localStorage（完成标记），属「带持久化的门闩函数」，调用时机由壳层负责。
  */
-import {
-  normalizeModelIds,
-  anyProfileHasKey,
-  DEFAULT_PROTOCOL,
-} from '../api/providerProfilesLight';
+import { DEFAULT_PROTOCOL } from '../api/modelsNormalize';
+import { normalizeModelIds } from '../api/modelsCatalogTypes';
+import { anyProviderHasKey } from '../api/modelsCatalogLive';
 import type { ProviderProfile } from '../api/provider-profiles/profileCatalog';
 import { networkUserMessage } from '../api/userFacingErrors';
 
@@ -51,13 +49,13 @@ export function setShowOnboardingOnStartup(enabled: boolean): void {
  * 1. 用户显式开启「启动时显示新手引导界面」时，每次启动均显示；
  * 2. 否则：未完成首次向导且本机尚未配密钥时显示。
  * 已有密钥且未开启常驻启动引导时落盘完成标记（模型可在底栏手填 / 设置页完成）。
- * 无副作用查询请用 isFirstRunDone / anyProfileHasKey；盖层是否打开用 isFirstRunOverlayOpen。
+ * 无副作用查询请用 isFirstRunDone / anyProviderHasKey；盖层是否打开用 isFirstRunOverlayOpen。
  */
 export function shouldShowFirstRunWizard(): boolean {
   if (isShowOnboardingOnStartupEnabled()) return true;
   if (isFirstRunDone()) return false;
   // 已有密钥视为用户会用，不再强制向导（模型可手填）
-  if (anyProfileHasKey()) {
+  if (anyProviderHasKey()) {
     markFirstRunDone();
     return false;
   }

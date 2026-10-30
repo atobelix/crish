@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
+import { AccountCenterDialog } from '../components/account/AccountCenterDialog';
 import { openSettings } from '../store/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import type { SettingsTabType } from '../store/types';
@@ -90,12 +91,14 @@ export function AppGlobalDialogs({
                 : {})}
               onDone={async () => {
                 setShowFirstRun(false);
-                const { getActiveModelId, getActiveProfileId } =
-                  await import('../api/providerProfiles');
-                const model = getActiveModelId();
-                const profileId = getActiveProfileId();
-                if (model && profileId) {
-                  emitUiEvent('model-changed', { profileId, model });
+                const { getActiveModelRef } =
+                  await import('../api/modelsCatalogStore');
+                const ref = getActiveModelRef();
+                if (ref) {
+                  emitUiEvent('model-changed', {
+                    profileId: ref.providerId,
+                    model: ref.modelId,
+                  });
                 }
               }}
               onOpenSettings={() => {
@@ -154,6 +157,10 @@ export function AppGlobalDialogs({
           </Suspense>
         </AppErrorBoundary>
       )}
+
+      {/* 登录弹窗：应用级单实例挂载——主界面账户入口（未登录直登）与
+          设置「账户」分区共用同一弹窗（loginOpen store 驱动，关闭态零渲染） */}
+      <AccountCenterDialog />
     </>
   );
 }

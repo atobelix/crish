@@ -20,17 +20,10 @@ vi.mock('../../services/toast/ToastContext', async (importOriginal) => {
     await importOriginal<typeof import('../../services/toast/ToastContext')>();
   return {
     ...actual,
-    toast: { ...actual.toast, show: (...args: unknown[]) => toastShowMock(...args) },
-  };
-});
-
-vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../api/providerProfiles')>();
-  return {
-    ...actual,
-    getActiveModelId: () => 'gpt-4o',
-    getActiveProfileId: () => 'openai',
+    toast: {
+      ...actual.toast,
+      show: (...args: unknown[]) => toastShowMock(...args),
+    },
   };
 });
 
@@ -93,7 +86,11 @@ const WITH_IMAGE: Record<string, ProviderSpec> = {
 };
 
 async function loadProviders(
-  providers: Record<string, ProviderSpec>
+  providers: Record<string, ProviderSpec>,
+  activeModel: { providerId: string; modelId: string } | null = {
+    providerId: 'openai',
+    modelId: 'gpt-4o',
+  }
 ): Promise<void> {
   mockTauriCommand('workbench_read_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -102,7 +99,7 @@ async function loadProviders(
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers },
+    tree: { version: 2, activeModel, providers },
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,
@@ -117,17 +114,19 @@ describe('slashSendPreflight 视觉单轨', () => {
     resetModelsCatalogMirror();
   });
 
-  it('生产路径不再三连 fail-open（无 getModelMeta / 无 store 全局兜底 / 无正则）', () => {
+  it('生产路径无双轨读取（无 getModelMeta / 无正则 / 无全局兜底表）', () => {
     const src = fs.readFileSync(SRC, 'utf8');
     expect(src).not.toMatch(/getModelMeta/);
-    expect(src).not.toMatch(/modelsCatalogStore/);
+    expect(src).not.toMatch(/providerProfilesLight/);
     expect(src).not.toMatch(/VISION_MODEL_PATTERNS/);
     expect(src).not.toMatch(/globalModelIndex/);
+    // 活跃模型只读统一树 activeModel（单轨 SSOT）
+    expect(src).toContain('getActiveModelRef');
     expect(src).toContain('isModelVisionSupported(modelId, profileId)');
   });
 
   it('providerId 缺失 → false；yaml 无 image 的 gpt-4o → false', async () => {
-    await loadProviders(TEXT_ONLY);
+    await loadProviders(TEXT_ONLY, null);
     expect(checkModelVisionSupport('gpt-4o')).toBe(false);
     expect(checkModelVisionSupport('gpt-4o', 'openai')).toBe(false);
   });

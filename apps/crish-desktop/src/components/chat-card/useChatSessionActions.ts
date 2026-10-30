@@ -22,6 +22,7 @@ import { useChatHandlers } from './useChatHandlers';
 
 interface ComposerPropsLike {
   handleStopGeneration: () => void;
+  handleSilentStopGeneration?: () => void;
   setChatInput: (textOrFn: React.SetStateAction<string>) => void;
   runStreamingAssistant: (
     text: string,
@@ -231,6 +232,7 @@ export function useChatSessionActions({
     activeSessionId,
     activeSessionTitle,
     handleStopGeneration: composerProps.handleStopGeneration,
+    handleSilentStopGeneration: composerProps.handleSilentStopGeneration,
     setChatInput: composerProps.setChatInput,
     runStreamingAssistant: composerProps.runStreamingAssistant,
     handleSendChat: composerProps.handleSendChat,

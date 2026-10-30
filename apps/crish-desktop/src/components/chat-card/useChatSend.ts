@@ -28,6 +28,9 @@ export interface UseChatSendResult {
   handleStopGeneration: ReturnType<
     typeof useChatStream
   >['handleStopGeneration'];
+  handleSilentStopGeneration: ReturnType<
+    typeof useChatStream
+  >['handleSilentStopGeneration'];
   handleForceCancelGeneration: ReturnType<
     typeof useChatStream
   >['handleForceCancelGeneration'];
@@ -40,6 +43,7 @@ export function useChatSend(options: UseChatSendOptions): UseChatSendResult {
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleSilentStopGeneration,
     handleForceCancelGeneration,
   } = useChatStream({
     sessionId: options.sessionId,
@@ -68,6 +72,7 @@ export function useChatSend(options: UseChatSendOptions): UseChatSendResult {
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleSilentStopGeneration,
     handleForceCancelGeneration,
   };
 }

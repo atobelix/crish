@@ -312,6 +312,14 @@ impl AgentSessionLoop {
             target: "session_loop",
             "外部控制总线注入（替换 LoopState 自建实例）"
         );
+        // 停止信号对齐：state 持有总线内同一 L2 触发面（流消费循环竞速等待用）。
+        // AbortSignal 内部 Arc 共享——壳层 request_cooperative_stop 触发总线信号时，
+        // 循环内竞速分支立即可见，无需抢总线锁。
+        self.state.stop_signal = bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .stop_signal()
+            .clone();
         self.state.control_bus = bus;
         self
     }

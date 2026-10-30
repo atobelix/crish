@@ -20,6 +20,7 @@ import type {
   ThinkingMap,
   ThinkingWireFormat,
 } from './modelsCatalogTypes';
+import type { ProviderProfile } from './provider-profiles/profileCatalog';
 
 export type LiveThinkingOption = {
   title: ThinkingLevelTitle;
@@ -74,11 +75,35 @@ export function listLiveProviders(): IndexedProviderEntry[] {
   return listCatalogProviders();
 }
 
+/**
+ * 统一树条目 → 设置页/向导消费的供应商视图（ProviderProfile 投影）。
+ * 唯一投影实现：名称/Base URL/协议/模型列表/凭据状态全部只读树，
+ * LS 档案轨不参与（它只承载 OAuth 身份）。
+ */
+export function toProviderView(entry: IndexedProviderEntry): ProviderProfile {
+  return {
+    id: entry.providerId,
+    name: entry.provider.displayName?.trim() || entry.providerId,
+    baseUrl: entry.provider.baseUrl ?? '',
+    protocol: entry.provider.protocol,
+    models: entry.provider.models.map((model) => model.id),
+    hasKey: providerHasKey(entry.providerId),
+    enabled: entry.provider.enabled !== false,
+  };
+}
+
 /** 密钥状态权威源 = 快照 credentialStates；无记录视为无密钥，不回落旧存储。 */
 export function providerHasKey(providerId: string): boolean {
   const id = providerId.trim();
   if (!id) return false;
   return modelsCatalogStore.getState().credentialStates[id]?.hasKey === true;
+}
+
+/** 是否至少有一个可选（启用）供应商已配置密钥（首次引导 / 就绪态用）。 */
+export function anyProviderHasKey(): boolean {
+  return listLivePickerEntries().some(({ providerId }) =>
+    providerHasKey(providerId)
+  );
 }
 
 export function modelAcceptsInput(
@@ -202,7 +227,3 @@ export function resolveThinkingHandoffSafe(
     };
   }
 }
-
-// 自动向轻量探测层注入 live catalog 解析器（D9-B：断开 transport ↔ catalog 静态边）
-import { registerLiveCatalogResolvers } from './providerProfilesLight';
-registerLiveCatalogResolvers({ getLiveModel, resolveThinkingHandoffSafe });

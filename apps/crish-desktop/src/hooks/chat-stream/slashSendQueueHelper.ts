@@ -27,8 +27,8 @@ import {
 
 /**
  * 在向会话追加新消息前，取走并计算可能存在的上下文状态变更。
- * 状态文本将作为 [系统环境上下文] 随附进用户消息正文，后端直通 system_prompt，
- * 避免在会话中生成冗余的独立载体卡片造成双重提示。
+ * 状态变更以感知注入卡片落载体（驱动时间线发丝线 ContextStateNotice）；
+ * 文本形态仅随 followUp 注入线拼信封供 LLM 感知（不入时间线、不入库）。
  */
 function rememberContextBaseline(sessionId: string): void {
   const live = readContextStateSnapshot(sessionId);
@@ -160,13 +160,15 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
   } = params;
   try {
     const flushedContextState = flushContextStateBeforeSend(sessionId);
-    const finalDisplayText = flushedContextState
+    // 信封 SSOT：入库正文恒为用户原文；信封仅拼入 followUp 注入线
+    // （LLM 可见、瞬态、不入时间线——与主发送路径请求组装期合并同口径）
+    const followUpText = flushedContextState
       ? `[用户输入]\n${displayText}\n\n[系统环境上下文]\n${flushedContextState}`
       : displayText;
     addMessage(wsId, sessionId, {
       id: userMsgId,
       sender: 'user',
-      text: finalDisplayText,
+      text: displayText,
       timestamp: Date.now(),
       status: 'queued',
       ...(images?.length ? { images } : {}),
@@ -176,7 +178,7 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
     void getCompositionRoot().runControl.followUp({
       runId: liveHandleRunId ?? null,
       sessionId,
-      text: finalDisplayText,
+      text: followUpText,
       clientMessageId: userMsgId,
       reason: reason || 'ui-send-while-running',
     });

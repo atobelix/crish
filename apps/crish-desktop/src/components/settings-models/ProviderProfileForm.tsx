@@ -69,6 +69,7 @@ export const ProviderProfileForm: React.FC<{
     defaultCollapsed !== undefined ? defaultCollapsed : isConfigured
   );
   const prevSelectedIdRef = useRef(selected.id);
+  const isSavingBaseUrlRef = useRef(false);
 
   useEffect(() => {
     setBaseUrlDraft(storeBaseUrl);
@@ -94,20 +95,23 @@ export const ProviderProfileForm: React.FC<{
   const handleSaveVendorName = () => {
     const trimmed = vendorNameDraft.trim();
     if (!trimmed) {
-      notify(false, t('models.probe.vendorNameEmpty'));
+      notify(false, t('settings.models.probe.vendorNameEmpty'));
       setVendorNameDraft(vendorName);
       return;
     }
     if (trimmed !== vendorName) {
       void runAsLocalMutation(async () => {
         try {
-          upsertProfile({ ...selected, name: trimmed });
           const res = await modelsCatalogStore.updateProvider(selected.id, {
             displayName: trimmed,
           });
           if (!res.ok) {
-            notify(false, res.error || t('models.probe.vendorNameSaveFailed'));
+            notify(
+              false,
+              res.error || t('settings.models.probe.vendorNameSaveFailed')
+            );
           } else {
+            upsertProfile({ ...selected, name: trimmed });
             _refresh();
           }
         } catch (e) {
@@ -137,6 +141,7 @@ export const ProviderProfileForm: React.FC<{
           protocol: cleanProtocol,
         });
         if (!shell.ok) {
+          setProtocolDraft(effectiveProtocol);
           notify(false, shell.error || '写入服务商失败');
           return;
         }
@@ -154,20 +159,26 @@ export const ProviderProfileForm: React.FC<{
           updatePatch
         );
         if (!res.ok) {
+          setProtocolDraft(effectiveProtocol);
           notify(false, res.error || '保存失败');
         } else {
           _refresh();
         }
       } catch (e) {
+        setProtocolDraft(effectiveProtocol);
         notify(false, e instanceof Error ? e.message : String(e));
+      } finally {
+        isSavingBaseUrlRef.current = false;
       }
     });
   };
 
   const handleSaveBaseUrl = () => {
+    if (isSavingBaseUrlRef.current) return;
     const trimmed = baseUrlDraft.trim();
     const current = storeBaseUrl || selected.baseUrl || '';
     if (trimmed !== current) {
+      isSavingBaseUrlRef.current = true;
       persistProviderPatch({ baseUrl: trimmed });
     }
   };

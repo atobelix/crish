@@ -59,10 +59,13 @@ pub fn request_headers_for(
         }
         WireProtocol::Gemini => owned(gemini_request_headers(&config.api_key)),
         WireProtocol::Chat | WireProtocol::Responses => {
-            let mut headers = vec![(
-                "Authorization".to_string(),
-                format!("Bearer {}", config.api_key),
-            )];
+            let mut headers = Vec::new();
+            if !config.api_key.trim().is_empty() {
+                headers.push((
+                    "Authorization".to_string(),
+                    format!("Bearer {}", config.api_key),
+                ));
+            }
             for (name, value) in affinity_headers_for(policy) {
                 headers.push((name.to_string(), value));
             }
