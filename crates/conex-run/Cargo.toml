@@ -52,5 +52,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# 内联测试（run_commands / run_launch / run_core / stream_error_retry）使用
+# orchestrator 的 persist::InMemoryStore 测试替身：仅 dev 构建图启用 test-support
+orchestrator = { path = "../orchestrator", features = ["test-support"] }
 # 部分内联测试使用多线程 runtime（spawn 语义断言）
 tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

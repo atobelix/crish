@@ -10,6 +10,11 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+# test-support：仅测试/基准构建启用，导出 persist::InMemoryStore 测试替身
+# （生产 [dependencies] 一律不启用；消费方只能在 [dev-dependencies] 里开）
+test-support = []
+
 [dependencies]
 # G5 清理（2026-08-03）：agent-tools 无任何引用（run/events/persist/session/restore
 # 均为编排逻辑，工具执行未接线，cargo machete 实证）；I5-M6（C6 依赖图调度器）
@@ -30,6 +35,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# 本 crate 的 tests/*.rs 集成测试与 benches 直接使用 persist::InMemoryStore
+# 测试替身：以自身 dev-dependency 启用 test-support（仅测试/基准构建图生效）
+orchestrator = { path = ".", features = ["test-support"] }
 # rt-multi-thread：persist.rs 测试用 tokio::runtime::Runtime::new（PE-10 T10.3）
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 # Criterion 基准（PE-09 T09.7：event_chain，仅 dev-dependency）
@@ -47,3 +55,5 @@ rusqlite = { workspace = true }
 [[bench]]
 name = "event_chain"
 harness = false
+# bench 使用 InMemoryStore 测试替身（仅在 test-support 构建图内可用）
+required-features = ["test-support"]

@@ -147,6 +147,9 @@ webview2-com = "0.38.2"
 libc = "0.2"
 
 [dev-dependencies]
+# orchestrator 的 persist::InMemoryStore 测试替身（test-support feature）：
+# 仅 dev 构建图启用，发布/普通构建不包含
+orchestrator = { path = "../../../crates/orchestrator", features = ["test-support"] }
 # 跨 crate 测试钩子（poison/inject/catalog yaml 等 test-only API；发布构建不暴露）：
 # dev-dependency 的 feature 只在 cargo test 构建图内生效
 conex-run = { path = "../../../crates/conex-run", features = ["test-hooks"] }
