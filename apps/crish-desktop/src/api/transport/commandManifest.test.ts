@@ -279,7 +279,7 @@ describe('commandManifest', () => {
 
   /** Rust 真源相对仓库根的路径（路径耦合由 existsSync fail 兜底） */
   const RUST_MANIFEST_REL =
-    'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+    'apps/agent-workbench/src-tauri/src/command_manifest/mod.rs';
 
   function locateRepoRoot(): string {
     let dir = dirname(fileURLToPath(import.meta.url));

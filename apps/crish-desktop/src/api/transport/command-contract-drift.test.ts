@@ -54,7 +54,7 @@ const MAIN_RS_REL = 'apps/agent-workbench/src-tauri/src/main.rs';
 const REGISTRY_RS_REL =
   'apps/agent-workbench/src-tauri/src/command_registry.rs';
 const MANIFEST_RS_REL =
-  'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+  'apps/agent-workbench/src-tauri/src/command_manifest/mod.rs';
 const FRONTEND_ROOT_REL = 'apps/crish-desktop/src';
 
 function locateRepoRoot(): string {

@@ -188,10 +188,6 @@ command_registry![
         "core_rebuild_search_index",
         core_commands::core_rebuild_search_index
     ),
-    (
-        "core_compact_messages",
-        core_commands::core_compact_messages
-    ),
     ("core_count_tokens", core_commands::core_count_tokens),
     ("core_compute_diff", core_commands::core_compute_diff),
     // ── 查询与运行（A/B，§2.2）──

@@ -119,26 +119,6 @@ pub struct FileHit {
     pub match_indices: Vec<usize>,
 }
 
-// ===== Message / Compaction Types (对齐 rustCore.ts Message/CompactionResult) =====
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Message {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub images: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct CompactionResult {
-    pub messages: Vec<Message>,
-    pub tokens_consumed: usize,
-    pub cache_hit_rate_optimized: bool,
-}
-
 // ===== Session Persistence Types (对齐 crish-desktop store/types.ts) =====
 
 /// 会话内一条用户或助手消息（对齐 SessionMessage in store/types.ts L344-370）
@@ -390,41 +370,6 @@ mod tests {
         let json = serde_json::to_string(&hit).unwrap();
         let back: FileHit = serde_json::from_str(&json).unwrap();
         assert_eq!(hit, back);
-    }
-
-    #[test]
-    fn message_serializes_with_optional_images() {
-        let msg = Message {
-            id: "m1".into(),
-            role: "user".into(),
-            content: "hello".into(),
-            images: None,
-        };
-        let json = serde_json::to_value(&msg).unwrap();
-        assert_eq!(json["id"], "m1");
-        assert_eq!(json["role"], "user");
-        assert!(json.get("images").is_none());
-
-        let msg_with_images = Message {
-            id: "m2".into(),
-            role: "assistant".into(),
-            content: "see image".into(),
-            images: Some(vec!["img.png".into()]),
-        };
-        let json2 = serde_json::to_value(&msg_with_images).unwrap();
-        assert_eq!(json2["images"][0], "img.png");
-    }
-
-    #[test]
-    fn compaction_result_serializes_to_camel_case() {
-        let result = CompactionResult {
-            messages: vec![],
-            tokens_consumed: 150,
-            cache_hit_rate_optimized: true,
-        };
-        let json = serde_json::to_value(&result).unwrap();
-        assert_eq!(json["tokensConsumed"], 150);
-        assert_eq!(json["cacheHitRateOptimized"], true);
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**166 = 注册面 166 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**173 = 注册面 173 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //! 维护规则：
 //! - `registered = true` 子集 = command_registry.rs `command_registry!` 当前注册面（integration agent
@@ -57,7 +57,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**166 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**173 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 command_registry.rs `command_registry!` 注册一致；
@@ -86,6 +86,7 @@ const fn entry(
 /// 161 → **162**；运行时权限切换后 162 → **163**；Markdown 2.0 恢复 `core_md_render_stream`
 /// 后 163 → **164**；外链命令 164 → **165**；首次配对信任引导
 /// `multi_device_export_ca` 登记后 165 → **166**。
+/// CP-P2：旧 `Message` 面压缩命令死链退役（174 → **173**）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -206,7 +207,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_check_command", "core", "engine", true),
         entry("core_search_files", "core", "engine", true),
         entry("core_rebuild_search_index", "core", "engine", true),
-        entry("core_compact_messages", "core", "engine", true),
         entry("core_count_tokens", "core", "engine", true),
         entry("core_compute_diff", "core", "engine", true),
         // ── 查询与运行（A/B，§2.2）──

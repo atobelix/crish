@@ -52,35 +52,7 @@ export async function searchFilesDetailed(
   return { status: 'ok', hits: normalizeFileHits(res.data, limit) };
 }
 
-// ===== Compaction API =====
-
-export interface Message {
-  id: string;
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-  images?: string[];
-}
-
-export interface CompactionResult {
-  messages: Message[];
-  tokensConsumed: number;
-  cacheHitRateOptimized: boolean;
-}
-
-export async function compactMessages(
-  messages: Message[],
-  maxTokens: number
-): Promise<CompactionResult> {
-  // T-F 06 T6.1 / T5-5：invokeTyped 三态化（worker 回退路径纪律：
-  // missing → 回退兜底；error → logInternalError 再回退）
-  const res = await invokeTyped<CompactionResult>('core_compact_messages', {
-    messages,
-    maxTokens,
-  });
-  if (res.status === 'ok') return res.data;
-  if (res.status === 'error') logInternalError('compactMessages', res.message);
-  return { messages, tokensConsumed: 0, cacheHitRateOptimized: false };
-}
+// ===== Token 估算 API =====
 
 export async function countTokens(text: string): Promise<number> {
   const res = await invokeTyped<number>('core_count_tokens', { text });

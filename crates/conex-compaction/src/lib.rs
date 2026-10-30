@@ -1,15 +1,9 @@
 //! 上下文压缩引擎（conex-compaction）
 //!
-//! 双面结构（P4 阶段 2-1 / 阶段 3-1，T-32）：
-//!
-//! - **旧 `Message` 面**：`compaction::CompactionEngine::compact(&[Message])`
-//!   三字段模型（id/role/content），供 UI 手动压缩工具命令
-//!   `core_compact_messages` 使用（core_commands.rs:191-207，IPC 面保留兼容）；
-//! - **`AgentMessage` 面**：`estimate_context_tokens` /
-//!   `find_cut_point` / `compact_agent_messages` / `should_compact`，基于
-//!   `conex_types::message::AgentMessage`（blocks 形态），供 session-loop
-//!   预算层与预检触发（T-33）内联消费。旧面标记为"已迁移"：新功能一律在
-//!   AgentMessage 面实现，旧面不再演进。
+//! 单一 `AgentMessage` 面（CP-01 收敛）：
+//! `estimate_context_tokens` / `find_cut_point` / `compact_agent_messages` /
+//! `should_compact`，基于 `conex_types::message::AgentMessage`（blocks 形态），
+//! 供 session-loop 预算层与预检触发（T-33）内联消费。
 //!
 //! 核心算法对齐参考实现：
 //!

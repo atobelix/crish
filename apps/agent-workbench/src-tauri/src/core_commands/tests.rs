@@ -1,4 +1,4 @@
-//! core_commands 测试（core_commands.rs 拆分）：命令门禁/搜索索引/压缩/工具组。
+//! core_commands 测试（core_commands.rs 拆分）：命令门禁/搜索索引/工具组。
 
 #![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 
@@ -231,18 +231,6 @@ fn rebuild_search_index_rejects_empty_or_oversized_root() {
     runtime.block_on(async {
         let oversized = "x".repeat(SEARCH_ROOT_MAX_LEN + 1);
         let result = core_rebuild_search_index(app.handle().clone(), Some(oversized), state).await;
-        assert!(matches!(result, Err(CoreError::InvalidInput(_))));
-    });
-}
-
-#[test]
-fn compact_rejects_zero_budget() {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    runtime.block_on(async {
-        let result = core_compact_messages(Vec::new(), 0).await;
         assert!(matches!(result, Err(CoreError::InvalidInput(_))));
     });
 }

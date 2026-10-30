@@ -163,12 +163,6 @@ pub(crate) fn llm_blocked_plan(
     }
 }
 
-/// L1 静态摘要占位符（旧 Message 面 / 兼容测试仍使用；AgentMessage
-/// 面已由 [stub_placeholder] 取代——R-E：旧面保留，新面中性句柄）
-pub(crate) fn summary_placeholder(dropped_count: usize) -> String {
-    format!("[Compacted {dropped_count} earlier message(s) to fit context window]")
-}
-
 /// 中性句柄 stub（T-13；R-C：永不改写；无"生成中/失败"措辞——
 /// 文本是压缩时刻状态快照，摘要就绪以块表/工具为准，不误导模型）
 ///

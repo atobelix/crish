@@ -372,7 +372,7 @@ fn main() {
                 .is_empty();
             app.manage(Arc::clone(&search_state));
             let compaction = core_commands::SharedCompactionState::new();
-            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接线）
+            // 压缩为纯内存能力（conex-compaction），core_compact_now 已接线）
             compaction.set_ready(true);
             let compaction_ready = compaction.is_ready();
             app.manage(compaction);

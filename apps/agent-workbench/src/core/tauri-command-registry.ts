@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（165 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（173 条 = 与 command_manifest/mod.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -409,11 +409,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_rebuild_search_index',
     status: 'implemented',
     feature: 'search index rebuild',
-  },
-  {
-    command: 'core_compact_messages',
-    status: 'implemented',
-    feature: 'conversation compaction',
   },
   {
     command: 'core_count_tokens',

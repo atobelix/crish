@@ -2,7 +2,7 @@
 //!
 //! 本文件是 Tauri 壳的命令面实现之一，职责边界（PE-03 T03.3 错误协议统一后）：
 //! - 旧 6 命令（E1 工具组）：`core_search_files` / `core_rebuild_search_index` /
-//!   `core_compact_messages` / `core_count_tokens` / `core_check_command` /
+//!   `core_count_tokens` / `core_check_command` /
 //!   `core_compute_diff`——错误统一为 `CoreError {kind, detail}`（`crate::core_error`）；
 //! - Worker 组下沉（Stream E）：`core_hash_compute` / `core_base64_*` /
 //!   `core_detect_encoding` / `core_decode_text` / `core_parse_diff` /
@@ -14,13 +14,12 @@
 //! - `check_command_verdict`：把闸门检查结果包装为结构化裁决（{allowed,
 //!   requiresApproval, blocked, reason}），供 run 循环 / sidecar 复用。
 
-use conex_compaction::compaction::CompactionEngine;
 use conex_diff::diff_engine::DiffEngine;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
 use conex_search::walker::build_directory_index;
-use conex_types::{CompactionResult, DiffResult, FileHit, Message};
+use conex_types::{DiffResult, FileHit};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -256,26 +255,6 @@ fn resolve_index_root<R: tauri::Runtime>(
     Err(CoreError::InvalidInput(format!(
         "workspace_not_granted: root is outside the authorized workspace root: `{target_root}`"
     )))
-}
-
-/// 上下文压缩（maxTokens 消息数组 → 压缩结果）。
-#[tauri::command]
-pub async fn core_compact_messages(
-    messages: Vec<Message>,
-    max_tokens: usize,
-) -> Result<CompactionResult, CoreError> {
-    if max_tokens == 0 {
-        return Err(CoreError::InvalidInput(
-            "max_tokens must be greater than 0".to_string(),
-        ));
-    }
-    let result = tokio::task::spawn_blocking(move || {
-        let engine = CompactionEngine::new(max_tokens);
-        engine.compact(&messages)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("compact task failed: {e}")))?;
-    Ok(result)
 }
 
 /// 文本 token 估算。

@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use conex_types::{
-    AgentMessage, AgentMessageBlock, AgentMessageRole, Message, ToolCallBlock, ToolOutput,
-};
+use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock, ToolOutput};
 use std::sync::Arc;
 
 pub fn text_block(text: &str) -> AgentMessageBlock {
@@ -76,15 +74,6 @@ pub fn usage_msg(id: &str, created_at: &str, input_total: u64, text: &str) -> Ar
             },
         })),
     )
-}
-
-pub fn msg(id: &str, role: &str, content: &str) -> Message {
-    Message {
-        id: id.to_string(),
-        role: role.to_string(),
-        content: content.to_string(),
-        images: None,
-    }
 }
 
 pub fn summary_doc_json(goal: &str) -> String {

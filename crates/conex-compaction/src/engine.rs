@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
-use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, CompactionResult, Message};
+use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 use crate::cut_point::find_cut_point_inner;
 use crate::estimate::{estimate_with_usage, find_usage_message, usage_occupancy, EstimateContext};
 use crate::plan::{
-    llm_blocked_plan, noop_plan, stub_placeholder, summary_placeholder, truncate_summary,
-    CompactionPlan, CompactionPolicy, StubPolicy, Summarizer,
+    llm_blocked_plan, noop_plan, stub_placeholder, truncate_summary, CompactionPlan,
+    CompactionPolicy, StubPolicy, Summarizer,
 };
 use crate::tokens::{count_agent_message_tokens, count_tokens};
 
@@ -54,125 +54,6 @@ impl CompactionEngine {
     /// 变更当前代数
     pub fn set_generation(&mut self, generation: u32) {
         self.generation = Some(generation);
-    }
-
-    /// Compact messages to fit within max_tokens budget.
-    /// Strategy: keep system messages and recent messages intact;
-    /// when over budget, merge oldest non-system messages into a summary placeholder.
-    ///
-    /// 【迁移标记】旧 `Message` 三字段面（P4 §1.2：保留原面兼容
-    /// `core_compact_messages` IPC 工具命令）；压缩主路径已迁移至
-    /// AgentMessage 面（[Self::compact_agent_messages]），本方法不再演进。
-    pub fn compact(&self, messages: &[Message]) -> CompactionResult {
-        if messages.is_empty() {
-            return CompactionResult {
-                messages: vec![],
-                tokens_consumed: 0,
-                cache_hit_rate_optimized: false,
-            };
-        }
-
-        // Pre-compute token counts once (#5: avoid repeated count_tokens calls)
-        let token_counts: Vec<usize> = messages.iter().map(|m| count_tokens(&m.content)).collect();
-
-        let total_tokens: usize = token_counts.iter().sum();
-
-        // Under budget: no compaction needed
-        if total_tokens <= self.max_tokens {
-            return CompactionResult {
-                messages: messages.to_vec(),
-                tokens_consumed: total_tokens,
-                cache_hit_rate_optimized: true,
-            };
-        }
-
-        // Over budget: compact oldest non-system messages
-        let mut result_messages: Vec<Message> = Vec::new();
-        let mut tokens_used: usize = 0;
-
-        // Partition indices into system vs non-system
-        let system_indices: Vec<usize> = messages
-            .iter()
-            .enumerate()
-            .filter(|(_, m)| m.role == "system")
-            .map(|(i, _)| i)
-            .collect();
-        let non_system_indices: Vec<usize> = messages
-            .iter()
-            .enumerate()
-            .filter(|(_, m)| m.role != "system")
-            .map(|(i, _)| i)
-            .collect();
-
-        // Always keep system messages
-        for &idx in &system_indices {
-            tokens_used += token_counts[idx];
-            result_messages.push(messages[idx].clone());
-        }
-
-        // Reserve budget for recent messages (keep at least last 2 non-system messages)
-        let keep_recent = non_system_indices.len().min(2);
-        let recent_start = non_system_indices.len().saturating_sub(keep_recent);
-
-        // Calculate tokens for recent messages
-        let recent_tokens: usize = non_system_indices[recent_start..]
-            .iter()
-            .map(|&idx| token_counts[idx])
-            .sum();
-
-        // Budget available for middle messages
-        let budget_for_middle = self
-            .max_tokens
-            .saturating_sub(tokens_used)
-            .saturating_sub(recent_tokens);
-
-        // Try to fit middle messages from newest to oldest
-        // (#6: use continue instead of break to skip large messages and fit smaller ones)
-        let middle_indices = &non_system_indices[..recent_start];
-        let mut middle_kept: Vec<usize> = Vec::new();
-        let mut middle_tokens: usize = 0;
-
-        for &idx in middle_indices.iter().rev() {
-            let msg_tokens = token_counts[idx];
-            if middle_tokens + msg_tokens <= budget_for_middle {
-                middle_kept.push(idx);
-                middle_tokens += msg_tokens;
-            }
-            // continue: skip this message but try older (possibly shorter) ones
-        }
-        middle_kept.reverse();
-
-        // If we dropped some middle messages, add a summary placeholder
-        let dropped_count = middle_indices.len() - middle_kept.len();
-        if dropped_count > 0 {
-            let summary = summary_placeholder(dropped_count);
-            let summary_tokens = count_tokens(&summary);
-            result_messages.push(Message {
-                id: format!("compacted-summary-{dropped_count}"),
-                role: "assistant".to_string(),
-                content: summary,
-                images: None,
-            });
-            tokens_used += summary_tokens;
-        }
-
-        // Add kept middle messages
-        for &idx in &middle_kept {
-            tokens_used += token_counts[idx];
-            result_messages.push(messages[idx].clone());
-        }
-
-        // Add recent messages
-        for &idx in &non_system_indices[recent_start..] {
-            tokens_used += token_counts[idx];
-            result_messages.push(messages[idx].clone());
-        }
-
-        CompactionResult {
-            messages: result_messages,
-            tokens_consumed: tokens_used,
-            cache_hit_rate_optimized: false,
-        }
     }
 
     /// 对话级估算（AgentMessage 面；usage 优先 + 时间戳护栏 + 启发式兜底）
