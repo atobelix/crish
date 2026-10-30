@@ -8,6 +8,7 @@
 #![allow(clippy::await_holding_lock)] // 测试驱动中持有测试同步锁跨越 step 调度 await
 
 use super::*;
+use conex_types::events::ApprovalDecision;
 use conex_types::message::{
     AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
 };
@@ -156,6 +157,7 @@ async fn gate_routes_subagent_request_to_main_agent_arbiter() {
         .expect("审批应在时限内返回")
         .expect("request_approval 不应 panic");
     assert_eq!(decision.decision, ApprovalDecision::Approved);
+    assert_eq!(decision.reason, None);
     // 广播载荷：requesterRunId / reason / 路由 arbiter=main-agent
     let payloads = emitter.0.lock().unwrap().clone();
     let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
@@ -404,6 +406,7 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
         ApprovalDecision::Expired,
         "超时必须是 Expired 权威收场"
     );
+    assert_eq!(decision.reason, None, "Expired 不携带拒绝原因");
     assert!(
         !gate.contains_pending("tc-expired"),
         "过期后待审批集合必须清除（迟到裁决 NotFound 的前提）"
@@ -445,6 +448,11 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
     assert!(
         matches!(decision.decision, ApprovalDecision::Denied),
         "首次裁决应为 Denied"
+    );
+    assert_eq!(
+        decision.reason.as_deref(),
+        Some("风险过高"),
+        "拒绝原因必须随审批结果保留（R5）"
     );
     let err = approve_tool_impl(
         &state,
@@ -1051,6 +1059,19 @@ static CORE_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// 测试用 CoreRunState（临时目录快照存储 + 记录型事件桥 + 独立诊断）
 fn core_state_with_store(store: Arc<dyn Store>) -> Arc<CoreRunState> {
+    // 默认给独立内存库；与 store 绑定同一库的用例走 core_state_with_db
+    core_state_with_db(store, LocalDb::open_in_memory().unwrap())
+}
+
+/// 测试用 LocalDb（CoreRunState 的必需依赖；与 store 独立时仅承载引擎
+/// 装配面，不参与事件持久化断言）。
+fn test_local_db() -> LocalDb {
+    LocalDb::open_in_memory().expect("测试用内存 LocalDb")
+}
+
+/// 测试用 CoreRunState（store 与 LocalDb 同一底层库——session_meta /
+/// 会话索引 / usage_records 断言面）
+fn core_state_with_db(store: Arc<dyn Store>, db: LocalDb) -> Arc<CoreRunState> {
     let (bridge, _emitter) = recording_bridge();
     let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let snapshots: Arc<dyn SnapshotStore> = Arc::new(
@@ -1061,6 +1082,7 @@ fn core_state_with_store(store: Arc<dyn Store>) -> Arc<CoreRunState> {
     );
     Arc::new(CoreRunState::new(
         store,
+        db,
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -1086,8 +1108,8 @@ fn summarizer_factory_injection_channel() {
     }
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     // 生产装配（COMPACTION-01 P0-3）：CoreRunState::new 已装配真实
     // 工厂——测试显式清空回到「无注入」基线（provider 未就绪时工厂
@@ -1127,7 +1149,7 @@ fn summary_dispatch_config_reads_session_meta() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
 
     // 无任何配置键 → None（与轮次 4 summary_dispatch: None 语义一致）
     assert!(state.summary_dispatch_config("s1").is_none());
@@ -1150,8 +1172,8 @@ fn summary_dispatch_config_malformed_falls_back_to_defaults() {
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta("compact_summary_backoff_ms", "oops")
         .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let config = state
         .summary_dispatch_config("s1")
         .expect("有键即构造（解析失败兜底缺省）");
@@ -1165,8 +1187,8 @@ fn summary_dispatch_config_malformed_falls_back_to_defaults() {
 fn summary_coordinator_registry_is_session_scoped() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     let c1 = state.summary_coordinator_for("s1");
     let c1_again = state.summary_coordinator_for("s1");
@@ -1190,8 +1212,8 @@ fn summary_coordinator_registry_is_session_scoped() {
 fn compaction_policy_assembled_with_defaults() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     let policy = state
         .compaction_policy_for("s1")
@@ -1231,7 +1253,7 @@ fn compaction_policy_overrides_and_malformed_fall_back() {
     db.set_session_meta("compact_min_recent_turns", "4")
         .unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
 
     let policy = state.compaction_policy_for("s1").expect("装配 policy");
     assert_eq!(
@@ -2189,6 +2211,7 @@ async fn snapshot_skipped_before_restore_ready_preserves_main_snapshot() {
     snapshots.save_snapshot(&prior).unwrap();
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -2261,6 +2284,7 @@ async fn snapshot_skipped_after_restore_failed_preserves_main_snapshot() {
     let snapshots: Arc<dyn SnapshotStore> = failing.clone();
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         recording_bridge().0,
         Arc::new(StatusDiagnostics::new()),
@@ -2320,6 +2344,7 @@ async fn snapshot_concurrent_saves_are_mutexed() {
         Arc::new(orchestrator::restore::SnapshotFileStore::new(&path));
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         recording_bridge().0,
         Arc::new(StatusDiagnostics::new()),
@@ -2433,7 +2458,7 @@ fn run_usage_returns_persisted_stats_from_local_db() {
     let stats = cache_stats(Some(61_000), 12_000);
     db.save_run_usage("r1", stats).unwrap();
 
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     let usage = state.run_usage("r1").expect("已落库 usage 必须返回");
     assert_eq!(usage.prompt_tokens, 10_000);
     assert_eq!(usage.completion_tokens, 100);
@@ -2448,15 +2473,6 @@ fn run_usage_returns_persisted_stats_from_local_db() {
     assert_eq!(usage.warm_until_ms, Some(61_000));
     // 不存在的 run → None（前端回退估算）
     assert!(state.run_usage("missing").is_none());
-}
-
-/// ③ 兜底：store 非 LocalDb（InMemoryStore 测试替身）→ run_usage
-/// None（local_db 下转失败路径，usage 查询回退前端估算）
-#[test]
-fn run_usage_falls_back_none_without_local_db() {
-    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    assert!(state.local_db().is_none(), "非 LocalDb store 不得下转");
-    assert!(state.run_usage("r1").is_none());
 }
 
 /// 验收（30 方案 P3）：steering_queue 访问器与引擎队列同一 Arc 实例
@@ -2531,7 +2547,7 @@ async fn main_assembly_shared_queue_single_instance() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.upsert_session_entry(&subagent_test_session_entry("s1"))
         .expect("会话条目");
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     // main.rs 装配轮同序构造
     let workflow_state = crate::workflow::WorkflowBackend::new(
         Arc::new(crate::workflow::SessionMetaWorkflowStore::new(db)),
@@ -2577,7 +2593,7 @@ async fn write_back_cache_stats_persists_run_usage_to_local_db() {
     db.insert_session("s1", "s1").unwrap();
     db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 0)
         .unwrap();
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
 
     let stats = cache_stats(Some(61_000), 12_000);
     write_back_cache_stats(&state, "s1", "r1", "conex", stats).await;
@@ -2604,14 +2620,6 @@ async fn write_back_cache_stats_persists_run_usage_to_local_db() {
         .expect("仪表盘查询不应失败");
     assert_eq!(dashboard_again.hero.total_messages, 1);
     assert_eq!(dashboard_again.total_input, 10_000);
-}
-
-/// ② 兜底：store 非 LocalDb（InMemoryStore）→ 落库跳过（无 SQLite
-/// 连接），收口流程不 panic、不中断
-#[tokio::test]
-async fn write_back_cache_stats_skips_save_without_local_db() {
-    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    write_back_cache_stats(&state, "s1", "r1", "", cache_stats(None, 0)).await;
 }
 
 /// ④ EngineHandle 会话缓存状态写读面（跨 CoreRunState 可达）：
@@ -2983,7 +2991,7 @@ async fn heartbeat_persist_updates_running_subagent_row() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     let mut active = build_active_run(&state, "s1", "run-child").await;
     Arc::get_mut(&mut active).expect("唯一引用").subagent =
         Some(crate::subagent_spawner::SubagentRunConfig {
@@ -3049,7 +3057,7 @@ async fn model_and_capability_persist_for_terminal_subagent() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     let row = conex_types::session_record::SessionAgent {
         id: "sub-1".to_string(),
         subagent_run_id: "run-child".to_string(),
@@ -3879,8 +3887,8 @@ fn restore_outcome_with(
 #[tokio::test]
 async fn restore_enqueues_main_run_entry() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome =
         restore_outcome_with(vec![interrupted_run("run-main-1", "sess-main")], Vec::new());
     state.enqueue_restore_entries(&outcome).await;
@@ -3945,8 +3953,8 @@ async fn restore_notifies_parent_for_subagent() {
         last_heartbeat_ms: None,
     })
     .expect("session_agents 行落库");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome = restore_outcome_with(
         vec![interrupted_run("sub-run-1-1", "sub-sess-1-1")],
         vec![SessionRecord {
@@ -3991,8 +3999,8 @@ async fn restore_notifies_parent_for_subagent() {
 #[tokio::test]
 async fn restore_enqueues_single_subagent_summary_per_parent() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let mut outcome = restore_outcome_with(
         // 同一子代理 run 的旧逐条记录：应被汇总覆盖（不重复通知）
         vec![interrupted_run("sub-run-1", "sub-sess-1-1")],
@@ -4049,8 +4057,8 @@ async fn restore_enqueues_single_subagent_summary_per_parent() {
 #[tokio::test]
 async fn restore_skips_when_parent_unresolvable() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome = restore_outcome_with(
         vec![interrupted_run("sub-run-orphan", "sub-sess-9-9")],
         Vec::new(),
@@ -4067,8 +4075,8 @@ async fn restore_skips_when_parent_unresolvable() {
 #[tokio::test]
 async fn restore_entries_dedup_by_group() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome =
         restore_outcome_with(vec![interrupted_run("run-main-1", "sess-main")], Vec::new());
     state.enqueue_restore_entries(&outcome).await;
@@ -4556,8 +4564,8 @@ async fn goal_round_no_output_counts_streak() {
         &GoalState::new("测试目标", 12, 2).to_json(),
     )
     .expect("goal_state 落键");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let active = build_active_run(&state, "s1", "run-1").await;
     let verdict = decide_idle_resume(
         &state,
@@ -4595,8 +4603,8 @@ async fn goal_state_is_isolated_per_session() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.insert_session("s1", "s1").expect("会话行 s1");
     db.insert_session("s2", "s2").expect("会话行 s2");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     state
         .save_goal_state("s1", &GoalState::new("A 会话目标", 5, 2))
@@ -4615,8 +4623,8 @@ async fn provider_fail_streak_is_isolated_per_session() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.insert_session("s1", "s1").expect("会话行 s1");
     db.insert_session("s2", "s2").expect("会话行 s2");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     state.update_provider_fail_streak("s1", true).await;
     assert_eq!(
@@ -5569,6 +5577,7 @@ async fn fault_inject_test_state(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -6400,7 +6409,7 @@ fn retry_backoff_config_parses_session_meta() {
 #[test]
 fn retry_backoff_config_reads_session_meta_key() {
     let db = LocalDb::open_in_memory().unwrap();
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     assert!(
         state.retry_backoff_config("s1").is_none(),
         "缺键 → None = 现状立即重试"
@@ -7025,6 +7034,7 @@ fn subagent_state_with_providers(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -8012,6 +8022,7 @@ fn run_control_test_state_on_db_with_model(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -8596,6 +8607,7 @@ async fn timer_and_cron_events_drain_forwarded_e2e() {
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         bridge.clone(),
         Arc::new(StatusDiagnostics::new()),
@@ -9915,7 +9927,7 @@ async fn continuity_kill_channel_lifecycle_paths() {
     // 会话条目前置（session_agents 外键约束；对齐子代理 e2e 装配）
     db.upsert_session_entry(&subagent_test_session_entry("sess-main"))
         .expect("会话条目");
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     state.finalize_continuity_channels();
     let tool = state
         .engine
@@ -10053,7 +10065,7 @@ async fn compact_now_manual_roundtrip_replaces_cache_emits_events_and_writes_blo
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     // 预置超预算对话（缓存路径：引擎权威增量；30 条 ≈ 60k token）
     let messages = big_llm_conversation(30);
@@ -10119,8 +10131,8 @@ async fn compact_now_manual_roundtrip_replaces_cache_emits_events_and_writes_blo
 async fn compact_now_rejects_busy_session() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let active = build_active_run(&state, "s1", "run-1").await;
     state
@@ -10140,8 +10152,8 @@ async fn compact_now_rejects_busy_session() {
 async fn compact_now_validates_target_tokens() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let error = compact_now_impl(&state, "s1", Some(1000))
         .await
@@ -10154,8 +10166,8 @@ async fn compact_now_validates_target_tokens() {
 async fn compact_now_rejects_without_summarizer() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     state.set_summarizer_factory(None);
     let messages = big_llm_conversation(30);
     let history: Vec<HistoryMessage> = messages
@@ -10175,8 +10187,8 @@ async fn compact_now_rejects_without_summarizer() {
 async fn compact_now_rejects_noop_short_conversation() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let messages = [
         Arc::new(amsg(
@@ -10212,8 +10224,8 @@ async fn stage_milestone_triggers_once_and_suppresses_repeat() {
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
         .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     // 会话树（checkpoint 落载荷面）
     let mut tree = SessionTree::new("s1");
@@ -10276,10 +10288,11 @@ fn core_state_with_emitter(db: LocalDb) -> (Arc<CoreRunState>, Arc<RecordingEmit
             std::process::id()
         ))),
     );
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
     (
         Arc::new(CoreRunState::new(
             store,
+            db,
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),
@@ -10494,7 +10507,7 @@ fn stage_summary_injected_into_system_prompt() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     // 无总结 → 原样（build_system_prompt trim 规范化后输出）
     let base = assemble_system_prompt_with_stages(&state, "s1", Some("  基础提示词  ".to_string()));
     assert_eq!(base.as_deref(), Some("基础提示词"), "无总结原样返回");
@@ -10715,147 +10728,8 @@ fn dm07_envelope(event_type: &str, run_id: Option<&str>, sequence: u64) -> Strin
     .to_string()
 }
 
-/// DM-07 记录型 store 包装：断言 query_events / query_events_by_run 收到
-/// 的 limit 下推参数（其余方法原样委托内层，行为零改动）
-struct RecordingStore {
-    inner: Arc<dyn Store>,
-    session_limits: Arc<Mutex<Vec<Option<u64>>>>,
-    run_limits: Arc<Mutex<Vec<Option<u64>>>>,
-}
-
-#[async_trait::async_trait]
-impl Store for RecordingStore {
-    async fn insert_run(
-        &self,
-        run_id: &str,
-        session_id: &str,
-        status: conex_db::RunStatus,
-        end_reason: Option<&str>,
-        cursor: i64,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .insert_run(run_id, session_id, status, end_reason, cursor)
-            .await
-    }
-
-    async fn update_run_status(
-        &self,
-        run_id: &str,
-        status: conex_db::RunStatus,
-        end_reason: Option<&str>,
-        cursor: Option<i64>,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .update_run_status(run_id, status, end_reason, cursor)
-            .await
-    }
-
-    async fn reserve_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
-        self.inner.reserve_sequence(session_id).await
-    }
-
-    async fn seed_sequence(
-        &self,
-        session_id: &str,
-        next_sequence: u64,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner.seed_sequence(session_id, next_sequence).await
-    }
-
-    async fn append_event(
-        &self,
-        session_id: &str,
-        sequence: u64,
-        event_type: &str,
-        payload: &str,
-        run_id: Option<&str>,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .append_event(session_id, sequence, event_type, payload, run_id)
-            .await
-    }
-
-    async fn query_events(
-        &self,
-        session_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.session_limits
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(limit);
-        self.inner
-            .query_events(session_id, after_sequence, limit)
-            .await
-    }
-
-    async fn query_events_by_run(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.run_limits
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(limit);
-        self.inner
-            .query_events_by_run(session_id, run_id, after_sequence, limit)
-            .await
-    }
-
-    // 1C-1 下推面（Store trait 新增方法）：本桩仅关注 query_events /
-    // query_events_by_run 的 limit 记录，其余一律原样委托内层。
-    async fn max_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
-        self.inner.max_sequence(session_id).await
-    }
-
-    async fn query_events_by_type(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        event_type: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.inner
-            .query_events_by_type(session_id, run_id, event_type, after_sequence, limit)
-            .await
-    }
-
-    async fn query_runs(&self) -> orchestrator::persist::StoreResult<Vec<conex_db::StoredRun>> {
-        self.inner.query_runs().await
-    }
-
-    async fn save_pending_input(
-        &self,
-        id: &str,
-        session_id: &str,
-        run_id: Option<&str>,
-        payload: &str,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .save_pending_input(id, session_id, run_id, payload)
-            .await
-    }
-
-    async fn load_pending_inputs(
-        &self,
-        session_id: &str,
-    ) -> orchestrator::persist::StoreResult<Vec<conex_db::PendingInput>> {
-        self.inner.load_pending_inputs(session_id).await
-    }
-
-    async fn delete_pending_input(&self, id: &str) -> orchestrator::persist::StoreResult<bool> {
-        self.inner.delete_pending_input(id).await
-    }
-
-    fn as_local_db(&self) -> Option<conex_db::LocalDb> {
-        self.inner.as_local_db()
-    }
-}
+mod recording_store;
+use recording_store::RecordingStore;
 
 /// DM-07 验收 ①：run 查询返回全链含终态后 tail——agent-start…run-terminal +
 /// 终态后同 runId 尾事件（audit-flush 收尾区，R-06）；goal-* 轮次域不命中。
@@ -10905,8 +10779,8 @@ async fn read_run_events_full_chain_with_tail() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
         .await
         .unwrap();
@@ -10987,8 +10861,8 @@ async fn read_run_events_interleaved_runs_only_own() {
         Some("r2"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let seqs = |page: crate::core_query::EventPage| {
         page.events
             .iter()
@@ -11030,8 +10904,8 @@ async fn read_run_events_pagination_global_sequence() {
         )
         .unwrap();
     }
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let seqs = |page: crate::core_query::EventPage| {
         page.events
             .iter()
@@ -11093,11 +10967,11 @@ async fn read_run_events_limit_pushdown_has_more() {
     let session_limits = Arc::new(Mutex::new(Vec::new()));
     let run_limits = Arc::new(Mutex::new(Vec::new()));
     let recording = RecordingStore {
-        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         session_limits: Arc::clone(&session_limits),
         run_limits: Arc::clone(&run_limits),
     };
-    let state = core_state_with_store(Arc::new(recording));
+    let state = core_state_with_db(Arc::new(recording), db.clone());
     let p1 = super::read_run_events_impl(&state, "r1", Some("s1"), None, Some(2))
         .await
         .unwrap();
@@ -11176,8 +11050,8 @@ async fn read_run_events_excludes_goal_round() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
         .await
         .unwrap();
@@ -11216,8 +11090,8 @@ async fn read_run_events_session_lookup_via_run_record() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", None, None, None)
         .await
         .unwrap();
@@ -11247,11 +11121,11 @@ async fn core_read_session_events_limit_pushdown() {
     let session_limits = Arc::new(Mutex::new(Vec::new()));
     let run_limits = Arc::new(Mutex::new(Vec::new()));
     let recording = RecordingStore {
-        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         session_limits: Arc::clone(&session_limits),
         run_limits: Arc::clone(&run_limits),
     };
-    let state = core_state_with_store(Arc::new(recording));
+    let state = core_state_with_db(Arc::new(recording), db.clone());
     let page = super::read_session_events_impl(&state, "s1", None, Some(2))
         .await
         .unwrap();

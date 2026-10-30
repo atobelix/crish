@@ -287,7 +287,7 @@ impl CoreRunState {
     /// B 会话）。升级首次读取时做一次性迁移：仅当旧键存在、本会话正是
     /// `active_session_id`、且迁移标记未置位时，把旧值归属到本会话并置标记。
     pub(crate) async fn load_goal_state(&self, session_id: &str) -> Option<GoalState> {
-        let db = self.local_db()?;
+        let db = self.local_db();
         let key = session_meta_key_of(session_id, orchestrator::goal_state::GOAL_STATE_KEY);
         let session_id = session_id.to_string();
         tokio::task::spawn_blocking(move || {
@@ -340,9 +340,7 @@ impl CoreRunState {
     /// tracing::error 显式留痕（不阻断收口——goal 推进丢失属可观测降级，
     /// 下轮续轮判定会重新读到未推进值并重新评估）。
     pub(crate) async fn save_goal_state(&self, session_id: &str, state: &GoalState) {
-        let Some(db) = self.local_db() else {
-            return;
-        };
+        let db = self.local_db();
         let key = session_meta_key_of(session_id, orchestrator::goal_state::GOAL_STATE_KEY);
         let json = state.to_json();
         let result = tokio::task::spawn_blocking(move || {
@@ -386,9 +384,7 @@ impl CoreRunState {
     /// （fail-open：无块 / 坏 JSON → None，不阻断注入——注入主源是 goal
     /// 前缀；Schema V1 字段 nextSteps = 字符串数组）
     pub(crate) async fn read_summary_next_steps(&self, session_id: &str) -> Vec<String> {
-        let Some(db) = self.local_db() else {
-            return Vec::new();
-        };
+        let db = self.local_db();
         let session_id = session_id.to_string();
         tokio::task::spawn_blocking(move || {
             db.list_blocks(&session_id, Some(1))
@@ -418,9 +414,7 @@ impl CoreRunState {
     /// E1 §3.4（T7）：续写开关键（`content_resume_enabled` 键，缺省 true
     /// = 默认开启——与用户诉求「断网自动接续最好」一致）
     pub(crate) async fn content_resume_enabled(&self, _session_id: &str) -> bool {
-        let Some(db) = self.local_db() else {
-            return true;
-        };
+        let db = self.local_db();
         tokio::task::spawn_blocking(move || {
             db.get_session_meta(CONTENT_RESUME_ENABLED_KEY)
                 .ok()
@@ -519,12 +513,7 @@ impl CoreRunState {
         limit_key: &'static str,
         default_limit: u32,
     ) -> EpisodeConsume {
-        let Some(db) = self.local_db() else {
-            return EpisodeConsume::Denied {
-                count: 0,
-                max: default_limit,
-            };
-        };
+        let db = self.local_db();
         let fp = fp.to_string();
         let limit_key = limit_key.to_string();
         // 恢复预算按会话隔离（旧实现读全局键：A 会话的自愈消耗会把 B 会话
@@ -755,7 +744,8 @@ impl CoreRunState {
         tokio::time::sleep(delay).await;
         // 原 run failed reason 覆写（RecoveryStore::update_run_status 同步
         // → spawn_blocking 直连 LocalDb，F2-27 覆盖表新增点）
-        if let Some(db) = self.local_db() {
+        {
+            let db = self.local_db();
             let run_id = ctx.subagent_run_id.clone();
             match tokio::task::spawn_blocking(move || {
                 db.update_run_status(
@@ -873,9 +863,7 @@ impl CoreRunState {
         if messages.is_empty() {
             return;
         }
-        let Some(db) = self.local_db() else {
-            return;
-        };
+        let db = self.local_db();
         let emitter =
             SubagentEventEmitter::new(Arc::new(orchestrator::persist::LocalDbStore::new(db)));
         let emit_ctx = SubagentEmitContext {

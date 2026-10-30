@@ -1272,9 +1272,7 @@ pub(crate) mod idle_resume {
     /// F5：读取已触发里程碑下标集合（session_meta 键；缺失/坏 JSON → 空集
     /// fail-open，不 panic）
     pub(crate) fn stage_triggered_indices(state: &CoreRunState, session_id: &str) -> Vec<u32> {
-        let Some(db) = state.local_db() else {
-            return Vec::new();
-        };
+        let db = state.local_db();
         db.get_session_meta(&stage_triggered_meta_key(session_id))
             .ok()
             .flatten()
@@ -1285,9 +1283,7 @@ pub(crate) mod idle_resume {
     /// F5：写入已触发里程碑下标集合（失败仅告警——下次收口按当前集合重判，
     /// 幂等语义）
     pub(crate) fn save_stage_triggered(state: &CoreRunState, session_id: &str, indices: &[u32]) {
-        let Some(db) = state.local_db() else {
-            return;
-        };
+        let db = state.local_db();
         let raw = serde_json::to_string(indices).unwrap_or_else(|_| "[]".to_string());
         if let Err(error) = db.set_session_meta(&stage_triggered_meta_key(session_id), &raw) {
             tracing::warn!(
@@ -1304,9 +1300,7 @@ pub(crate) mod idle_resume {
         state: &CoreRunState,
         session_id: &str,
     ) -> Vec<(String, String)> {
-        let Some(db) = state.local_db() else {
-            return Vec::new();
-        };
+        let db = state.local_db();
         let Some(raw) = db
             .get_session_meta(&stage_summaries_meta_key(session_id))
             .ok()
@@ -1335,9 +1329,7 @@ pub(crate) mod idle_resume {
         tier: &str,
         markdown: &str,
     ) {
-        let Some(db) = state.local_db() else {
-            return;
-        };
+        let db = state.local_db();
         let key = stage_summaries_meta_key(session_id);
         let mut items: Vec<serde_json::Value> = db
             .get_session_meta(&key)
@@ -1444,10 +1436,7 @@ pub(crate) mod idle_resume {
         // 默认 40/60/80%——stage_ratios_from_session_meta fail-open）
         let ratios = {
             let db = state.local_db();
-            let meta = |key: &str| {
-                db.as_ref()
-                    .and_then(|d| d.get_session_meta(key).ok().flatten())
-            };
+            let meta = |key: &str| db.get_session_meta(key).ok().flatten();
             stage_ratios_from_session_meta(meta)
                 .unwrap_or_else(|| DEFAULT_COMPACT_STAGE_RATIOS.to_vec())
         };
@@ -1653,12 +1642,10 @@ pub(crate) mod idle_resume {
         let meta_key = crate::run::session_meta_key_of(&session_id, "permission_mode");
         let restored_mode = state
             .local_db()
-            .and_then(|db| {
-                db.get_session_meta(&meta_key)
-                    .ok()
-                    .flatten()
-                    .or_else(|| db.get_session_meta("permission_mode").ok().flatten())
-            })
+            .get_session_meta(&meta_key)
+            .ok()
+            .flatten()
+            .or_else(|| state.local_db().get_session_meta("permission_mode").ok().flatten())
             .or_else(|| {
                 state
                     .active_runs

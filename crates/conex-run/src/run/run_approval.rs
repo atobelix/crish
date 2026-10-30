@@ -14,9 +14,7 @@ use conex_device_protocol::{
     ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
     PendingApproval,
 };
-use conex_types::events::{
-    AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
-};
+use conex_types::events::{AgentEvent, AgentEventEnvelope, ApprovalDecision, PermissionRequest};
 use orchestrator::persist::Store;
 use orchestrator::run::RunHandle;
 use serde::Serialize;
@@ -25,7 +23,6 @@ use session_loop::approval_policy::{
     TimeoutAction, TimeoutEvaluationContext,
 };
 use session_loop::approval_router::{classify_source, route_approval, route_approval_guarded};
-use conex_types::events::ApprovalDecision;
 use session_loop::tool_events::{ApprovalOutcome, ApprovalRequester};
 use session_loop::ApprovalGate;
 
@@ -423,7 +420,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Approved,
+                            decision: ApprovalDecision::Approved,
                             timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalOutcome::approved()
@@ -438,7 +435,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Denied,
+                            decision: ApprovalDecision::Denied,
                             timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalOutcome::denied(full_reason)
@@ -448,7 +445,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Expired,
+                            decision: ApprovalDecision::Expired,
                             timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalOutcome::expired()
@@ -480,7 +477,7 @@ pub async fn approve_tool_impl(
         .approval
         .resolve(tool_call_id, ApprovalOutcome::approved())
         .await?;
-    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Approved).await;
+    emit_approval_resolved(&active, tool_call_id, ApprovalDecision::Approved).await;
     Ok(ApproveResponse {
         ok: true,
         tool_call_id: tool_call_id.to_string(),
@@ -504,7 +501,7 @@ pub async fn deny_tool_impl(
             ApprovalOutcome::denied(reason.unwrap_or("user denied")),
         )
         .await?;
-    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Denied).await;
+    emit_approval_resolved(&active, tool_call_id, ApprovalDecision::Denied).await;
     Ok(ApproveResponse {
         ok: true,
         tool_call_id: tool_call_id.to_string(),
@@ -672,14 +669,7 @@ pub async fn approval_history_impl(
     limit: Option<u32>,
 ) -> Result<ApprovalHistoryResult, CoreError> {
     let limit = limit.unwrap_or(100).clamp(1, 500) as usize;
-    let Some(db) = state.local_db() else {
-        // 无本地库（测试替身 store）：诚实返回空历史（不编造）
-        return Ok(ApprovalHistoryResult {
-            items: Vec::new(),
-            next_after_sequence: None,
-            has_more: None,
-        });
-    };
+    let db = state.local_db();
     let after = after_sequence.unwrap_or(0);
     // 会话范围：显式 sessionId → 单会话；缺省 → 全部会话索引
     let session_ids: Vec<String> = match session_id {
@@ -768,7 +758,7 @@ pub fn map_db_failure(error: conex_db::DbFailure) -> CoreError {
 pub async fn emit_approval_resolved(
     active: &ActiveRun,
     tool_call_id: &str,
-    decision: WireApprovalDecision,
+    decision: ApprovalDecision,
 ) {
     let event = AgentEvent::ApprovalResolved {
         session_id: active.session_id.clone(),

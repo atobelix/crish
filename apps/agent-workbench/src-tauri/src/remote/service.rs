@@ -68,7 +68,7 @@ async fn run(auth: Arc<AuthManager>, md: Arc<MultiDeviceService>) {
             }
         }
 
-        if bridge_task.as_ref().map_or(true, |task| task.is_finished()) {
+        if bridge_task.as_ref().is_none_or(|task| task.is_finished()) {
             if let Some(task) = bridge_task.take() {
                 task.abort();
             }

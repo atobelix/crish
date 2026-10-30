@@ -22,8 +22,8 @@
 //! - pending sink = [QueuePendingSink]（真实 PendingMessageQueue）；
 //! - event sink = [AgentEventSink]（缓冲 + 日志；`engine_channels.rs` 提供
 //!   drain 转发到 EventBridge，宿主周期任务在 `main.rs` 装配）；
-//! - store = [LocalDbTimerStore]（有 LocalDb 时经 `timer_ids` 索引持久化，
-//!   无数据库时使用 [MemoryTimerStore]）。
+//! - store = [LocalDbTimerStore]（经 `timer_ids` 索引持久化；db 为引擎
+//!   装配必需依赖，内存版 store 仅测试构建可用）。
 //!
 //! 早退旁路点（T-CF-07 §3）：orchestrator `EventQueue::push` 与 Tauri
 //! 侧事件收口均不在本文件域；钩子以 [TimerRegistry::on_event] 提供。
@@ -37,6 +37,8 @@ pub mod types;
 mod tests;
 
 pub use registry::TimerRegistry;
-pub use store::{LocalDbTimerStore, MemoryTimerStore, TimerStore};
+pub use store::{LocalDbTimerStore, TimerStore};
+#[cfg(any(test, feature = "test-support"))]
+pub use store::MemoryTimerStore;
 pub use types::{steering_group_id, TimerCancelReason, TimerEvent};
 pub use types::{AgentEventSink, EventSink, QueuePendingSink};

@@ -155,7 +155,7 @@ impl CoreStateBackend {
             env!("CARGO_PKG_VERSION").to_string(),
             self.core.engine_ready(),
             self.search_index_ready,
-            self.core.local_db().is_some(),
+            true,
             self.compaction_ready,
             provider_status,
             conex_telemetry::current_level(),
@@ -220,16 +220,15 @@ impl CoreStateBackend {
             Some(id) if !id.trim().is_empty() => id.trim().to_string(),
             _ => {
                 let id = generate_session_id();
-                if let Some(db) = self.core.local_db() {
-                    let title = prompt.chars().take(30).collect::<String>();
-                    let title = if title.is_empty() {
-                        "新会话".to_string()
-                    } else {
-                        title
-                    };
-                    db.insert_session(&id, &title)
-                        .map_err(|e| ServerError::io(format!("新建会话落库失败：{e}")))?;
-                }
+                let db = self.core.local_db();
+                let title = prompt.chars().take(30).collect::<String>();
+                let title = if title.is_empty() {
+                    "新会话".to_string()
+                } else {
+                    title
+                };
+                db.insert_session(&id, &title)
+                    .map_err(|e| ServerError::io(format!("新建会话落库失败：{e}")))?;
                 id
             }
         };

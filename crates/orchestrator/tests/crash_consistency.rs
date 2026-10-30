@@ -2112,7 +2112,7 @@ async fn restore_heals_mixed_orphan_and_complete_envelopes() {
 }
 
 /// LocalDb 全包络：session_messages 物化视图携带 tool_calls_json 声明，
-/// events 无 tool-start → 恢复后经 as_local_db 读声明并补齐双事件。
+/// events 无 tool-start → 恢复后经 Store 读声明并补齐双事件。
 #[tokio::test]
 async fn restore_heals_full_envelope_from_session_messages_localdb() {
     let dir = std::env::temp_dir().join(format!(
@@ -2190,10 +2190,9 @@ async fn restore_heals_full_envelope_from_session_messages_localdb() {
     // 04 §5.4：自愈结果回写 session_messages.tool_call_results_json
     {
         let reloaded = store
-            .as_local_db()
-            .expect("LocalDbStore 下转")
-            .load_session_body("s1")
-            .unwrap();
+            .load_session_messages("s1")
+            .await
+            .expect("load_session_messages 读取成功");
         let results_json = reloaded[0]
             .tool_call_results_json
             .as_deref()

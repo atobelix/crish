@@ -19,6 +19,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// 引擎装配必需依赖：测试用内存 LocalDb。
+fn test_local_db() -> conex_db::LocalDb {
+    conex_db::LocalDb::open_in_memory().expect("测试用内存 LocalDb")
+}
+
 use agent_provider::config::Endpoint;
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::responses::ResponsesParser;
@@ -1468,7 +1473,7 @@ fn production_factory_returns_real_summarizer_from_engine_config() {
     std::fs::create_dir_all(&dir).expect("create config dir");
     isolate_config_store(&dir);
 
-    let engine = Arc::new(EngineHandle::new(None));
+    let engine = Arc::new(EngineHandle::new(None, test_local_db()));
     let factory = production_summarizer_factory(Arc::clone(&engine));
     assert!(
         factory("s1").is_none(),
@@ -2387,7 +2392,7 @@ fn locate_mcp_fake_server() -> Option<std::path::PathBuf> {
 /// mcp.* 错误上抛且注册表不污染
 #[tokio::test]
 async fn register_plugin_mcp_server_integration() {
-    let engine = EngineHandle::new(None);
+    let engine = EngineHandle::new(None, test_local_db());
 
     // 错误路径：非法命令 → mcp.connection_failed，注册表无残留
     let bad = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
@@ -2490,7 +2495,7 @@ mod timer_wiring_tests {
     /// PendingMessageQueue（group_id = timer-<id>）。
     #[tokio::test]
     async fn engine_injects_timer_channel() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         // 工具注册面（T-CF-05 登记；通道为 None 时工具才返回 unsupported）
         let names: Vec<String> = engine
             .tool_registry()
@@ -2569,7 +2574,7 @@ mod wait_wiring_tests {
     /// 落库到引擎共享 dispatch 存储（与 watchdog 同一数据面）。
     #[tokio::test]
     async fn engine_registers_wait_channel() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         // 工具注册面（T-CF-10：通道为 None 时工具才返回 unsupported）
         let names: Vec<String> = engine
             .tool_registry()
@@ -2623,7 +2628,7 @@ mod wait_wiring_tests {
     /// 面）→ 提前返回；返回后订阅断流。
     #[tokio::test]
     async fn engine_wait_channel_wakeup_via_terminal_stream() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         let tool = engine
             .tool_registry()
             .get("wait_subagents")
@@ -2682,7 +2687,7 @@ mod wait_wiring_tests {
     /// wait 落库后 watchdog 可读（同一实例双 trait 注入断言）
     #[tokio::test]
     async fn engine_dispatch_store_bridges_to_watchdog() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         let declaration = DispatchDeclaration {
             mode: WaitMode::AwaitAll,
             wait_ms: None,
@@ -2710,7 +2715,7 @@ mod wait_wiring_tests {
 /// D6 §3.1 段 2 + D4 §3.8 ② store 装配替换测试：`new_with_spawner`
 /// 注入 `db: Option<LocalDb>`（W4 统一签名）后 timer/sched/wait 三 store
 /// 真适配落库 + 模拟重启恢复；None 回退内存版（功能面由既有
-/// EngineHandle::new(None) 测试全量覆盖，本模块补差分断言面）。
+/// EngineHandle::new(None, test_local_db()) 测试全量覆盖，本模块补差分断言面）。
 #[cfg(test)]
 mod store_assembly_tests {
     use super::*;
@@ -2725,7 +2730,7 @@ mod store_assembly_tests {
     #[tokio::test]
     async fn engine_localdb_timer_store_persists_and_recovers() {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        let engine = EngineHandle::new_with_spawner(None, None, Some(db.clone()));
+        let engine = EngineHandle::new_with_spawner(None, None, db.clone());
         let channel: Arc<dyn TimerChannel> = engine.timer_registry();
         let handle = channel
             .register(60, "重启恢复检查".to_string(), TimerCondition::Never)
@@ -2745,7 +2750,7 @@ mod store_assembly_tests {
             .expect("索引键应已写入");
         assert!(index.contains("timer-0"), "索引应含 timer-0：{index}");
         // 模拟重启：新引擎同 db → restore 扫描重建（未到期不 fire）
-        let restarted = EngineHandle::new_with_spawner(None, None, Some(db));
+        let restarted = EngineHandle::new_with_spawner(None, None, db);
         let restarted_channel: Arc<dyn TimerChannel> = restarted.timer_registry();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
         loop {
@@ -2769,7 +2774,7 @@ mod store_assembly_tests {
     #[tokio::test]
     async fn engine_localdb_wait_store_persists_and_bridges() {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
-        let engine = EngineHandle::new_with_spawner(None, None, Some(db.clone()));
+        let engine = EngineHandle::new_with_spawner(None, None, db.clone());
         let declaration = DispatchDeclaration {
             mode: WaitMode::AwaitAll,
             wait_ms: None,
@@ -2803,16 +2808,14 @@ mod store_assembly_tests {
         assert_eq!(declarations[0].subagent_ids, vec!["sa-1".to_string()]);
     }
 
-    /// sched 注册表装配分支：Some(db) → LocalDb 真适配（`sched_<id>` 键
-    /// + `sched_ids` 索引落库）；None → 内存版回退（注册功能可用，无
-    /// db 可落）。
+    /// sched 注册表装配：LocalDb 是必需依赖（`sched_<id>` 键 +
+    /// `sched_index` 索引落库；不存在无库内存回退）。
     #[tokio::test]
-    async fn engine_sched_store_assembly_branches() {
+    async fn engine_sched_store_assembly_persists_declarations() {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let sink = Arc::new(conex_run::sched::SchedEventSink::new());
-        // Some(db) → 真适配：注册 cron 后 sched_* 键落库
-        let registry = assemble_scheduler_registry(&queue, sink.clone(), Some(db.clone()))
+        let registry = assemble_scheduler_registry(&queue, sink, db.clone())
             .expect("装配应成功");
         let cron_id = registry
             .register(CronTaskInput {
@@ -2839,20 +2842,6 @@ mod store_assembly_tests {
                 .is_some(),
             "sched_index 索引应已写入"
         );
-        // None → 内存版回退：注册功能可用（数据不进 db，功能面同既有
-        // MemorySchedStore 语义）
-        let registry_mem =
-            assemble_scheduler_registry(&queue, sink, None).expect("None 装配应成功（内存回退）");
-        let cron_id_mem = registry_mem
-            .register(CronTaskInput {
-                expression: "0 9 * * *".to_string(),
-                prompt: "内存回退检查".to_string(),
-                max_iterations: None,
-                is_daemon: false,
-            })
-            .await
-            .expect("内存版注册应成功");
-        assert_eq!(cron_id_mem, "cron-0", "内存版独立序号域");
     }
 }
 
@@ -3086,7 +3075,7 @@ mod event_drain_tests {
     /// 后真实桥收到信封（与 :690 装配点同一实例的功能性证明）。
     #[tokio::test]
     async fn engine_accessors_reach_production_sinks() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         // 访问器稳定实例（两次取回同一 Arc）
         assert!(Arc::ptr_eq(
             &engine.timer_event_sink(),
@@ -3248,7 +3237,7 @@ mod event_drain_tests {
     /// 同一实例（路由 sink 经工具注册表接线到引擎共享统计）
     #[test]
     fn engine_audit_sink_accessor_reaches_shared_instance() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         assert!(Arc::ptr_eq(&engine.audit_sink(), &engine.audit_sink()));
     }
 
@@ -3275,7 +3264,7 @@ mod event_drain_tests {
 
         // 统一树配置 A（active=(p1, model-a)，key 经 env ref 注入为 sk-a）
         let store = install_tree_models_store(&dir, "https://a.example/v1");
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         let before = engine.provider_config().expect("构造后就绪");
         assert_eq!(before.api_key, "sk-a");
         assert_eq!(before.model, "model-a");
@@ -3314,7 +3303,7 @@ mod event_drain_tests {
         isolate_config_store(&dir);
 
         let _store = install_tree_models_store(&dir, "https://a.example/v1");
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         assert!(engine.ready());
 
         // 移除凭据（env ref 失效 → CREDENTIAL_MISSING）→ 重载 → 降级未就绪
@@ -3433,7 +3422,7 @@ mod continuity_wiring_tests {
     /// 未绑定窗口返回未绑定错误而非 unsupported——装配前行为一致降级）
     #[tokio::test]
     async fn engine_wires_continuity_board_into_tools() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         let kill = engine
             .tool_registry()
             .get(agent_tools::tools::kill_subagent::SUBAGENT_KILL_TOOL_NAME)
@@ -3690,7 +3679,7 @@ mod b1_5_poison_tests {
     /// 返回（不 panic、不传播）+ error 日志 + 计数 +1（三要素）
     #[test]
     fn poisoned_provider_lock_recovers_with_log_and_count() {
-        let engine = EngineHandle::new(None);
+        let engine = EngineHandle::new(None, test_local_db());
         poison_std_lock(&engine.provider);
         let before = conex_run::engine_handle::build_poison_recovery_count();
         // 毒化后读路径仍正常返回（None 亦为合法降级，不 panic 不传播）

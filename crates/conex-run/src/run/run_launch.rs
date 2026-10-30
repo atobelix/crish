@@ -415,6 +415,7 @@ mod tests {
             ))));
         Arc::new(CoreRunState::new(
             store,
+            conex_db::LocalDb::open_in_memory().expect("测试用内存 LocalDb"),
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),
@@ -873,17 +874,16 @@ pub fn resolve_max_turns(
     if let Some(turns) = requested {
         return turns;
     }
-    if let Some(db) = state.local_db() {
+    if let Some(turns) = {
+        let db = state.local_db();
         let key = session_meta_key_of(session_id, META_KEY_MAX_TURNS);
-        if let Some(turns) = db
-            .get_session_meta(&key)
+        db.get_session_meta(&key)
             .ok()
             .flatten()
             .or_else(|| db.get_session_meta(META_KEY_MAX_TURNS).ok().flatten())
             .and_then(|val| val.trim().parse::<u32>().ok())
-        {
-            return turns;
-        }
+    } {
+        return turns;
     }
     match mode {
         Some("goal" | "scheduled" | "idle-resume" | "content-resume" | "goal-continue") => 0,
@@ -935,24 +935,22 @@ pub async fn run_task_impl(
         Some(raw) => {
             let mode = parse_permission_mode(Some(raw));
             if parent_run_id.is_none() {
-                if let Some(db) = state.local_db() {
-                    let key = session_meta_key_of(&session_id, "permission_mode");
-                    let _ = db.set_session_meta(&key, mode.as_str());
-                }
+                let db = state.local_db();
+                let key = session_meta_key_of(&session_id, "permission_mode");
+                let _ = db.set_session_meta(&key, mode.as_str());
             }
             mode
         }
-        None => state
-            .local_db()
-            .and_then(|db| {
-                let key = session_meta_key_of(&session_id, "permission_mode");
-                db.get_session_meta(&key)
-                    .ok()
-                    .flatten()
-                    .or_else(|| db.get_session_meta("permission_mode").ok().flatten())
-            })
-            .map(|s| parse_permission_mode(Some(&s)))
-            .unwrap_or_default(),
+        None => {
+            let db = state.local_db();
+            let key = session_meta_key_of(&session_id, "permission_mode");
+            db.get_session_meta(&key)
+                .ok()
+                .flatten()
+                .or_else(|| db.get_session_meta("permission_mode").ok().flatten())
+                .map(|s| parse_permission_mode(Some(&s)))
+                .unwrap_or_default()
+        }
     };
     let client_message_id = options.client_message_id;
     let assistant_client_message_id = options.assistant_client_message_id;
@@ -1147,7 +1145,8 @@ pub async fn run_task_impl(
     };
 
     // 确保 session 行存在（自愈补建，避免 FK 报错；对齐 session_commands::self_heal_then_save_body）
-    if let Some(db) = state.local_db() {
+    {
+        let db = state.local_db();
         let sid = session_id.clone();
         let _ = tokio::task::spawn_blocking(move || db.insert_session(&sid, "")).await;
     }
@@ -1342,7 +1341,8 @@ pub async fn run_task_impl(
             // 权限申请上下文（design/review 配额凭证；T-D-14）
             let quota = match config.task_type.as_deref() {
                 Some("design") | Some("review") => {
-                    state.local_db().map(|db| ExploreDocsQuotaContext {
+                    let db = state.local_db();
+                    Some(ExploreDocsQuotaContext {
                         session_id: session_id.clone(),
                         run_id: run_id.clone(),
                         granted: true,
@@ -1804,7 +1804,8 @@ pub async fn compact_now_impl(
         };
         let in_db = state
             .local_db()
-            .and_then(|db| db.list_sessions().ok())
+            .list_sessions()
+            .ok()
             .map(|entries| entries.iter().any(|entry| entry.id == session_id))
             .unwrap_or(false);
         in_trees || in_sessions || in_db
@@ -1849,11 +1850,7 @@ pub async fn compact_now_impl(
     let conversation = if let Some(cached) = state.session_history.get(session_id) {
         cached_history_to_conversation(cached)
     } else {
-        let Some(db) = state.local_db() else {
-            return Err(CoreError::Internal(
-                "LocalDb 不可用，无法加载会话对话".to_string(),
-            ));
-        };
+        let db = state.local_db();
         let body = db
             .load_session_body(session_id)
             .map_err(|error| CoreError::Io(format!("store.load_session_body: {error}")))?;

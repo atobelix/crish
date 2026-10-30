@@ -83,6 +83,7 @@ fn run_state_with_http_provider(
     let bridge = EventBridge::new("workbench-run-event", Arc::new(IgnoreEmitter));
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),

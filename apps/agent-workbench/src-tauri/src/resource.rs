@@ -156,10 +156,10 @@ pub(crate) fn sample_usage(pid: u32) -> Result<RawUsage, String> {
     }
 }
 
-/// Windows：QueryInformationJobObject 双查——BasicAccountingInformation 的
-/// TotalUserTime/TotalKernelTime（FILETIME，100ns 单位）累加为 CPU 累计毫秒；
-/// ExtendedLimitInformation 的 PeakJobMemoryUsed 近似 RSS（Job 累计峰值）。
-///
+// Windows：QueryInformationJobObject 双查——BasicAccountingInformation 的
+// TotalUserTime/TotalKernelTime（FILETIME，100ns 单位）累加为 CPU 累计毫秒；
+// ExtendedLimitInformation 的 PeakJobMemoryUsed 近似 RSS（Job 累计峰值）。
+//
 // ============================================================================
 // 通知投递（T-AB-16：Suspicious / Crashed 双通道）
 // ============================================================================

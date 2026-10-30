@@ -143,6 +143,7 @@ fn terminal_count(events: &[SequencedEvent]) -> usize {
 
 mod envelope_freeze;
 mod queue_sequencing;
+mod queue_sequencing_store;
 mod run_lifecycle;
 mod sequence_reserve;
 mod session_compression;

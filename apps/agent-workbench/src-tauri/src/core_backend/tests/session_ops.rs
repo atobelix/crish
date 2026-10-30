@@ -57,6 +57,7 @@ async fn remote_run_control_completed_run_returns_not_found() {
     );
     let state = Arc::new(conex_run::run::CoreRunState::new(
         Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),
@@ -322,6 +323,7 @@ async fn t08_remote_run_full_mode_downgraded_to_ask_with_audit() {
     );
     let state = Arc::new(conex_run::run::CoreRunState::new(
         Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),

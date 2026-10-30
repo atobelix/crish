@@ -167,9 +167,7 @@ impl CoreRunState {
         run_ids: &[String],
         candidate_sessions: &[String],
     ) -> HashMap<String, String> {
-        let Some(db) = self.local_db() else {
-            return HashMap::new();
-        };
+        let db = self.local_db();
         let targets: Vec<String> = run_ids.to_vec();
         let sessions: Vec<String> = candidate_sessions.to_vec();
         tokio::task::spawn_blocking(move || {
@@ -260,27 +258,23 @@ impl CoreRunState {
         // 全局恢复排他租约（04 §6.2；conex-db session_meta 键）：
         // 抢不到仍允许只读恢复（CAS 幂等兜底）；抢到则 finally 释放。
         let lease_id = format!("restore-{}-{}", std::process::id(), u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
-        let leased = self
-            .local_db()
-            .and_then(|db| {
-                db.try_acquire_recovery_lease(&lease_id, None)
-                    .map_err(|e| {
-                        tracing::warn!(target: "restore", error = %e, "恢复租约抢占失败，降级 CAS 幂等路径");
-                        e
-                    })
-                    .ok()
+        let db = self.local_db();
+        let leased = db
+            .try_acquire_recovery_lease(&lease_id, None)
+            .map_err(|e| {
+                tracing::warn!(target: "restore", error = %e, "恢复租约抢占失败，降级 CAS 幂等路径");
+                e
             })
+            .ok()
             .unwrap_or(false);
         if !leased {
-            tracing::warn!(target: "restore", "全局恢复租约未持有（他实例运行中或非 LocalDb），孤儿自愈依赖 CAS");
+            tracing::warn!(target: "restore", "全局恢复租约未持有（他实例运行中），孤儿自愈依赖 CAS");
         }
         let restore_result = RestoreManager::new()
             .restore(self.store.as_ref(), self.snapshots.as_ref())
             .await;
         if leased {
-            if let Some(db) = self.local_db() {
-                let _ = db.release_recovery_lease(&lease_id);
-            }
+            let _ = db.release_recovery_lease(&lease_id);
         }
         match restore_result {
             Ok(outcome) => {

@@ -461,7 +461,7 @@ fn main() {
 
             // 核心运行状态（store / 快照 / 事件桥 / 诊断 / 后台任务管理器注入）
             let core_state = Arc::new(conex_run::run::CoreRunState::new(
-                Arc::clone(&store),
+                Arc::clone(&store), shared_db.local_db(),
                 Arc::clone(&snapshots),
                 bridge.clone(),
                 Arc::clone(diagnostics),
@@ -685,7 +685,7 @@ fn main() {
                         .with_search_index_ready(search_index_ready)
                         .with_compaction_ready(compaction_ready)
                         .with_search_state(Arc::clone(&search_state))
-                        .with_workspace_ops(core_backend::workspace_ops::AppWorkspaceOps::new(
+                        .with_workspace_ops(core_backend::workspace_ops::AppWorkspaceOps::create(
                             app_handle.clone(),
                         ));
                 if let Ok(guard) = crate::workspace::resolve_guard(&app_handle, "") {

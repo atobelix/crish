@@ -690,7 +690,7 @@ fn handle_client_text(
                 tx,
                 json!({
                     "type": "relay.pong",
-                    "ts": ts.unwrap_or_else(|| now_ms_u64())
+                    "ts": ts.unwrap_or_else(now_ms_u64)
                 })
                 .to_string(),
             );

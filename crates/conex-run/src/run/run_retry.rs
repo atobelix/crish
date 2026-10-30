@@ -203,9 +203,7 @@ impl CoreRunState {
     /// D3 §4.1：阶梯 1 跨 run 重试次数配置解析（可配键缺省 2；与
     /// coordinator_for 装配口径同源，保证「推满 = 必然 Escalate」判定一致）
     pub fn ladder1_max_retries_config(&self) -> u32 {
-        let Some(db) = self.local_db() else {
-            return RECOVER_LADDER1_MAX_RETRIES_DEFAULT;
-        };
+        let db = self.local_db();
         db.get_session_meta(RECOVER_LADDER1_MAX_RETRIES_KEY)
             .ok()
             .flatten()
@@ -392,9 +390,7 @@ impl CoreRunState {
                 weak_cb
                     .upgrade()
                     .map(|state| {
-                        let Some(db) = state.local_db() else {
-                            return false;
-                        };
+                        let db = state.local_db();
                         let threshold = state.provider_fail_threshold_config(&db);
                         let streak_key = session_meta_key_of(sid, PROVIDER_FAIL_STREAK_KEY);
                         let raw = db.get_session_meta(&streak_key).ok().flatten();
@@ -428,9 +424,7 @@ impl CoreRunState {
     /// 装配进 SessionLoopOptions，D1 §3.2.3）；落点 ② decide_idle_resume
     /// error 分支与 E1 续写分支（02-定夺 S2：两处共用同一查询面）。
     pub async fn circuit_breaker_is_tripped(&self, session_id: &str) -> bool {
-        let Some(db) = self.local_db() else {
-            return false;
-        };
+        let db = self.local_db();
         let threshold = self.provider_fail_threshold_config(&db);
         let streak_key = session_meta_key_of(session_id, PROVIDER_FAIL_STREAK_KEY);
         tokio::task::spawn_blocking(move || {
@@ -453,9 +447,7 @@ impl CoreRunState {
         session_id: &str,
         transient_failure: bool,
     ) -> bool {
-        let Some(db) = self.local_db() else {
-            return false;
-        };
+        let db = self.local_db();
         let threshold = self.provider_fail_threshold_config(&db);
         let session_id = session_id.to_string();
         let streak_key = session_meta_key_of(&session_id, PROVIDER_FAIL_STREAK_KEY);
@@ -507,7 +499,7 @@ impl CoreRunState {
     /// provider_fail_streak——transient_retry 入口闸 C1 输入；无键 → None
     /// = 不启用闸，向后兼容）
     pub async fn provider_fail_streak_count(&self, session_id: &str) -> Option<u32> {
-        let db = self.local_db()?;
+        let db = self.local_db();
         let streak_key = session_meta_key_of(session_id, PROVIDER_FAIL_STREAK_KEY);
         tokio::task::spawn_blocking(move || {
             let raw = db.get_session_meta(&streak_key).ok().flatten();
@@ -530,7 +522,7 @@ impl CoreRunState {
         &self,
         _session_id: &str,
     ) -> Option<session_loop::r#loop::RetryBackoffConfig> {
-        let db = self.local_db()?;
+        let db = self.local_db();
         let raw = db
             .get_session_meta(PROVIDER_RETRY_BACKOFF_MS_KEY)
             .ok()

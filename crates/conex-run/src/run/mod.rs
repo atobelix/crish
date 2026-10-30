@@ -121,8 +121,6 @@ pub(crate) use orchestrator::recovery::{RunFailureContext, RECOVER_EPISODES_KEY}
 pub(crate) use orchestrator::restore::{RestoreMode, StateSnapshot};
 #[cfg(test)]
 pub(crate) use orchestrator::ToolCallStamp;
-#[cfg(test)]
-pub(crate) use conex_types::events::ApprovalDecision;
 
 // ── 会话元数据键约定（checkpoint 阶段标记 / 产出目录键共用）────────
 
@@ -247,5 +245,4 @@ pub(crate) use run_resume::*;
 pub use run_retry::*;
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

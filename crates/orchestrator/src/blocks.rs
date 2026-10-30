@@ -22,7 +22,7 @@
 //!
 //! cache_tracker 消费面在轮次 3/4（T-25~T-31）：本模块只落块表，不触碰测量面。
 
-use conex_db::{BlockState, CompactionBlockRow, DbFailure, LocalDb};
+use conex_db::{BlockState, CompactionBlockRow};
 use conex_types::events::AgentEvent;
 use conex_types::tool::ContextCompressionRecord;
 
@@ -32,7 +32,11 @@ use conex_shared::time::{Clock, SystemClock};
 /// 压缩事件（context-compression-end）落库成功后写入块行。
 ///
 /// 非压缩事件 / result 为 None / store 无底层 LocalDb（内存测试替身）→
-/// Ok 跳过。返回 Err 仅当真实 DB 写失败（调用方告警不阻断）。
+/// 块写入/摘要推进是 [crate::persist::Store] 的必需能力（生产 SQLite 与
+/// 内存实现各自记账），本模块只做事件解包与委托。
+///
+/// 非压缩事件 / result 为 None → Ok 跳过。返回 Err 仅当真实存储写失败
+/// （调用方告警不阻断）。
 pub async fn persist_compression_block(
     store: &dyn crate::persist::Store,
     session_id: &str,
@@ -46,36 +50,23 @@ pub async fn persist_compression_block(
     else {
         return Ok(());
     };
-    // 块写入仅生产路径（SQLite）；InMemoryStore 等测试替身无连接 → 跳过
-    let Some(db) = store.as_local_db() else {
-        return Ok(());
-    };
-    // insert_block / count_compression_events 走 write_blocking/读锁：
-    // 必须从 spawn_blocking 调用，禁止在 async worker 上直接 blocking_send。
-    let db2 = db.clone();
-    let session_id = session_id.to_string();
-    let record = record.clone();
-    tokio::task::spawn_blocking(move || {
-        let row = build_block_row(&db2, &session_id, &record, sequence)?;
-        db2.insert_block(&row).map_err(db_store_error)
-    })
-    .await
-    .map_err(|e| StoreError::new("insert_block", format!("spawn_blocking join: {e}")))?
+    store
+        .insert_compression_block(session_id, record, sequence)
+        .await
 }
 
 /// 摘要任务完成回调落库面（T-42；两阶段写协议阶段二——会话级协调器
 /// 后台任务完成后推进块行 state / summary_json / attempts）。
 ///
 /// - **幂等**：行不存在（事件尚未落块 / 已删除）→ Ok 无操作；
-///   [LocalDb::update_block_state] 可重复调用不报错；
 /// - **height 保持**：V1 后台任务不读表（session-loop 叶子纪律，无
 ///   existing 迭代合并语义）——推进时保留块行既有 height（同步路径
 ///   创建时=1），避免误覆盖未来合并高度；
 /// - **语源**：summary_json 为 Schema V1 规范文档（R-G 表面），链文本
 ///   形态由 outcome.rendered_markdown 承载（会话元数据 / 前端展示挂账）；
 /// - 失败语义：写失败告警不阻断（块表是索引面，原文仍在事件流可回放）。
-/// - 同步函数：conex-db 为同步 API，回调（FnOnce，壳层默认回调）内直接
-///   调用（单连接锁短持有；V1 简化，长库面演进留 V2）。
+/// - 同步函数：回调（FnOnce，壳层默认回调）内直接调用（单连接锁短持有；
+///   V1 简化，长库面演进留 V2）。
 pub fn update_compression_block_summary(
     store: &dyn crate::persist::Store,
     session_id: &str,
@@ -84,28 +75,21 @@ pub fn update_compression_block_summary(
     summary_json: Option<&str>,
     attempts: u32,
 ) -> Result<(), StoreError> {
-    // 仅生产路径（SQLite）；测试替身无连接 → Ok 跳过
-    let Some(db) = store.as_local_db() else {
-        return Ok(());
-    };
-    // height 保持既有值（V1 不读表合并 → 不推进高度；缺行时兜底 1）
-    let height = db
-        .get_block(session_id, block_id)
-        .ok()
-        .flatten()
-        .map(|row| row.height)
-        .unwrap_or(1);
-    db.update_block_state(session_id, block_id, state, summary_json, height, attempts)
-        .map_err(db_store_error)
+    store.update_compression_block_summary(session_id, block_id, state, summary_json, attempts)
 }
 
 /// 事件 record + 会话上下文 → 块行（details 优先，兜底推导；见模块注释）。
-fn build_block_row(
-    db: &LocalDb,
+///
+/// `generation_fallback` / `prev_block_id_fallback` 由存储实现按自身数据面
+/// 给出：SQLite 用 events 表压缩事件计数与块表链尾（首条 = 最新），内存
+/// 实现用内存事件表与内存块表。
+pub(crate) fn build_block_row(
     session_id: &str,
     record: &ContextCompressionRecord,
     sequence: u64,
-) -> Result<CompactionBlockRow, StoreError> {
+    generation_fallback: u32,
+    prev_block_id_fallback: Option<String>,
+) -> CompactionBlockRow {
     let details = record.details.as_ref();
     let str_field = |key: &str| {
         details
@@ -120,28 +104,13 @@ fn build_block_row(
     };
 
     let block_id = str_field("blockId").unwrap_or_else(|| record.id.clone());
-    // generation：details 优先；兜底 = events 表压缩事件计数（含本次），
-    // 与 restore 重放 apply_compression_end 的 +1 语义一致（R-K 单源）
+    // generation：details 优先；兜底 = 压缩事件计数（含本次），与 restore
+    // 重放 apply_compression_end 的 +1 语义一致（R-K 单源）
     let generation = u64_field("generation")
         .map(|g| g as u32)
-        .or_else(|| {
-            db.count_compression_events(session_id)
-                .ok()
-                .map(|c| c as u32)
-        })
-        .unwrap_or(1);
+        .unwrap_or(generation_fallback);
     // prev_block_id：details 优先；兜底 = 块表链尾（list 首条即最新）
-    let prev_block_id = str_field("prevBlockId").or_else(|| {
-        db.list_blocks(session_id, Some(1))
-            .ok()
-            .and_then(|mut blocks| {
-                if blocks.is_empty() {
-                    None
-                } else {
-                    Some(blocks.remove(0).block_id)
-                }
-            })
-    });
+    let prev_block_id = str_field("prevBlockId").or(prev_block_id_fallback);
     let dropped_at_ms = u64_field("droppedAtMs")
         .map(|v| v as i64)
         .unwrap_or_else(|| SystemClock.now_ms());
@@ -153,7 +122,7 @@ fn build_block_row(
     };
 
     let now = SystemClock.now_ms();
-    Ok(CompactionBlockRow {
+    CompactionBlockRow {
         session_id: session_id.to_string(),
         block_id,
         sequence,
@@ -178,12 +147,7 @@ fn build_block_row(
         attempts: if state == BlockState::Committed { 1 } else { 0 },
         created_at: now,
         updated_at: now,
-    })
-}
-
-/// DbFailure → StoreError（操作名保留，cause 链携带底层分类码，对齐 persist.rs）
-fn db_store_error(failure: DbFailure) -> StoreError {
-    crate::persist::StoreError::with_cause("insert_block", failure.message.clone(), failure)
+    }
 }
 
 #[cfg(test)]
@@ -371,16 +335,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn persist_block_skips_without_local_db_or_non_compression_event() {
-        // InMemoryStore（测试替身）无 LocalDb → Ok 跳过
-        let mem: Arc<dyn Store> = Arc::new(InMemoryStore::new());
+    async fn persist_block_writes_in_memory_store_and_skips_non_compression_event() {
+        // 内存实现同样落块（读得回来）；非压缩事件 → Ok 跳过（不误写块）
+        let mem = Arc::new(InMemoryStore::new());
+        let store: Arc<dyn Store> = Arc::clone(&mem) as Arc<dyn Store>;
         let event = compression_event(plain_record("b1", vec!["u1"]));
-        persist_compression_block(mem.as_ref(), "s1", &event, 1)
+        persist_compression_block(store.as_ref(), "s1", &event, 1)
             .await
             .unwrap();
-        assert!(mem.as_local_db().is_none());
+        let block = mem.compression_block("s1", "b1").expect("内存块表可读回");
+        assert_eq!(block.generation, 1);
+        assert_eq!(block.sequence, 1);
 
-        // 非压缩事件 → Ok 跳过（不误写块）
         let db = seeded_db("s1", 0);
         let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
         let other = AgentEvent::AgentStart {
@@ -542,10 +508,35 @@ mod tests {
 
     /// 测试替身（InMemoryStore 无 LocalDb）→ Ok 跳过（不 panic）
     #[tokio::test]
-    async fn update_block_summary_skips_without_local_db() {
-        let mem: Arc<dyn Store> = Arc::new(InMemoryStore::new());
-        update_compression_block_summary(mem.as_ref(), "s1", "b1", BlockState::Committed, None, 1)
+    async fn update_block_summary_updates_in_memory_store() {
+        let mem = Arc::new(InMemoryStore::new());
+        let store: Arc<dyn Store> = Arc::clone(&mem) as Arc<dyn Store>;
+        persist_compression_block(
+            store.as_ref(),
+            "s1",
+            &compression_event(plain_record("b1", vec!["u1"])),
+            1,
+        )
+        .await
+        .unwrap();
+
+        update_compression_block_summary(
+            store.as_ref(),
+            "s1",
+            "b1",
+            BlockState::Committed,
+            Some("{\"v\":1}"),
+            2,
+        )
+        .unwrap();
+        let block = mem.compression_block("s1", "b1").expect("内存块表可读回");
+        assert_eq!(block.state, BlockState::Committed);
+        assert_eq!(block.summary_json.as_deref(), Some("{\"v\":1}"));
+        assert_eq!(block.attempts, 2);
+        assert_eq!(block.height, 1, "V1 不推进高度");
+
+        // 行不存在 → Ok 无操作（对齐 LocalDb::update_block_state 宽容语义）
+        update_compression_block_summary(mem.as_ref(), "s1", "missing", BlockState::Committed, None, 1)
             .unwrap();
-        assert!(mem.as_local_db().is_none());
     }
 }

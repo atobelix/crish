@@ -17,7 +17,7 @@ pub(crate) struct AppWorkspaceOps {
 }
 
 impl AppWorkspaceOps {
-    pub(crate) fn new(app: tauri::AppHandle) -> Arc<dyn WorkspaceOps> {
+    pub(crate) fn create(app: tauri::AppHandle) -> Arc<dyn WorkspaceOps> {
         Arc::new(Self { app })
     }
 

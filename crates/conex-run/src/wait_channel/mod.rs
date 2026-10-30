@@ -50,12 +50,15 @@ mod wait_registry;
 
 pub use broadcast::{EventStreamBroadcast, NoopControlBusResolver};
 pub use channel::WaitChannel;
-pub use stores::{LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore};
+pub use stores::{LocalDbWaitStore, MemoryAgentSource};
+#[cfg(any(test, feature = "test-support"))]
+pub use stores::MemoryWaitStore;
 pub use wait_registry::{SubagentWaitRegistry, WaitScopeGuard};
 
 /// 订阅通道容量（终端事件量级极小；防慢消费者阻塞旁路点）
 const SUBSCRIBER_CAPACITY: usize = 64;
 /// 声明保存条数上限（保留最近 N 条分发声明；防无界增长）
+#[cfg(any(test, feature = "test-support"))]
 const DECLARATION_CAP: usize = 16;
 
 // ── 适配器契约（装配注入面）────────────────────────────────────────
@@ -105,6 +108,7 @@ pub trait DispatchStore: Send + Sync {
     fn clear_declarations(&self) {}
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl DispatchStore for MemoryWaitStore {
     fn load_declarations(&self) -> Vec<DispatchDeclaration> {
         WaitStore::load_all(self)
@@ -126,6 +130,7 @@ impl DispatchStore for LocalDbWaitStore {
 /// 类型化——装配分支（内存/真适配）后访问器返回类型不漂移，双 trait
 /// 消费面分别注入 WaitChannel 与 Watchdog。
 pub trait WaitDispatchStore: WaitStore + DispatchStore {}
+#[cfg(any(test, feature = "test-support"))]
 impl WaitDispatchStore for MemoryWaitStore {}
 impl WaitDispatchStore for LocalDbWaitStore {}
 

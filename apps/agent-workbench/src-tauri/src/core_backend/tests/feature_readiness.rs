@@ -352,7 +352,6 @@ async fn p7_status_includes_active_runs_and_pending_approvals_end_to_end() {
     state.run_restore().await;
     state
         .local_db()
-        .expect("local_db")
         .insert_session("s1", "s1")
         .expect("创建测试会话");
 

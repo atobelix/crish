@@ -456,9 +456,7 @@ pub async fn get_run_snapshot_impl(
 pub fn list_sessions_impl(
     state: &CoreRunState,
 ) -> Result<Vec<conex_types::session_record::SessionIndexEntry>, CoreError> {
-    let Some(db) = state.local_db() else {
-        return Ok(Vec::new());
-    };
+    let db = state.local_db();
     db.list_sessions().map_err(map_db_failure)
 }
 
@@ -473,9 +471,7 @@ pub fn get_flow_snapshot_impl(
     if session_id.trim().is_empty() {
         return Err(CoreError::invalid_input("session_id 不能为空"));
     }
-    let Some(db) = state.local_db() else {
-        return Err(CoreError::NotFound(format!("会话不存在：{session_id}")));
-    };
+    let db = state.local_db();
     let declaration = db
         .get_session_meta(orchestrator::flow_graph::FLOW_DECLARATION_KEY)
         .map_err(map_db_failure)?;
@@ -879,9 +875,7 @@ pub const SUBAGENT_HEARTBEAT_TICK_MS: u64 = 5_000;
 
 /// 一次心跳落库扫描：活动子代理 run → running 行条件刷新。
 pub(crate) async fn persist_subagent_heartbeats(state: &Arc<CoreRunState>) {
-    let Some(db) = state.local_db() else {
-        return;
-    };
+    let db = state.local_db();
     let candidates: Vec<(String, String)> = {
         let runs = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
         runs.iter()
@@ -1109,6 +1103,7 @@ mod tests {
             ))));
         Arc::new(CoreRunState::new(
             Arc::new(InMemoryStore::new()),
+            conex_db::LocalDb::open_in_memory().expect("测试用内存 LocalDb"),
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),

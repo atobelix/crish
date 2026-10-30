@@ -15,7 +15,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use conex_db::{PendingInput, RunStatus, StoredRun};
+use conex_db::{BlockState, CompactionBlockRow, PendingInput, RunStatus, StoredRun};
+use conex_types::tool::ContextCompressionRecord;
+use conex_types::events::RunCacheStats;
+use conex_types::session_record::{SessionAgent, SessionMessage};
 
 use super::{PersistedEvent, RecoveryForkTreeEntry, Store, StoreError, StoreResult};
 use conex_shared::time::{Clock, SystemClock};
@@ -39,79 +42,20 @@ struct InMemoryInner {
     recovery_fork_tree_entries: HashMap<String, Vec<RecoveryForkTreeEntry>>,
     /// 会话 → 最近一次已分配 sequence（T08.12：会话级原子计数器的本地镜像）
     sequence_counters: HashMap<String, u64>,
+    /// run → run 级缓存统计（runs 表 v5 列的等价内存表）
+    run_usage: HashMap<String, RunCacheStats>,
+    /// 会话 → 正文消息（session_messages 物化视图的等价内存表）
+    session_messages: HashMap<String, Vec<SessionMessage>>,
+    /// 子代理行（session_agents 的等价内存表）
+    session_agents: Vec<SessionAgent>,
+    /// 压缩块（compression_blocks 的等价内存表；按写入顺序保存）
+    compression_blocks: Vec<CompactionBlockRow>,
     append_delay: Duration,
     fail_all_message: Option<String>,
     next_failures: Vec<String>,
 }
 
-impl InMemoryStore {
-    /// 新建空的内存存储
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(InMemoryInner::default())),
-        }
-    }
-
-    /// 注入持久化事件追加延迟（模拟慢 store；仅测试用）
-    pub fn set_append_delay(&self, delay: Duration) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.append_delay = delay;
-        }
-    }
-
-    /// 注入一次追加失败（每次 append 消费一条；耗尽后恢复正常）
-    pub fn fail_next_append(&self, message: impl Into<String>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.next_failures.push(message.into());
-        }
-    }
-
-    /// 注入持续追加失败（模拟 store 彻底损坏，写失败 latch）
-    pub fn fail_all_appends(&self, message: impl Into<String>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.fail_all_message = Some(message.into());
-        }
-    }
-
-    /// 当前全部 run 记录快照（断言用）
-    pub fn runs(&self) -> Vec<StoredRun> {
-        self.inner
-            .lock()
-            .map(|guard| guard.runs.clone())
-            .unwrap_or_default()
-    }
-
-    /// 当前已落库事件快照（断言用）
-    pub fn events(&self) -> Vec<PersistedEvent> {
-        self.inner
-            .lock()
-            .map(|guard| guard.events.clone())
-            .unwrap_or_default()
-    }
-
-    /// 直接注入待处理输入（测试用，可指定 created_at 精确控制 FIFO 顺序）
-    pub fn seed_pending_inputs(&self, inputs: Vec<PendingInput>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            for input in inputs {
-                guard.pending_inputs.retain(|p| p.id != input.id);
-                guard.pending_inputs.push(input);
-            }
-        }
-    }
-
-    /// Seed Recovery fork tree entries for restore and snapshot tests.
-    pub fn seed_recovery_fork_tree_entry(&self, session_id: &str, entry: RecoveryForkTreeEntry) {
-        if let Ok(mut guard) = self.inner.lock() {
-            let entries = guard
-                .recovery_fork_tree_entries
-                .entry(session_id.to_string())
-                .or_default();
-            entries.retain(|existing| existing.entry.id != entry.entry.id);
-            entries.push(entry);
-            entries.sort_by_key(|entry| entry.event_sequence);
-        }
-    }
-}
+mod fixtures;
 
 impl Default for InMemoryStore {
     fn default() -> Self {
@@ -433,6 +377,182 @@ impl Store for InMemoryStore {
         let before = guard.pending_inputs.len();
         guard.pending_inputs.retain(|p| p.id != id);
         Ok(guard.pending_inputs.len() != before)
+    }
+
+    async fn touch_session(&self, _session_id: &str) -> StoreResult<()> {
+        // 内存实现无 sessions 表：touch 是「刷新 updated_at」的持久化语义，
+        // 内存表没有对应事实，显式实现为空操作（不是 trait 默认兜底）。
+        Ok(())
+    }
+
+    fn get_run_usage(&self, run_id: &str) -> StoreResult<Option<RunCacheStats>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        Ok(guard.run_usage.get(run_id).cloned())
+    }
+
+    fn save_run_usage(&self, run_id: &str, stats: RunCacheStats) -> StoreResult<()> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        guard.run_usage.insert(run_id.to_string(), stats);
+        Ok(())
+    }
+
+    async fn load_running_session_agent_rows(&self) -> StoreResult<Vec<SessionAgent>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        Ok(guard
+            .session_agents
+            .iter()
+            .filter(|agent| agent.status == "running")
+            .cloned()
+            .collect())
+    }
+
+    async fn mark_session_agent_interrupted(
+        &self,
+        parent_session_id: &str,
+        subagent_run_id: &str,
+        ended_at_ms: i64,
+        summary: &str,
+    ) -> StoreResult<usize> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        let mut affected = 0;
+        for agent in guard.session_agents.iter_mut().filter(|agent| {
+            agent.parent_session_id == parent_session_id
+                && agent.subagent_run_id == subagent_run_id
+                && agent.status == "running"
+        }) {
+            agent.status = "failed".to_string();
+            agent.ended_at = Some(ended_at_ms);
+            agent.summary = Some(summary.to_string());
+            agent.resumable = true;
+            affected += 1;
+        }
+        Ok(affected)
+    }
+
+    async fn load_session_messages(&self, session_id: &str) -> StoreResult<Vec<SessionMessage>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        Ok(guard
+            .session_messages
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    async fn save_session_messages(
+        &self,
+        session_id: &str,
+        messages: &[SessionMessage],
+    ) -> StoreResult<()> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        guard
+            .session_messages
+            .insert(session_id.to_string(), messages.to_vec());
+        Ok(())
+    }
+
+    async fn insert_compression_block(
+        &self,
+        session_id: &str,
+        record: &ContextCompressionRecord,
+        sequence: u64,
+    ) -> StoreResult<()> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        // generation 兜底 = 会话内压缩事件计数（含本次，与 drive 落库顺序一致）
+        let generation = record
+            .details
+            .as_ref()
+            .and_then(|details| details.get("generation"))
+            .and_then(serde_json::Value::as_u64)
+            .map(|generation| generation as u32)
+            .unwrap_or_else(|| {
+                guard
+                    .events
+                    .iter()
+                    .filter(|event| {
+                        event.session_id == session_id
+                            && event.event_type == "context-compression-end"
+                    })
+                    .count() as u32
+            })
+            .max(1);
+        // prev 兜底 = 链尾块（generation 最大者；对齐 list_blocks 首条）
+        let prev_block_id = record
+            .details
+            .as_ref()
+            .and_then(|details| details.get("prevBlockId"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                guard
+                    .compression_blocks
+                    .iter()
+                    .filter(|block| block.session_id == session_id)
+                    .max_by_key(|block| block.generation)
+                    .map(|block| block.block_id.clone())
+            });
+        let row = crate::blocks::build_block_row(
+            session_id,
+            record,
+            sequence,
+            generation,
+            prev_block_id,
+        );
+        // INSERT OR IGNORE 语义：同 (session_id, block_id) 重放不重复行
+        if !guard
+            .compression_blocks
+            .iter()
+            .any(|block| block.session_id == row.session_id && block.block_id == row.block_id)
+        {
+            guard.compression_blocks.push(row);
+        }
+        Ok(())
+    }
+
+    fn update_compression_block_summary(
+        &self,
+        session_id: &str,
+        block_id: &str,
+        state: BlockState,
+        summary_json: Option<&str>,
+        attempts: u32,
+    ) -> StoreResult<()> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        // 行不存在 → Ok 无操作（对齐 LocalDb::update_block_state）
+        if let Some(block) = guard
+            .compression_blocks
+            .iter_mut()
+            .find(|block| block.session_id == session_id && block.block_id == block_id)
+        {
+            block.state = state;
+            block.summary_json = summary_json.map(str::to_string);
+            block.attempts = attempts;
+            block.updated_at = SystemClock.now_ms();
+        }
+        Ok(())
     }
 }
 

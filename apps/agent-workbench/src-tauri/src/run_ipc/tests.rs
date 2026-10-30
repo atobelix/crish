@@ -97,7 +97,7 @@ fn test_state(
     );
     let background = registry.map(|value| value as Arc<dyn BackgroundTaskManager>);
     let state = Arc::new(CoreRunState::new(
-        Arc::new(LocalDbStore::new(db.clone())),
+        Arc::new(LocalDbStore::new(db.clone())), db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),

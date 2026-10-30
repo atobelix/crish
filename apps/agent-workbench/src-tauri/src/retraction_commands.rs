@@ -130,16 +130,15 @@ pub(crate) async fn retract_impl(
 
     // ⑦ 物理下推：SQLite 消息持久层截断 target_message_id 之后的消息
     // 彻底根除应用重启或水合后被撤回消息死灰复燃
-    if let Some(db) = state.local_db() {
-        if let Err(e) = db.truncate_session_messages_after(session_id, target_message_id) {
-            tracing::warn!(
-                target: "retraction",
-                session_id = %session_id,
-                target_message_id = %target_message_id,
-                error = %e,
-                "撤回持久化物理下推警告（session_messages 截断未匹配或失败）"
-            );
-        }
+    let db = state.local_db();
+    if let Err(e) = db.truncate_session_messages_after(session_id, target_message_id) {
+        tracing::warn!(
+            target: "retraction",
+            session_id = %session_id,
+            target_message_id = %target_message_id,
+            error = %e,
+            "撤回持久化物理下推警告（session_messages 截断未匹配或失败）"
+        );
     }
 
     Ok(RetractResponse {

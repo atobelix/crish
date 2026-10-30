@@ -340,15 +340,15 @@ async fn wait_for_shutdown(mut rx: watch::Receiver<bool>) {
     let _ = rx.changed().await;
 }
 
-/// TLS 包装监听器（axum Listener 适配，R1-11 wss 装配）
-///
-/// accept 语义（D5 §2.1 降级保护 / T-04 落点）：TCP accept 后先做 TLS
-/// 握手——明文 ws:// 握手（无 ClientHello）或伪造证书客户端在**握手层**
-/// 被拒绝：记录诊断（TLS-08 握手失败日志，审计通道的最小落地）后继续
-/// 接受下一条连接，不终止 serve（垃圾连接不构成拒绝服务面）。
-///
-/// Connected / ConnectInfo 语义（R1 收口 /v1/pair 每源 IP 限速）：axum
-// 客户端地址注入（R1 收口 /v1/pair 每源 IP 限速）说明：axum 0.8 的
+// TLS 包装监听器（axum Listener 适配，R1-11 wss 装配）。
+//
+// accept 语义（D5 §2.1 降级保护 / T-04 落点）：TCP accept 后先做 TLS
+// 握手——明文 ws:// 握手（无 ClientHello）或伪造证书客户端在握手层
+// 被拒绝：记录诊断（TLS-08 握手失败日志，审计通道的最小落地）后继续
+// 接受下一条连接，不终止 serve（垃圾连接不构成拒绝服务面）。
+//
+// Connected / ConnectInfo 语义（R1 收口 /v1/pair 每源 IP 限速）：axum
+// 客户端地址注入说明：axum 0.8 的
 // `into_make_service_with_connect_info::<SocketAddr>` 要求
 // `SocketAddr: Connected<IncomingStream<'_, L>>`，但只对
 // `tokio::net::TcpListener` 预置该实现——自定义 [TlsListener] 无法直接

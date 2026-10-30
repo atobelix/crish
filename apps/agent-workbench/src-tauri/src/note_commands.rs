@@ -38,6 +38,7 @@
 //! 本文件为薄门面：共享失败面（`unwired_failure` / `err_outcome`）+ 测试助手
 //! `apply_md_for_test` + 四子模（与 `note_commands/` 目录一一对应，无 `#[path]`）
 //! + 公开符号 `pub use` 保持。
+//!
 //! 实现按逻辑域拆（子模经 `super::` 引用共享面）：
 //! - `note_commands/apply.rs`：写路径（apply_md / send_to_note / apply_ops）
 //! - `note_commands/document.rs`：文档 CRUD（create / delete / list / rename）

@@ -11,15 +11,15 @@ use agent_tools::tools::wait_subagents::{
 use conex_db::LocalDb;
 use conex_types::session_record::SessionAgent;
 
-use super::{SubagentStatusSource, WaitStore, DECLARATION_CAP};
+use super::{SubagentStatusSource, WaitStore};
+#[cfg(any(test, feature = "test-support"))]
+use super::DECLARATION_CAP;
 
 // ── 默认生产适配器 ────────────────────────────────────────────────
 
-/// 内存持久化适配（引擎默认装配；conex-db session_meta 真适配在 R-CF3
-/// 后续轮接线——键形状已冻结为 wait_subagents.rs:83-99 的 dispatch_* 与
-/// `dispatch_outputs`，真适配用 [DispatchDeclaration::to_meta_pairs] /
-/// `from_meta_pairs` 与 `dispatch_outputs_value` / `parse_dispatch_outputs`
-/// 落读）
+/// 内存持久化适配（仅测试构建：`cfg(test)` / `test-support`；生产装配恒用
+/// [LocalDbWaitStore]）
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 pub struct MemoryWaitStore {
     /// 声明列表（保留最近 [DECLARATION_CAP] 条；watchdog 取最近分发时刻）
@@ -28,6 +28,7 @@ pub struct MemoryWaitStore {
     outputs: Mutex<HashMap<String, Vec<SubagentOutput>>>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl MemoryWaitStore {
     /// 新建内存存储
     pub fn new() -> Self {
@@ -43,6 +44,7 @@ impl MemoryWaitStore {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl WaitStore for MemoryWaitStore {
     fn load_all(&self) -> Vec<DispatchDeclaration> {
         self.declarations

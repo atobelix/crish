@@ -5,12 +5,14 @@
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
 //! - 前端侧：`commandManifest.test.ts`（**173 = 注册面 173 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
+//!
 //! 维护规则：
 //! - `registered = true` 子集 = command_registry.rs `command_registry!` 当前注册面（integration agent
 //!   接线时以本清单为准对齐，任何不一致都是 bug）；
 //! - 登记先行命令（`registered = false`，如 workbench_* 待接线）
 //!   由实现方各自负责，接线后翻 `true`（**当前为 0 条**，全部实装）；
 //! - 幽灵命令（AA-02 W-5，9 条）**严禁**登记（`manifest_excludes_ghost_commands` 测试拦截）。
+//!
 //! `core_list_commands` 启动即可用、无状态依赖，返回完整 manifest JSON
 //! （`{ contractVersion, commands: [{ name, family, surface, registered }] }`）。
 

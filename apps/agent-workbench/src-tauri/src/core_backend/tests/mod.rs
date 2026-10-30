@@ -72,7 +72,8 @@ pub(super) fn r2_test_core_state() -> Arc<CoreRunState> {
         ))),
     );
     Arc::new(CoreRunState::new(
-        Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
+        db,
         snapshots,
         bridge,
         Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),

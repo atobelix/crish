@@ -569,7 +569,6 @@ impl BrowserSlot {
     }
 
     /// 挂接事件发射器与状态转发任务见 [`slot_events`]。
-
     /// 会话存在且端点匹配（快速路径判定）。
     fn has_session_matching(&self, manager: &BrowserManager) -> bool {
         let present = self
