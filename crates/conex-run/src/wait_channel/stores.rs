@@ -9,7 +9,7 @@ use agent_tools::tools::wait_subagents::{
     DISPATCH_META_KEY_MODE, DISPATCH_META_KEY_OUTPUTS, DISPATCH_META_KEY_WAIT_MS,
 };
 use conex_db::LocalDb;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 
 use super::{SubagentStatusSource, WaitStore, DECLARATION_CAP};
 

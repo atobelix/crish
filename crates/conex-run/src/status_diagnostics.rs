@@ -7,7 +7,7 @@
 //! - [AtomicSlot]：`lastError` 由 **AtomicSlot** 驱动（F2/C4/D16）——任何
 //!   error 收场或 catch 兜底时写入（`run/run_launch.rs` 的 finalize_failed
 //!   与 `run/run_idle.rs` 的 runtime-error 事件收口处），命令读取返回；载荷为
-//!   [conex_types::CrishErrorPayload]（`to_error_payload` 产出，PE-06 类型）。
+//!   [conex_types::error::CrishErrorPayload]（`to_error_payload` 产出，PE-06 类型）。
 //!
 //! 并发：std [std::sync::Mutex] 只保护短临界区（记录/读取），不跨 await
 //! 持有（AA-02 并发模型注记：std Mutex 均未跨 await 持有）。
@@ -15,7 +15,7 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
-use conex_types::CrishErrorPayload;
+use conex_types::error::CrishErrorPayload;
 use serde::Serialize;
 
 /// 诊断环形缓冲容量（T04.5-1：最近 20 条）
@@ -158,7 +158,7 @@ mod tests {
     use super::*;
 
     fn payload(code: &str) -> CrishErrorPayload {
-        conex_types::CrishError::new(code, "模拟错误").to_error_payload(0)
+        conex_types::error::CrishError::new(code, "模拟错误").to_error_payload(0)
     }
 
     /// 环形 20 条：超出丢弃最旧，新条目在前

@@ -7,8 +7,8 @@
 //!
 //! # Dependency on Agent 10-A
 //!
-//! This module imports [`conex_types::CrishErrorPayload`] and
-//! [`conex_types::CrishErrorCategory`], which are introduced by Agent 10-A in
+//! This module imports [`conex_types::error::CrishErrorPayload`] and
+//! [`conex_types::error::CrishErrorCategory`], which are introduced by Agent 10-A in
 //! `crates/conex-types/src/error.rs` (see `ROUND-10-rust.md` §3.2). Until that
 //! module lands, `cargo check -p conex-telemetry` will fail on these imports
 //! by design. The field layout used below matches the §3.2 contract:

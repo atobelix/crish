@@ -11,7 +11,7 @@
 //! 2. 失败时返回标准 JSON `{ ok: false, code, reason }`，对齐前端类型契约。
 
 use crate::note_runtime;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use conex_workspace_store::document_meta::NoteDocumentMeta;
 use conex_workspace_store::StoreError;
 use serde_json::{json, Value as JsonValue};

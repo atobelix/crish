@@ -13,7 +13,7 @@ use agent_tools::background::{
     TaskState,
 };
 use agent_tools::definition::ToolError;
-use conex_types::codes;
+use conex_types::error::codes;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
 };
@@ -455,7 +455,7 @@ pub async fn get_run_snapshot_impl(
 /// 面，R1-04 直调面不实现——缺省语义不变）
 pub fn list_sessions_impl(
     state: &CoreRunState,
-) -> Result<Vec<conex_types::SessionIndexEntry>, CoreError> {
+) -> Result<Vec<conex_types::session_record::SessionIndexEntry>, CoreError> {
     let Some(db) = state.local_db() else {
         return Ok(Vec::new());
     };
@@ -1171,7 +1171,7 @@ mod tests {
             subagent: None,
             audit_persist: Mutex::new(None),
             permission: conex_agents::permission::PermissionCell::root(
-                conex_types::PermissionMode::default(),
+                conex_types::permission::PermissionMode::default(),
             ),
             capability: conex_agents::capability::CapabilityCell::root(
                 conex_agents::task::SubagentCapabilityMode::All,

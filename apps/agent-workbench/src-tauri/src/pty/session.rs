@@ -13,7 +13,7 @@
 //! 其余内部失败 → `Internal`。
 
 use super::utf8_buffer::Utf8ChunkBuffer;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::{

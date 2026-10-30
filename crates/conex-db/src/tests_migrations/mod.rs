@@ -6,7 +6,8 @@
 use super::*;
 use crate::migrate_steps::{migrate_v10_to_v11, step_10_to_11};
 use crate::schema::create_v5_schema;
-use conex_types::{RunCacheStats, SessionIndexEntry, SessionMessage};
+use conex_types::events::RunCacheStats;
+use conex_types::session_record::{SessionIndexEntry, SessionMessage};
 use rusqlite::Connection;
 use std::collections::HashMap;
 

@@ -24,7 +24,7 @@ use conex_device_protocol::{
     RunControlParams, RunEventsParams, RunSnapshotParams, RunSnapshotResult, SearchFilesParams,
     SearchFilesResult, SearchIndexResult,
 };
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower::ServiceExt;

@@ -39,7 +39,7 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEvent, RunTerminalStatus};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::session::AgentEndReason;
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use orchestrator::events::{drive_outcome, EventQueue};
 use orchestrator::flow_graph::{
     FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler, FLOW_RELEASED_KEY,
@@ -1298,7 +1298,7 @@ async fn kill_all_rows_stay_terminal_across_restart() {
         let mut rows = db.load_session_agents(session_id).unwrap();
         let now = now_ms();
         for row in &mut rows {
-            row.messages.push(conex_types::SessionMessage {
+            row.messages.push(conex_types::session_record::SessionMessage {
                 id: format!("msg-{}", row.id),
                 sender: "user".to_string(),
                 text: Some(format!("产出 {}", row.id)),
@@ -1867,13 +1867,13 @@ fn tool_start_payload(session: &str, call_id: &str, tool_name: &str) -> String {
     let event = AgentEvent::ToolStart {
         session_id: session.to_string(),
         batch_id: "b1".to_string(),
-        call: conex_types::ToolBatchCall {
+        call: conex_types::tool::ToolBatchCall {
             id: call_id.to_string(),
             tool_name: tool_name.to_string(),
             summary: "run".to_string(),
             input: serde_json::json!({}),
-            category: conex_types::ToolCategory::Internal,
-            concurrency: conex_types::ToolConcurrency::Sequential,
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: conex_types::tool::ToolConcurrency::Sequential,
         },
         timestamp: "2026-09-12T00:00:00.000Z".to_string(),
         turn_index: None,

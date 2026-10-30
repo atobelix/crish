@@ -13,7 +13,7 @@
 
 use agent_tools::note_backend::{NoteBackendError, NoteQueryBlocksParams};
 use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Map, Value as JsonValue};
 

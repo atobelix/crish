@@ -181,8 +181,8 @@ impl DbSpawner {
         subagent_run_id: &str,
         depth: usize,
         now: i64,
-    ) -> conex_types::SessionAgent {
-        conex_types::SessionAgent {
+    ) -> conex_types::session_record::SessionAgent {
+        conex_types::session_record::SessionAgent {
             id: subagent_id.to_string(),
             subagent_run_id: subagent_run_id.to_string(),
             parent_session_id: req.parent_session_id.clone(),

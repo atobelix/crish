@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex};
 
 pub use agent_tools::tools::wait_subagents::SubagentWaitChannel;
 use agent_tools::tools::wait_subagents::{DispatchDeclaration, SubagentOutput, SubagentWaitError};
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 use session_loop::control::ControlBus;
 
 mod broadcast;

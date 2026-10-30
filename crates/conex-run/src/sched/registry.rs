@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::sched::cron::{parse_cron, CronSchedule, SystemLocal};
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 use super::entry::{fire_delay_ms, spawn_fire_task, CronEntry};
 use super::store::SchedStore;

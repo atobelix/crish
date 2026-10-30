@@ -49,8 +49,8 @@ fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
     (bridge, emitter)
 }
 
-fn test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
-    conex_types::SessionIndexEntry {
+fn test_session_entry(id: &str) -> conex_types::session_record::SessionIndexEntry {
+    conex_types::session_record::SessionIndexEntry {
         id: id.to_string(),
         title: format!("会话 {id}"),
         folder: String::new(),

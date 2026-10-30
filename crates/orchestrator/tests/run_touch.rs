@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use conex_db::{LocalDb, ORPHAN_GRACE_MS};
 use conex_types::events::RunTerminalStatus;
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use orchestrator::persist::{LocalDbStore, Store};
 use orchestrator::run::{RunHandle, RunManager};
 

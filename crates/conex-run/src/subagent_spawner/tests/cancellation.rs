@@ -251,7 +251,7 @@ async fn terminal_before_launcher_return_releases_once_and_preserves_event_order
 async fn spawn_launch_failure_emits_ended_failed() {
     let launcher = Arc::new(RecordingLauncher::failing());
     let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&conex_types::SessionIndexEntry {
+    db.upsert_session_entry(&conex_types::session_record::SessionIndexEntry {
         id: "sess-main".to_string(),
         title: "主会话".to_string(),
         folder: String::new(),

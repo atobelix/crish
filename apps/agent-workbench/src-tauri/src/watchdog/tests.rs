@@ -195,8 +195,8 @@ fn duration_format_hour_boundary() {
     assert_eq!(format_duration_ms(45_000), "45 秒");
 }
 
-fn test_agent(id: &str, status: &str) -> conex_types::SessionAgent {
-    conex_types::SessionAgent {
+fn test_agent(id: &str, status: &str) -> conex_types::session_record::SessionAgent {
+    conex_types::session_record::SessionAgent {
         id: id.to_string(),
         subagent_run_id: format!("run-{id}"),
         parent_session_id: "sess-1".to_string(),

@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use conex_types::PermissionMode;
+use conex_types::permission::PermissionMode;
 
 /// 权限排序（Ask < Smart < Full）
 pub const fn rank(mode: PermissionMode) -> u8 {

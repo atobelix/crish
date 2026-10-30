@@ -1,7 +1,7 @@
 //! 用量监控 IPC 命令面（Usage Dashboard Tauri Commands）
 
 use conex_db::{ActivityMatrixDto, InsertUsageRecordInput, UsageDashboardDto};
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use tauri::State;
 
 #[derive(Debug, Clone, serde::Deserialize)]

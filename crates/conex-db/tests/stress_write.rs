@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use conex_db::LocalDb;
-use conex_types::{SessionIndexEntry, SessionMessage};
+use conex_types::session_record::{SessionIndexEntry, SessionMessage};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 

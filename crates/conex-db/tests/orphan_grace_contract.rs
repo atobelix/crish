@@ -26,7 +26,7 @@
 //! 运行：`cargo test -p conex-db --test orphan_grace_contract`
 
 use conex_db::{LocalDb, RunStatus, ORPHAN_GRACE_MS, ORPHAN_GRACE_MS_KEY};
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 
 /// 当前 epoch 毫秒（与库层 cleanup 的口径一致）
 fn now_ms() -> i64 {

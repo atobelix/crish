@@ -40,8 +40,8 @@ pub(super) fn recorded_security_audit(emitter: &RecordingEmitter) -> AgentEvent 
 }
 
 /// 会话索引条目（测试会话；对齐 core_run_commands 测试先例）
-pub(super) fn g5_test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
-    conex_types::SessionIndexEntry {
+pub(super) fn g5_test_session_entry(id: &str) -> conex_types::session_record::SessionIndexEntry {
+    conex_types::session_record::SessionIndexEntry {
         id: id.to_string(),
         title: format!("会话 {id}"),
         folder: String::new(),

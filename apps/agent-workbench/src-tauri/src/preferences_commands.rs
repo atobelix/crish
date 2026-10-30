@@ -6,7 +6,7 @@
 //! - 读全量与单 key 读写均保证字段级无损 deepEqual；
 //! - 变更记录 updated_at 毫秒时间戳。
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde_json::Value;
 use tauri::State;
 

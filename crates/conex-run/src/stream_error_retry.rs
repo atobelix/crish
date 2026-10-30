@@ -251,7 +251,7 @@ mod tests {
             false,
             None,
             None,
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
             String::new(),
         )
     }

@@ -10,7 +10,7 @@
 
 use agent_provider::request::cache::CacheMechanism;
 use conex_compaction::Summarizer;
-use conex_types::ContextBudget;
+use conex_types::context::ContextBudget;
 use session_loop::provider::ProviderStreamItem;
 use session_loop::TestProvider;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

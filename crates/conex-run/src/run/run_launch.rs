@@ -509,7 +509,7 @@ mod tests {
             subagent: None,
             audit_persist: Mutex::new(None),
             permission: conex_agents::permission::PermissionCell::root(
-                conex_types::PermissionMode::default(),
+                conex_types::permission::PermissionMode::default(),
             ),
             capability: conex_agents::capability::CapabilityCell::root(
                 conex_agents::task::SubagentCapabilityMode::All,
@@ -2025,7 +2025,7 @@ pub async fn push_emit_idle_event(
 
 /// F4：DB body（SessionMessage）→ HistoryMessage（字段一一对应；再经
 /// cached_history_to_conversation 保真水合为对话——与缓存路径同源）
-pub fn session_message_to_history(message: conex_types::SessionMessage) -> HistoryMessage {
+pub fn session_message_to_history(message: conex_types::session_record::SessionMessage) -> HistoryMessage {
     HistoryMessage {
         id: message.id,
         sender: message.sender,

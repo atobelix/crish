@@ -15,7 +15,7 @@
 use agent_tools::note_backend::{
     apply_result_json, NoteApplyMdRequest, NoteApplyMode, NoteBackendError,
 };
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
 #[cfg(test)]

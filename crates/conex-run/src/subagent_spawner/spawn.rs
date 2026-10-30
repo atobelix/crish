@@ -5,7 +5,7 @@ use agent_tools::tools::subagent::{
 };
 use conex_agents::guard::{check_ancestor_chain, DeadlockCheckInput};
 use conex_types::events::SubagentEndStatus;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 use orchestrator::persist::LocalDbStore;
 use orchestrator::subagent_events::{
     started_info_from_spawn, SubagentEmitContext, SubagentEndedInfo, SubagentEventEmitter,
@@ -58,7 +58,7 @@ impl SubagentSpawnerImpl {
             db.upsert_session_agent(&row)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
             // 会话索引条目幂等写入（子代理独立会话；与前端会话列表同表）
-            let entry = conex_types::SessionIndexEntry {
+            let entry = conex_types::session_record::SessionIndexEntry {
                 id: session_id.clone(),
                 title: format!("子代理 {subagent_id}"),
                 folder: String::new(),
@@ -130,11 +130,11 @@ impl SubagentSpawnerImpl {
         // 2. 否则强制从父级 ActiveRun 提取 permission_mode；
         // 3. 兜底默认 Smart（绝不降级为 Ask）。
         // 显式请求只作为子代理 ceiling（只可收窄）；未显式请求 = 完全跟随父链。
-        let requested_mode: Option<conex_types::PermissionMode> =
+        let requested_mode: Option<conex_types::permission::PermissionMode> =
             crate::run::parse_permission_mode_opt(req.permission_mode.as_deref());
-        let effective_mode: conex_types::PermissionMode = requested_mode
+        let effective_mode: conex_types::permission::PermissionMode = requested_mode
             .or_else(|| self.get_active_run_permission_mode(parent_run.as_deref()))
-            .unwrap_or(conex_types::PermissionMode::Smart);
+            .unwrap_or(conex_types::permission::PermissionMode::Smart);
 
         let config = SubagentRunConfig {
             subagent_id: subagent_id.clone(),

@@ -10,7 +10,7 @@
 //!   [Self::update_session_agent_status]、[Self::update_session_agent_path]。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 
 /// session_agents 行 → SessionAgent 映射（全量加载与查询扩展共用，
 /// 唯一真源，防两份查询口径漂移）
@@ -395,7 +395,7 @@ pub(crate) fn parse_session_agents_safe(raw: &str) -> Vec<SessionAgent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::SessionIndexEntry;
+    use conex_types::session_record::SessionIndexEntry;
 
     fn session_entry(id: &str) -> SessionIndexEntry {
         SessionIndexEntry {

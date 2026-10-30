@@ -206,7 +206,7 @@ pub(crate) type TestRig = (
 pub(crate) fn test_rig() -> TestRig {
     let launcher = Arc::new(RecordingLauncher::ok());
     let db = LocalDb::open_in_memory().expect("内存库");
-    db.upsert_session_entry(&conex_types::SessionIndexEntry {
+    db.upsert_session_entry(&conex_types::session_record::SessionIndexEntry {
         id: "sess-main".to_string(),
         title: "主会话".to_string(),
         folder: String::new(),

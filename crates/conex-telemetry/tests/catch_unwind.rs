@@ -1,6 +1,6 @@
 //! Integration tests for `conex_telemetry::catch_unwind`.
 //!
-//! These tests depend on `conex_types::CrishErrorPayload` being available
+//! These tests depend on `conex_types::error::CrishErrorPayload` being available
 //! (Agent 10-A's `crates/conex-types/src/error.rs`). They compile once that
 //! module lands; until then the failure is expected, as noted in
 //! `src/crash.rs`.

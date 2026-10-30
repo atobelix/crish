@@ -2,7 +2,7 @@
 //! PendingInput 记录类型（orchestrator persist/restore 层消费的最小 API 面）。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::RunCacheStats;
+use conex_types::events::RunCacheStats;
 use rusqlite::OptionalExtension;
 use std::str::FromStr;
 

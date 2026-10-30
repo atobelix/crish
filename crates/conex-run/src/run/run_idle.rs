@@ -1146,9 +1146,9 @@ pub(crate) mod idle_resume {
                 tree.read_leaf_checkpoint(None),
             )
         })
-        .unwrap_or((None, conex_types::LeafCheckpointState::Absent));
+        .unwrap_or((None, conex_types::checkpoint::LeafCheckpointState::Absent));
         match checkpoint {
-            conex_types::LeafCheckpointState::Present(payload) => {
+            conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
                 // EV-02：恢复注入命中 → checkpoint-restored（record.checkpoint_id
                 // = 叶子 id，与 created 事件的 record.id 配对；restored = 检查点
                 // 涉及文件清单；metadata 承载载荷全文）
@@ -1191,7 +1191,7 @@ pub(crate) mod idle_resume {
                     },
                 )
             }
-            conex_types::LeafCheckpointState::Corrupt(message) => {
+            conex_types::checkpoint::LeafCheckpointState::Corrupt(message) => {
                 tracing::warn!(
                     target: "run",
                     session_id,

@@ -6,7 +6,7 @@
 //! - [LocalDb::update_session_agent_path]（恢复域路径写面）
 
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 
 impl LocalDb {
     /// 单行更新 status / ended_at（kill_all 用）。只动目标行，不碰 messages。
@@ -295,7 +295,7 @@ impl LocalDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::{SessionIndexEntry, SessionMessage};
+    use conex_types::session_record::{SessionIndexEntry, SessionMessage};
     use std::sync::Arc;
 
     fn session_entry(id: &str) -> SessionIndexEntry {

@@ -10,7 +10,7 @@ use conex_types::session::{
 };
 use std::sync::Arc;
 
-    use conex_types::{AgentMessageBlock, AgentMessageRole};
+    use conex_types::message::{AgentMessageBlock, AgentMessageRole};
     use crate::testing::TestProvider;
 
     fn registry() -> Arc<ToolRegistry> {

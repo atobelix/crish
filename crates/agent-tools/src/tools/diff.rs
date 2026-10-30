@@ -9,7 +9,7 @@ use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_string, require_string, resolve_workspace_path};
 use async_trait::async_trait;
 use conex_diff::diff_engine::DiffEngine;
-use conex_types::{DiffLineKind, DiffResult};
+use conex_types::diff::{DiffLineKind, DiffResult};
 
 /// 文本 diff 工具
 pub(crate) struct DiffTextTool {

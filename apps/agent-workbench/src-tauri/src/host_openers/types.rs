@@ -1,4 +1,4 @@
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::{env, path::PathBuf};
 

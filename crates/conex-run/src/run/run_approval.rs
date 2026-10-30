@@ -281,7 +281,7 @@ impl ApprovalGate for ApprovalGateImpl {
             session_id: &self.session_id,
             run_id: &self.run_id,
             requester,
-            permission_mode: conex_types::PermissionMode::Smart,
+            permission_mode: conex_types::permission::PermissionMode::Smart,
             unattended_mode: self.unattended_mode,
             workspace_root: workspace_root_path.as_ref(),
             reason: requester.and_then(|r| r.reason.as_deref()),

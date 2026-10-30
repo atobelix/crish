@@ -569,7 +569,7 @@ mod tests {
         use conex_types::events::{
             SecurityAuditDecision as Decision, SecurityAuditOperation as Op,
         };
-        use conex_types::AgentEvent;
+        use conex_types::events::AgentEvent;
 
         let ws = TempWorkspace::new("del_audit");
         ws.write_file("sub/a.txt", "aaaa");

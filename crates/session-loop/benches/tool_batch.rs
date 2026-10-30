@@ -159,7 +159,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
-                    permission_mode: Some(conex_types::PermissionMode::Full),
+                    permission_mode: Some(conex_types::permission::PermissionMode::Full),
                     ..ToolBatchOptions::default()
                 };
                 let gate = Arc::new(InstantApprovalGate);

@@ -32,7 +32,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use conex_db::{DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun};
-use conex_types::{codes, CrishError};
+use conex_types::error::{codes, CrishError};
 
 use crate::session::SessionTreeEntry;
 
@@ -786,7 +786,7 @@ impl session_loop::input::PendingInputStore for LocalDbStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::CrishErrorCategory;
+    use conex_types::error::CrishErrorCategory;
     use std::time::Duration;
 
     /// T-40：下转型访问器——LocalDbStore 返回底层连接（run usage 数据面），

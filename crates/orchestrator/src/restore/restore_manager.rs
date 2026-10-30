@@ -693,9 +693,9 @@ fn extract_declared_tool_calls(
         }
     }
     if let Some(json) = blocks_json {
-        if let Ok(blocks) = serde_json::from_str::<Vec<conex_types::AgentMessageBlock>>(json) {
+        if let Ok(blocks) = serde_json::from_str::<Vec<conex_types::message::AgentMessageBlock>>(json) {
             for b in blocks {
-                if let conex_types::AgentMessageBlock::ToolCall(call) = b {
+                if let conex_types::message::AgentMessageBlock::ToolCall(call) = b {
                     out.push((call.id, call.tool_name));
                 }
             }
@@ -957,13 +957,13 @@ async fn heal_one_orphan(
         let tool_start = AgentEvent::ToolStart {
             session_id: session_id.to_string(),
             batch_id,
-            call: conex_types::ToolBatchCall {
+            call: conex_types::tool::ToolBatchCall {
                 id: call_id.to_string(),
                 tool_name: tool_name.to_string(),
                 summary: "Synthesized tool start during crash recovery".to_string(),
                 input: input.unwrap_or(serde_json::json!({})),
-                category: conex_types::ToolCategory::Internal,
-                concurrency: conex_types::ToolConcurrency::Sequential,
+                category: conex_types::tool::ToolCategory::Internal,
+                concurrency: conex_types::tool::ToolConcurrency::Sequential,
             },
             timestamp: format_iso_utc_ms(healed_at),
             turn_index: None,
@@ -990,10 +990,10 @@ async fn heal_one_orphan(
     let tool_end = AgentEvent::ToolEnd {
         session_id: session_id.to_string(),
         batch_id,
-        result: conex_types::ToolBatchResult {
+        result: conex_types::tool::ToolBatchResult {
             id: call_id.to_string(),
             tool_name: tool_name.to_string(),
-            output: conex_types::ToolOutput {
+            output: conex_types::tool::ToolOutput {
                 text: Some(
                     "Execution outcome unknown: daemon or host process terminated \
                      abnormally before tool completion."

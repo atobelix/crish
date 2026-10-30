@@ -21,7 +21,7 @@ use conex_db::{LocalDb, RunStatus};
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::tool::{ToolBatchResult, ToolOutput};
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use orchestrator::events::EventQueue;
 use orchestrator::persist::LocalDbStore;
 use orchestrator::restore::{SnapshotFileStore, SnapshotStore};
@@ -321,7 +321,7 @@ async fn build_cancelled_active_run(
         true,
         None,
         None,
-        conex_types::PermissionMode::Full,
+        conex_types::permission::PermissionMode::Full,
         String::new(),
     ))
 }
@@ -365,7 +365,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     // ② 行面：running 子代理行（kill_all 归一目标）
     let sub_run_id = "run-sub-k2";
     let mut rows = db.load_session_agents("s1").expect("读取子代理行");
-    rows.push(conex_types::SessionAgent {
+    rows.push(conex_types::session_record::SessionAgent {
         id: "sub-k2".into(),
         subagent_run_id: sub_run_id.into(),
         parent_session_id: "s1".into(),
@@ -392,7 +392,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     db.save_session_agents("s1", &rows).expect("保存子代理行");
     // ②b 消息持久层：预置 2 条消息（msg-user-1, msg-assistant-1）
     let initial_msgs = vec![
-        conex_types::SessionMessage {
+        conex_types::session_record::SessionMessage {
             id: "msg-user-1".into(),
             sender: "user".into(),
             text: Some("撤回我".into()),
@@ -406,7 +406,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
             tool_call_results_json: None,
             usage: None,
         },
-        conex_types::SessionMessage {
+        conex_types::session_record::SessionMessage {
             id: "msg-assistant-1".into(),
             sender: "assistant".into(),
             text: Some("收到".into()),
@@ -536,7 +536,7 @@ async fn retract_impl_missing_target_fails_closed_without_kill_all() {
 
     let sub_run_id = "run-sub-ghost";
     let mut rows = db.load_session_agents("s1").expect("读取子代理行");
-    rows.push(conex_types::SessionAgent {
+    rows.push(conex_types::session_record::SessionAgent {
         id: "sub-ghost".into(),
         subagent_run_id: sub_run_id.into(),
         parent_session_id: "s1".into(),
@@ -642,7 +642,7 @@ async fn retract_impl_waits_for_all_runs_and_subagents_to_converge() {
         true,
         None,
         None,
-        conex_types::PermissionMode::Full,
+        conex_types::permission::PermissionMode::Full,
         String::new(),
     ));
 

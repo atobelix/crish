@@ -115,7 +115,7 @@ impl CoreStateBackend {
     }
 
     /// CoreError → ServerError（单一真源映射，M6 §6.2.3）
-    pub(super) fn map_core(error: conex_types::CoreError) -> ServerError {
+    pub(super) fn map_core(error: conex_types::ipc_error::CoreError) -> ServerError {
         ServerError::from_core_error(&error)
     }
 
@@ -246,7 +246,7 @@ impl CoreStateBackend {
                 values
                     .into_iter()
                     .filter_map(|value| {
-                        serde_json::from_value::<conex_types::HistoryMessage>(value).ok()
+                        serde_json::from_value::<conex_types::history::HistoryMessage>(value).ok()
                     })
                     .collect::<Vec<_>>()
             })

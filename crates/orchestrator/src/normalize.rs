@@ -472,7 +472,7 @@ mod tests {
                 session_id: "s".into(),
                 tool_call_id: "tc".into(),
                 request_id: None,
-                decision: conex_types::ApprovalDecision::Approved,
+                decision: conex_types::events::ApprovalDecision::Approved,
                 timestamp: TS.into(),
             },
             AgentEvent::CheckpointCreated {
@@ -592,10 +592,10 @@ mod tests {
 
     // ── 测试构件（最小字段构造）──
 
-    fn message() -> conex_types::AgentMessage {
-        conex_types::AgentMessage {
+    fn message() -> conex_types::message::AgentMessage {
+        conex_types::message::AgentMessage {
             id: "m1".into(),
-            role: conex_types::AgentMessageRole::User,
+            role: conex_types::message::AgentMessageRole::User,
             created_at: TS.into(),
             blocks: vec![block()],
             metadata: None,
@@ -604,33 +604,33 @@ mod tests {
         }
     }
 
-    fn block() -> conex_types::AgentMessageBlock {
-        conex_types::AgentMessageBlock::Text { text: "hi".into() }
+    fn block() -> conex_types::message::AgentMessageBlock {
+        conex_types::message::AgentMessageBlock::Text { text: "hi".into() }
     }
 
-    fn batch_call() -> conex_types::ToolBatchCall {
-        conex_types::ToolBatchCall {
+    fn batch_call() -> conex_types::tool::ToolBatchCall {
+        conex_types::tool::ToolBatchCall {
             id: "tc-1".into(),
             tool_name: "read_file".into(),
             summary: "读取".into(),
             input: json!({ "path": "a.txt" }),
-            category: conex_types::ToolCategory::Filesystem,
-            concurrency: conex_types::ToolConcurrency::Parallel,
+            category: conex_types::tool::ToolCategory::Filesystem,
+            concurrency: conex_types::tool::ToolConcurrency::Parallel,
         }
     }
 
-    fn batch_result() -> conex_types::ToolBatchResult {
-        conex_types::ToolBatchResult {
+    fn batch_result() -> conex_types::tool::ToolBatchResult {
+        conex_types::tool::ToolBatchResult {
             id: "tc-1".into(),
             tool_name: "read_file".into(),
-            output: conex_types::ToolOutput::text("内容"),
+            output: conex_types::tool::ToolOutput::text("内容"),
             is_error: false,
             duration_ms: 1,
         }
     }
 
-    fn permission_request() -> conex_types::PermissionRequest {
-        conex_types::PermissionRequest {
+    fn permission_request() -> conex_types::events::PermissionRequest {
+        conex_types::events::PermissionRequest {
             id: "pr-1".into(),
             session_id: "s".into(),
             cwd: "/ws".into(),
@@ -646,9 +646,9 @@ mod tests {
         }
     }
 
-    fn diagnostic() -> conex_types::ProviderDiagnostic {
-        conex_types::ProviderDiagnostic {
-            phase: conex_types::ProviderDiagnosticPhase::RequestStart,
+    fn diagnostic() -> conex_types::tool::ProviderDiagnostic {
+        conex_types::tool::ProviderDiagnostic {
+            phase: conex_types::tool::ProviderDiagnosticPhase::RequestStart,
             provider_id: None,
             endpoint: None,
             url: None,
@@ -680,10 +680,10 @@ mod tests {
         }
     }
 
-    fn checkpoint() -> conex_types::RuntimeCheckpointRecord {
-        conex_types::RuntimeCheckpointRecord {
+    fn checkpoint() -> conex_types::tool::RuntimeCheckpointRecord {
+        conex_types::tool::RuntimeCheckpointRecord {
             id: "ck-1".into(),
-            kind: conex_types::RuntimeCheckpointKind::WorkspaceCheckpoint,
+            kind: conex_types::tool::RuntimeCheckpointKind::WorkspaceCheckpoint,
             label: "检查点".into(),
             tool_call_id: "tc-1".into(),
             tool_name: "checkpoint".into(),
@@ -695,8 +695,8 @@ mod tests {
         }
     }
 
-    fn restore() -> conex_types::RuntimeCheckpointRestoreRecord {
-        conex_types::RuntimeCheckpointRestoreRecord {
+    fn restore() -> conex_types::tool::RuntimeCheckpointRestoreRecord {
+        conex_types::tool::RuntimeCheckpointRestoreRecord {
             checkpoint_id: "ck-1".into(),
             tool_call_id: "tc-1".into(),
             tool_name: "checkpoint".into(),

@@ -5,7 +5,7 @@
 use super::*;
 use crate::events::{stream_error_kind, StopReason};
 use crate::sse::frame::SseFrame;
-use conex_types::ProviderErrorKind;
+use conex_types::error::ProviderErrorKind;
 use serde_json::json;
 
 /// 便捷构造：处理一帧并立即 finish，返回全部事件

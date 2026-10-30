@@ -230,7 +230,7 @@ async fn t10_active_run(
         subagent: None,
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -2897,21 +2897,21 @@ async fn runtime_permission_switch_propagates_to_child_cell() {
     );
 
     state
-        .set_run_permission_mode("run-parent", conex_types::PermissionMode::Full)
+        .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Full)
         .expect("切换权限");
     assert_eq!(
         child.effective(),
-        conex_types::PermissionMode::Full,
+        conex_types::permission::PermissionMode::Full,
         "父切换 Full 后子代理自动跟随"
     );
 
     state
-        .set_run_permission_mode("run-parent", conex_types::PermissionMode::Ask)
+        .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Ask)
         .expect("切换权限");
-    assert_eq!(child.effective(), conex_types::PermissionMode::Ask);
+    assert_eq!(child.effective(), conex_types::permission::PermissionMode::Ask);
     assert!(
         state
-            .set_run_permission_mode("missing-run", conex_types::PermissionMode::Full)
+            .set_run_permission_mode("missing-run", conex_types::permission::PermissionMode::Full)
             .is_err(),
         "未知 run 必须报错而非静默"
     );
@@ -3004,7 +3004,7 @@ async fn heartbeat_persist_updates_running_subagent_row() {
         .unwrap_or_else(|e| e.into_inner())
         .insert("run-child".to_string(), Arc::clone(&active));
 
-    let agent_row = conex_types::SessionAgent {
+    let agent_row = conex_types::session_record::SessionAgent {
         id: "sub-1".to_string(),
         subagent_run_id: "run-child".to_string(),
         parent_session_id: "s1".to_string(),
@@ -3050,7 +3050,7 @@ async fn model_and_capability_persist_for_terminal_subagent() {
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
     let state = core_state_with_store(store);
-    let row = conex_types::SessionAgent {
+    let row = conex_types::session_record::SessionAgent {
         id: "sub-1".to_string(),
         subagent_run_id: "run-child".to_string(),
         parent_session_id: "s1".to_string(),
@@ -3164,7 +3164,7 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         // L4（F12）：测试驱动路径未装配审计落库 worker（收口跳过）
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -3920,7 +3920,7 @@ async fn restore_notifies_parent_for_subagent() {
     db.insert_session("sess-main", "sess-main")
         .expect("父会话行");
     // session_agents 行（父归属：主会话 sess-main 派发子代理 sub-run-1-1）
-    db.upsert_session_agent(&conex_types::SessionAgent {
+    db.upsert_session_agent(&conex_types::session_record::SessionAgent {
         id: "sub-1-1".to_string(),
         subagent_run_id: "sub-run-1-1".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -6608,7 +6608,7 @@ async fn checkpoint_restored_event_emitted_on_present_inject() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要B".to_string(),
             timestamp: None,
@@ -6738,7 +6738,7 @@ async fn checkpoint_collected_written_on_close() {
     let trees = state.session_trees.lock().unwrap();
     let tree = trees.get("s1").unwrap().lock().unwrap();
     match tree.read_leaf_checkpoint(None) {
-        conex_types::LeafCheckpointState::Present(payload) => {
+        conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
             assert_eq!(payload.target, "T1", "目标保真");
             assert_eq!(payload.summary, "S1", "摘要保真");
             assert_eq!(payload.completed, vec!["c1".to_string()], "已完成保真");
@@ -6775,7 +6775,7 @@ async fn checkpoint_collect_corrupt_degrades() {
     let tree = trees.get("s1").unwrap().lock().unwrap();
     assert_eq!(
         tree.read_leaf_checkpoint(None),
-        conex_types::LeafCheckpointState::Absent,
+        conex_types::checkpoint::LeafCheckpointState::Absent,
         "采集侧损坏 → 不写叶子（降级现状）"
     );
 }
@@ -6790,7 +6790,7 @@ async fn checkpoint_injection_present_contains_summary() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要B".to_string(),
             timestamp: None,
@@ -6869,7 +6869,7 @@ async fn checkpoint_injection_summary_truncated() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: long_summary.clone(),
             timestamp: None,
@@ -6901,7 +6901,7 @@ async fn checkpoint_injection_list_items_limited() {
     let completed: Vec<String> = (0..8).map(|i| format!("步骤{i}")).collect();
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要".to_string(),
             timestamp: None,
@@ -6954,8 +6954,8 @@ async fn checkpoint_collect_skips_without_tree() {
 // ======================================================================
 
 /// 会话索引条目（测试用主会话）
-fn subagent_test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
-    conex_types::SessionIndexEntry {
+fn subagent_test_session_entry(id: &str) -> conex_types::session_record::SessionIndexEntry {
+    conex_types::session_record::SessionIndexEntry {
         id: id.to_string(),
         title: format!("会话 {id}"),
         folder: String::new(),
@@ -7813,7 +7813,7 @@ async fn kill_all_delivers_force_cancel_and_normalizes_rows() {
     // 子代理行落库（模拟 spawner 产物；running 状态）
     {
         let mut rows = db.load_session_agents("sess-main").unwrap();
-        rows.push(conex_types::SessionAgent {
+        rows.push(conex_types::session_record::SessionAgent {
             id: "sub-kill".to_string(),
             subagent_run_id: sub_run_id.to_string(),
             parent_session_id: "sess-main".to_string(),
@@ -7885,7 +7885,7 @@ async fn kill_all_delivers_force_cancel_and_normalizes_rows() {
 
     // 不可达 run（无活动实例）→ 未终态汇总（不 panic）
     let mut ghost_rows = db.load_session_agents("sess-main").unwrap();
-    ghost_rows.push(conex_types::SessionAgent {
+    ghost_rows.push(conex_types::session_record::SessionAgent {
         id: "sub-ghost".to_string(),
         subagent_run_id: "sub-run-ghost".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -9643,7 +9643,7 @@ async fn insert_continuity_run(
         subagent,
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -9930,7 +9930,7 @@ async fn continuity_kill_channel_lifecycle_paths() {
         .unwrap_err();
     assert_eq!(err.code(), conex_types::error::codes::SUBAGENT_NOT_FOUND);
     // ② running 行 + 活动 run → killed：L3 强停意图 + 行归一 failed
-    let row = conex_types::SessionAgent {
+    let row = conex_types::session_record::SessionAgent {
         id: "sub-1-0".to_string(),
         subagent_run_id: "sub-run-1-0".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -10243,7 +10243,7 @@ async fn stage_milestone_triggers_once_and_suppresses_repeat() {
         let trees = state.session_trees.lock().unwrap();
         let tree = trees.get("s1").unwrap().lock().unwrap();
         match tree.read_leaf_checkpoint(None) {
-            conex_types::LeafCheckpointState::Present(payload) => {
+            conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
                 assert_eq!(payload.target, "测试目标", "target ← goal");
                 assert_eq!(
                     payload.next,

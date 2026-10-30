@@ -14,7 +14,7 @@
 //! `core_list_commands` 启动即可用、无状态依赖，返回完整 manifest JSON
 //! （`{ contractVersion, commands: [{ name, family, surface, registered }] }`）。
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Serialize;
 
 /// 契约版本（semver，与前端 `COMMAND_MANIFEST_CONTRACT_VERSION` 同步；§2.5 约定）。

@@ -14,7 +14,7 @@ use conex_agents::guard::{
     DEFAULT_SPAWN_POLICY,
 };
 use conex_db::LocalDb;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 
 use crate::subagent_events::SubagentEventEmitter;
 

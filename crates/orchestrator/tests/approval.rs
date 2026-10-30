@@ -70,7 +70,7 @@ async fn approved_run_resumes_and_completes() {
             vec![
                 agent_start("s1"),
                 approval_requested("s1", "tc-1"),
-                approval_resolved("s1", "tc-1", conex_types::ApprovalDecision::Approved),
+                approval_resolved("s1", "tc-1", conex_types::events::ApprovalDecision::Approved),
                 agent_end("s1", AgentEndReason::Stop),
             ],
         ),
@@ -117,7 +117,7 @@ async fn denied_approval_resumes_and_completes() {
             vec![
                 agent_start("s1"),
                 approval_requested("s1", "tc-1"),
-                approval_resolved("s1", "tc-1", conex_types::ApprovalDecision::Denied),
+                approval_resolved("s1", "tc-1", conex_types::events::ApprovalDecision::Denied),
                 agent_end("s1", AgentEndReason::Stop),
             ],
         ),

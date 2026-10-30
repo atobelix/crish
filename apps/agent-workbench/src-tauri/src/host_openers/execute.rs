@@ -24,7 +24,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 use crate::host_openers::discovery::opener_candidates;
 use crate::host_openers::path_safety::is_blocked_executable_path;

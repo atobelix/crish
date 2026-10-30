@@ -34,15 +34,22 @@ use conex_types::tool::{
     ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionReason,
     ContextCompressionRecord, ContextCompressionTrigger,
 };
-use conex_types::{
-    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageMetadataKind,
-    AgentMessageRole, ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution,
-    PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind,
-    RunCacheStats, RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
-    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
-    TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
-    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
+use conex_types::error::ProviderErrorKind;
+use conex_types::events::{
+    AgentEvent, ApprovalDecision, BackpressureLevel, MissAttribution, PermissionRequest,
+    RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
+    ToolMetadata,
+};
+use conex_types::impact::ImpactAssessment;
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+};
+use conex_types::session::AgentEndReason;
+use conex_types::tool::{
+    ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;

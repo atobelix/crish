@@ -12,7 +12,7 @@
 //!   the previously installed hook so host runtimes (e.g. Tauri) keep their
 //!   default panic behaviour.
 //! - [`catch_unwind`]: wraps `std::panic::catch_unwind` and converts the panic
-//!   payload into a structured [`conex_types::CrishErrorPayload`].
+//!   payload into a structured [`conex_types::error::CrishErrorPayload`].
 //!
 //! Dependency direction: this crate is leaf-level. It depends only on
 //! `conex-types` (for `CrishErrorPayload`) and the workspace tracing/serde

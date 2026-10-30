@@ -7,7 +7,7 @@
 // 在途），整模块 dead_code 静音待接线。
 #![allow(dead_code)]
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 #[cfg(target_os = "windows")]
 mod platform {

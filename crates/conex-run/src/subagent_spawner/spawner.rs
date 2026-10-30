@@ -185,7 +185,7 @@ impl SubagentSpawnerImpl {
     pub fn get_active_run_permission_mode(
         &self,
         run_id: Option<&str>,
-    ) -> Option<conex_types::PermissionMode> {
+    ) -> Option<conex_types::permission::PermissionMode> {
         let run_id = run_id?;
         let launcher = self.launcher.lock().unwrap_or_else(|e| e.into_inner()).clone()?;
         launcher.get_active_run_permission_mode(run_id)

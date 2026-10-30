@@ -142,7 +142,7 @@ impl ActiveRun {
         delta_sink_active: bool,
         subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
         audit_persist: Option<tokio::task::JoinHandle<()>>,
-        permission_mode: conex_types::PermissionMode,
+        permission_mode: conex_types::permission::PermissionMode,
         project_name: String,
     ) -> Self {
         let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
@@ -1438,7 +1438,7 @@ impl CoreRunState {
     pub fn set_run_permission_mode(
         &self,
         run_id: &str,
-        mode: conex_types::PermissionMode,
+        mode: conex_types::permission::PermissionMode,
     ) -> Result<(), CoreError> {
         let cell = self
             .permission_cell_for_run(run_id)
@@ -1453,7 +1453,7 @@ impl CoreRunState {
     pub fn set_session_permission_mode(
         &self,
         session_id: &str,
-        mode: conex_types::PermissionMode,
+        mode: conex_types::permission::PermissionMode,
     ) -> Result<(), CoreError> {
         let cells: Vec<Arc<conex_agents::permission::PermissionCell>> = {
             let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
@@ -1484,7 +1484,7 @@ impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
         run_task_impl(state, options).await
     }
 
-    fn get_active_run_permission_mode(&self, run_id: &str) -> Option<conex_types::PermissionMode> {
+    fn get_active_run_permission_mode(&self, run_id: &str) -> Option<conex_types::permission::PermissionMode> {
         let state = self.state.upgrade()?;
         let active_runs = state.active_runs.lock().ok()?;
         active_runs
@@ -2018,7 +2018,7 @@ mod phase_tests {
             false,
             None,
             None,
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
             String::new(),
         );
 

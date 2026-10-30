@@ -15,7 +15,7 @@ use agent_tools::note_backend::NoteBackendError;
 use conex_note_runtime::{
     ImportMirrorResult, MirrorDriftClass, MirrorDriftReport, ThreeWayStrategy,
 };
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
 

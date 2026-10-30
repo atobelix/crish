@@ -72,9 +72,10 @@ pub(crate) use conex_types::tool::{
     compaction_block_details, ContextCompressionReason, ContextCompressionRecord,
     ContextCompressionTrigger,
 };
-pub(crate) use conex_types::{
-    codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage, PermissionMode,
-};
+pub(crate) use conex_types::context::ContextBudget;
+pub(crate) use conex_types::error::{codes, CrishError, CrishErrorPayload};
+pub(crate) use conex_types::history::HistoryMessage;
+pub(crate) use conex_types::permission::PermissionMode;
 pub(crate) use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 pub(crate) use orchestrator::persist::{SessionSequencer, Store};
 pub(crate) use orchestrator::recovery::{

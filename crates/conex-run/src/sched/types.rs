@@ -6,7 +6,7 @@ use async_trait::async_trait;
 #[cfg(test)]
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 

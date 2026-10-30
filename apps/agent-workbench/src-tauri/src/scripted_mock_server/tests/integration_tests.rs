@@ -11,7 +11,7 @@ use conex_run::engine_provider::{EngineProviderConfig, HttpProviderCall};
 use conex_run::run::{run_task_impl, BackoffDelayFn, CoreRunState, RunTaskOptions};
 use conex_run::status_diagnostics::StatusDiagnostics;
 use conex_types::message::AgentMessage;
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use orchestrator::persist::LocalDbStore;
 use orchestrator::restore::{SnapshotFileStore, SnapshotStore};
 use serde_json::json;

@@ -1,7 +1,7 @@
 //! 会话删除级联、session_meta 前缀键清理、孤儿清理、touch / insert 时间戳。
 
 use super::*;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 
 #[test]
 fn delete_session_cascades() {

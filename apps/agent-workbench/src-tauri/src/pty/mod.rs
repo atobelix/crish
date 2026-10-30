@@ -29,7 +29,7 @@
 mod session;
 pub(crate) mod utf8_buffer;
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 

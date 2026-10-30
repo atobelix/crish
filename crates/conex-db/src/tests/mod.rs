@@ -4,7 +4,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use super::*;
-use conex_types::{SessionIndexEntry, SessionMessage};
+use conex_types::session_record::{SessionIndexEntry, SessionMessage};
 
 mod cascade_meta;
 mod events;

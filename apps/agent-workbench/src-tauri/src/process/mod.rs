@@ -1,4 +1,4 @@
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process::Stdio};
 use tokio::process::Command as TokioCommand;
