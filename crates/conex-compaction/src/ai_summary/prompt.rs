@@ -49,7 +49,7 @@ fn render_message_text(message: &AgentMessage) -> String {
 }
 
 /// 构建摘要提示词（被丢弃消息 + 既有摘要迭代合并；输出要求为
-/// **Schema V1 JSON 文档**（[crate::summary_document::SUMMARY_REQUIRED_FIELDS]
+/// **Schema V1 JSON 文档**（[crate::summary_document::SummaryDocument]
 /// 12 字段），与引擎同步路径 / 后台调度的 JSON 契约单轨对齐
 /// （COMPACTION-01 P1-C：引擎契约单轨 Schema V1 JSON；忠实按本提示
 /// 输出的 LLM 结果经 validate_summary_document 校验后落库）。
@@ -103,90 +103,6 @@ fn role_name(role: conex_types::AgentMessageRole) -> &'static str {
         conex_types::AgentMessageRole::User => "用户",
         conex_types::AgentMessageRole::Assistant => "助手",
         conex_types::AgentMessageRole::Tool => "工具",
-    }
-}
-
-/// Critical Context 多态渲染器（BC05-6：根除关键信息静默蒸发）
-///
-/// 全面支持数组（`- item`）、对象键值（`- key: value`）与多行字符串多态解析，
-/// 确保模型输出的结构化 criticalContext 100% 确定性保真投影到 Markdown，
-/// 杜绝出现空白标题。
-pub fn push_critical_context(out: &mut String, doc: &serde_json::Value) {
-    let Some(val) = doc.get("criticalContext") else {
-        return;
-    };
-    match val {
-        // 契约正规态：数组形式（逐条渲染为无序列表）
-        serde_json::Value::Array(items) => {
-            for item in items {
-                match item {
-                    serde_json::Value::String(s) => {
-                        let trimmed = s.trim();
-                        if !trimmed.is_empty() {
-                            out.push_str("- ");
-                            out.push_str(trimmed);
-                            out.push('\n');
-                        }
-                    }
-                    serde_json::Value::Object(map) => {
-                        // 兼容对象条目：{ "path": "...", "desc": "..." } 等键值对
-                        let mut parts = Vec::new();
-                        for (k, v) in map {
-                            if let Some(str_val) = v.as_str() {
-                                parts.push(format!("{k}: {str_val}"));
-                            } else {
-                                parts.push(format!("{k}: {v}"));
-                            }
-                        }
-                        if !parts.is_empty() {
-                            out.push_str("- ");
-                            out.push_str(&parts.join(", "));
-                            out.push('\n');
-                        }
-                    }
-                    other => {
-                        let s = other.to_string();
-                        let trimmed = s.trim();
-                        if !trimmed.is_empty() {
-                            out.push_str("- ");
-                            out.push_str(trimmed);
-                            out.push('\n');
-                        }
-                    }
-                }
-            }
-        }
-        // 兼容态：顶层对象键值直接作为 criticalContext
-        serde_json::Value::Object(map) => {
-            for (k, v) in map {
-                out.push_str("- ");
-                out.push_str(k);
-                out.push_str(": ");
-                if let Some(str_val) = v.as_str() {
-                    out.push_str(str_val);
-                } else {
-                    out.push_str(&v.to_string());
-                }
-                out.push('\n');
-            }
-        }
-        // 兼容态：纯文本多行字符串
-        serde_json::Value::String(s) => {
-            let trimmed = s.trim();
-            if !trimmed.is_empty() {
-                for line in trimmed.lines() {
-                    let l = line.trim();
-                    if !l.is_empty() {
-                        if !l.starts_with('-') && !l.starts_with('*') {
-                            out.push_str("- ");
-                        }
-                        out.push_str(l);
-                        out.push('\n');
-                    }
-                }
-            }
-        }
-        _ => {}
     }
 }
 

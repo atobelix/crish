@@ -9,14 +9,14 @@
 //! - **退化重试护栏**：空/过短摘要（< 500 字符，对齐 grok
 //!   MIN_SUMMARY_SEED_CHARS）视为瞬态，至多重试 N 次（默认 3 次、
 //!   3s 间隔、wall-clock 预算兜底）后仍失败才降级回退占位符
-//!   （02 Top 3；降级语义由调用方经 [crate::compaction::Summarizer]
+//!   （02 Top 3；降级语义由调用方经 [crate::Summarizer]
 //!   的 Err 路径落到既有 `[Compacted N...]` 占位符，不阻塞 run）；
 //! - **covers_up_to_turn 落库载荷**：压缩覆盖到哪一轮（被丢弃段内
 //!   用户回合数），随 [compaction_event_details] 产出事件 details
 //!   载荷（02 Top 9，M11 拼接注入消费）。
 //!
 //! provider 调用通道：真实模型调用由调用方（session-loop 壳层）实现
-//! [crate::compaction::Summarizer] 注入（经 agent-provider 通道，
+//! [crate::Summarizer] 注入（经 agent-provider 通道，
 //! Q5 暂定引擎内部调用、独立小预算；生产实现 ProviderSummarizer 直接
 //! 消费 [build_summarize_prompt]）；本模块只提供重试护栏与模板协议。
 
@@ -28,9 +28,7 @@ pub use details::{compaction_event_details, covers_up_to_turn_for_dropped};
 pub use guard::{
     retry_allowed, summarize_with_guard, RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy,
 };
-pub use prompt::{
-    build_summarize_prompt, is_acceptable_summary, is_degenerate_summary, push_critical_context,
-};
+pub use prompt::{build_summarize_prompt, is_acceptable_summary, is_degenerate_summary};
 
 // ── 默认值与 session_meta 键（配置面 Q1：默认值在配置面、覆盖走
 //    session_meta；键命名空间 compact_*，04 §3.5）──

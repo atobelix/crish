@@ -894,7 +894,6 @@ pub(crate) mod idle_resume {
             event,
         )
         .await;
-        conex_types::denied_stats::global_denied_stats().record_recovery_budget_denied();
     }
 
     /// D1 §3.2.2（C5）：熔断触发边沿观测事件（[Self::update_provider_fail_
@@ -1389,20 +1388,6 @@ pub(crate) mod idle_resume {
         }
     }
 
-    /// F5：Schema V1 字符串数组字段提取（非数组/非字符串项跳过；阶段总结
-    /// 构造辅助）
-    pub(crate) fn stage_doc_string_array(doc: &serde_json::Value, key: &str) -> Vec<String> {
-        doc.get(key)
-            .and_then(|v| v.as_array())
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| item.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
     /// EV-07：stage-summary-milestone 发射单点（[evaluate_stage_milestones]
     /// 各态调用；milestone_type = reached/summarizing/produced/persisted，
     /// Delta 可丢观测事件，不进主链；Summarizer 缺失时止于 reached——
@@ -1528,16 +1513,16 @@ pub(crate) mod idle_resume {
                 return;
             }
         };
-        // Schema V1 校验 + 字段提取（goal/constraints/progress/decisions/
-        // nextSteps/criticalContext）；非法输出 → 不标记（下轮重试）
-        let llm_doc: serde_json::Value = match serde_json::from_str(&text) {
+        // Schema V1 强类型校验（字段缺失 / 类型错一律失败，走既有降级）；
+        // 非法输出 → 不标记（下轮重试）
+        let llm_doc = match conex_compaction::validate_summary_document(&text, usize::MAX) {
             Ok(doc) => doc,
             Err(error) => {
                 tracing::warn!(
                     target: "run",
                     session_id,
                     error = %error,
-                    "阶段总结非 Schema V1 JSON → 不标记（下轮收口重试）"
+                    "阶段总结非 Schema V1 文档 → 不标记（下轮收口重试）"
                 );
                 return;
             }
@@ -1549,20 +1534,12 @@ pub(crate) mod idle_resume {
             stage_index: index,
             block_id: format!("stage-summary-{}", index + 1),
             generation: 1,
-            goal: llm_doc
-                .get("goal")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            constraints: stage_doc_string_array(&llm_doc, "constraints"),
-            progress: stage_doc_string_array(&llm_doc, "progress"),
-            decisions: stage_doc_string_array(&llm_doc, "decisions"),
-            next_steps: stage_doc_string_array(&llm_doc, "nextSteps"),
-            critical_context: llm_doc
-                .get("criticalContext")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
+            goal: llm_doc.goal,
+            constraints: llm_doc.constraints,
+            progress: llm_doc.progress,
+            decisions: llm_doc.decisions,
+            next_steps: llm_doc.next_steps,
+            critical_context: llm_doc.critical_context,
             range: Some(StageSummaryRange {
                 start_message_id: messages.first().map(|m| m.id.clone()).unwrap_or_default(),
                 end_message_id: messages.last().map(|m| m.id.clone()).unwrap_or_default(),

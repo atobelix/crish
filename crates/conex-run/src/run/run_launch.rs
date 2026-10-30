@@ -1880,9 +1880,8 @@ pub async fn compact_now_impl(
     //    纯丢弃式 stub，E2 F1）。D10-A：引擎不再裸调 summarizer——经
     //    preview + 同步 summarize 预计算后传入 precomputed（手动压缩命令
     //    为同步上下文；async run loop 主路径经 summarize_via_blocking）。
-    let engine = conex_compaction::CompactionEngine::new(budget as usize);
-    let summarize_precomputed = engine
-        .preview_compaction(&conversation, &policy)
+    let engine = conex_compaction::CompactionEngine::new();
+    let summarize_precomputed = conex_compaction::preview_compaction(&conversation, &policy)
         .map(|preview| summarizer.summarize(&preview.dropped, preview.existing.as_deref()));
     let plan = engine.compact_agent_messages_with_stub_policy(
         &conversation,

@@ -955,7 +955,7 @@ impl CoreRunState {
     pub fn compaction_policy_for(
         &self,
         session_id: &str,
-    ) -> Option<conex_compaction::compaction::CompactionPolicy> {
+    ) -> Option<conex_compaction::CompactionPolicy> {
         let db = self.local_db()?;
         let policy =
             compaction_policy_from_session_meta(|key| db.get_session_meta(key).ok().flatten());

@@ -10,7 +10,7 @@ use super::{
     MIN_SUMMARY_SEED_CHARS_DEFAULT, SUMMARY_MAX_ATTEMPTS_DEFAULT,
     SUMMARY_RETRY_INTERVAL_MS_DEFAULT, SUMMARY_WALL_CLOCK_BUDGET_MS_DEFAULT,
 };
-use crate::compaction::Summarizer;
+use crate::Summarizer;
 
 // ── 退化重试护栏（02 Top 3：空/过短 = 瞬态，重试 N 次后降级）──
 
@@ -140,7 +140,7 @@ pub fn summarize_with_guard(
 }
 
 /// 摘要器包装：把 [summarize_with_guard] 折叠成 [Summarizer] trait，
-/// 可直接注入 [crate::compaction::CompactionEngine::compact_agent_messages]
+/// 可直接注入 [crate::CompactionEngine::compact_agent_messages]
 /// ——成功返回摘要，最终降级返回 Err（引擎回退 L1 占位符，语义不变）；
 /// 最近一次 [SummaryOutcome] 由 [Self::last_outcome] 读取，供压缩事件
 /// 记录降级事实（02 Top 3「降级事件记录事实，不阻塞会话循环」）。

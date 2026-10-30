@@ -89,13 +89,13 @@ pub fn summary_doc_json(goal: &str) -> String {
         "progress": [],
         "decisions": [],
         "nextSteps": [],
-        "criticalContext": "",
+        "criticalContext": [],
     })
     .to_string()
 }
 
 pub fn first_compaction_fixture() -> (conex_compaction::CompactionEngine, Vec<Arc<AgentMessage>>) {
-    let engine = conex_compaction::CompactionEngine::new(0);
+    let engine = conex_compaction::CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",

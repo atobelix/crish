@@ -239,7 +239,7 @@ impl MockEngine {
             queue,
             tree,
             emitter,
-            compact: CompactionEngine::new(64),
+            compact: CompactionEngine::new(),
             wait_tx,
         }
     }

@@ -475,7 +475,7 @@ pub(crate) const META_KEY_COMPACT_KEEP_RECENT_TOKENS: &str = "compact_keep_recen
 /// （conex-compaction 缺省 [conex_compaction::MIN_RECENT_TURNS_DEFAULT]）
 pub(crate) const META_KEY_COMPACT_MIN_RECENT_TURNS: &str = "compact_min_recent_turns";
 
-/// session_meta 键 → [conex_compaction::compaction::CompactionPolicy]
+/// session_meta 键 → [conex_compaction::CompactionPolicy]
 /// （COMPACTION-01 P0-1 装配 helper：缺省 = 常量默认；键缺失 / 坏值回退
 /// 默认 + warn，不 panic）。
 ///
@@ -483,8 +483,8 @@ pub(crate) const META_KEY_COMPACT_MIN_RECENT_TURNS: &str = "compact_min_recent_t
 /// 测试注入内存表）。
 pub(crate) fn compaction_policy_from_session_meta(
     meta: impl Fn(&str) -> Option<String>,
-) -> conex_compaction::compaction::CompactionPolicy {
-    let mut policy = conex_compaction::compaction::CompactionPolicy::default();
+) -> conex_compaction::CompactionPolicy {
+    let mut policy = conex_compaction::CompactionPolicy::default();
     if let Some(raw) = meta(conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS) {
         match raw.trim().parse::<usize>() {
             Ok(value) if value > 0 => policy.max_summary_tokens = value,

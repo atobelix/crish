@@ -1,7 +1,7 @@
 //! 超限恢复阶梯面（01 §2.6 length 阶梯 + P4 §3.5 溢出压缩阶梯 + 溢出常量）——
 //! SR-06c · 拆分 · ≠ EL：自 stream_error.rs 拆出，公共面经父模 re-export。
 
-use conex_compaction::CompactionEngine;
+use conex_compaction::{preview_compaction, CompactionEngine};
 use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentSessionEvent as E;
 use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
@@ -156,22 +156,22 @@ pub(crate) async fn compression_ladder(
     }
     // 目标预算 = window - reserve（与预检触发同一口径，P4 §3.4.1 触发点 2）
     let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     // E2 F1 L3：LLM 摘要强制——豁免（compact_allow_stub_fallback /
     // !compact_require_llm 任一放行）→ StubAllowed 降级 stub；默认
     // LlmRequired → 无 Summarizer/摘要失败不落 stub、标记 llm_unavailable
     let stub_policy = if state.options.compaction.compact_allow_stub_fallback
         || !state.options.compaction.compact_require_llm
     {
-        conex_compaction::compaction::StubPolicy::StubAllowed
+        conex_compaction::StubPolicy::StubAllowed
     } else {
-        conex_compaction::compaction::StubPolicy::LlmRequired
+        conex_compaction::StubPolicy::LlmRequired
     };
     // D10-A / DEL-9 + M4：摘要经 spawn_blocking 预计算一次（summarize_via_blocking
     // 单源 helper）；shape 失败的 tighter 重试**复用同一 precomputed summary**
     // （禁止第二次完整 summarize / 2× LLM——13-M4）。
     let summarize_precomputed = if let Some(summarizer) = state.compaction.summarizer.clone() {
-        match engine.preview_compaction(&state.conversation, &policy) {
+        match preview_compaction(&state.conversation, &policy) {
             Some(preview) => {
                 let wall_ms = state
                     .options
@@ -205,7 +205,7 @@ pub(crate) async fn compression_ladder(
             session_id = %state.machine.context().session_id,
             "溢出压缩 LLM 摘要不可用，平滑降级为中性 Stub 消息（解除 400 危险并放行业务前行）"
         );
-        effective_stub_policy = conex_compaction::compaction::StubPolicy::StubAllowed;
+        effective_stub_policy = conex_compaction::StubPolicy::StubAllowed;
         plan = engine.compact_agent_messages_with_stub_policy(
             &state.conversation,
             budget_tokens as usize,

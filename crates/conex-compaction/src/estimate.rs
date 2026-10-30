@@ -138,6 +138,56 @@ pub(crate) fn estimate_with_usage(
     }
 }
 
+/// 对话级估算（AgentMessage 面；usage 优先 + 时间戳护栏 + 启发式兜底）
+///
+/// 双源策略（P4 §3.3.1，对齐 pi estimate.ts）：
+///
+/// - **源 1：usage 优先**：从尾部向前找最近一条仍描述当前前缀的
+///   usage 消息，上下文占用取 `metadata.cacheBreakdown.inputTotal`
+///   （P2/C9 归一化口径，I6；Included 系 prompt、Excluded 系
+///   prompt+read+write 已由适配层折算）；cacheBreakdown 缺失时回退
+///   `metadata.usage.promptTokens`（Included 语义）。排除 aborted /
+///   error 回合与零 usage 消息；**时间戳护栏**：消息时间戳早于
+///   `last_compaction_at`（压缩边界）时 usage 不再描述当前前缀，作废
+///   回退启发式（对齐 pi `usageAppliesToPrefix`）。usage 覆盖其后缀
+///   之前的前缀（含 system/tools），其后的尾随消息按块级启发式补算；
+/// - **源 2：本地启发式兜底**（无 usage / usage 作废 / 冷启动）：
+///   全部消息逐块估算 + `tools`（工具 schema 整体 JSON 体积）与
+///   `system`（system prompt 文本）前缀折算（按 P1 透传后的实际字节）。
+///
+/// `tokens` 为 u64 上下文占用（含缓存读/写，I6 口径）。
+pub fn estimate_context_tokens(
+    messages: &[Arc<AgentMessage>],
+    tools: Option<&str>,
+    system: Option<&str>,
+    last_compaction_at: Option<i64>,
+) -> EstimateContext {
+    let usage = find_usage_message(messages, last_compaction_at);
+    estimate_with_usage(messages, tools, system, usage)
+}
+
+/// 对话级估算（P4 §3.7 签名兼容入口）
+///
+/// 调用方（session-loop）已按时间戳护栏定位 usage 消息 id 时传入；
+/// 该消息存在且带可解析 usage 时以其为准，否则纯启发式。
+/// 不带 tools/system 前缀参数（usage 实测已含此前缀；启发式路径按
+/// 0 前缀估算）。
+pub fn estimate_agent_context(
+    messages: &[Arc<AgentMessage>],
+    usage_message_id: Option<&str>,
+) -> EstimateContext {
+    let usage = usage_message_id
+        .and_then(|id| messages.iter().position(|m| m.id == id))
+        .and_then(|idx| usage_occupancy(&messages[idx]).map(|occupancy| (idx, occupancy)));
+    estimate_with_usage(messages, None, None, usage)
+}
+
+/// 阈值判定单点：`estimate >= budget_tokens`（T-33 预检触发用，
+/// P4 §3.4.1 阈值 = window - reserve，budget_tokens 由调用方换算）
+pub fn should_compact(estimate: u64, budget_tokens: u64) -> bool {
+    estimate >= budget_tokens
+}
+
 #[cfg(test)]
 mod tests {
     use conex_shared::time::parse_iso8601_ms;

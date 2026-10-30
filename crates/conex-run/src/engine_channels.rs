@@ -156,7 +156,7 @@ impl conex_compaction::Summarizer for ProviderSummarizer {
     ) -> Result<String, String> {
         // 提示词 = 引擎侧单源（ai_summary::build_summarize_prompt，Schema V1
         // JSON 输出契约，P1-C 对齐后不再是五字段孤儿）
-        let prompt = conex_compaction::ai_summary::build_summarize_prompt(dropped, existing);
+        let prompt = conex_compaction::build_summarize_prompt(dropped, existing);
         let body = self.build_request_body(&prompt);
         // DEEPCHECK-05 #10 修复：摘要请求体恒 chat 形状 → URL 恒 chat-completions
         // （responses 端点配置下也禁止把 chat body 发往 /responses）

@@ -53,7 +53,7 @@ pub(crate) use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 pub(crate) use conex_db::LocalDb;
 // E2 F4（手动压缩命令面）：LlmRequired = 无 Summarizer / 摘要失败 → 放弃
 // 压缩（禁止纯丢弃式线性压缩，E2 §2 F1 L1/L2）
-pub(crate) use conex_compaction::compaction::StubPolicy;
+pub(crate) use conex_compaction::StubPolicy;
 pub(crate) use conex_types::events::{
     AgentEvent, AgentEventEnvelope, RunCacheStats, RunTerminalStatus,
 };

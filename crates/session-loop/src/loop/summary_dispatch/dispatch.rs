@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::safe_point::AbortSignal;
-use conex_compaction::{recovery::SummaryState, Summarizer};
+use conex_compaction::{Summarizer, SummaryState};
 use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
 

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
-use crate::compaction::Summarizer;
+use crate::Summarizer;
 
 mod details;
 mod guard;
@@ -102,7 +102,7 @@ pub(super) fn summary_doc_json(goal: &str) -> String {
         "progress": [],
         "decisions": [],
         "nextSteps": [],
-        "criticalContext": "折叠链冻结 + 中性 stub（R-C）+ Schema V1 文档 md 渲染投影（R-G）：链消息逐字节稳定，可追溯可恢复；同步单次尝试（R-F）；摘要就绪以块表为准，对话 stub 永不改写。".repeat(5),
+        "criticalContext": ["折叠链冻结 + 中性 stub（R-C）+ Schema V1 文档 md 渲染投影（R-G）：链消息逐字节稳定，可追溯可恢复；同步单次尝试（R-F）；摘要就绪以块表为准，对话 stub 永不改写。".repeat(5)],
     })
     .to_string()
 }

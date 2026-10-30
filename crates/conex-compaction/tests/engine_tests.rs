@@ -8,7 +8,7 @@ use conex_types::{AgentMessage, AgentMessageRole};
 
 #[test]
 fn compact_empty_input() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let plan = engine.compact_agent_messages(&[], 100, &CompactionPolicy::default(), None);
     assert!(plan.messages.is_empty());
     assert_eq!(plan.tokens_before, 0);
@@ -19,7 +19,7 @@ fn compact_empty_input() {
 
 #[test]
 fn compact_under_budget_returns_original() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -59,7 +59,7 @@ fn compact_under_budget_returns_original() {
 
 #[test]
 fn compact_keeps_system_and_recent_with_placeholder() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -131,7 +131,7 @@ fn compact_keeps_system_and_recent_with_placeholder() {
 
 #[test]
 fn compact_placeholder_uses_dropped_count() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -185,7 +185,7 @@ fn compact_placeholder_uses_dropped_count() {
 
 #[test]
 fn compact_tool_pair_not_split() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -245,7 +245,7 @@ fn compact_tool_pair_not_split() {
 
 #[test]
 fn compact_abandons_when_orphan_unfixable() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -299,7 +299,7 @@ fn compact_abandons_when_orphan_unfixable() {
 
 #[test]
 fn compact_tool_pair_protection_can_be_disabled() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -357,7 +357,7 @@ fn compact_tool_pair_protection_can_be_disabled() {
 
 #[test]
 fn compact_uses_summarizer_and_iterative_merge() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "compacted-summary-1",
@@ -450,7 +450,7 @@ fn compact_uses_summarizer_and_iterative_merge() {
 
 #[test]
 fn compact_summarizer_error_falls_back_to_stub() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -516,7 +516,7 @@ fn compact_summarizer_error_falls_back_to_stub() {
 
 #[test]
 fn compact_summary_capped_by_max_summary_tokens() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -561,7 +561,7 @@ fn compact_summary_capped_by_max_summary_tokens() {
 
 #[test]
 fn compact_system_messages_always_kept() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -626,7 +626,7 @@ fn compact_system_messages_always_kept() {
 
 #[test]
 fn critical_line_hard_compression_deterministic_placeholder() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -682,7 +682,7 @@ fn critical_line_hard_compression_deterministic_placeholder() {
 
 #[test]
 fn regular_line_ai_summary_document_into_conversation() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -750,7 +750,7 @@ fn regular_line_ai_summary_document_into_conversation() {
 
 #[test]
 fn system_never_compressed_on_ai_path() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let injected = "## Agent 定义\nagent-body";
     let messages = vec![
         amsg(
@@ -814,7 +814,7 @@ fn system_never_compressed_on_ai_path() {
 
 #[test]
 fn test_post_append_emergency_preflight() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
 
     let huge_text = "x".repeat(50_000);
     let messages = vec![

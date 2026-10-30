@@ -82,7 +82,7 @@ pub const META_KEY_SUMMARY_WALL_MS: &str = "compact_summary_wall_ms";
 /// RetryGuardSummarizer 的 max_attempts（<500 字符退化重试 3 次）与本层
 /// 窗口累计护栏互不覆盖。
 pub const META_KEY_SUMMARY_MAX_ATTEMPTS: &str =
-    conex_compaction::ai_summary::SESSION_META_KEY_COMPACT_SUMMARY_MAX_ATTEMPTS;
+    conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_ATTEMPTS;
 /// session_meta 键：低功耗观察窗口（E2 F2 层 1 / 07 §5.2，缺省
 /// [DEFAULT_RETRY_GUARD_WINDOW_MS]）：窗口内 0 次被动触发 → 尝试计数重置。
 pub const META_KEY_SUMMARY_RETRY_WINDOW_MS: &str = "compact_summary_retry_window_ms";

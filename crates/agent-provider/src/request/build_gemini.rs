@@ -23,7 +23,7 @@
 //! SR-06e · 拆分 · ≠ EL：门面文件。实现域即本文件（含私有映射/工具辅助）；
 //! 测试旁挂 build_gemini/tests.rs（目录模块）。
 
-use conex_compaction::clean_output::{clean_output, CleanupOptions};
+use crate::request::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -423,7 +423,7 @@ fn tool_result_gemini_parts(msg: &AgentMessage) -> Vec<Value> {
             let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
             let mut fr = json!({
                 "name": tool_name,
-                "response": tool_response_value(&cleaned.cleaned),
+                "response": tool_response_value(&cleaned),
             });
             if !tool_call_id.is_empty() {
                 fr["id"] = json!(tool_call_id);

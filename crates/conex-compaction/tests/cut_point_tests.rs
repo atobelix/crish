@@ -4,12 +4,13 @@ use common::{
     amsg, first_compaction_fixture, push_long_turn, tail_keep_policy, text_block, tool_call_block,
     tool_result_block,
 };
-use conex_compaction::{count_agent_message_tokens, CompactionEngine, CompactionPolicy};
+use conex_compaction::{
+    count_agent_message_tokens, find_cut_point, CompactionEngine, CompactionPolicy,
+};
 use conex_types::AgentMessageRole;
 
 #[test]
 fn cut_point_accumulates_from_tail_to_budget() {
-    let engine = CompactionEngine::new(0);
     // 中间两条长消息 + 尾部两条短消息；keep 预算恰好覆盖尾部两条
     let messages = vec![
         amsg(
@@ -43,15 +44,12 @@ fn cut_point_accumulates_from_tail_to_budget() {
     ];
     // 预算 = 尾部两条的 token 和 → 倒推累计恰好在 m3 达标 → 切割点 = 2
     let keep = count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
-    let cut = engine
-        .find_cut_point(&messages, keep, 1)
-        .expect("应存在切割点");
+    let cut = find_cut_point(&messages, keep, 1).expect("应存在切割点");
     assert_eq!(cut, 2);
 }
 
 #[test]
 fn cut_point_min_recent_turns_extends_backward() {
-    let engine = CompactionEngine::new(0);
     // 预算切割点落在 m3（assistant）→ 保留段仅 1 个 user 回合；
     // min_recent_turns=2 → 向前扩展到 m2（user）凑满 2 个回合
     let messages = vec![
@@ -94,15 +92,12 @@ fn cut_point_min_recent_turns_extends_backward() {
     let keep = count_agent_message_tokens(&messages[2])
         + count_agent_message_tokens(&messages[3])
         + count_agent_message_tokens(&messages[4]);
-    let cut = engine
-        .find_cut_point(&messages, keep, 2)
-        .expect("应存在切割点");
+    let cut = find_cut_point(&messages, keep, 2).expect("应存在切割点");
     assert_eq!(cut, 1);
 }
 
 #[test]
 fn cut_point_never_splits_tool_pair() {
-    let engine = CompactionEngine::new(0);
     // m2 是 tool-call（id=t1），m3 是 tool-result(t1)；预算切割点落在
     // m3（保留段含 result 无 call）→ 向前扩展到 m2
     let messages = vec![
@@ -149,16 +144,13 @@ fn cut_point_never_splits_tool_pair() {
     let keep = count_agent_message_tokens(&messages[2])
         + count_agent_message_tokens(&messages[3])
         + count_agent_message_tokens(&messages[4]);
-    let cut = engine
-        .find_cut_point(&messages, keep, 1)
-        .expect("应存在切割点");
+    let cut = find_cut_point(&messages, keep, 1).expect("应存在切割点");
     // 预算落在 m3，但 m3 含孤儿 result(t1) → 扩展到 m2（call 所在）
     assert_eq!(cut, 1);
 }
 
 #[test]
 fn cut_point_abandons_on_unfixable_orphan() {
-    let engine = CompactionEngine::new(0);
     // 保留段含 result(t1) 但全对话无对应 call → 数据异常，放弃压缩
     let messages = vec![
         amsg(
@@ -200,14 +192,13 @@ fn cut_point_abandons_on_unfixable_orphan() {
     let keep = count_agent_message_tokens(&messages[2])
         + count_agent_message_tokens(&messages[3])
         + count_agent_message_tokens(&messages[4]);
-    let cut = engine.find_cut_point(&messages, keep, 0);
+    let cut = find_cut_point(&messages, keep, 0);
     assert_eq!(cut, None);
 }
 
 #[test]
 fn cut_point_none_on_empty_or_all_retained() {
-    let engine = CompactionEngine::new(0);
-    assert_eq!(engine.find_cut_point(&[], 100, 2), None);
+    assert_eq!(find_cut_point(&[], 100, 2), None);
     // 全部消息未达预算 → 无可丢内容
     let messages = vec![
         amsg(
@@ -225,7 +216,7 @@ fn cut_point_none_on_empty_or_all_retained() {
             None,
         ),
     ];
-    assert_eq!(engine.find_cut_point(&messages, 10_000, 1), None);
+    assert_eq!(find_cut_point(&messages, 10_000, 1), None);
 }
 
 #[test]
@@ -274,7 +265,7 @@ fn cut_never_below_fold_start() {
 
 #[test]
 fn budget_scan_starts_after_chain() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     // 链消息本身远超预算 → 切割点仍必须落在链后（fold_start = 2）
     let messages = vec![
         amsg(
@@ -324,7 +315,7 @@ fn budget_scan_starts_after_chain() {
 
 #[test]
 fn tool_pair_protection_clamps_to_chain() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     // 场景 A：孤儿 result(t1) 的 call 位于链内（fold_start 处）→ 放弃压缩
     let messages_a = vec![
         amsg(
@@ -465,7 +456,7 @@ fn tool_pair_protection_clamps_to_chain() {
 
 #[test]
 fn test_cut_point_at_fold_start_success() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -562,7 +553,7 @@ fn test_cut_point_at_fold_start_success() {
 
 #[test]
 fn test_tool_batch_atomicity_closure() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",
@@ -682,7 +673,7 @@ fn test_is_within_keep_budget() {
 
 #[test]
 fn test_turn_batch_no_orphan_calls_across_generations() {
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     // 多个连续工具回合：验证不会在工具批中间切割，无论预算落在哪个具体回执
     let messages = vec![
         amsg(

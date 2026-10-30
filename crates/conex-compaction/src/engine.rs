@@ -5,20 +5,23 @@ use std::sync::Arc;
 use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 use crate::cut_point::find_cut_point_inner;
-use crate::estimate::{estimate_with_usage, find_usage_message, usage_occupancy, EstimateContext};
 use crate::plan::{
     llm_blocked_plan, noop_plan, stub_placeholder, truncate_summary, CompactionPlan,
     CompactionPolicy, StubPolicy, Summarizer,
 };
 use crate::tokens::{count_agent_message_tokens, count_tokens};
 
+/// 压缩引擎：唯一状态为压缩代数。
+///
+/// 预算、保留策略、摘要预算一律经方法参数（[CompactionPolicy] /
+/// `budget_tokens`）传入，引擎自身不持有第二个真源。
+#[derive(Default)]
 pub struct CompactionEngine {
-    max_tokens: usize,
     /// 压缩代数（None = 从上下文或既有链历史推导，BC05-3）
     generation: Option<u32>,
 }
 
-/// 压缩预览（D10-A）：[CompactionEngine::preview_compaction] 的产出——
+/// 压缩预览（D10-A）：[preview_compaction] 的产出——
 /// 「本可压缩的应丢消息 + 既有摘要文本」。供调用方在主压缩方法之前
 /// 经 spawn_blocking 异步预计算摘要（session-loop summarize_via_blocking）。
 #[derive(Debug, Clone)]
@@ -30,103 +33,15 @@ pub struct CompactionPreview {
 }
 
 impl CompactionEngine {
-    pub fn new(max_tokens: usize) -> Self {
-        Self {
-            max_tokens,
-            generation: None,
-        }
+    /// 无状态构造：预算只经方法参数传入，generation 缺省时按消息链推导。
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// 显式接收外部 generation 构造（BC05-3 单源化，消除主键冲突）
-    pub fn new_with_generation(max_tokens: usize, generation: u32) -> Self {
-        Self {
-            max_tokens,
-            generation: Some(generation),
-        }
-    }
-
-    /// 链式注入 generation
+    /// 链式注入 generation（唯一显式设置入口，BC05-3 单源化）
     pub fn with_generation(mut self, generation: u32) -> Self {
         self.generation = Some(generation);
         self
-    }
-
-    /// 变更当前代数
-    pub fn set_generation(&mut self, generation: u32) {
-        self.generation = Some(generation);
-    }
-
-    /// 对话级估算（AgentMessage 面；usage 优先 + 时间戳护栏 + 启发式兜底）
-    ///
-    /// 双源策略（P4 §3.3.1，对齐 pi estimate.ts）：
-    ///
-    /// - **源 1：usage 优先**：从尾部向前找最近一条仍描述当前前缀的
-    ///   usage 消息，上下文占用取 `metadata.cacheBreakdown.inputTotal`
-    ///   （P2/C9 归一化口径，I6；Included 系 prompt、Excluded 系
-    ///   prompt+read+write 已由适配层折算）；cacheBreakdown 缺失时回退
-    ///   `metadata.usage.promptTokens`（Included 语义）。排除 aborted /
-    ///   error 回合与零 usage 消息；**时间戳护栏**：消息时间戳早于
-    ///   `last_compaction_at`（压缩边界）时 usage 不再描述当前前缀，作废
-    ///   回退启发式（对齐 pi `usageAppliesToPrefix`）。usage 覆盖其后缀
-    ///   之前的前缀（含 system/tools），其后的尾随消息按块级启发式补算；
-    /// - **源 2：本地启发式兜底**（无 usage / usage 作废 / 冷启动）：
-    ///   全部消息逐块估算 + `tools`（工具 schema 整体 JSON 体积）与
-    ///   `system`（system prompt 文本）前缀折算（按 P1 透传后的实际字节）。
-    ///
-    /// `tokens` 为 u64 上下文占用（含缓存读/写，I6 口径）。
-    pub fn estimate_context_tokens(
-        &self,
-        messages: &[Arc<AgentMessage>],
-        tools: Option<&str>,
-        system: Option<&str>,
-        last_compaction_at: Option<i64>,
-    ) -> EstimateContext {
-        let usage = find_usage_message(messages, last_compaction_at);
-        estimate_with_usage(messages, tools, system, usage)
-    }
-
-    /// 对话级估算（P4 §3.7 签名兼容入口）
-    ///
-    /// 调用方（session-loop）已按时间戳护栏定位 usage 消息 id 时传入；
-    /// 该消息存在且带可解析 usage 时以其为准，否则纯启发式。
-    /// 不带 tools/system 前缀参数（usage 实测已含此前缀；启发式路径按
-    /// 0 前缀估算）。
-    pub fn estimate_agent_context(
-        &self,
-        messages: &[Arc<AgentMessage>],
-        usage_message_id: Option<&str>,
-    ) -> EstimateContext {
-        let usage = usage_message_id
-            .and_then(|id| messages.iter().position(|m| m.id == id))
-            .and_then(|idx| usage_occupancy(&messages[idx]).map(|occupancy| (idx, occupancy)));
-        estimate_with_usage(messages, None, None, usage)
-    }
-
-    /// 计算合法切割点：返回保留段起始索引（None = 放弃压缩）
-    ///
-    /// 策略（P4 §3.4.2，对齐 pi findCutPoint / jcode safe_compaction_cutoff）：
-    ///
-    /// 1. **尾部倒推预算**：从末尾向前累计 token 至 `keep_recent_tokens`，
-    ///    累计达标处的消息纳入保留段；扫描区间自折叠链后起算（链 token
-    ///    不计入预算，T-02）；
-    /// 2. **完整回合下限**：保留段内 user 消息数不得少于 `min_recent_turns`
-    ///    （不足时向前扩展保留段；回合 = 一个 user 消息及其后的
-    ///    assistant/tool 消息组）；
-    /// 3. **合法切割点（tool 配对保护）**：保留段内每个 `ToolResult` 必须
-    ///    能在保留段内找到对应 `ToolCall`；存在孤儿 id 时向前扩展保留段
-    ///    直到全部配对；仍无法配对（数据异常）或保留段覆盖全部消息
-    ///    （无可丢内容）时返回 None——宁可暂不压缩也不破坏语义。
-    ///
-    /// **折叠链下界（T-01~T-05）**：切割点恒 `> fold_start`（system 段后
-    /// 首个非链下标）——链消息（compacted-summary 前缀）永不进保留区/丢弃区
-    /// （B1 冻结、B2 单调），cut ≤ fold_start 一律 None。
-    pub fn find_cut_point(
-        &self,
-        messages: &[Arc<AgentMessage>],
-        keep_recent_tokens: usize,
-        min_recent_turns: u32,
-    ) -> Option<usize> {
-        find_cut_point_inner(messages, keep_recent_tokens, min_recent_turns, true)
     }
 
     /// 压缩对话（AgentMessage 面；保留策略见 P4 §3.4.2）
@@ -138,12 +53,12 @@ impl CompactionEngine {
     /// 2. 无合法切割点（tool 孤儿无法配对 / 保留段覆盖全部消息）：
     ///    放弃压缩，原样返回（宁可暂不压缩也不破坏语义，jcode
     ///    safe_compaction_cutoff:289-290）；
-    /// 3. 保留尾部：[find_cut_point] 计算保留段；保留段之前的 **system
+    /// 3. 保留尾部：[crate::find_cut_point] 计算保留段；保留段之前的 **system
     ///    消息恒保留**（置于输出头部），**折叠链（compacted-summary
     ///    前缀，T-06/T-08）恒保留**（B1 冻结：链永不改写/丢失/折叠），
     ///    其余中间段合并为摘要；
     /// 4. 摘要：注入 [Summarizer] 时同步单次尝试（R-F）；成功且输出为
-    ///    Schema V1 JSON 文档（[crate::summary_document::validate_summary_document]）
+    ///    Schema V1 JSON 文档（[crate::validate_summary_document]）
     ///    时以 markdown 渲染进链（R-G 语源唯一，summary_is_llm=true），
     ///    否则按 [StubPolicy] 决策——[StubPolicy::StubAllowed] 降级中性
     ///    stub（R-C 永不改写，state=awaiting）、[StubPolicy::LlmRequired]
@@ -164,7 +79,7 @@ impl CompactionEngine {
     ///
     /// **兼容 wrapper（测试 / 手动压缩路径）**：内部同步调用 summarizer
     /// （preview + summarize → precomputed）；async run loop 主路径不走本
-    /// 方法——经 [Self::preview_compaction] + session-loop
+    /// 方法——经 [preview_compaction] + session-loop
     /// `summarize_via_blocking`（spawn_blocking）预计算后调
     /// [Self::compact_agent_messages_with_stub_policy]（DEL-9：run loop
     /// 无同步 summarize 直调）。
@@ -177,7 +92,7 @@ impl CompactionEngine {
     ) -> CompactionPlan {
         // 同步 preview + summarize（仅本 wrapper / 手动命令路径；run loop 不经此）
         let summarize_precomputed = summarizer.and_then(|s| {
-            self.preview_compaction(messages, policy)
+            preview_compaction(messages, policy)
                 .map(|preview| s.summarize(&preview.dropped, preview.existing.as_deref()))
         });
         self.compact_agent_messages_with_stub_policy(
@@ -202,7 +117,7 @@ impl CompactionEngine {
     ///
     /// **D10-A / DEL-9**：本方法不再裸调 `summarizer.summarize`——摘要
     /// 结果经 `summarize_precomputed` 注入。async run loop（预检/边界/
-    /// 溢出）经 [Self::preview_compaction] + session-loop
+    /// 溢出）经 [preview_compaction] + session-loop
     /// `summarize_via_blocking`（spawn_blocking + 墙钟）预计算后传入；
     /// `None` = 无摘要可用（按 stub_policy 决策）。
     pub fn compact_agent_messages_with_stub_policy(
@@ -390,7 +305,7 @@ impl CompactionEngine {
         // 【核心加固 3：追加后紧急二次预检（Emergency Preflight / Fallback Compaction）】
         // 若追加新摘要或组装保留段后，总 Token 仍超过预算上限，强制执行兜底压缩，杜绝 400 错误
         if budget_tokens >= policy.keep_recent_tokens && tokens_after > budget_tokens as u64 {
-            tokens_after = Self::apply_emergency_preflight(
+            tokens_after = apply_emergency_preflight(
                 &mut result,
                 &mut dropped_ids,
                 messages,
@@ -424,138 +339,6 @@ impl CompactionEngine {
         }
     }
 
-    /// 紧急二次预检与兜底压缩逻辑（Emergency Preflight）
-    ///
-    /// 当追加新摘要或历史保留段后，总 Token 仍超过预算上限时触发：
-    /// 1. 尝试更紧凑的截断点（放宽 min_recent_turns 下限至 1 或 0），丢弃更多历史；
-    /// 2. 若依然超预算（如单条巨型工具输出），对保留段中的超大 ToolResult 实施紧急截断，
-    ///    保证最终输出严格收敛于预算之内。
-    fn apply_emergency_preflight(
-        result: &mut Vec<Arc<AgentMessage>>,
-        dropped_ids: &mut Vec<String>,
-        original_messages: &[Arc<AgentMessage>],
-        initial_cut: usize,
-        budget_tokens: usize,
-        policy: &CompactionPolicy,
-        block_id: &str,
-    ) -> u64 {
-        let summary_pos = result.iter().position(|m| m.id == *block_id).unwrap_or(0);
-
-        // 前缀（System + 历史链 + 新摘要）Token 占用
-        let header_tokens: usize = result[..=summary_pos]
-            .iter()
-            .map(|m| count_agent_message_tokens(m))
-            .sum();
-
-        let tail_budget = budget_tokens.saturating_sub(header_tokens);
-
-        // 阶段 1：尝试更紧凑的切割点
-        let tighter_cut = find_cut_point_inner(
-            original_messages,
-            tail_budget,
-            1,
-            policy.tool_pair_protection,
-        )
-        .or_else(|| {
-            find_cut_point_inner(
-                original_messages,
-                tail_budget,
-                0,
-                policy.tool_pair_protection,
-            )
-        });
-
-        if let Some(ecut) = tighter_cut {
-            if ecut > initial_cut {
-                // 纳入新丢弃的消息 id
-                for msg in &original_messages[initial_cut..ecut] {
-                    if msg.role != AgentMessageRole::System
-                        && !msg.id.starts_with("compacted-summary")
-                        && !dropped_ids.contains(&msg.id)
-                    {
-                        dropped_ids.push(msg.id.clone());
-                    }
-                }
-                // 重建保留段
-                result.truncate(summary_pos + 1);
-                result.extend_from_slice(&original_messages[ecut..]);
-            }
-        }
-
-        let mut current_tokens: u64 = result
-            .iter()
-            .map(|m| count_agent_message_tokens(m) as u64)
-            .sum();
-
-        if current_tokens <= budget_tokens as u64 {
-            return current_tokens;
-        }
-
-        // 阶段 2：若仍超预算，对保留段中的超大工具输出执行紧急截断
-        let non_header_start = summary_pos + 1;
-        if non_header_start < result.len() {
-            let retained_count = result.len() - non_header_start;
-            let per_msg_budget_bytes =
-                (budget_tokens.saturating_sub(header_tokens) * 4) / retained_count.max(1);
-            let emergency_limits = crate::tool_output::ToolOutputTruncationLimits {
-                max_lines: 50,
-                max_bytes: per_msg_budget_bytes.clamp(256, 4096),
-            };
-
-            for msg in &mut result[non_header_start..] {
-                let mut modified_blocks = Vec::new();
-                let mut changed = false;
-                for block in &msg.blocks {
-                    match block {
-                        AgentMessageBlock::ToolResult {
-                            tool_call_id,
-                            tool_name,
-                            output,
-                            is_error,
-                        } => {
-                            let mut new_output = output.clone();
-                            if let Some(ref text) = output.text {
-                                let trunc_res = crate::tool_output::truncate_tool_output(
-                                    text,
-                                    &emergency_limits,
-                                );
-                                if trunc_res.truncated {
-                                    new_output.text = Some(trunc_res.text);
-                                    changed = true;
-                                }
-                            }
-                            modified_blocks.push(AgentMessageBlock::ToolResult {
-                                tool_call_id: tool_call_id.clone(),
-                                tool_name: tool_name.clone(),
-                                output: new_output,
-                                is_error: *is_error,
-                            });
-                        }
-                        other => modified_blocks.push(other.clone()),
-                    }
-                }
-                if changed {
-                    *msg = Arc::new(AgentMessage {
-                        id: msg.id.clone(),
-                        role: msg.role,
-                        created_at: msg.created_at.clone(),
-                        blocks: modified_blocks,
-                        metadata: msg.metadata.clone(),
-                        client_message_id: msg.client_message_id.clone(),
-                        content: msg.content.clone(),
-                    });
-                }
-            }
-        }
-
-        current_tokens = result
-            .iter()
-            .map(|m| count_agent_message_tokens(m) as u64)
-            .sum();
-
-        current_tokens
-    }
-
     /// 紧急二次预检（Emergency Preflight）：
     /// 在追加消息或会话后，若当前对话总估算仍超预算，强制执行兜底压缩。
     ///
@@ -569,7 +352,7 @@ impl CompactionEngine {
         summarizer: Option<&dyn Summarizer>,
     ) -> CompactionPlan {
         let summarize_precomputed = summarizer.and_then(|s| {
-            self.preview_compaction(messages, policy)
+            preview_compaction(messages, policy)
                 .map(|preview| s.summarize(&preview.dropped, preview.existing.as_deref()))
         });
         let mut plan = self.compact_agent_messages_with_stub_policy(
@@ -585,7 +368,7 @@ impl CompactionEngine {
                 plan.generation,
                 plan.fold_index.max(1)
             );
-            let new_tokens = Self::apply_emergency_preflight(
+            let new_tokens = apply_emergency_preflight(
                 &mut plan.messages,
                 &mut plan.dropped_ids,
                 messages,
@@ -606,60 +389,181 @@ impl CompactionEngine {
         }
         plan
     }
+}
 
-    /// 压缩预览（D10-A）：返回「本可压缩的应丢消息 + 既有摘要文本」，
-    /// 供调用方在调用 [Self::compact_agent_messages_with_stub_policy]
-    /// **之前**经 spawn_blocking 异步预计算摘要（summarize_via_blocking）。
-    ///
-    /// cut 计算与主方法同源（同一纯逻辑），返回 Some 当且仅当主方法
-    /// 会进入摘要分支（有合法切割点且有可丢消息）；None = 无压缩动作
-    /// （主方法将 noop）。`dropped` 为值克隆（Summarizer trait 借
-    /// `&[AgentMessage]`）；克隆成本远低于摘要网络往返，可接受。
-    pub fn preview_compaction(
-        &self,
-        messages: &[Arc<AgentMessage>],
-        policy: &CompactionPolicy,
-    ) -> Option<CompactionPreview> {
-        if messages.is_empty() {
-            return None;
-        }
-        let cut = find_cut_point_inner(
-            messages,
-            policy.keep_recent_tokens,
-            policy.min_recent_turns,
+/// 紧急二次预检与兜底压缩逻辑（Emergency Preflight）
+///
+/// 当追加新摘要或历史保留段后，总 Token 仍超过预算上限时触发：
+/// 1. 尝试更紧凑的截断点（放宽 min_recent_turns 下限至 1 或 0），丢弃更多历史；
+/// 2. 若依然超预算（如单条巨型工具输出），对保留段中的超大 ToolResult 实施紧急截断，
+///    保证最终输出严格收敛于预算之内。
+fn apply_emergency_preflight(
+    result: &mut Vec<Arc<AgentMessage>>,
+    dropped_ids: &mut Vec<String>,
+    original_messages: &[Arc<AgentMessage>],
+    initial_cut: usize,
+    budget_tokens: usize,
+    policy: &CompactionPolicy,
+    block_id: &str,
+) -> u64 {
+    let summary_pos = result.iter().position(|m| m.id == *block_id).unwrap_or(0);
+
+    // 前缀（System + 历史链 + 新摘要）Token 占用
+    let header_tokens: usize = result[..=summary_pos]
+        .iter()
+        .map(|m| count_agent_message_tokens(m))
+        .sum();
+
+    let tail_budget = budget_tokens.saturating_sub(header_tokens);
+
+    // 阶段 1：尝试更紧凑的切割点
+    let tighter_cut = find_cut_point_inner(
+        original_messages,
+        tail_budget,
+        1,
+        policy.tool_pair_protection,
+    )
+    .or_else(|| {
+        find_cut_point_inner(
+            original_messages,
+            tail_budget,
+            0,
             policy.tool_pair_protection,
-        )?;
-        let dropped_arcs: Vec<Arc<AgentMessage>> = messages[..cut]
-            .iter()
-            .filter(|m| {
-                m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
-            })
-            .cloned()
-            .collect();
-        if dropped_arcs.is_empty() {
-            return None;
-        }
-        let existing = messages[..cut]
-            .iter()
-            .filter(|m| m.id.starts_with("compacted-summary"))
-            .filter_map(|m| {
-                let text = m.text();
-                if text.is_empty() {
-                    None
-                } else {
-                    Some(text)
+        )
+    });
+
+    if let Some(ecut) = tighter_cut {
+        if ecut > initial_cut {
+            // 纳入新丢弃的消息 id
+            for msg in &original_messages[initial_cut..ecut] {
+                if msg.role != AgentMessageRole::System
+                    && !msg.id.starts_with("compacted-summary")
+                    && !dropped_ids.contains(&msg.id)
+                {
+                    dropped_ids.push(msg.id.clone());
                 }
-            })
-            .next_back();
-        let dropped: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
-        Some(CompactionPreview { dropped, existing })
+            }
+            // 重建保留段
+            result.truncate(summary_pos + 1);
+            result.extend_from_slice(&original_messages[ecut..]);
+        }
     }
 
-    /// 阈值判定单点：`estimate >= budget_tokens`（T-33 预检触发用，
-    /// P4 §3.4.1 阈值 = window - reserve，budget_tokens 由调用方换算）
-    pub fn should_compact(&self, estimate: u64, budget_tokens: u64) -> bool {
-        estimate >= budget_tokens
+    let mut current_tokens: u64 = result
+        .iter()
+        .map(|m| count_agent_message_tokens(m) as u64)
+        .sum();
+
+    if current_tokens <= budget_tokens as u64 {
+        return current_tokens;
     }
+
+    // 阶段 2：若仍超预算，对保留段中的超大工具输出执行紧急截断
+    let non_header_start = summary_pos + 1;
+    if non_header_start < result.len() {
+        let retained_count = result.len() - non_header_start;
+        let per_msg_budget_bytes =
+            (budget_tokens.saturating_sub(header_tokens) * 4) / retained_count.max(1);
+        let emergency_limits = crate::tool_output::ToolOutputTruncationLimits {
+            max_lines: 50,
+            max_bytes: per_msg_budget_bytes.clamp(256, 4096),
+        };
+
+        for msg in &mut result[non_header_start..] {
+            let mut modified_blocks = Vec::new();
+            let mut changed = false;
+            for block in &msg.blocks {
+                match block {
+                    AgentMessageBlock::ToolResult {
+                        tool_call_id,
+                        tool_name,
+                        output,
+                        is_error,
+                    } => {
+                        let mut new_output = output.clone();
+                        if let Some(ref text) = output.text {
+                            let trunc_res =
+                                crate::tool_output::truncate_tool_output(text, &emergency_limits);
+                            if trunc_res.truncated {
+                                new_output.text = Some(trunc_res.text);
+                                changed = true;
+                            }
+                        }
+                        modified_blocks.push(AgentMessageBlock::ToolResult {
+                            tool_call_id: tool_call_id.clone(),
+                            tool_name: tool_name.clone(),
+                            output: new_output,
+                            is_error: *is_error,
+                        });
+                    }
+                    other => modified_blocks.push(other.clone()),
+                }
+            }
+            if changed {
+                *msg = Arc::new(AgentMessage {
+                    id: msg.id.clone(),
+                    role: msg.role,
+                    created_at: msg.created_at.clone(),
+                    blocks: modified_blocks,
+                    metadata: msg.metadata.clone(),
+                    client_message_id: msg.client_message_id.clone(),
+                    content: msg.content.clone(),
+                });
+            }
+        }
+    }
+
+    current_tokens = result
+        .iter()
+        .map(|m| count_agent_message_tokens(m) as u64)
+        .sum();
+
+    current_tokens
+}
+
+/// 压缩预览（D10-A）：返回「本可压缩的应丢消息 + 既有摘要文本」，
+/// 供调用方在调用 [CompactionEngine::compact_agent_messages_with_stub_policy]
+/// **之前**经 spawn_blocking 异步预计算摘要（summarize_via_blocking）。
+///
+/// cut 计算与主方法同源（同一纯逻辑），返回 Some 当且仅当主方法
+/// 会进入摘要分支（有合法切割点且有可丢消息）；None = 无压缩动作
+/// （主方法将 noop）。`dropped` 为值克隆（Summarizer trait 借
+/// `&[AgentMessage]`）；克隆成本远低于摘要网络往返，可接受。
+pub fn preview_compaction(
+    messages: &[Arc<AgentMessage>],
+    policy: &CompactionPolicy,
+) -> Option<CompactionPreview> {
+    if messages.is_empty() {
+        return None;
+    }
+    let cut = find_cut_point_inner(
+        messages,
+        policy.keep_recent_tokens,
+        policy.min_recent_turns,
+        policy.tool_pair_protection,
+    )?;
+    let dropped_arcs: Vec<Arc<AgentMessage>> = messages[..cut]
+        .iter()
+        .filter(|m| m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary"))
+        .cloned()
+        .collect();
+    if dropped_arcs.is_empty() {
+        return None;
+    }
+    let existing = messages[..cut]
+        .iter()
+        .filter(|m| m.id.starts_with("compacted-summary"))
+        .filter_map(|m| {
+            let text = m.text();
+            if text.is_empty() {
+                None
+            } else {
+                Some(text)
+            }
+        })
+        .next_back();
+    let dropped: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
+    Some(CompactionPreview { dropped, existing })
 }
 
 #[cfg(test)]
@@ -669,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_explicit_generation_generates_correct_block_id() {
-        let engine = CompactionEngine::new(0).with_generation(3);
+        let engine = CompactionEngine::new().with_generation(3);
         let messages = vec![
             Arc::new(AgentMessage {
                 id: "u1".to_string(),

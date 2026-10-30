@@ -1,4 +1,4 @@
-//! 工具输出清洗管线（T-14：R1-R6 纯函数；接线在轮次 4 wire 面）
+//! 工具输出清洗管线（T-14：R1-R6 纯函数；provider wire 投影面专用）
 //!
 //! 规则（00-plan §8.2 / 03 §3.3，wire 面统一应用，R-J）：
 //! - R1 ANSI/控制字符剥离（字节安全状态机）
@@ -10,8 +10,8 @@
 //!
 //! 不变量：**确定性 + 幂等**（clean(clean(x)) == clean(x)）；落库/事件/
 //! 工具返回面保持 raw，本函数只在 wire 序列化面应用（R-J），不产生前缀漂移。
-
-use crate::count_tokens;
+//!
+//! 归属：provider 请求投影策略，私有于 request 层（不对外导出）。
 
 /// 清洗选项（Default：max_line_width=120，其余规则全开）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,24 +36,6 @@ impl Default for CleanupOptions {
         }
     }
 }
-
-/// 清洗结果（规则命中记录 + token 收益）
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CleanupResult {
-    pub cleaned: String,
-    pub original_bytes: usize,
-    pub cleaned_bytes: usize,
-    pub tokens_saved: usize,
-    pub rules_applied: Vec<&'static str>,
-}
-
-/// 规则命中常量（rules_applied 内按管线应用顺序记录）
-const R1_ANSI: &str = "R1 ANSI剥离";
-const R2_TRIM: &str = "R2 行尾空白";
-const R3_EMPTY: &str = "R3 空行合并";
-const R4_DUP: &str = "R4 重复行折叠";
-const R5_TRUNC: &str = "R5 超长行截断";
-const R6_JSON: &str = "R6 JSON 压缩";
 
 /// R4 重复行折叠标记（N = 折叠掉的行数 = 原连续数 - 1）
 fn duplicate_fold_marker(folded_away: usize) -> String {
@@ -124,28 +106,14 @@ fn strip_control_bytes(input: &str) -> String {
 /// 顺序理由：R3 先于 R4（空行先合并，避免被当作重复行折叠）；
 /// R6 先于 R5（JSON 压缩后再截断——已截断的 JSON 不再被二次压缩，
 /// 保证幂等；截断发生在最外层，避免半截 JSON 被重复折叠）。
-pub fn clean_output(raw: &str, opts: &CleanupOptions) -> CleanupResult {
-    let original_bytes = raw.len();
-    let mut applied: Vec<&'static str> = Vec::new();
-
+pub fn clean_output(raw: &str, opts: &CleanupOptions) -> String {
     // R1：ANSI/控制字符剥离
     let stripped = strip_control_bytes(raw);
-    if stripped.as_bytes() != raw.as_bytes() {
-        applied.push(R1_ANSI);
-    }
 
     // R2：行尾空白（str::lines 已剔除 \r，此处兜底空格/Tab）
-    let mut r2_changed = false;
     let mut lines: Vec<String> = Vec::new();
     for line in stripped.lines() {
-        let trimmed = line.trim_end().to_string();
-        if trimmed != line {
-            r2_changed = true;
-        }
-        lines.push(trimmed);
-    }
-    if r2_changed {
-        applied.push(R2_TRIM);
+        lines.push(line.trim_end().to_string());
     }
 
     // R3：空行合并（连续空行至多 1）
@@ -163,9 +131,6 @@ pub fn clean_output(raw: &str, opts: &CleanupOptions) -> CleanupResult {
             }
             collapsed.push(line.clone());
         }
-        if collapsed.len() != lines.len() {
-            applied.push(R3_EMPTY);
-        }
         lines = collapsed;
     }
 
@@ -181,7 +146,6 @@ pub fn clean_output(raw: &str, opts: &CleanupOptions) -> CleanupResult {
             if count >= 3 {
                 folded.push(lines[i].clone());
                 folded.push(duplicate_fold_marker(count - 1));
-                applied.push(R4_DUP);
             } else {
                 for _ in 0..count {
                     folded.push(lines[i].clone());
@@ -194,28 +158,23 @@ pub fn clean_output(raw: &str, opts: &CleanupOptions) -> CleanupResult {
 
     // R6：JSON 压缩（行首为 { 且整体可解析 → 重 compact；失败原样保留）
     if opts.compact_json {
-        let mut r6_changed = false;
         for line in lines.iter_mut() {
             if !line.trim_start().starts_with('{') {
                 continue;
             }
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-                let compact = serde_json::to_string(&value).unwrap_or_default();
-                if compact != *line {
-                    *line = compact;
-                    r6_changed = true;
+                if let Ok(compact) = serde_json::to_string(&value) {
+                    if compact != *line {
+                        *line = compact;
+                    }
                 }
             }
-        }
-        if r6_changed {
-            applied.push(R6_JSON);
         }
     }
 
     // R5：超长行截断（char 边界；结果 = max_line_width - 1 字符 + 省略号，
     // 总长 = max_line_width → 二次清洗不再截断，幂等）
     if opts.max_line_width > 0 {
-        let mut r5_changed = false;
         for line in lines.iter_mut() {
             if line.chars().count() > opts.max_line_width {
                 let mut truncated: String = line
@@ -227,109 +186,87 @@ pub fn clean_output(raw: &str, opts: &CleanupOptions) -> CleanupResult {
                 }
                 truncated.push('…');
                 *line = truncated;
-                r5_changed = true;
             }
-        }
-        if r5_changed {
-            applied.push(R5_TRUNC);
         }
     }
 
-    let cleaned = lines.join("\n");
-    let cleaned_bytes = cleaned.len();
-    let tokens_saved = count_tokens(raw).saturating_sub(count_tokens(&cleaned));
-    CleanupResult {
-        cleaned,
-        original_bytes,
-        cleaned_bytes,
-        tokens_saved,
-        rules_applied: applied,
-    }
+    lines.join("\n")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_output, duplicate_fold_marker, CleanupOptions, CleanupResult};
+    use super::{clean_output, duplicate_fold_marker, CleanupOptions};
 
-    fn clean(raw: &str) -> CleanupResult {
+    fn clean(raw: &str) -> String {
         clean_output(raw, &CleanupOptions::default())
     }
 
     /// 幂等断言：clean(clean(x)) 的字节与 clean(x) 一致
     fn assert_idempotent(raw: &str) {
         let once = clean(raw);
-        let twice = clean_output(&once.cleaned, &CleanupOptions::default());
-        assert_eq!(
-            once.cleaned, twice.cleaned,
-            "清洗必须幂等：{raw:?} → {once:?} → {twice:?}"
-        );
+        let twice = clean_output(&once, &CleanupOptions::default());
+        assert_eq!(once, twice, "清洗必须幂等：{raw:?} → {once:?} → {twice:?}");
     }
 
     #[test]
     fn strips_ansi_and_control_chars() {
-        let result = clean("\x1b[31mred\x1b[0m\nplain\x1b]0;title\x07");
-        assert_eq!(result.cleaned, "red\nplain");
-        assert!(result.rules_applied.contains(&"R1 ANSI剥离"));
+        assert_eq!(
+            clean("\x1b[31mred\x1b[0m\nplain\x1b]0;title\x07"),
+            "red\nplain"
+        );
         // C0 剥离：\x00 与 \x1b（ESC 未终结时后续字节也剥离）
-        assert_eq!(clean("a\x00b\x1bc").cleaned, "ab");
+        assert_eq!(clean("a\x00b\x1bc"), "ab");
         // \n\r\t 保留
-        assert_eq!(clean("a\tb\r\nc").cleaned, "a\tb\nc");
-        // 无控制字符 → R1 不命中
-        assert!(!clean("plain text").rules_applied.contains(&"R1 ANSI剥离"));
+        assert_eq!(clean("a\tb\r\nc"), "a\tb\nc");
+        // 无控制字符 → 原样
+        assert_eq!(clean("plain text"), "plain text");
     }
 
     #[test]
     fn trims_trailing_whitespace_per_line() {
-        let result = clean("a   \nb \t\nc");
-        assert_eq!(result.cleaned, "a\nb\nc");
-        assert!(result.rules_applied.contains(&"R2 行尾空白"));
+        assert_eq!(clean("a   \nb \t\nc"), "a\nb\nc");
     }
 
     #[test]
     fn collapses_empty_lines_to_at_most_one() {
-        let result = clean("a\n\n\n\nb\n\nc");
-        assert_eq!(result.cleaned, "a\n\nb\n\nc");
-        assert!(result.rules_applied.contains(&"R3 空行合并"));
+        assert_eq!(clean("a\n\n\n\nb\n\nc"), "a\n\nb\n\nc");
         // 单空行不合并
-        assert_eq!(clean("a\n\nb").cleaned, "a\n\nb");
+        assert_eq!(clean("a\n\nb"), "a\n\nb");
     }
 
     #[test]
     fn folds_duplicate_lines_with_marker() {
-        let result = clean("x\nx\nx\ny\n\nz\nz\nz\nz");
-        assert_eq!(result.cleaned, "x\n… 重复 2 行 …\ny\n\nz\n… 重复 3 行 …");
-        assert!(result.rules_applied.contains(&"R4 重复行折叠"));
+        assert_eq!(
+            clean("x\nx\nx\ny\n\nz\nz\nz\nz"),
+            "x\n… 重复 2 行 …\ny\n\nz\n… 重复 3 行 …"
+        );
         assert_eq!(duplicate_fold_marker(2), "… 重复 2 行 …");
         // 恰好 2 连续不折叠
-        assert_eq!(clean("x\nx\ny").cleaned, "x\nx\ny");
+        assert_eq!(clean("x\nx\ny"), "x\nx\ny");
     }
 
     #[test]
     fn truncates_overlong_lines_at_char_boundary() {
         let long = "字".repeat(200);
-        let result = clean(&long);
+        let cleaned = clean(&long);
         // 截断 = 119 字符 + 省略号 = 120 字符（char 边界，不裂多字节）
-        assert_eq!(result.cleaned.chars().count(), 120);
-        assert!(result.cleaned.ends_with('…'));
-        assert!(result.rules_applied.contains(&"R5 超长行截断"));
+        assert_eq!(cleaned.chars().count(), 120);
+        assert!(cleaned.ends_with('…'));
         // max_line_width = 0 → 不截断
         let opts = CleanupOptions {
             max_line_width: 0,
             ..CleanupOptions::default()
         };
-        let result = clean_output(&long, &opts);
-        assert_eq!(result.cleaned, long);
+        assert_eq!(clean_output(&long, &opts), long);
     }
 
     #[test]
     fn compacts_single_line_json() {
         let raw = "{\"a\": 1, \"b\": [2, 3], \"c\": {\"d\": \"e\"}}";
-        let result = clean(raw);
-        assert_eq!(result.cleaned, "{\"a\":1,\"b\":[2,3],\"c\":{\"d\":\"e\"}}");
-        assert!(result.rules_applied.contains(&"R6 JSON 压缩"));
+        assert_eq!(clean(raw), "{\"a\":1,\"b\":[2,3],\"c\":{\"d\":\"e\"}}");
         // 非 JSON（行首非 { 或不可解析）原样保留
-        assert_eq!(clean("prefix {not json").cleaned, "prefix {not json");
-        assert_eq!(clean("text only").cleaned, "text only");
+        assert_eq!(clean("prefix {not json"), "prefix {not json");
+        assert_eq!(clean("text only"), "text only");
     }
 
     #[test]
@@ -344,23 +281,22 @@ mod tests {
             "{\"k\": \"v\"}\n{\"k2\": [1,2,3]}",
         ] {
             let once = clean(raw);
-            let twice = clean_output(&once.cleaned, &CleanupOptions::default());
-            assert_eq!(once.cleaned, twice.cleaned, "幂等失败：{raw:?}");
+            let twice = clean_output(&once, &CleanupOptions::default());
+            assert_eq!(once, twice, "幂等失败：{raw:?}");
             assert_idempotent(raw);
         }
     }
 
     #[test]
-    fn tokens_saved_and_byte_counts_reported() {
+    fn repeated_lines_are_folded_to_bounded_output() {
         // 6 连续相同行：折叠标记固定开销远小于省下的 5 行
         let raw = "same long line here\n".repeat(6);
-        let result = clean(&raw);
-        assert_eq!(result.original_bytes, raw.len());
-        assert_eq!(result.cleaned, "same long line here\n… 重复 5 行 …");
-        assert_eq!(result.cleaned_bytes, result.cleaned.len());
-        assert!(result.tokens_saved > 0, "折叠后 token 必须下降");
+        let once = clean(&raw);
+        assert_eq!(once, "same long line here\n… 重复 5 行 …");
         // 清洗后 ≤ 原始
-        assert!(result.cleaned_bytes <= result.original_bytes);
+        assert!(once.len() <= raw.len());
+        // 折叠结果幂等（不二次折叠）
+        assert_eq!(clean(&once), once);
     }
 
     #[test]
@@ -376,27 +312,17 @@ mod tests {
         let raw_json = "{\n  \"nested\": {\n    \"key\": \"value\"\n  }\n}";
         let raw = format!("\x1b[33m{}\x1b[0m\n\n\n{}", long_code, raw_json);
 
-        let result = clean_output(&raw, &opts);
-        assert!(
-            result.cleaned.contains(long_code),
-            "wire 投影面绝不截断长代码行"
-        );
-        assert!(
-            result.cleaned.contains(raw_json),
-            "wire 投影面绝不折叠多行 JSON"
-        );
-        assert!(
-            !result.cleaned.contains("\x1b"),
-            "wire 投影面剥离 ANSI 颜色"
-        );
-        assert_eq!(result.cleaned, format!("{}\n\n{}", long_code, raw_json));
+        let cleaned = clean_output(&raw, &opts);
+        assert!(cleaned.contains(long_code), "wire 投影面绝不截断长代码行");
+        assert!(cleaned.contains(raw_json), "wire 投影面绝不折叠多行 JSON");
+        assert!(!cleaned.contains("\x1b"), "wire 投影面剥离 ANSI 颜色");
+        assert_eq!(cleaned, format!("{}\n\n{}", long_code, raw_json));
     }
 
     #[test]
     fn strips_all_ecma48_csi_commands() {
         // \x1b[2J (erase display), \x1b[1;1H (cursor home), \x1b[?25h (show cursor), \x1b[10C (cursor forward)
         let raw = "prefix\x1b[2Jmid\x1b[1;1H\x1b[?25h\x1b[10Csuffix";
-        let result = clean(raw);
-        assert_eq!(result.cleaned, "prefixmidsuffix");
+        assert_eq!(clean(raw), "prefixmidsuffix");
     }
 }

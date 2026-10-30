@@ -172,15 +172,15 @@ pub(crate) fn stub_placeholder(block_id: &str, count: usize, _generation: u32) -
     format!("[Compacted({block_id}) {count} 条消息 · 摘要见块表]")
 }
 
-/// 摘要文本按 token 上限钳制（保证 count_tokens(结果) ≤ max_tokens）
+/// 摘要文本按 token 上限钳制（保证 count_tokens(结果) ≤ max_summary_tokens）
 ///
-/// 字符预算 = max_tokens × 4（ASCII 4 字符/token 的保守上界），截断后
+/// 字符预算 = max_summary_tokens × 4（ASCII 4 字符/token 的保守上界），截断后
 /// 再按启发式计数逐档收缩；省略号占 1 token 预算（内容预算先减 1）。
-pub(crate) fn truncate_summary(summary: &str, max_tokens: usize) -> String {
-    if count_tokens(summary) <= max_tokens {
+pub(crate) fn truncate_summary(summary: &str, max_summary_tokens: usize) -> String {
+    if count_tokens(summary) <= max_summary_tokens {
         return summary.to_string();
     }
-    let content_budget = max_tokens.saturating_sub(1);
+    let content_budget = max_summary_tokens.saturating_sub(1);
     let mut truncated: String = summary
         .chars()
         .take(content_budget.saturating_mul(4))

@@ -18,13 +18,10 @@
 //! 记录路径）与事件落库由调用方（session-loop）接线。
 
 use crate::count_tokens;
-
-// D0/U-BUDGET：G8 默认双阈值定义收敛至 conex-shared::perf_budget（行为不变）
-// 对齐 opencode MAX_LINES=2000 / MAX_BYTES=50KB；接线主责 D10
-pub use conex_shared::perf_budget::{
-    G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT as TOOL_OUTPUT_MAX_BYTES_DEFAULT,
-    G8_TOOL_OUTPUT_MAX_LINES_DEFAULT as TOOL_OUTPUT_MAX_LINES_DEFAULT,
+use conex_shared::perf_budget::{
+    G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT, G8_TOOL_OUTPUT_MAX_LINES_DEFAULT,
 };
+
 /// 截断标记占用的预算预留（行 1 行 + 字节 96 + 分隔符 4；标记文案含计数）
 const MARKER_LINE_RESERVE: usize = 1;
 const MARKER_BYTES_RESERVE: usize = 96;
@@ -47,8 +44,8 @@ pub struct ToolOutputTruncationLimits {
 impl Default for ToolOutputTruncationLimits {
     fn default() -> Self {
         Self {
-            max_lines: TOOL_OUTPUT_MAX_LINES_DEFAULT,
-            max_bytes: TOOL_OUTPUT_MAX_BYTES_DEFAULT,
+            max_lines: G8_TOOL_OUTPUT_MAX_LINES_DEFAULT,
+            max_bytes: G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT,
         }
     }
 }
@@ -310,7 +307,10 @@ pub fn estimate_after_truncation(estimate: u64, tokens_saved: u64) -> u64 {
 mod tests {
     use super::{
         estimate_after_truncation, truncate_tool_output, ToolOutputTruncationLimits,
-        ToolOutputTruncationRecord, TOOL_OUTPUT_MAX_BYTES_DEFAULT, TOOL_OUTPUT_MAX_LINES_DEFAULT,
+        ToolOutputTruncationRecord,
+    };
+    use conex_shared::perf_budget::{
+        G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT, G8_TOOL_OUTPUT_MAX_LINES_DEFAULT,
     };
 
     /// 多行文本（行间 \n、末行无尾随换行——与真实工具输出的
@@ -342,8 +342,8 @@ mod tests {
     #[test]
     fn defaults_aligned_with_opencode() {
         let limits = ToolOutputTruncationLimits::default();
-        assert_eq!(limits.max_lines, TOOL_OUTPUT_MAX_LINES_DEFAULT);
-        assert_eq!(limits.max_bytes, TOOL_OUTPUT_MAX_BYTES_DEFAULT);
+        assert_eq!(limits.max_lines, G8_TOOL_OUTPUT_MAX_LINES_DEFAULT);
+        assert_eq!(limits.max_bytes, G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT);
     }
 
     // ── 行数截断：head + 标记 + tail ──

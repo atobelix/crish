@@ -3,9 +3,9 @@
 //! 测试旁挂先例）
 
 use super::*;
-use conex_compaction::summary_document::validate_summary_document;
+use conex_compaction::{validate_summary_document, SummaryDocument, SummaryTier};
 
-fn sample_document(stage_index: u32) -> serde_json::Value {
+fn sample_document(stage_index: u32) -> SummaryDocument {
     build_stage_summary_document(&StageSummaryDocument {
         stage_index,
         block_id: format!("stage-summary-{}", stage_index + 1),
@@ -18,7 +18,7 @@ fn sample_document(stage_index: u32) -> serde_json::Value {
         ],
         decisions: vec!["系统段注入为主选".to_string()],
         next_steps: vec!["接线 run 收口触发".to_string()],
-        critical_context: "estimate/window 双源口径".to_string(),
+        critical_context: vec!["estimate/window 双源口径".to_string()],
         range: Some(StageSummaryRange {
             start_message_id: "m1".to_string(),
             end_message_id: "m40".to_string(),
@@ -186,20 +186,18 @@ fn milestone_state_marks_and_queries() {
 fn stage_summary_document_is_valid_schema_v1() {
     let doc = sample_document(0);
     let json = serde_json::to_string(&doc).unwrap();
-    // Schema V1 校验通过（required 骨架 + droppedIds 数组）
+    // Schema V1 强类型校验通过（弱类型 Value 已删除）
     validate_summary_document(&json, 4096).expect("阶段总结必须过 Schema V1 校验");
-    assert_eq!(doc["schemaVersion"], 1);
-    assert_eq!(doc["tier"], "stage-1", "tier 标记 stage-N");
-    assert!(
-        doc["droppedIds"].as_array().unwrap().is_empty(),
-        "droppedIds 空数组（无损）"
-    );
-    assert_eq!(doc["height"], 1);
+    assert_eq!(doc.schema_version, 1);
+    assert_eq!(doc.tier, SummaryTier::Stage(1));
+    assert_eq!(doc.tier.to_string(), "stage-1", "tier 标记 stage-N");
+    assert!(doc.dropped_ids.is_empty(), "droppedIds 空数组（无损）");
+    assert_eq!(doc.height, 1);
     assert_eq!(
-        doc["range"]["startMessageId"], "m1",
+        doc.extra["range"]["startMessageId"], "m1",
         "custom range 覆盖消息 id 区间"
     );
-    assert_eq!(doc["range"]["messageCount"], 40);
+    assert_eq!(doc.extra["range"]["messageCount"], 40);
     // 阶段下标 → tier 命名
     assert_eq!(stage_tier(0), "stage-1");
     assert_eq!(stage_tier(1), "stage-2");
@@ -217,14 +215,14 @@ fn stage_summary_document_without_range_omits_key() {
         progress: Vec::new(),
         decisions: Vec::new(),
         next_steps: Vec::new(),
-        critical_context: String::new(),
+        critical_context: Vec::new(),
         range: None,
     };
     let doc = build_stage_summary_document(&input);
-    assert!(doc.get("range").is_none(), "range=None 不输出键");
+    assert!(!doc.extra.contains_key("range"), "range=None 不输出键");
     input.stage_index = 2;
     let doc2 = build_stage_summary_document(&input);
-    assert_eq!(doc2["tier"], "stage-3");
+    assert_eq!(doc2.tier, SummaryTier::Stage(3));
     // 缺省空数组字段合法（Schema V1 校验兼容）
     validate_summary_document(&serde_json::to_string(&doc2).unwrap(), 4096).unwrap();
 }
@@ -283,7 +281,7 @@ fn checkpoint_payload_handles_empty_progress() {
         progress: Vec::new(),
         decisions: Vec::new(),
         next_steps: Vec::new(),
-        critical_context: String::new(),
+        critical_context: Vec::new(),
         range: None,
     });
     let payload = stage_summary_to_checkpoint_payload(&doc);
@@ -318,8 +316,13 @@ fn inheritance_view_extracts_fields() {
     assert_eq!(inherited.goal, Some("实现分阶段总结"));
     assert_eq!(inherited.progress.len(), 2);
     assert_eq!(inherited.next_steps, vec!["接线 run 收口触发"]);
-    // 字段缺失 → 空面（不 panic）
-    let empty_doc = serde_json::json!({});
+    // 空字段 → 空面（不 panic）
+    let mut empty_doc = sample_document(0);
+    empty_doc.goal.clear();
+    empty_doc.progress.clear();
+    empty_doc.next_steps.clear();
     let empty = stage_summary_inheritance(&empty_doc);
-    assert_eq!(empty, StageSummaryInheritance::default());
+    assert_eq!(empty.goal, Some(""));
+    assert!(empty.progress.is_empty());
+    assert!(empty.next_steps.is_empty());
 }

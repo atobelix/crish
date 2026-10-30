@@ -19,7 +19,7 @@
 //!    超出 800 Tokens 时按优先级（SecurityBoundary > UserExplicitConstraint > ArchitecturalRule）
 //!    与时间戳淘汰修剪，确保核心高优决策永不被挤出。
 
-use conex_compaction::tokens::count_tokens_fast;
+use conex_compaction::count_tokens_fast;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 /// 决策账本条目全局保留的 Token 预算上限 (Tokens <= 800)

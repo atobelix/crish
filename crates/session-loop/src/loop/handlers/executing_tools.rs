@@ -198,7 +198,7 @@ fn tool_output_from_result(
     result: &ClassifiedToolResult,
 ) -> (
     ToolOutput,
-    Option<conex_compaction::tool_output::ToolOutputTruncationRecord>,
+    Option<conex_compaction::ToolOutputTruncationRecord>,
 ) {
     // D1 Arc 出口（ClassifiedToolResult.output = Arc<Value>）：读路径
     // as_ref 解引用，不碰装配行
@@ -253,16 +253,16 @@ fn tool_output_from_result(
 fn apply_g8_tool_output_truncation(
     result: &ClassifiedToolResult,
     output: &mut ToolOutput,
-) -> Option<conex_compaction::tool_output::ToolOutputTruncationRecord> {
+) -> Option<conex_compaction::ToolOutputTruncationRecord> {
     let text = output.text.as_mut()?;
-    let trunc = conex_compaction::tool_output::truncate_tool_output(
+    let trunc = conex_compaction::truncate_tool_output(
         text,
-        &conex_compaction::tool_output::ToolOutputTruncationLimits::default(),
+        &conex_compaction::ToolOutputTruncationLimits::default(),
     );
     if !trunc.truncated {
         return None;
     }
-    let record = conex_compaction::tool_output::ToolOutputTruncationRecord::from_result(&trunc);
+    let record = conex_compaction::ToolOutputTruncationRecord::from_result(&trunc);
     tracing::info!(
         target: "run",
         tool_name = %result.tool_name,
