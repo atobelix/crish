@@ -67,6 +67,8 @@
 > - Rust：`cargo check --workspace` 零错误；`cargo test -p agent-provider` 全绿（886+ 集成全过）；`cargo test -p session-loop` 546/547（唯一失败 `summary_dispatch::single_flight_dedupes_live_task` 为并行编译满载下的时序 flake，隔离重跑 0.05s 通过，与本次改动无代码关联）；工作台 probe 定向测试通过；`cargo test --workspace --no-run` 全测试目标编译通过。
 > - 前端：`tsc --noEmit` 零错误；改动域定向单测 157 + 509 全绿；全量 unit 套件 13462/13463（1 失败归属排查中——不在本次改动文件域）；`check:input-guardrails`、`check:motion-strict` 全过。
 > - 关键追加发现：`MessageVirtualizer.tsx` 的 `onStartEdit` 闭包硬编码传原始 msg，使行内信封剥离逻辑被整体旁路（即「编辑框出现信封」的直接原因），已修复为透传 sanitized 消息。
+> - 真机复验（Tauri MCP，新二进制）：`provider_probe_ping` 错误由裸状态码升级为携带上游原因——`服务端错误（HTTP Some(503)）：{"error":{"message":"Service temporarily unavailable",...}}`（gpt-6-luna 通道仍由服务端修复）；应用带全部改动正常启动（4000 监听）。
+> - 提交记录（并行主控按维度收编，内容完整性已逐一验证）：`12e63c44a`（引擎停止+信封）、`64240725f`（探活加固）、`0e426b280`（登录收敛）、`97f21a30f`（气泡清退）、`c9f9f0e59`（测试与战役记录）。
 
 - 集中测试（改完 A–E 后一次跑）：`cargo test -p session-loop -p conex-run -p agent-provider` + 前端 `npm run typecheck` + `npm run test -- --project=unit`（触域文件对应单测先行修复）。
 - 真机验收（Tauri MCP）：停止即时性 / 编辑观感 / 信封消失 / 直登弹窗 / 探活错误透传（gpt-6-luna 503 时应显示服务端原始原因）。
