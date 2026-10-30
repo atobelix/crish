@@ -146,10 +146,7 @@ mod tests {
             let dir = std::env::temp_dir().join(format!(
                 "conex-quota-{name}-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or_default()
+                conex_shared::time::unix_millis()
             ));
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join("sessions.db");

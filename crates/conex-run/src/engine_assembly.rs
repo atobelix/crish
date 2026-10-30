@@ -96,14 +96,6 @@ pub fn note_backend() -> Option<Arc<dyn NoteBackend>> {
     factory()
 }
 
-/// 当前 UTC 毫秒时间戳（epoch ms；冷缓存预警判定用）
-pub fn unix_millis_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
-}
-
 // ── 进程级 tokio runtime 句柄槽（原 tauri::async_runtime 的解耦替代）──
 
 static RUNTIME_HANDLE: RwLock<Option<tokio::runtime::Handle>> = RwLock::new(None);

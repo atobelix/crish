@@ -57,12 +57,12 @@ pub fn redact_token(token: &str) -> String {
 ///
 /// 契约：输入 = 配对码（容错形态：`CXN-XXXX-XXXX-XXXX` / 裸 12 位 /
 /// 小写 / 带空白或分隔符，标准化规则与
-/// [`conex_types::device::PairCode::normalize`] 同源）；输出 = 恒 12 位
+/// [`conex_device_protocol::PairCode::normalize`] 同源）；输出 = 恒 12 位
 /// 小写 hex。同一码的不同输入形态 → 同一前缀（审计对账友好）；
 /// 标准化失败（非法字符/长度）时仍对原始输入哈希——任何情况下不回吐
 /// 明文（fail-safe）。
 pub fn redact_pair_code(code: &str) -> String {
-    let normalized = conex_types::device::PairCode::normalize(code)
+    let normalized = conex_device_protocol::PairCode::normalize(code)
         .map(|c| c.as_str().to_string())
         .unwrap_or_else(|_| code.to_string());
     sha256_prefix_12(&normalized)
@@ -179,7 +179,7 @@ fn match_at(bytes: &[u8], i: usize) -> Option<(usize, SensitiveKind)> {
 /// 配对码显示形态总长（`CXN-` + 4 + `-` + 4 + `-` + 4 = 18 字节）。
 const PAIR_CODE_DISPLAY_LEN: usize = 18;
 
-/// 配对码有效字符集（与 `conex_types::device::PAIR_CODE_ALPHABET` 同源：
+/// 配对码有效字符集（与 `conex_device_protocol::PAIR_CODE_ALPHABET` 同源：
 /// D3 §4.1 base32 子集，去 0/O/1/I 混淆字符；含 L——以 Rust 侧常量
 /// 唯一真源为准，参考 tests/fixtures/device-protocol 对拍记录）。
 const PAIR_CODE_ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

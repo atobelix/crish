@@ -381,9 +381,9 @@ impl DeviceErrorCode {
     /// - NotFound：审批域语义升级为 cmd.approval_mismatch（携带冲突信号）；
     /// - Cancelled → cmd.cancelled；Encoding → file.encoding；
     /// - Io → internal；Internal：含 "engine not ready" → cmd.engine_not_ready。
-    pub fn from_core_error(err: &crate::CoreError) -> Self {
+    pub fn from_core_error(err: &conex_types::CoreError) -> Self {
         match err {
-            crate::CoreError::InvalidInput(detail) => {
+            conex_types::CoreError::InvalidInput(detail) => {
                 if detail.contains("workspace_not_granted") {
                     DeviceErrorCode::FileNotGranted
                 } else if detail.contains("file_exists") {
@@ -396,7 +396,7 @@ impl DeviceErrorCode {
                     DeviceErrorCode::CmdInvalid
                 }
             }
-            crate::CoreError::NotFound(detail) => {
+            conex_types::CoreError::NotFound(detail) => {
                 // 审批域 NotFound 升级为冲突信号（F2 §11.2）
                 if detail.contains("approval") || detail.contains("pending") {
                     DeviceErrorCode::CmdApprovalMismatch
@@ -404,10 +404,10 @@ impl DeviceErrorCode {
                     DeviceErrorCode::CmdNotFound
                 }
             }
-            crate::CoreError::Cancelled => DeviceErrorCode::CmdCancelled,
-            crate::CoreError::Encoding(_) => DeviceErrorCode::FileEncoding,
-            crate::CoreError::Io(_) => DeviceErrorCode::Internal,
-            crate::CoreError::Internal(msg) => {
+            conex_types::CoreError::Cancelled => DeviceErrorCode::CmdCancelled,
+            conex_types::CoreError::Encoding(_) => DeviceErrorCode::FileEncoding,
+            conex_types::CoreError::Io(_) => DeviceErrorCode::Internal,
+            conex_types::CoreError::Internal(msg) => {
                 if msg.to_lowercase().contains("engine not ready") {
                     DeviceErrorCode::CmdEngineNotReady
                 } else {
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn from_core_error_mapping() {
-        use crate::CoreError;
+        use conex_types::CoreError;
 
         assert_eq!(
             DeviceErrorCode::from_core_error(&CoreError::NotFound("run not found".into())),

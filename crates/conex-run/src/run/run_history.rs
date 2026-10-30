@@ -277,7 +277,7 @@ pub(crate) fn to_history_message(message: &AgentMessage) -> HistoryMessage {
         tool_calls_json: None,
         tool_call_results_json: None,
         status: Some("completed".to_string()),
-        timestamp: iso8601_to_epoch_millis(&message.created_at),
+        timestamp: conex_shared::time::parse_iso8601_ms(&message.created_at).unwrap_or(0),
     }
 }
 
@@ -300,79 +300,6 @@ pub(crate) fn non_empty(text: String) -> Option<String> {
     } else {
         Some(text)
     }
-}
-
-// ── T-29 时间戳互逆（与 session-loop hydrate.rs 同源算法）────────
-
-/// ISO8601 → epoch ms（引擎统一格式 `YYYY-MM-DDTHH:MM:SS.mmmZ`；
-/// 宽容解析：毫秒段可缺省（`SSZ`），时区仅接受 Z；失败兜底 0）
-pub(crate) fn iso8601_to_epoch_millis(iso: &str) -> i64 {
-    let Some((date, rest)) = iso.split_once('T') else {
-        return 0;
-    };
-    let mut parts = date.split('-');
-    let (Some(year), Some(month), Some(day)) = (
-        parts.next().and_then(|v| v.parse::<i64>().ok()),
-        parts.next().and_then(|v| v.parse::<u32>().ok()),
-        parts.next().and_then(|v| v.parse::<u32>().ok()),
-    ) else {
-        return 0;
-    };
-    let mut time = rest.split(':');
-    let (Some(hour), Some(minute)) = (
-        time.next().and_then(|v| v.parse::<i64>().ok()),
-        time.next().and_then(|v| v.parse::<i64>().ok()),
-    ) else {
-        return 0;
-    };
-    let sec_rest = time.next().unwrap_or("0");
-    let stripped = sec_rest.strip_suffix('Z').unwrap_or(sec_rest);
-    let (sec, millis) = match stripped.split_once('.') {
-        Some((s, ms)) => (
-            s.parse::<i64>().unwrap_or(0),
-            ms.parse::<i64>().unwrap_or(0),
-        ),
-        None => (stripped.parse::<i64>().unwrap_or(0), 0),
-    };
-    let days = days_from_civil(year, month, day);
-    ((days * 86_400 + hour * 3600 + minute * 60 + sec) * 1000) + millis
-}
-
-/// 公历年月日 → Unix 天数（Howard Hinnant civil_from_days 的逆函数；
-/// 与 session-loop hydrate.rs / steering mod.rs 同源算法）
-pub(crate) fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (m as i64 + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
-/// epoch ms → ISO8601（毫秒精度 UTC；算法与 session-loop hydrate.rs
-/// iso8601_from_epoch_millis 同源——读回缓存还原 created_at 用）
-pub(crate) fn epoch_millis_to_iso8601(epoch_ms: i64) -> String {
-    let secs = epoch_ms.div_euclid(1000);
-    let millis = epoch_ms.rem_euclid(1000);
-    let (hours, minutes, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let (year, month, day) = civil_from_days(secs.div_euclid(86_400));
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{sec:02}.{millis:03}Z")
-}
-
-/// Unix 天数 → 公历年月日（Howard Hinnant 算法，与 session-loop
-/// hydrate.rs:251-271 同源，不引入 chrono 依赖）
-pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (y + if m <= 2 { 1 } else { 0 }, m, d)
 }
 
 // ── T-29 读回水合与混合路线装配 ──────────────────────────────────
@@ -406,7 +333,7 @@ pub(crate) fn cached_history_to_conversation(
             Some(Arc::new(AgentMessage {
                 id: entry.id.clone(),
                 role,
-                created_at: epoch_millis_to_iso8601(entry.timestamp),
+                created_at: conex_shared::time::format_iso_utc_ms(entry.timestamp),
                 blocks,
                 // metadata 裁剪（usage 等运行期数据不进 LLM 上下文，双保险）
                 metadata: None,

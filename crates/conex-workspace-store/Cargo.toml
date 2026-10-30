@@ -9,6 +9,7 @@ authors.workspace = true
 [dependencies]
 conex-doc-collab = { path = "../conex-doc-collab" }
 conex-md-ast = { path = "../conex-md-ast" }
+conex-shared = { path = "../conex-shared" }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

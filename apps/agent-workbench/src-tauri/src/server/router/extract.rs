@@ -2,7 +2,7 @@
 
 use crate::server::ServerError;
 use axum::extract::{FromRequest, Request};
-use conex_types::device::DeviceErrorCode;
+use conex_device_protocol::DeviceErrorCode;
 use serde::de::DeserializeOwned;
 
 /// JSON body 请求体上限（2 MiB，与 axum 默认 DefaultBodyLimit 一致；

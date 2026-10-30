@@ -347,7 +347,7 @@ impl RetractionBackend for ShellRetractionBackend {
             run_id,
             boundary_seq,
             target_message_id,
-            &conex_run::engine_provider::now_iso_utc(),
+            &conex_shared::time::now_iso_utc(),
         );
         // 经挂载冻结护栏的队列发射（timeline-truncate 为撤离事件放行；
         // 自身占 sequence = frozen_seq + 1）

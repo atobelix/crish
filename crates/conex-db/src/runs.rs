@@ -117,7 +117,7 @@ impl LocalDb {
         let status_lit = status.as_str().to_string();
         let end_reason = end_reason.map(|s| s.to_string());
         self.write_blocking(move |conn| {
-            let now = now_millis();
+            let now = conex_shared::time::unix_millis();
             conn.execute(
                 "INSERT INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -164,7 +164,13 @@ impl LocalDb {
                     cursor = COALESCE(?4, cursor),
                     updated_at = ?5
                  WHERE run_id = ?1",
-                rusqlite::params![run_id, status_lit, end_reason, cursor, now_millis()],
+                rusqlite::params![
+                    run_id,
+                    status_lit,
+                    end_reason,
+                    cursor,
+                    conex_shared::time::unix_millis()
+                ],
             )
             .map_err(|e| DbFailure {
                 message: format!("update_run_status: {e}"),
@@ -353,7 +359,13 @@ impl LocalDb {
                      run_id = excluded.run_id,
                      payload = excluded.payload,
                      created_at = excluded.created_at",
-                rusqlite::params![id, session_id, run_id, payload, now_millis()],
+                rusqlite::params![
+                    id,
+                    session_id,
+                    run_id,
+                    payload,
+                    conex_shared::time::unix_millis()
+                ],
             )
             .map_err(|e| DbFailure {
                 message: format!("save_pending_input: {e}"),
@@ -430,14 +442,6 @@ fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRun> {
         created_at: row.get(5)?,
         updated_at: row.get(6)?,
     })
-}
-
-/// 当前 UTC 毫秒时间戳（epoch ms；runs / pending_inputs 时间列）
-pub(crate) fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

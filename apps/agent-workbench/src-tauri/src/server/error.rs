@@ -13,7 +13,7 @@ use axum::{
     Json,
 };
 
-use conex_types::device::{DeviceErrorCode, ErrorBody};
+use conex_device_protocol::{DeviceErrorCode, ErrorBody};
 
 /// 服务错误（内部统一错误类型；HTTP 侧经 [ServerError::http_status] 与
 /// [ServerError::error_body] 出网）

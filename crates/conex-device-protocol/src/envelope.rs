@@ -340,7 +340,7 @@ impl DeviceEnvelope {
         body: serde_json::Value,
     ) -> Self {
         Self {
-            v: crate::device::version::PROTOCOL_VERSION,
+            v: crate::version::PROTOCOL_VERSION,
             kind,
             msg_id: msg_id.into(),
             ts,
@@ -504,8 +504,8 @@ mod tests {
         assert_eq!(STATIC_KINDS.len(), 29);
         let unique: std::collections::HashSet<&str> = STATIC_KINDS.iter().copied().collect();
         assert_eq!(unique.len(), STATIC_KINDS.len());
-        // 与 mod.rs 的 103 全量核对
-        assert_eq!(crate::device::all_kinds().len(), 103);
+        // 与 lib.rs 的 103 全量核对
+        assert_eq!(crate::all_kinds().len(), 103);
     }
 
     #[test]

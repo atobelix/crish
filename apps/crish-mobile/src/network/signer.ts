@@ -1,6 +1,6 @@
 // HMAC 签名器（M5 §4.2 / D3 §5.1 / M6 §10.1 AuthHeader）
 //
-// - canon 输入（唯一真源 = Rust crates/conex-types/src/device/envelope.rs
+// - canon 输入（唯一真源 = Rust crates/conex-device-protocol/src/envelope.rs
 //   canonical_signing_payload，D3 §5.1）：
 //     canon(header) = deviceId ∥ ts ∥ nonce ∥ msgId ∥ kind ∥ v
 //   随后拼接 body 的**紧凑 JSON 字节**（serde_json::to_string 无空格）。

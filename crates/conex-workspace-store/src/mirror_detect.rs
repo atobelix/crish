@@ -201,9 +201,7 @@ impl WorkspaceStore {
 pub(crate) fn file_mtime_ms(path: &Path) -> i64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
+        .map(conex_shared::time::millis_of)
         .unwrap_or(0)
 }
 

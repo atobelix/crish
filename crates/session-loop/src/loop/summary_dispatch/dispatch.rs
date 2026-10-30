@@ -214,7 +214,7 @@ impl SummaryDispatch {
             }
             // E2 F2 层 1：窗口护栏——累计尝试达上限 → 拒绝（停止重试，等待
             // 窗口过期重置；被动触发点不阻塞用户消息发送，仅本次补摘要跳过）
-            let now_ms = conex_shared::time::unix_millis() as u64;
+            let now_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
             let mut gate = self.retry_gate.lock().unwrap_or_else(|e| {
                 tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
                 e.into_inner()
@@ -257,7 +257,10 @@ impl SummaryDispatch {
                     tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
                     e.into_inner()
                 });
-                    gate.record_episode(outcome.attempts, conex_shared::time::unix_millis() as u64);
+                    gate.record_episode(
+                        outcome.attempts,
+                        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                    );
                     drop(gate);
                     if let Some(callback) = on_done {
                         callback(outcome);

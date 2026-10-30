@@ -11,8 +11,8 @@
 //!   （pair.hello / challenge / verify / ok 密钥交换链）归 R1-07；
 //!   本包实现：数据模型 + CSPRNG 生成 + 校验判定状态机。
 
-use conex_types::device::version::{PAIR_CODE_TTL_MS, PAIR_MAX_ACTIVE, PAIR_MAX_ATTEMPTS};
-use conex_types::device::{PairCode, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH};
+use conex_device_protocol::version::{PAIR_CODE_TTL_MS, PAIR_MAX_ACTIVE, PAIR_MAX_ATTEMPTS};
+use conex_device_protocol::{PairCode, PAIR_CODE_ALPHABET, PAIR_CODE_LENGTH};
 
 use crate::server::ServerError;
 
@@ -278,8 +278,8 @@ pub fn generate_pair_code() -> Result<PairCode, ServerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::device::pair::PAIR_CODE_SEPARATOR;
-    use conex_types::device::{PairCodeError, PAIR_CODE_PREFIX};
+    use conex_device_protocol::pair::PAIR_CODE_SEPARATOR;
+    use conex_device_protocol::{PairCodeError, PAIR_CODE_PREFIX};
 
     /// 生成一个可用测试码（任意固定 12 字符合法码）
     fn sample_code() -> PairCode {

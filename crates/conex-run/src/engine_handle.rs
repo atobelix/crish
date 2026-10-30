@@ -782,7 +782,7 @@ pub fn cold_cache_warning_event(
     cold_cache_check(Some(&baseline), now_ms, config.ttl_seconds).map(|warning| {
         conex_types::events::AgentEvent::ColdCacheWarning {
             session_id: session_id.to_string(),
-            timestamp: crate::engine_provider::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             ttl_seconds: warning.ttl_seconds,
             idle_ms: warning.idle_ms,
             resend_estimate_tokens: warning.resend_estimate,
@@ -828,7 +828,7 @@ pub fn waste_alert_event(
     }
     Some(conex_types::events::AgentEvent::CacheWasteAlert {
         session_id: session_id.to_string(),
-        timestamp: crate::engine_provider::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         attribution: conex_types::events::MissAttribution::Unknown,
         missed_tokens: stats.missed_tokens,
         idle_ms: 0,

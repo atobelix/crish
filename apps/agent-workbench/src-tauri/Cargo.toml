@@ -68,6 +68,8 @@ async-trait.workspace = true
 anyhow.workspace = true
 conex-sandbox = { path = "../../../crates/conex-sandbox" }
 conex-types = { path = "../../../crates/conex-types" }
+# 多端设备协议（TY-P5：从 conex-types 拆出的独立 crate；server/ws/push/core_backend 消费）
+conex-device-protocol = { path = "../../../crates/conex-device-protocol" }
 conex-compaction = { path = "../../../crates/conex-compaction" }
 conex-diff = { path = "../../../crates/conex-diff" }
 conex-search = { path = "../../../crates/conex-search" }

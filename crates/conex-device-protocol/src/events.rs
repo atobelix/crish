@@ -3,8 +3,8 @@
 //! - 事件载荷 = `AgentEventEnvelope` 扁平 JSON 原样透传（D3 §7.1：与桌面事件
 //!   通道逐字节同构，跨端不二次包装）——[EventsPush::event] 以
 //!   `serde_json::Value` 承载，[EventsPush::from_envelope] 从既有
-//!   `crate::events::AgentEventEnvelope` 产形；
-//! - 订阅 / 续传 / 回执 / 会话索引广播：与既有 41 变体（`crate::events::
+//!   `conex_types::events::AgentEventEnvelope` 产形；
+//! - 订阅 / 续传 / 回执 / 会话索引广播：与既有 41 变体（`conex_types::events::
 //!   AgentEvent`，冻结不新增）正交，会话列表增量走 `session.updated` 会话面
 //!   消息（P-3 裁决）；
 //! - 双面策略映射：M6 §5.1 把 41 变体按「实时面 / 同步面」登记跨端策略
@@ -25,9 +25,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::device::skip_false;
-use crate::events::{AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION};
-use crate::SessionIndexEntry;
+use crate::skip_false;
+use conex_types::events::{AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION};
+use conex_types::SessionIndexEntry;
 
 /// 跨端事件裁剪策略（M6 §5.1 三档；wire kebab-case）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -421,7 +421,7 @@ pub struct SessionUpdatedAll {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{AgentEvent, AgentEventEnvelope, ApprovalDecision, RunTerminalStatus};
+    use conex_types::events::{AgentEvent, AgentEventEnvelope};
 
     #[test]
     fn event_cross_strategy_groups() {
@@ -438,7 +438,7 @@ mod tests {
                 session_id: "s1".into(),
                 run_id: "r1".into(),
                 timestamp: "t".into(),
-                terminal: RunTerminalStatus::Completed,
+                terminal: conex_types::events::RunTerminalStatus::Completed,
                 error: None,
             }),
             EventRedactStrategy::Transparent
@@ -447,7 +447,7 @@ mod tests {
         assert_eq!(
             event_cross_strategy(&AgentEvent::ApprovalRequested {
                 session_id: "s1".into(),
-                request: crate::events::PermissionRequest {
+                request: conex_types::events::PermissionRequest {
                     id: "req-1".into(),
                     session_id: "s1".into(),
                     cwd: "/".into(),
@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(SYNC_ELIGIBLE_TYPES.len(), 19);
         for name in SYNC_ELIGIBLE_TYPES {
             assert!(
-                crate::events::AgentEvent::ALL_TYPE_NAMES.contains(&name),
+                conex_types::events::AgentEvent::ALL_TYPE_NAMES.contains(&name),
                 "同步面白名单 {name} 不在 41 变体注册表中"
             );
         }
@@ -491,7 +491,7 @@ mod tests {
             session_id: "s1".into(),
             timestamp: "t".into(),
             message_id: "m1".into(),
-            block: crate::message::AgentMessageBlock::Text { text: "x".into() },
+            block: conex_types::message::AgentMessageBlock::Text { text: "x".into() },
         }));
     }
 
@@ -502,7 +502,7 @@ mod tests {
                 session_id: "s-abc".into(),
                 tool_call_id: "tc-9".into(),
                 request_id: None,
-                decision: ApprovalDecision::Approved,
+                decision: conex_types::events::ApprovalDecision::Approved,
                 timestamp: "t".into(),
             },
             Some("r-01".into()),

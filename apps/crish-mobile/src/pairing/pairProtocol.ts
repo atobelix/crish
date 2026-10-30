@@ -1,7 +1,7 @@
 // 配对协议层（R2-03）：pair.hello 构造 + pair.ok/pair.error 帧解析
 //
 // 对齐依据：
-// - pair.hello 字段：D3 §4.8 step 1 / crates/conex-types/contracts/
+// - pair.hello 字段：D3 §4.8 step 1 / crates/conex-device-protocol/contracts/
 //   device-protocol.json message 1（PairHello：code/deviceId/mobilePub/
 //   mobileLongPub/deviceName/platform）与生成类型 PairHello；
 // - code 传输形态：Rust PairCode 序列化为 12 位无前缀无分隔符（pair.rs:99-103），

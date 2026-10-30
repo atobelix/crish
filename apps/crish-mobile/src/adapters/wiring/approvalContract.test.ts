@@ -7,7 +7,7 @@
 // 或发送形状漂移都会红。
 //
 // 真源索引：
-// - crates/conex-types/contracts/device-protocol.json（C11 approve / C12 deny /
+// - crates/conex-device-protocol/contracts/device-protocol.json（C11 approve / C12 deny /
 //   C13 listPendingApprovals / C14 approvalHistory）
 // ============================================================================
 
@@ -49,7 +49,7 @@ interface DeviceProtocolRegistry {
 
 const REGISTRY_PATH = join(
   __dirname,
-  '../../../../../crates/conex-types/contracts/device-protocol.json'
+  '../../../../../crates/conex-device-protocol/contracts/device-protocol.json'
 );
 
 function loadRegistry(): DeviceProtocolRegistry {

@@ -8,7 +8,7 @@ use conex_types::events::{AgentEvent, SubagentEndStatus};
 use session_loop::control::ControlBus;
 use tokio::sync::mpsc;
 
-use super::{now_ms, ControlBusResolver, SUBSCRIBER_CAPACITY};
+use super::{ControlBusResolver, SUBSCRIBER_CAPACITY};
 
 /// subagent-ended 事件流广播（EventQueue 旁路适配）
 ///
@@ -74,7 +74,7 @@ impl EventStreamBroadcast {
             summary,
             // 事件体 ended_at 为 ISO8601 文本；旁路点时刻即到达时刻，
             // 以 feed 时刻作为终止时刻（不引入时间解析依赖）
-            ended_at_ms: now_ms(),
+            ended_at_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
         };
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         // 修剪断流订阅者（接收端 drop = wait 已返回）并逐条投递

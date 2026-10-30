@@ -14,7 +14,7 @@
 //   setupRoutes，业务语义 R2-05 域实现）。
 // AppState 联动、NetInfo 即时重连、游标追平属 R2-03/05（接线点已留接口）。
 //
-// 常量真源 = crates/conex-types/src/device/version.rs 协议常量表：
+// 常量真源 = crates/conex-device-protocol/src/version.rs 协议常量表：
 // HEARTBEAT_INTERVAL_MS=30_000（D3 §9.3 移动端 30s 心跳）、
 // HEARTBEAT_TIMEOUT_FACTOR=3（3×间隔无消息 → 判定断线，90s 假死）、
 import { WsGateway, GatewayError, decodeFrame } from './WsGateway';

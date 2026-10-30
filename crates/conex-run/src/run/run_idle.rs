@@ -472,7 +472,7 @@ pub(crate) mod idle_resume {
                         "自主目标触发防复读安全熔断：连续 3 次无物理产出且无活跃外部任务，刚性安全熔断挂起等待用户干预澄清 (SuspendedWaitingClarification)"
                     );
 
-                    let now = crate::engine_provider::now_iso_utc();
+                    let now = conex_shared::time::now_iso_utc();
                     emit_envelope_event(
                         &active.queue,
                         &active.bridge,
@@ -610,7 +610,7 @@ pub(crate) mod idle_resume {
                 // 3g. 恢复条目入队 → drain 注入 → 拉起；注入文本最小化
                 //     「继续任务」（约束 C：kind/retries 走 provider-diagnostic
                 //     事件 + 临时通知，不进对话、不给 AI）
-                let now = now_ms_internal();
+                let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
                 let entry = SteeringInputEntry {
                     session_id: active.session_id.clone(),
                     id: format!("recovery-main-{}-{now}", active.run_id),
@@ -691,7 +691,7 @@ pub(crate) mod idle_resume {
                 let continuation_msg = AgentMessage {
                     id: crate::engine_provider::new_message_id("episode-bridge"),
                     role: AgentMessageRole::System,
-                    created_at: crate::engine_provider::now_iso_utc(),
+                    created_at: conex_shared::time::now_iso_utc(),
                     blocks: vec![AgentMessageBlock::Text {
                         text: "【系统跨周期接续 (Cross-Episode Continuation)】\n\
                          前序执行周期已达轮次上限（物理切片点）。\n\
@@ -781,7 +781,7 @@ pub(crate) mod idle_resume {
         }
         // 注入锁定模板（E1 §3.2：测试断言绑定）；history 经 SessionHistoryCache
         // 天然含已产出前缀，不重复注入（前缀不变性，约束 B）
-        let now = now_ms_internal();
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let text = format!(
             "上一轮生成中断({}),请从断点继续完成,不要重复已输出的内容",
             resume_kind_label(kind)
@@ -813,7 +813,7 @@ pub(crate) mod idle_resume {
         AgentMessage {
             id: crate::engine_provider::new_message_id("goal-continue"),
             role: AgentMessageRole::User,
-            created_at: crate::engine_provider::now_iso_utc(),
+            created_at: conex_shared::time::now_iso_utc(),
             blocks: vec![AgentMessageBlock::Text { text }],
             metadata: Some(serde_json::json!({
                 "kind": AgentMessageMetadataKind::GoalContinue
@@ -902,7 +902,7 @@ pub(crate) mod idle_resume {
     /// detail=Some("circuit-trip") 语义对齐 02-定夺 W1（熔断侧 subagentRunId
     /// = None、detail=Some）。
     pub(crate) async fn emit_circuit_trip_events(active: &ActiveRun, session_id: &str) {
-        let now = crate::engine_provider::now_iso_utc();
+        let now = conex_shared::time::now_iso_utc();
         emit_envelope_event(
         &active.queue,
         &active.bridge,
@@ -1008,7 +1008,7 @@ pub(crate) mod idle_resume {
         vec![AgentMessage {
             id: first.id.clone(),
             role: AgentMessageRole::User,
-            created_at: crate::engine_provider::now_iso_utc(),
+            created_at: conex_shared::time::now_iso_utc(),
             blocks: vec![AgentMessageBlock::Text { text }],
             metadata: Some(meta),
             client_message_id: None,
@@ -1103,7 +1103,7 @@ pub(crate) mod idle_resume {
                         session_id,
                         AgentEvent::CheckpointCreated {
                             session_id: session_id.to_string(),
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                             checkpoint: record,
                         },
                     )
@@ -1167,7 +1167,7 @@ pub(crate) mod idle_resume {
                         session_id,
                         AgentEvent::CheckpointRestored {
                             session_id: session_id.to_string(),
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                             restore: record,
                         },
                     )
@@ -1406,7 +1406,7 @@ pub(crate) mod idle_resume {
             session_id,
             AgentEvent::StageSummaryMilestone {
                 session_id: session_id.to_string(),
-                timestamp: crate::engine_provider::now_iso_utc(),
+                timestamp: conex_shared::time::now_iso_utc(),
                 milestone_type: milestone_type.to_string(),
                 tier: Some(tier.to_string()),
                 milestone_index: Some(milestone_index),
@@ -1597,7 +1597,7 @@ pub(crate) mod idle_resume {
         if mode == "goal-continue" || inject.is_empty() {
             return;
         }
-        let now = now_ms_internal();
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let mut queue = state
             .pending_queue
             .lock()

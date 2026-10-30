@@ -51,7 +51,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::serve::ListenerExt;
 use axum::Router;
-use conex_types::device::{ALL_CAPABILITIES, MIN_PROTOCOL_VERSION, PROTOCOL_VERSION};
+use conex_device_protocol::{ALL_CAPABILITIES, MIN_PROTOCOL_VERSION, PROTOCOL_VERSION};
 use serde::Serialize;
 use tokio::sync::watch;
 
@@ -420,7 +420,7 @@ impl ServerState {
                 auth::DEFAULT_CLOCK_SKEW_MS,
             )),
             relay_loopback_secret: handle.config.relay_loopback_secret.clone(),
-            _started_at_ms: now_ms(),
+            _started_at_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
         }
     }
 
@@ -494,7 +494,7 @@ impl ServerState {
             port: self.actual_addr.port(),
             bind_mode: self.config.bind_mode,
             pairing_active: self.config.pairing_enabled,
-            server_time_ms: now_ms(),
+            server_time_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
             capabilities: service_capabilities(),
         }
     }
@@ -557,14 +557,6 @@ impl ServerState {
     pub fn started_at_ms(&self) -> u64 {
         self._started_at_ms
     }
-}
-
-/// 当前 UTC 毫秒时间戳（epoch ms）
-pub(crate) fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

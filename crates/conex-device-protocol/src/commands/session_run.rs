@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::enums::{PageDirection, StatusInclude};
-use crate::device::version::ManifestEntry;
+use crate::version::ManifestEntry;
 
 // ── F1 监控域：参数与响应 ──
 
@@ -142,7 +142,7 @@ pub struct ListSessionsParams {
 #[serde(rename_all = "camelCase")]
 pub struct ListSessionsResult {
     /// 会话索引条目（≤1000）
-    pub sessions: Vec<crate::SessionIndexEntry>,
+    pub sessions: Vec<conex_types::SessionIndexEntry>,
 }
 
 /// C06 参数（空）

@@ -1,8 +1,8 @@
-use conex_types::device::commands::{
+use conex_device_protocol::commands::{
     SettingsConfirmAction, SettingsConfirmParams, SettingsConfirmResult, SettingsConfirmStatus,
 };
-use conex_types::device::commands::{SwitchWorkspaceParams, SwitchWorkspaceResult};
-use conex_types::device::{
+use conex_device_protocol::commands::{SwitchWorkspaceParams, SwitchWorkspaceResult};
+use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
     CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
     FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
@@ -125,8 +125,8 @@ impl ApiBackend for CoreStateBackend {
     /// C07 任务输出补取（afterLine 偏移分页）
     async fn get_task_output(
         &self,
-        params: conex_types::device::commands::TaskOutputParams,
-    ) -> Result<conex_types::device::commands::TaskOutputResult, ServerError> {
+        params: conex_device_protocol::commands::TaskOutputParams,
+    ) -> Result<conex_device_protocol::commands::TaskOutputResult, ServerError> {
         get_task_output_impl(
             self.core(),
             &params.task_id,
@@ -155,15 +155,15 @@ impl ApiBackend for CoreStateBackend {
             .iter()
             .map(|entry| {
                 let surface = match entry.surface {
-                    "engine" => conex_types::device::CommandSurface::Engine,
-                    "gui" => conex_types::device::CommandSurface::Gui,
+                    "engine" => conex_device_protocol::CommandSurface::Engine,
+                    "gui" => conex_device_protocol::CommandSurface::Gui,
                     other => {
                         return Err(ServerError::internal(format!(
                             "manifest 含未知 surface：{other}"
                         )))
                     }
                 };
-                Ok(conex_types::device::ManifestEntry {
+                Ok(conex_device_protocol::ManifestEntry {
                     name: entry.name.to_string(),
                     family: entry.family.to_string(),
                     surface,

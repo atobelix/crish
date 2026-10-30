@@ -50,7 +50,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use conex_types::events::AgentEvent;
 
@@ -213,7 +212,7 @@ impl PushDispatcher {
         if let Some(store) = &self.pending_store {
             deliveries.extend(
                 store
-                    .take_due(now_ms())
+                    .take_due(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
                     .into_iter()
                     .map(StoredPendingApproval::into_delivery),
             );
@@ -308,7 +307,7 @@ pub struct PushAwareEmitter {
     /// 分发器（在线直推 / 离线 pending）
     dispatcher: Arc<PushDispatcher>,
     /// 时钟源（epoch 毫秒；测试注入固定时钟防时刻敏感——静默时段/
-    /// 窗口边界随真实墙钟漂移，生产用 [now_ms]）
+    /// 窗口边界随真实墙钟漂移，生产用 `conex_shared::time::unix_millis`）
     now: Box<dyn Fn() -> u64 + Send + Sync>,
     /// 合并桶入队/变更唤醒（drain loop 事件驱动，取代固定 500ms sleep）
     wake: Arc<tokio::sync::Notify>,
@@ -317,7 +316,11 @@ pub struct PushAwareEmitter {
 impl PushAwareEmitter {
     /// 用内层发射器 + 分发器构造（决策引擎缺省配置；墙钟）
     pub fn new(inner: Arc<dyn Emitter>, dispatcher: Arc<PushDispatcher>) -> Self {
-        Self::with_clock(inner, dispatcher, Box::new(now_ms))
+        Self::with_clock(
+            inner,
+            dispatcher,
+            Box::new(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
+        )
     }
 
     /// 注入时钟构造（测试用：固定时钟使决策时刻/静默时段判定可复现）
@@ -417,14 +420,6 @@ fn parse_event_payload(payload: &str) -> Option<(AgentEvent, Option<String>, Opt
         .map(str::to_string);
     let sequence = value.get("sequence").and_then(serde_json::Value::as_u64);
     Some((event, run_id, sequence))
-}
-
-/// 墙钟（epoch 毫秒；推送生成时刻 tsMs 与决策时钟）
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

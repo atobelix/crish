@@ -212,10 +212,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
 /// 3. 从 blocks 中抽取首行 heading 或首段文本前 30 个字（字符感知，不截断多字节 UTF-8）；
 /// 4. 将 created_at 为 0 的老数据平滑初始化为 updated_at（并归一化为 13 位毫秒）。
 pub(crate) fn backfill_legacy_doc_meta_v8(conn: &Connection) -> Result<(), StoreError> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
+    let now_ms = conex_shared::time::unix_millis();
 
     // 1. 对所有 created_at = 0 的历史记录，对齐 created_at = updated_at
     conn.execute(

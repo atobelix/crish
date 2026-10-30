@@ -1247,7 +1247,10 @@ async fn trigger_with_real_launcher_transitions_running_to_terminal() {
 #[test]
 #[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 fn resolve_effective_workflow_cwd_creates_default_sandbox_int02() {
-    let unique_dir = std::env::temp_dir().join(format!("crish-int02-sandbox-test-{}", now_ms()));
+    let unique_dir = std::env::temp_dir().join(format!(
+        "crish-int02-sandbox-test-{}",
+        crate::now_ms_u64()
+    ));
     let _ = std::fs::remove_dir_all(&unique_dir);
 
     // 1. cwd = None -> 自动创建 <unique_dir>/scheduled-tasks-sandbox

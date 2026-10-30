@@ -82,7 +82,7 @@ impl LastWakeupTracker {
 
     /// 标记一次事件唤醒（时刻取系统时钟；事件收口处接线调用）
     pub fn mark_wakeup(&self) {
-        self.mark_wakeup_at(now_ms());
+        self.mark_wakeup_at(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
     }
 
     /// 标记一次事件唤醒（指定时刻；测试与旁路接线共用）
@@ -94,12 +94,6 @@ impl LastWakeupTracker {
     pub fn last_wakeup_ms(&self) -> Option<u64> {
         *self.last.lock().unwrap_or_else(|e| e.into_inner())
     }
-}
-
-/// 当前 epoch 毫秒（wake_watcher 全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
 }
 
 /// 拉起器（拉 run 的注入接口；生产由 `CoreRunState::build_wake_watcher` 包装
@@ -153,7 +147,7 @@ impl Default for WakeWatcherOptions {
             period: DEFAULT_WAKE_PERIOD,
             min_launch_interval: DEFAULT_MIN_LAUNCH_INTERVAL,
             max_empty_streak: DEFAULT_MAX_EMPTY_STREAK,
-            now: Arc::new(now_ms),
+            now: Arc::new(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
             lease_duration: Duration::from_secs(60),
             batch_limit: 10,
             launch_verifier: None,
@@ -343,7 +337,7 @@ impl WakeWatcher {
     /// 标记用户显式停止（测试与调试入口）
     #[cfg(test)]
     pub fn set_user_stopped(&self) {
-        self.set_user_stopped_at(now_ms());
+        self.set_user_stopped_at(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
     }
 
     /// 标记用户显式停止（指定时刻；测试与壳层接线共用）

@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::device::error::ErrorBody;
+use crate::error::ErrorBody;
 
 /// 流载荷类别（wire snake_case；M6 §10.7）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,11 +56,7 @@ pub struct StreamChunk {
     /// UTF-8 文本块（或 base64，meta.encoding=b64）
     pub data: String,
     /// 块级终帧标记（非流级收口；流级收口走 stream.close）
-    #[serde(
-        default,
-        skip_serializing_if = "crate::device::skip_false",
-        rename = "final"
-    )]
+    #[serde(default, skip_serializing_if = "crate::skip_false", rename = "final")]
     pub is_final: bool,
     /// 字节偏移锚点（续传用；final 时省略）
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,7 +92,7 @@ pub struct StreamClose {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::device::error::DeviceErrorCode;
+    use crate::error::DeviceErrorCode;
 
     #[test]
     fn stream_open_roundtrip_snake_kind() {

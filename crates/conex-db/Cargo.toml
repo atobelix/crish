@@ -20,6 +20,8 @@ serde_json = { workspace = true }
 # T-16：blocks 模块缺表降级告警（R12/P2-1，tracing::warn!；workspace 既有依赖）
 tracing = { workspace = true }
 conex-types = { path = "../conex-types" }
+# X-03：时间戳唯一真源（取消本地 now_ms / UNIX_EPOCH 换算）
+conex-shared = { path = "../conex-shared" }
 # I6-M11 C5：探索类文档配额存储实现 agent-tools 的 ExploreDocsQuotaStore
 # 契约（explore_quota.rs:96-106）。环说明：agent-tools 在 dev-dependencies
 # 引用 conex-db（revert_guard 持久化集成测试）——Cargo 允许含 dev-dependency

@@ -3,7 +3,7 @@
 // 字段与形状对齐（rustParity.test.ts 先例的 files 域补位）
 //
 // 策略（任务书 fixture 纪律，对齐 pairing/rustParity.test.ts）：
-// - 注册表为单一真源：运行时直读 crates/conex-types/contracts/device-protocol.json
+// - 注册表为单一真源：运行时直读 crates/conex-device-protocol/contracts/device-protocol.json
 //   （commands 段 C16-C23 + types 段 paramsType/resultType 字段表），
 //   注册表漂移时测试红；
 // - 对拍面：build*Request（8 条命令的 kind/body.command/params 键集）、
@@ -13,7 +13,7 @@
 //   与注册表 paramsType/resultType 一致）。
 //
 // 真源索引：
-// - crates/conex-types/contracts/device-protocol.json（协议注册表唯一真源）
+// - crates/conex-device-protocol/contracts/device-protocol.json（协议注册表唯一真源）
 // - M6 §4.3（F4 域 8 条命令逐条展开：参数 schema + 响应 schema + 错误码）
 // ============================================================================
 
@@ -70,7 +70,7 @@ interface DeviceProtocolRegistry {
 /** 注册表路径：apps/crish-mobile/src/domain/repositories → 仓库根 crates/... */
 const REGISTRY_PATH = join(
   __dirname,
-  '../../../../../crates/conex-types/contracts/device-protocol.json'
+  '../../../../../crates/conex-device-protocol/contracts/device-protocol.json'
 );
 
 function loadRegistry(): DeviceProtocolRegistry {

@@ -389,9 +389,9 @@ crates/conex-run/src/workflow/tests.rs 1433
 crates/conex-sandbox/src/semantics.rs 2659
 crates/conex-sandbox/src/smart_classifier.rs 1838
 crates/conex-telemetry/src/file.rs 972
+crates/conex-device-protocol/src/error.rs 601
+crates/conex-device-protocol/src/events.rs 665
 crates/conex-types/src/cron.rs 881
-crates/conex-types/src/device/error.rs 601
-crates/conex-types/src/device/events.rs 665
 crates/conex-types/src/events.rs 1579
 crates/conex-types/src/tool.rs 621
 crates/orchestrator/src/flow_graph/advance.rs 623

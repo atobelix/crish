@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use conex_types::device::{
+use conex_device_protocol::{
     ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
     PendingApproval,
 };
@@ -26,7 +26,6 @@ use session_loop::ApprovalGate;
 
 use crate::core_error::CoreError;
 
-use super::run_history::iso8601_to_epoch_millis;
 use super::run_launch::active_run;
 use super::{ActiveRun, CoreRunState};
 
@@ -286,7 +285,7 @@ impl ApprovalGate for ApprovalGateImpl {
         let effective_timeout = self
             .approval_timeout
             .unwrap_or_else(|| self.policy_engine.resolve_timeout(&eval_ctx));
-        let requested_at_ms = crate::engine_assembly::unix_millis_now();
+        let requested_at_ms = crate::now_ms_u64();
         let expires_at_ms = requested_at_ms + effective_timeout.as_millis() as u64;
         let timeout_action = self.policy_engine.evaluate_timeout_action(&eval_ctx);
 
@@ -338,7 +337,7 @@ impl ApprovalGate for ApprovalGateImpl {
         (self.broadcast)(AgentEvent::ApprovalRequested {
             session_id: self.session_id.clone(),
             request,
-            timestamp: crate::engine_provider::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
         });
 
         // 4. 状态机联动：running → awaiting-approval（落库，中间态可观测）
@@ -420,7 +419,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
                             decision: WireApprovalDecision::Approved,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalDecision::Approved
                     }
@@ -435,7 +434,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
                             decision: WireApprovalDecision::Denied,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalDecision::Denied {
                             reason: full_reason,
@@ -447,7 +446,7 @@ impl ApprovalGate for ApprovalGateImpl {
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
                             decision: WireApprovalDecision::Expired,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
                         ApprovalDecision::Expired
                     }
@@ -754,7 +753,11 @@ pub async fn approval_history_impl(
             let resolved_at = payload
                 .get("timestamp")
                 .and_then(serde_json::Value::as_str)
-                .map(|iso| iso8601_to_epoch_millis(iso).max(0) as u64);
+                .map(|iso| {
+                    conex_shared::time::parse_iso8601_ms(iso)
+                        .unwrap_or(0)
+                        .max(0) as u64
+                });
             Some(ApprovalHistoryItem {
                 sequence: sequence.max(0) as u64,
                 tool_call_id,
@@ -797,7 +800,7 @@ pub async fn emit_approval_resolved(
         tool_call_id: tool_call_id.to_string(),
         request_id: None,
         decision,
-        timestamp: crate::engine_provider::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
     };
     let mut queue = active.queue.lock().await;
     match queue.push(&active.session_id, event).await {

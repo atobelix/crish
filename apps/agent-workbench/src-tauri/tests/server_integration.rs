@@ -35,7 +35,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use conex_run::core_event_bridge::Emitter;
-use conex_types::device::{
+use conex_device_protocol::{
     ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, DeviceEndpoint,
     DeviceEnvelope, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, EventsPush,
     HeartbeatOk, ListCommandsResult, ListSessionsParams, ListSessionsResult, MessageKind,

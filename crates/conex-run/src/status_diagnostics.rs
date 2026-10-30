@@ -116,7 +116,7 @@ impl StatusDiagnostics {
             subsystem: subsystem.into(),
             ready,
             message,
-            updated_at: now_ms(),
+            updated_at: conex_shared::time::unix_millis(),
         };
         if let Ok(mut guard) = self.entries.lock() {
             guard.push_front(entry);
@@ -151,14 +151,6 @@ impl StatusDiagnostics {
     pub fn last_error(&self) -> Option<CrishErrorPayload> {
         self.last_error.get()
     }
-}
-
-/// 当前 UTC 毫秒时间戳（epoch ms）
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

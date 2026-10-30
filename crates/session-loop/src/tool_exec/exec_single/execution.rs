@@ -70,7 +70,7 @@ impl ToolExecutor {
             })
             .await;
         let duration_ms = start.elapsed().as_millis() as u64;
-        let occurred_at_ms = conex_shared::time::unix_millis() as u64;
+        let occurred_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         // 取消判定看工具令牌（语义见 race_execution 注释）
         if tool_ctx.abort_token.is_aborted() {
             let mut r = Self::cancelled_result(call, duration_ms);

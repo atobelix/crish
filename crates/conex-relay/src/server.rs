@@ -17,6 +17,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use conex_shared::time::unix_millis;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -25,7 +26,7 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
 
@@ -524,7 +525,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
                 if last_rx.elapsed() > WS_DEAD_AFTER {
                     break;
                 }
-                let ping = json!({ "type": "relay.ping", "ts": now_ms() }).to_string();
+                let ping =
+                    json!({ "type": "relay.ping", "ts": u64::try_from(unix_millis()).unwrap_or(0) })
+                        .to_string();
                 if state.hub.send(&tx, ping).is_err() {
                     break;
                 }
@@ -680,19 +683,16 @@ fn handle_client_text(
             send_best_effort(
                 state,
                 tx,
-                json!({ "type": "relay.pong", "ts": ts.unwrap_or_else(now_ms) }).to_string(),
+                json!({
+                    "type": "relay.pong",
+                    "ts": ts.unwrap_or_else(|| u64::try_from(unix_millis()).unwrap_or(0))
+                })
+                .to_string(),
             );
             true
         }
         ClientRelayMessage::Pong { .. } => true,
     }
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 #[derive(Default)]
@@ -702,7 +702,7 @@ struct TicketReplay {
 
 impl TicketReplay {
     fn mark(&self, jti: &str, exp: u64) -> bool {
-        let now = now_ms() / 1000;
+        let now = u64::try_from(unix_millis()).unwrap_or(0) / 1000;
         let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
         if used.len() > 4096 {
             used.retain(|_, expiry| *expiry + 5 >= now);
@@ -838,8 +838,14 @@ mod tests {
     #[test]
     fn ticket_replay_guard_blocks_second_use() {
         let replay = TicketReplay::default();
-        assert!(replay.mark("jti-1", now_ms() / 1000 + 60));
-        assert!(!replay.mark("jti-1", now_ms() / 1000 + 60));
+        assert!(replay.mark(
+            "jti-1",
+            u64::try_from(unix_millis()).unwrap_or(0) / 1000 + 60
+        ));
+        assert!(!replay.mark(
+            "jti-1",
+            u64::try_from(unix_millis()).unwrap_or(0) / 1000 + 60
+        ));
     }
 
     #[test]

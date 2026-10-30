@@ -17,11 +17,11 @@
 //!   并行任务（R1-05 ws.rs 等）的既有 mock 无需感知新方法即可编译；
 //!   CoreStateBackend 覆盖为真实直调。
 
-use conex_types::device::commands::{
+use conex_device_protocol::commands::{
     SettingsConfirmParams, SettingsConfirmResult, SwitchWorkspaceParams, SwitchWorkspaceResult,
     TaskOutputParams, TaskOutputResult, WorkspaceEntry,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetUrlParams,
     AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams,
     EventPageResult, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,

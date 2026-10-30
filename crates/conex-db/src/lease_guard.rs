@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 /// 默认活数据保护租约时长：30 分钟（1800 秒）。
 pub const DEFAULT_LEASE_DURATION: Duration = Duration::from_secs(1800);
@@ -23,10 +23,7 @@ static LEASE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// 生成全局唯一租约 ID。
 pub fn generate_lease_id() -> String {
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
+    let now_ms = conex_shared::time::unix_millis();
     let count = LEASE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("lease-{now_ms:x}-{count:x}")
 }

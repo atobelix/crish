@@ -32,6 +32,8 @@ conex-fs = { path = "../conex-fs" }
 conex-shared = { path = "../conex-shared" }
 conex-telemetry = { path = "../conex-telemetry" }
 conex-types = { path = "../conex-types" }
+# 多端设备协议（TY-P5）：审批/命令桥接面消费 commands 类型（run_approval / run_commands）
+conex-device-protocol = { path = "../conex-device-protocol" }
 orchestrator = { path = "../orchestrator" }
 session-loop = { path = "../session-loop" }
 # trash 服务契约（conex-fs::trash 返回 anyhow::Result）

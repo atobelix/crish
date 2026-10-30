@@ -193,10 +193,7 @@ impl LocalDb {
     pub fn insert_usage_record(&self, input: InsertUsageRecordInput) -> Result<i64, DbFailure> {
         self.write_blocking(move |conn| {
             let timestamp = if input.timestamp <= 0 {
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as i64)
-                    .unwrap_or(0)
+                conex_shared::time::unix_millis()
             } else {
                 input.timestamp
             };
@@ -397,12 +394,7 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
 
-        let now_ms = now_ms_override.unwrap_or_else(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0)
-        });
+        let now_ms = now_ms_override.unwrap_or_else(conex_shared::time::unix_millis);
 
         let (start_ms, bucket_size_ms, num_buckets, is_hourly, days_count) = match range {
             "24h" => {
@@ -657,12 +649,7 @@ impl LocalDb {
             kind: DbFailureKind::Lock,
         })?;
 
-        let now_ms = now_ms_override.unwrap_or_else(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0)
-        });
+        let now_ms = now_ms_override.unwrap_or_else(conex_shared::time::unix_millis);
 
         // 确定热力图布局
         let (rows, cols, num_rows, num_cols, start_ms) = match range {

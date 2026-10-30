@@ -207,7 +207,7 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
     let messages = vec![Arc::new(AgentMessage {
         id: "provider-probe".into(),
         role: AgentMessageRole::User,
-        created_at: conex_run::engine_provider::now_iso_utc(),
+        created_at: conex_shared::time::now_iso_utc(),
         blocks: vec![AgentMessageBlock::Text {
             text: "Reply with OK.".into(),
         }],

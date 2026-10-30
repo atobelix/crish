@@ -338,7 +338,9 @@ pub(crate) fn mark_rest_cancelled(
             category: call.category,
             concurrency: call.concurrency,
             summary: call.summary.clone(),
-            occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
+            occurred_at_ms: Some(
+                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            ),
         });
         events.push(ToolEvent::ToolEnd {
             call_id: call.id.clone(),

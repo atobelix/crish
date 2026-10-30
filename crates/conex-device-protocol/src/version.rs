@@ -13,8 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::device::events::ResumeState;
-use crate::device::pair::Platform;
+use crate::events::ResumeState;
+use crate::pair::Platform;
 
 // ── 版本常量 ──
 

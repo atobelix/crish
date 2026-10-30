@@ -77,7 +77,9 @@ impl ToolExecutor {
                     concurrency: call.concurrency,
                     summary: call.summary.clone(),
                     // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
-                    occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
+                    occurred_at_ms: Some(
+                        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                    ),
                 });
             }
             ToolEmit::EndAborted => {

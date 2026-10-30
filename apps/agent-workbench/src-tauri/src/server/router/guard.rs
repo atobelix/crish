@@ -6,8 +6,8 @@ use axum::extract::State;
 use axum::http::{StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use conex_types::device::version::PAGE_SIZE_MAX;
-use conex_types::device::{DeviceErrorCode, ErrorBody};
+use conex_device_protocol::version::PAGE_SIZE_MAX;
+use conex_device_protocol::{DeviceErrorCode, ErrorBody};
 use std::sync::Arc;
 
 use super::SECRET_COMMAND_SURFACE;

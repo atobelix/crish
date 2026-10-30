@@ -36,9 +36,9 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use conex_types::device::{DeviceErrorCode, ErrorBody, PairHello};
+use conex_device_protocol::{DeviceErrorCode, ErrorBody, PairHello};
 
-use super::{limiter::PairRateOutcome, now_ms, pairing::PairingCoordinator, ServerState};
+use super::{limiter::PairRateOutcome, pairing::PairingCoordinator, ServerState};
 
 /// 固定桌面标识占位（R2 设备注册表接入前；mock 同款占位哲学）
 pub const DESKTOP_ID: &str = "crish-desktop";
@@ -91,7 +91,10 @@ pub async fn handle_rest_pair(
     // 错误码走 error.rs 既有 `CmdTooManyRequests => 429` 映射
     // （error.rs:131），与其余 REST 错误同 ErrorBody 出网。
     if let PairRateOutcome::Rejected { limit, current } =
-        state.pair_limiter().check_and_count(addr.ip(), now_ms())
+        state.pair_limiter().check_and_count(
+            addr.ip(),
+            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        )
     {
         return error_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -133,7 +136,11 @@ pub async fn handle_rest_pair(
         .map(str::trim)
         .filter(|l| !l.is_empty())
         .unwrap_or("remote-device");
-    match pairing.complete_pairing(code, label, now_ms()) {
+    match pairing.complete_pairing(
+        code,
+        label,
+        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+    ) {
         Ok(token) => {
             // 新令牌落盘后重载路由层令牌库（协调器 store 与本路由 store
             // 各自独立——R1-07 装配断裂收口：令牌立即可用于后续请求）
@@ -228,7 +235,10 @@ pub fn pair_upgrade_allowed(state: &ServerState) -> bool {
     state
         .pairing()
         .as_deref()
-        .is_some_and(|coordinator| coordinator.status(now_ms()).code_remaining_ms.is_some())
+        .is_some_and(|coordinator| coordinator
+            .status(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+            .code_remaining_ms
+            .is_some())
 }
 
 /// 统一错误响应（HTTP 状态 + ErrorBody JSON；配对入口专用——REST 侧

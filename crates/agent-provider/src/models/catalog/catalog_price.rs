@@ -141,19 +141,6 @@ pub(crate) fn parse_date_utc_epoch(date: &str) -> Option<u64> {
     if parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
-    let days = days_from_civil(year, month, day);
+    let days = conex_shared::time::days_from_civil(year, month as u32, day as u32);
     u64::try_from(days.checked_mul(86_400)?).ok()
-}
-
-/// 公历日期（年/月/日）→ 自 Unix 纪元（1970-01-01）的天数（Howard Hinnant
-/// civil 算法；1970-01-01 返回 0，负值为纪元前）。无 chrono 依赖（本 crate
-/// 仅 std），峰值时段判定不引入时间库。
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = if year >= 0 { year } else { year - 399 } / 400;
-    let year_of_era = year - era * 400;
-    let month_adj = (month + 9) % 12;
-    let day_of_year = (153 * month_adj + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
 }

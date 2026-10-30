@@ -6,7 +6,7 @@ use super::support::*;
 use crate::server::auth::TokenStore;
 use crate::server::backend::ApiBackend;
 use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
-use conex_types::device::RunControlLevel;
+use conex_device_protocol::RunControlLevel;
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -111,7 +111,7 @@ async fn pair_upgrade_rejected_without_active_code() {
 async fn pair_hello_chain_ok_and_token_subscribes() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     let code = coordinator
-        .start_pairing(now_ms())
+        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
         .expect("激活配对必须成功")
         .code;
     let mut ws = ws_connect_anonymous(addr).await;
@@ -166,7 +166,7 @@ async fn pair_hello_chain_ok_and_token_subscribes() {
     send_envelope_text(
         &mut ws2,
         "heartbeat",
-        serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
     )
     .await;
     let (kind, _) = parse_frame(&next_text(&mut ws2).await.unwrap());
@@ -180,7 +180,7 @@ async fn pair_hello_chain_ok_and_token_subscribes() {
 async fn pair_hello_wrong_code_returns_error_frame() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(now_ms())
+        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_pair_hello(&mut ws, "CXN-AAAA-BBBB-CCCC").await;
@@ -197,7 +197,7 @@ async fn pair_hello_wrong_code_returns_error_frame() {
 async fn pair_hello_malformed_body_returns_error_frame() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(now_ms())
+        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_envelope_text(
@@ -249,7 +249,7 @@ async fn ws_hmac_signature_and_nonce_verification() {
     let (addr, _handle, raw_token, _) = test_server(None, None).await;
     let mut ws = ws_connect(addr, &raw_token).await;
 
-    let now = now_ms();
+    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let device_id = "test-device";
     let body = serde_json::json!({ "ts": now, "deviceTimeMs": now });
     let body_str = serde_json::to_string(&body).unwrap();
@@ -405,7 +405,7 @@ async fn remote_run_control_dispatches_mobile_wire_params_and_preserves_errors()
         send_remote_command(&mut ws, "runControl", msg_id, params).await;
         let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
         assert_eq!(kind, "result.runControl");
-        let result: conex_types::device::commands::CommandResult =
+        let result: conex_device_protocol::commands::CommandResult =
             serde_json::from_value(body).unwrap();
         assert_eq!(result.req_msg_id, msg_id);
         assert!(result.ok);
@@ -444,7 +444,7 @@ async fn remote_run_control_dispatches_mobile_wire_params_and_preserves_errors()
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "result.runControl");
-    let result: conex_types::device::commands::CommandResult =
+    let result: conex_device_protocol::commands::CommandResult =
         serde_json::from_value(body).unwrap();
     assert!(!result.ok);
     assert_eq!(
@@ -467,7 +467,7 @@ async fn remote_run_control_dispatches_mobile_wire_params_and_preserves_errors()
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "result.runControl");
-    let result: conex_types::device::commands::CommandResult =
+    let result: conex_device_protocol::commands::CommandResult =
         serde_json::from_value(body).unwrap();
     assert_eq!(result.error.unwrap().code, DeviceErrorCode::CmdInvalid);
     assert_eq!(backend.run_controls.lock().unwrap().len(), 5);
@@ -494,7 +494,7 @@ async fn remote_other_session_commands_keep_their_wire_contracts() {
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "result.runTask");
-    let result: conex_types::device::commands::CommandResult =
+    let result: conex_device_protocol::commands::CommandResult =
         serde_json::from_value(body).unwrap();
     assert!(result.ok);
     assert_eq!(result.req_msg_id, "mobile-run-task");
@@ -515,7 +515,7 @@ async fn remote_other_session_commands_keep_their_wire_contracts() {
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "result.cancelRun");
-    let result: conex_types::device::commands::CommandResult =
+    let result: conex_device_protocol::commands::CommandResult =
         serde_json::from_value(body).unwrap();
     assert!(result.ok);
     assert_eq!(
@@ -534,7 +534,7 @@ async fn remote_other_session_commands_keep_their_wire_contracts() {
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "result.searchSessions");
-    let result: conex_types::device::commands::CommandResult =
+    let result: conex_device_protocol::commands::CommandResult =
         serde_json::from_value(body).unwrap();
     assert!(!result.ok);
     assert_eq!(result.req_msg_id, "mobile-search-sessions");
@@ -546,7 +546,7 @@ async fn remote_other_session_commands_keep_their_wire_contracts() {
 async fn remote_run_control_rejects_pairing_state_connection() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(now_ms())
+        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_remote_command(
@@ -570,7 +570,7 @@ async fn remote_run_control_rejects_pairing_state_connection() {
 /// F3：listPendingApprovals 空参契约——Null/`{}` 不得恒 CmdInvalid
 #[test]
 fn list_pending_approvals_null_and_empty_object_contract() {
-    use conex_types::device::commands::ListPendingApprovalsParams;
+    use conex_device_protocol::commands::ListPendingApprovalsParams;
 
     // 裸 Null 对 struct 反序列化失败（记录为何必须 normalize）
     let bare_null = serde_json::from_value::<ListPendingApprovalsParams>(Value::Null);

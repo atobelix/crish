@@ -43,10 +43,7 @@ static TEST_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64
 
 fn create_temp_file_db() -> (TempDbGuard, std::path::PathBuf) {
     let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
+    let now = conex_shared::time::unix_millis();
     let path = std::env::temp_dir().join(format!(
         "conex_test_wal_{}_{}_{}.db",
         std::process::id(),

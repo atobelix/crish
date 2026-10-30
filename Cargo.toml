@@ -10,6 +10,7 @@ members = [
     "crates/conex-computer",
     "crates/conex-computer-tools",
     "crates/conex-db",
+    "crates/conex-device-protocol",
     "crates/conex-diff",
     "crates/conex-doc-collab",
     "crates/conex-fs",

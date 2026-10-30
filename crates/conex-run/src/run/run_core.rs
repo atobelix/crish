@@ -145,7 +145,7 @@ impl ActiveRun {
         permission_mode: conex_types::PermissionMode,
         project_name: String,
     ) -> Self {
-        let now = conex_shared::time::unix_millis() as u64;
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         Self {
             session_id,
             run_id,
@@ -174,14 +174,15 @@ impl ActiveRun {
     /// 刷新心跳时间戳（避免边界瞬态抖动与活跃态超时）
     pub fn touch_heartbeat(&self) {
         self.last_heartbeat_ms.store(
-            conex_shared::time::unix_millis() as u64,
+            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
             std::sync::atomic::Ordering::Relaxed,
         );
     }
 
     /// 进入挂起状态并登记时效租约（Lease）
     pub fn enter_suspended_phase(&self, duration: std::time::Duration, reason: SuspensionReason) {
-        let until_ms = conex_shared::time::unix_millis() as u64 + duration.as_millis() as u64;
+        let until_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
+            + duration.as_millis() as u64;
         let mut phase_guard = self.phase.write().unwrap_or_else(|e| e.into_inner());
         *phase_guard = ExecutionPhase::Suspended { until_ms, reason };
         // 挂起时同步刷新一次心跳时间戳，避免瞬态边界抖动
@@ -1681,7 +1682,7 @@ impl CoreRunState {
             id: message_id.clone(),
             text: message.to_string(),
             attachments: Vec::new(),
-            enqueued_at: now_ms_internal(),
+            enqueued_at: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
             group_id: Some("main-agent-msg".to_string()),
             is_steering: true,
         };
@@ -1883,7 +1884,7 @@ pub async fn write_back_cache_stats(
                 cache_write_tokens: usage.cache_write_tokens.unwrap_or(0),
                 cost_cny,
                 cost_usd,
-                timestamp: conex_shared::time::unix_millis() as i64,
+                timestamp: conex_shared::time::unix_millis(),
             }
         });
 
@@ -2027,7 +2028,7 @@ mod phase_tests {
         assert!(initial_heartbeat > 0);
 
         // 进入 429 挂起租约
-        let before_suspend = conex_shared::time::unix_millis() as u64;
+        let before_suspend = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let sleep_duration = Duration::from_millis(5000);
         active.enter_suspended_phase(
             sleep_duration,

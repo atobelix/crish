@@ -793,10 +793,7 @@ impl BridgeLiveSink {
     fn maybe_flush_live(&self) {
         use std::sync::atomic::Ordering;
         const LIVE_FLUSH_INTERVAL_MS: u64 = 8;
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        let now_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let last = self.last_flush_ms.load(Ordering::Relaxed);
         let elapsed = now_ms.saturating_sub(last);
         if elapsed >= LIVE_FLUSH_INTERVAL_MS {
@@ -819,10 +816,7 @@ impl BridgeLiveSink {
             crate::engine_assembly::spawn_here(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
                 trailing_scheduled.store(false, Ordering::SeqCst);
-                let now_ms = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
+                let now_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
                 last_flush_ms.store(now_ms, Ordering::Relaxed);
                 let _ = bridge.flush();
             });

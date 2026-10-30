@@ -799,7 +799,7 @@ impl CoreRunState {
                 // = 剩余重试预算）
                 let retry_event = AgentEvent::RecoveryRetryAttempted {
                     session_id: session_id.to_string(),
-                    timestamp: crate::engine_provider::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                     attempt: retries,
                     delay_ms: delay.as_millis() as u64,
                     budget_remaining: self.ladder1_max_retries_config().saturating_sub(retries),

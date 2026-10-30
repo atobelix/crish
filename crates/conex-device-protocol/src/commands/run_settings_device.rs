@@ -4,7 +4,7 @@ use super::enums::{
     DeviceChannel, DeviceRole, DeviceType, PairState, RunControlLevel, SetSettingsKey,
     SettingsConfirmAction, SettingsConfirmStatus,
 };
-use crate::permission::PermissionMode;
+use conex_types::permission::PermissionMode;
 
 // ── F5 会话与消息域：参数与响应 ──
 

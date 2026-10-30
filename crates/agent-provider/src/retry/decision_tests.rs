@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::error::{NetworkSourceKind, ProviderError, StreamErrorKind, TimeoutKind};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 /// 测试用策略：显式开启 3 次重试
 fn default_policy() -> RetryPolicy {
@@ -224,11 +224,10 @@ fn parse_retry_after_seconds() {
 #[test]
 fn parse_retry_after_http_date() {
     // HTTP-date 只有秒粒度：以截断到整秒的时刻为比较基准
-    let now_epoch = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-    let now = UNIX_EPOCH + Duration::from_secs(now_epoch as u64);
+    let now = SystemTime::now();
+    let now_ms = conex_shared::time::millis_of(now);
+    let now_epoch = now_ms.div_euclid(1_000);
+    let now = now - Duration::from_millis(now_ms.rem_euclid(1_000) as u64);
     let future_epoch = now_epoch + 30;
     // IMF-fixdate：目标时刻 = 现在 + 30s
     assert_eq!(

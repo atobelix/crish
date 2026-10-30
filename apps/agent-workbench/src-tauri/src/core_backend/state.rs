@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
-use conex_types::device::{
+use conex_device_protocol::{
     ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, RunTaskParams, RunTaskResult,
     SearchFilesParams, SearchFilesResult,
 };
@@ -204,13 +204,13 @@ impl CoreStateBackend {
         let prompt = params.prompt.trim();
         if prompt.is_empty() {
             return Err(ServerError::protocol(
-                conex_types::device::DeviceErrorCode::CmdInvalid,
+                conex_device_protocol::DeviceErrorCode::CmdInvalid,
                 "prompt 不能为空",
             ));
         }
         if params.prompt.len() > 262_144 {
             return Err(ServerError::protocol(
-                conex_types::device::DeviceErrorCode::CmdInvalid,
+                conex_device_protocol::DeviceErrorCode::CmdInvalid,
                 "prompt 超过 256 KiB 上限（超限走流上传 promptRef，M6 §8.1）",
             ));
         }
@@ -403,7 +403,7 @@ pub(super) fn resolve_approval_run_id(
         Some(run_id) if !run_id.trim().is_empty() => Ok(run_id.trim().to_string()),
         _ => find_run_by_pending_tool_call(core, &params.tool_call_id).ok_or_else(|| {
             ServerError::protocol(
-                conex_types::device::DeviceErrorCode::CmdApprovalMismatch,
+                conex_device_protocol::DeviceErrorCode::CmdApprovalMismatch,
                 format!("tool_call_id 不在待审批集合：{}", params.tool_call_id),
             )
         }),
@@ -419,7 +419,7 @@ pub(super) fn resolve_deny_run_id(
         Some(run_id) if !run_id.trim().is_empty() => Ok(run_id.trim().to_string()),
         _ => find_run_by_pending_tool_call(core, &params.tool_call_id).ok_or_else(|| {
             ServerError::protocol(
-                conex_types::device::DeviceErrorCode::CmdApprovalMismatch,
+                conex_device_protocol::DeviceErrorCode::CmdApprovalMismatch,
                 format!("tool_call_id 不在待审批集合：{}", params.tool_call_id),
             )
         }),

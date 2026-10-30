@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use conex_types::device::commands::WorkspaceEntry;
-use conex_types::device::{DeviceErrorCode, DirectoryItem, ListDirResult, ReadFileResult};
+use conex_device_protocol::commands::WorkspaceEntry;
+use conex_device_protocol::{DeviceErrorCode, DirectoryItem, ListDirResult, ReadFileResult};
 
 use crate::fs_commands::directory::list_directory_with_guard;
 use crate::fs_commands::read::read_file_content_with_guard;

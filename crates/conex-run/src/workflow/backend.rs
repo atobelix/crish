@@ -13,7 +13,7 @@ use crate::workflow::schedule::{
     next_fire_after_ms, schedule_to_expression, validate_cron_expression, WorkflowScheduleWire,
 };
 use crate::workflow::sinks::{SteeringSink, WorkflowEventSink};
-use crate::workflow::{now_ms, CRON_ID_PREFIX};
+use crate::workflow::CRON_ID_PREFIX;
 
 /// workflow 命令后端（store 即元数据真源：每次操作以 sched_* 键读写，
 /// 重启无损；seq 自数据推导，重启不撞号；调度真源 = 委托注册表）
@@ -153,7 +153,7 @@ impl WorkflowBackend {
             if workflow.target_session_id.is_some() {
                 workflow.target_session_id = None;
                 workflow.execution_mode = Some("isolated".to_string());
-                workflow.updated_at_ms = now_ms();
+                workflow.updated_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
                 self.store.save(&workflow);
             }
         }
@@ -209,7 +209,7 @@ impl WorkflowBackend {
                     }
                 }
                 // manual（无表达式）不经注册表：命令层独立 id 分配
-                let now = now_ms();
+                let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
                 let next_fire_at_ms = next_fire_after_ms(&expression, now).unwrap_or(0);
                 let workflow = StoredWorkflow {
                     cron_id,
@@ -253,7 +253,7 @@ impl WorkflowBackend {
         }
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let cron_id = format!("{CRON_ID_PREFIX}{seq}");
-        let now = now_ms();
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let next_fire_at_ms = if expression.is_empty() {
             0
         } else {
@@ -395,7 +395,7 @@ impl WorkflowBackend {
             workflow.next_fire_at_ms = if workflow.expression.is_empty() {
                 0
             } else {
-                next_fire_after_ms(&workflow.expression, now_ms()).ok_or_else(|| {
+                next_fire_after_ms(&workflow.expression, u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)).ok_or_else(|| {
                     CoreError::InvalidInput(format!(
                         "cron 表达式 {} 无未来触发时刻（如 2 月 30 日），拒绝更新",
                         workflow.expression
@@ -461,7 +461,7 @@ impl WorkflowBackend {
         } else {
             CronTaskStatus::Paused
         };
-        workflow.updated_at_ms = now_ms();
+        workflow.updated_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         self.store.save(&workflow);
         Ok(workflow.view())
     }
@@ -506,7 +506,7 @@ impl WorkflowBackend {
                 "workflow {cron_id} 已暂停，请先启用再触发"
             )));
         }
-        let now = now_ms();
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
 
         // INT-04：检查绑定的 target_session_id 是否依然存在，若已被删除则自愈抹除并降级为独立会话
         let resolved_target_session_id = match workflow
@@ -622,7 +622,7 @@ impl WorkflowBackend {
                 match launcher.launch_scheduled_task(ctx).await {
                     Ok(handle) => {
                         if !handle.async_terminal_managed {
-                            let finished_at = now_ms().max(now);
+                            let finished_at = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0).max(now);
                             let duration = finished_at.saturating_sub(now);
                             let summary = handle.immediate_output_summary.unwrap_or_else(|| {
                                 format!(
@@ -661,7 +661,7 @@ impl WorkflowBackend {
                         }
                     }
                     Err(err) => {
-                        let finished_at = now_ms().max(now);
+                        let finished_at = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0).max(now);
                         let duration = finished_at.saturating_sub(now);
                         let err_msg = err.to_string();
                         store.update_run_finish(

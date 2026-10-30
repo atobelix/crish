@@ -35,7 +35,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use anyhow::{bail, Context, Result};
-use conex_shared::time::{Clock, SystemClock};
+use conex_shared::time::{millis_of, Clock, SystemClock};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -217,7 +217,7 @@ impl TrashService {
                 Some(crate::path_utils::compute_file_hash(path)?)
             };
             let snapshot = SnapshotMeta {
-                mtime: epoch_millis(metadata.modified().ok()),
+                mtime: metadata.modified().map(millis_of).unwrap_or(0),
                 readonly: metadata.permissions().readonly(),
             };
             (checksum, Some(snapshot))
@@ -347,7 +347,7 @@ impl TrashService {
 
         let checksum = Some(crate::path_utils::compute_file_hash(path)?);
         let snapshot = SnapshotMeta {
-            mtime: epoch_millis(metadata.modified().ok()),
+            mtime: metadata.modified().map(millis_of).unwrap_or(0),
             readonly: metadata.permissions().readonly(),
         };
         let entry = TrashEntry {
@@ -1020,13 +1020,6 @@ fn snapshot_order_key(entry: &TrashEntry) -> String {
         .map(|(_, suffix)| suffix)
         .unwrap_or("");
     format!("{:020}-{id_suffix}", entry.trashed_at.max(0))
-}
-
-/// 系统时间 → 纪元毫秒（对齐全仓 epoch ms 惯例；不可用时 0）
-fn epoch_millis(t: Option<std::time::SystemTime>) -> i64 {
-    t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

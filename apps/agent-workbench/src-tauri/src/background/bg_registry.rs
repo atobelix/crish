@@ -2,7 +2,6 @@
 //! OutputPreview + 构造注入面 + 事件桥/消费器接线 + 归档/容量生命周期）。
 //! 结构拆分轮仅搬移，注册表语义零改动。接线：background.rs `mod bg_registry;`。
 
-use crate::process::now_millis;
 use crate::resource::{sample_usage, ResourceMonitorConfig, TaskNotifier};
 use agent_tools::background::{BackgroundTaskInfo, TaskState};
 use agent_tools::definition::ToolError;
@@ -413,7 +412,7 @@ impl BackgroundTaskRegistry {
     #[allow(clippy::disallowed_methods)] // 归档清 .meta.json 属任务日志内部索引
                                          // 清理（非用户文件，豁免裸删除；.log 永远保留）
     pub(crate) fn archive_expired(&self) -> usize {
-        let now = now_millis() as u64;
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         let retention_ms = self.retention.as_millis() as u64;
         let mut expired: Vec<String> = Vec::new();
         {

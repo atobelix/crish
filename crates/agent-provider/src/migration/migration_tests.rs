@@ -218,12 +218,12 @@ fn test_timestamp_format_and_civil_days_math() {
     assert!(parts
         .iter()
         .all(|part| part.bytes().all(|byte| byte.is_ascii_digit())));
-    assert_eq!(ConfigMigrationManager::civil_from_days(0), (1970, 1, 1));
+    assert_eq!(conex_shared::time::civil_from_days(0), (1970, 1, 1));
     assert_eq!(
-        ConfigMigrationManager::civil_from_days(11016),
+        conex_shared::time::civil_from_days(11016),
         (2000, 2, 29)
     );
-    assert_eq!(ConfigMigrationManager::civil_from_days(20704), (2026, 9, 8));
+    assert_eq!(conex_shared::time::civil_from_days(20704), (2026, 9, 8));
 }
 
 #[test]

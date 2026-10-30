@@ -802,7 +802,7 @@ async fn t08_remote_run_ask_mode_dangerous_tool_gated() {
 
     let backend = CoreStateBackend::new(Arc::clone(&state));
     backend
-        .run_task(conex_types::device::RunTaskParams {
+        .run_task(conex_device_protocol::RunTaskParams {
             session_id: Some("sess-main".to_string()),
             prompt: "远程 run（申报 ask 模式）".to_string(),
             prompt_ref: None,

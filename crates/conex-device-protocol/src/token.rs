@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::device::pair::Platform;
+use crate::pair::Platform;
 
 /// 配对派生三子钥（T1；D3 §4.4：HKDF-SHA256 从 master 一次展开）
 ///

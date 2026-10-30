@@ -5,7 +5,6 @@
 
 use super::*;
 use conex_types::{SessionIndexEntry, SessionMessage};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 mod cascade_meta;
 mod events;
@@ -57,10 +56,7 @@ fn open_temp_wal_db() -> (LocalDb, TempWalDbGuard) {
     let dir = std::env::temp_dir().join(format!(
         "conex_msg_body_{}_{}_{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos(),
+        conex_shared::time::unix_millis(),
         id
     ));
     std::fs::create_dir_all(&dir).expect("create temp dir");

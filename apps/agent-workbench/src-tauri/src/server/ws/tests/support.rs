@@ -10,7 +10,7 @@ use crate::server::auth::TokenStore;
 use crate::server::backend::ApiBackend;
 use crate::server::fanout::FanOutEmitter;
 use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
-use conex_types::device::{
+use conex_device_protocol::{
     ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, EventPageParams,
     EventPageResult, ListCommandsResult, ListSessionsParams, ListSessionsResult, RunControlParams,
     RunControlResult, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
@@ -169,7 +169,14 @@ pub(super) async fn spawn_server_with_tokens(
         let mut store = TokenStore::new(config.pairing_file_path.clone());
         let mut issued = Vec::new();
         for label in labels {
-            issued.push(store.issue(label, now_ms()).expect("签发必须成功"));
+            issued.push(
+                store
+                    .issue(
+                        label,
+                        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                    )
+                    .expect("签发必须成功"),
+            );
         }
         issued
     };
@@ -258,7 +265,7 @@ pub(super) async fn send_envelope_text(
     let envelope = DeviceEnvelope::unsigned(
         kind,
         format!("m-test-{:08}", MSG_COUNTER.fetch_add(1, Ordering::Relaxed)),
-        now_ms(),
+        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
         body,
@@ -281,7 +288,7 @@ pub(super) async fn send_remote_command(
     let envelope = DeviceEnvelope::unsigned(
         MessageKind::Remote(command.to_string()),
         msg_id,
-        now_ms(),
+        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
         serde_json::json!({ "command": command, "params": params }),
@@ -336,7 +343,7 @@ pub(super) async fn confirm_registered(
     send_envelope_text(
         ws,
         "heartbeat",
-        serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
     )
     .await;
     let (kind, _) = parse_frame(&next_text(ws).await.expect("必须收到 heartbeat.ok"));

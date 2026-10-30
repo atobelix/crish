@@ -58,12 +58,6 @@ const SUBSCRIBER_CAPACITY: usize = 64;
 /// 声明保存条数上限（保留最近 N 条分发声明；防无界增长）
 const DECLARATION_CAP: usize = 16;
 
-/// 当前 epoch 毫秒（等待通道全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}
-
 // ── 适配器契约（装配注入面）────────────────────────────────────────
 
 /// dispatch 声明与产出清单持久化适配（conex-db session_meta

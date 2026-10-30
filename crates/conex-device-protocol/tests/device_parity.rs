@@ -18,7 +18,7 @@
 //! 对拍注记裁决（配对码字符集 / canon / tauri_command 占位 / ResumeState
 //! 死条目）见 `tests/fixtures/device-protocol/README.md`。
 
-use conex_types::device::{
+use conex_device_protocol::{
     CommandRequest, CommandResult, DeviceEndpoint, DeviceEnvelope, ErrorBody, EventsPush, Hello,
     HelloOk, MessageKind, PairChallenge, PairHello, PairOk, PairVerify, Resume, ResumeDone,
     ResumePage, StreamChunk, Subscribe,

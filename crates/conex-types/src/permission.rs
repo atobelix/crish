@@ -1,9 +1,9 @@
 //! 权限模式（领域枚举，TY-P2：从多端设备协议迁回类型 crate 领域层）
 //!
 //! `PermissionMode` 是引擎领域概念（会话/子代理能力钳制），不属于设备协议；
-//! 设备命令载荷（`device::commands::RunSettingsDevice.permission_mode`）只是
-//! 其中一个接收面，故定义归本模块，协议侧按 `crate::permission::PermissionMode`
-//! 引用。
+//! 设备命令载荷（`conex_device_protocol::commands::RunSettingsDevice.permission_mode`）
+//! 只是其中一个接收面，故定义归本模块，协议侧按 `conex_types::permission::
+//! PermissionMode` 引用。
 
 use serde::{Deserialize, Serialize};
 

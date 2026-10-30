@@ -34,7 +34,7 @@
 //! | S11 | security-audit | security | security | session:{s} | {} |
 //! | S12 | cache-waste-alert | system | summary | session:{s} | runId |
 
-use conex_types::device::EventsPush;
+use conex_device_protocol::EventsPush;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

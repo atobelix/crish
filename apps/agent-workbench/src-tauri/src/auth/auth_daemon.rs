@@ -540,7 +540,7 @@ impl AuthManager {
             let elapsed_ms = cur.obtained_at.elapsed().as_millis() as u64;
             let total_ms = cur.expires_in_secs * 1000;
             let remaining_ms = total_ms.saturating_sub(elapsed_ms);
-            let now_ms = crate::server::now_ms();
+            let now_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
 
             SessionSnapshot {
                 is_logged_in: true,

@@ -1,8 +1,12 @@
-//! 多端互通设备域类型族（R0-02；D3 §12.2 / M6 §12.1 落位）
+//! 多端互通设备协议 crate（TY-P5：从 conex-types 拆出；R0-02 落位）
 //!
 //! 跨端协议（D3/M6）的 Rust 类型唯一事实源，与 `contracts/device-protocol.
 //! json` 注册表（并行 R0-02a 产出）同源演进，字段命名一致性由 R0-05 对拍
-//! 统一——本模块类型形状以 M6 §10 JSON Schema 为准。
+//! 统一——本 crate 类型形状以 M6 §10 JSON Schema 为准。
+//!
+//! 依赖方向单向：本 crate → `conex-types`（命令载荷与事件面引用
+//! `ApprovalDecision` / `PermissionMode` / `CoreError` / `SessionIndexEntry`
+//! 等领域类型）；`conex-types` 不反向依赖本 crate。
 //!
 //! 模块族：
 //! - [envelope]：L3 外层信封 DeviceEnvelope + AuthHeader + 103 kind 注册；
@@ -67,7 +71,7 @@ pub use version::{
 };
 
 /// bool 缺省 false 时的序列化省略助手（`#[serde(default,
-/// skip_serializing_if = "crate::device::skip_false")]`）
+/// skip_serializing_if = "crate::skip_false")]`）
 pub(crate) fn skip_false(b: &bool) -> bool {
     !*b
 }
@@ -108,7 +112,7 @@ mod tests {
 
     #[test]
     fn module_re_exports_resolve() {
-        // 根级重导出抽查（lib.rs 接线点自检）
+        // 根级重导出抽查（crate 根接线点自检）
         let code = DeviceErrorCode::CmdDenied;
         assert_eq!(code.as_str(), "cmd.denied");
         let hello = Hello {

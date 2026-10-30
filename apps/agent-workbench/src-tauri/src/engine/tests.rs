@@ -56,7 +56,8 @@ use conex_run::context_injection::{
     SUBAGENT_ROLE_CONSTRAINT_CONTENT, SUBAGENT_ROLE_CONSTRAINT_TITLE,
 };
 use conex_run::core_event_bridge::EventBridge;
-use conex_run::engine_assembly::{assemble_scheduler_registry, unix_millis_now};
+use conex_run::engine_assembly::assemble_scheduler_registry;
+use conex_shared::time::{now_iso_utc, unix_millis};
 use conex_run::engine_channels::{
     production_summarizer_factory, BufferedRunEventBridge, ContinuityChannelBoard,
     ProviderSummarizer,
@@ -97,7 +98,7 @@ use crate::fs_commands::skills::RustSkill;
 use conex_run::engine_provider::protocol::HttpStreamParser;
 use conex_run::engine_provider::stream::{classify_stream_parse, to_classified, to_loop_event};
 use conex_run::engine_provider::{
-    build_http_client, effective_context_window, new_message_id, now_iso_utc, provider_url,
+    build_http_client, effective_context_window, new_message_id, provider_url,
     responses_endpoint_active, responses_supported, user_message, ClientConnectionConfig,
     EngineProviderConfig, HttpProviderCall,
 };
@@ -1849,7 +1850,7 @@ async fn produce_without_cache_tracking_keeps_legacy_behavior() {
 /// input_total）
 #[tokio::test]
 async fn produce_emits_cold_cache_warning_when_previous_run_cold() {
-    let now = unix_millis_now();
+    let now = u64::try_from(unix_millis()).unwrap_or(0);
     // 上一 run：温暖截止 = now - 1（刚过期）；TTL 60s
     let last = sample_stats(Some(now.saturating_sub(1)), 0);
     let sink_events: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));

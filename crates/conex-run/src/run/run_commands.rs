@@ -25,7 +25,6 @@ use crate::core_query::BackgroundTasksSummary;
 use crate::status_diagnostics::StatusDiagnostics;
 
 use super::run_approval::map_db_failure;
-use super::run_history::civil_from_days;
 use super::run_launch::finalize_orphan_run;
 use super::{ActiveRun, CoreRunState};
 // ── T-AB-19：run 感知后台任务管理器（owner_run_id 注入装饰器）────
@@ -536,7 +535,7 @@ pub fn generate_run_id() -> String {
     let _ = getrandom::getrandom(&mut random);
     format!(
         "run-{}-{}",
-        base36(now_ms_internal()),
+        base36(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
         base36(u32::from_le_bytes(random) as u64)
     )
 }
@@ -544,12 +543,10 @@ pub fn generate_run_id() -> String {
 /// 生成会话 id（sessionId 缺省时桌面新建会话，对齐前端 `sess-<时间戳>`
 /// 命名风格）
 pub fn generate_session_id() -> String {
-    format!("sess-{}", base36(now_ms_internal()))
-}
-
-/// 当前 epoch ms（模块内 id 生成用；与 crate::server::now_ms 同源）
-pub fn now_ms_internal() -> u64 {
-    crate::engine_assembly::unix_millis_now()
+    format!(
+        "sess-{}",
+        base36(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+    )
 }
 
 /// base36 编码（0-9a-z；对齐前端 `Date.now().toString(36)` 风格）
@@ -599,7 +596,7 @@ pub async fn get_task_output_impl(
     task_id: &str,
     max_lines: Option<u32>,
     after_line: Option<u64>,
-) -> Result<conex_types::device::commands::TaskOutputResult, CoreError> {
+) -> Result<conex_device_protocol::commands::TaskOutputResult, CoreError> {
     let max_lines = max_lines.unwrap_or(200).clamp(1, 1000);
     let slice = state
         .background_manager()
@@ -608,7 +605,7 @@ pub async fn get_task_output_impl(
     let start = slice.start_line;
     let end = slice.end_line;
     let has_more = slice.truncated || end < slice.total_lines;
-    Ok(conex_types::device::commands::TaskOutputResult {
+    Ok(conex_device_protocol::commands::TaskOutputResult {
         lines: slice.lines,
         truncated: slice.truncated,
         line_count: slice.total_lines,
@@ -790,7 +787,7 @@ pub fn emit_trash_audit(
     };
     let event = AgentEvent::SecurityAudit {
         session_id: session_id.to_string(),
-        timestamp: now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         operation,
         targets: vec![original_path.to_string()],
         impact: ImpactAssessment {
@@ -815,19 +812,6 @@ pub fn emit_trash_audit(
         "回收站命令审计：已发前端事件流"
     );
     bridge.emit_envelope(&envelope)
-}
-
-/// 当前 UTC 时间 ISO8601 字符串（毫秒精度；复用既有 civil_from_days
-/// 换算，与 orchestrator / session-loop 同源）
-pub fn now_iso_utc() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let (year, month, day) = civil_from_days((secs / 86400) as i64);
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
 
 // ── T5-2：孤儿 run 收割周期任务 ────────────────────────────────────
@@ -913,7 +897,7 @@ pub(crate) async fn persist_subagent_heartbeats(state: &Arc<CoreRunState>) {
         return;
     }
     let policy_service = state.engine.agent_policy_service();
-    let now = conex_shared::time::unix_millis() as i64;
+    let now = conex_shared::time::unix_millis();
     let mut intervals: HashMap<String, u64> = HashMap::new();
     for (session_id, run_id) in candidates {
         let interval = *intervals.entry(session_id.clone()).or_insert_with(|| {
@@ -985,7 +969,7 @@ fn abort_and_clean_hung_run(active: &ActiveRun, state: &CoreRunState, run_id: &s
 /// 3. 若未卡死且未完成（正常推进或在合法挂起中）：清零去抖并放行；
 /// 4. 若驱动任务已收口（`is_finished == true`）且仍停留 active_runs：连续 [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮去抖触发孤儿收割。
 pub async fn reap_orphan_runs_round(state: &Arc<CoreRunState>) {
-    let now = conex_shared::time::unix_millis() as u64;
+    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let candidates: Vec<(String, Arc<ActiveRun>)> = state
         .active_runs
         .lock()
@@ -1113,15 +1097,15 @@ mod tests {
 
     /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥）
     fn test_state() -> Arc<CoreRunState> {
+        static STATE_SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
         let (bridge, _emitter) = recording_bridge();
         let snapshots: Arc<dyn SnapshotStore> =
             Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
-                "conex_reaper_{}_{}_snapshot.json",
+                "conex_reaper_{}_{}_{}_snapshot.json",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos()
+                conex_shared::time::unix_millis(),
+                STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ))));
         Arc::new(CoreRunState::new(
             Arc::new(InMemoryStore::new()),
@@ -1196,7 +1180,7 @@ mod tests {
             project_name: String::new(),
             phase: std::sync::RwLock::new(ExecutionPhase::Active),
             last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-                conex_shared::time::unix_millis() as u64
+                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
             ),
         });
         state
@@ -1381,7 +1365,7 @@ mod tests {
         let active =
             build_active_run(&state, "s1", "run-hung-after-lease", Some(running_handle)).await;
 
-        let now = conex_shared::time::unix_millis() as u64;
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         // 人工模拟一个过去已超期 130 秒的挂起租约
         {
             let mut phase_guard = active.phase.write().unwrap();
@@ -1423,7 +1407,7 @@ mod tests {
         });
         let active = build_active_run(&state, "s1", "run-active-stale", Some(running_handle)).await;
 
-        let now = conex_shared::time::unix_millis() as u64;
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         // 人工将心跳时间拨回 130 秒前
         active
             .last_heartbeat_ms

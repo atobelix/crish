@@ -575,7 +575,7 @@ pub(crate) async fn apply_compaction(
         }
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
-    let boundary_ms = conex_shared::time::unix_millis() as i64;
+    let boundary_ms = conex_shared::time::unix_millis();
     tracing::info!(
         tokens_before = plan.tokens_before,
         tokens_after = plan.tokens_after,

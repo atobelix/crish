@@ -1,7 +1,7 @@
 # device-protocol 跨端对拍样例集（R0-05）
 
 > 多端互通 R0-05 任务（TS↔Rust 对拍闭环）共享样例集：**同一份 JSON 载荷双端消费**——
-> Rust 侧 `crates/conex-types/tests/device_parity.rs` 与 TS 侧
+> Rust 侧 `crates/conex-device-protocol/tests/device_parity.rs` 与 TS 侧
 > `packages/shared-types/src/generated/device/parity.test.ts` 均以本目录为唯一输入。
 > 编码：UTF-8 无 BOM；样例集是入库资产（AGENTS.md「测试是资产不是杂物」）。
 
@@ -40,7 +40,7 @@
 
 ## 门禁接线
 
-- **Rust 侧**：`cargo test --workspace` 已含 `crates/conex-types/tests/device_parity.rs`
+- **Rust 侧**：`cargo test --workspace` 已含 `crates/conex-device-protocol/tests/device_parity.rs`
   （ci-mid.yml `rust-test` job 覆盖）；
 - **TS 侧**：vitest unit 项目 include 面已含 `packages/shared-types/src/generated/device/*.test.ts`
   （ci-mid.yml `test` job 与快层 vitest-fast 覆盖）；

@@ -79,14 +79,9 @@ pub fn millis_of(t: SystemTime) -> i64 {
     }
 }
 
-/// 当前 Unix 毫秒（消息 id 前缀用）。
-///
-/// 兼容既有 u128 调用面；P3 会统一改为 i64（见 `docs/refactor-plans/x03-time-utils.md`）。
-pub fn unix_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0)
+/// 当前 Unix 毫秒（时钟早于 1970 时返回负值）。
+pub fn unix_millis() -> i64 {
+    millis_of(SystemTime::now())
 }
 
 /// 解析 ISO8601 UTC 时间戳（接受 `YYYY-MM-DDTHH:MM:SS[.fraction]Z`）。

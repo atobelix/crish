@@ -15,8 +15,8 @@ use super::capacity::{CapacityReservation, SpawnIds};
 use super::lifecycle::{RunLaunchLifecycle, StartedEventCompletionGuard};
 use super::spawner::SubagentSpawnerImpl;
 use super::tracking::{FlowRegistration, RunRecord};
-use super::types::{now_ms, SubagentRunConfig};
-use crate::engine_provider::now_iso_utc;
+use super::types::SubagentRunConfig;
+use conex_shared::time::now_iso_utc;
 use crate::run::RunTaskOptions;
 
 impl SubagentSpawnerImpl {
@@ -36,7 +36,7 @@ impl SubagentSpawnerImpl {
         let subagent_id = ids.subagent_id.clone();
         let subagent_run_id = ids.subagent_run_id.clone();
         let session_id = ids.session_id.clone();
-        let now = now_ms();
+        let now = conex_shared::time::unix_millis();
 
         // 子代理路由登记（mailbox 反查父会话；启动失败时注销）
         if let Some(registrar) = self.child_registrar() {
@@ -286,7 +286,7 @@ impl SubagentSpawnerImpl {
                             &parent_session_id,
                             &run_id_for_launch,
                             SubagentState::Failed.to_db_status(),
-                            Some(now_ms()),
+                            Some(conex_shared::time::unix_millis()),
                         ) {
                             tracing::warn!(
                                 target: "subagent_spawner",

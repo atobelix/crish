@@ -256,7 +256,7 @@ async fn t10_active_run(
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
         last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
+            crate::now_ms_u64()
         ),
     });
     state
@@ -1021,15 +1021,24 @@ providers:
 #[test]
 fn iso8601_epoch_millis_roundtrip() {
     let epoch = 1_785_456_000_123;
-    assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:00.123Z"), epoch);
-    assert_eq!(epoch_millis_to_iso8601(epoch), "2026-07-31T00:00:00.123Z");
+    assert_eq!(
+        conex_shared::time::parse_iso8601_ms("2026-07-31T00:00:00.123Z").unwrap_or(0),
+        epoch
+    );
+    assert_eq!(
+        conex_shared::time::format_iso_utc_ms(epoch),
+        "2026-07-31T00:00:00.123Z"
+    );
     // 宽容解析：无毫秒段
     assert_eq!(
-        iso8601_to_epoch_millis("2026-07-31T00:00:01Z"),
+        conex_shared::time::parse_iso8601_ms("2026-07-31T00:00:01Z").unwrap_or(0),
         1_785_456_001_000
     );
     // 失败兜底 0
-    assert_eq!(iso8601_to_epoch_millis("not-a-date"), 0);
+    assert_eq!(
+        conex_shared::time::parse_iso8601_ms("not-a-date").unwrap_or(0),
+        0
+    );
 }
 
 // ── T-40：缓存测量收口（R5-D3 轮末合并接线 ②③④）────────────
@@ -1691,12 +1700,14 @@ async fn subagent_run_abort_terminates_without_estop_bridge() {
 /// 独立临时 config 目录（不清理：静态 store 在测试结束后仍可能绑定该
 /// 目录，删除会触发后续只读初始化的缺省回落——保留无害且避免竞态）。
 fn temp_config_dir() -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let dir =
-        std::env::temp_dir().join(format!("conex-config-test-{}-{nanos}", std::process::id()));
+    static CONFIG_DIR_SEQ: std::sync::atomic::AtomicU64 =
+        std::sync::atomic::AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "conex-config-test-{}-{}-{}",
+        std::process::id(),
+        conex_shared::time::unix_millis(),
+        CONFIG_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("create config dir");
     dir
 }
@@ -3179,7 +3190,7 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
         last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
+            crate::now_ms_u64()
         ),
     })
 }
@@ -9658,7 +9669,7 @@ async fn insert_continuity_run(
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
         last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
+            crate::now_ms_u64()
         ),
     });
     state

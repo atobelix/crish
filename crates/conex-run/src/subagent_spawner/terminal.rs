@@ -8,7 +8,7 @@ use orchestrator::subagent_events::{
 };
 
 use super::spawner::SubagentSpawnerImpl;
-use super::types::{now_ms, SubagentRunConfig};
+use super::types::SubagentRunConfig;
 
 impl SubagentSpawnerImpl {
     /// 终态统一处理（子代理 run 收口后由 CoreRunState 调用）：
@@ -66,7 +66,7 @@ impl SubagentSpawnerImpl {
         {
             let db = self.db.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(db) = db {
-                let now = now_ms();
+                let now = conex_shared::time::unix_millis();
                 let loaded = db.load_session_agents(&cfg.parent_session_id);
                 match loaded {
                     Ok(mut agents) => {
@@ -232,7 +232,7 @@ impl SubagentSpawnerImpl {
                 SteeringInputEntry::steering(
                     format!("subagent-terminal-{run_id}"),
                     summary_text,
-                    now_ms() as u64,
+                    u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
                 )
                 .with_session(&cfg.parent_session_id),
             );

@@ -14,6 +14,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "conex-fs",
+ "conex-shared",
  "conex-test-utils",
  "conex-types",
  "criterion",
@@ -1178,6 +1179,7 @@ name = "conex-db"
 version = "0.1.1"
 dependencies = [
  "agent-tools",
+ "conex-shared",
  "conex-types",
  "criterion",
  "hex",
@@ -1187,6 +1189,16 @@ dependencies = [
  "sha2",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "conex-device-protocol"
+version = "0.1.1"
+dependencies = [
+ "conex-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1275,6 +1287,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.22.1",
+ "conex-shared",
  "futures-util",
  "hex",
  "hmac",
@@ -1303,6 +1316,7 @@ dependencies = [
  "conex-agents",
  "conex-compaction",
  "conex-db",
+ "conex-device-protocol",
  "conex-fs",
  "conex-shared",
  "conex-telemetry",
@@ -1351,6 +1365,7 @@ dependencies = [
 name = "conex-telemetry"
 version = "0.1.1"
 dependencies = [
+ "conex-device-protocol",
  "conex-shared",
  "conex-types",
  "hex",
@@ -1377,6 +1392,7 @@ dependencies = [
 name = "conex-types"
 version = "0.1.1"
 dependencies = [
+ "conex-device-protocol",
  "conex-shared",
  "once_cell",
  "serde",
@@ -1539,6 +1555,7 @@ dependencies = [
  "conex-computer",
  "conex-computer-tools",
  "conex-db",
+ "conex-device-protocol",
  "conex-diff",
  "conex-fs",
  "conex-markdown",

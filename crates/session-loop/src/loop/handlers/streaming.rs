@@ -78,7 +78,7 @@ pub(crate) async fn handle(
     // （request 最后使用点 = stream 调用，NLL 允许此后 &mut state；
     // 消费循环尚未开始，锚点必然先于任何 message-delta）。
     let request = build_request(state);
-    let request_started_at_ms = conex_shared::time::unix_millis() as u64;
+    let request_started_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let result = provider.stream(&request).await;
     emit_provider_request_anchored(state, request_started_at_ms);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
@@ -676,7 +676,7 @@ fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
     };
     let completion = get("completionTokens").unwrap_or(0);
     let total = get("totalTokens").unwrap_or(0);
-    let completed_at_ms = conex_shared::time::unix_millis() as u64;
+    let completed_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     if let Some(miss) = tracker.record_usage(scalars, completion, total, completed_at_ms) {
         tracing::debug!(
             missed_tokens = miss.missed_tokens,

@@ -43,3 +43,8 @@ pub mod wait_channel;
 pub mod wake_watcher;
 pub mod wakeup_summary;
 pub mod workflow;
+
+/// 当前 Unix 毫秒的 u64 协议面（时间真源 = conex-shared::time）。
+pub(crate) fn now_ms_u64() -> u64 {
+    u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
+}

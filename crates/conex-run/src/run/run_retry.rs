@@ -12,7 +12,7 @@ use orchestrator::recovery::{
 
 use super::run_idle::idle_resume;
 use super::{
-    now_ms_internal, session_meta_key_of, CoreRunState, PROVIDER_FAIL_STREAK_KEY,
+    session_meta_key_of, CoreRunState, PROVIDER_FAIL_STREAK_KEY,
     PROVIDER_FAIL_THRESHOLD_DEFAULT, PROVIDER_FAIL_THRESHOLD_KEY, PROVIDER_FAIL_WINDOW_MS_DEFAULT,
     PROVIDER_RETRY_BACKOFF_MS_KEY, RECOVER_LADDER1_MAX_RETRIES_DEFAULT,
     RECOVER_LADDER1_MAX_RETRIES_KEY,
@@ -221,7 +221,7 @@ impl CoreRunState {
     /// 同步到该会话 watcher 实例——watcher 判定与 decide_idle_resume
     /// 共享同一跨 run 语义；不落库，重启天然消失）
     pub fn set_user_stopped(&self, session_id: &str) {
-        let now = now_ms_internal();
+        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
         *self
             .user_stopped
             .lock()
@@ -399,7 +399,7 @@ impl CoreRunState {
                         let streak_key = session_meta_key_of(sid, PROVIDER_FAIL_STREAK_KEY);
                         let raw = db.get_session_meta(&streak_key).ok().flatten();
                         let streak = ProviderFailStreak::from_json(raw.as_deref());
-                        streak.effective_count(now_ms_internal()) >= threshold
+                        streak.effective_count(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)) >= threshold
                     })
                     .unwrap_or(false)
             });
@@ -436,7 +436,7 @@ impl CoreRunState {
         tokio::task::spawn_blocking(move || {
             let raw = db.get_session_meta(&streak_key).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
-            streak.effective_count(now_ms_internal()) >= threshold
+            streak.effective_count(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)) >= threshold
         })
         .await
         .unwrap_or(false)
@@ -462,7 +462,7 @@ impl CoreRunState {
         tokio::task::spawn_blocking(move || {
             let raw = db.get_session_meta(&streak_key).ok().flatten();
             let mut streak = ProviderFailStreak::from_json(raw.as_deref());
-            let now = now_ms_internal();
+            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
             let before = streak.effective_count(now);
             if transient_failure {
                 streak.record_failure(now);
@@ -512,7 +512,7 @@ impl CoreRunState {
         tokio::task::spawn_blocking(move || {
             let raw = db.get_session_meta(&streak_key).ok().flatten();
             let streak = ProviderFailStreak::from_json(raw.as_deref());
-            let count = streak.effective_count(now_ms_internal());
+            let count = streak.effective_count(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
             (count > 0).then_some(count)
         })
         .await

@@ -35,8 +35,12 @@ interface Registry {
 }
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../');
+// TY-P5：设备协议注册表随类型拆出独立 crate（conex-device-protocol）
 const REGISTRY = JSON.parse(
-  readFileSync(join(ROOT, 'crates', 'conex-types', 'contracts', 'device-protocol.json'), 'utf8')
+  readFileSync(
+    join(ROOT, 'crates', 'conex-device-protocol', 'contracts', 'device-protocol.json'),
+    'utf8',
+  )
 ) as Registry;
 
 type AnyParser = (v: unknown) => ParseResult<unknown>;

@@ -5,6 +5,7 @@
 //! 慢消费者先被背压断链，攻击者也无法用大帧把中继内存打爆。
 
 use crate::ticket::{TicketClaims, TicketRole};
+use conex_shared::time::unix_millis;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
@@ -170,7 +171,7 @@ impl Hub {
             role: claims.role,
             device_id: claims.device_id.clone(),
             device_name,
-            connected_at_ms: unix_ms(),
+            connected_at_ms: u64::try_from(unix_millis()).unwrap_or(0),
             tx,
         };
         let mut rooms = self.rooms.lock().unwrap_or_else(|e| e.into_inner());
@@ -275,13 +276,6 @@ impl Hub {
             })
             .collect()
     }
-}
-
-fn unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::enums::{ApprovalChannel, Arbiter, CheckDecision};
-use crate::events::ApprovalDecision;
+use conex_types::events::ApprovalDecision;
 
 // ── F2 审批域：参数与响应 ──
 

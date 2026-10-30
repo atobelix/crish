@@ -91,10 +91,6 @@ impl AgentMailbox {
         }
     }
 
-    fn now_ms() -> i64 {
-        conex_shared::time::unix_millis() as i64
-    }
-
     fn comm_policy(&self, parent_session: &str) -> CommPolicy {
         self.policy
             .as_ref()
@@ -129,7 +125,12 @@ impl AgentMailbox {
             let Some(mut digest) =
                 state
                     .digest
-                    .drain_into_digest(child_session, &route.parent_session, Self::now_ms(), policy.suppress_marker)
+                    .drain_into_digest(
+                        child_session,
+                        &route.parent_session,
+                        conex_shared::time::unix_millis(),
+                        policy.suppress_marker,
+                    )
             else {
                 return Ok(());
             };
@@ -187,7 +188,7 @@ impl SubagentReportChannel for AgentMailbox {
         text: String,
         dedupe_key: Option<String>,
     ) -> Result<(), String> {
-        let now = Self::now_ms();
+        let now = conex_shared::time::unix_millis();
         let (parent, action) = {
             let routes = self.routes.lock().unwrap_or_else(|e| e.into_inner());
             let route = routes

@@ -196,7 +196,7 @@ impl LocalDb {
                     "UPDATE runs SET status = 'failed', end_reason = 'recovery-fork',
                         updated_at = ?2
                      WHERE run_id = ?1",
-                    rusqlite::params![original_run_id, super::runs::now_millis()],
+                    rusqlite::params![original_run_id, conex_shared::time::unix_millis()],
                 )
                 .map_err(|e| DbFailure {
                     message: format!("persist_recovery_fork_source_status: {e}"),

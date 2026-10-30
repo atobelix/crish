@@ -45,7 +45,7 @@ pub async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, mess
             &session_id,
             AgentEvent::RuntimeError {
                 session_id: session_id.clone(),
-                timestamp: crate::engine_provider::now_iso_utc(),
+                timestamp: conex_shared::time::now_iso_utc(),
                 error: message.to_string(),
                 retryable: None,
             },
@@ -148,10 +148,6 @@ fn scheduled_run_hooks() -> &'static Mutex<HashMap<String, ScheduledRunHookEntry
     HOOKS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn scheduled_now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}
-
 /// 注册指定 run_id 的定时任务终态回写钩子（在 run_task_impl 启动前登记）
 pub fn register_scheduled_run_hook(
     run_id: String,
@@ -203,7 +199,7 @@ fn notify_scheduled_run_failed(state: &Arc<CoreRunState>, active: &ActiveRun, me
     let Some((workflow_id, started_at_ms, hook)) = take_scheduled_run_hook(&active.run_id) else {
         return;
     };
-    let finished_at_ms = scheduled_now_ms();
+    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
     let output_summary = state
         .session_history
@@ -233,7 +229,7 @@ async fn notify_scheduled_run_terminal_after_drive(state: &Arc<CoreRunState>, ac
         conex_db::RunStatus::Cancelled => "cancelled",
         _ => "failed",
     };
-    let finished_at_ms = scheduled_now_ms();
+    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
     let output_summary = state
         .session_history
@@ -403,6 +399,8 @@ mod tests {
     fn launch_guard_test_state_with_store(
         store: Arc<dyn orchestrator::persist::Store>,
     ) -> Arc<CoreRunState> {
+        static STATE_SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
         let emitter = Arc::new(RecordingEmitter::default());
         let bridge = EventBridge::new(
             "workbench-run-event",
@@ -410,12 +408,10 @@ mod tests {
         );
         let snapshots: Arc<dyn SnapshotStore> =
             Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
-                "conex_launch_guard_{}_{}_snapshot.json",
+                "conex_launch_guard_{}_{}_{}_snapshot.json",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos()
+                conex_shared::time::unix_millis(),
+                STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ))));
         Arc::new(CoreRunState::new(
             store,
@@ -522,7 +518,7 @@ mod tests {
             project_name: String::new(),
             phase: std::sync::RwLock::new(ExecutionPhase::Active),
             last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-                conex_shared::time::unix_millis() as u64
+                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
             ),
         });
         state
@@ -1597,7 +1593,7 @@ pub async fn run_task_impl(
         project_name: project_name.clone(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
         last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
+            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
         ),
     });
     state
@@ -1914,7 +1910,7 @@ pub async fn compact_now_impl(
         None,
     )));
     let bridge = state.event_bridge();
-    let now_iso = crate::engine_provider::now_iso_utc();
+    let now_iso = conex_shared::time::now_iso_utc();
     // Start 事件（触发原因 + 压缩前 token；会话级队列入队持久化 + 全局
     // 事件桥信封广播——非 run 上下文 run_id 缺省 None）
     push_emit_idle_event(
@@ -1963,7 +1959,7 @@ pub async fn compact_now_impl(
                     )
                 })
                 .as_deref(),
-            iso8601_to_epoch_millis(&now_iso),
+            conex_shared::time::parse_iso8601_ms(&now_iso).unwrap_or(0),
             summary_state,
         )),
     };

@@ -23,6 +23,8 @@ import { describe, expect, it } from 'vitest';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../');
 const GENERATOR = join(ROOT, 'scripts', 'generate-engine-bindings.mjs');
 const CONTRACTS_DIR = join(ROOT, 'crates', 'conex-types', 'contracts');
+// TY-P5：设备协议注册表随类型拆出独立 crate（conex-device-protocol）
+const DEVICE_CONTRACTS_DIR = join(ROOT, 'crates', 'conex-device-protocol', 'contracts');
 const GENERATED_DIR = join(ROOT, 'packages', 'shared-types', 'src', 'generated');
 
 /** 生成器对指定注册表在临时目录执行一次（--out 直接作为输出目录） */
@@ -33,7 +35,7 @@ function regenerateTo(tmpDir: string, registryPath: string) {
   });
 }
 
-const DEVICE_REGISTRY = join(CONTRACTS_DIR, 'device-protocol.json');
+const DEVICE_REGISTRY = join(DEVICE_CONTRACTS_DIR, 'device-protocol.json');
 const ENGINE_REGISTRY = join(CONTRACTS_DIR, 'engine-events.json');
 
 /** 指定注册表的全部生成产物（与脚本输出集合一致，防比对漏文件） */

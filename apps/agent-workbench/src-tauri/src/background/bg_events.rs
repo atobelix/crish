@@ -3,7 +3,7 @@
 //! 结构拆分轮仅搬移，七事件发射与健康判定语义零改动。接线：background.rs
 //! `mod bg_events;`。
 
-use crate::process::now_millis;
+
 use crate::resource::{
     cpu_percent_from_delta, judge_health, EventSink, ProcessHealth, RawUsage,
     ResourceMonitorConfig, TaskNotifier,
@@ -321,7 +321,7 @@ pub(crate) fn spawn_resource_monitor_loop(
                 );
                 continue;
             };
-            let now = now_millis() as u64;
+            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
             let Some((prev_raw, prev_wall)) = baseline.take() else {
                 // 首采样：仅建立基线，丢弃本拍
                 baseline = Some((raw, now));

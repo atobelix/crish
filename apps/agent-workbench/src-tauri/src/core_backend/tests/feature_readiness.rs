@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use conex_types::device::commands::{
+use conex_device_protocol::commands::{
     SettingsConfirmAction, SettingsConfirmParams, SettingsConfirmStatus,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     CancelRunParams, DeviceErrorCode, PauseAutomationParams, RunTaskParams, SearchFilesParams,
 };
 use conex_types::permission::PermissionMode;
@@ -245,7 +245,7 @@ async fn r2_12_pause_automation_via_real_scheduler() {
         "真实引擎路径调度器应已装配"
     );
     let backend = CoreStateBackend::new(Arc::clone(&state));
-    let before = crate::server::now_ms();
+    let before = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
     let result = backend
         .pause_automation(PauseAutomationParams { duration_sec: None })
         .await
@@ -302,9 +302,9 @@ async fn r2_12_pause_automation_via_real_scheduler() {
 async fn r2_12_asset_url_placeholder_not_implemented() {
     let backend = CoreStateBackend::new(r2_test_core_state());
     let err = backend
-        .asset_url(conex_types::device::AssetUrlParams {
+        .asset_url(conex_device_protocol::AssetUrlParams {
             path: "docs/x.png".to_string(),
-            kind: conex_types::device::AssetKind::Image,
+            kind: conex_device_protocol::AssetKind::Image,
         })
         .await
         .expect_err("占位端点必须返回错误");

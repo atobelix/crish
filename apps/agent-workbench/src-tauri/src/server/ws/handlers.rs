@@ -68,7 +68,7 @@ pub(super) async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
 
         // 1. 时钟偏差校验
         if envelope.auth.ts > 0 {
-            let now = now_ms();
+            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
             let max_skew = ctx.state.nonce_guard().clock_skew_ms();
             let diff = envelope.auth.ts.abs_diff(now);
             if diff > max_skew {
@@ -85,7 +85,7 @@ pub(super) async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
 
         // 2. Nonce 幂等与重放防护
         if has_auth_nonce {
-            let now = now_ms();
+            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
             let mut hasher = Sha256::new();
             hasher.update(
                 serde_json::to_string(&envelope.body)
@@ -209,7 +209,7 @@ async fn handle_remote_command_frame(
 ) -> Action {
     let Some(backend) = ctx.state.backend() else {
         let err_body = ErrorBody::new(DeviceErrorCode::Internal, "API backend not initialized");
-        let res = conex_types::device::commands::CommandResult::failure(msg_id, err_body);
+        let res = conex_device_protocol::commands::CommandResult::failure(msg_id, err_body);
         return send_envelope(ctx, MessageKind::Result(cmd.to_string()), res).await;
     };
 
@@ -221,8 +221,8 @@ async fn handle_remote_command_frame(
     // 通用分发：命令名 = remote_whitelist 的 camelCase 后缀；未登记命令
     // 由 backend 返回 cmd.unknown（与注册表错误契约一致）。
     let result = match backend.dispatch_remote_command(cmd, params_val).await {
-        Ok(value) => conex_types::device::commands::CommandResult::success(msg_id, value),
-        Err(error) => conex_types::device::commands::CommandResult::failure(
+        Ok(value) => conex_device_protocol::commands::CommandResult::success(msg_id, value),
+        Err(error) => conex_device_protocol::commands::CommandResult::failure(
             msg_id,
             ErrorBody::new(error.device_code(), error.to_string()),
         ),
@@ -241,12 +241,12 @@ async fn handle_device_unlink(msg_id: &str, ctx: &ConnCtx) -> Action {
         guard.revoke(&ctx.token_hash)
     };
     let result = if revoked {
-        conex_types::device::commands::CommandResult::success(
+        conex_device_protocol::commands::CommandResult::success(
             msg_id,
             serde_json::json!({ "unlinked": true }),
         )
     } else {
-        conex_types::device::commands::CommandResult::failure(
+        conex_device_protocol::commands::CommandResult::failure(
             msg_id,
             ErrorBody::new(
                 DeviceErrorCode::AuthUnknownDevice,
@@ -293,7 +293,7 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
     let reply = crate::server::pair_endpoint::handle_pair_hello(
         &body,
         ctx.state.pairing().as_deref(),
-        now_ms(),
+        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
     );
     let (token, label, device_id) = match reply {
         Ok(ok) => ok,
@@ -365,7 +365,7 @@ async fn handle_subscribe(body: Value, ctx: &ConnCtx) -> Action {
     if let Some(backend) = ctx.state.backend() {
         for session_id in &subscribe.sessions {
             let last = subscribe.last_sequences.sequence_of(session_id);
-            let params = conex_types::device::EventPageParams {
+            let params = conex_device_protocol::EventPageParams {
                 session_id: session_id.clone(),
                 after_sequence: Some(last),
                 max_events: Some(1),
@@ -493,7 +493,7 @@ async fn handle_resume(body: Value, ctx: &ConnCtx) -> Action {
     let mut cursor = resume.after_sequence;
     if let Some(backend) = ctx.state.backend() {
         loop {
-            let params = conex_types::device::EventPageParams {
+            let params = conex_device_protocol::EventPageParams {
                 session_id: resume.session_id.clone(),
                 after_sequence: Some(cursor),
                 max_events: Some(page_size),
@@ -568,14 +568,14 @@ async fn handle_resume(body: Value, ctx: &ConnCtx) -> Action {
 /// heartbeat：回执 heartbeat.ok（时钟校准，D3 §9.3）
 async fn handle_heartbeat(body: Value, ctx: &ConnCtx) -> Action {
     // 载荷宽松解析（心跳格式非法仍回执——保活优先）
-    let heartbeat = serde_json::from_value::<conex_types::device::Heartbeat>(body.clone())
-        .unwrap_or(conex_types::device::Heartbeat {
-            ts: now_ms(),
+    let heartbeat = serde_json::from_value::<conex_device_protocol::Heartbeat>(body.clone())
+        .unwrap_or(conex_device_protocol::Heartbeat {
+            ts: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
             device_time_ms: 0,
         });
-    let ok = conex_types::device::HeartbeatOk {
+    let ok = conex_device_protocol::HeartbeatOk {
         ts: heartbeat.ts,
-        server_time: now_ms(),
+        server_time: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
     };
     send_envelope(ctx, MessageKind::HeartbeatOk, ok).await
 }

@@ -2,7 +2,7 @@
 // R0-05 TS↔Rust 设备协议对拍闭环（D8 §5.3.3 protocol-parity）
 //
 // 与 `tests/fixtures/device-protocol/` 样例集（唯一共享输入）双端消费：Rust
-// 侧 `crates/conex-types/tests/device_parity.rs` 消费同一目录。本文件断言：
+// 侧 `crates/conex-device-protocol/tests/device_parity.rs` 消费同一目录。本文件断言：
 //
 // - valid/*.json：parseDeviceFrame 解析成功 → 重序列化与样例**规范化 JSON**
 //   一致（键码点升序递归排序，canonicalJsonString 与 Rust 侧 canonical

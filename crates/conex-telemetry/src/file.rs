@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use conex_shared::time::{civil_from_days, days_from_civil};
+use conex_shared::time::{civil_from_days, days_from_civil, millis_of, unix_secs};
 use tracing_subscriber::fmt::writer::MakeWriter;
 
 use crate::format::truncate_string;
@@ -328,10 +328,7 @@ pub(crate) fn today_key() -> String {
 
 /// 今日距 1970-01-01 的天数（UTC）
 fn today_days() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64 / 86_400)
-        .unwrap_or(0)
+    unix_secs() / 86_400
 }
 
 /// 日志保留策略（T04.6-1 默认值；启动时由 main.rs 传入 [`cleanup_logs`]）
@@ -472,9 +469,8 @@ fn file_age_days(p: &Path, today: i64) -> i64 {
     }
     let mtime_days = fs::metadata(p)
         .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64 / 86_400)
+        .map(millis_of)
+        .map(|ms| ms / 86_400_000)
         .unwrap_or(0);
     today - mtime_days
 }
@@ -495,10 +491,7 @@ fn parse_day_key(key: &str) -> Option<i64> {
 
 /// 时间戳键（YYYYMMDD-HHMMSS，UTC），用于崩溃文件命名（T04.1-3）。
 pub(crate) fn timestamp_key() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs = unix_secs();
     let days = secs.div_euclid(86_400);
     let tod = secs.rem_euclid(86_400);
     let (year, month, day) = civil_from_days(days);

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::device::error::ErrorBody;
+use crate::error::ErrorBody;
 
 // ── 命令请求 / 响应信封（M6 §10.6.1）──
 

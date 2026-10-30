@@ -4,7 +4,7 @@ use super::super::*;
 use super::support::*;
 
 use crate::server::auth::sha256_hex;
-use conex_types::device::version::MAX_FRAME_BYTES;
+use conex_device_protocol::version::MAX_FRAME_BYTES;
 use std::time::Duration;
 
 // ── 连接管理 ──────────────────────────────────────────────
@@ -150,10 +150,10 @@ async fn version_mismatch_closes_connection() {
     let envelope = DeviceEnvelope::unsigned(
         MessageKind::Heartbeat,
         format!("m-test-{:08}", 99),
-        now_ms(),
+        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
-        serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
     );
     // 手工改版本号
     let mut value = serde_json::to_value(&envelope).unwrap();

@@ -168,7 +168,7 @@ pub(crate) fn notify_pty_activity(app: &AppHandle) {
                     continue;
                 }
                 idle_consecutive_ticks = 0;
-                let now = crate::server::now_ms();
+                let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
                 let killed = session::run_gc_sweep(now);
                 if !killed.is_empty() {
                     tracing::info!(

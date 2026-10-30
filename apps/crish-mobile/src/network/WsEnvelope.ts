@@ -1,5 +1,5 @@
 // DeviceEnvelope 帧类型（M5 §4.2 / D3 §5.3 / M6 §10.1）
-// 协议真源 = crates/conex-types/contracts/device-protocol.json → 生成面
+// 协议真源 = crates/conex-device-protocol/contracts/device-protocol.json → 生成面
 // packages/shared-types/src/generated/device（R0-03 产物，已入库）。本文件
 // **禁止手抄第二套协议类型**：wire 类型全部引用生成面，仅以类型运算附加
 // 本地入站形态（配对期 auth 可选，D3 §5.2 / mock-daemon envelope.ts 先例）。

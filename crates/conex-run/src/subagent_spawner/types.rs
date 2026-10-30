@@ -3,14 +3,6 @@ use async_trait::async_trait;
 use crate::core_error::CoreError;
 use crate::run::{RunTaskOptions, RunTaskResponse};
 
-/// 当前 UTC 毫秒时间戳（epoch ms；与全仓 epoch ms 惯例一致；时钟异常 0）
-pub fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
-}
-
 /// 子代理 run 装配配置（run_task_impl 消费；IPC 命令面不携带——
 /// serde 缺省 None，仅引擎内部 spawner 构造）
 #[derive(Debug, Clone, serde::Deserialize)]

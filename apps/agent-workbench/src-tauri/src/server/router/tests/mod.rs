@@ -9,15 +9,15 @@ use crate::server::{ServerConfig, ServerHandle};
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{StatusCode, Uri};
-use conex_types::device::commands::{SettingsConfirmAction, SettingsConfirmStatus};
-use conex_types::device::commands::{
+use conex_device_protocol::commands::{SettingsConfirmAction, SettingsConfirmStatus};
+use conex_device_protocol::commands::{
     SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
 };
-use conex_types::device::version::PAGE_SIZE_DEFAULT;
-use conex_types::device::{
+use conex_device_protocol::version::PAGE_SIZE_DEFAULT;
+use conex_device_protocol::{
     CommandSurface, FileSearchHit, ManifestEntry, RunTaskParams, RunTaskResult,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     DenyParams, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, FlowSnapshotParams,
     FlowSnapshotResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
     ListTasksParams, ListTasksResult, PauseAutomationParams, PauseAutomationResult,
@@ -70,7 +70,10 @@ fn issue_token(state: &ServerState) -> String {
         .tokens()
         .lock()
         .unwrap()
-        .issue("test-device", now_ms())
+        .issue(
+            "test-device",
+            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        )
         .expect("签发必须成功")
 }
 
@@ -258,7 +261,7 @@ impl MockBackend {
         &self,
         tool_call_id: &str,
         decision: &'static str,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         if tool_call_id == "tc-missing" {
             return Err(Self::not_found("tool_call_id 从未出现（mock）"));
         }
@@ -270,7 +273,7 @@ impl MockBackend {
             ));
         }
         resolved.insert(tool_call_id.to_string());
-        Ok(conex_types::device::ApproveResult {
+        Ok(conex_device_protocol::ApproveResult {
             ok: true,
             tool_call_id: tool_call_id.to_string(),
             decision: serde_json::from_value(serde_json::Value::String(decision.to_string()))

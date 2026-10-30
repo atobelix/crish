@@ -91,7 +91,7 @@ pub fn wakeup_summary(event: &AgentEvent, ctx: &SummaryCtx) -> String {
         } => {
             let mut segments = vec![format!("任务 {run_id}")];
             if let Some(started) = ctx.run_started_at_ms {
-                let ended = iso8601_to_epoch_millis(timestamp);
+                let ended = conex_shared::time::parse_iso8601_ms(timestamp).unwrap_or(0);
                 segments.push(format!(
                     "已运行 {}",
                     format_duration_ms(ended.saturating_sub(started))
@@ -161,53 +161,6 @@ fn run_terminal_cn(terminal: &RunTerminalStatus) -> &'static str {
         RunTerminalStatus::Cancelled => "取消",
         RunTerminalStatus::Failed => "失败",
     }
-}
-
-/// ISO8601 → epoch 毫秒（引擎统一格式 `YYYY-MM-DDTHH:MM:SS.mmmZ`；
-/// 宽容解析：毫秒段可缺省，时区仅接受 Z，失败兜底 0；算法与
-/// `run/run_history.rs::iso8601_to_epoch_millis` 同源，本模块本地实现以保持纯函数自足）
-fn iso8601_to_epoch_millis(iso: &str) -> i64 {
-    let Some((date, rest)) = iso.split_once('T') else {
-        return 0;
-    };
-    let mut parts = date.split('-');
-    let (Some(year), Some(month), Some(day)) = (
-        parts.next().and_then(|v| v.parse::<i64>().ok()),
-        parts.next().and_then(|v| v.parse::<u32>().ok()),
-        parts.next().and_then(|v| v.parse::<u32>().ok()),
-    ) else {
-        return 0;
-    };
-    let mut time = rest.split(':');
-    let (Some(hour), Some(minute)) = (
-        time.next().and_then(|v| v.parse::<i64>().ok()),
-        time.next().and_then(|v| v.parse::<i64>().ok()),
-    ) else {
-        return 0;
-    };
-    let sec_rest = time.next().unwrap_or("0");
-    let stripped = sec_rest.strip_suffix('Z').unwrap_or(sec_rest);
-    let (sec, millis) = match stripped.split_once('.') {
-        Some((s, ms)) => (
-            s.parse::<i64>().unwrap_or(0),
-            ms.parse::<i64>().unwrap_or(0),
-        ),
-        None => (stripped.parse::<i64>().unwrap_or(0), 0),
-    };
-    let days = days_from_civil(year, month, day);
-    ((days * 86_400 + hour * 3600 + minute * 60 + sec) * 1000) + millis
-}
-
-/// 公历年月日 → Unix 天数（Howard Hinnant civil_from_days 的逆函数；
-/// 与 `run/run_history.rs::days_from_civil` / session-loop hydrate.rs 同源算法）
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (m as i64 + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 /// 时长格式化（毫秒差 → 人读中文：「3 小时 2 分」/「2 分 30 秒」/

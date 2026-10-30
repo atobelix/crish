@@ -1429,8 +1429,8 @@ pub fn event_policy(event: &AgentEvent) -> EventPolicy {
 }
 
 /// 事件 → 背压级别（D-04 PC-05 薄壳：单一分类事实源 [event_policy] 唯一
-/// 实现三决策，本函数仅投影 backpressure——保持 device/events.rs 的
-/// event_is_sync_eligible、fanout/ws 等既有调用面零改动）
+/// 实现三决策，本函数仅投影 backpressure——保持 conex-device-protocol 的
+/// events.rs 中 event_is_sync_eligible、fanout/ws 等既有调用面零改动）
 pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
     event_policy(event).backpressure
 }

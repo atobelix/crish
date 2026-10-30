@@ -6,9 +6,9 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, Mac};
+use conex_shared::time::unix_secs;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -73,13 +73,6 @@ fn hmac(secret: &[u8], data: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 impl TicketClaims {
     /// 签发票据（`exp` = 绝对 Unix 秒）。
     pub fn sign(&self, secret: &[u8]) -> Result<String, TicketError> {
@@ -109,7 +102,7 @@ impl TicketClaims {
             .map_err(|_| TicketError::Format)?;
         let claims: Self =
             serde_json::from_slice(&payload).map_err(|e| TicketError::Payload(e.to_string()))?;
-        let now = now_secs();
+        let now = u64::try_from(unix_secs()).unwrap_or(0);
         if claims.exp + 5 < now {
             return Err(TicketError::Expired);
         }
@@ -126,7 +119,7 @@ impl TicketClaims {
         device_name: Option<String>,
         ttl_secs: u64,
     ) -> Self {
-        let now = now_secs();
+        let now = u64::try_from(unix_secs()).unwrap_or(0);
         Self {
             account_id: account_id.into(),
             device_id: device_id.into(),
@@ -147,7 +140,7 @@ impl TicketClaims {
         target_device_id: impl Into<String>,
         ttl_secs: u64,
     ) -> Self {
-        let now = now_secs();
+        let now = u64::try_from(unix_secs()).unwrap_or(0);
         Self {
             account_id: account_id.into(),
             device_id: device_id.into(),
@@ -189,7 +182,7 @@ mod tests {
     #[test]
     fn rejects_expired() {
         let mut claims = TicketClaims::host("acc-1", "desk-1", None, 0);
-        claims.exp = now_secs().saturating_sub(10);
+        claims.exp = u64::try_from(unix_secs()).unwrap_or(0).saturating_sub(10);
         let ticket = claims.sign(SECRET).expect("sign");
         assert!(matches!(
             TicketClaims::verify(&ticket, SECRET),

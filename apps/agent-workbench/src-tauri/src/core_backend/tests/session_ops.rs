@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use conex_types::device::{
+use conex_device_protocol::{
     DeviceErrorCode, RunControlLevel, RunControlParams, RunTaskParams,
 };
 use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperation};

@@ -60,7 +60,7 @@ fn remote_audit_event(
 ) -> AgentEvent {
     AgentEvent::SecurityAudit {
         session_id: session_id.to_string(),
-        timestamp: conex_run::engine_provider::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         operation,
         targets,
         impact: ImpactAssessment::default(),

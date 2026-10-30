@@ -214,10 +214,7 @@ impl VendorPushChannel for ApnsSender {
         &self,
         notification: &VendorNotification,
     ) -> Result<VendorSendOutcome, VendorError> {
-        let now_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .unwrap_or_default();
+        let now_secs = u64::try_from(conex_shared::time::unix_secs()).unwrap_or(0);
         self.send_at(notification, now_secs).await
     }
 }
