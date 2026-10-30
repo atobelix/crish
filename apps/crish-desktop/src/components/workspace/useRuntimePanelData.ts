@@ -13,7 +13,6 @@ import {
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../store/storeAccess';
 import {
-  getActiveModelId,
   resolveDisplayModelId,
 } from '../../api/providerProfiles';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -109,7 +108,7 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
     }
   };
 
-  const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
+  const modelId = resolveDisplayModelId() || 'unknown';
   // plans/05 T5.4：费用只渲染引擎三态（formattedTotal / 未定价 / 免费），
   // 禁止 JS 估算与 `$` + toFixed
   const estimated =

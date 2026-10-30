@@ -11,7 +11,7 @@ import styles from './ChatCard.module.css';
 import { Button, Tooltip } from '@/components/ui';
 import { toggleExclusiveMenu } from '@/components/ui';
 import { getActiveModelRef } from '../../api/modelsCatalogStore';
-import { openSettings } from '../../api/storeAccess';
+import { openSettings } from '../../store/storeAccess';
 import {
   getLiveModel,
   getLiveProvider,
