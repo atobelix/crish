@@ -174,38 +174,19 @@ impl ToolExecutor {
         call: &ToolBatchCall,
         ctx: &ToolExecCtx,
         options: &ToolBatchOptions,
-        abort: Option<&crate::safe_point::AbortSignal>,
-        _approval: &Option<Arc<dyn ApprovalGate>>,
-    ) -> (
-        ToolContext,
-        Option<Arc<ApprovalChannel>>,
-        ToolExecutionContext,
-        ExecutorContext,
-        AbortToken,
-    ) {
+        abort: Option<&AbortSignal>,
+    ) -> (ToolContext, ToolExecutionContext, ExecutorContext) {
         let exec_ctx = ExecutorContext {
             run_id: ctx.run_id.clone(),
             session_id: ctx.session_id.clone(),
             tool_call_id: Some(call.id.clone()),
             cwd: ctx.cwd.clone(),
         };
-        let abort_token = AbortToken::new();
-        // BC03-1 / 04A / 04B：将 Run 级 AbortSignal 与工具级 AbortToken 物理绑定
-        if let Some(signal) = abort {
-            if signal.is_aborted() {
-                abort_token.abort();
-            } else {
-                let sig_clone = signal.clone();
-                let tok_clone = abort_token.clone();
-                tokio::spawn(async move {
-                    sig_clone.wait_aborted().await;
-                    tok_clone.abort();
-                });
-            }
-        }
         let tool_ctx = ToolContext {
             session_id: ctx.session_id.clone(),
-            abort_token: abort_token.clone(),
+            // BC03-1 / 04A / 04B（SL-01）：工具级令牌为 Run 级信号的子令牌，
+            // 中止沿令牌链级联，不派生监听任务
+            abort_token: abort.map_or_else(AbortToken::new, AbortSignal::tool_token),
             workspace_root: ctx
                 .workspace_root
                 .clone()
@@ -232,7 +213,7 @@ impl ToolExecutor {
             tool_call_id: Some(call.id.clone()),
             cwd: ctx.cwd.clone(),
         };
-        (tool_ctx, None, mw_ctx, exec_ctx, abort_token)
+        (tool_ctx, mw_ctx, exec_ctx)
     }
 
     pub(super) async fn run_pre_checks(

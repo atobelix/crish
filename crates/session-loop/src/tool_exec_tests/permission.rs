@@ -314,9 +314,9 @@ async fn w4b_ask_mode_denied_document_apply_md_user_denied() {
 }
 
 /// T10 集成：dangerous shell 工具经权限判定进入审批（Approved 后执行），
-/// ApprovalChannel 的审批事件进入批事件流
+/// 批级审批门的审批事件进入批事件流
 #[tokio::test]
-async fn permission_ask_mode_approval_channel_events_in_batch_stream() {
+async fn permission_ask_mode_approval_events_in_batch_stream() {
     let reg = registry_with(vec![Arc::new(DangerousTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];

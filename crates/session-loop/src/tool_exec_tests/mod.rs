@@ -7,6 +7,7 @@ pub(super) mod approval_fixture;
 pub(super) mod fixture;
 pub(super) mod middleware;
 
+mod abort_chain;
 mod approval;
 mod approval_hang;
 mod budget;

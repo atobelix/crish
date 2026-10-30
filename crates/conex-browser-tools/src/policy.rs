@@ -2,7 +2,7 @@
 //!
 //! `CommandPolicyHooks`（conex-browser/cdp/sender.rs:102-113）五钩子的
 //! MVP 形态——**单一判定点纪律**（17 §2.2）：命令级审批与审计出站由工具层
-//! 既有设施承担（dangerous + PermissionMode 三态 + AskChannel / SecurityAuditSink），
+//! 既有设施承担（dangerous + PermissionMode 三态 + 执行器审批门 / SecurityAuditSink），
 //! 发送层不重复拦截、不双份记账：
 //!
 //! - `idempotent` → `None`（不短路：在途合并由 sender 层处理）；

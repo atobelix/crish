@@ -70,9 +70,7 @@ pub mod write_paths;
 pub use audit::{
     security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
 };
-pub use context::{
-    create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, ToolContext,
-};
+pub use context::{create_mock_tool_context, AbortToken, ToolContext};
 // T-AB-02（后台任务契约，冻结接口 #1/#2）：trait 与数据结构导出——
 // 壳层（A3 注册表）与 R-AB2 工具面按冻结形状消费
 pub use background::{

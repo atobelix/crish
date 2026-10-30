@@ -15,7 +15,6 @@
 //!   （01 §五.5 三环语义：steer → 下一安全点；followUp → 仅 idle promote），
 //!   不打断流。
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::registry::ToolRegistry;
@@ -47,15 +46,6 @@ pub(crate) mod turn_complete;
 pub(crate) use tool_pairing::{
     reconcile_orphan_tool_calls, synthesize_and_record_interrupted_calls,
 };
-
-/// 消息 id 计数器（同毫秒内多次生成保证唯一）
-static MESSAGE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// 生成唯一消息 id（前缀 + 毫秒时间戳 + 序号）
-pub(crate) fn new_message_id(prefix: &str) -> String {
-    let n = MESSAGE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{prefix}-{}-{n}", conex_shared::time::unix_millis())
-}
 
 /// 重试等待延迟注入函数（D1 §3.1.2 注入面签名：本次尝试序号、Retry-After
 /// 毫秒 → 等待时长；测试注入确定性延迟，零真实等待不依赖 tokio pause）

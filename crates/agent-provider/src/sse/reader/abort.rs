@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use async_trait::async_trait;
 use tokio::sync::watch;
 
@@ -45,6 +47,16 @@ impl AbortFlag {
     /// 是否已触发
     pub fn is_aborted(&self) -> bool {
         *self.tx.borrow()
+    }
+
+    /// 把外部中止源中继到本旗标：`trigger` 先完成则触发 abort；全部
+    /// [AbortHandle] 释放（读取流结束或被丢弃）则直接返回——中继生命周期
+    /// 以观察方为界，承载它的任务不会越过所服务的流而常驻。
+    pub async fn abort_on(self, trigger: impl Future<Output = ()>) {
+        tokio::select! {
+            () = trigger => self.abort(),
+            () = self.tx.closed() => {}
+        }
     }
 }
 

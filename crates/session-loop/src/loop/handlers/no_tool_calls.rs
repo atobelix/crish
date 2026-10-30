@@ -20,12 +20,11 @@ use conex_types::message::{
 };
 use conex_types::session::AgentSessionEvent as E;
 
+use crate::ids::new_message_id;
 use crate::steering::strategy::ToolPromiseDetector;
 use crate::stream::ConsumeStopReason;
 
-use super::super::handlers::{
-    dispatch, last_assistant_message, new_message_id, HandlerOutcome, LoopState,
-};
+use super::super::handlers::{dispatch, last_assistant_message, HandlerOutcome, LoopState};
 use super::super::LoopError;
 
 /// 会话推导语言环境（避免跨语言 Steering 污染）
