@@ -1,7 +1,7 @@
 /**
  * 侧栏左下角账号卡片：
  * - 头像（点缀 + 账户入口）：已登录有图显示头像（加载失败回落首字母），无图显示首字母圆，未登录显示中性占位；
- *   点击打开设置并切到「账户」分区概览；未登录时由该分区的「登录」打开分栏登录弹窗，主界面不浮任何东西。
+ *   未登录点击直接弹出登录弹窗（openLogin，应用级单实例）；已登录点击打开设置并切到「账户」分区概览。
  * - 名字：点击打开 SettingsQuickMenu 快捷设置菜单。
  */
 import React, { useEffect, useState } from 'react';
@@ -29,6 +29,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
     const { isLoggedIn, user, profile, initialized, initSession } =
       useAuthField((state) => state);
     const setAccountView = useAccountUiStore((state) => state.setView);
+    const openLogin = useAccountUiStore((state) => state.openLogin);
     const { t } = useI18n();
     /** 加载失败的头像地址：失败后回落首字母，换图后自动重试 */
     const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
@@ -56,8 +57,12 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
       '用户卡片：'
     )}${activeUser} (${roleLabel})${t('sidebar.clickToOpen', '，点击打开')}${tooltip}`;
 
-    /** 头像入口：打开设置「账户」分区，并回到概览（离开过修改密码子页时） */
+    /** 头像入口：未登录直登；已登录打开设置「账户」分区并回到概览 */
     const openAccount = () => {
+      if (!isLoggedIn) {
+        openLogin();
+        return;
+      }
       setAccountView('overview');
       openSettings('profile');
     };
