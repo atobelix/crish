@@ -1406,6 +1406,7 @@ version = "0.1.1"
 dependencies = [
  "conex-doc-collab",
  "conex-md-ast",
+ "conex-shared",
  "hex",
  "notify",
  "rusqlite",

@@ -31,6 +31,11 @@ use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
 
 const TICKET_WINDOW: Duration = Duration::from_secs(60);
+
+/// 当前 Unix 毫秒的 u64 协议面（时间真源 = conex-shared::time）。
+fn now_ms_u64() -> u64 {
+    u64::try_from(unix_millis()).unwrap_or(0)
+}
 const TICKET_PER_IP: usize = 120;
 const TICKET_PER_TOKEN: usize = 30;
 const PRESENCE_PER_IP: usize = 60;
@@ -526,7 +531,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
                     break;
                 }
                 let ping =
-                    json!({ "type": "relay.ping", "ts": u64::try_from(unix_millis()).unwrap_or(0) })
+                    json!({ "type": "relay.ping", "ts": now_ms_u64() })
                         .to_string();
                 if state.hub.send(&tx, ping).is_err() {
                     break;
@@ -685,7 +690,7 @@ fn handle_client_text(
                 tx,
                 json!({
                     "type": "relay.pong",
-                    "ts": ts.unwrap_or_else(|| u64::try_from(unix_millis()).unwrap_or(0))
+                    "ts": ts.unwrap_or_else(|| now_ms_u64())
                 })
                 .to_string(),
             );
@@ -702,7 +707,7 @@ struct TicketReplay {
 
 impl TicketReplay {
     fn mark(&self, jti: &str, exp: u64) -> bool {
-        let now = u64::try_from(unix_millis()).unwrap_or(0) / 1000;
+        let now = now_ms_u64() / 1000;
         let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
         if used.len() > 4096 {
             used.retain(|_, expiry| *expiry + 5 >= now);
@@ -799,6 +804,8 @@ mod tests {
     use crate::ticket::TicketRole;
     use async_trait::async_trait;
 
+    mod extra;
+
     struct MockVerifier;
 
     #[async_trait]
@@ -833,19 +840,6 @@ mod tests {
             },
             Arc::new(MockVerifier),
         ))
-    }
-
-    #[test]
-    fn ticket_replay_guard_blocks_second_use() {
-        let replay = TicketReplay::default();
-        assert!(replay.mark(
-            "jti-1",
-            u64::try_from(unix_millis()).unwrap_or(0) / 1000 + 60
-        ));
-        assert!(!replay.mark(
-            "jti-1",
-            u64::try_from(unix_millis()).unwrap_or(0) / 1000 + 60
-        ));
     }
 
     #[test]

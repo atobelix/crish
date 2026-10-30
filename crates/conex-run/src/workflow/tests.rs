@@ -11,7 +11,7 @@ use crate::core_error::CoreError;
 use crate::sched::cron::parse_cron;
 use crate::sched::SchedulerRegistry;
 
-use super::schedule::{epoch_ms_to_iso, next_fire_after_ms, validate_cron_expression};
+use super::schedule::{next_fire_after_ms, validate_cron_expression};
 use super::store::SESSION_META_INDEX_KEY_FOR_TEST as SESSION_META_INDEX_KEY;
 use super::*;
 
@@ -637,16 +637,6 @@ fn schedule_next(expression: &str, after_ms: u64) -> Option<u64> {
     parse_cron(expression)
         .ok()?
         .next_fire_after_in_offset(after_ms, 0)
-}
-
-#[test]
-fn epoch_iso_format_is_parseable() {
-    let iso = epoch_ms_to_iso(1_752_000_000_000);
-    assert!(iso.ends_with('Z'), "应为 UTC Z 后缀：{iso}");
-    assert!(iso.contains('T'), "应为 ISO 格式：{iso}");
-    let secs = iso[..iso.len() - 5].replace(['T', ':'], "-");
-    let parts: Vec<&str> = secs.split('-').collect();
-    assert_eq!(parts.len(), 6, "ISO 应含完整日期时间字段：{iso}");
 }
 
 /// 持久化重启恢复：MemoryStore 残留 → 新后端 seq 不撞号、列表可读回
@@ -1434,3 +1424,5 @@ async fn trigger_workflow_steering_routes_to_bound_target_session_or_fallback() 
         "未绑定 target_session_id 时，SteeringInputEntry.session_id 必须回退为 sched-<cron_id>"
     );
 }
+
+mod extra;

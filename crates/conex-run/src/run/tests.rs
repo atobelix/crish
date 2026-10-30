@@ -79,24 +79,6 @@ fn tool_result_block(id: &str, output: &str) -> AgentMessageBlock {
     }
 }
 
-/// 错误文案 → payload：77 码兜底 + 人读文案
-#[test]
-fn failure_payload_uses_common_unknown_code() {
-    let payload = crish_payload_from_message("provider 调用失败");
-    assert_eq!(payload.code, codes::COMMON_UNKNOWN);
-    assert!(payload.message.contains("provider 调用失败"));
-    assert!(!payload.retryable);
-}
-
-/// 审批映射：wire 决策规范值（approved / denied / expired，03 §5.3-3）
-#[test]
-fn approval_decisions_map_to_wire_values() {
-    let json = serde_json::to_string(&WireApprovalDecision::Denied).unwrap();
-    assert_eq!(json, "\"denied\"");
-    let approved = serde_json::to_string(&WireApprovalDecision::Approved).unwrap();
-    assert_eq!(approved, "\"approved\"");
-}
-
 // ── T-D-14 权限传递层：审批门载荷与裁决者路由 ──
 
 /// 组装子代理 run 的审批门（父 run 归属注入；广播落到记录发射器）
@@ -11281,3 +11263,5 @@ async fn core_read_session_events_limit_pushdown() {
     assert!(page.has_more);
     assert_eq!(page.next_after_sequence, 2, "游标 = 页末全局 sequence");
 }
+
+mod extra;

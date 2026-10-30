@@ -111,9 +111,7 @@ pub(crate) use crate::wait_channel::{ControlBusResolver, SubagentWaitRegistry};
 #[cfg(test)]
 pub(crate) use conex_types::error::ProviderErrorKind;
 #[cfg(test)]
-pub(crate) use conex_types::events::{
-    ApprovalDecision as WireApprovalDecision, SecurityAuditDecision, SecurityAuditOperation,
-};
+pub(crate) use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 #[cfg(test)]
 pub(crate) use conex_types::impact::ImpactAssessment;
 #[cfg(test)]

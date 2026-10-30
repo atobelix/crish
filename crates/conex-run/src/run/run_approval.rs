@@ -2,6 +2,10 @@
 //!
 //! 经 run/mod.rs 聚合接线；顶层符号 pub 化供兄弟模与门面 re-export。
 
+mod danger;
+
+pub use danger::derive_danger_level;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -658,32 +662,6 @@ pub fn list_pending_approvals_impl(state: &CoreRunState) -> Vec<PendingApproval>
                 })
         })
         .collect()
-}
-
-/// 危险级别推导（R1-04 / M6 C13：桌面按 F2 §2.2 表推导，移动端不重算）
-///
-/// 轻量启发式（与前端 approvalHandlers S9 宽容解析同语义的子集）：
-/// 删除类工具 / 参数含删除语义 → 2（高风险，移动端二次确认），其余
-/// 常规确认 → 1。红线请求不会到达审批门（exec_verdict 裁决中心对红线
-/// 任何模式先行 Deny），此处无需红线分支。
-pub fn derive_danger_level(tool_name: &str, param_keys: &[String]) -> u8 {
-    const DESTRUCTIVE_TOOLS: [&str; 5] = [
-        "shell:write",
-        "shell:exec",
-        "git:revert",
-        "file:delete",
-        "workspace:delete",
-    ];
-    if DESTRUCTIVE_TOOLS.contains(&tool_name) {
-        return 2;
-    }
-    if param_keys
-        .iter()
-        .any(|k| k.contains("delete") || k.contains("remove") || k.contains("overwrite"))
-    {
-        return 2;
-    }
-    1
 }
 
 /// 审批历史补拉（R1-04 / M6 C14：approval-resolved 事件白名单投影——
