@@ -98,7 +98,7 @@ fn f3_f4_session_commands_registered() {
 }
 #[test]
 fn models_read_save_apply_have_real_primary_registration() {
-    let main = include_str!("../src/main.rs");
+    let main = include_str!("../src/command_registry.rs");
     for name in [
         "workbench_read_models_yaml",
         "workbench_save_models_yaml",
@@ -117,7 +117,7 @@ fn models_read_save_apply_have_real_primary_registration() {
 #[test]
 fn capability_dictionary_read_face_is_registered() {
     const NAME: &str = "workbench_read_capability_dictionary";
-    let main = include_str!("../src/main.rs");
+    let main = include_str!("../src/command_registry.rs");
     assert!(
         manifest_names().contains(&NAME),
         "{NAME} 必须登记 manifest（四方权威 ①）"
@@ -141,7 +141,7 @@ fn capability_dictionary_read_face_is_registered() {
 /// manifest 重新登记（防「退役后又悄悄复活」），也不得出现在 main.rs 注册面。
 #[test]
 fn retired_drift_debt_commands_are_not_registered() {
-    let main = include_str!("../src/main.rs");
+    let main = include_str!("../src/command_registry.rs");
     let names = manifest_names();
     for retired in [
         "workbench_select_folder",

@@ -205,11 +205,11 @@ async fn probe_ping_and_scan_with_local_mock_server() {
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let app = Router::new()
-        .route("/chat/completions", post(|| async {
+        .route("/v1/chat/completions", post(|| async {
             ([(axum::http::header::CONTENT_TYPE, "text/event-stream")],
             "data: {\"choices\":[{\"delta\":{\"content\":\"OK\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
         }))
-        .route("/models", get(|| async { Json(serde_json::json!({"data":[{"id":"mock-model-1"},{"id":"new-candidate"}]})) }));
+        .route("/v1/models", get(|| async { Json(serde_json::json!({"data":[{"id":"mock-model-1"},{"id":"new-candidate"}]})) }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

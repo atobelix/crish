@@ -23,7 +23,7 @@ use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
 
-use crate::control::ControlBus;
+use crate::control::{ControlBus, ControlIntent};
 use crate::input::AgentInputQueue;
 use crate::safe_point::{apply_safe_point_control, AbortSignal};
 use crate::state::AgentSessionMachine;
@@ -485,6 +485,33 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
 ///
 /// 返回 [Some] 表示 run 已可收敛（force_cancel / cooperative_stop），
 /// [None] 表示继续（soft_inject 只读消费后消息已落环）。
+/// EV-04：control-intent 两态发射（enqueued 先、consumed 后，intent_id 配对）。
+pub(crate) fn emit_control_intents(state: &mut LoopState, intents: &[ControlIntent]) {
+    let session_id = state.machine.context().session_id.clone();
+    for intent in intents {
+        state.events.push(AgentEvent::ControlIntent {
+            session_id: session_id.clone(),
+            timestamp: conex_shared::time::now_iso_utc(),
+            kind: intent.kind.as_event_kind().to_string(),
+            intent_id: intent.id.clone(),
+            source: intent.source.clone(),
+            reason: intent.reason.clone(),
+            state: "enqueued".to_string(),
+        });
+    }
+    for intent in intents {
+        state.events.push(AgentEvent::ControlIntent {
+            session_id: session_id.clone(),
+            timestamp: conex_shared::time::now_iso_utc(),
+            kind: intent.kind.as_event_kind().to_string(),
+            intent_id: intent.id.clone(),
+            source: intent.source.clone(),
+            reason: intent.reason.clone(),
+            state: "consumed".to_string(),
+        });
+    }
+}
+
 pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>, LoopError> {
     // AbortSignal 等价 L3 强停，优先于总线内任何意图（01 §2.10）
     let (action, drained) = {
@@ -510,29 +537,7 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
     // intent_id 两态配对（Delta 可丢观测事件；软注入消息本体不入事件，
     // message-start/end 已可见；cooperative_stop 的 reason 经 intent 透出，
     // 不再丢弃）
-    let session_id = state.machine.context().session_id.clone();
-    for intent in &drained {
-        state.events.push(AgentEvent::ControlIntent {
-            session_id: session_id.clone(),
-            timestamp: conex_shared::time::now_iso_utc(),
-            kind: intent.kind.as_event_kind().to_string(),
-            intent_id: intent.id.clone(),
-            source: intent.source.clone(),
-            reason: intent.reason.clone(),
-            state: "enqueued".to_string(),
-        });
-    }
-    for intent in &drained {
-        state.events.push(AgentEvent::ControlIntent {
-            session_id: session_id.clone(),
-            timestamp: conex_shared::time::now_iso_utc(),
-            kind: intent.kind.as_event_kind().to_string(),
-            intent_id: intent.id.clone(),
-            source: intent.source.clone(),
-            reason: intent.reason.clone(),
-            state: "consumed".to_string(),
-        });
-    }
+    emit_control_intents(state, &drained);
     // 重构（BC01-2）：仅在真正终止（ForceCancel / CooperativeStop）时补发 TurnEnd；
     // 软注入绝不触碰 TurnEnd，避免单回合双终态；强停时先将中断合成工具消息入树，再发射 TurnEnd。
     match action {

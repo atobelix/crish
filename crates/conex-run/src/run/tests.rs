@@ -1902,7 +1902,7 @@ async fn provider_apply_swaps_next_request_payload() {
     let captured = server.wait_for(1).await;
     assert_eq!(captured.len(), 1, "应恰好捕获 1 个请求");
     assert!(
-        captured[0].path.starts_with("/v1-new/chat/completions"),
+        captured[0].path.starts_with("/v1-new/v1/chat/completions"),
         "请求 URL 必须用新 baseUrl：{}",
         captured[0].path
     );
