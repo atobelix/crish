@@ -20,6 +20,7 @@ use agent_provider::config::Endpoint;
 use session_loop::provider::ProviderCall;
 use session_loop::stream::{ProviderStreamEvent, StopReason};
 use session_loop::testing::TestProvider;
+use session_loop::tool_events::{ApprovalOutcome, ApprovalRequester};
 use std::collections::BTreeMap;
 use std::time::Duration;
 // T4.3-R2：本地 HTTP 请求捕获服务器（真实 wire 层载荷断言）
@@ -147,14 +148,14 @@ async fn gate_routes_subagent_request_to_main_agent_arbiter() {
     });
     // 等待广播 + pending 注册后裁决（主 agent 裁决 = 同一 resolve 入口）
     tokio::time::sleep(Duration::from_millis(100)).await;
-    gate.resolve("tc-1", ApprovalDecision::Approved)
+    gate.resolve("tc-1", ApprovalOutcome::approved())
         .await
         .expect("resolve 应放行（I-02 校验通过）");
     let decision = tokio::time::timeout(Duration::from_secs(2), wait)
         .await
         .expect("审批应在时限内返回")
         .expect("request_approval 不应 panic");
-    assert_eq!(decision, ApprovalDecision::Approved);
+    assert_eq!(decision.decision, ApprovalDecision::Approved);
     // 广播载荷：requesterRunId / reason / 路由 arbiter=main-agent
     let payloads = emitter.0.lock().unwrap().clone();
     let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
@@ -330,7 +331,7 @@ async fn t10_approve_forged_tool_call_id_returns_not_found_no_event() {
         .await
         .expect("审批应在时限内返回")
         .expect("request_approval 不应 panic");
-    assert_eq!(decision, ApprovalDecision::Approved);
+    assert_eq!(decision.decision, ApprovalDecision::Approved);
     // 裁决后落地 approval-resolved（真实验证：事件只在真实裁决后出现）
     let payloads = emitter.0.lock().unwrap().clone();
     assert!(
@@ -399,7 +400,7 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
         .expect("短超时应在时限内返回")
         .expect("request_approval 不应 panic");
     assert_eq!(
-        decision,
+        decision.decision,
         ApprovalDecision::Expired,
         "超时必须是 Expired 权威收场"
     );
@@ -442,7 +443,7 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
         .expect("裁决应在时限内返回")
         .expect("request_approval 不应 panic");
     assert!(
-        matches!(decision, ApprovalDecision::Denied { .. }),
+        matches!(decision.decision, ApprovalDecision::Denied),
         "首次裁决应为 Denied"
     );
     let err = approve_tool_impl(
@@ -531,7 +532,7 @@ async fn gate_deflects_approval_when_arbiter_waiting_on_subagent() {
                 .await
         });
         tokio::time::sleep(Duration::from_millis(100)).await;
-        gate.resolve("tc-1", ApprovalDecision::Approved)
+        gate.resolve("tc-1", ApprovalOutcome::approved())
             .await
             .expect("resolve 应放行");
         let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
@@ -567,7 +568,7 @@ async fn main_agent_gate_payload_has_no_requester_fields() {
             .await
     });
     tokio::time::sleep(Duration::from_millis(100)).await;
-    gate.resolve("tc-1", ApprovalDecision::Approved)
+    gate.resolve("tc-1", ApprovalOutcome::approved())
         .await
         .expect("resolve 应放行");
     let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
@@ -7185,7 +7186,7 @@ async fn resolve_all_pending_approvals(state: &CoreRunState, window: Duration) -
                 };
                 if let Some(call_id) = call_id {
                     run.approval
-                        .resolve(&call_id, ApprovalDecision::Approved)
+                        .resolve(&call_id, ApprovalOutcome::approved())
                         .await
                         .expect("主 agent 裁决应成功");
                     resolved += 1;
@@ -7662,7 +7663,7 @@ async fn subagent_approval_carries_requester_run_id_and_resolves() {
                     };
                     if let Some(call_id) = call_id {
                         run.approval
-                            .resolve(&call_id, ApprovalDecision::Approved)
+                            .resolve(&call_id, ApprovalOutcome::approved())
                             .await
                             .expect("主 agent 裁决应成功");
                         break (true, got);

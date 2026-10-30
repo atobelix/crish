@@ -17,7 +17,7 @@ use orchestrator::persist::LocalDbStore;
 use session_loop::provider::ProviderCall;
 use session_loop::stream::{ProviderStreamEvent, StopReason};
 use session_loop::testing::TestProvider;
-use session_loop::tool_events::ApprovalDecision;
+use session_loop::tool_events::ApprovalOutcome;
 use tokio::process::Child;
 
 use crate::background::BackgroundTaskRegistry;
@@ -292,7 +292,7 @@ async fn resolve_all_pending_approvals(state: &CoreRunState, window: Duration) {
                 .collect::<Vec<_>>();
             for call_id in call_ids {
                 run.approval
-                    .resolve(&call_id, ApprovalDecision::Approved)
+                    .resolve(&call_id, ApprovalOutcome::approved())
                     .await
                     .expect("审批放行");
             }

@@ -90,9 +90,7 @@ async fn ask_large_revert_denied_after_approval_request() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        decision: ApprovalOutcome::denied("no"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -118,7 +116,7 @@ async fn ask_large_revert_approved_then_executes() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)

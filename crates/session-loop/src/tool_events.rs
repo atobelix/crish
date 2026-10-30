@@ -38,6 +38,7 @@ use agent_tools::permission::PermissionMode;
 use conex_agents::capability::CapabilityCell;
 use conex_agents::permission::PermissionCell;
 use conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT;
+use conex_types::events::ApprovalDecision;
 use conex_types::tool::{ToolCategory, ToolConcurrency};
 use serde_json::Value;
 use std::sync::Arc;
@@ -83,7 +84,7 @@ pub enum ToolEvent {
     /// AgentEvent::ApprovalResolved（复用既有变体，协议不变）。
     ApprovalResolved {
         call_id: String,
-        /// 引擎侧审批决策（当前恒 Expired；保留全量枚举供映射层对齐）
+        /// 引擎侧审批决策（当前恒 Expired；领域枚举与 wire 同源）
         decision: ApprovalDecision,
     },
     /// 单工具结束（携带完整分类结果：成功输出 / 错误码+文案）
@@ -118,15 +119,45 @@ pub enum ToolEvent {
     BatchEnd { batch_id: String },
 }
 
-/// 审批决策
-#[derive(Debug, Clone, PartialEq)]
-pub enum ApprovalDecision {
+/// 审批结果：领域决策（`conex_types::events::ApprovalDecision`，wire 无载荷
+/// 字符串枚举）+ 拒绝原因（wire 事件无 reason 字段，拒绝原因独立承载）。
+///
+/// 拒绝原因的唯一消费方是执行器错误文案（`user denied: …`
+/// / 子代理回传指引），随 tool-end 事件的 `error_message` 落库；
+/// approval-resolved 事件保持 registry 定义的
+/// `approved|denied|expired` 三值形态，wire 不变。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalOutcome {
+    /// 领域决策（与 wire 枚举同源，无载荷）
+    pub decision: ApprovalDecision,
+    /// 拒绝原因（仅 Denied 携带；其余决策恒 None）
+    pub reason: Option<String>,
+}
+
+impl ApprovalOutcome {
     /// 通过
-    Approved,
-    /// 拒绝（用户明确拒绝）
-    Denied { reason: String },
+    pub fn approved() -> Self {
+        Self {
+            decision: ApprovalDecision::Approved,
+            reason: None,
+        }
+    }
+
+    /// 拒绝（携带拒绝原因）
+    pub fn denied(reason: impl Into<String>) -> Self {
+        Self {
+            decision: ApprovalDecision::Denied,
+            reason: Some(reason.into()),
+        }
+    }
+
     /// 审批超时过期
-    Expired,
+    pub fn expired() -> Self {
+        Self {
+            decision: ApprovalDecision::Expired,
+            reason: None,
+        }
+    }
 }
 
 /// 审批请求方身份（T-D-14 权限传递层，用户定夺「子代理申请 → 主 agent 裁决」）
@@ -166,7 +197,7 @@ pub trait ApprovalGate: Send + Sync {
         args: &Value,
         requester: Option<&ApprovalRequester>,
         reason: Option<&str>,
-    ) -> ApprovalDecision;
+    ) -> ApprovalOutcome;
 }
 
 /// 工具错误分类（fatalOnError 判定依据，01 §五.8）

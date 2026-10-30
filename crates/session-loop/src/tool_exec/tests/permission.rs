@@ -53,9 +53,7 @@ async fn permission_ask_mode_denied_dangerous_skips_execution() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        decision: ApprovalOutcome::denied("no"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -108,9 +106,7 @@ async fn permission_smart_mode_denied_dangerous_skips_execution() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "denied by user".into(),
-        },
+        decision: ApprovalOutcome::denied("denied by user"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -285,9 +281,7 @@ async fn w4b_ask_mode_denied_document_apply_md_user_denied() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "user said no notes".into(),
-        },
+        decision: ApprovalOutcome::denied("user said no notes"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -325,7 +319,7 @@ async fn permission_ask_mode_approval_events_in_batch_stream() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)

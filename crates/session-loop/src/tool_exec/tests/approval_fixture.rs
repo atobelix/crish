@@ -19,12 +19,12 @@ impl ApprovalGate for RecordingApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         self.order
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(call_id.to_string());
-        ApprovalDecision::Approved
+        ApprovalOutcome::approved()
     }
 }
 
@@ -42,13 +42,13 @@ impl ApprovalGate for BlockingApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         self.order
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(call_id.to_string());
         self.release.notified().await;
-        ApprovalDecision::Approved
+        ApprovalOutcome::approved()
     }
 }
 
@@ -65,24 +65,22 @@ impl ApprovalGate for DenySomeApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         if call_id == self.deny {
-            ApprovalDecision::Denied {
-                reason: "no".into(),
-            }
+            ApprovalOutcome::denied("no")
         } else {
-            ApprovalDecision::Approved
+            ApprovalOutcome::approved()
         }
     }
 }
 
 /// 按序返回决策的测试门（T10：批级审批通过 → 重试审批拒绝场景）
 pub(super) struct SequenceApproval {
-    decisions: std::sync::Mutex<VecDeque<ApprovalDecision>>,
+    decisions: std::sync::Mutex<VecDeque<ApprovalOutcome>>,
 }
 
 impl SequenceApproval {
-    pub(super) fn new(decisions: Vec<ApprovalDecision>) -> Self {
+    pub(super) fn new(decisions: Vec<ApprovalOutcome>) -> Self {
         Self {
             decisions: std::sync::Mutex::new(VecDeque::from(decisions)),
         }
@@ -98,12 +96,12 @@ impl ApprovalGate for SequenceApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         self.decisions
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .pop_front()
-            .unwrap_or(ApprovalDecision::Approved)
+            .unwrap_or(ApprovalOutcome::approved())
     }
 }
 
@@ -121,7 +119,7 @@ impl ApprovalGate for PendingApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         std::future::pending().await
     }
 }
@@ -151,10 +149,10 @@ impl ApprovalGate for HangAfterApprovals {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         let n = self.consulted.fetch_add(1, Ordering::SeqCst);
         if n < self.hang_after {
-            ApprovalDecision::Approved
+            ApprovalOutcome::approved()
         } else {
             std::future::pending().await
         }
@@ -163,7 +161,7 @@ impl ApprovalGate for HangAfterApprovals {
 
 /// 记录请求方身份的测试门（T-D-14：断言子代理请求透传 requester）
 pub(super) struct RequesterRecordingApproval {
-    pub(super) decision: ApprovalDecision,
+    pub(super) decision: ApprovalOutcome,
     pub(super) received: Arc<std::sync::Mutex<Option<ApprovalRequester>>>,
 }
 #[async_trait::async_trait]
@@ -175,7 +173,7 @@ impl ApprovalGate for RequesterRecordingApproval {
         _args: &Value,
         requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         *self.received.lock().unwrap() = requester.cloned();
         self.decision.clone()
     }

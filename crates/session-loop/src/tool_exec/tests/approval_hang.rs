@@ -373,7 +373,7 @@ async fn requires_approval_approved_then_retries_execution() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -404,10 +404,8 @@ async fn requires_approval_denied_returns_user_denied() {
     };
     // 批级审批通过（首问），重试审批拒绝（次问）
     let gate = SequenceApproval::new(vec![
-        ApprovalDecision::Approved,
-        ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        ApprovalOutcome::approved(),
+        ApprovalOutcome::denied("no"),
     ]);
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -432,7 +430,10 @@ async fn requires_approval_expired_returns_approval_expired() {
     let opts = ToolBatchOptions {
         ..Default::default()
     };
-    let gate = SequenceApproval::new(vec![ApprovalDecision::Approved, ApprovalDecision::Expired]);
+    let gate = SequenceApproval::new(vec![
+        ApprovalOutcome::approved(),
+        ApprovalOutcome::expired(),
+    ]);
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
         .await;

@@ -42,9 +42,9 @@ pub(crate) enum ApprovalWaitOutcome {
     /// abort 竞速命中（不伪造审批事件，按取消收场——对齐
     /// approval.rs:135 语义）
     Cancelled,
-    /// 审批门在超时内返回决策（超时 → [ApprovalDecision::Expired]，
+    /// 审批门在超时内返回决策（超时 → [ApprovalOutcome::expired]，
     /// 调用方既有 Expired 分支直接复用）
-    Decision(ApprovalDecision),
+    Decision(ApprovalOutcome),
 }
 
 /// 批级审批三个 await 点（顺序路径 / 并行组审批循环 /
@@ -86,9 +86,9 @@ pub(crate) async fn approval_wait(
                 return ApprovalWaitOutcome::Cancelled;
             }
             match result {
-                Ok(decision) => ApprovalWaitOutcome::Decision(decision),
+                Ok(outcome) => ApprovalWaitOutcome::Decision(outcome),
                 // 超时：Expired（调用方既有分支复用，非致命）
-                Err(_) => ApprovalWaitOutcome::Decision(ApprovalDecision::Expired),
+                Err(_) => ApprovalWaitOutcome::Decision(ApprovalOutcome::expired()),
             }
         }
     }

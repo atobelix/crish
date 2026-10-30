@@ -23,9 +23,7 @@ use conex_types::tool::{
 };
 
 use crate::safe_point::AbortSignal;
-use crate::tool_events::{
-    ApprovalDecision, ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent,
-};
+use crate::tool_events::{ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 use std::sync::Arc;
 
@@ -429,15 +427,8 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     session_id: session_id.clone(),
                     tool_call_id: call_id.clone(),
                     request_id: None,
-                    decision: match decision {
-                        ApprovalDecision::Approved => {
-                            conex_types::events::ApprovalDecision::Approved
-                        }
-                        ApprovalDecision::Denied { .. } => {
-                            conex_types::events::ApprovalDecision::Denied
-                        }
-                        ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
-                    },
+                    // 领域枚举与 wire 同源（approved|denied|expired 三值）
+                    decision: *decision,
                     timestamp: conex_shared::time::now_iso_utc(),
                 }
             }

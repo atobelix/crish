@@ -28,7 +28,7 @@ async fn subagent_approval_flow_reaches_gate_with_requester_and_executes() {
     let exec = ToolExecutor::new(reg);
     let received = Arc::new(std::sync::Mutex::new(None));
     let gate = Arc::new(RequesterRecordingApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
         received: Arc::clone(&received),
     });
     let calls = vec![ToolBatchCall {
@@ -95,9 +95,7 @@ async fn subagent_denied_carries_relay_guidance() {
     let reg = registry_with(vec![Arc::new(DangerousTool)]);
     let exec = ToolExecutor::new(reg);
     let gate = Arc::new(RequesterRecordingApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "写入范围超出默认集".into(),
-        },
+        decision: ApprovalOutcome::denied("写入范围超出默认集"),
         received: Arc::new(std::sync::Mutex::new(None)),
     });
     let calls = vec![ToolBatchCall {
@@ -132,9 +130,7 @@ async fn main_agent_approval_requester_none_and_legacy_denied_text() {
     let exec = ToolExecutor::new(reg);
     let received = Arc::new(std::sync::Mutex::new(None));
     let gate = Arc::new(RequesterRecordingApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        decision: ApprovalOutcome::denied("no"),
         received: Arc::clone(&received),
     });
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
@@ -163,7 +159,7 @@ async fn subagent_approval_expired_does_not_interrupt_run() {
     let reg = registry_with(vec![Arc::new(DangerousTool)]);
     let exec = ToolExecutor::new(reg);
     let gate = Arc::new(RequesterRecordingApproval {
-        decision: ApprovalDecision::Expired,
+        decision: ApprovalOutcome::expired(),
         received: Arc::new(std::sync::Mutex::new(None)),
     });
     let calls = vec![ToolBatchCall {

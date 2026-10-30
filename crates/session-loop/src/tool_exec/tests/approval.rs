@@ -15,9 +15,7 @@ async fn approval_denied_is_not_fatal() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        decision: ApprovalOutcome::denied("no"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -29,6 +27,12 @@ async fn approval_denied_is_not_fatal() {
         .events
         .iter()
         .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })));
+    // R5：拒绝原因在事件与结果中都保留（tool-end 错误文案携带原因）
+    let tool_end_message = out.events.iter().find_map(|e| match e {
+        ToolEvent::ToolEnd { error_message, .. } => error_message.as_deref(),
+        _ => None,
+    });
+    assert_eq!(tool_end_message, Some("user denied: no"));
 }
 
 #[tokio::test]
@@ -40,7 +44,7 @@ async fn approval_approved_executes() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -58,7 +62,7 @@ async fn approval_expired_not_fatal() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Expired,
+        decision: ApprovalOutcome::expired(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -85,7 +89,7 @@ async fn approval_parallel_executes_concurrently() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let start = std::time::Instant::now();
     let out = exec

@@ -190,36 +190,41 @@ impl ToolExecutor {
                 ),
                 events,
             ),
-            ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
-                let retried = self.execute_single(call, ctx, options, abort, 2).await;
-                (retried, events)
-            }
-            ApprovalWaitOutcome::Decision(ApprovalDecision::Denied { reason }) => (
-                ClassifiedToolResult::error(
-                    &call.id,
-                    &call.tool_name,
-                    ToolErrorKind::UserDenied,
-                    denied_message(requester.is_some(), &reason),
-                    0,
-                ),
-                events,
-            ),
-            ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
-                events.push(ToolEvent::ApprovalResolved {
-                    call_id: call.id.clone(),
-                    decision: ApprovalDecision::Expired,
-                });
-                (
+            ApprovalWaitOutcome::Decision(outcome) => match outcome.decision {
+                ApprovalDecision::Approved => {
+                    let retried = self.execute_single(call, ctx, options, abort, 2).await;
+                    (retried, events)
+                }
+                ApprovalDecision::Denied => (
                     ClassifiedToolResult::error(
                         &call.id,
                         &call.tool_name,
-                        ToolErrorKind::ApprovalExpired,
-                        "approval expired",
+                        ToolErrorKind::UserDenied,
+                        denied_message(
+                            requester.is_some(),
+                            outcome.reason.as_deref().unwrap_or_default(),
+                        ),
                         0,
                     ),
                     events,
-                )
-            }
+                ),
+                ApprovalDecision::Expired => {
+                    events.push(ToolEvent::ApprovalResolved {
+                        call_id: call.id.clone(),
+                        decision: ApprovalDecision::Expired,
+                    });
+                    (
+                        ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::ApprovalExpired,
+                            "approval expired",
+                            0,
+                        ),
+                        events,
+                    )
+                }
+            },
         }
     }
 }

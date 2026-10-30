@@ -320,11 +320,8 @@ impl BatchRunner<'_> {
         group: &[usize],
         approval_active: bool,
         events: &mut Vec<ToolEvent>,
-    ) -> (
-        Vec<Option<ApprovalDecision>>,
-        Vec<Option<ApprovalRequester>>,
-    ) {
-        let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
+    ) -> (Vec<Option<ApprovalOutcome>>, Vec<Option<ApprovalRequester>>) {
+        let mut approvals: Vec<Option<ApprovalOutcome>> = vec![None; group.len()];
         // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
         // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
         let mut requesters: Vec<Option<ApprovalRequester>> = vec![None; group.len()];
@@ -401,7 +398,7 @@ impl BatchRunner<'_> {
     async fn execute_group(
         &self,
         group: &[usize],
-        approvals: &[Option<ApprovalDecision>],
+        approvals: &[Option<ApprovalOutcome>],
         requesters: &[Option<ApprovalRequester>],
         approval_active: bool,
         events: &mut Vec<ToolEvent>,
@@ -435,7 +432,10 @@ impl BatchRunner<'_> {
             let should_execute = match (verdict, approval_active) {
                 (PermissionVerdict::Deny, _) => false,
                 (PermissionVerdict::NeedsApproval, true) => {
-                    matches!(decided, Some(ApprovalDecision::Approved))
+                    matches!(
+                        decided,
+                        Some(outcome) if outcome.decision == ApprovalDecision::Approved
+                    )
                 }
                 // A3 fail-closed（P1 权限归一）：审批未启用/无门时需审批项
                 // 一律不透传执行（不再按 mode=None 直通执行）
@@ -459,14 +459,19 @@ impl BatchRunner<'_> {
                         )
                     }
                     _ => match decided {
-                        Some(ApprovalDecision::Denied { reason }) => ClassifiedToolResult::error(
-                            &call.id,
-                            &call.tool_name,
-                            ToolErrorKind::UserDenied,
-                            denied_message(requesters[pos].is_some(), reason),
-                            0,
-                        ),
-                        Some(ApprovalDecision::Expired) => {
+                        Some(outcome) if outcome.decision == ApprovalDecision::Denied => {
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::UserDenied,
+                                denied_message(
+                                    requesters[pos].is_some(),
+                                    outcome.reason.as_deref().unwrap_or_default(),
+                                ),
+                                0,
+                            )
+                        }
+                        Some(outcome) if outcome.decision == ApprovalDecision::Expired => {
                             // G-9：超时 → Expired 权威语义落库（并行组路径同
                             // 顺序路径；approval-resolved 位于本项
                             // approval-requested 与 tool-end 之间）

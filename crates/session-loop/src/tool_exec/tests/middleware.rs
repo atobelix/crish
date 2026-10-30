@@ -331,9 +331,7 @@ async fn middleware_runs_after_approval_gate() {
         calls: Arc::clone(&counter),
     })]);
     let gate = MockApproval {
-        decision: ApprovalDecision::Denied {
-            reason: "no".into(),
-        },
+        decision: ApprovalOutcome::denied("no"),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
@@ -349,7 +347,7 @@ async fn middleware_runs_after_approval_gate() {
         calls: Arc::clone(&counter2),
     })]);
     let gate2 = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out2 = exec2
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate2)), &opts, None)

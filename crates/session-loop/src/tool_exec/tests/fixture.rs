@@ -268,7 +268,7 @@ pub(super) fn exec_ctx() -> ToolExecCtx {
 
 /// 测试审批门
 pub(super) struct MockApproval {
-    pub(super) decision: ApprovalDecision,
+    pub(super) decision: ApprovalOutcome,
 }
 #[async_trait::async_trait]
 impl ApprovalGate for MockApproval {
@@ -279,7 +279,7 @@ impl ApprovalGate for MockApproval {
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         self.decision.clone()
     }
 }

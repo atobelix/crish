@@ -57,7 +57,7 @@ use crate::approval_router::{
 use crate::hooks::{HookEvent, HookRegistry};
 use crate::safe_point::AbortSignal;
 use crate::tool_events::{
-    ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
+    ApprovalGate, ApprovalOutcome, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 use agent_tools::context::{AbortToken, ExploreDocsQuotaContext, ToolContext};
@@ -75,6 +75,7 @@ use agent_tools::permission::{PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
 use agent_tools::write_paths::WritePathRegistry;
+use conex_types::events::ApprovalDecision;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
 use serde_json::Value;
 use std::path::PathBuf;

@@ -208,7 +208,7 @@ async fn cancel_siblings_approval_parallel_completes_before_fatal_judged() {
         ..Default::default()
     };
     let gate = MockApproval {
-        decision: ApprovalDecision::Approved,
+        decision: ApprovalOutcome::approved(),
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)

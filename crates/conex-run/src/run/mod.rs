@@ -121,7 +121,7 @@ pub(crate) use orchestrator::restore::{RestoreMode, StateSnapshot};
 #[cfg(test)]
 pub(crate) use orchestrator::ToolCallStamp;
 #[cfg(test)]
-pub(crate) use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
+pub(crate) use conex_types::events::ApprovalDecision;
 
 // ── 会话元数据键约定（checkpoint 阶段标记 / 产出目录键共用）────────
 
