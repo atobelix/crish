@@ -11,9 +11,9 @@ use agent_tools::tools::wait_subagents::{
 use conex_db::LocalDb;
 use conex_types::session_record::SessionAgent;
 
-use super::{SubagentStatusSource, WaitStore};
 #[cfg(any(test, feature = "test-support"))]
 use super::DECLARATION_CAP;
+use super::{SubagentStatusSource, WaitStore};
 
 // ── 默认生产适配器 ────────────────────────────────────────────────
 

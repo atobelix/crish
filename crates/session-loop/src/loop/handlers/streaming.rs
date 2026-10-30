@@ -78,7 +78,7 @@ pub(crate) async fn handle(
     // （request 最后使用点 = stream 调用，NLL 允许此后 &mut state；
     // 消费循环尚未开始，锚点必然先于任何 message-delta）。
     let request = build_request(state);
-    let request_started_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let request_started_at_ms = conex_shared::time::now_millis();
     let result = provider.stream(&request).await;
     emit_provider_request_anchored(state, request_started_at_ms);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
@@ -462,7 +462,8 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
             tracing::error!(target: "session_loop", "control_bus 锁中毒，按恢复模式继续：{e}");
             e.into_inner()
         });
-        let action = crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal));
+        let action =
+            crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal));
         let trace = if state.abort_signal.is_aborted() {
             Vec::new()
         } else {
@@ -676,7 +677,7 @@ fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
     };
     let completion = get("completionTokens").unwrap_or(0);
     let total = get("totalTokens").unwrap_or(0);
-    let completed_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let completed_at_ms = conex_shared::time::now_millis();
     if let Some(miss) = tracker.record_usage(scalars, completion, total, completed_at_ms) {
         tracing::debug!(
             missed_tokens = miss.missed_tokens,

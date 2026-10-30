@@ -101,7 +101,7 @@ async fn drain_available<R: AsyncBufRead + Unpin>(
         if buf.is_empty() {
             return Ok(true);
         }
-        acc.append(buf, u64::try_from(unix_millis()).unwrap_or(0));
+        acc.append(buf, conex_shared::time::now_millis());
         let len = buf.len();
         reader.consume(len);
     }

@@ -303,11 +303,7 @@ fn split_highlighted_html_lines(html: &str) -> Vec<String> {
                 i += 1;
             }
             _ => {
-                let ch_len = html[i..]
-                    .chars()
-                    .next()
-                    .map(char::len_utf8)
-                    .unwrap_or(1);
+                let ch_len = html[i..].chars().next().map(char::len_utf8).unwrap_or(1);
                 current.push_str(&html[i..i + ch_len]);
                 i += ch_len;
             }
@@ -345,7 +341,10 @@ mod tests {
     #[test]
     fn highlight_typescript_returns_classed_spans() {
         let html = highlight_code("const x: number = 1;", Some("ts"));
-        assert!(html.contains("<span class=\""), "expected classed spans: {html}");
+        assert!(
+            html.contains("<span class=\""),
+            "expected classed spans: {html}"
+        );
         assert!(html.contains("const"));
     }
 

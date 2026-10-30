@@ -199,7 +199,7 @@ fn notify_scheduled_run_failed(state: &Arc<CoreRunState>, active: &ActiveRun, me
     let Some((workflow_id, started_at_ms, hook)) = take_scheduled_run_hook(&active.run_id) else {
         return;
     };
-    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let finished_at_ms = conex_shared::time::now_millis();
     let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
     let output_summary = state
         .session_history
@@ -229,7 +229,7 @@ async fn notify_scheduled_run_terminal_after_drive(state: &Arc<CoreRunState>, ac
         conex_db::RunStatus::Cancelled => "cancelled",
         _ => "failed",
     };
-    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let finished_at_ms = conex_shared::time::now_millis();
     let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
     let output_summary = state
         .session_history
@@ -399,8 +399,7 @@ mod tests {
     fn launch_guard_test_state_with_store(
         store: Arc<dyn orchestrator::persist::Store>,
     ) -> Arc<CoreRunState> {
-        static STATE_SEQ: std::sync::atomic::AtomicU64 =
-            std::sync::atomic::AtomicU64::new(0);
+        static STATE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let emitter = Arc::new(RecordingEmitter::default());
         let bridge = EventBridge::new(
             "workbench-run-event",
@@ -518,9 +517,7 @@ mod tests {
             model: Arc::new(conex_agents::model::ModelCell::new(None)),
             project_name: String::new(),
             phase: std::sync::RwLock::new(ExecutionPhase::Active),
-            last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
-            ),
+            last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
         });
         state
             .active_runs
@@ -1592,9 +1589,7 @@ pub async fn run_task_impl(
         model: Arc::clone(&model_cell),
         project_name: project_name.clone(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     });
     state
         .active_runs
@@ -2022,7 +2017,9 @@ pub async fn push_emit_idle_event(
 
 /// F4：DB body（SessionMessage）→ HistoryMessage（字段一一对应；再经
 /// cached_history_to_conversation 保真水合为对话——与缓存路径同源）
-pub fn session_message_to_history(message: conex_types::session_record::SessionMessage) -> HistoryMessage {
+pub fn session_message_to_history(
+    message: conex_types::session_record::SessionMessage,
+) -> HistoryMessage {
     HistoryMessage {
         id: message.id,
         sender: message.sender,

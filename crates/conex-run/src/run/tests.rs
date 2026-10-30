@@ -240,9 +240,7 @@ async fn t10_active_run(
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            crate::now_ms_u64()
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     });
     state
         .active_runs
@@ -1705,8 +1703,7 @@ async fn subagent_run_abort_terminates_without_estop_bridge() {
 /// 独立临时 config 目录（不清理：静态 store 在测试结束后仍可能绑定该
 /// 目录，删除会触发后续只读初始化的缺省回落——保留无害且避免竞态）。
 fn temp_config_dir() -> std::path::PathBuf {
-    static CONFIG_DIR_SEQ: std::sync::atomic::AtomicU64 =
-        std::sync::atomic::AtomicU64::new(0);
+    static CONFIG_DIR_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
         "conex-config-test-{}-{}-{}",
         std::process::id(),
@@ -2899,10 +2896,8 @@ async fn runtime_permission_switch_propagates_to_child_cell() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert("run-parent".to_string(), Arc::clone(&parent));
-    let child = conex_agents::permission::PermissionCell::child(
-        Arc::clone(&parent.permission),
-        None,
-    );
+    let child =
+        conex_agents::permission::PermissionCell::child(Arc::clone(&parent.permission), None);
 
     state
         .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Full)
@@ -2916,7 +2911,10 @@ async fn runtime_permission_switch_propagates_to_child_cell() {
     state
         .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Ask)
         .expect("切换权限");
-    assert_eq!(child.effective(), conex_types::permission::PermissionMode::Ask);
+    assert_eq!(
+        child.effective(),
+        conex_types::permission::PermissionMode::Ask
+    );
     assert!(
         state
             .set_run_permission_mode("missing-run", conex_types::permission::PermissionMode::Full)
@@ -3107,7 +3105,9 @@ async fn model_and_capability_persist_for_terminal_subagent() {
     assert_eq!(rows[0].model_override, None);
 
     assert!(
-        state.set_subagent_model("s1", "missing", Some("x".to_string())).is_err(),
+        state
+            .set_subagent_model("s1", "missing", Some("x".to_string()))
+            .is_err(),
         "未知 agent 必须 NotFound"
     );
     assert!(
@@ -3180,9 +3180,7 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            crate::now_ms_u64()
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     })
 }
 
@@ -3482,9 +3480,7 @@ async fn failed_resume_launch_reinstates_drained_queue_entries() {
         queue.has_pending_for("s1"),
         "拉起失败后本轮条目必须回灌队列"
     );
-    let requeued = queue
-        .peek_for("s1")
-        .expect("回灌条目必须可读");
+    let requeued = queue.peek_for("s1").expect("回灌条目必须可读");
     assert!(
         requeued.text.contains(original_text),
         "回灌内容必须保留原唤醒文本：{}",
@@ -4043,7 +4039,11 @@ async fn restore_enqueues_single_subagent_summary_per_parent() {
         "汇总按父会话分组去重"
     );
     assert!(entry.is_steering, "汇总为 steering 受保护条目");
-    assert!(entry.text.contains("2 个子代理"), "摘要含数量：{}", entry.text);
+    assert!(
+        entry.text.contains("2 个子代理"),
+        "摘要含数量：{}",
+        entry.text
+    );
     assert!(entry.text.contains("调研员（grok-3）"), "摘要含标签与模型");
     assert!(entry.text.contains("实现者"), "摘要含全部标签");
     assert!(
@@ -8196,10 +8196,7 @@ async fn diag_goal_overwrite_dump() {
         .await
         .expect("run 发起成功");
     for i in 0..50 {
-        let raw = db
-            .get_session_meta(&goal_key("s1"))
-            .ok()
-            .flatten();
+        let raw = db.get_session_meta(&goal_key("s1")).ok().flatten();
         match raw {
             Some(raw) => {
                 let goal: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
@@ -9663,9 +9660,7 @@ async fn insert_continuity_run(
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            crate::now_ms_u64()
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     });
     state
         .active_runs
@@ -9979,9 +9974,9 @@ async fn continuity_kill_channel_lifecycle_paths() {
             allowed_write_paths: None,
             output_dir: None,
             started_at_ms: 1_000,
-        permission_mode: None,
-        capability_mode: None,
-        model_override: None,
+            permission_mode: None,
+            capability_mode: None,
+            model_override: None,
         }),
     )
     .await;

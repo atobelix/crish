@@ -28,12 +28,6 @@
 //! 任何一侧改动不同步（改 enum 不更新注册表 / 改注册表不匹配 serde），
 //! `cargo test -p conex-types` 立即失败。
 
-use conex_types::tool::{
-    CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
-    ContextCompressionHandoffMetadata, ContextCompressionPolicyAction,
-    ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionReason,
-    ContextCompressionRecord, ContextCompressionTrigger,
-};
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{
     AgentEvent, ApprovalDecision, BackpressureLevel, MissAttribution, PermissionRequest,
@@ -46,6 +40,12 @@ use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
 };
 use conex_types::session::AgentEndReason;
+use conex_types::tool::{
+    CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
+    ContextCompressionHandoffMetadata, ContextCompressionPolicyAction,
+    ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionReason,
+    ContextCompressionRecord, ContextCompressionTrigger,
+};
 use conex_types::tool::{
     ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,

@@ -1298,20 +1298,21 @@ async fn kill_all_rows_stay_terminal_across_restart() {
         let mut rows = db.load_session_agents(session_id).unwrap();
         let now = now_ms();
         for row in &mut rows {
-            row.messages.push(conex_types::session_record::SessionMessage {
-                id: format!("msg-{}", row.id),
-                sender: "user".to_string(),
-                text: Some(format!("产出 {}", row.id)),
-                thinking: None,
-                timestamp: now,
-                status: None,
-                stream_text_offset: None,
-                thinking_time: None,
-                tool_calls_json: None,
-                blocks_json: None,
-                tool_call_results_json: None,
-                usage: None,
-            });
+            row.messages
+                .push(conex_types::session_record::SessionMessage {
+                    id: format!("msg-{}", row.id),
+                    sender: "user".to_string(),
+                    text: Some(format!("产出 {}", row.id)),
+                    thinking: None,
+                    timestamp: now,
+                    status: None,
+                    stream_text_offset: None,
+                    thinking_time: None,
+                    tool_calls_json: None,
+                    blocks_json: None,
+                    tool_call_results_json: None,
+                    usage: None,
+                });
         }
         db.save_session_agents(session_id, &rows).unwrap();
         // kill_all：逐个投递 L3 强停 + 行归一 failed（终态收口在服务侧）
@@ -1426,7 +1427,8 @@ async fn running_subagents_normalized_across_crash_restart() {
     );
     assert!(
         rows.iter()
-            .all(|r| r.summary.as_deref() == Some(orchestrator::restore::INTERRUPTED_SUBAGENT_SUMMARY)),
+            .all(|r| r.summary.as_deref()
+                == Some(orchestrator::restore::INTERRUPTED_SUBAGENT_SUMMARY)),
         "中断摘要落库（保留已有 summary 语义由 DB 层单测覆盖）"
     );
     assert!(

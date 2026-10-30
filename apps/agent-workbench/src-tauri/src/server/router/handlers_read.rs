@@ -25,7 +25,7 @@ pub(super) async fn handle_hello(State(state): State<ServerState>) -> Json<Hello
     Json(HelloInfo {
         server_version: info.version,
         protocol_version: info.protocol_version,
-        server_time_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        server_time_ms: conex_shared::time::now_millis(),
     })
 }
 

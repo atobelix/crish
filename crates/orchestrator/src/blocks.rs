@@ -536,7 +536,14 @@ mod tests {
         assert_eq!(block.height, 1, "V1 不推进高度");
 
         // 行不存在 → Ok 无操作（对齐 LocalDb::update_block_state 宽容语义）
-        update_compression_block_summary(mem.as_ref(), "s1", "missing", BlockState::Committed, None, 1)
-            .unwrap();
+        update_compression_block_summary(
+            mem.as_ref(),
+            "s1",
+            "missing",
+            BlockState::Committed,
+            None,
+            1,
+        )
+        .unwrap();
     }
 }

@@ -129,7 +129,10 @@ async fn spawn_model_override_carried_and_inheritance_preserved() {
     );
 
     // 未携带 → None（跟随引擎当前配置 = 继承语义）
-    let _ = spawner.spawn(&request("调研二", None)).await.expect("spawn 应成功");
+    let _ = spawner
+        .spawn(&request("调研二", None))
+        .await
+        .expect("spawn 应成功");
     let launches = launcher.launches();
     assert_eq!(launches.len(), 2);
     let config = launches[1].subagent_config.as_ref().unwrap();

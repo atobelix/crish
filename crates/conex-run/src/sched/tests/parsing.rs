@@ -72,7 +72,7 @@ fn steering_group_id_shape() {
 #[test]
 fn scheduler_registry_pause_for_sets_and_refreshes_deadline() {
     let (registry, _, _, store) = test_registry();
-    let before = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let before = conex_shared::time::now_millis();
     let first = registry.pause_for(3600);
     assert!(
         first >= before + 3600 * 1000,
@@ -89,7 +89,7 @@ fn scheduler_registry_pause_for_sets_and_refreshes_deadline() {
 async fn scheduler_registry_pause_blocks_fire_then_resume_continues() {
     let (registry, pending, events, store) = test_registry();
     registry.set_fire_override_ms(40);
-    let pause_until = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) + 250;
+    let pause_until = conex_shared::time::now_millis() + 250;
     registry.set_paused_until_ms_for_test(Some(pause_until));
     registry
         .register(test_input("* * * * *", Some(2), false))

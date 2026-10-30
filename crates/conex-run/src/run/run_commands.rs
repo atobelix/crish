@@ -531,7 +531,7 @@ pub fn generate_run_id() -> String {
     let _ = getrandom::getrandom(&mut random);
     format!(
         "run-{}-{}",
-        base36(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
+        base36(conex_shared::time::now_millis()),
         base36(u32::from_le_bytes(random) as u64)
     )
 }
@@ -539,10 +539,7 @@ pub fn generate_run_id() -> String {
 /// 生成会话 id（sessionId 缺省时桌面新建会话，对齐前端 `sess-<时间戳>`
 /// 命名风格）
 pub fn generate_session_id() -> String {
-    format!(
-        "sess-{}",
-        base36(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
-    )
+    format!("sess-{}", base36(conex_shared::time::now_millis()))
 }
 
 /// base36 编码（0-9a-z；对齐前端 `Date.now().toString(36)` 风格）
@@ -963,7 +960,7 @@ fn abort_and_clean_hung_run(active: &ActiveRun, state: &CoreRunState, run_id: &s
 /// 3. 若未卡死且未完成（正常推进或在合法挂起中）：清零去抖并放行；
 /// 4. 若驱动任务已收口（`is_finished == true`）且仍停留 active_runs：连续 [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮去抖触发孤儿收割。
 pub async fn reap_orphan_runs_round(state: &Arc<CoreRunState>) {
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let candidates: Vec<(String, Arc<ActiveRun>)> = state
         .active_runs
         .lock()
@@ -1091,8 +1088,7 @@ mod tests {
 
     /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥）
     fn test_state() -> Arc<CoreRunState> {
-        static STATE_SEQ: std::sync::atomic::AtomicU64 =
-            std::sync::atomic::AtomicU64::new(0);
+        static STATE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let (bridge, _emitter) = recording_bridge();
         let snapshots: Arc<dyn SnapshotStore> =
             Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
@@ -1174,9 +1170,7 @@ mod tests {
             model: Arc::new(conex_agents::model::ModelCell::new(None)),
             project_name: String::new(),
             phase: std::sync::RwLock::new(ExecutionPhase::Active),
-            last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
-            ),
+            last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
         });
         state
             .active_runs
@@ -1360,7 +1354,7 @@ mod tests {
         let active =
             build_active_run(&state, "s1", "run-hung-after-lease", Some(running_handle)).await;
 
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         // 人工模拟一个过去已超期 130 秒的挂起租约
         {
             let mut phase_guard = active.phase.write().unwrap();
@@ -1402,7 +1396,7 @@ mod tests {
         });
         let active = build_active_run(&state, "s1", "run-active-stale", Some(running_handle)).await;
 
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         // 人工将心跳时间拨回 130 秒前
         active
             .last_heartbeat_ms

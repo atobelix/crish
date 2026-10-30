@@ -162,7 +162,12 @@ impl Store for CountingReserves {
         summary: &str,
     ) -> crate::persist::StoreResult<usize> {
         self.inner
-            .mark_session_agent_interrupted(parent_session_id, subagent_run_id, ended_at_ms, summary)
+            .mark_session_agent_interrupted(
+                parent_session_id,
+                subagent_run_id,
+                ended_at_ms,
+                summary,
+            )
             .await
     }
 

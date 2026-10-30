@@ -104,6 +104,8 @@ export const CRISH_ERROR_CODES = [
   "tool.browser.tab_limit_exceeded",
   "tool.browser.unwired",
   "tool.cancelled",
+  "tool.cd_blocked",
+  "tool.command_blocked",
   "tool.computer.cancelled",
   "tool.computer.capability_unavailable",
   "tool.computer.coords_out_of_bounds",

@@ -17,7 +17,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use conex_shared::time::unix_millis;
+use conex_shared::time::now_millis;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -32,10 +32,6 @@ use tokio::time::MissedTickBehavior;
 
 const TICKET_WINDOW: Duration = Duration::from_secs(60);
 
-/// 当前 Unix 毫秒的 u64 协议面（时间真源 = conex-shared::time）。
-fn now_ms_u64() -> u64 {
-    u64::try_from(unix_millis()).unwrap_or(0)
-}
 const TICKET_PER_IP: usize = 120;
 const TICKET_PER_TOKEN: usize = 30;
 const PRESENCE_PER_IP: usize = 60;
@@ -531,7 +527,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
                     break;
                 }
                 let ping =
-                    json!({ "type": "relay.ping", "ts": now_ms_u64() })
+                    json!({ "type": "relay.ping", "ts": now_millis() })
                         .to_string();
                 if state.hub.send(&tx, ping).is_err() {
                     break;
@@ -690,7 +686,7 @@ fn handle_client_text(
                 tx,
                 json!({
                     "type": "relay.pong",
-                    "ts": ts.unwrap_or_else(now_ms_u64)
+                    "ts": ts.unwrap_or_else(now_millis)
                 })
                 .to_string(),
             );
@@ -707,7 +703,7 @@ struct TicketReplay {
 
 impl TicketReplay {
     fn mark(&self, jti: &str, exp: u64) -> bool {
-        let now = now_ms_u64() / 1000;
+        let now = now_millis() / 1000;
         let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
         if used.len() > 4096 {
             used.retain(|_, expiry| *expiry + 5 >= now);

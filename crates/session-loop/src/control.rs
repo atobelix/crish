@@ -604,10 +604,7 @@ mod tests {
         let mut bus = ControlBus::new();
         assert!(!bus.stop_signal().is_aborted());
         bus.request_cooperative_stop(Some("enough".to_string()), None);
-        assert!(
-            bus.stop_signal().is_aborted(),
-            "协作停止入队即触发停止信号"
-        );
+        assert!(bus.stop_signal().is_aborted(), "协作停止入队即触发停止信号");
     }
 
     /// 无 L1 消息的混合队列（如仅 cooperative_stop + continue）→ cooperative_stop

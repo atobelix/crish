@@ -297,14 +297,12 @@ impl SessionLoopProducer {
         let Some(last) = &self.cache_session.last_stats else {
             return;
         };
-        if let Some(event) =
-            cold_cache_warning_event(
-                &self.session_id,
-                config,
-                last,
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-            )
-        {
+        if let Some(event) = cold_cache_warning_event(
+            &self.session_id,
+            config,
+            last,
+            conex_shared::time::now_millis(),
+        ) {
             sink.push(event);
         }
     }

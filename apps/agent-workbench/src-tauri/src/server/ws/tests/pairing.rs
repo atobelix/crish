@@ -111,7 +111,7 @@ async fn pair_upgrade_rejected_without_active_code() {
 async fn pair_hello_chain_ok_and_token_subscribes() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     let code = coordinator
-        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功")
         .code;
     let mut ws = ws_connect_anonymous(addr).await;
@@ -166,7 +166,7 @@ async fn pair_hello_chain_ok_and_token_subscribes() {
     send_envelope_text(
         &mut ws2,
         "heartbeat",
-        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
+        serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
     )
     .await;
     let (kind, _) = parse_frame(&next_text(&mut ws2).await.unwrap());
@@ -180,7 +180,7 @@ async fn pair_hello_chain_ok_and_token_subscribes() {
 async fn pair_hello_wrong_code_returns_error_frame() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_pair_hello(&mut ws, "CXN-AAAA-BBBB-CCCC").await;
@@ -197,7 +197,7 @@ async fn pair_hello_wrong_code_returns_error_frame() {
 async fn pair_hello_malformed_body_returns_error_frame() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_envelope_text(
@@ -249,7 +249,7 @@ async fn ws_hmac_signature_and_nonce_verification() {
     let (addr, _handle, raw_token, _) = test_server(None, None).await;
     let mut ws = ws_connect(addr, &raw_token).await;
 
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let device_id = "test-device";
     let body = serde_json::json!({ "ts": now, "deviceTimeMs": now });
     let body_str = serde_json::to_string(&body).unwrap();
@@ -546,7 +546,7 @@ async fn remote_other_session_commands_keep_their_wire_contracts() {
 async fn remote_run_control_rejects_pairing_state_connection() {
     let (addr, _handle, coordinator) = spawn_pairing_server().await;
     coordinator
-        .start_pairing(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功");
     let mut ws = ws_connect_anonymous(addr).await;
     send_remote_command(

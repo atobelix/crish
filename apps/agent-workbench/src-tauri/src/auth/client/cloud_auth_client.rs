@@ -204,7 +204,10 @@ impl CloudAuthClient {
     ) -> Result<EmailCodeTicket, CloudAuthError> {
         let resp = self
             .http
-            .post(format!("{}/api/auth/password/change/request", self.base_url))
+            .post(format!(
+                "{}/api/auth/password/change/request",
+                self.base_url
+            ))
             .bearer_auth(access_token)
             .json(&serde_json::json!({}))
             .send()
@@ -227,7 +230,10 @@ impl CloudAuthClient {
     ) -> Result<(), CloudAuthError> {
         let resp = self
             .http
-            .post(format!("{}/api/auth/password/change/confirm", self.base_url))
+            .post(format!(
+                "{}/api/auth/password/change/confirm",
+                self.base_url
+            ))
             .bearer_auth(access_token)
             .json(&serde_json::json!({
                 "code": code,

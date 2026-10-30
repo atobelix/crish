@@ -10,7 +10,9 @@ use std::time::Duration;
 use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, StateSnapshot};
 use orchestrator::session::{SessionRecord, SessionTree};
 
-use super::{CoreRunState, RESTORE_GROUP_PREFIX, RESTORE_MAIN_INJECT_TEXT, SUBAGENT_SESSION_PREFIX};
+use super::{
+    CoreRunState, RESTORE_GROUP_PREFIX, RESTORE_MAIN_INJECT_TEXT, SUBAGENT_SESSION_PREFIX,
+};
 impl CoreRunState {
     /// D6 §3.3：重启恢复条目生成（断点 3 消费端；run_restore 成功路径
     /// 调用）。对 [RestoreOutcome::interrupted] 逐条生成 steering 条目
@@ -102,7 +104,7 @@ impl CoreRunState {
         }
         let mut queue = self.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
         for record in &outcome.interrupted {
-            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+            let now = conex_shared::time::now_millis();
             // 目标会话强隔离：子代理 interrupted 通知父会话；
             // 用户显式铁律：主 run 在重启时不隐蔽自动续跑（防止启动时无差别并发拉起数十个历史会话）
             let (target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
@@ -145,7 +147,7 @@ impl CoreRunState {
         }
         // P3 父会话汇总（同父多子代理只一条；group 去重防双恢复重复）
         for (parent, group, text) in summaries {
-            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+            let now = conex_shared::time::now_millis();
             queue.replace_or_enqueue(orchestrator::steering_queue::SteeringInputEntry {
                 session_id: parent,
                 id: format!("{group}-{now}"),
@@ -257,7 +259,11 @@ impl CoreRunState {
         self.restore_started.store(true, Ordering::SeqCst);
         // 全局恢复排他租约（04 §6.2；conex-db session_meta 键）：
         // 抢不到仍允许只读恢复（CAS 幂等兜底）；抢到则 finally 释放。
-        let lease_id = format!("restore-{}-{}", std::process::id(), u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
+        let lease_id = format!(
+            "restore-{}-{}",
+            std::process::id(),
+            conex_shared::time::now_millis()
+        );
         let db = self.local_db();
         let leased = db
             .try_acquire_recovery_lease(&lease_id, None)
@@ -419,9 +425,7 @@ impl CoreRunState {
                 *self
                     .snapshot_written_at
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = Some(
-                    conex_shared::time::unix_millis(),
-                );
+                    .unwrap_or_else(|e| e.into_inner()) = Some(conex_shared::time::unix_millis());
                 tracing::info!(target: "restore", generation, "快照已保存");
             }
             Err(error) => {

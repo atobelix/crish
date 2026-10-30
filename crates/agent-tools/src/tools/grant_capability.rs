@@ -135,13 +135,15 @@ mod tests {
             .await
             .expect("授予应成功");
         assert_eq!(out["status"], "granted");
-        assert_eq!(channel.calls.lock().unwrap()[0].1, SubagentCapabilityMode::ReadWrite);
+        assert_eq!(
+            channel.calls.lock().unwrap()[0].1,
+            SubagentCapabilityMode::ReadWrite
+        );
     }
 
     #[tokio::test]
     async fn rejects_unknown_capability() {
-        let tool =
-            GrantCapabilityTool::with_channel(Some(Arc::new(RecordingGrant::default())));
+        let tool = GrantCapabilityTool::with_channel(Some(Arc::new(RecordingGrant::default())));
         let ctx = create_mock_tool_context();
         let err = tool
             .execute(

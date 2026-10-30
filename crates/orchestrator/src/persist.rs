@@ -30,9 +30,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use conex_db::{
-    BlockState, DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun,
-};
+use conex_db::{BlockState, DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun};
 use conex_types::error::{codes, CrishError};
 use conex_types::events::RunCacheStats;
 use conex_types::session_record::{SessionAgent, SessionMessage};
@@ -1066,7 +1064,10 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            assert_eq!(store.load_running_session_agent_rows().await.unwrap().len(), 1);
+            assert_eq!(
+                store.load_running_session_agent_rows().await.unwrap().len(),
+                1
+            );
             let affected = store
                 .mark_session_agent_interrupted("s1", "sr1", 42, "interrupted")
                 .await
@@ -1076,7 +1077,11 @@ mod tests {
             assert_eq!(rows[0].status, "failed");
             assert_eq!(rows[0].ended_at, Some(42));
             assert!(rows[0].resumable);
-            assert!(store.load_running_session_agent_rows().await.unwrap().is_empty());
+            assert!(store
+                .load_running_session_agent_rows()
+                .await
+                .unwrap()
+                .is_empty());
         });
     }
 

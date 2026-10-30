@@ -171,10 +171,7 @@ pub(super) async fn spawn_server_with_tokens(
         for label in labels {
             issued.push(
                 store
-                    .issue(
-                        label,
-                        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-                    )
+                    .issue(label, conex_shared::time::now_millis())
                     .expect("签发必须成功"),
             );
         }
@@ -265,7 +262,7 @@ pub(super) async fn send_envelope_text(
     let envelope = DeviceEnvelope::unsigned(
         kind,
         format!("m-test-{:08}", MSG_COUNTER.fetch_add(1, Ordering::Relaxed)),
-        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        conex_shared::time::now_millis(),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
         body,
@@ -288,7 +285,7 @@ pub(super) async fn send_remote_command(
     let envelope = DeviceEnvelope::unsigned(
         MessageKind::Remote(command.to_string()),
         msg_id,
-        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        conex_shared::time::now_millis(),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
         serde_json::json!({ "command": command, "params": params }),
@@ -343,7 +340,7 @@ pub(super) async fn confirm_registered(
     send_envelope_text(
         ws,
         "heartbeat",
-        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
+        serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
     )
     .await;
     let (kind, _) = parse_frame(&next_text(ws).await.expect("必须收到 heartbeat.ok"));

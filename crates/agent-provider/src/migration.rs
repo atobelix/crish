@@ -139,7 +139,7 @@ impl ConfigMigrationManager {
         let metadata = fs::metadata(source)?;
         let original_size = metadata.len();
 
-        let timestamp = Self::current_utc_timestamp();
+        let timestamp = conex_shared::time::compact_utc_stamp(conex_shared::time::unix_millis());
         let file_stem = source
             .file_stem()
             .and_then(|s| s.to_str())
@@ -249,16 +249,6 @@ impl ConfigMigrationManager {
         }
         Ok(())
     }
-
-    /// 获取 UTC 时间戳字符串 (%Y%m%d_%H%M%S)。
-    /// 秒数与公历换算统一取自 `conex_shared::time`，天然为 UTC，绝非本地时区。
-    pub fn current_utc_timestamp() -> String {
-        let secs = conex_shared::time::unix_secs();
-        let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-        let (year, month, day) =
-            conex_shared::time::civil_from_days(secs.div_euclid(86_400));
-        format!("{year:04}{month:02}{day:02}_{hours:02}{mins:02}{sec:02}")
-    }
 }
 
 #[cfg(test)]
@@ -364,7 +354,7 @@ mod migration_hardening_tests {
         let temp_dir = std::env::temp_dir().join(format!(
             "conex_atomic_replace_test_{}_{}",
             std::process::id(),
-            ConfigMigrationManager::current_utc_timestamp()
+            conex_shared::time::compact_utc_stamp(conex_shared::time::unix_millis())
         ));
         let _ = fs::create_dir_all(&temp_dir);
 

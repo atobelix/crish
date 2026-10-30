@@ -67,15 +67,15 @@ pub(crate) use session_loop::r#loop::stage_summary::{
 };
 // E2 F4：压缩记录（context-compression-end 载荷）+ Manual 触发/原因变体 +
 // 块语义 details 构造（orchestrator::blocks 消费面，blocks.rs:96-137）
+pub(crate) use conex_types::context::ContextBudget;
+pub(crate) use conex_types::error::{codes, CrishError, CrishErrorPayload};
+pub(crate) use conex_types::history::HistoryMessage;
+pub(crate) use conex_types::permission::PermissionMode;
 pub(crate) use conex_types::session::AgentEndReason;
 pub(crate) use conex_types::tool::{
     compaction_block_details, ContextCompressionReason, ContextCompressionRecord,
     ContextCompressionTrigger,
 };
-pub(crate) use conex_types::context::ContextBudget;
-pub(crate) use conex_types::error::{codes, CrishError, CrishErrorPayload};
-pub(crate) use conex_types::history::HistoryMessage;
-pub(crate) use conex_types::permission::PermissionMode;
 pub(crate) use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 pub(crate) use orchestrator::persist::{SessionSequencer, Store};
 pub(crate) use orchestrator::recovery::{

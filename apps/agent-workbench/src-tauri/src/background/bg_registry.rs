@@ -412,7 +412,7 @@ impl BackgroundTaskRegistry {
     #[allow(clippy::disallowed_methods)] // 归档清 .meta.json 属任务日志内部索引
                                          // 清理（非用户文件，豁免裸删除；.log 永远保留）
     pub(crate) fn archive_expired(&self) -> usize {
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let retention_ms = self.retention.as_millis() as u64;
         let mut expired: Vec<String> = Vec::new();
         {

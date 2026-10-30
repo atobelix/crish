@@ -232,7 +232,7 @@ impl SubagentSpawnerImpl {
                 SteeringInputEntry::steering(
                     format!("subagent-terminal-{run_id}"),
                     summary_text,
-                    u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                    conex_shared::time::now_millis(),
                 )
                 .with_session(&cfg.parent_session_id),
             );

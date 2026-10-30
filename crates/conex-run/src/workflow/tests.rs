@@ -1239,7 +1239,7 @@ async fn trigger_with_real_launcher_transitions_running_to_terminal() {
 fn resolve_effective_workflow_cwd_creates_default_sandbox_int02() {
     let unique_dir = std::env::temp_dir().join(format!(
         "crish-int02-sandbox-test-{}",
-        crate::now_ms_u64()
+        conex_shared::time::now_millis()
     ));
     let _ = std::fs::remove_dir_all(&unique_dir);
 

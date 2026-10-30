@@ -107,7 +107,7 @@ pub(crate) async fn workbench_run_shell(
 
     let (program, args, shell_label) = build_shell_invocation(&command)?;
 
-    let started = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let started = conex_shared::time::now_millis();
 
     let mut child_cmd = TokioCommand::new(&program);
     child_cmd
@@ -156,7 +156,7 @@ pub(crate) async fn workbench_run_shell(
     let wait_fut = child.wait_with_output();
     let timed = timeout(Duration::from_millis(timeout_ms), wait_fut).await;
 
-    let finished = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let finished = conex_shared::time::now_millis();
     let duration_ms = finished.saturating_sub(started);
 
     match timed {

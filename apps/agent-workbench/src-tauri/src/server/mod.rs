@@ -420,7 +420,7 @@ impl ServerState {
                 auth::DEFAULT_CLOCK_SKEW_MS,
             )),
             relay_loopback_secret: handle.config.relay_loopback_secret.clone(),
-            _started_at_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            _started_at_ms: conex_shared::time::now_millis(),
         }
     }
 
@@ -494,7 +494,7 @@ impl ServerState {
             port: self.actual_addr.port(),
             bind_mode: self.config.bind_mode,
             pairing_active: self.config.pairing_enabled,
-            server_time_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            server_time_ms: conex_shared::time::now_millis(),
             capabilities: service_capabilities(),
         }
     }

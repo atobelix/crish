@@ -68,7 +68,7 @@ pub(super) async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
 
         // 1. 时钟偏差校验
         if envelope.auth.ts > 0 {
-            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+            let now = conex_shared::time::now_millis();
             let max_skew = ctx.state.nonce_guard().clock_skew_ms();
             let diff = envelope.auth.ts.abs_diff(now);
             if diff > max_skew {
@@ -85,7 +85,7 @@ pub(super) async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
 
         // 2. Nonce 幂等与重放防护
         if has_auth_nonce {
-            let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+            let now = conex_shared::time::now_millis();
             let mut hasher = Sha256::new();
             hasher.update(
                 serde_json::to_string(&envelope.body)
@@ -293,7 +293,7 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
     let reply = crate::server::pair_endpoint::handle_pair_hello(
         &body,
         ctx.state.pairing().as_deref(),
-        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        conex_shared::time::now_millis(),
     );
     let (token, label, device_id) = match reply {
         Ok(ok) => ok,
@@ -570,12 +570,12 @@ async fn handle_heartbeat(body: Value, ctx: &ConnCtx) -> Action {
     // 载荷宽松解析（心跳格式非法仍回执——保活优先）
     let heartbeat = serde_json::from_value::<conex_device_protocol::Heartbeat>(body.clone())
         .unwrap_or(conex_device_protocol::Heartbeat {
-            ts: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            ts: conex_shared::time::now_millis(),
             device_time_ms: 0,
         });
     let ok = conex_device_protocol::HeartbeatOk {
         ts: heartbeat.ts,
-        server_time: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        server_time: conex_shared::time::now_millis(),
     };
     send_envelope(ctx, MessageKind::HeartbeatOk, ok).await
 }

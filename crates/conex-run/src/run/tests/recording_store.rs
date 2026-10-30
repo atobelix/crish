@@ -170,7 +170,12 @@ impl Store for RecordingStore {
         summary: &str,
     ) -> orchestrator::persist::StoreResult<usize> {
         self.inner
-            .mark_session_agent_interrupted(parent_session_id, subagent_run_id, ended_at_ms, summary)
+            .mark_session_agent_interrupted(
+                parent_session_id,
+                subagent_run_id,
+                ended_at_ms,
+                summary,
+            )
             .await
     }
 
@@ -208,7 +213,12 @@ impl Store for RecordingStore {
         summary_json: Option<&str>,
         attempts: u32,
     ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .update_compression_block_summary(session_id, block_id, state, summary_json, attempts)
+        self.inner.update_compression_block_summary(
+            session_id,
+            block_id,
+            state,
+            summary_json,
+            attempts,
+        )
     }
 }

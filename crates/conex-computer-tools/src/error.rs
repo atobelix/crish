@@ -11,11 +11,10 @@
 //! - 审批拒绝（守卫⑤）→ `approval.rejected`（conex-types 既有码，浏览器线
 //!   ActionErrorKind::ApprovalDenied 同源先例）。
 
-use crate::codes;
 use agent_tools::definition::ToolError;
 use conex_computer::perception::PerceptionError;
 use conex_computer::SessionError;
-use conex_types::error::codes as shared_codes;
+use conex_types::error::codes;
 
 /// 会话未注入 / 恢复期 gating（06 §5 `tool.computer.not_ready`，Transient 可重试）。
 pub fn not_ready(reason: impl Into<String>) -> ToolError {
@@ -58,7 +57,7 @@ pub fn elevated_window(message: impl Into<String>) -> ToolError {
 /// 已删除，本函数保留供其他消费方复用）。
 #[allow(dead_code)]
 pub fn approval_rejected(reason: impl Into<String>) -> ToolError {
-    ToolError::new(shared_codes::APPROVAL_REJECTED, reason)
+    ToolError::new(codes::APPROVAL_REJECTED, reason)
 }
 
 /// `SessionError` → `ToolError`（06 文档 §5 码表 + 通用 tool.* 码）。
@@ -76,7 +75,7 @@ pub fn map_session_error(tool_name: &str, err: SessionError) -> ToolError {
             return elevated_window(format!("工具 {tool_name} 目标窗口拒绝：{raw}"))
         }
         SessionError::Inject(_) | SessionError::Capture(_) | SessionError::Init(_) => {
-            shared_codes::TOOL_EXECUTION_FAILED
+            codes::TOOL_EXECUTION_FAILED
         }
     };
     ToolError::new(code, format!("工具 {tool_name} 执行失败：{raw}"))
@@ -86,7 +85,7 @@ pub fn map_session_error(tool_name: &str, err: SessionError) -> ToolError {
 /// 消息携带错误语义供模型侧区分无活动窗口 / UIA 故障）。
 pub fn map_perception_error(tool_name: &str, err: PerceptionError) -> ToolError {
     ToolError::new(
-        shared_codes::TOOL_EXECUTION_FAILED,
+        codes::TOOL_EXECUTION_FAILED,
         format!("工具 {tool_name} 感知失败：{err}"),
     )
 }
@@ -125,7 +124,7 @@ mod tests {
         ] {
             assert_eq!(
                 map_session_error("computer_click", err).code(),
-                shared_codes::TOOL_EXECUTION_FAILED
+                codes::TOOL_EXECUTION_FAILED
             );
         }
     }
@@ -152,14 +151,14 @@ mod tests {
     #[test]
     fn perception_error_mapping() {
         let err = map_perception_error("computer_snapshot", PerceptionError::NoActiveWindow);
-        assert_eq!(err.code(), shared_codes::TOOL_EXECUTION_FAILED);
+        assert_eq!(err.code(), codes::TOOL_EXECUTION_FAILED);
         assert!(err.to_string().contains("无活动窗口"));
 
         let err = map_perception_error(
             "computer_snapshot",
             PerceptionError::Traverse("元素读取失败".into()),
         );
-        assert_eq!(err.code(), shared_codes::TOOL_EXECUTION_FAILED);
+        assert_eq!(err.code(), codes::TOOL_EXECUTION_FAILED);
     }
 
     /// 守卫错误码：not_ready / not_enabled / exclusive / cancelled 文案与码。
@@ -186,7 +185,7 @@ mod tests {
         );
         assert_eq!(
             approval_rejected("拒绝").code(),
-            shared_codes::APPROVAL_REJECTED,
+            codes::APPROVAL_REJECTED,
             "审批拒绝走既有 approval.rejected（浏览器线同源）"
         );
     }

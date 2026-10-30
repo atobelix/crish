@@ -17,7 +17,7 @@ impl TempTestDir {
             "conex_migration_test_{}_{}_{}",
             name,
             std::process::id(),
-            ConfigMigrationManager::current_utc_timestamp()
+            conex_shared::time::compact_utc_stamp(conex_shared::time::unix_millis())
         );
         let path = temp_base.join(unique_name);
         fs::create_dir_all(&path).expect("创建临时测试目录成功");
@@ -211,7 +211,7 @@ fn test_missing_context_window_and_max_output_stay_none() {
 
 #[test]
 fn test_timestamp_format_and_civil_days_math() {
-    let stamp = ConfigMigrationManager::current_utc_timestamp();
+    let stamp = conex_shared::time::compact_utc_stamp(conex_shared::time::unix_millis());
     assert_eq!(stamp.len(), 15);
     let parts: Vec<_> = stamp.split('_').collect();
     assert_eq!((parts[0].len(), parts[1].len()), (8, 6));
@@ -219,10 +219,7 @@ fn test_timestamp_format_and_civil_days_math() {
         .iter()
         .all(|part| part.bytes().all(|byte| byte.is_ascii_digit())));
     assert_eq!(conex_shared::time::civil_from_days(0), (1970, 1, 1));
-    assert_eq!(
-        conex_shared::time::civil_from_days(11016),
-        (2000, 2, 29)
-    );
+    assert_eq!(conex_shared::time::civil_from_days(11016), (2000, 2, 29));
     assert_eq!(conex_shared::time::civil_from_days(20704), (2026, 9, 8));
 }
 

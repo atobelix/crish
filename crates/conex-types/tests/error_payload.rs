@@ -4,9 +4,7 @@
 //! 结构 `{kind, detail}` 对齐 03 §5.3-5（CoreError）。
 
 use conex_types::error::{codes, CrishError, CrishErrorPayload, CRISH_ERROR_CAUSE_MAX_DEPTH};
-use conex_types::error::{
-    ProviderErrorKind, RunTerminal, RunTerminalError,
-};
+use conex_types::error::{ProviderErrorKind, RunTerminal, RunTerminalError};
 use conex_types::ipc_error::CoreError;
 use conex_types::session::{AgentEndReason, AgentSessionEvent};
 

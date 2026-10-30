@@ -82,7 +82,11 @@ impl AgentPolicyService {
 }
 
 impl AgentPolicyChannel for AgentPolicyService {
-    fn apply(&self, session_id: &str, patch: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn apply(
+        &self,
+        session_id: &str,
+        patch: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let policy = self.apply_patch(session_id, &patch)?;
         serde_json::to_value(policy).map_err(|error| format!("agent_policy 序列化失败：{error}"))
     }
@@ -150,7 +154,10 @@ mod tests {
     fn invalid_patch_is_rejected_without_persisting() {
         let (service, _db) = service();
         assert!(service
-            .apply_patch("s1", &serde_json::json!({ "spawn": { "maxDepth": "many" } }))
+            .apply_patch(
+                "s1",
+                &serde_json::json!({ "spawn": { "maxDepth": "many" } })
+            )
             .is_err());
         assert_eq!(service.load("s1"), AgentPolicy::default());
     }

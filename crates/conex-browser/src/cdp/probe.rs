@@ -142,7 +142,7 @@ pub struct CapabilityReport {
 /// 执行能力探测（发送层全命令过闸门；总预算 ≤ 10s）。
 pub async fn run(sender: &CommandSender) -> CapabilityReport {
     let start = Instant::now();
-    let detected_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let detected_at_ms = conex_shared::time::now_millis();
 
     // 1. 版本（先决：Input/Emulation/Storage 推理依赖）
     let version = fetch_version(sender).await;

@@ -322,11 +322,8 @@ pub(crate) fn read_meta_config(
     meta: &dyn FlowMetaStore,
 ) -> Result<(Option<usize>, Option<usize>, bool), FlowError> {
     let default = DEFAULT_SPAWN_POLICY;
-    let max_siblings = read_meta_opt_usize(
-        meta,
-        FLOW_MAX_SIBLINGS_KEY,
-        default.max_active_per_parent,
-    )?;
+    let max_siblings =
+        read_meta_opt_usize(meta, FLOW_MAX_SIBLINGS_KEY, default.max_active_per_parent)?;
     let max_concurrent = read_meta_opt_usize(
         meta,
         FLOW_MAX_CONCURRENT_KEY,

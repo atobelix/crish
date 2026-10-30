@@ -105,16 +105,14 @@ pub fn error_catalog() -> impl Iterator<Item = &'static CrishErrorInfo> {
 
 /// 查询错误码元信息，未知码回退到 common.unknown（TS 端 getErrorInfo 同构）
 pub fn info(code: &str) -> CrishErrorInfo {
-    error_info(code)
-        .cloned()
-        .unwrap_or(CrishErrorInfo {
-            code: codes::COMMON_UNKNOWN,
-            title: "未知错误",
-            category: CrishErrorCategory::Permanent,
-            retryable: false,
-            is_public: true,
-            action: "action.common.report_bug",
-        })
+    error_info(code).cloned().unwrap_or(CrishErrorInfo {
+        code: codes::COMMON_UNKNOWN,
+        title: "未知错误",
+        category: CrishErrorCategory::Permanent,
+        retryable: false,
+        is_public: true,
+        action: "action.common.report_bug",
+    })
 }
 
 // ===== Tests =====

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use conex_search::fuzzy::FuzzyMatcher;
-use conex_search::search::{search_files, search_files_parallel};
 use conex_device_protocol::{
     ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, RunTaskParams, RunTaskResult,
     SearchFilesParams, SearchFilesResult,
 };
+use conex_search::fuzzy::FuzzyMatcher;
+use conex_search::search::{search_files, search_files_parallel};
 
 use crate::core_commands::SharedSearchState;
 use crate::server::backend::WorkspaceOps;

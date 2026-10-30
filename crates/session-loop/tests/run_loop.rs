@@ -24,8 +24,8 @@ use conex_test_utils::clock::TimePauseGuard;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use session_loop::r#loop::AgentEndReason;
 use conex_types::tool::ToolOutput;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream,
     ProviderRequest, ProviderStreamEvent, ReasoningEffort, RecoverySteeringStrategy,

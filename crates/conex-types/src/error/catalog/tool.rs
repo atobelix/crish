@@ -189,6 +189,28 @@ error_catalog_table! {
         },
     );
     m.insert(
+        codes::TOOL_COMMAND_BLOCKED,
+        CrishErrorInfo {
+            code: codes::TOOL_COMMAND_BLOCKED,
+            title: "命令被安全策略拦截",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_policy",
+        },
+    );
+    m.insert(
+        codes::TOOL_CD_BLOCKED,
+        CrishErrorInfo {
+            code: codes::TOOL_CD_BLOCKED,
+            title: "目录切换命令被拦截",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_policy",
+        },
+    );
+    m.insert(
         codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH,
         CrishErrorInfo {
             code: codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH,

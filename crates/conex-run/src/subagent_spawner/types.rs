@@ -42,7 +42,10 @@ pub trait SubagentRunLauncher: Send + Sync + std::fmt::Debug {
     async fn launch(&self, options: RunTaskOptions) -> Result<RunTaskResponse, CoreError>;
 
     /// 查询活动 run 的生效权限模式（供子代理无损继承父级权限）
-    fn get_active_run_permission_mode(&self, _run_id: &str) -> Option<conex_types::permission::PermissionMode> {
+    fn get_active_run_permission_mode(
+        &self,
+        _run_id: &str,
+    ) -> Option<conex_types::permission::PermissionMode> {
         None
     }
 }

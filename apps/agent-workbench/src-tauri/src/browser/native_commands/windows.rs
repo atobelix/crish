@@ -58,12 +58,12 @@ pub async fn browser_webview_create(
 
     // 存储子目录：显式 data_directory 优先（03-分维 §3.4 的隔离面）；
     // Ephemeral 模式按设计回退为 browser-storage/ephemeral-{tabId}
-    let data_directory = effective.data_directory.or_else(|| {
-        match effective.storage_mode {
+    let data_directory = effective
+        .data_directory
+        .or_else(|| match effective.storage_mode {
             Some(BrowserStorageMode::Ephemeral) => Some(format!("ephemeral-{}", effective.tab_id)),
             _ => None,
-        }
-    });
+        });
 
     let label = state
         .create_webview(

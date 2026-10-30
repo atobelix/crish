@@ -22,7 +22,7 @@ use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::{TOOL_CD_BLOCKED, TOOL_COMMAND_BLOCKED};
+use conex_types::error::codes;
 
 /// 删除形态引导文案（模型可改走统一删除接口）
 const DELETE_REDIRECT_GUIDANCE: &str =
@@ -80,7 +80,7 @@ pub(crate) fn redirect_or_intercept_delete(
             vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!(
                 "PermissionDenied: 检测到间接执行包裹的物理删除形态（eval / bash -c / xargs 等），已拦截；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
@@ -99,7 +99,7 @@ pub(crate) fn redirect_or_intercept_delete(
             vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!(
                 "PermissionDenied: 检测到复合命令链中的物理删除形态，整链已拦截（链内其他段副作用不可控）；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
@@ -114,7 +114,7 @@ pub(crate) fn redirect_or_intercept_delete(
             vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!(
                 "PermissionDenied: 检测到物理删除形态但无法解析删除目标；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
@@ -168,7 +168,7 @@ pub(crate) fn redirect_or_intercept_delete(
                 vec![display.clone()],
             );
             return Err(ToolError::new(
-                TOOL_COMMAND_BLOCKED,
+                codes::TOOL_COMMAND_BLOCKED,
                 format!(
                     "PermissionDenied: 删除目标为工作区根或当前工作目录，拒绝执行：{display}；{DELETE_REDIRECT_GUIDANCE}"
                 ),
@@ -277,7 +277,7 @@ fn resolve_delete_target(
     let trimmed = target.trim();
     if trimmed.is_empty() || matches!(trimmed, "." | ".." | "~") || trimmed.starts_with('~') {
         return Err(ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!(
                 "删除目标为特殊路径，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"
             ),
@@ -285,7 +285,7 @@ fn resolve_delete_target(
     }
     if trimmed.contains(['*', '?', '[']) {
         return Err(ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!(
                 "删除目标含通配符，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"
             ),
@@ -305,7 +305,7 @@ fn resolve_delete_target(
 
     resolve_workspace_path(workspace_root, &candidate.to_string_lossy()).map_err(|_| {
         ToolError::new(
-            TOOL_COMMAND_BLOCKED,
+            codes::TOOL_COMMAND_BLOCKED,
             format!("删除目标在工作区外或越界，已拒绝：{target:?}"),
         )
     })
@@ -435,7 +435,7 @@ pub(crate) fn intercept_cd_shape(analysis: &Assessment, command: &str) -> Option
     };
 
     Some(ToolError::new(
-        TOOL_CD_BLOCKED,
+        codes::TOOL_CD_BLOCKED,
         format!("{message}。原始命令：{display_cmd}"),
     ))
 }

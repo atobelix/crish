@@ -212,7 +212,7 @@ impl PushDispatcher {
         if let Some(store) = &self.pending_store {
             deliveries.extend(
                 store
-                    .take_due(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+                    .take_due(conex_shared::time::now_millis())
                     .into_iter()
                     .map(StoredPendingApproval::into_delivery),
             );
@@ -316,11 +316,7 @@ pub struct PushAwareEmitter {
 impl PushAwareEmitter {
     /// 用内层发射器 + 分发器构造（决策引擎缺省配置；墙钟）
     pub fn new(inner: Arc<dyn Emitter>, dispatcher: Arc<PushDispatcher>) -> Self {
-        Self::with_clock(
-            inner,
-            dispatcher,
-            Box::new(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
-        )
+        Self::with_clock(inner, dispatcher, Box::new(conex_shared::time::now_millis))
     }
 
     /// 注入时钟构造（测试用：固定时钟使决策时刻/静默时段判定可复现）

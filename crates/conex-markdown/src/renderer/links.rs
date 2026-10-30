@@ -79,9 +79,7 @@ impl Renderer {
             if is_remote_http_url(&url) {
                 // 远程图片默认不直接加载（CSP 亦不允许 https:），渲染为可点击链接，
                 // 由用户显式决定是否交给系统浏览器打开。
-                self.push_str(
-                    "<a class=\"md-image-remote\" href=\"",
-                );
+                self.push_str("<a class=\"md-image-remote\" href=\"");
                 self.push_escaped_attr(&url);
                 self.push_str("\" target=\"_blank\" rel=\"noreferrer\">");
                 if alt.is_empty() {

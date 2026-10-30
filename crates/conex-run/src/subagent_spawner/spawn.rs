@@ -16,8 +16,8 @@ use super::lifecycle::{RunLaunchLifecycle, StartedEventCompletionGuard};
 use super::spawner::SubagentSpawnerImpl;
 use super::tracking::{FlowRegistration, RunRecord};
 use super::types::SubagentRunConfig;
-use conex_shared::time::now_iso_utc;
 use crate::run::RunTaskOptions;
+use conex_shared::time::now_iso_utc;
 
 impl SubagentSpawnerImpl {
     /// 落库 + 记账 + 启动 + 结果（守卫已在调用方完成——单发经 [Self::spawn]

@@ -239,6 +239,10 @@ jobs:
       - run: npm install -g npm@11.6.2 && npm ci
       - run: node scripts/generate-engine-bindings.mjs
       - run: git diff --exit-code -- packages/shared-types/src/generated
+      # 结构/时间/错误码单一真源回归门禁（无白名单、无基线）
+      - run: node scripts/check-no-path-attr.mjs
+      - run: node scripts/check-time-ssot.mjs
+      - run: node scripts/check-error-code-literals.mjs
 
   cargo-deny:
     runs-on: ubuntu-24.04

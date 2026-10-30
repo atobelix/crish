@@ -566,10 +566,10 @@ mod tests {
     #[tokio::test]
     async fn delete_emits_security_audit_event() {
         use crate::audit::RecordingAuditSink;
+        use conex_types::events::AgentEvent;
         use conex_types::events::{
             SecurityAuditDecision as Decision, SecurityAuditOperation as Op,
         };
-        use conex_types::events::AgentEvent;
 
         let ws = TempWorkspace::new("del_audit");
         ws.write_file("sub/a.txt", "aaaa");

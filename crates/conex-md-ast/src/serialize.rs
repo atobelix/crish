@@ -80,7 +80,10 @@ fn child_prefix(node: &BlockNode, prefix: &str) -> String {
         BlockKind::Heading { .. } => prefix.to_string(),
         BlockKind::BulletItem => format!("{prefix}  "),
         BlockKind::OrderedItem => {
-            format!("{prefix}{}", " ".repeat(ordered_number(node).to_string().len() + 2))
+            format!(
+                "{prefix}{}",
+                " ".repeat(ordered_number(node).to_string().len() + 2)
+            )
         }
         BlockKind::TaskItem { ordered } => {
             let width = if *ordered {

@@ -39,11 +39,8 @@ pub const WRITE_TOOL_NAMES: [&str; 4] = [
 pub const EXECUTE_TOOL_NAMES: [&str; 1] = ["shell_command"];
 
 /// 通信工具（与能力档无关，任何子代理都必须可用——否则只读代理无法上报/求助）
-pub const COMMUNICATION_TOOL_NAMES: [&str; 3] = [
-    "report_progress",
-    "ask_parent",
-    "request_capability",
-];
+pub const COMMUNICATION_TOOL_NAMES: [&str; 3] =
+    ["report_progress", "ask_parent", "request_capability"];
 
 /// 工具所需能力档
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,7 +146,10 @@ mod tests {
     fn read_only_denies_write_and_execute() {
         assert!(allows_tool(SubagentCapabilityMode::ReadOnly, "read_file"));
         assert!(!allows_tool(SubagentCapabilityMode::ReadOnly, "write_file"));
-        assert!(!allows_tool(SubagentCapabilityMode::ReadOnly, "shell_command"));
+        assert!(!allows_tool(
+            SubagentCapabilityMode::ReadOnly,
+            "shell_command"
+        ));
         assert!(
             !allows_tool(SubagentCapabilityMode::ReadOnly, "unknown_new_tool"),
             "未知工具按写类 fail-closed"
@@ -163,7 +163,10 @@ mod tests {
             SubagentCapabilityMode::ReadWrite,
             "shell_command"
         ));
-        assert!(allows_tool(SubagentCapabilityMode::Execute, "shell_command"));
+        assert!(allows_tool(
+            SubagentCapabilityMode::Execute,
+            "shell_command"
+        ));
     }
 
     #[test]

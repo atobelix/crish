@@ -89,7 +89,7 @@ pub(crate) async fn kill_task(
     }
 
     // 2) 阶段一：优雅终止请求（进程树；Windows taskkill 无 /F）
-    let graceful_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let graceful_at_ms = conex_shared::time::now_millis();
     let graceful = crate::process::terminate_process_tree_graceful(handle.pid);
     let mut diagnostics = vec![format!(
         "优雅终止请求已发送（pid={}，发送时间={}ms，结果={}）",
@@ -114,7 +114,7 @@ pub(crate) async fn kill_task(
     let (exit_code, via_force) = match graceful_exit {
         Some(status) => (status.code(), false),
         None => {
-            let escalate_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+            let escalate_at_ms = conex_shared::time::now_millis();
             let escalate_reason = match &graceful {
                 Ok(()) => "5s 优雅等待超时".to_string(),
                 Err(reason) => format!("优雅请求未生效（{reason}）"),
@@ -176,7 +176,7 @@ pub(crate) async fn kill_task(
     }
 
     // 6) 终态联动（纪律：meta 落盘 → stdin 清空 → 状态翻转）
-    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let finished_at_ms = conex_shared::time::now_millis();
     {
         // 6a) meta 落盘：基于磁盘现有 meta（保留 checkpoint/轮转字段）更新
         //     终态；磁盘 meta 缺失（极端）则按内存快照组装基本 meta

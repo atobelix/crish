@@ -34,7 +34,7 @@ pub fn fire_delay_ms(components: &SchedulerComponents, next_fire_at_ms: u64) -> 
     {
         return ms;
     }
-    next_fire_at_ms.saturating_sub(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0))
+    next_fire_at_ms.saturating_sub(conex_shared::time::now_millis())
 }
 
 /// spawn 一次触发任务：sleep_until 到期 → fire_cron
@@ -59,7 +59,7 @@ pub async fn fire_cron(
 ) {
     // 段 0（R2-12c C31 暂停门控）：暂停期内到点不触发
     if let Some(paused_until) = *components.pause.lock().unwrap_or_else(|e| e.into_inner()) {
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         if now < paused_until {
             let delay = paused_until - now;
             tracing::info!(
@@ -161,7 +161,7 @@ pub async fn fire_cron(
         match sched_launcher.launch_scheduled_task(ctx).await {
             Ok(handle) => {
                 if !handle.async_terminal_managed {
-                    let finish_now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+                    let finish_now = conex_shared::time::now_millis();
                     let duration_ms = finish_now.saturating_sub(outcome.fired_at_ms);
                     components.store.finish_run(
                         &outcome.task.cron_id,
@@ -182,7 +182,7 @@ pub async fn fire_cron(
                     error = %err,
                     "ScheduledTaskLauncher 拉起失败，回写 failed 状态并降级 steering 唤醒"
                 );
-                let finish_now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+                let finish_now = conex_shared::time::now_millis();
                 let duration_ms = finish_now.saturating_sub(outcome.fired_at_ms);
                 components.store.finish_run(
                     &outcome.task.cron_id,
@@ -254,7 +254,7 @@ pub async fn fire_cron(
                                     "cron {} 已达最大触发次数 {}，已停止",
                                     outcome.task.cron_id, max
                                 ),
-                                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                                conex_shared::time::now_millis(),
                                 outcome
                                     .effective_target_session_id
                                     .as_deref()
@@ -364,7 +364,7 @@ pub fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<Fi
             }
         }
     }
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let iteration = task.fired_count + 1;
     let scheduled_for_ms = task.next_fire_at_ms;
 

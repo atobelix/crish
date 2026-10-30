@@ -147,7 +147,7 @@ pub struct HelloInfo {
 
 /// 全局时钟响应头注入中间件（为所有 HTTP 响应注入 X-Server-Time-Ms，使客户端能自愈时钟偏差）
 pub async fn inject_server_time_header(request: Request, next: Next) -> Response {
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let mut response = next.run(request).await;
     if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
         response

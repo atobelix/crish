@@ -74,8 +74,7 @@ impl PermissionCell {
 
     /// 设置自身模式（root 可自由切换；子代理受 ceiling 与父级钳制）
     pub fn set(&self, mode: PermissionMode) {
-        *self.own.write().unwrap_or_else(|e| e.into_inner()) =
-            Some(min_mode(mode, self.ceiling));
+        *self.own.write().unwrap_or_else(|e| e.into_inner()) = Some(min_mode(mode, self.ceiling));
     }
 
     /// 清除自身覆盖（回到跟随父/ceiling）

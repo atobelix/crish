@@ -5,8 +5,8 @@
 //! `RELAY_SECRET`，仓库内不得存在默认密钥。
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use hmac::{Hmac, Mac};
 use conex_shared::time::unix_secs;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use thiserror::Error;

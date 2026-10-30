@@ -144,7 +144,7 @@ fn write_output_line(
     let start_offset = log.offset;
     log.append_line(log_path, prefix, &line);
 
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let line_count;
     let prompt_hit = {
         let Ok(mut guard) = info.write() else {
@@ -179,7 +179,7 @@ fn write_output_line(
             // 轮转成功：行号从 1 重新编号，旧 checkpoint 全部失效
             checkpoints.clear();
             *rotated = true;
-            *rotated_at_ms = Some(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
+            *rotated_at_ms = Some(conex_shared::time::now_millis());
             *dropped_lines = dropped_lines.saturating_add(line_count.saturating_sub(new_total));
         } else {
             checkpoints.push(CheckpointEntry {
@@ -253,7 +253,7 @@ pub(crate) async fn finish_task(
         // wait；本路径按 Killed 收尾，kill 随后以权威值幂等覆盖）
         None => (TaskState::Killed, None),
     };
-    let finished_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let finished_at_ms = conex_shared::time::now_millis();
 
     // 3) 终态 meta：exit_code / finished_at / 最终行数 / 补末行 checkpoint
     let meta = {

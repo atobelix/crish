@@ -107,7 +107,7 @@ impl Default for WatchdogOptions {
         Self {
             idle_minutes: DEFAULT_WATCHDOG_IDLE_MINUTES,
             period: DEFAULT_WATCHDOG_PERIOD,
-            now: Arc::new(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
+            now: Arc::new(conex_shared::time::now_millis),
         }
     }
 }

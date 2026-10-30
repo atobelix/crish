@@ -171,8 +171,8 @@ impl AgentPolicy {
     ///
     /// 主 agent 的 `configure_agents` 与用户配置层共用本实现，避免两套合并逻辑。
     pub fn apply_patch(&self, patch: &serde_json::Value) -> Result<Self, String> {
-        let mut value =
-            serde_json::to_value(self).map_err(|error| format!("agent_policy 序列化失败：{error}"))?;
+        let mut value = serde_json::to_value(self)
+            .map_err(|error| format!("agent_policy 序列化失败：{error}"))?;
         merge_json(&mut value, patch);
         serde_json::from_value(value).map_err(|error| format!("agent_policy 补丁非法：{error}"))
     }

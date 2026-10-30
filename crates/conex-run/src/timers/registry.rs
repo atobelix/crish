@@ -58,7 +58,7 @@ impl TimerRegistry {
             pending,
             events,
             store,
-            Arc::new(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)),
+            Arc::new(conex_shared::time::now_millis),
         )
     }
 

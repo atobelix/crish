@@ -11,7 +11,7 @@ use regex::Regex;
 
 use crate::definition::ToolError;
 
-use super::TOOL_COMMAND_BLOCKED;
+use conex_types::error::codes;
 
 /// 编译期常量正则的惰性缓存（结果含错误：编译失败不得 panic）
 type CompiledRegex = LazyLock<Result<Regex, regex::Error>>;
@@ -44,7 +44,7 @@ impl CommandPathInspector {
             // 1. 系统核心关键目录物理红线（命中则刚性 Deny 阻断）
             if Self::is_critical_path(path) {
                 return Err(ToolError::new(
-                    TOOL_COMMAND_BLOCKED,
+                    codes::TOOL_COMMAND_BLOCKED,
                     format!(
                         "PermissionDenied: 命令包含指向系统核心关键目录的敏感路径：{}，硬性阻断！",
                         path.display()
@@ -57,7 +57,7 @@ impl CommandPathInspector {
                 && !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root)
             {
                 return Err(ToolError::new(
-                    TOOL_COMMAND_BLOCKED,
+                    codes::TOOL_COMMAND_BLOCKED,
                     format!(
                         "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
                         path.display()

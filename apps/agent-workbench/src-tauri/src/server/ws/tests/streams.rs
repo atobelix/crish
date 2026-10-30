@@ -35,10 +35,7 @@ async fn upgrade_rejects_revoked_token() {
     let _ = std::fs::remove_file(&path);
     let mut store = TokenStore::new(path.clone());
     let raw = store
-        .issue(
-            "revoke-me",
-            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-        )
+        .issue("revoke-me", conex_shared::time::now_millis())
         .unwrap();
     let hash = sha256_hex(raw.as_bytes());
     assert!(store.revoke(&hash), "撤销必须命中");
@@ -410,7 +407,7 @@ async fn heartbeat_gets_ok() {
     send_envelope_text(
         &mut ws,
         "heartbeat",
-        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
+        serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
     )
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
@@ -500,10 +497,10 @@ async fn ping_pong_keeps_alive_during_silence() {
                             let envelope = DeviceEnvelope::unsigned(
                                 MessageKind::Heartbeat,
                                 format!("m-test-{:08}", MSG_COUNTER.fetch_add(1, Ordering::Relaxed)),
-                                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+                                conex_shared::time::now_millis(),
                                 DeviceEndpoint::Mobile,
                                 DeviceEndpoint::Desktop,
-                                serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
+                                serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
                             );
                             if ws
                                 .send(tokio_tungstenite::tungstenite::Message::Text(

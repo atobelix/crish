@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod config_command_names_contract;
+
 /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
 /// 变更时双端同步——T-F 06 退役 5 条后 95 → 90，浏览器域追加
 /// browser_input / browser_start_frames / browser_stop_frames /

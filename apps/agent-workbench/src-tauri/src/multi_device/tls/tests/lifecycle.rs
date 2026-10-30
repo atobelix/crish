@@ -8,8 +8,7 @@ use std::fs;
 #[test]
 fn first_generation_creates_files_and_assembles() {
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     // 四证书件 + 锁文件齐备。
     for f in [
         CA_CERT_FILE,
@@ -34,8 +33,7 @@ fn first_generation_creates_files_and_assembles() {
     );
     // 叶子主题 CN=crish-remote（D5 §2.2）。
     let leaf_der = load_cert_der(&dir.path().join(SERVER_CERT_FILE)).expect("读回叶子证书");
-    let (_, leaf_x509) =
-        x509_parser::parse_x509_certificate(leaf_der.as_ref()).expect("解析叶子");
+    let (_, leaf_x509) = x509_parser::parse_x509_certificate(leaf_der.as_ref()).expect("解析叶子");
     assert_eq!(
         leaf_x509
             .subject()
@@ -129,8 +127,7 @@ fn ca_rotation_changes_fingerprint_and_invalidates_old() {
 #[tokio::test]
 async fn handshake_succeeds_with_pinned_ca() {
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let ca = load_cert_der(&dir.path().join(CA_CERT_FILE)).expect("读回 CA 证书");
     // 移动端语义：信任锚 = 配对期拿到的 CA 证书 → 握手 + 双向字节交换成功。
     assert!(try_handshake(&material, Some(&ca)).await);
@@ -139,8 +136,7 @@ async fn handshake_succeeds_with_pinned_ca() {
 #[tokio::test]
 async fn handshake_rejects_untrusted_client() {
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     // 空信任锚（系统 CA 不参与，D5 §2.2 pinning 模型）→ 握手失败。
     assert!(!try_handshake(&material, None).await);
 }
@@ -162,8 +158,7 @@ fn concurrent_load_waits_for_lock() {
     let (tx, rx) = std::sync::mpsc::channel();
     let dir2 = dir.path().to_path_buf();
     let handle = std::thread::spawn(move || {
-        let m =
-            load_or_generate_with(&dir2, &CertOptions::default()).expect("等待锁后加载成功");
+        let m = load_or_generate_with(&dir2, &CertOptions::default()).expect("等待锁后加载成功");
         let _ = tx.send(m.ca_fingerprint().to_string());
     });
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -185,8 +180,8 @@ fn leaf_key_is_ecdsa_p256() {
     assert_eq!(spki_algorithm_oid(leaf_der.as_ref()), "1.2.840.10045.2.1");
     // P-256 SPKI 固定 DER 前缀（RFC 5480：算法 OID + 曲线 OID + 未压缩点标记）。
     const P256_SPKI_PREFIX: &[u8] = &[
-        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06,
-        0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08,
+        0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
     ];
     assert!(spki_raw(leaf_der.as_ref()).starts_with(P256_SPKI_PREFIX));
 }
@@ -209,15 +204,12 @@ fn reissue_leaf_replaces_sans() {
     );
 
     let leaf_der = load_cert_der(&dir.path().join(SERVER_CERT_FILE)).expect("读回叶子");
-    let (_, leaf_x509) =
-        x509_parser::parse_x509_certificate(leaf_der.as_ref()).expect("解析叶子");
+    let (_, leaf_x509) = x509_parser::parse_x509_certificate(leaf_der.as_ref()).expect("解析叶子");
     let san_names = leaf_x509
         .extensions()
         .iter()
         .find_map(|ext| match ext.parsed_extension() {
-            x509_parser::extensions::ParsedExtension::SubjectAlternativeName(names) => {
-                Some(names)
-            }
+            x509_parser::extensions::ParsedExtension::SubjectAlternativeName(names) => Some(names),
             _ => None,
         })
         .expect("叶子应含 SAN 扩展");
@@ -241,8 +233,7 @@ fn reissue_leaf_replaces_sans() {
 fn fingerprint_matches_sha256_of_key_spki() {
     // 与 key pair 导出的 SPKI 交叉验证（同一公钥的两种编码路径必须一致）。
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let ca_key_der = load_pkcs8_der(&dir.path().join(CA_KEY_FILE)).expect("读回 CA 私钥");
     let ca_key = rcgen::KeyPair::try_from(&ca_key_der).expect("还原 KeyPair");
     let digest = sha2::Sha256::digest(ca_key.public_key_der());

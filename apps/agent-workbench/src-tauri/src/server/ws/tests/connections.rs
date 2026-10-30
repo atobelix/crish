@@ -150,10 +150,10 @@ async fn version_mismatch_closes_connection() {
     let envelope = DeviceEnvelope::unsigned(
         MessageKind::Heartbeat,
         format!("m-test-{:08}", 99),
-        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        conex_shared::time::now_millis(),
         DeviceEndpoint::Mobile,
         DeviceEndpoint::Desktop,
-        serde_json::json!({ "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0), "deviceTimeMs": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) }),
+        serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
     );
     // 手工改版本号
     let mut value = serde_json::to_value(&envelope).unwrap();

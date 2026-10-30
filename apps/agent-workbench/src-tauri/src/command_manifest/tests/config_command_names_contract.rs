@@ -1,27 +1,17 @@
 //! F5 配置命令终态名冻结契约测试（AU-04 F5 / PE-03 T03.4 / PE-07 T07.4）
 //!
-//! 本文件经 `#[path]` 独立编译 `src/command_manifest.rs`（命令面唯一真源，
-//! 零 crate:: 内部引用，可独立编译），锚定 F5 终态命名表（v1）：
-//! 注：本集成测试是独立 crate，无法经 `crate::command_manifest` 解析，故
-//! 保留这一处 `#[path]`（X-05 目录化仅允许的测试资产例外；src/ 下已零 `#[path]`）。
+//! 直接经 `super::*` 读取命令面唯一真源 `COMMAND_MANIFEST`，锚定 F5 终态
+//! 命名表（v1）：
 //! - `config_*` 终态名 8 条全部登记且已接线（registered=true）；
 //! - 旧名（update_daemon_config / get_api_config / save_api_config /
 //!   workbench_profile_secret_* / workbench_profile_apply /
 //!   workbench_profile_secret_reveal / syncActiveProfileToEngine）**严禁**
 //!   登记 manifest（单终态：更名即弃名，F5 处置表）。
 //!
-//! 与内联测试的关系：command_manifest.rs 内联测试锚定「条数公式化 / 9 条
-//! 新增命令登记 / 幽灵命令排除」；本文件补 F5 独有的**终态名与旧名对照**
-//! （旧名排除此前无独立断言）。
-//!
-//! 运行：`cargo test -p agent-workbench --test config_command_names_contract`
+//! 与同目录内联测试互补：`tests.rs` 锚定「条数公式化 / 幽灵命令排除」；
+//! 本文件补 F5 独有的**终态名与旧名对照**。
 
-#![allow(dead_code)]
-
-#[path = "../src/command_manifest/mod.rs"]
-mod command_manifest;
-
-use command_manifest::COMMAND_MANIFEST;
+use super::*;
 
 /// 取 manifest 全量命令名（去重校验由内联测试锚定，此处直接收集）
 fn manifest_names() -> Vec<&'static str> {
@@ -100,7 +90,10 @@ fn f3_f4_session_commands_registered() {
 }
 #[test]
 fn models_read_save_apply_have_real_primary_registration() {
-    let main = include_str!("../src/command_registry.rs");
+    let main = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/command_registry.rs"
+    ));
     for name in [
         "workbench_read_models_yaml",
         "workbench_save_models_yaml",
@@ -119,7 +112,10 @@ fn models_read_save_apply_have_real_primary_registration() {
 #[test]
 fn capability_dictionary_read_face_is_registered() {
     const NAME: &str = "workbench_read_capability_dictionary";
-    let main = include_str!("../src/command_registry.rs");
+    let main = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/command_registry.rs"
+    ));
     assert!(
         manifest_names().contains(&NAME),
         "{NAME} 必须登记 manifest（四方权威 ①）"
@@ -143,7 +139,10 @@ fn capability_dictionary_read_face_is_registered() {
 /// manifest 重新登记（防「退役后又悄悄复活」），也不得出现在 main.rs 注册面。
 #[test]
 fn retired_drift_debt_commands_are_not_registered() {
-    let main = include_str!("../src/command_registry.rs");
+    let main = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/command_registry.rs"
+    ));
     let names = manifest_names();
     for retired in [
         "workbench_select_folder",

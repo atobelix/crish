@@ -104,7 +104,7 @@ pub struct CronTask {
 
 /// 反序列化缺省时间戳（epoch 毫秒；时钟早于 1970 时取 0）
 fn default_timestamp_ms() -> u64 {
-    u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
+    conex_shared::time::now_millis()
 }
 
 impl CronTask {

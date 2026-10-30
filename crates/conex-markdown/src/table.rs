@@ -167,7 +167,10 @@ mod tests {
 
     #[test]
     fn split_keeps_empty_cells_between_delimiters() {
-        assert_eq!(split_table_cells("| | |"), vec!["".to_string(), "".to_string()]);
+        assert_eq!(
+            split_table_cells("| | |"),
+            vec!["".to_string(), "".to_string()]
+        );
         assert_eq!(split_table_cells("||"), vec!["".to_string()]);
     }
 

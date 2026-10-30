@@ -74,7 +74,7 @@ impl EventStreamBroadcast {
             summary,
             // 事件体 ended_at 为 ISO8601 文本；旁路点时刻即到达时刻，
             // 以 feed 时刻作为终止时刻（不引入时间解析依赖）
-            ended_at_ms: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            ended_at_ms: conex_shared::time::now_millis(),
         };
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         // 修剪断流订阅者（接收端 drop = wait 已返回）并逐条投递

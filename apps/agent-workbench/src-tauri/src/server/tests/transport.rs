@@ -55,10 +55,7 @@ async fn injected_shared_registry_sees_route_upgrade_connections() {
     let token = {
         let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
         store
-            .issue(
-                "p2-5-device",
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-            )
+            .issue("p2-5-device", conex_shared::time::now_millis())
             .expect("签发必须成功")
     };
 
@@ -150,10 +147,7 @@ async fn spawn_tls_server() -> TlsTestHarness {
     let token = {
         let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
         store
-            .issue(
-                "tls-test-device",
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-            )
+            .issue("tls-test-device", conex_shared::time::now_millis())
             .expect("签发必须成功")
     };
     let instance = ServerInstance::bind(config)
@@ -526,7 +520,7 @@ async fn relay_loopback_requires_secret_and_serves_trusted_frames() {
     let (mut ws, _) = tokio_tungstenite::connect_async(request)
         .await
         .expect("trusted bridge upgrade");
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let envelope = DeviceEnvelope::unsigned(
         MessageKind::Heartbeat,
         "m-bridge-1",

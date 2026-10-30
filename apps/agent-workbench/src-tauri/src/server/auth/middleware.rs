@@ -23,7 +23,7 @@ pub async fn require_bearer_token(
     request: Request,
     next: Next,
 ) -> Response {
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
         let mut resp = (
             StatusCode::UNAUTHORIZED,
@@ -83,7 +83,7 @@ pub async fn require_signed_request(
     request: Request,
     next: Next,
 ) -> Response {
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
         let mut resp = (
             StatusCode::UNAUTHORIZED,

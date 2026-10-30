@@ -41,8 +41,7 @@ pub fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     let year_of_era = year - era * 400;
     let month = i64::from(month);
     let day = i64::from(day);
-    let day_of_year =
-        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     era * 146_097 + day_of_era - 719_468
 }
@@ -59,9 +58,7 @@ pub fn format_iso_utc_ms(epoch_ms: i64) -> String {
         seconds_of_day / 60 % 60,
         seconds_of_day % 60,
     );
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
 
 /// 毫秒时间戳 → `YYYY-MM-DD`（UTC 日期）。
@@ -69,6 +66,30 @@ pub fn format_date_utc(epoch_ms: i64) -> String {
     let days = epoch_ms.div_euclid(86_400_000);
     let (year, month, day) = civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// 当前 Unix 毫秒（协议 u64 面；时钟早于 epoch 时返回 0）。
+pub fn now_millis() -> u64 {
+    u64::try_from(unix_millis()).unwrap_or(0)
+}
+
+/// 当前 Unix 秒（协议 u64 面；时钟早于 epoch 时返回 0）。
+pub fn now_secs() -> u64 {
+    now_millis() / 1_000
+}
+
+/// 毫秒时间戳 → `YYYYMMDD_HHMMSS`（UTC，文件名/版本戳）。
+pub fn compact_utc_stamp(epoch_ms: i64) -> String {
+    let secs = epoch_ms.div_euclid(1_000);
+    let days = secs.div_euclid(86_400);
+    let seconds_of_day = secs.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    let (hours, mins, sec) = (
+        seconds_of_day / 3_600,
+        seconds_of_day / 60 % 60,
+        seconds_of_day % 60,
+    );
+    format!("{year:04}{month:02}{day:02}_{hours:02}{mins:02}{sec:02}")
 }
 
 /// 任意 [`SystemTime`]（如文件 mtime）→ Unix 毫秒；早于 epoch 返回负值。
@@ -145,8 +166,7 @@ fn valid_calendar_date(year: i64, month: i64, day: i64) -> bool {
     if !(1..=12).contains(&month) || day < 1 {
         return false;
     }
-    let leap = year.rem_euclid(4) == 0
-        && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0);
+    let leap = year.rem_euclid(4) == 0 && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0);
     let max_day = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
@@ -209,10 +229,19 @@ mod tests {
             let text = format_iso_utc_ms(value);
             assert_eq!(parse_iso8601_ms(&text), Some(value), "{text}");
         }
-        assert_eq!(parse_iso8601_ms("2026-08-03T12:00:00Z"), Some(1_785_758_400_000));
-        assert_eq!(parse_iso8601_ms("2026-08-03T12:00:00.5Z"), Some(1_785_758_400_500));
+        assert_eq!(
+            parse_iso8601_ms("2026-08-03T12:00:00Z"),
+            Some(1_785_758_400_000)
+        );
+        assert_eq!(
+            parse_iso8601_ms("2026-08-03T12:00:00.5Z"),
+            Some(1_785_758_400_500)
+        );
         assert_eq!(parse_iso8601_ms("2023-02-29T00:00:00Z"), None);
-        assert_eq!(parse_iso8601_ms("2024-02-29T00:00:00Z"), Some(1_709_164_800_000));
+        assert_eq!(
+            parse_iso8601_ms("2024-02-29T00:00:00Z"),
+            Some(1_709_164_800_000)
+        );
         assert_eq!(parse_iso8601_ms("2026-13-01T00:00:00Z"), None);
         assert_eq!(parse_iso8601_ms("2026-01-32T00:00:00Z"), None);
         assert_eq!(parse_iso8601_ms("2026-01-01T24:00:00Z"), None);

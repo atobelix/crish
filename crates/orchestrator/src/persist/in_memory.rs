@@ -16,9 +16,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use conex_db::{BlockState, CompactionBlockRow, PendingInput, RunStatus, StoredRun};
-use conex_types::tool::ContextCompressionRecord;
 use conex_types::events::RunCacheStats;
 use conex_types::session_record::{SessionAgent, SessionMessage};
+use conex_types::tool::ContextCompressionRecord;
 
 use super::{PersistedEvent, RecoveryForkTreeEntry, Store, StoreError, StoreResult};
 use conex_shared::time::{Clock, SystemClock};
@@ -511,13 +511,8 @@ impl Store for InMemoryStore {
                     .max_by_key(|block| block.generation)
                     .map(|block| block.block_id.clone())
             });
-        let row = crate::blocks::build_block_row(
-            session_id,
-            record,
-            sequence,
-            generation,
-            prev_block_id,
-        );
+        let row =
+            crate::blocks::build_block_row(session_id, record, sequence, generation, prev_block_id);
         // INSERT OR IGNORE 语义：同 (session_id, block_id) 重放不重复行
         if !guard
             .compression_blocks

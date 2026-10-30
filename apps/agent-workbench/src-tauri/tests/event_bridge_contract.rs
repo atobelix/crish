@@ -35,7 +35,9 @@ use conex_types::events::{
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::session::AgentEndReason;
-use conex_types::tool::{ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput};
+use conex_types::tool::{
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput,
+};
 use serde_json::Value;
 
 const TS: &str = "2026-07-31T00:00:00.000Z";

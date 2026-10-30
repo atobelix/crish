@@ -777,6 +777,22 @@
       "title": "工具已被取消"
     },
     {
+      "action": "action.tool.check_policy",
+      "category": "security",
+      "code": "tool.cd_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "目录切换命令被拦截"
+    },
+    {
+      "action": "action.tool.check_policy",
+      "category": "security",
+      "code": "tool.command_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "命令被安全策略拦截"
+    },
+    {
       "action": "action.computer.none",
       "category": "permanent",
       "code": "tool.computer.cancelled",
@@ -962,6 +978,6 @@
     }
   ],
   "contract": "error-codes",
-  "count": 120,
+  "count": 122,
   "schemaVersion": 1
 }

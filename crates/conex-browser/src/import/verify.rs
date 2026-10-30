@@ -17,7 +17,6 @@
 //! 锁纪律（31-security-baseline B8）：本模块无锁。
 
 use crate::import::discovery::detect_app_bound;
-use crate::import::persist::now_unix_str;
 use crate::import::types::{AppBoundStatus, VerifyConclusion, VerifyReport};
 use rusqlite::{Connection, OpenFlags};
 use std::path::{Path, PathBuf};
@@ -158,7 +157,7 @@ fn report(
         n_db,
         n_cdp: None,
         app_bound,
-        checked_at: now_unix_str(),
+        checked_at: conex_shared::time::now_secs().to_string(),
         notes,
     }
 }

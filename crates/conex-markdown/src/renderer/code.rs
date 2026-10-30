@@ -228,9 +228,7 @@ fn build_code_block_html(fence: &FenceState, stream_mode: bool) -> String {
 
     out.push_str("</code></pre>");
     if is_mermaid {
-        out.push_str(
-            "<div class=\"md-island-slot\" data-island-slot=\"mermaid\"></div>",
-        );
+        out.push_str("<div class=\"md-island-slot\" data-island-slot=\"mermaid\"></div>");
     }
     out.push_str("</div>");
     out

@@ -34,32 +34,6 @@
 //! 12 工具真实执行路径，三段守卫：会话注入/开启复查 → 互斥 → 中止自查 →
 //! 执行，06 文档 §4.2）。骨架阶段占位的 `tool.computer.unwired` 已随接线消除。
 
-/// computer_* 工具错误码（06 文档 §5 码表）。
-///
-/// 码表权威：06 文档 §5（`tool.computer.*` 域 + 跨线共享码 `tool.session.exclusive`）。
-/// 本 crate 常量先行；**conex-types 码表登记已完成**（主控登记：codes 模块
-/// `TOOL_COMPUTER_*` 7 码 + `TOOL_SESSION_EXCLUSIVE`，见
-/// crates/conex-types/src/error.rs:134-148），两处取值一致。
-pub mod codes {
-    /// 参数非法（04 §2.1 / 18 §2.1：枚举/取值/组合合法性校验失败）
-    pub const TOOL_COMPUTER_INVALID_PARAMS: &str = "tool.computer.invalid_params";
-    /// 坐标越界（18 §4.4 API 空间边界校验失败；含 zoom region 越界）
-    pub const TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS: &str = "tool.computer.coords_out_of_bounds";
-    /// 提权窗口拒绝（18 §9 R3 / 05 文档 gate：UI-PIA 会话隔离，注入受限，不静默失败）
-    pub const TOOL_COMPUTER_ELEVATED_WINDOW: &str = "tool.computer.elevated_window";
-    /// 会话未开启/已挂起（运行期动作准入拒绝，零副作用；挂载后禁用兜底）
-    pub const TOOL_COMPUTER_NOT_ENABLED: &str = "tool.computer.not_enabled";
-    /// 电脑操作会话未注入/恢复期（工具面 gating，对齐 browser 的 not_ready 语义）
-    pub const TOOL_COMPUTER_NOT_READY: &str = "tool.computer.not_ready";
-    /// 中止/取消（会话级中止令牌触发，04 §4.3）
-    pub const TOOL_COMPUTER_CANCELLED: &str = "tool.computer.cancelled";
-    /// 能力缺失（UIA+视觉双通道皆无 → 拒绝启用，18 §3.4 降级矩阵第 4 格）
-    pub const TOOL_COMPUTER_CAPABILITY_UNAVAILABLE: &str = "tool.computer.capability_unavailable";
-    /// 会话互斥（S3 ActivationGate 守卫；browser_* 与 computer_* 共用同一码，
-    /// 18 §6.3 / 04 §4.6，守卫检查点在审批之前）
-    pub const TOOL_SESSION_EXCLUSIVE: &str = "tool.session.exclusive";
-}
-
 /// 会话访问抽象与真实会话适配（06 文档 §4.1 / 遗留③）。
 pub mod session;
 

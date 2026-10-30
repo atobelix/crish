@@ -121,9 +121,9 @@ pub use revert::{
 // I3-S7（C4 连续回退计数）：时窗归零 / 第 2 次必审批判定 / 统一回退护栏
 // （面积 + 连续合并），接线契约见 revert_guard 模块文档（S6 判定点挂载）
 pub use revert_guard::{
-    combine_revert_gate, evaluate_streak, guard_reasons, now_unix, parse_window_seconds,
-    RevertCounterGuard, RevertGuardOutcome, RevertGuardReason, StreakVerdict,
-    DEFAULT_REVERT_WINDOW_SECONDS, REVERT_WINDOW_SECONDS_KEY,
+    combine_revert_gate, evaluate_streak, guard_reasons, parse_window_seconds, RevertCounterGuard,
+    RevertGuardOutcome, RevertGuardReason, StreakVerdict, DEFAULT_REVERT_WINDOW_SECONDS,
+    REVERT_WINDOW_SECONDS_KEY,
 };
 // I4-M4（C2 创建时间注入 + git 回退谨慎指引）+ F5 EG（REQ-E03 注释保留
 // 注入段）：注入内容模块——started_at 注入段 / 续跑不刷新解析 / git 回退

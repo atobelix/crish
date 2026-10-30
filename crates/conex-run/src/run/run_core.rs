@@ -145,7 +145,7 @@ impl ActiveRun {
         permission_mode: conex_types::permission::PermissionMode,
         project_name: String,
     ) -> Self {
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         Self {
             session_id,
             run_id,
@@ -174,15 +174,14 @@ impl ActiveRun {
     /// 刷新心跳时间戳（避免边界瞬态抖动与活跃态超时）
     pub fn touch_heartbeat(&self) {
         self.last_heartbeat_ms.store(
-            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            conex_shared::time::now_millis(),
             std::sync::atomic::Ordering::Relaxed,
         );
     }
 
     /// 进入挂起状态并登记时效租约（Lease）
     pub fn enter_suspended_phase(&self, duration: std::time::Duration, reason: SuspensionReason) {
-        let until_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0)
-            + duration.as_millis() as u64;
+        let until_ms = conex_shared::time::now_millis() + duration.as_millis() as u64;
         let mut phase_guard = self.phase.write().unwrap_or_else(|e| e.into_inner());
         *phase_guard = ExecutionPhase::Suspended { until_ms, reason };
         // 挂起时同步刷新一次心跳时间戳，避免瞬态边界抖动
@@ -1363,11 +1362,7 @@ impl CoreRunState {
     }
 
     /// 运行时切换 run 模型（`None` = 跟随引擎默认；下一 turn 生效）。
-    pub fn set_run_model(
-        &self,
-        run_id: &str,
-        model: Option<String>,
-    ) -> Result<(), CoreError> {
+    pub fn set_run_model(&self, run_id: &str, model: Option<String>) -> Result<(), CoreError> {
         let cell = self
             .active_runs
             .lock()
@@ -1481,12 +1476,13 @@ impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
         run_task_impl(state, options).await
     }
 
-    fn get_active_run_permission_mode(&self, run_id: &str) -> Option<conex_types::permission::PermissionMode> {
+    fn get_active_run_permission_mode(
+        &self,
+        run_id: &str,
+    ) -> Option<conex_types::permission::PermissionMode> {
         let state = self.state.upgrade()?;
         let active_runs = state.active_runs.lock().ok()?;
-        active_runs
-            .get(run_id)
-            .map(|r| r.permission.effective())
+        active_runs.get(run_id).map(|r| r.permission.effective())
     }
 }
 
@@ -1679,7 +1675,7 @@ impl CoreRunState {
             id: message_id.clone(),
             text: message.to_string(),
             attachments: Vec::new(),
-            enqueued_at: u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+            enqueued_at: conex_shared::time::now_millis(),
             group_id: Some("main-agent-msg".to_string()),
             is_steering: true,
         };
@@ -1712,8 +1708,10 @@ impl CoreRunState {
         board.bind_control_bus(Arc::clone(&adapter) as Arc<dyn ControlBusResolver>);
         board.bind_kill(Arc::clone(&adapter) as Arc<dyn SubagentKillChannel>);
         board.bind_inject(Arc::clone(&adapter) as Arc<dyn SubagentInjectChannel>);
-        board.bind_capability_grant(Arc::clone(&adapter) as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>);
-        board.bind_model_switch(Arc::clone(&adapter) as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>);
+        board.bind_capability_grant(Arc::clone(&adapter)
+            as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>);
+        board.bind_model_switch(Arc::clone(&adapter)
+            as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>);
         board.bind_self_message(adapter as Arc<dyn MainAgentMessageChannel>);
         tracing::info!(
             target: "engine",
@@ -1849,9 +1847,10 @@ pub async fn write_back_cache_stats(
         .and_then(|config| config.provider_id.clone())
         .unwrap_or_default();
     let pricing = provider_config.as_ref().and_then(|config| {
-        config.provider_id.as_deref().and_then(|provider_id| {
-            crate::pricing::live_model_pricing(provider_id, &config.model)
-        })
+        config
+            .provider_id
+            .as_deref()
+            .and_then(|provider_id| crate::pricing::live_model_pricing(provider_id, &config.model))
     });
     let usage_record = crate::core_query::RunUsage::from_run_cache_stats(stats, pricing.as_ref())
         .map(|usage| {
@@ -2025,7 +2024,7 @@ mod phase_tests {
         assert!(initial_heartbeat > 0);
 
         // 进入 429 挂起租约
-        let before_suspend = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let before_suspend = conex_shared::time::now_millis();
         let sleep_duration = Duration::from_millis(5000);
         active.enter_suspended_phase(
             sleep_duration,

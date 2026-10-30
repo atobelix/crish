@@ -9,10 +9,7 @@ use crate::table::{
 
 impl Renderer {
     pub(super) fn start_table(&mut self, alignments: Vec<pulldown_cmark::Alignment>) {
-        let aligns: Vec<Align> = alignments
-            .into_iter()
-            .map(Align::from_pulldown)
-            .collect();
+        let aligns: Vec<Align> = alignments.into_iter().map(Align::from_pulldown).collect();
         let col_count = aligns.len().max(1);
         self.table = Some(TableState {
             alignments: aligns,
@@ -159,10 +156,7 @@ pub(super) fn prepare_tables(md: &str) -> (Cow<'_, str>, Option<String>) {
             lines[i].contains('|') && i + 1 < lines.len() && is_table_sep_line(lines[i + 1]);
         if is_table_start {
             let mut end = i;
-            while end < lines.len()
-                && !lines[end].trim().is_empty()
-                && lines[end].contains('|')
-            {
+            while end < lines.len() && !lines[end].trim().is_empty() && lines[end].contains('|') {
                 end += 1;
             }
             let token = placeholder.get_or_insert_with(|| choose_placeholder(md));

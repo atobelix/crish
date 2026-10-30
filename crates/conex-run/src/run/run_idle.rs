@@ -610,7 +610,7 @@ pub(crate) mod idle_resume {
                 // 3g. 恢复条目入队 → drain 注入 → 拉起；注入文本最小化
                 //     「继续任务」（约束 C：kind/retries 走 provider-diagnostic
                 //     事件 + 临时通知，不进对话、不给 AI）
-                let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+                let now = conex_shared::time::now_millis();
                 let entry = SteeringInputEntry {
                     session_id: active.session_id.clone(),
                     id: format!("recovery-main-{}-{now}", active.run_id),
@@ -781,7 +781,7 @@ pub(crate) mod idle_resume {
         }
         // 注入锁定模板（E1 §3.2：测试断言绑定）；history 经 SessionHistoryCache
         // 天然含已产出前缀，不重复注入（前缀不变性，约束 B）
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let text = format!(
             "上一轮生成中断({}),请从断点继续完成,不要重复已输出的内容",
             resume_kind_label(kind)
@@ -1586,7 +1586,7 @@ pub(crate) mod idle_resume {
         if mode == "goal-continue" || inject.is_empty() {
             return;
         }
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let mut queue = state
             .pending_queue
             .lock()
@@ -1645,7 +1645,13 @@ pub(crate) mod idle_resume {
             .get_session_meta(&meta_key)
             .ok()
             .flatten()
-            .or_else(|| state.local_db().get_session_meta("permission_mode").ok().flatten())
+            .or_else(|| {
+                state
+                    .local_db()
+                    .get_session_meta("permission_mode")
+                    .ok()
+                    .flatten()
+            })
             .or_else(|| {
                 state
                     .active_runs

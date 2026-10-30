@@ -269,10 +269,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         )
             .into_response();
     };
-    let verdict = lock(&state.tokens()).verify(
-        &token,
-        u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-    );
+    let verdict = lock(&state.tokens()).verify(&token, conex_shared::time::now_millis());
     match verdict {
         auth::TokenVerdict::Valid => {}
         auth::TokenVerdict::Revoked => {

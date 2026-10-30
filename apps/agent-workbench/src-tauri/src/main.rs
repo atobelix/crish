@@ -624,7 +624,7 @@ fn main() {
                 tauri::async_runtime::spawn(async move {
                     let wake = push_emitter.wake_notify();
                     loop {
-                        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+                        let now = conex_shared::time::now_millis();
                         let wait_ms = push_emitter
                             .next_expiry_ms(now)
                             .map(|exp| exp.saturating_sub(now))
@@ -634,7 +634,7 @@ fn main() {
                             _ = tokio::time::sleep(std::time::Duration::from_millis(wait_ms)) => {}
                             _ = wake.notified() => {}
                         }
-                        push_emitter.flush(u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
+                        push_emitter.flush(conex_shared::time::now_millis());
                     }
                 });
             }

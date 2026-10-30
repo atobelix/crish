@@ -127,11 +127,10 @@ pub fn parse_cron(expression: &str) -> Result<CronSchedule, CronError> {
         .collect::<Result<_, _>>()?;
     // 字段数已在上方锁定为 5；数组转换失败仅防御性返回结构化错误，
     // 不用 panic 表达不可达状态。
-    let [minute, hour, day_of_month, month, day_of_week]: [CronField; 5] =
-        parsed.try_into().map_err(|fields: Vec<CronField>| {
-            CronError::WrongFieldCount {
-                actual: fields.len(),
-            }
+    let [minute, hour, day_of_month, month, day_of_week]: [CronField; 5] = parsed
+        .try_into()
+        .map_err(|fields: Vec<CronField>| CronError::WrongFieldCount {
+            actual: fields.len(),
         })?;
     Ok(CronSchedule {
         minute,

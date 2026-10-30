@@ -43,7 +43,6 @@ pub enum BlockKind {
     },
 }
 
-
 impl BlockKind {
     /// 纸面 flavour / slash catalog id → [`BlockKind`]。
     ///

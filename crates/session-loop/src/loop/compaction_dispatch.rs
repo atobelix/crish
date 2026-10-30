@@ -237,7 +237,11 @@ pub(crate) fn check_compaction_debounce(
     let current_turn = state.machine.context().turn_index as u64;
 
     // 规则 1: 轮次间隔防抖
-    let min_turn_interval = state.options.compaction.min_turn_interval.max(gen.min_turn_interval);
+    let min_turn_interval = state
+        .options
+        .compaction
+        .min_turn_interval
+        .max(gen.min_turn_interval);
     if current_turn < last_turn.saturating_add(min_turn_interval) {
         tracing::info!(
             current_turn,
@@ -249,7 +253,11 @@ pub(crate) fn check_compaction_debounce(
     }
 
     // 规则 2: Token 增量防抖
-    let min_token_delta = state.options.compaction.min_token_delta.max(gen.min_token_delta);
+    let min_token_delta = state
+        .options
+        .compaction
+        .min_token_delta
+        .max(gen.min_token_delta);
     if estimate_tokens < gen.last_compaction_tokens.saturating_add(min_token_delta) {
         tracing::info!(
             estimate_tokens,

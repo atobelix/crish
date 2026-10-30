@@ -48,7 +48,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         let task_id = format!("task-{}", self.task_seq.fetch_add(1, Ordering::Relaxed));
         let log_path = self.log_root.join(format!("{task_id}.log"));
         let meta_path = self.log_root.join(format!("{task_id}.meta.json"));
-        let started_at_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let started_at_ms = conex_shared::time::now_millis();
         let command = Self::summarize_command(&req.command);
         let cwd = req.cwd.display().to_string();
 
@@ -188,7 +188,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         // 已归档条目自此不可见（list/status/read_log 均 NotFound 附归档指引）。
         self.archive_expired();
         let tasks = self.tasks.lock().unwrap_or_else(|p| p.into_inner());
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let mut out: Vec<BackgroundTaskInfo> = Vec::with_capacity(tasks.len());
         for handle in tasks.values() {
             let mut info = handle
@@ -222,7 +222,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
             let preview = handle.preview.lock().unwrap_or_else(|p| p.into_inner());
             preview.tail_lines(20).join("\n")
         };
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let duration_ms = info
             .finished_at_ms
             .map(|f| f.saturating_sub(info.started_at_ms))

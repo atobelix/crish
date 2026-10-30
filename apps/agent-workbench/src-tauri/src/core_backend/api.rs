@@ -5,13 +5,13 @@ use conex_device_protocol::commands::{SwitchWorkspaceParams, SwitchWorkspaceResu
 use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
     CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
-    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult, ListCommandsResult,
-    ListDirParams, ListDirResult, ListPendingApprovalsParams, ListPendingApprovalsResult,
-    ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, ListWorkspacesParams,
-    ListWorkspacesResult, PauseAutomationParams, PauseAutomationResult, ReadFileParams,
-    ReadFileResult, RunControlLevel, RunControlParams, RunControlResult, RunEventsParams,
-    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
-    SearchFilesResult, SearchIndexResult,
+    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    ListCommandsResult, ListDirParams, ListDirResult, ListPendingApprovalsParams,
+    ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
+    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, PauseAutomationParams,
+    PauseAutomationResult, ReadFileParams, ReadFileResult, RunControlLevel, RunControlParams,
+    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
+    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexResult,
 };
 
 use crate::run_ipc::{settings_get_impl, settings_update_impl};
@@ -445,7 +445,9 @@ impl ApiBackend for CoreStateBackend {
         })?;
         let workspaces = tokio::task::spawn_blocking(move || ops.list_workspaces())
             .await
-            .map_err(|error| ServerError::internal(format!("list_workspaces 任务失败：{error}")))??;
+            .map_err(|error| {
+                ServerError::internal(format!("list_workspaces 任务失败：{error}"))
+            })??;
         Ok(ListWorkspacesResult { workspaces })
     }
 
@@ -456,12 +458,11 @@ impl ApiBackend for CoreStateBackend {
         let ops = self.workspace_ops().ok_or_else(|| {
             ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "工作区操作未装配")
         })?;
-        let active_root =
-            tokio::task::spawn_blocking(move || ops.switch_workspace(&params.path))
-                .await
-                .map_err(|error| {
-                    ServerError::internal(format!("switch_workspace 任务失败：{error}"))
-                })??;
+        let active_root = tokio::task::spawn_blocking(move || ops.switch_workspace(&params.path))
+            .await
+            .map_err(|error| {
+                ServerError::internal(format!("switch_workspace 任务失败：{error}"))
+            })??;
         Ok(SwitchWorkspaceResult {
             ok: true,
             active_root,

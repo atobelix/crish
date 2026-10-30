@@ -596,10 +596,8 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         agent_policy.clone(),
     ));
     if let Some(spawner) = subagent_spawner.as_ref() {
-        spawner.set_child_registrar(
-            Arc::clone(&agent_mailbox)
-                as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>,
-        );
+        spawner.set_child_registrar(Arc::clone(&agent_mailbox)
+            as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>);
     }
 
     // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：后台管理器
@@ -618,21 +616,16 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
             Arc::clone(&continuity) as Arc<dyn MainAgentMessageChannel>
         ),
         agent_policy_channel: agent_policy.as_ref().map(|service| {
-            Arc::clone(service)
-                as Arc<dyn agent_tools::tools::configure_agents::AgentPolicyChannel>
+            Arc::clone(service) as Arc<dyn agent_tools::tools::configure_agents::AgentPolicyChannel>
         }),
         subagent_report_channel: Some(Arc::clone(&agent_mailbox)
             as Arc<dyn agent_tools::tools::subagent_report::SubagentReportChannel>),
-        subagent_capability_channel: Some(
-            Arc::clone(&continuity)
-                as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>,
-        ),
+        subagent_capability_channel: Some(Arc::clone(&continuity)
+            as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>),
         child_agent_registrar: Some(Arc::clone(&agent_mailbox)
             as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>),
-        subagent_model_channel: Some(
-            Arc::clone(&continuity)
-                as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>,
-        ),
+        subagent_model_channel: Some(Arc::clone(&continuity)
+            as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>),
         audit_sink: Some(Arc::clone(&audit_sink) as agent_tools::audit::AuditSink),
         ..agent_tools::tools::BuiltinToolConfig::default()
     };

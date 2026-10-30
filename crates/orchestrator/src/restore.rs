@@ -33,6 +33,7 @@
 use std::fmt;
 
 use conex_db::{PendingInput, StoredRun};
+use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
 
 use crate::persist::StoreError;
@@ -216,6 +217,6 @@ impl From<SnapshotError> for RestoreError {
 
 impl From<SessionTreeError> for RestoreError {
     fn from(err: SessionTreeError) -> Self {
-        Self::new("session.invalid_state", err.to_string())
+        Self::new(codes::SESSION_INVALID_STATE, err.to_string())
     }
 }

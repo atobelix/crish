@@ -21,7 +21,9 @@ impl AppWorkspaceOps {
         Arc::new(Self { app })
     }
 
-    fn registry(&self) -> Result<tauri::State<'_, crate::workspace::WorkspaceRegistry>, ServerError> {
+    fn registry(
+        &self,
+    ) -> Result<tauri::State<'_, crate::workspace::WorkspaceRegistry>, ServerError> {
         crate::workspace::registry(&self.app).map_err(map_fs_error)
     }
 

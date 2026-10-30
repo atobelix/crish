@@ -250,7 +250,9 @@ fn parse_profile(user: &serde_json::Value) -> Result<UserProfile, CloudAuthError
 }
 
 /// 解析会话响应（`accessToken` / `refreshToken` 缺失即契约破坏）。
-fn parse_session_body(body: &serde_json::Value) -> Result<(AuthTokens, UserProfile), CloudAuthError> {
+fn parse_session_body(
+    body: &serde_json::Value,
+) -> Result<(AuthTokens, UserProfile), CloudAuthError> {
     let access_token = body["accessToken"]
         .as_str()
         .ok_or_else(|| CloudAuthError::BadResponse("accessToken missing".into()))?

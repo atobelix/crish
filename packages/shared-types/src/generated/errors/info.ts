@@ -119,6 +119,8 @@ export const CRISH_ERROR_REGISTRY: Readonly<
   "tool.browser.tab_limit_exceeded": { code: "tool.browser.tab_limit_exceeded", title: "\u6807\u7b7e\u6570\u91cf\u8d85\u9650", category: "permanent", retryable: false, public: true, action: "action.browser.close_tabs" },
   "tool.browser.unwired": { code: "tool.browser.unwired", title: "\u6d4f\u89c8\u5668\u80fd\u529b\u672a\u63a5\u7ebf", category: "permanent", retryable: false, public: true, action: "action.browser.check_supported" },
   "tool.cancelled": { code: "tool.cancelled", title: "\u5de5\u5177\u5df2\u88ab\u53d6\u6d88", category: "permanent", retryable: false, public: true, action: "action.tool.cancelled" },
+  "tool.cd_blocked": { code: "tool.cd_blocked", title: "\u76ee\u5f55\u5207\u6362\u547d\u4ee4\u88ab\u62e6\u622a", category: "security", retryable: false, public: true, action: "action.tool.check_policy" },
+  "tool.command_blocked": { code: "tool.command_blocked", title: "\u547d\u4ee4\u88ab\u5b89\u5168\u7b56\u7565\u62e6\u622a", category: "security", retryable: false, public: true, action: "action.tool.check_policy" },
   "tool.computer.cancelled": { code: "tool.computer.cancelled", title: "\u7535\u8111\u64cd\u4f5c\u5df2\u53d6\u6d88", category: "permanent", retryable: false, public: false, action: "action.computer.none" },
   "tool.computer.capability_unavailable": { code: "tool.computer.capability_unavailable", title: "\u80fd\u529b\u4e0d\u53ef\u7528", category: "security", retryable: false, public: true, action: "action.computer.check_capability" },
   "tool.computer.coords_out_of_bounds": { code: "tool.computer.coords_out_of_bounds", title: "\u5750\u6807\u8d8a\u754c", category: "permanent", retryable: false, public: true, action: "action.computer.refresh_perception" },

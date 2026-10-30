@@ -70,10 +70,7 @@ pub struct AgentMailbox {
 impl std::fmt::Debug for AgentMailbox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentMailbox")
-            .field(
-                "routes",
-                &self.routes.lock().map(|r| r.len()).unwrap_or(0),
-            )
+            .field("routes", &self.routes.lock().map(|r| r.len()).unwrap_or(0))
             .finish()
     }
 }
@@ -122,16 +119,12 @@ impl AgentMailbox {
                 return Ok(());
             };
             let policy = self.comm_policy(&route.parent_session);
-            let Some(mut digest) =
-                state
-                    .digest
-                    .drain_into_digest(
-                        child_session,
-                        &route.parent_session,
-                        conex_shared::time::unix_millis(),
-                        policy.suppress_marker,
-                    )
-            else {
+            let Some(mut digest) = state.digest.drain_into_digest(
+                child_session,
+                &route.parent_session,
+                conex_shared::time::unix_millis(),
+                policy.suppress_marker,
+            ) else {
                 return Ok(());
             };
             if state.suppressed > 0 {
@@ -323,11 +316,10 @@ mod tests {
             message: &str,
             ring: MainMessageRing,
         ) -> Result<String, String> {
-            self.calls.lock().unwrap().push((
-                session_id.to_string(),
-                message.to_string(),
-                ring,
-            ));
+            self.calls
+                .lock()
+                .unwrap()
+                .push((session_id.to_string(), message.to_string(), ring));
             Ok("msg-1".to_string())
         }
     }
@@ -403,12 +395,7 @@ mod tests {
     async fn unregistered_child_is_rejected() {
         let (mailbox, _delivery) = mailbox();
         let error = mailbox
-            .report(
-                "unknown",
-                AgentMessageKind::Progress,
-                "x".to_string(),
-                None,
-            )
+            .report("unknown", AgentMessageKind::Progress, "x".to_string(), None)
             .await
             .expect_err("未登记必须报错");
         assert!(error.contains("未登记"));

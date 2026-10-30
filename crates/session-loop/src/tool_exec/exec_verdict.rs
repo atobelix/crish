@@ -206,7 +206,10 @@ impl ToolExecutor {
             if let Some(revert_verdict) = self.revert_policy.gate_verdict(analysis, mode) {
                 let reason = (revert_verdict == PermissionVerdict::NeedsApproval)
                     .then(|| "检测到大面积回退操作，需确认".to_string());
-                return VerdictDecision { verdict: revert_verdict, reason };
+                return VerdictDecision {
+                    verdict: revert_verdict,
+                    reason,
+                };
             }
             return match analysis.permission_verdict() {
                 conex_sandbox::verdict::PermissionVerdict::Allow => VerdictDecision::allow(),
@@ -338,9 +341,7 @@ pub(crate) fn mark_rest_cancelled(
             category: call.category,
             concurrency: call.concurrency,
             summary: call.summary.clone(),
-            occurred_at_ms: Some(
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-            ),
+            occurred_at_ms: Some(conex_shared::time::now_millis()),
         });
         events.push(ToolEvent::ToolEnd {
             call_id: call.id.clone(),
@@ -658,8 +659,7 @@ mod tests {
         assert!(reg.register(Arc::new(DummyShellTool)).is_ok());
         let exec = ToolExecutor::new(Arc::new(reg));
         let benign = conex_sandbox::assess("git status");
-        let decision =
-            exec.decide_from_assessment(&benign, "rm -rf /", PermissionMode::Smart);
+        let decision = exec.decide_from_assessment(&benign, "rm -rf /", PermissionMode::Smart);
         assert_eq!(decision.verdict, PermissionVerdict::Allow);
     }
 }

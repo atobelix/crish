@@ -60,7 +60,7 @@ static CRASH_MARKER: Mutex<Option<CrashMarker>> = Mutex::new(None);
 /// 记录崩溃标记（panic hook 崩溃文件写成功后调用；锁中毒/写失败静默
 /// ——崩溃处理路径不允许二次 panic）。
 fn record_crash_marker(file_name: String) {
-    let timestamp_ms = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let timestamp_ms = conex_shared::time::now_millis();
     // 锁中毒（Err）：崩溃处理路径不允许二次 panic，显式放弃写入
     if let Ok(mut slot) = CRASH_MARKER.lock() {
         *slot = Some(CrashMarker {

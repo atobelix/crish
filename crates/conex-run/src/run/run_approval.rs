@@ -287,7 +287,7 @@ impl ApprovalGate for ApprovalGateImpl {
         let effective_timeout = self
             .approval_timeout
             .unwrap_or_else(|| self.policy_engine.resolve_timeout(&eval_ctx));
-        let requested_at_ms = crate::now_ms_u64();
+        let requested_at_ms = conex_shared::time::now_millis();
         let expires_at_ms = requested_at_ms + effective_timeout.as_millis() as u64;
         let timeout_action = self.policy_engine.evaluate_timeout_action(&eval_ctx);
 

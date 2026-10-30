@@ -97,7 +97,7 @@ impl SubagentWaitChannel for WaitChannel {
         &self,
         subagent_ids: &[String],
     ) -> Result<Vec<SubagentWaitStatus>, SubagentWaitError> {
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let rows = self.agents.load_agents();
         Ok(subagent_ids
             .iter()
@@ -145,7 +145,7 @@ impl SubagentWaitChannel for WaitChannel {
             .filter(|d| d.subagent_ids.iter().any(|id| subagent_ids.contains(id)))
             .map(|d| d.dispatched_at_ms)
             .max()
-            .unwrap_or_else(|| u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0));
+            .unwrap_or_else(conex_shared::time::now_millis);
         let rx = self.terminal_stream.subscribe();
         Ok(wait_for_terminal_events(
             subagent_ids,

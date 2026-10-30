@@ -14,17 +14,17 @@
 
 mod api;
 pub(crate) mod state;
-pub(crate) mod workspace_ops;
 #[cfg(test)]
 mod tests;
+pub(crate) mod workspace_ops;
 
 pub use state::CoreStateBackend;
 
-use conex_types::permission::PermissionMode;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
 };
 use conex_types::impact::ImpactAssessment;
+use conex_types::permission::PermissionMode;
 
 use conex_run::core_event_bridge::EventBridge;
 

@@ -164,7 +164,9 @@ impl backend::ApiBackend for TestBackendStub {
         Err(ServerError::internal("test stub"))
     }
 
-    async fn list_commands(&self) -> Result<conex_device_protocol::ListCommandsResult, ServerError> {
+    async fn list_commands(
+        &self,
+    ) -> Result<conex_device_protocol::ListCommandsResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
@@ -229,7 +231,7 @@ async fn subscribe_and_receive_push(
         "v": 1,
         "kind": "events.subscribe",
         "msgId": "asm-subscribe-1",
-        "ts": u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
+        "ts": conex_shared::time::now_millis(),
         "from": "mobile",
         "to": "desktop",
         "auth": { "deviceId": "", "nonce": "", "sig": "", "ts": 0 },
@@ -307,10 +309,7 @@ async fn assembled_router_serves_real_backend_fanout_and_401() {
     let token = {
         let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
         store
-            .issue(
-                "asm-device",
-                u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-            )
+            .issue("asm-device", conex_shared::time::now_millis())
             .expect("签发必须成功")
     };
 

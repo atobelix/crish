@@ -50,9 +50,9 @@ mod wait_registry;
 
 pub use broadcast::{EventStreamBroadcast, NoopControlBusResolver};
 pub use channel::WaitChannel;
-pub use stores::{LocalDbWaitStore, MemoryAgentSource};
 #[cfg(any(test, feature = "test-support"))]
 pub use stores::MemoryWaitStore;
+pub use stores::{LocalDbWaitStore, MemoryAgentSource};
 pub use wait_registry::{SubagentWaitRegistry, WaitScopeGuard};
 
 /// 订阅通道容量（终端事件量级极小；防慢消费者阻塞旁路点）

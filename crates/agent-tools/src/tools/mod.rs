@@ -90,11 +90,11 @@ pub mod search_context;
 pub mod configure_agents;
 pub mod grant_capability;
 pub mod send_message;
-pub mod subagent_report;
-pub mod switch_agent_model;
 pub mod set_timer;
 pub mod shell;
 pub mod subagent;
+pub mod subagent_report;
+pub mod switch_agent_model;
 pub mod wait_subagents;
 
 use crate::audit::{NoopAuditSink, SecurityAuditSink};
@@ -256,14 +256,16 @@ pub fn register_builtin_tools_with_config(
         configure_agents::ConfigureAgentsTool::with_channel(config.agent_policy_channel.clone()),
     ))?;
     // 子代理上报工具（P1）：progress（摘要）/ ask（即时）/ request_capability
-    registry.register(Arc::new(
-        subagent_report::ReportProgressTool::with_channel(config.subagent_report_channel.clone()),
-    ))?;
+    registry.register(Arc::new(subagent_report::ReportProgressTool::with_channel(
+        config.subagent_report_channel.clone(),
+    )))?;
     registry.register(Arc::new(subagent_report::AskParentTool::with_channel(
         config.subagent_report_channel.clone(),
     )))?;
     registry.register(Arc::new(
-        subagent_report::RequestCapabilityTool::with_channel(config.subagent_report_channel.clone()),
+        subagent_report::RequestCapabilityTool::with_channel(
+            config.subagent_report_channel.clone(),
+        ),
     ))?;
     // grant_capability（P0）：主 agent 批准子代理能力申请
     registry.register(Arc::new(

@@ -90,6 +90,10 @@ pub const TOOL_REQUIRES_APPROVAL: &str = "tool.requires_approval";
 pub const TOOL_SOFT_DENY: &str = "tool.soft_deny";
 /// 系统安全策略阻断（红线拦截 / 只读模式 / 任务类型越界；不可重试）
 pub const TOOL_POLICY_BLOCKED: &str = "tool.policy_blocked";
+/// shell 命令被安全策略拦截（命令级黑名单/形态拦截；不可重试）
+pub const TOOL_COMMAND_BLOCKED: &str = "tool.command_blocked";
+/// 目录切换命令被拦截（cd 形态逃逸防护；不可重试）
+pub const TOOL_CD_BLOCKED: &str = "tool.cd_blocked";
 /// 流式响应以错误截断，工具在派发前被防火墙阻断（BC02-2；本次调用不可重试）
 pub const TOOL_STREAM_ERROR_BEFORE_DISPATCH: &str = "tool.stream_error_before_dispatch";
 // ── browser 域（9 正式码，17 文档 §1.3 + R-9-2/R-8/U-12）──

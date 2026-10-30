@@ -29,7 +29,9 @@ pub const MAX_DECISION_LEDGER_TOKENS: usize = 800;
 pub const PINNED_LEDGER_MESSAGE_ID: &str = "slot2-pinned-decision-ledger";
 
 /// 决策类别（依据 §8.1 类型契约）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum DecisionCategory {
     /// 架构规则与重大技术选型 (DECISION:)
     ArchitecturalRule = 1,
@@ -121,7 +123,11 @@ impl PinnedDecisionLedger {
         }
 
         // 规范化去重判定：若已有相同核心文本，则忽略或保留更高优者
-        if let Some(pos) = self.entries.iter().position(|e| normalize_statement(&e.statement) == norm_stmt) {
+        if let Some(pos) = self
+            .entries
+            .iter()
+            .position(|e| normalize_statement(&e.statement) == norm_stmt)
+        {
             let existing = &self.entries[pos];
             if entry.category.priority_weight() > existing.category.priority_weight() {
                 // 升级类别权重
@@ -206,7 +212,8 @@ impl PinnedDecisionLedger {
 
             for (idx, item) in self.entries.iter().enumerate().skip(1) {
                 let prio = item.category.priority_weight();
-                if prio < min_priority || (prio == min_priority && item.created_at_turn < min_turn) {
+                if prio < min_priority || (prio == min_priority && item.created_at_turn < min_turn)
+                {
                     victim_idx = idx;
                     min_priority = prio;
                     min_turn = item.created_at_turn;
@@ -279,7 +286,10 @@ impl PinnedDecisionLedger {
 
         let content = self.render_markdown();
         let mut metadata = serde_json::Map::new();
-        metadata.insert("slot".to_string(), serde_json::Value::String("2.2".to_string()));
+        metadata.insert(
+            "slot".to_string(),
+            serde_json::Value::String("2.2".to_string()),
+        );
         metadata.insert("pinned".to_string(), serde_json::Value::Bool(true));
         metadata.insert("non_foldable".to_string(), serde_json::Value::Bool(true));
 
@@ -315,10 +325,7 @@ impl PinnedDecisionLedger {
     }
 
     /// 跨代不可折叠保护：从即将丢弃的 IDs 列表中剥离账本消息并维护在 kept_ids 中
-    pub fn protect_from_dropped(
-        dropped_ids: &mut Vec<String>,
-        kept_ids: &mut Vec<String>,
-    ) -> bool {
+    pub fn protect_from_dropped(dropped_ids: &mut Vec<String>, kept_ids: &mut Vec<String>) -> bool {
         let before_len = dropped_ids.len();
         dropped_ids.retain(|id| {
             if id == PINNED_LEDGER_MESSAGE_ID {
@@ -338,7 +345,9 @@ impl PinnedDecisionLedger {
 fn normalize_statement(raw: &str) -> String {
     let trimmed = raw.trim();
     let cleaned = trimmed
-        .trim_start_matches(|c: char| c == '*' || c == '_' || c == '`' || c == '-' || c == '#' || c.is_whitespace())
+        .trim_start_matches(|c: char| {
+            c == '*' || c == '_' || c == '`' || c == '-' || c == '#' || c.is_whitespace()
+        })
         .trim_end_matches(|c: char| c == '*' || c == '_' || c == '`' || c.is_whitespace());
     cleaned.to_string()
 }
@@ -362,7 +371,14 @@ fn parse_decision_line(line: &str) -> Option<(DecisionCategory, String)> {
             let after = &line[idx + keyword.len()..];
             // 剥除紧随的冒号、括号、中括号、强调符等分隔符
             let stripped = after.trim_start_matches(|c: char| {
-                c == ':' || c == '：' || c == ']' || c == ')' || c == '*' || c == '_' || c == '-' || c.is_whitespace()
+                c == ':'
+                    || c == '：'
+                    || c == ']'
+                    || c == ')'
+                    || c == '*'
+                    || c == '_'
+                    || c == '-'
+                    || c.is_whitespace()
             });
             let stmt = normalize_statement(stripped);
             if !stmt.is_empty() && stmt.len() >= 4 {
@@ -422,7 +438,10 @@ mod tests {
         assert_eq!(ledger.len(), 2);
 
         // 验证保护机制
-        let mut dropped = vec!["msg-history-1".to_string(), PINNED_LEDGER_MESSAGE_ID.to_string()];
+        let mut dropped = vec![
+            "msg-history-1".to_string(),
+            PINNED_LEDGER_MESSAGE_ID.to_string(),
+        ];
         let mut kept = vec!["msg-history-2".to_string()];
         let protected = PinnedDecisionLedger::protect_from_dropped(&mut dropped, &mut kept);
         assert!(protected);

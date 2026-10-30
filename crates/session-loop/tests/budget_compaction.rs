@@ -18,8 +18,8 @@ use conex_compaction::CompactionPolicy;
 use conex_types::context::ContextBudget;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
-use session_loop::r#loop::AgentEndReason;
 use conex_types::tool::ContextCompressionRecord;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AgentSessionLoop, ProviderCall, ProviderEventStream, ProviderRequest, SessionLoopOptions,
     TestProvider,

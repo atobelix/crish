@@ -113,8 +113,7 @@ impl SessionFreezeRegistry {
         let mut map = self.lock();
         match map.get(session_id) {
             None => {
-                let deadline_ms =
-                    u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0) + timeout_ms;
+                let deadline_ms = conex_shared::time::now_millis() + timeout_ms;
                 map.insert(
                     session_id.to_string(),
                     SessionFreezeState::Freezing {

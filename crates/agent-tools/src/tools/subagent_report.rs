@@ -60,7 +60,12 @@ const REQUEST_CAPABILITY_DESCRIPTION: &str =
     "申请能力升级（即时通道）：当前只读/能力不足导致无法完成剩余任务时，\
      说明需要的能力与理由；主 agent 可用 grant_capability 批准。";
 
-fn build_definition(name: &str, description: &str, properties: Value, required: &[&str]) -> ToolDefinition {
+fn build_definition(
+    name: &str,
+    description: &str,
+    properties: Value,
+    required: &[&str],
+) -> ToolDefinition {
     ToolDefinition {
         name: name.to_string(),
         description: description.to_string(),
@@ -332,8 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_capability_rejects_unknown_mode() {
-        let tool =
-            RequestCapabilityTool::with_channel(Some(Arc::new(RecordingChannel::default())));
+        let tool = RequestCapabilityTool::with_channel(Some(Arc::new(RecordingChannel::default())));
         let ctx = create_mock_tool_context();
         let err = tool
             .execute(

@@ -5,11 +5,11 @@ use std::collections::HashMap;
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::{Arc, Mutex};
 
-use conex_db::LocalDb;
 use super::types::{
     CronTask, CronTaskStatus, LEGACY_SESSION_META_SCHED_INDEX_KEY, SESSION_META_SCHED_INDEX_KEY,
     SESSION_META_SCHED_KEY_PREFIX,
 };
+use conex_db::LocalDb;
 
 /// session_meta 持久化适配（conex-db `sched_*` 键读写）
 pub trait SchedStore: Send + Sync {

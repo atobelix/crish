@@ -97,7 +97,8 @@ fn test_state(
     );
     let background = registry.map(|value| value as Arc<dyn BackgroundTaskManager>);
     let state = Arc::new(CoreRunState::new(
-        Arc::new(LocalDbStore::new(db.clone())), db.clone(),
+        Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -816,9 +817,6 @@ async fn t08_remote_run_ask_mode_dangerous_tool_gated() {
         .expect("远程 run 发起");
 
     let hits = wait_approval_requested(&emitter, "write_file", Duration::from_secs(15)).await;
-    assert!(
-        hits >= 1,
-        "远程 ask 模式下，write_file 必须触发审批"
-    );
+    assert!(hits >= 1, "远程 ask 模式下，write_file 必须触发审批");
     resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
 }

@@ -12,6 +12,7 @@ fn command_request_roundtrip_camel_case() {
             run_id: Some("r-01".into()),
         },
     )
+    .expect("参数序列化")
     .with_timeout(30_000);
     let json = serde_json::to_value(&req).unwrap();
     assert_eq!(json["command"], "approve");
@@ -137,9 +138,18 @@ fn enum_wire_values() {
     assert_eq!(PermissionMode::default(), PermissionMode::Smart);
     assert_eq!(PermissionMode::Full.as_str(), "full");
     assert_eq!(PermissionMode::Full.to_string(), "full");
-    assert_eq!("full".parse::<PermissionMode>().unwrap(), PermissionMode::Full);
-    assert_eq!("smart".parse::<PermissionMode>().unwrap(), PermissionMode::Smart);
-    assert_eq!("ask".parse::<PermissionMode>().unwrap(), PermissionMode::Ask);
+    assert_eq!(
+        "full".parse::<PermissionMode>().unwrap(),
+        PermissionMode::Full
+    );
+    assert_eq!(
+        "smart".parse::<PermissionMode>().unwrap(),
+        PermissionMode::Smart
+    );
+    assert_eq!(
+        "ask".parse::<PermissionMode>().unwrap(),
+        PermissionMode::Ask
+    );
     assert_eq!(
         serde_json::to_string(&PairState::Handshaking).unwrap(),
         "\"handshaking\""

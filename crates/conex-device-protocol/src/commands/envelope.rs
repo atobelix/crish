@@ -27,10 +27,13 @@ impl CommandRequest {
         }
     }
 
-    /// 以类型化参数构造（任意 Serialize 结构 → params JSON）
-    pub fn with_typed_params<T: Serialize>(command: impl Into<String>, params: &T) -> Self {
-        let params = serde_json::to_value(params).expect("类型化命令参数必须可序列化为 JSON");
-        Self::new(command, params)
+    /// 以类型化参数构造（任意 Serialize 结构 → params JSON）。
+    pub fn with_typed_params<T: Serialize>(
+        command: impl Into<String>,
+        params: &T,
+    ) -> Result<Self, serde_json::Error> {
+        let params = serde_json::to_value(params)?;
+        Ok(Self::new(command, params))
     }
 
     /// 设置请求超时（毫秒，1000-120000）

@@ -329,18 +329,18 @@ pub struct EventsPush {
 }
 
 impl EventsPush {
-    /// 从既有信封产形（序列化 AgentEventEnvelope → 扁平 JSON）
+    /// 从既有信封产形（序列化 AgentEventEnvelope → 扁平 JSON）。
     pub fn from_envelope(
         session_id: impl Into<String>,
         envelope: &AgentEventEnvelope,
         preview: bool,
-    ) -> Self {
-        let event = serde_json::to_value(envelope).expect("AgentEventEnvelope 必须可序列化为 JSON");
-        Self {
+    ) -> Result<Self, serde_json::Error> {
+        let event = serde_json::to_value(envelope)?;
+        Ok(Self {
             session_id: session_id.into(),
             preview,
             event,
-        }
+        })
     }
 }
 
@@ -508,7 +508,7 @@ mod tests {
             Some("r-01".into()),
             Some(130),
         );
-        let push = EventsPush::from_envelope("s-abc", &envelope, false);
+        let push = EventsPush::from_envelope("s-abc", &envelope, false).expect("序列化信封");
         let json = serde_json::to_value(&push).unwrap();
         assert_eq!(json["sessionId"], "s-abc");
         assert!(json.get("preview").is_none(), "preview=false 应省略");

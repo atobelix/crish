@@ -32,7 +32,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-
 // ============================================================================
 // 采样配置与健康判定三态（方案 §4.3 冻结形状）
 // ============================================================================
@@ -382,7 +381,7 @@ impl TaskNotifier {
     /// 任务输出投递（Delta 可丢；100ms 节流窗口聚合——窗口内只记
     /// last_line/line_count，窗口边界发一条；终态通知前冲刷窗口）。
     pub(crate) fn notify_output(&self, task_id: &str, line: &str, line_count: u64) {
-        let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+        let now = conex_shared::time::now_millis();
         let mut throttle = self
             .output_throttle
             .lock()

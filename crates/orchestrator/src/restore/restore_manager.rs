@@ -687,7 +687,9 @@ fn extract_declared_tool_calls(
         }
     }
     if let Some(json) = blocks_json {
-        if let Ok(blocks) = serde_json::from_str::<Vec<conex_types::message::AgentMessageBlock>>(json) {
+        if let Ok(blocks) =
+            serde_json::from_str::<Vec<conex_types::message::AgentMessageBlock>>(json)
+        {
             for b in blocks {
                 if let conex_types::message::AgentMessageBlock::ToolCall(call) = b {
                     out.push((call.id, call.tool_name));

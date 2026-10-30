@@ -10,7 +10,6 @@ use crate::background::{BackgroundAdoptRequest, BackgroundTaskManager};
 use crate::context::{AbortToken, ToolContext};
 use crate::definition::ToolError;
 use crate::streaming::{terminal_only, ToolProgress, ToolStream, ToolStreamItem};
-use conex_shared::time::unix_millis;
 use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -823,7 +822,7 @@ fn push_chunk(r: &mut RunningState, chunk: &[u8], is_err: bool) -> Option<ToolSt
     if chunk.is_empty() {
         return None;
     }
-    let now_ms = u64::try_from(unix_millis()).unwrap_or(0);
+    let now_ms = conex_shared::time::now_millis();
     if is_err {
         r.acc_err.append(chunk, now_ms);
     } else {

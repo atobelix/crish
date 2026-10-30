@@ -44,7 +44,7 @@ pub fn multi_device_pair_start(
                 .to_string(),
         ));
     }
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     coordinator.start_pairing(now).map_err(map_pair_start_err)
 }
 
@@ -57,7 +57,7 @@ pub fn multi_device_pair_status(
     service: State<'_, Arc<MultiDeviceService>>,
     coordinator: State<'_, Arc<PairingCoordinator>>,
 ) -> PairStatus {
-    let now = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let now = conex_shared::time::now_millis();
     let mut status = coordinator.status(now);
     status.service_enabled = service.enabled();
     status

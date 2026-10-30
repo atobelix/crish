@@ -37,8 +37,8 @@ pub mod types;
 mod tests;
 
 pub use registry::TimerRegistry;
-pub use store::{LocalDbTimerStore, TimerStore};
 #[cfg(any(test, feature = "test-support"))]
 pub use store::MemoryTimerStore;
+pub use store::{LocalDbTimerStore, TimerStore};
 pub use types::{steering_group_id, TimerCancelReason, TimerEvent};
 pub use types::{AgentEventSink, EventSink, QueuePendingSink};

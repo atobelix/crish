@@ -878,13 +878,8 @@ mod tests {
         seed_running_rows(&db, "s1");
 
         assert_eq!(
-            db.mark_session_agent_interrupted(
-                "s1",
-                "run-1",
-                50_000,
-                "应用重启中断（可恢复）"
-            )
-            .unwrap(),
+            db.mark_session_agent_interrupted("s1", "run-1", 50_000, "应用重启中断（可恢复）")
+                .unwrap(),
             1
         );
         let rows = db.load_session_agents("s1").unwrap();

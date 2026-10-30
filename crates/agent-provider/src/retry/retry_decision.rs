@@ -247,9 +247,7 @@ pub fn parse_retry_after_ms(value: Option<&str>, now: SystemTime) -> Option<Dura
     }
     let epoch = parse_http_date(value)?;
     let then = Duration::from_secs(epoch.max(0) as u64);
-    let now = Duration::from_millis(
-        u64::try_from(conex_shared::time::millis_of(now)).unwrap_or(0),
-    );
+    let now = Duration::from_millis(u64::try_from(conex_shared::time::millis_of(now)).unwrap_or(0));
     Some(clamp_retry_after(then.saturating_sub(now)))
 }
 

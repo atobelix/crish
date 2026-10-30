@@ -47,20 +47,13 @@ pub fn render_cache_for(variant: MarkdownVariant) -> &'static RenderCache {
 
 /// 借用切片 `&str` 零拷贝查询渲染缓存。
 #[inline]
-pub fn get_render_cached(
-    variant: MarkdownVariant,
-    key: &str,
-) -> Option<Arc<RenderResult>> {
+pub fn get_render_cached(variant: MarkdownVariant, key: &str) -> Option<Arc<RenderResult>> {
     render_cache_for(variant).get(key)
 }
 
 /// 写入全局渲染缓存（预检查单条目字节预算）。
 #[inline]
-pub fn insert_render_cached(
-    variant: MarkdownVariant,
-    key: &str,
-    value: Arc<RenderResult>,
-) -> bool {
+pub fn insert_render_cached(variant: MarkdownVariant, key: &str, value: Arc<RenderResult>) -> bool {
     if entry_within_budget(key, &value) {
         render_cache_for(variant).insert(key.to_string(), value);
         true
@@ -105,11 +98,7 @@ mod tests {
     fn variants_are_isolated() {
         let key = "same-text";
         insert_render_cached(MarkdownVariant::Chat, key, result("<p>chat</p>"));
-        insert_render_cached(
-            MarkdownVariant::Document,
-            key,
-            result("<p>document</p>"),
-        );
+        insert_render_cached(MarkdownVariant::Document, key, result("<p>document</p>"));
         assert_eq!(
             get_render_cached(MarkdownVariant::Chat, key)
                 .map(|v| v.html.clone())

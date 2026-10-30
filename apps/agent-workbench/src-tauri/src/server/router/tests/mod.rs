@@ -70,10 +70,7 @@ fn issue_token(state: &ServerState) -> String {
         .tokens()
         .lock()
         .unwrap()
-        .issue(
-            "test-device",
-            u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0),
-        )
+        .issue("test-device", conex_shared::time::now_millis())
         .expect("签发必须成功")
 }
 

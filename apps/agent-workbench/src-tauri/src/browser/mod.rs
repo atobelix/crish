@@ -130,13 +130,13 @@ use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
     BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
-use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{
     ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView,
 };
 use conex_run::core_event_bridge::Emitter;
+use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
 use frame_stream::{FrameStreamController, FrameStreamState};
 use mcp_attach::McpAttachEndpoint;
 use panel_input::{BrowserInputEvent, PanelInputRouter};

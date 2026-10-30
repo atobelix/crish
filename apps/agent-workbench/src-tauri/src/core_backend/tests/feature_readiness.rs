@@ -245,7 +245,7 @@ async fn r2_12_pause_automation_via_real_scheduler() {
         "真实引擎路径调度器应已装配"
     );
     let backend = CoreStateBackend::new(Arc::clone(&state));
-    let before = u64::try_from(conex_shared::time::unix_millis()).unwrap_or(0);
+    let before = conex_shared::time::now_millis();
     let result = backend
         .pause_automation(PauseAutomationParams { duration_sec: None })
         .await
