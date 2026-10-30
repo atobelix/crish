@@ -4,7 +4,7 @@
  * 探针 B（详案 06 §5.2 · Wave D2）：工具成对与恢复断言（结构性静态守门）。
  *
  * 三大刚性判定维度：
- *   1. converge_orphan_pairing_missing —— loop_exec.rs 的 converge 终态收敛
+ *   1. converge_orphan_pairing_missing —— loop/exec.rs 的 converge 终态收敛
  *      必须显式包含 reconcile_orphan_tool_calls 或 assert_tool_pairing_invariants
  *      调用（孤儿工具闭环守卫接线）。
  *   2. executing_tools_bare_exit —— executing_tools.rs 在 check_control 命中退出前
@@ -39,7 +39,7 @@ const METRICS = [
 const GUIDE_TEXT = {
   converge_orphan_pairing_missing: [
     'converge 是全部收敛路径的唯一收口；若不在 converge 内闭合孤儿 tool_use，中断后孤儿调用会引爆上游 LLM HTTP 400。',
-    '正确做法：在 crates/session-loop/src/loop/loop_exec.rs 的 converge 函数体内显式调用 reconcile_orphan_tool_calls 或 assert_tool_pairing_invariants。',
+    '正确做法：在 crates/session-loop/src/loop/exec.rs 的 converge 函数体内显式调用 reconcile_orphan_tool_calls 或 assert_tool_pairing_invariants。',
     '阈值: converge 内匹配符号数 ≥ 1。',
   ],
   executing_tools_bare_exit: [
@@ -54,7 +54,7 @@ const GUIDE_TEXT = {
   ],
   key_file_missing: [
     '关键守卫目标文件缺失时必须 Fail-Closed（exit 1），严禁 silent pass。',
-    '正确做法：确认 loop_exec.rs / executing_tools.rs / restore_manager.rs 仍位于约定路径；若路径迁移，同步更新本探针 SCAN 目标。',
+    '正确做法：确认 loop/exec.rs / executing_tools.rs / restore_manager.rs 仍位于约定路径；若路径迁移，同步更新本探针 SCAN 目标。',
   ],
 };
 
@@ -71,7 +71,7 @@ if (GUIDE) {
 }
 
 // ── 扫描目标（约定路径；缺失即 Fail-Closed）────────────────────────────────
-const LOOP_EXEC = 'crates/session-loop/src/loop/loop_exec.rs';
+const LOOP_EXEC = 'crates/session-loop/src/loop/exec.rs';
 const EXECUTING_TOOLS = 'crates/session-loop/src/loop/handlers/executing_tools.rs';
 const RESTORE_MANAGER = 'crates/orchestrator/src/restore/restore_manager.rs';
 

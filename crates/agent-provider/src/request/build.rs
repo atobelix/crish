@@ -23,9 +23,7 @@ use super::messages::ReasoningContentMode;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ReasoningVendor, ThinkingIntensity};
 
-#[path = "build_chat.rs"]
 mod build_chat;
-#[path = "build_responses.rs"]
 mod build_responses;
 
 pub use build_chat::build_chat_completions_request_body;
@@ -36,13 +34,10 @@ pub use super::vendor::dialect;
 pub use super::vendor::dialect::{assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
 
 #[cfg(test)]
-#[path = "build_chat_tests.rs"]
 mod chat_tests;
 #[cfg(test)]
-#[path = "build_responses_tests.rs"]
 mod responses_tests;
 #[cfg(test)]
-#[path = "build_tests_common.rs"]
 mod test_common;
 
 /// maxTokens 字段名（对齐 OpenAICompatibleMaxTokensField）
