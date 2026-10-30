@@ -1,3 +1,4 @@
+import React from 'react';
 import type {
   MessageVirtualizerProps,
   PinnedItem,
@@ -45,4 +46,12 @@ export function messageVirtualizerPropsEqual(
   }
 
   return true;
+}
+
+export function memoizeMessageVirtualizer(
+  component: React.FC<MessageVirtualizerProps>
+): React.NamedExoticComponent<MessageVirtualizerProps> {
+  const memo = React.memo(component, messageVirtualizerPropsEqual);
+  memo.displayName = 'MessageVirtualizer';
+  return memo;
 }

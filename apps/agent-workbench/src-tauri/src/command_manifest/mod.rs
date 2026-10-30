@@ -245,7 +245,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // G03 会话级产出根：set_session_output_root 已退役（四方同步移除，
         // 前端无会话级产出根消费方；工具侧读取面保留）
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-        entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
         entry("core_md_render_stream", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2）──

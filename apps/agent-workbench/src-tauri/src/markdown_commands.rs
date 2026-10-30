@@ -1,7 +1,7 @@
 //! Stream A: Tauri 命令层 —— Rust Markdown 渲染入口。
 //!
 //! 包装 `conex_markdown` 的渲染 API：
-//! - `core_md_render`：单条渲染（带缓存）
+//! - `core_md_render`: retired（无前端消费；单条渲染走 batch 单元素或 stream）。
 //! - `core_md_render_batch`：批量渲染（每条独立缓存）
 //! - `core_md_render_stream`：流式渲染（跳过 syntect 高亮，不写缓存）
 //!
@@ -39,19 +39,6 @@ fn parse_options(variant: &str) -> Result<RenderOptions, CoreError> {
         ))
     })?;
     Ok(RenderOptions::new(variant))
-}
-
-/// 渲染单条 markdown 为 HTML。
-///
-/// wire 名 = `core_md_render`。结果自带 LRU 缓存（按 variant 隔离）。
-#[tauri::command(rename = "core_md_render")]
-pub async fn md_render(text: String, variant: String) -> Result<RenderResultDto, CoreError> {
-    let options = parse_options(&variant)?;
-    tokio::task::spawn_blocking(move || {
-        RenderResultDto::from(conex_markdown::render_markdown(&text, options))
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("md_render join: {e}")))
 }
 
 /// 批量渲染 markdown 为 HTML。

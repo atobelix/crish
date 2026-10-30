@@ -325,11 +325,11 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · 已激活 NoteLeafHost invoke 填 Sta
 
     const mirrorPath = join(
       REPO,
-      'apps/agent-workbench/src-tauri/src/note_commands_mirror.rs'
+      'apps/agent-workbench/src-tauri/src/note_commands/mirror.rs'
     );
     const applyPath = join(
       REPO,
-      'apps/agent-workbench/src-tauri/src/note_commands_apply.rs'
+      'apps/agent-workbench/src-tauri/src/note_commands/apply.rs'
     );
     const legacyPath = join(
       REPO,

@@ -31,12 +31,9 @@ use conex_shared::time::{Clock, SystemClock};
 
 /// 压缩事件（context-compression-end）落库成功后写入块行。
 ///
-/// 非压缩事件 / result 为 None / store 无底层 LocalDb（内存测试替身）→
-/// 块写入/摘要推进是 [crate::persist::Store] 的必需能力（生产 SQLite 与
-/// 内存实现各自记账），本模块只做事件解包与委托。
-///
-/// 非压缩事件 / result 为 None → Ok 跳过。返回 Err 仅当真实存储写失败
-/// （调用方告警不阻断）。
+/// 非压缩事件 / result 为 None → Ok 跳过。块写入/摘要推进是
+/// [crate::persist::Store] 的必需能力（生产 SQLite 与内存实现各自记账），
+/// 本模块只做事件解包与委托；返回 Err 仅当真实存储写失败（调用方告警不阻断）。
 pub async fn persist_compression_block(
     store: &dyn crate::persist::Store,
     session_id: &str,

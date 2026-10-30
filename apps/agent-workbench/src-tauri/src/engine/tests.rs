@@ -2712,10 +2712,9 @@ mod wait_wiring_tests {
     }
 }
 
-/// D6 §3.1 段 2 + D4 §3.8 ② store 装配替换测试：`new_with_spawner`
-/// 注入 `db: Option<LocalDb>`（W4 统一签名）后 timer/sched/wait 三 store
-/// 真适配落库 + 模拟重启恢复；None 回退内存版（功能面由既有
-/// EngineHandle::new(None, test_local_db()) 测试全量覆盖，本模块补差分断言面）。
+/// D6 §3.1 段 2 + D4 §3.8 ② store 装配测试：`new_with_spawner` 注入
+/// `db: LocalDb`（必需依赖）后 timer/sched/wait 三 store 真适配落库 +
+/// 模拟重启恢复；无库回退已删除，本模块补差分断言面。
 #[cfg(test)]
 mod store_assembly_tests {
     use super::*;

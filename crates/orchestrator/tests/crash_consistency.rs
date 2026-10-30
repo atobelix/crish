@@ -2292,3 +2292,56 @@ async fn restore_skips_declared_call_with_message_level_result() {
     drop(store);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// X-06 P3 R2：InMemoryStore 也必须完整承担恢复对账能力——running 子代理行
+/// 经 RestoreManager 归一到 failed + ended_at + resumable（不再走替身跳过路径）。
+#[tokio::test]
+async fn restore_normalizes_running_session_agents_with_in_memory_store() {
+    let (mem, store) = setup();
+    store
+        .insert_run("r1", "s1", RunStatus::Running, None, 0)
+        .await
+        .unwrap();
+    mem.seed_session_agent(SessionAgent {
+        id: "a1".into(),
+        subagent_run_id: "sr1".into(),
+        parent_session_id: "s1".into(),
+        parent_run_id: "r1".into(),
+        parent_tool_call_id: None,
+        description: String::new(),
+        mode: String::new(),
+        status: "running".into(),
+        summary: None,
+        messages: vec![],
+        started_at: 0,
+        ended_at: None,
+        depth: None,
+        subagent_path_json: None,
+        task_type: None,
+        display_label: None,
+        allowed_write_paths_json: None,
+        sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
+    });
+
+    RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .expect("内存 store 恢复应成功");
+
+    let rows = mem.session_agents();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "failed");
+    assert!(rows[0].ended_at.is_some());
+    assert!(rows[0].resumable);
+    assert!(
+        mem.load_running_session_agent_rows()
+            .await
+            .unwrap()
+            .is_empty(),
+        "恢复后不得残留 running 子代理行"
+    );
+}

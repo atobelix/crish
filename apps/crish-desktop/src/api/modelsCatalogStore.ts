@@ -1,7 +1,7 @@
 /** 已提交模型配置镜像。所有写操作串行，回执成功后才发布新快照。 */
 import { emitUiEvent } from './uiEvents';
 import { logger, toErrMeta } from '../services/LoggerService';
-import { modelRefKey, formatParseError } from './modelsCatalogTypes';
+import { formatParseError } from './modelsCatalogTypes';
 import type {
   IndexedModelEntry,
   ModelRef,
@@ -25,6 +25,7 @@ import {
 } from './modelsCatalogActions';
 import { createSelectors } from './modelsCatalogSelectors';
 import { createCatalogQueries } from './modelsCatalogQuery';
+import { emptyState, freezeTree, indexes } from './modelsCatalogMirrorHelpers';
 
 /** 保存期间被新一轮变更取代时的统一错误文案 */
 const STALE_OPERATION_ERROR = '配置操作已失效';
@@ -57,21 +58,6 @@ export type ModelsCatalogWriteResult =
   { ok: true } | { ok: false; error: string };
 type StoreListener = (snapshot: ModelsCatalogState) => void;
 
-function emptyState(): ModelsCatalogState {
-  return {
-    tree: { version: 2, activeModel: null, providers: {} },
-    providerMap: new Map(),
-    modelIndex: new Map(),
-    revision: '',
-    credentialStates: {},
-    version: 0,
-    loaded: false,
-    filePath: '',
-    lastError: null,
-    warning: null,
-  };
-}
-
 let state = emptyState();
 const listeners = new Set<StoreListener>();
 let operationTail: Promise<unknown> = Promise.resolve();
@@ -95,30 +81,6 @@ function notify(): void {
       });
     }
   }
-}
-
-function indexes(tree: ModelsYamlTree) {
-  const providerMap = new Map<string, ProviderSpec>();
-  const modelIndex = new Map<string, IndexedModelEntry>();
-  for (const [providerId, provider] of Object.entries(tree.providers)) {
-    providerMap.set(providerId, provider);
-    for (const model of provider.models) {
-      modelIndex.set(modelRefKey({ providerId, modelId: model.id }), {
-        providerId,
-        provider,
-        model,
-      });
-    }
-  }
-  return { providerMap, modelIndex };
-}
-
-function freezeTree<T>(value: T): T {
-  if (value && typeof value === 'object') {
-    for (const child of Object.values(value)) freezeTree(child);
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /** 凭据写入等同轨命令也通过此入口安装已接受快照。 */

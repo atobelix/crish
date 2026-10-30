@@ -194,7 +194,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-    entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
     entry('core_md_render_stream', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2）──

@@ -604,12 +604,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'workflow runs list',
   },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-  // Markdown 2.0：恢复 core_md_render_stream（活跃尾块 Rust 流式渲染）。
-  {
-    command: 'core_md_render',
-    status: 'implemented',
-    feature: 'markdown render',
-  },
+  // Markdown 2.0：core_md_render 退役（无前端消费），保留 batch/stream。
   {
     command: 'core_md_render_batch',
     status: 'implemented',
