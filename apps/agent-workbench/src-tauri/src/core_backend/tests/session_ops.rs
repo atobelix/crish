@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use conex_types::device::{
-    DeviceErrorCode, PermissionMode, RunControlLevel, RunControlParams, RunTaskParams,
+    DeviceErrorCode, RunControlLevel, RunControlParams, RunTaskParams,
 };
 use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperation};
+use conex_types::permission::PermissionMode;
 
 use crate::core_backend::{
     apply_remote_mode, combine_dual_decisions, emit_remote_mode_downgrade_audit,

@@ -20,7 +20,7 @@ mod tests;
 
 pub use state::CoreStateBackend;
 
-use conex_types::device::PermissionMode;
+use conex_types::permission::PermissionMode;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
 };

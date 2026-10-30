@@ -35,10 +35,10 @@ pub use commands::{
     ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
     ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, MessageDirection, OkResult,
     PageDirection, PairStateParams, PairStateResult, PauseAutomationParams, PauseAutomationResult,
-    PendingApproval, PermissionMode, PresenceParams, PresenceResult, ReadFileParams,
-    ReadFileResult, RenameDeviceParams, RevokeDeviceParams, RunControlLevel, RunControlParams,
-    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
-    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexParams, SearchIndexResult,
+    PendingApproval, PresenceParams, PresenceResult, ReadFileParams, ReadFileResult,
+    RenameDeviceParams, RevokeDeviceParams, RunControlLevel, RunControlParams, RunControlResult,
+    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
+    SearchFilesParams, SearchFilesResult, SearchIndexParams, SearchIndexResult,
     SearchSessionsParams, SearchSessionsResult, COMMANDS, REMOTE_KINDS, RESULT_KINDS,
 };
 pub use envelope::{

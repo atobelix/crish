@@ -808,7 +808,7 @@ async fn t08_remote_run_ask_mode_dangerous_tool_gated() {
             prompt_ref: None,
             mode: Some("task".to_string()),
             cwd: None,
-            permission_mode: Some(conex_types::device::PermissionMode::Ask),
+            permission_mode: Some(conex_types::permission::PermissionMode::Ask),
             history: None,
             client_message_id: None,
         })

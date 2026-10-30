@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::enums::{
-    DeviceChannel, DeviceRole, DeviceType, PairState, PermissionMode, RunControlLevel,
-    SetSettingsKey, SettingsConfirmAction, SettingsConfirmStatus,
+    DeviceChannel, DeviceRole, DeviceType, PairState, RunControlLevel, SetSettingsKey,
+    SettingsConfirmAction, SettingsConfirmStatus,
 };
+use crate::permission::PermissionMode;
 
 // ── F5 会话与消息域：参数与响应 ──
 

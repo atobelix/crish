@@ -147,7 +147,7 @@ struct MockBackend {
     last_settings_keys: std::sync::Mutex<Option<Vec<String>>>,
     /// 最近一次 run_task 收到的权限模式申报（R1-10 T-08：远程申报
     /// 原样抵达后端装配面——降级由 apply_remote_mode 在装配面执行）
-    last_run_permission_mode: std::sync::Mutex<Option<conex_types::device::PermissionMode>>,
+    last_run_permission_mode: std::sync::Mutex<Option<conex_types::permission::PermissionMode>>,
     /// 最近一次 search_files 收到的参数（R2-12c C21 透传断言）
     last_search_files: std::sync::Mutex<Option<SearchFilesParams>>,
     /// 最近一次 settings_confirm 收到的参数（R2-12c C30 透传断言）

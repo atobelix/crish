@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 pub mod attachment;
 pub mod checkpoint;
 pub mod context;
-pub mod denied_stats;
 pub mod device;
 pub mod error;
 pub mod events;
 pub mod history;
 pub mod impact;
 pub mod message;
+pub mod permission;
 pub mod response;
 pub mod session;
 pub mod timer;
@@ -34,8 +34,6 @@ pub use checkpoint::{
     CHECKPOINT_MARKER, CHECKPOINT_PAYLOAD_KEY, CHECKPOINT_PRESENT_SIGNAL, CONEX_CHECKPOINT_MARKER,
 };
 pub use context::{ContextBudget, SessionContextMeta, CONTEXT_SAFETY_TOKENS};
-pub use denied_stats::{global_denied_stats, DeniedStats, DeniedStatsSummary};
-pub use device::PermissionMode;
 pub use error::codes;
 
 pub use error::{
@@ -55,6 +53,7 @@ pub use message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ImageContentBlock,
     ToolCallBlock,
 };
+pub use permission::PermissionMode;
 pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};
 pub use timer::{TimerCondition, TimerDeclaration, TimerHandle};

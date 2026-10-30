@@ -1,6 +1,7 @@
 use super::*;
 use crate::device::error::DeviceErrorCode;
 use crate::device::error::ErrorBody;
+use crate::permission::PermissionMode;
 
 #[test]
 fn command_request_roundtrip_camel_case() {

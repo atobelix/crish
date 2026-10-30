@@ -1289,7 +1289,7 @@ impl conex_compaction::Summarizer for FakeLlmSummarizer {
         _dropped: &[conex_types::message::AgentMessage],
         _existing: Option<&str>,
     ) -> Result<String, String> {
-        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":"关键上下文"}"#.to_string())
+        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":["关键上下文"]}"#.to_string())
     }
 }
 

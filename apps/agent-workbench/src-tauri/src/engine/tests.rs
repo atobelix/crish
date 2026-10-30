@@ -39,7 +39,6 @@ use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_run::wait_channel::ControlBusResolver;
 use conex_telemetry::cache::WARN_MISSED_TOKENS;
-use conex_types::denied_stats::DeniedStats;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats, SecurityAuditDecision,
@@ -3156,7 +3155,7 @@ mod event_drain_tests {
         // 清理：max_iterations=1 已自停（enabled=false 落库），无残留声明
     }
 
-    // ── 15-T-6（裁决 D9）：RoutingAuditSink 路由分发 / G10 计数 ───
+    // ── 15-T-6（裁决 D9）：RoutingAuditSink 路由分发 ───
 
     /// 测试用 security-audit 事件（决策参数化；形状对齐
     /// agent-tools audit.rs security_audit_event 构造器）
@@ -3181,7 +3180,7 @@ mod event_drain_tests {
     /// 会话 tracing 兜底不 panic 不送达
     #[test]
     fn routing_audit_sink_dispatches_per_session() {
-        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new();
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         let s2 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
@@ -3207,35 +3206,10 @@ mod event_drain_tests {
         assert_eq!(s2.emitted().len(), 1);
     }
 
-    /// G10 denied 计数：仅 denied 决策计数（引擎级共享统计），全部事件
-    /// 原样转发
-    #[test]
-    fn routing_audit_sink_counts_denied_globally() {
-        let stats = Arc::new(DeniedStats::new());
-        let sink = conex_run::audit::RoutingAuditSink::new(Arc::clone(&stats));
-        let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
-        sink.register("s1", Arc::clone(&s1) as AuditSink);
-        sink.emit(&routing_test_audit_event(
-            "s1",
-            SecurityAuditDecision::Denied,
-        ));
-        sink.emit(&routing_test_audit_event(
-            "s1",
-            SecurityAuditDecision::Redirected,
-        ));
-        sink.emit(&routing_test_audit_event(
-            "s1",
-            SecurityAuditDecision::Denied,
-        ));
-        // 仅 denied 计数（G10），全部事件转发
-        assert_eq!(stats.summary().security_audit_denied, 2);
-        assert_eq!(s1.emitted().len(), 3);
-    }
-
     /// 收口注销：unregister 后路由不再送达；重复注销幂等；注册表无残留
     #[test]
     fn routing_audit_sink_unregister_is_idempotent() {
-        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new();
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
         assert_eq!(sink.route_count(), 1);
@@ -3256,7 +3230,7 @@ mod event_drain_tests {
     /// 与事件收口旁路点口径一致）
     #[test]
     fn routing_audit_sink_later_register_overwrites() {
-        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new();
         let old = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         let new = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&old) as AuditSink);
@@ -3617,7 +3591,7 @@ mod b1_5_poison_tests {
     /// （不 panic）+ error 日志出现 + 毒丸恢复计数 +1（三要素）
     #[test]
     fn poisoned_routes_lock_register_recovers_with_log_and_count() {
-        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new();
         sink.poison_routes_for_test();
         let before = conex_run::audit::audit_poison_recovery_count();
         let ((), lines) = with_capture(|| {

@@ -275,7 +275,7 @@ async fn t08_run_task_passes_permission_mode_wire() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         *mock.last_run_permission_mode.lock().unwrap(),
-        Some(conex_types::device::PermissionMode::Full),
+        Some(conex_types::permission::PermissionMode::Full),
         "远程申报 full 必须原样透传到后端装配面"
     );
 }

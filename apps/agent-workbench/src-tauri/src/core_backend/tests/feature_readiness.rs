@@ -4,9 +4,9 @@ use conex_types::device::commands::{
     SettingsConfirmAction, SettingsConfirmParams, SettingsConfirmStatus,
 };
 use conex_types::device::{
-    CancelRunParams, DeviceErrorCode, PauseAutomationParams, PermissionMode, RunTaskParams,
-    SearchFilesParams,
+    CancelRunParams, DeviceErrorCode, PauseAutomationParams, RunTaskParams, SearchFilesParams,
 };
+use conex_types::permission::PermissionMode;
 
 use crate::core_backend::CoreStateBackend;
 use crate::server::backend::ApiBackend;

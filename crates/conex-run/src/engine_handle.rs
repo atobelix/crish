@@ -27,7 +27,6 @@ use agent_tools::tools::wait_subagents::SubagentWaitChannel;
 use agent_tools::WorkflowCreationChannel;
 use async_trait::async_trait;
 use conex_db::LocalDb;
-use conex_types::denied_stats::DeniedStats;
 use conex_types::events::RunCacheStats;
 use conex_types::response::ClassifiedStreamError;
 use orchestrator::PendingMessageQueue;
@@ -590,9 +589,8 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         db.clone(),
     );
 
-    // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配 ──
-    // G10 denied 计数实例（引擎级共享）+ run 级桥注册表
-    let audit_sink = Arc::new(RoutingAuditSink::new(Arc::new(DeniedStats::new())));
+    // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配（run 级桥注册表）──
+    let audit_sink = Arc::new(RoutingAuditSink::new());
 
     // 会话级子代理策略服务（configure_agents）：LocalDb 持久化 + spawner 同步
     let agent_policy = db.as_ref().map(|db| {
