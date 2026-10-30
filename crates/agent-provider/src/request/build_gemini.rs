@@ -21,7 +21,7 @@
 //! + `content-type: application/json`。
 //!
 //! SR-06e · 拆分 · ≠ EL：门面文件。实现域即本文件（含私有映射/工具辅助）；
-//! 测试旁挂 build_gemini_tests.rs（经 #[path] 接线）。
+//! 测试旁挂 build_gemini/tests.rs（目录模块）。
 
 use conex_compaction::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -37,7 +37,7 @@ use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ThinkingIntensity};
 use super::RequestBuildContext;
 use crate::error::RequestBuildError;
-use crate::request::build::dialect::{
+use crate::request::vendor::dialect::{
     self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
 };
 
@@ -590,5 +590,4 @@ impl BorrowMessage for std::sync::Arc<AgentMessage> {
 
 // 测试旁挂接线（SR-06e）
 #[cfg(test)]
-#[path = "build_gemini_tests.rs"]
 mod tests;

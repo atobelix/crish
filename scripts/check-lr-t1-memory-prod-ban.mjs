@@ -65,11 +65,11 @@ const MEMORY_INTEGRATION_PINS = [
 
 const PROD_INJECT_FILES = [
   'src/note_runtime.rs',
-  'src/engine_build.rs',
+  'src/engine/build.rs',
   'src/run_ipc.rs',
   'src/main.rs',
   'src/note_commands.rs',
-  'src/note_commands_apply.rs',
+  'src/note_commands/apply.rs',
   // ACT-102 双库并发装配：NoteRuntime 初始化入口（原 main.rs 内联）。
   'src/db_setup.rs',
 ];
@@ -180,7 +180,7 @@ function checkInjectStoreOrUnwired() {
     fail(`note_runtime 生产码零 ${MEMORY_IDENT}`);
   }
 
-  const engine = productionCode(readUtf8(join(workbenchRoot, 'src/engine_build.rs')));
+  const engine = productionCode(readUtf8(join(workbenchRoot, 'src/engine/build.rs')));
   if (!engine.includes('note_runtime::try_backend')) {
     fail('engine produce 必须注入 try_backend（Store 或 None；闭包或函数项均可）');
   }

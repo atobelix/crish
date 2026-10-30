@@ -53,7 +53,6 @@ use crate::error::RequestBuildError;
 use serde_json::Value;
 
 #[cfg(test)]
-#[path = "../build_anthropic_tests.rs"]
 mod tests;
 
 /// anthropic.messages 接口显式版本头

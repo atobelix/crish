@@ -346,5 +346,4 @@ impl StageMilestoneState {
 }
 
 #[cfg(test)]
-#[path = "stage_summary_tests.rs"]
 mod tests;

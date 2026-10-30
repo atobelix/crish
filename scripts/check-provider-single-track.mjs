@@ -919,7 +919,7 @@ const D8_KNOWN_DEBT = new Map([
   //   C 前端注册表 = tauri-command-registry.ts 的 command: '...'
   //   D 前端内置快照 = crish-desktop commandManifest.ts 的 entry('name', ...)
   // 缺陷形态：删命令漏改一处 / 新增命令只登记一侧 / 条数注释与实况脱节。
-  const manifestRel = 'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+  const manifestRel = 'apps/agent-workbench/src-tauri/src/command_manifest/mod.rs';
   // 注册宏随 main.rs 拆分迁至独立模块。此前本脚本固定读 main.rs，拆分后读到
   // 空集合、把全部命令报成「声明未实装」的假红（2026-10-29 审计）。
   const registryMacroRel = 'apps/agent-workbench/src-tauri/src/command_registry.rs';

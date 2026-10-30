@@ -13,11 +13,11 @@
 //! - [anthropic]（B2.9）：Anthropic Messages 事件驱动（message_start usage 初始 /
 //!   content_block_delta text|thinking|input_json / message_delta stop_reason + usage
 //!   分片补全 / message_stop；空流保护；02 §三.1、§六.6）——SR-06e 已拆门面：
-//!   解析核心 anthropic_core / 映射面 anthropic_map（测试旁挂 anthropic_tests*）
+//!   解析核心 anthropic_core / 映射面 anthropic_map（测试旁挂 anthropic/tests*）
 //! - [gemini]（B2.9）：Gemini 帧式（candidates[].parts text|thought|functionCall /
 //!   finishReason 映射 / blockReason 阻断 / usageMetadata 逐帧合并；空流保护；
 //!   02 §三.2、§六.6）——SR-06e 已拆门面：解析核心 gemini_core /
-//!   映射面 gemini_map（测试旁挂 gemini_tests*）
+//!   映射面 gemini_map（测试旁挂 gemini/tests*）
 
 pub mod anthropic;
 pub mod azure_responses;

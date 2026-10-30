@@ -116,7 +116,7 @@ pub(crate) struct LoopState {
     /// 护栏计数（时间戳 / 单 run / 溢出重试 / LLM 不可用）/ 缓存跟踪器 /
     /// 摘要调度与协调器 / 待重试快照归组为 `CompactionRuntime` 子结构
     /// （定义与字段文档在 compaction_dispatch.rs，C1a 详案 C1c 段）；
-    /// LoopState 只留组合引用，run 起始归零见 loop_exec.rs。
+    /// LoopState 只留组合引用，run 起始归零见 loop/exec.rs。
     pub(crate) compaction: CompactionRuntime,
     /// 预算/用量运行态（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
     /// EV-11 每 turn usage 槽位归组为 `BudgetState` 子结构

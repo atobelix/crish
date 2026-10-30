@@ -23,7 +23,6 @@ use conex_run::run::{
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 
 #[cfg(test)]
-#[path = "run_ipc_tests.rs"]
 mod tests;
 
 // ── 回收站根解析（宿主侧）──────────────────────────────────────────

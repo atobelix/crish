@@ -35,5 +35,4 @@ pub use credential_ref::CredentialRef;
 pub use ttl::cache_ttl_for_declared_model;
 
 #[cfg(test)]
-#[path = "ssot_convergence_tests.rs"]
 mod ssot_convergence_tests;

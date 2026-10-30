@@ -9,7 +9,7 @@
 //! 纯函数约束：同输入同输出，不依赖全局状态；入参一律 `&str`，内部 `to_ascii_lowercase()`
 //! 逐字节确定性，无 IO / 无 RNG / 无时间。
 //!
-//! SR-06e · 拆分 · ≠ EL：独立新模块 + 测试旁挂 compat_tests.rs。
+//! SR-06e · 拆分 · ≠ EL：独立新模块 + 测试旁挂 compat/tests.rs。
 
 use super::build::MaxTokensField;
 use crate::models::catalog_types::{CompatSpec, MaxTokensField as CatalogMaxTokensField};
@@ -290,5 +290,4 @@ mod compat_spec_tests {
 }
 
 #[cfg(test)]
-#[path = "compat_tests.rs"]
 mod tests;

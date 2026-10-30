@@ -84,15 +84,7 @@ pub(crate) mod frame_stream;
 #[cfg(windows)]
 pub mod inspector_bridge;
 pub(crate) mod mcp_attach;
-#[cfg(not(windows))]
-#[path = "native_commands_fallback.rs"]
 pub mod native_commands;
-#[cfg(windows)]
-pub mod native_commands;
-#[cfg(not(windows))]
-#[path = "native_manager_fallback.rs"]
-pub mod native_manager;
-#[cfg(windows)]
 pub mod native_manager;
 pub mod native_tokens;
 pub mod native_types;

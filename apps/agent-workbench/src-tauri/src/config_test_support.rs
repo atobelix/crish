@@ -94,11 +94,11 @@ pub(crate) fn isolate_config_store(dir: &std::path::Path) {
 }
 
 /// 向 conex-run 注入壳层配置源（生产语义等价：EngineHost::new 在装配时
-/// 注入同一 [crate::engine::engine_build::ShellConfigSource]）。直接构造
+/// 注入同一 [crate::engine::build::ShellConfigSource]）。直接构造
 /// `EngineHandle` 的壳层测试必须经此接线，否则 crate 侧配置源槽为空、
 /// 引擎恒降级未就绪。
 pub(crate) fn inject_shell_config_source() {
     conex_run::engine_provider::set_committed_config_source(std::sync::Arc::new(
-        crate::engine::engine_build::ShellConfigSource,
+        crate::engine::build::ShellConfigSource,
     ));
 }

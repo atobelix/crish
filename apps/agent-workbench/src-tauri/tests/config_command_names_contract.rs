@@ -2,6 +2,8 @@
 //!
 //! 本文件经 `#[path]` 独立编译 `src/command_manifest.rs`（命令面唯一真源，
 //! 零 crate:: 内部引用，可独立编译），锚定 F5 终态命名表（v1）：
+//! 注：本集成测试是独立 crate，无法经 `crate::command_manifest` 解析，故
+//! 保留这一处 `#[path]`（X-05 目录化仅允许的测试资产例外；src/ 下已零 `#[path]`）。
 //! - `config_*` 终态名 8 条全部登记且已接线（registered=true）；
 //! - 旧名（update_daemon_config / get_api_config / save_api_config /
 //!   workbench_profile_secret_* / workbench_profile_apply /
@@ -16,7 +18,7 @@
 
 #![allow(dead_code)]
 
-#[path = "../src/command_manifest.rs"]
+#[path = "../src/command_manifest/mod.rs"]
 mod command_manifest;
 
 use command_manifest::COMMAND_MANIFEST;

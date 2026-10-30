@@ -18,7 +18,7 @@
 //!   显式 false）只把**该模型**描述为保守默认（supports_reasoning=false 或系列级兜底），
 //!   绝不抛错、绝不影响同 provider 其它模型的描述（对齐
 //!   `llm-pi-ai/README.zh.md:115`「坏配置暴露在被执行处而非描述处」，由
-//!   `capability_tests.rs` 的「A 坏配置 B 仍可描述」用例钉死）。
+//!   `capability/tests.rs` 的「A 坏配置 B 仍可描述」用例钉死）。
 //! - **档位白名单只含支持的档位**（隐藏档不出现）；`efforts` 是**规范档位**——
 //!   G6 wire 拼写改名（如 `{"medium":"high"}`）不进入白名单，白名单恒为规范名。
 //!
@@ -115,5 +115,4 @@ pub fn describe_model(
 }
 
 #[cfg(test)]
-#[path = "capability_tests.rs"]
 mod tests;

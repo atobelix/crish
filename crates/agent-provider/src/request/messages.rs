@@ -15,7 +15,7 @@
 //!
 //! 不做 LruMap 消息转换缓存（02 §五.13：Rust 无 GC 压力，非热路径）。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 messages_tests/）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 messages/tests/）：
 //! - [messages_content]：内容构造域（user_message_content / normalize_content_parts /
 //!   stringify_tool_output / strip_inline_data_urls / sanitize_tool_call_id /
 //!   responses_input_content 等纯函数与内容载体转换）
@@ -32,9 +32,7 @@ use crate::request::cache::CacheControl;
 use crate::request::compat::empty_content_wire_value;
 use crate::request::schema::canonical_json_string;
 
-#[path = "messages_compat.rs"]
 mod messages_compat;
-#[path = "messages_content.rs"]
 mod messages_content;
 
 pub(crate) use messages_content::responses_input_content;
@@ -720,5 +718,4 @@ pub fn validate_chat_pairing_from_messages(
 }
 
 #[cfg(test)]
-#[path = "messages_tests/mod.rs"]
 mod tests;

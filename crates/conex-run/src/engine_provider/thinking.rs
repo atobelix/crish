@@ -8,7 +8,7 @@
 //! 变体集/字面完全一致（`off/auto/minimal/low/medium/high/xhigh/max`），本模块
 //! 提供逐变体映射；四轨思考键统一由出站剖面 + dialect 产出（plans/04 §3）。
 
-use agent_provider::request::build::dialect::ReasoningEffort as DialectEffort;
+use agent_provider::request::vendor::dialect::ReasoningEffort as DialectEffort;
 use agent_provider::request::{ReasoningEffort, ReasoningReject};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;

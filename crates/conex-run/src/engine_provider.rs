@@ -4,7 +4,7 @@
 //!
 //! 多模型适配战役 R3 T3.2：四协议（chat / responses / anthropic / gemini）URL/body/
 //! parser 同轨，思考档位（series 级）消费接线。本文件为门面，实现域拆分如下
-//! （`engine_provider/` 子模，测试旁挂 `engine_provider_tests.rs`）：
+//! （`engine_provider/` 子模，测试在同目录 `engine_provider/tests.rs`）：
 //! - [connection]：连接配置 + HTTP 客户端；[timestamp]：ISO8601 + 消息 id；
 //! - [protocol]：协议路由单一真源消费 + 四态解析器选择 + 目录查询
 //!   + maxTokensField 决议（T3.6/C5）；[headers]：请求头组装
@@ -13,15 +13,10 @@
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分；四协议路由/思考档位为 R3 T3.2 新增，
 //! URL/body/parser 收敛于同一 [protocol::effective_protocol]）。
 
-#[path = "engine_provider/connection.rs"]
 pub mod connection;
-#[path = "engine_provider/headers.rs"]
 pub mod headers;
-#[path = "engine_provider/protocol.rs"]
 pub mod protocol;
-#[path = "engine_provider/stream.rs"]
 pub mod stream;
-#[path = "engine_provider/thinking.rs"]
 pub mod thinking;
 
 pub use connection::*;
@@ -57,7 +52,6 @@ use futures_util::Stream;
 use indexmap::IndexMap;
 use session_loop::provider::{ProviderCall, ProviderEventStream, ProviderRequest};
 
-#[path = "engine_provider/timestamp.rs"]
 mod timestamp;
 
 /// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
@@ -702,7 +696,6 @@ fn to_modality_reject(err: agent_provider::error::ProviderError) -> ClassifiedSt
 }
 
 #[cfg(test)]
-#[path = "engine_provider_tests.rs"]
 mod tests;
 
 #[cfg(test)]

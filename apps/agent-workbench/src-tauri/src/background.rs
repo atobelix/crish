@@ -61,9 +61,10 @@
 
 //!
 //! SR-05 · 拆分门面 · ≠ EL（2026-08-13-wave 结构拆分轮）：本文件仅剩模块
-//! 文档 + re-export 门面；实现已拆 bg_log / bg_registry / bg_task / bg_kill /
-//! bg_writer / bg_events / bg_commands，测试外置 background_tests.rs（#[path]
-//! 旁挂）。公开 API 不 break（main.rs 调用路径零改动，仅搬移不改语义）。
+//! 文档 + re-export 门面；实现已拆 `background/bg_log.rs` 等子模块（与目录
+//! 一一对应，无 `#[path]`），测试外置 `background/tests/`（主测试 mod）+
+//! `background/tests_{log,kill,resource,events}.rs`。公开 API 不 break
+//! （main.rs 调用路径零改动，仅搬移不改语义）。
 
 // ============================================================================
 // 契约来源说明（跨 Agent 冻结接口，只读消费）
@@ -76,19 +77,12 @@
 // BackgroundTaskRegistry）即契约的实现面。
 // ============================================================================
 
-#[path = "bg_commands.rs"]
 mod bg_commands;
-#[path = "bg_events.rs"]
 mod bg_events;
-#[path = "bg_kill.rs"]
 mod bg_kill;
-#[path = "bg_log.rs"]
 mod bg_log;
-#[path = "bg_registry.rs"]
 mod bg_registry;
-#[path = "bg_task.rs"]
 mod bg_task;
-#[path = "bg_writer.rs"]
 mod bg_writer;
 
 pub(crate) use bg_commands::{
@@ -111,21 +105,16 @@ pub(crate) use bg_commands::{
 pub(crate) use bg_registry::BackgroundTaskRegistry;
 
 #[cfg(test)]
-#[path = "background_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "background_tests_log.rs"]
 mod tests_log;
 
 #[cfg(test)]
-#[path = "background_tests_kill.rs"]
 mod tests_kill;
 
 #[cfg(test)]
-#[path = "background_tests_resource.rs"]
 mod tests_resource;
 
 #[cfg(test)]
-#[path = "background_tests_events.rs"]
 mod tests_events;

@@ -16,9 +16,9 @@
 //!
 //! SR-06c · 拆分 · ≠ EL：本文件为分类面门面——handle 入口 + 公共面
 //! re-export（stream_error::* 路径不 break）；恢复面拆至
-//! stream_error_retry.rs（瞬态重试）/ stream_error_recover.rs（超限阶梯）/
-//! stream_error_fatal.rs（降级 fatal）；测试旁挂 stream_error_tests.rs
-//! （`#[path]` 接线，无孤儿）。
+//! stream_error/retry.rs（瞬态重试）/ stream_error/recover.rs（超限阶梯）/
+//! stream_error/fatal.rs（降级 fatal）；测试旁挂 stream_error_tests.rs
+//! （include! 接线，无孤儿）。
 
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
@@ -27,11 +27,8 @@ use super::super::handlers::{HandlerOutcome, LoopState};
 use super::super::LoopError;
 use super::streaming::streaming_aborted;
 
-#[path = "stream_error_fatal.rs"]
 mod fatal;
-#[path = "stream_error_recover.rs"]
 mod recover;
-#[path = "stream_error_retry.rs"]
 mod retry;
 
 // 公共面 re-export（外部经 stream_error::* 引用不 break：no_tool_calls.rs

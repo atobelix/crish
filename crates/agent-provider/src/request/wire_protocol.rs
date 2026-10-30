@@ -285,5 +285,4 @@ pub fn resolve_wire_protocol(
 }
 
 #[cfg(test)]
-#[path = "wire_protocol_tests.rs"]
 mod tests;

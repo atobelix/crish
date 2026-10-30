@@ -11,20 +11,18 @@
 //! `infer_thinking_capability`——无生产调用者，已物理移除。
 //! 自适应思考由 yaml 字典值 `High: "adaptive"` 经 dialect 表达，不触 MODEL_SERIES。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分（测试旁挂 vendor_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分（测试旁挂 vendor/tests.rs）：
 //! [vendor_capability] 系列能力声明 · [vendor_wire] wire 换算 ·
-//! [reject] R4 T4.1 拒绝校验（三态+开关）。
+//! [reject] R4 T4.1 拒绝校验（三态+开关）· [dialect] 思考方言组装 SSOT。
 
-#[path = "vendor/reject.rs"]
 mod reject;
-#[path = "vendor_capability.rs"]
 mod vendor_capability;
-#[path = "vendor_wire.rs"]
 mod vendor_wire;
 
-// dialect 单模块（plans/04 §3.2）：只由 `build.rs` 的 `pub mod dialect` 编译，
-// 本模块不再声明第二个 `#[path]` 副本——四个 builder 共用同一
-// `assemble_thinking_dialect`，杜绝双份类型与双实现漂移。
+// dialect 单模块（plans/04 §3.2）：归 vendor 目录声明，`build.rs` 只引入别名——
+// 四个 builder 共用同一 `assemble_thinking_dialect`，杜绝双份类型与双实现漂移。
+pub mod dialect;
+
 pub use reject::{resolve_reasoning_level, DegradePolicy, ReasoningEffortState, ReasoningReject};
 pub use vendor_capability::{ThinkingCapability, NO_THINKING};
 pub use vendor_wire::{
@@ -222,5 +220,4 @@ pub fn normalize_thinking_intensity(
 }
 
 #[cfg(test)]
-#[path = "vendor_tests.rs"]
 mod tests;

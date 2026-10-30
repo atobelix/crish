@@ -920,7 +920,7 @@ fn policy_tier_for(trigger: ContextCompressionTrigger) -> ContextCompressionPoli
 /// （[crate::r#loop::handlers::LoopState::compaction]），字段文档随迁本处。
 ///
 /// 生命周期 = LoopState：构造派生见 `LoopState::new`（mod.rs）与
-/// `loop_runner with_options` 同步；run 起始归零见 loop_exec.rs（压缩
+/// `runner with_options` 同步；run 起始归零见 exec.rs（压缩
 /// 护栏 + cache_tracker 复位同批，P5 §3.4.5 fresh run 语义）。
 pub(crate) struct CompactionRuntime {
     /// 压缩策略（经 SessionLoopOptions 注入，P4 §3.4.2）：None = 无自动压缩。
@@ -947,7 +947,7 @@ pub(crate) struct CompactionRuntime {
     /// 在 plan.llm_unavailable 且无豁免时置 true，fatal 文案经
     /// compression_fatal_note 输出「LLM 不可用」附注（显式失败不静默丢语义，
     /// 信息分级约束 C：经 runtime-error 事件呈现，不进对话）；fresh run
-    /// 归零（loop_exec.rs run 起始同批）。
+    /// 归零（exec.rs run 起始同批）。
     pub(crate) overflow_llm_unavailable: bool,
     /// 缓存跟踪器（P5 S2 / T-36）：None = 未配置缓存测量（行为与现状一致）；
     /// 构造 / 复位点 = LoopState 构造 + run() 起始（fresh run，P5 §3.4.5）；
@@ -999,7 +999,7 @@ pub(crate) struct BudgetState {
 
 impl CompactionRuntime {
     /// 从 options 派生构造（LoopState::new 构造期调用；with_options 覆盖
-    /// options 时由 loop_runner 派生状态同步刷新，run 起始复位见 loop_exec.rs）
+    /// options 时由 runner 派生状态同步刷新，run 起始复位见 exec.rs）
     pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
         Self {
             compaction_policy: options.compaction.compaction_policy.clone(),

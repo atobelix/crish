@@ -91,5 +91,4 @@ impl AzureResponsesParser {
 }
 
 #[cfg(test)]
-#[path = "azure_responses_tests.rs"]
 mod tests;

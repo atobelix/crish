@@ -346,20 +346,14 @@ impl Tool for ShellCommandTool {
 }
 
 // ==================== 拆分接线 ====================
-#[path = "shell_exec.rs"]
 mod shell_exec;
-#[path = "shell_invoke.rs"]
 mod shell_invoke;
-#[path = "shell_output.rs"]
 mod shell_output;
-#[path = "shell_path_guard.rs"]
 mod shell_path_guard;
-#[path = "shell_redirect.rs"]
 mod shell_redirect;
 
 pub(crate) use shell_exec::{run_command_maybe_background, run_command_streaming};
 pub(crate) use shell_invoke::{parse_mode, ShellMode};
 
 #[cfg(test)]
-#[path = "shell_tests/mod.rs"]
 mod tests;

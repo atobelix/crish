@@ -92,7 +92,7 @@ pub(crate) mod remote;
 // 见 push_wiring.rs 模块头注记）
 mod push_wiring;
 
-#[path = "server/core_backend/mod.rs"]
+// 本地服务 REST 后端（CoreStateBackend）：物理目录 src/core_backend/；直调 bin-only 命令面，不能并入 server（lib 亦编译 server）
 pub(crate) mod core_backend;
 mod server;
 mod session_commands;

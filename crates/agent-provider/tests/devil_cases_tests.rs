@@ -4,7 +4,7 @@
 //! 权威参考依据：docs/provider-model-unification/plans/05-全量立体验证、存量自动迁移与防回潮门禁计划.md §4.1 ~ §4.2
 //! 覆盖计费微元、协议单向继承、思考白名单、防溢出、时间戳备份与容灾快照。
 //! 100% 直连 agent_provider 真实生产模块（pricing, migration, models::catalog_types,
-//! request::wire_protocol, request::build::dialect::assemble_thinking_dialect）。
+//! request::wire_protocol, request::vendor::dialect::assemble_thinking_dialect）。
 //!
 //! 轨A SSOT 净清（假绿魔鬼用例审查）：
 //! - Case13 假「RCU」已删除（RwLock 包装 + count>0 断言，无生产 RCU 符号）；
@@ -17,7 +17,7 @@
 use agent_provider::migration::{ConfigMigrationManager, MigrationError, MigrationStatus};
 use agent_provider::models::catalog_types::*;
 use agent_provider::pricing::{CostBreakdown, Currency, PricingEngine};
-use agent_provider::request::build::dialect::{
+use agent_provider::request::vendor::dialect::{
     assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort, ThinkingDialectFormat,
 };
 use agent_provider::request::wire_protocol::{build_endpoint_url, WireProtocol};

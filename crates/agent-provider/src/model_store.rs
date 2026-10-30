@@ -13,10 +13,8 @@ use sha2::{Digest, Sha256};
 use crate::credentials::{CredentialStore, SecretString};
 use crate::models::{CredentialRef, ModelRef, ModelSpec, ProviderSpec, UnifiedModelsConfig};
 
-#[path = "model_store_import.rs"]
 mod import;
 #[cfg(test)]
-#[path = "model_store_tests.rs"]
 mod tests;
 
 pub const EMPTY_MODELS_YAML: &str = "version: 2\nproviders: {}\nactiveModel: null\n";

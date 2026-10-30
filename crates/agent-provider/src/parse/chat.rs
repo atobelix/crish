@@ -16,18 +16,15 @@
 //! 产出事件全部经 [StreamParser](crate::events::StreamParser)（events.rs B2.4）校验，
 //! 保证每流恰好一个 stop。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 chat_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 chat/tests.rs）：
 //! - [chat_core]：ChatCompletionsParser 状态机（push_frame / finish 帧处理顺序）
 //! - [chat_mapping]：finish_reason_to_stop / parse_usage / provider_body_error 与字段工具
 
-#[path = "chat_core.rs"]
 mod chat_core;
-#[path = "chat_mapping.rs"]
 mod chat_mapping;
 
 pub use chat_core::ChatCompletionsParser;
 pub use chat_mapping::{finish_reason_to_stop, parse_usage};
 
 #[cfg(test)]
-#[path = "chat_tests.rs"]
 mod tests;

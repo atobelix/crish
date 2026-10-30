@@ -1,7 +1,7 @@
 //! 服务层与核心命令的桥接契约（D2 §4.3「ApiBackend trait」）
 //!
 //! - **纯 trait**：只依赖 conex-types / serde / [ServerError]，不引用任何
-//!   crate:: 内部模块——router 测试可经 #[path] 独立编译挂内存后端全量
+//!   crate:: 内部模块——router 测试可直接编译挂内存后端全量
 //!   驱动（D2 §13 测试隔离关键）；
 //! - **命令体直调**：R1-03/04 的 `CoreStateBackend` 实现本 trait，方法内
 //!   直调既有 `*_impl` 契约体（`core_get_status` / `core_get_run_snapshot` /

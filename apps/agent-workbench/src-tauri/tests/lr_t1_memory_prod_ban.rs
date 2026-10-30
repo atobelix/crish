@@ -43,11 +43,11 @@ const MEMORY_INTEGRATION_PINS: &[&str] = &[
 /// 生产装配入口（注入点；须走 `try_backend` / `init_default` / Store）。
 const PROD_INJECT_FILES: &[&str] = &[
     "src/note_runtime.rs",
-    "src/engine_build.rs",
+    "src/engine/build.rs",
     "src/run_ipc.rs",
     "src/main.rs",
     "src/note_commands.rs",
-    "src/note_commands_apply.rs",
+    "src/note_commands/apply.rs",
     // ACT-102 双库并发装配：NoteRuntime 初始化入口（原 main.rs 内联）。
     "src/db_setup.rs",
 ];
@@ -173,7 +173,7 @@ fn lr_t1_prod_inject_is_store_or_unwired() {
         "note_runtime 生产码零 {MEMORY_IDENT}"
     );
 
-    let engine = production_code(&read_utf8(&manifest.join("src/engine_build.rs")));
+    let engine = production_code(&read_utf8(&manifest.join("src/engine/build.rs")));
     assert!(
         engine.contains("note_runtime::try_backend"),
         "engine produce 必须注入 try_backend（Store 或 None；闭包或函数项均可）"
