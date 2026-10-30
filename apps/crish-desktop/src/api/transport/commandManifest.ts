@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（166 = 注册面 166 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（165 = 注册面 165 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -195,7 +195,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-    entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
     entry('core_md_render_stream', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2）──

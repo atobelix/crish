@@ -57,7 +57,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**166 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**165 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 command_registry.rs `command_registry!` 注册一致；
@@ -85,7 +85,8 @@ const fn entry(
 /// 153 → 160；Hit-Test 能力查询命令追加后 160 → 161；Inspector 开关追加后
 /// 161 → **162**；运行时权限切换后 162 → **163**；Markdown 2.0 恢复 `core_md_render_stream`
 /// 后 163 → **164**；外链命令 164 → **165**；首次配对信任引导
-/// `multi_device_export_ca` 登记后 165 → **166**。
+/// `multi_device_export_ca` 登记后 165 → **166**；`core_md_render` 单条渲染
+/// 退役（前端只消费 batch/stream）后 166 → **165**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -243,7 +244,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // G03 会话级产出根：set_session_output_root 已退役（四方同步移除，
         // 前端无会话级产出根消费方；工具侧读取面保留）
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-        entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
         entry("core_md_render_stream", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2）──

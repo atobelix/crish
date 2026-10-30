@@ -610,11 +610,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
   // Markdown 2.0：恢复 core_md_render_stream（活跃尾块 Rust 流式渲染）。
-  {
-    command: 'core_md_render',
-    status: 'implemented',
-    feature: 'markdown render',
-  },
+  // 单条 core_md_render 已退役（前端只消费 batch/stream）。
   {
     command: 'core_md_render_batch',
     status: 'implemented',
