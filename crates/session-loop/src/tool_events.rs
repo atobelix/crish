@@ -234,21 +234,47 @@ impl ToolErrorKind {
     }
 
     /// 错误码（对齐 wire 协议 tool.* 域，03 §5.1-7；02 §4.2 对齐 F01 常量）
+    ///
+    /// X04 P4：全部改走 `conex_types::error::codes` 生成常量（无裸字面量），
+    /// 与 [`Self::from_code`] 构成双射。
     pub fn error_code(self) -> &'static str {
         use conex_types::error::codes;
         match self {
             ToolErrorKind::NotFound => codes::TOOL_NOT_FOUND,
             ToolErrorKind::InvalidInput => codes::TOOL_INVALID_INPUT,
             ToolErrorKind::ExecutionFailed => codes::TOOL_EXECUTION_FAILED,
-            ToolErrorKind::Timeout => "tool.timeout",
-            ToolErrorKind::UserDenied => "tool.user_denied",
-            ToolErrorKind::ApprovalExpired => "tool.approval_expired",
-            ToolErrorKind::ApprovalRequired => "tool.requires_approval",
-            ToolErrorKind::SoftDeny => "tool.soft_deny",
+            ToolErrorKind::Timeout => codes::TOOL_TIMEOUT,
+            ToolErrorKind::UserDenied => codes::TOOL_USER_DENIED,
+            ToolErrorKind::ApprovalExpired => codes::TOOL_APPROVAL_EXPIRED,
+            ToolErrorKind::ApprovalRequired => codes::TOOL_REQUIRES_APPROVAL,
+            ToolErrorKind::SoftDeny => codes::TOOL_SOFT_DENY,
             ToolErrorKind::Cancelled => codes::TOOL_CANCELLED,
             ToolErrorKind::AbortedBeforeDispatch => codes::TOOL_ABORTED_BEFORE_DISPATCH,
             ToolErrorKind::OutcomeUnknown => codes::TOOL_OUTCOME_UNKNOWN,
-            ToolErrorKind::PolicyBlocked => "tool.policy_blocked",
+            ToolErrorKind::PolicyBlocked => codes::TOOL_POLICY_BLOCKED,
+        }
+    }
+
+    /// 反向映射：wire 错误码 → 分类（[`Self::error_code`] 的逆函数）。
+    ///
+    /// 唯一反向映射入口——调用方禁止各自 match 码字符串。未注册码返回
+    /// `None`，由调用方决定回退（执行器落 `ExecutionFailed`）。
+    pub fn from_code(code: &str) -> Option<Self> {
+        use conex_types::error::codes;
+        match code {
+            codes::TOOL_NOT_FOUND => Some(ToolErrorKind::NotFound),
+            codes::TOOL_INVALID_INPUT => Some(ToolErrorKind::InvalidInput),
+            codes::TOOL_EXECUTION_FAILED => Some(ToolErrorKind::ExecutionFailed),
+            codes::TOOL_TIMEOUT => Some(ToolErrorKind::Timeout),
+            codes::TOOL_USER_DENIED => Some(ToolErrorKind::UserDenied),
+            codes::TOOL_APPROVAL_EXPIRED => Some(ToolErrorKind::ApprovalExpired),
+            codes::TOOL_REQUIRES_APPROVAL => Some(ToolErrorKind::ApprovalRequired),
+            codes::TOOL_SOFT_DENY => Some(ToolErrorKind::SoftDeny),
+            codes::TOOL_CANCELLED => Some(ToolErrorKind::Cancelled),
+            codes::TOOL_ABORTED_BEFORE_DISPATCH => Some(ToolErrorKind::AbortedBeforeDispatch),
+            codes::TOOL_OUTCOME_UNKNOWN => Some(ToolErrorKind::OutcomeUnknown),
+            codes::TOOL_POLICY_BLOCKED => Some(ToolErrorKind::PolicyBlocked),
+            _ => None,
         }
     }
 }
@@ -430,5 +456,71 @@ mod permission_cell_tests {
             PermissionMode::Full,
             "活单元在批次边界读取父级最新值"
         );
+    }
+}
+
+#[cfg(test)]
+/// R3：`ToolErrorKind` ↔ wire 错误码双向映射穷举（X04 P4）。
+mod tool_error_kind_code_tests {
+    use super::ToolErrorKind;
+
+    /// 枚举全部 12 个变体——新增变体必须同步登记在此（穷举断言不会漏网）
+    const ALL_KINDS: [ToolErrorKind; 12] = [
+        ToolErrorKind::NotFound,
+        ToolErrorKind::InvalidInput,
+        ToolErrorKind::ExecutionFailed,
+        ToolErrorKind::Timeout,
+        ToolErrorKind::UserDenied,
+        ToolErrorKind::ApprovalExpired,
+        ToolErrorKind::ApprovalRequired,
+        ToolErrorKind::SoftDeny,
+        ToolErrorKind::Cancelled,
+        ToolErrorKind::AbortedBeforeDispatch,
+        ToolErrorKind::OutcomeUnknown,
+        ToolErrorKind::PolicyBlocked,
+    ];
+
+    #[test]
+    fn from_code_inverts_error_code_for_all_variants() {
+        for kind in ALL_KINDS.iter().copied() {
+            assert_eq!(
+                ToolErrorKind::from_code(kind.error_code()),
+                Some(kind),
+                "{} 的反向映射必须回到原变体",
+                kind.error_code()
+            );
+        }
+    }
+
+    /// 正向映射两两不同：保证 `from_code` 是单值逆函数（12 码无碰撞）
+    #[test]
+    fn error_codes_are_unique_across_variants() {
+        let codes: std::collections::BTreeSet<&str> =
+            ALL_KINDS.iter().map(|k| k.error_code()).collect();
+        assert_eq!(
+            codes.len(),
+            ALL_KINDS.len(),
+            "ToolErrorKind 的码必须两两不同：{codes:?}"
+        );
+    }
+
+    /// 未注册码不得误命中（执行器据此回退 ExecutionFailed）
+    #[test]
+    fn from_code_rejects_unregistered_codes() {
+        assert_eq!(ToolErrorKind::from_code("tool.path_escape"), None);
+        assert_eq!(ToolErrorKind::from_code("tool.browser.not_ready"), None);
+        assert_eq!(ToolErrorKind::from_code(""), None);
+    }
+
+    /// 12 码必须全部登记 error catalog（元信息可查，杜绝未注册码回流）
+    #[test]
+    fn error_codes_are_registered_in_catalog() {
+        for kind in ALL_KINDS.iter().copied() {
+            assert!(
+                conex_types::error::error_info(kind.error_code()).is_some(),
+                "{} 未登记 error catalog",
+                kind.error_code()
+            );
+        }
     }
 }

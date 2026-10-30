@@ -91,7 +91,7 @@ async fn test_error_stop_with_tool_calls_triggers_isolation_firewall() {
     let metadata = last_tool_msg.metadata.as_ref().expect("必须有 metadata");
     assert_eq!(
         metadata.get("errorCode").and_then(|v| v.as_str()),
-        Some(TOOL_STREAM_ERROR_BEFORE_DISPATCH),
+        Some(conex_types::error::codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH),
         "错误码必须为 TOOL_STREAM_ERROR_BEFORE_DISPATCH"
     );
     if let Some(AgentMessageBlock::ToolResult {

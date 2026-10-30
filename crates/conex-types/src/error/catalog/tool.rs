@@ -120,6 +120,85 @@ error_catalog_table! {
             action: "action.tool.outcome_unknown",
         },
     );
+    // X04 P4：执行期分类码（session-loop ToolErrorKind 双向映射登记）——
+    // 仅超时可重试；审批/策略/控制类均为确定性拒绝，不可重试
+    m.insert(
+        codes::TOOL_TIMEOUT,
+        CrishErrorInfo {
+            code: codes::TOOL_TIMEOUT,
+            title: "工具执行超时",
+            category: CrishErrorCategory::Transient,
+            retryable: true,
+            is_public: true,
+            action: "action.tool.retry",
+        },
+    );
+    m.insert(
+        codes::TOOL_USER_DENIED,
+        CrishErrorInfo {
+            code: codes::TOOL_USER_DENIED,
+            title: "用户拒绝执行",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_permission",
+        },
+    );
+    m.insert(
+        codes::TOOL_APPROVAL_EXPIRED,
+        CrishErrorInfo {
+            code: codes::TOOL_APPROVAL_EXPIRED,
+            title: "审批已过期",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.request_approval",
+        },
+    );
+    m.insert(
+        codes::TOOL_REQUIRES_APPROVAL,
+        CrishErrorInfo {
+            code: codes::TOOL_REQUIRES_APPROVAL,
+            title: "工具调用需要审批",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.request_approval",
+        },
+    );
+    m.insert(
+        codes::TOOL_SOFT_DENY,
+        CrishErrorInfo {
+            code: codes::TOOL_SOFT_DENY,
+            title: "工具调用被软拒绝",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_policy",
+        },
+    );
+    m.insert(
+        codes::TOOL_POLICY_BLOCKED,
+        CrishErrorInfo {
+            code: codes::TOOL_POLICY_BLOCKED,
+            title: "安全策略阻断",
+            category: CrishErrorCategory::Security,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_policy",
+        },
+    );
+    m.insert(
+        codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH,
+        CrishErrorInfo {
+            code: codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH,
+            title: "流式错误导致工具未派发",
+            category: CrishErrorCategory::Permanent,
+            retryable: false,
+            is_public: true,
+            action: "action.tool.check_network",
+        },
+    );
     // ── browser 域（9 正式码：17 文档 §1.3，R-9-2/R-8/U-12 语义）──
     // R-9-2：恢复期工具门禁——Transient/可重试（等待恢复完成重试）
     m.insert(

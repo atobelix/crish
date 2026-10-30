@@ -41,9 +41,8 @@ use super::super::handlers::{
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
-
-/// 工具在派发执行前因流式以错误截断终止而被阻断（BC02-2 防火墙）
-pub(crate) const TOOL_STREAM_ERROR_BEFORE_DISPATCH: &str = "tool.stream_error_before_dispatch";
+/// BC02-2 防火墙拦截码（X04 P4：改用生成常量，禁止模块内自建字面量镜像）
+use conex_types::error::codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH;
 
 /// streaming handler（01 §2.4）
 pub(crate) async fn handle(

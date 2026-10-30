@@ -77,6 +77,21 @@ pub const TOOL_ABORTED_BEFORE_DISPATCH: &str = "tool.aborted_before_dispatch";
 pub const TOOL_CANCELLED: &str = "tool.cancelled";
 /// 进程异常退出或冷启动恢复时检测到未决工具调用，结果不可知（自愈修复）
 pub const TOOL_OUTCOME_UNKNOWN: &str = "tool.outcome_unknown";
+// ── tool 执行期分类码（7 正式码；X04 P4 补登，ToolErrorKind 双向映射）──
+/// 工具执行超时（批级超时或工具自身超时；可重试）
+pub const TOOL_TIMEOUT: &str = "tool.timeout";
+/// 用户明确拒绝执行（审批拒绝 / 权限模式拒绝；不可重试）
+pub const TOOL_USER_DENIED: &str = "tool.user_denied";
+/// 审批窗口已过期（超时未裁决；不可重试）
+pub const TOOL_APPROVAL_EXPIRED: &str = "tool.approval_expired";
+/// 工具要求先审批（执行前需用户或主代理裁决；不可重试）
+pub const TOOL_REQUIRES_APPROVAL: &str = "tool.requires_approval";
+/// 审批策略层软拒绝（本次调用不执行、不终止 run；不可重试）
+pub const TOOL_SOFT_DENY: &str = "tool.soft_deny";
+/// 系统安全策略阻断（红线拦截 / 只读模式 / 任务类型越界；不可重试）
+pub const TOOL_POLICY_BLOCKED: &str = "tool.policy_blocked";
+/// 流式响应以错误截断，工具在派发前被防火墙阻断（BC02-2；本次调用不可重试）
+pub const TOOL_STREAM_ERROR_BEFORE_DISPATCH: &str = "tool.stream_error_before_dispatch";
 // ── browser 域（9 正式码，17 文档 §1.3 + R-9-2/R-8/U-12）──
 /// 浏览器恢复中（R-9-2：进程启动/崩溃重启期间工具不可用，可重试）
 pub const TOOL_BROWSER_NOT_READY: &str = "tool.browser.not_ready";

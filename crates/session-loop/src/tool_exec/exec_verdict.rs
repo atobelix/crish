@@ -278,19 +278,16 @@ impl ToolExecutor {
     }
 }
 
+/// 工具错误分类（D-X04-3）：唯一反向映射入口 `ToolErrorKind::from_code`，
+/// 未注册码回退 [`ToolErrorKind::ExecutionFailed`]。
+///
+/// 行为变化（相对字符串白名单 6 码版）：`tool.timeout` / `tool.policy_blocked` /
+/// `tool.soft_deny` / `tool.aborted_before_dispatch` / `tool.outcome_unknown`
+/// 不再被折叠为 `ExecutionFailed`，而是落到各自分类——这五类均在
+/// `is_never_fatal` 排除清单内，fatalOnError 判定随即不再终止 run。
 pub(crate) fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {
-    let code = err.code();
-    let message = err.to_string();
-    let kind = match code {
-        "tool.not_found" => ToolErrorKind::NotFound,
-        "tool.invalid_input" => ToolErrorKind::InvalidInput,
-        "tool.requires_approval" => ToolErrorKind::ApprovalRequired,
-        "tool.user_denied" => ToolErrorKind::UserDenied,
-        "tool.approval_expired" => ToolErrorKind::ApprovalExpired,
-        "tool.cancelled" => ToolErrorKind::Cancelled,
-        _ => ToolErrorKind::ExecutionFailed,
-    };
-    (kind, message)
+    let kind = ToolErrorKind::from_code(err.code()).unwrap_or(ToolErrorKind::ExecutionFailed);
+    (kind, err.to_string())
 }
 
 pub(crate) fn denied_result(
