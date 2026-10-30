@@ -224,7 +224,13 @@ async fn server_errors_stop_after_max_retries() {
     .await
     .expect_err("5xx 连续应最终报错");
 
-    assert!(matches!(error, ProviderError::Server { status: Some(503) }));
+    assert!(matches!(
+        error,
+        ProviderError::Server {
+            status: Some(503),
+            ..
+        }
+    ));
     assert_eq!(counter.load(Ordering::SeqCst), 3, "初始 1 次 + 2 次重试");
     assert_eq!(state.retries, 2);
 }
@@ -285,7 +291,13 @@ async fn retry_budget_exhaustion_stops_retrying() {
         }
     };
 
-    assert!(matches!(error, ProviderError::Server { status: Some(500) }));
+    assert!(matches!(
+        error,
+        ProviderError::Server {
+            status: Some(500),
+            ..
+        }
+    ));
     let count = counter.load(Ordering::SeqCst);
     assert_eq!(
         count, 3,

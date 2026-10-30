@@ -100,12 +100,18 @@ async fn status_400_context_length_maps_to_context_length() {
     assert!(error.is_retryable(), "分类层 context_length 标记可重试");
 }
 
-/// HTTP 500 → Server（第 10 行，可重试）
+/// HTTP 500 → Server（第 10 行，可重试；响应体随 body_hint 透传）
 #[tokio::test(flavor = "multi_thread")]
 async fn status_500_maps_to_server() {
     let (status, body, _) = plain_response(500, "internal server error", vec![]).await;
     let error = classify_provider_error(Some(status), Some(&body), None, None);
-    assert_eq!(error, ProviderError::Server { status: Some(500) });
+    assert_eq!(
+        error,
+        ProviderError::Server {
+            status: Some(500),
+            body_hint: Some("internal server error".into())
+        }
+    );
     assert!(error.is_retryable());
 }
 

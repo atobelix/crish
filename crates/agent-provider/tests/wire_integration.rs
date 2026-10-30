@@ -850,7 +850,8 @@ fn endpoint_url_assembly_no_trailing_slash_no_v1_duplication() {
         (
             "https://api.deepseek.com",
             ProtocolKind::OpenAiChat,
-            "https://api.deepseek.com/chat/completions",
+            // 通用归一：裸域名补 /v1（DeepSeek 官方同时支持两种路径）
+            "https://api.deepseek.com/v1/chat/completions",
         ),
         // 场景 2: OpenAI Responses 原生路径拼装 (/responses)
         (
