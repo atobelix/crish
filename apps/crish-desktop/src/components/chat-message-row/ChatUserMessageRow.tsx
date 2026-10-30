@@ -36,10 +36,15 @@ import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
 import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
 import { useUserBubbleEntrance } from './useUserBubbleEntrance';
 
+/**
+ * 存量信封消息只读剥离器（信封 SSOT 收口后的唯一读侧兼容点）：
+ * 旧版曾把 [用户输入]/[系统环境上下文] 信封拼进消息正文落库，本函数在
+ * 呈现 / 复制 / 编辑预填时剥离出用户原文；新消息正文不再含信封标记，
+ * 存量随重发自然洗白，无数据迁移。
+ */
 export interface ParsedStructuredUserText {
   isStructured: boolean;
   userInputText: string;
-  contextStateText?: string;
 }
 
 export function parseStructuredUserText(
@@ -59,19 +64,12 @@ export function parseStructuredUserText(
     userIdx < ctxIdx
       ? raw.slice(userIdx + userTag.length, ctxIdx).trim()
       : raw.slice(userIdx + userTag.length).trim();
-  let contextStateText =
-    userIdx < ctxIdx
-      ? raw.slice(ctxIdx + ctxTag.length).trim()
-      : raw.slice(ctxIdx + ctxTag.length, userIdx).trim();
 
   if (userInputText.startsWith(':') || userInputText.startsWith('：')) {
     userInputText = userInputText.slice(1).trim();
   }
-  if (contextStateText.startsWith(':') || contextStateText.startsWith('：')) {
-    contextStateText = contextStateText.slice(1).trim();
-  }
 
-  return { isStructured: true, userInputText, contextStateText };
+  return { isStructured: true, userInputText };
 }
 
 export type ChatUserMessageRowProps = {
@@ -174,7 +172,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
       return {
         isStructured: true,
         userInputText: userBubbleDisplayText(fromRaw.userInputText, isExpanded),
-        contextStateText: fromRaw.contextStateText,
       };
     }
     return fromDisplay;
@@ -255,7 +252,9 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const rowRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = useCallback(() => {
-    const text = msg.text || '';
+    // 复制口径与呈现一致：存量信封消息剥离出用户原文，不复制系统上下文
+    const parsed = parseStructuredUserText(msg.text);
+    const text = parsed.isStructured ? parsed.userInputText : msg.text || '';
     if (!text) return;
     void copyTextBestEffort(text).then((ok) => {
       if (!ok) {
@@ -275,31 +274,14 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const handleStartEdit = useCallback(() => {
     if (!onStartEdit) return;
     if (parsedStructured.isStructured) {
+      // 信封 SSOT：编辑预填只带用户原文（剥离存量信封）。禁止临时改写
+      // store 消息对象（旧 mutate-then-restore 实现有竞态脏写，已废除）；
+      // sanitizedMsg 由 onStartEdit 透传（MessageVirtualizer 已接参）
       const sanitizedMsg: SessionMessage = {
         ...msg,
         text: parsedStructured.userInputText,
       };
-      const originalText = msg.text;
-      let mutated = false;
-      try {
-        if (!Object.isFrozen(msg)) {
-          (msg as { text?: string }).text = parsedStructured.userInputText;
-          mutated = true;
-        }
-      } catch {
-        /* swallow-ok: read-only object */
-      }
-      try {
-        (onStartEdit as (m?: SessionMessage) => void)(sanitizedMsg);
-      } finally {
-        if (mutated) {
-          try {
-            (msg as { text?: string }).text = originalText;
-          } catch {
-            /* swallow-ok */
-          }
-        }
-      }
+      (onStartEdit as (m?: SessionMessage) => void)(sanitizedMsg);
       return;
     }
     onStartEdit();
@@ -339,9 +321,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const hasTextContent =
     Boolean(
       parsedStructured.isStructured
-        ? (parsedStructured.userInputText &&
-            parsedStructured.userInputText.trim()) ||
-            parsedStructured.contextStateText
+        ? parsedStructured.userInputText &&
+            parsedStructured.userInputText.trim()
         : displayText && displayText.trim()
     ) ||
     isQueued ||
@@ -464,53 +445,24 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                     data-testid="trigger-source-badge"
                     data-source={triggerSource}
                   >
-                    <span aria-hidden="true">⏰</span>
+                    <AppIcon name="clock" size={12} aria-hidden />
                     <span>{triggerBadgeText}</span>
                   </div>
                 ) : null}
 
-                {/* 2. 底部：正文文本 */}
+                {/* 2. 底部：正文文本（信封 SSOT：只呈现用户原文——存量信封
+                    消息经 parseStructuredUserText 只读剥离；状态切换呈现归
+                    时间线发丝线 ContextStateNotice，气泡不再渲染信封附段） */}
                 {hasTextContent ? (
-                  parsedStructured.isStructured ? (
-                    <div
-                      className={styles.userBubbleStructuredContent}
-                      data-testid="user-bubble-structured"
-                    >
-                      {/* (a) 顶部主体段：用户的实际输入正文 */}
-                      <div
-                        className={styles.userBubbleText}
-                        data-testid="user-bubble-main-input"
-                      >
-                        {parsedStructured.userInputText}
-                        {queuedBadge}
-                      </div>
-
-                      {/* (b) 底部随附段：系统环境上下文信封 */}
-                      {parsedStructured.contextStateText ? (
-                        <div
-                          className={styles.userBubbleContextEnvelope}
-                          data-testid="user-bubble-context-envelope"
-                          role="note"
-                          aria-label="系统环境上下文"
-                        >
-                          <span
-                            className={styles.userBubbleContextBadge}
-                            aria-hidden
-                          >
-                            <AppIcon name="cpu" size={12} />
-                          </span>
-                          <span className={styles.userBubbleContextContent}>
-                            {parsedStructured.contextStateText}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className={styles.userBubbleText}>
-                      {displayText}
-                      {queuedBadge}
-                    </div>
-                  )
+                  <div
+                    className={styles.userBubbleText}
+                    data-testid="user-bubble-main-input"
+                  >
+                    {parsedStructured.isStructured
+                      ? parsedStructured.userInputText
+                      : displayText}
+                    {queuedBadge}
+                  </div>
                 ) : null}
               </div>
             ) : null}
