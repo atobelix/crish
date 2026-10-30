@@ -54,7 +54,7 @@ impl ByteBudget {
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
-                Ok(_) => return true,
+                Ok(_previous) => return true,
                 Err(actual) => current = actual,
             }
         }

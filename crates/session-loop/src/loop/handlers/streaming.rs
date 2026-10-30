@@ -471,7 +471,7 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
         };
         (action, trace)
     };
-    super::emit_control_intents(state, &trace);
+    super::control_intents::emit_control_intents(state, &trace);
     match action {
         Some(crate::safe_point::ControlAction::ForceCancel { reason }) => {
             // T06.3 Q02：取消原因经 aborted_with_diagnostic 透出

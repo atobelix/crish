@@ -54,7 +54,7 @@ use session_loop::{CacheTrackingConfig, SessionLoopOptions, ToolBatchOptions};
 
 use conex_run::context_injection::{
     push_subagent_role_constraint, ContextInjection, ContextInjectionKind, ContextInjector,
-    CONTEXT_INJECTION_ORDER, SUBAGENT_ROLE_CONSTRAINT_CONTENT, SUBAGENT_ROLE_CONSTRAINT_TITLE,
+    SUBAGENT_ROLE_CONSTRAINT_CONTENT, SUBAGENT_ROLE_CONSTRAINT_TITLE,
 };
 use conex_run::core_event_bridge::EventBridge;
 use conex_run::engine_assembly::{assemble_scheduler_registry, unix_millis_now};
@@ -66,6 +66,9 @@ use conex_run::engine_handle::{
     build_cache_tracking_config, cold_cache_warning_event, model_switched, waste_alert_event,
     EngineHandle, SessionCacheState, SharedProvider,
 };
+
+// 行数门禁拆分：注入顺序冻结契约测外置（子模块路径 engine/tests/extra.rs）
+mod extra;
 
 /// C10 Skills 注入段（RustSkill 扫描结果 → `## Skill 定义` 注入段；RustSkill
 /// 为壳层技能扫描类型，本装配辅助留壳——渲染确定，同一技能集合两次构建
@@ -1932,28 +1935,8 @@ fn cache_stats_updated_event_serializes_camel_case() {
 
 // ── M1：Tool Context 注入通道（C10 地基；build_context 立通道）────
 
-/// M1 注入顺序契约（冻结快照）：`system → skills → mcp → agent 定义`
-///
-/// 断言（02 M1 内容 4 + 任务书内容 2）：顺序常量与枚举声明序/排序序
-/// 三方一致——排序即协议，M11 重注入断言以此为契约；顺序变化必须
-/// 同时改三处并被本快照捕获。
-#[test]
-fn injection_order_contract_is_frozen() {
-    assert_eq!(
-        CONTEXT_INJECTION_ORDER,
-        [
-            ContextInjectionKind::System,
-            ContextInjectionKind::Skills,
-            ContextInjectionKind::Mcp,
-            ContextInjectionKind::AgentDefinition,
-        ],
-        "注入顺序契约：system → skills → mcp → agent 定义（变化视为协议变更）"
-    );
-    // 常量已按 enum Ord 升序（声明序 = 排序序 = 协议序）
-    let mut sorted = CONTEXT_INJECTION_ORDER.to_vec();
-    sorted.sort();
-    assert_eq!(sorted, CONTEXT_INJECTION_ORDER);
-}
+// 注入顺序冻结契约测（injection_order_contract_is_frozen）已外置：
+// 见 `mod extra;`（engine/tests/extra.rs）
 
 /// M1 注入点存在且可注入（mock）：push 累积、空判定、kinds 按契约序
 #[test]

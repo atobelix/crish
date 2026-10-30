@@ -1,5 +1,6 @@
 //! 一次性历史导入：只处理秘密与旧介质，数据转换委派核心唯一迁移函数。
 use super::*;
+use crate::credentials::CredentialStore;
 use crate::migration::ConfigMigrationManager;
 use crate::models::CredentialRef;
 use serde_json::{Map, Value};

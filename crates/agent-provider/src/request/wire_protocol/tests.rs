@@ -8,6 +8,9 @@
 //! - 同 provider 下 chat/responses 两模型各自正确
 //! - 未知模型 → 全局 endpoint 语义（chat 兜底）
 
+// 行数门禁拆分：resolve_endpoint_url 方法测外置（子模块路径 wire_protocol/tests/extra.rs）
+mod extra;
+
 use super::*;
 use crate::config::Endpoint;
 use crate::models::{ModelCatalog, ModelCatalogEntry, ModelCatalogFile};
@@ -660,31 +663,4 @@ fn test_build_endpoint_url_google_generate_content() {
     );
 }
 
-#[test]
-fn test_wire_protocol_resolve_endpoint_url_method() {
-    assert_eq!(
-        WireProtocol::Chat.resolve_endpoint_url("https://api.openai.com/v1"),
-        "https://api.openai.com/v1/chat/completions"
-    );
-    assert_eq!(
-        WireProtocol::Responses.resolve_endpoint_url("https://api.openai.com/v1"),
-        "https://api.openai.com/v1/responses"
-    );
-    assert_eq!(
-        WireProtocol::Anthropic.resolve_endpoint_url("https://api.anthropic.com"),
-        "https://api.anthropic.com/v1/messages"
-    );
-    // 测试别名常量的调用
-    assert_eq!(
-        WireProtocol::OpenAiChat.resolve_endpoint_url("https://api.deepseek.com"),
-        "https://api.deepseek.com/v1/chat/completions"
-    );
-    assert_eq!(
-        WireProtocol::OpenAiResponses.resolve_endpoint_url("https://api.openai.com"),
-        "https://api.openai.com/v1/responses"
-    );
-    assert_eq!(
-        WireProtocol::AnthropicMessages.resolve_endpoint_url("https://api.anthropic.com/v1/"),
-        "https://api.anthropic.com/v1/messages"
-    );
-}
+// 行数门禁拆分：resolve_endpoint_url 方法测已外置（wire_protocol/tests/extra.rs）

@@ -286,30 +286,30 @@ CI 以脚本实时输出为准。
   新登记注记 5 禁词自查 0 命中（禁词表见 D-01 详案 §G-02 验收③）。
 
 <!-- BASELINE_START -->
-apps/agent-workbench/src-tauri/src/background_tests_resource.rs 671
+apps/agent-workbench/src-tauri/src/background/tests_resource.rs 671
 apps/agent-workbench/src-tauri/src/browser/mod.rs 712
-apps/agent-workbench/src-tauri/src/browser/native_manager.rs 1251
-apps/agent-workbench/src-tauri/src/engine_tests.rs 3972
+apps/agent-workbench/src-tauri/src/browser/native_manager/windows.rs 1251
+apps/agent-workbench/src-tauri/src/engine/tests.rs 3972
 apps/agent-workbench/src-tauri/src/main.rs 933
-apps/agent-workbench/src-tauri/src/note_commands_tests.rs 713
+apps/agent-workbench/src-tauri/src/note_commands/tests.rs 713
 apps/agent-workbench/src-tauri/src/pty/session.rs 896
-apps/agent-workbench/src-tauri/src/retraction_commands_tests.rs 670
-apps/agent-workbench/src-tauri/src/run_ipc_tests.rs 824
-crates/agent-provider/src/error_tests.rs 712
+apps/agent-workbench/src-tauri/src/retraction_commands/tests.rs 670
+apps/agent-workbench/src-tauri/src/run_ipc/tests.rs 824
+crates/agent-provider/src/error/tests.rs 712
 crates/agent-provider/src/model_store.rs 681
 crates/agent-provider/src/models/behavior.rs 761
-crates/agent-provider/src/parse/anthropic_tests.rs 610
-crates/agent-provider/src/parse/chat_tests.rs 1042
+crates/agent-provider/src/parse/anthropic/tests.rs 610
+crates/agent-provider/src/parse/chat/tests.rs 1042
 crates/agent-provider/src/parse/responses/tests.rs 656
-crates/agent-provider/src/parse/think_tags_tests.rs 698
-crates/agent-provider/src/pricing_tests.rs 900
-crates/agent-provider/src/request/build_anthropic_tests.rs 905
-crates/agent-provider/src/request/build_gemini_tests.rs 681
+crates/agent-provider/src/parse/think_tags/tests.rs 698
+crates/agent-provider/src/pricing/tests.rs 900
+crates/agent-provider/src/request/build_anthropic/tests.rs 905
+crates/agent-provider/src/request/build_gemini/tests.rs 681
 crates/agent-provider/src/request/cache/cache_policy.rs 678
 crates/agent-provider/src/request/messages.rs 724
 crates/agent-provider/src/request/schema.rs 685
 crates/agent-provider/src/request/vendor/dialect.rs 679
-crates/agent-provider/src/request/wire_protocol_tests.rs 684
+crates/agent-provider/src/request/wire_protocol/tests.rs 684
 crates/agent-provider/src/sse/frame.rs 626
 crates/agent-tools/src/executor/tests.rs 1135
 crates/agent-tools/src/explore_quota.rs 1020
@@ -327,7 +327,7 @@ crates/agent-tools/src/tools/mod.rs 1107
 crates/agent-tools/src/tools/replace.rs 1289
 crates/agent-tools/src/tools/search.rs 886
 crates/agent-tools/src/tools/set_timer.rs 613
-crates/agent-tools/src/tools/shell_exec.rs 967
+crates/agent-tools/src/tools/shell/shell_exec.rs 967
 crates/agent-tools/src/write_paths/tests.rs 642
 crates/agent-tools/src/write_paths/write_paths_state.rs 624
 crates/conex-browser-tools/src/session.rs 993
@@ -374,7 +374,7 @@ crates/conex-run/src/engine_channels.rs 850
 crates/conex-run/src/engine_handle.rs 909
 crates/conex-run/src/engine_provider.rs 710
 crates/conex-run/src/engine_provider/protocol.rs 787
-crates/conex-run/src/engine_provider_tests.rs 905
+crates/conex-run/src/engine_provider/tests.rs 905
 crates/conex-run/src/run/run_approval.rs 823
 crates/conex-run/src/run/run_commands.rs 1463
 crates/conex-run/src/run/run_core.rs 2056
@@ -409,7 +409,7 @@ crates/orchestrator/src/steering_queue.rs 1143
 crates/orchestrator/src/subagent_events.rs 679
 crates/orchestrator/src/task_events.rs 1086
 crates/session-loop/src/control.rs 855
-crates/session-loop/src/exec_verdict.rs 667
+crates/session-loop/src/tool_exec/exec_verdict.rs 667
 crates/session-loop/src/input.rs 608
 crates/session-loop/src/loop/compaction_dispatch.rs 1223
 crates/session-loop/src/loop/handlers/mod.rs 1831
