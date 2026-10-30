@@ -25,7 +25,7 @@
 //! 父代理不得当真，子代理无权绕过本门禁。
 
 use crate::permission::{PermissionMode, PermissionVerdict};
-use conex_sandbox::semantics::{analyze, CommandClass, CommandSegment, SemanticAnalysis};
+use conex_sandbox::{assess, Assessment, CommandClass, Segment};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -67,8 +67,8 @@ pub struct RevertTarget {
 
 impl RevertTarget {
     /// 从命令段提取回退目标（非回退段返回 None）
-    pub fn from_segment(seg: &CommandSegment) -> Option<Self> {
-        if seg.command != "git" || seg.class != CommandClass::GitRevertShape {
+    pub fn from_segment(seg: &Segment) -> Option<Self> {
+        if seg.program != "git" || seg.class != CommandClass::GitRevertShape {
             return None;
         }
         let args = &seg.args;
@@ -127,7 +127,7 @@ impl RevertTarget {
 
     /// 从命令行文本提取（便捷入口，内部先语义分析）
     pub fn from_command_line(command_line: &str) -> Option<Self> {
-        let analysis = analyze(command_line);
+        let analysis = assess(command_line);
         let seg = analysis
             .segments
             .iter()
@@ -351,7 +351,7 @@ impl RevertPolicy {
     /// （Full 由调用方早退放行；Ask/Smart 下面积大一律审批）。
     pub fn gate_verdict(
         &self,
-        analysis: &SemanticAnalysis,
+        analysis: &Assessment,
         _mode: PermissionMode,
     ) -> Option<PermissionVerdict> {
         let seg = analysis
@@ -372,7 +372,7 @@ impl RevertPolicy {
     /// 等待，04 C3 第 2/5 条 + 01 方案 §4 关键关系），拒绝给出面积摘要与
     /// 替代路径指引（05 §2.1 语义）。非回退 / 小面积 → None。
     pub fn refusal_message(&self, command_line: &str) -> Option<String> {
-        let analysis = analyze(command_line);
+        let analysis = assess(command_line);
         let seg = analysis
             .segments
             .iter()
@@ -398,7 +398,7 @@ impl RevertPolicy {
     /// 发起 run 由事件层补）——供审批事件 / UI 弹窗（S9）消费；非回退 /
     /// 小面积 → None。
     pub fn approval_payload(&self, command_line: &str) -> Option<serde_json::Value> {
-        let analysis = analyze(command_line);
+        let analysis = assess(command_line);
         let seg = analysis
             .segments
             .iter()
@@ -480,7 +480,7 @@ pub(crate) use in_memory::InMemoryRevertCounterStore;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_sandbox::semantics::CommandSegment;
+    use conex_sandbox::Segment;
 
     /// 固定面积评估器（测试注入：断言阈值边界与判定链路）
     #[derive(Debug)]
@@ -552,11 +552,11 @@ mod tests {
     /// stash drop / revert --no-commit / restore --source= / restore --source 空格）
     #[test]
     fn target_extraction_from_segments() {
-        let seg = |command: &str, args: &[&str]| CommandSegment {
-            command: command.to_string(),
+        let seg = |command: &str, args: &[&str]| Segment {
+            program: command.to_string(),
             args: args.iter().map(|s| s.to_string()).collect(),
             class: CommandClass::GitRevertShape,
-            targets: Vec::new(),
+            ..Segment::default()
         };
 
         let t = RevertTarget::from_segment(&seg("git", &["checkout", "abc1234"])).unwrap();
@@ -677,7 +677,7 @@ mod tests {
     fn gate_verdict_small_vs_large_and_modes() {
         let small = policy_with(area(Some(3), None, None));
         let large = policy_with(area(Some(25), None, None));
-        let cmd = analyze("git checkout abc1234");
+        let cmd = assess("git checkout abc1234");
         for mode in [PermissionMode::Ask, PermissionMode::Full] {
             assert_eq!(
                 small.gate_verdict(&cmd, mode),
@@ -707,7 +707,7 @@ mod tests {
         let large = policy_with(area(Some(25), None, None));
         for cmd in ["git status", "git checkout main", "npm test", "ls -la"] {
             assert_eq!(
-                large.gate_verdict(&analyze(cmd), PermissionMode::Full),
+                large.gate_verdict(&assess(cmd), PermissionMode::Full),
                 None,
                 "非回退命令 {cmd:?} 不触发 C3"
             );

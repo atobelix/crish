@@ -7,7 +7,7 @@
 //!
 //! 边界（2026-10-27 收敛）：本模块只提供**工具级**三态矩阵；命令语义
 //! （Redline / 重定向 / git 写操作 / C3 回退）的唯一判定入口是
-//! `session-loop::exec_verdict::call_verdict`（消费 `conex-sandbox::SmartClassifier`）。
+//! `session-loop::exec_verdict::call_verdict`（消费 `conex_sandbox::assess`）。
 //! 禁止在本模块新增命令级判定函数，避免第二套放行链。
 
 use serde::{Deserialize, Serialize};
