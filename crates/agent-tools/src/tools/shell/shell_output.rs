@@ -17,6 +17,7 @@ use conex_shared::perf_budget::{
     SHELL_ACCUM_HARD_CAP_FACTOR, SHELL_MAX_OUTPUT_BYTES_DEFAULT,
     SHELL_PREVIEW_HEAD_BYTES as PREVIEW_HEAD_BYTES, SHELL_PREVIEW_TAIL_BYTES as PREVIEW_TAIL_BYTES,
 };
+use conex_shared::time::unix_millis;
 
 /// 超时结果构造（T-AB-02：sync 树杀路径与 S1 流式路径共用同一形状——
 /// timedOut=true + 超时文案，对齐改造前语义，防两路径漂移）
@@ -100,18 +101,10 @@ async fn drain_available<R: AsyncBufRead + Unpin>(
         if buf.is_empty() {
             return Ok(true);
         }
-        acc.append(buf, epoch_millis_now());
+        acc.append(buf, u64::try_from(unix_millis()).unwrap_or(0));
         let len = buf.len();
         reader.consume(len);
     }
-}
-
-/// 纪元毫秒（流式循环维护 last_output_at_ms 用）
-pub(crate) fn epoch_millis_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 /// 流式输出累积器（T-AB-01 / U-MEM）
@@ -306,10 +299,7 @@ fn spill_full_output(
     if std::fs::create_dir_all(&dir).is_err() {
         return None;
     }
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_millis();
+    let ts = u64::try_from(unix_millis()).ok()?;
     let seq = SPILL_SEQ.fetch_add(1, Ordering::SeqCst);
     let path = dir.join(format!("{ts}-{seq}.log"));
     let mut full = Vec::with_capacity(stdout.len() + stderr.len());

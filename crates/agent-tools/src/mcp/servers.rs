@@ -11,6 +11,7 @@
 
 use crate::definition::ToolError;
 use async_trait::async_trait;
+use conex_shared::time::unix_millis;
 use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -242,10 +243,8 @@ impl McpConfigPersistence for LocalFileMcpPersistence {
         })?;
         let tmp_path = self.file_path.with_extension(format!(
             "tmp.{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
+            // 保持纳秒量级后缀：由时间真源的毫秒换算
+            u128::try_from(unix_millis()).unwrap_or(0) * 1_000_000
         ));
         std::fs::write(&tmp_path, json_str).map_err(|e| {
             ToolError::new(codes::CONFIG_INVALID, format!("写入 MCP 临时文件失败: {e}"))

@@ -10,6 +10,7 @@ use crate::background::{BackgroundAdoptRequest, BackgroundTaskManager};
 use crate::context::{AbortToken, ToolContext};
 use crate::definition::ToolError;
 use crate::streaming::{terminal_only, ToolProgress, ToolStream, ToolStreamItem};
+use conex_shared::time::unix_millis;
 use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -20,8 +21,7 @@ use tokio::time::Duration;
 
 use super::shell_invoke::{build_shell_invocation, decode_console_bytes, ShellMode};
 use super::shell_output::{
-    build_sync_result, build_timeout_result, epoch_millis_now, stream_until_deadline,
-    OutputAccumulator, StreamEnd,
+    build_sync_result, build_timeout_result, stream_until_deadline, OutputAccumulator, StreamEnd,
 };
 use super::PreparedCommand;
 
@@ -823,7 +823,7 @@ fn push_chunk(r: &mut RunningState, chunk: &[u8], is_err: bool) -> Option<ToolSt
     if chunk.is_empty() {
         return None;
     }
-    let now_ms = epoch_millis_now();
+    let now_ms = u64::try_from(unix_millis()).unwrap_or(0);
     if is_err {
         r.acc_err.append(chunk, now_ms);
     } else {

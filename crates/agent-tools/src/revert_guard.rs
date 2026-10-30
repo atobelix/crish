@@ -24,6 +24,7 @@
 
 use crate::permission::{PermissionMode, PermissionVerdict};
 use crate::revert::{RevertCounterSnapshot, RevertCounterStore};
+use conex_shared::time::unix_secs;
 use std::sync::Arc;
 
 /// session_meta 键：时窗配置（秒，可配覆盖；04 C4 第 3 条，`revert_*`
@@ -170,12 +171,9 @@ pub fn parse_window_seconds(raw: Option<&str>) -> u64 {
         .unwrap_or(DEFAULT_REVERT_WINDOW_SECONDS)
 }
 
-/// 当前 Unix 秒（对齐 [RevertCounterSnapshot] 时间戳单位；系统时间不可用 0）。
+/// 当前 Unix 秒（对齐 [RevertCounterSnapshot] 时间戳单位；时间真源 = `conex_shared::time`，早于 epoch 时 0）。
 pub fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    unix_secs().max(0)
 }
 
 /// 会话级连续回退计数守卫（存储 + 时窗配置）。

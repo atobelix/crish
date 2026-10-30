@@ -646,11 +646,9 @@ fn path_within_root(candidate: &Path, root: &Path) -> bool {
     conex_fs::ConexPathNormalizer::is_subpath(candidate, root)
 }
 
-/// 系统时间 → 纪元毫秒（对齐全仓 epoch ms 惯例；不可用时 0）
+/// 系统时间 → 纪元毫秒（时间真源 = `conex_shared::time`；不可用或早于 epoch 时 0）
 pub(crate) fn epoch_millis(t: Option<std::time::SystemTime>) -> i64 {
-    t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    t.map(conex_shared::time::millis_of).unwrap_or(0).max(0)
 }
 
 /// 行级截断助手（T-CF-01）：先按行数上限钳制，再按字符预算钳制；

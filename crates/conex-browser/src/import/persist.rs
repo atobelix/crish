@@ -193,9 +193,8 @@ pub fn list_managed(managed_root: &Path) -> Vec<PathBuf> {
 
 /// 当前 unix 秒时间戳字符串（meta 时间字段，§7.1；避免引入 chrono 依赖）。
 pub(crate) fn now_unix_str() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs().to_string())
+    u64::try_from(conex_shared::time::unix_secs())
+        .map(|secs| secs.to_string())
         .unwrap_or_default()
 }
 
