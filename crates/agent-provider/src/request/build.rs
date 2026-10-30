@@ -27,12 +27,13 @@ use super::vendor::{ReasoningEffort, ReasoningVendor, ThinkingIntensity};
 mod build_chat;
 #[path = "build_responses.rs"]
 mod build_responses;
-#[path = "vendor/dialect.rs"]
-pub mod dialect;
 
 pub use build_chat::build_chat_completions_request_body;
 pub use build_responses::{affinity_http_headers, build_responses_request_body};
-pub use dialect::{assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
+// 思考方言归 vendor 目录（plans/04 §3.2）：本模块只重导出，避免同一文件被声明两份模块
+// （clippy::duplicate_mod）；build_chat / build_responses 经 `super::dialect` 取用此绑定。
+pub use super::vendor::dialect;
+pub use super::vendor::dialect::{assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
 
 #[cfg(test)]
 #[path = "build_chat_tests.rs"]

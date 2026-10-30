@@ -1,17 +1,13 @@
 //! request/build.rs 测试公共构造（SR-06e · 拆分 · ≠ EL；经 #[path] 接线，非直接 mod）
 //!
 //! 原 build.rs `mod tests` 的便捷构造（text_block / user_message / tool / base_opts /
-//! cache_policy / baseline_context）整段搬入并标为 pub，供 chat / cache / responses
-//! 三份旁挂测试经 `use super::test_common::*` 复用（避免三份重复定义；
-//! 测试名与断言形状不变）。
-
-use std::sync::Arc;
+//! cache_policy）整段搬入并标为 pub，供 chat / responses 两份旁挂测试经
+//! `use super::test_common::*` 复用（避免重复定义；测试名与断言形状不变）。
 
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
-use conex_types::tool::SystemPromptWireMode;
 use serde_json::json;
 
-use super::{ChatCompletionsRequestOptions, RequestBuildContext};
+use super::ChatCompletionsRequestOptions;
 use crate::request::cache::{
     BreakpointPlan, CacheKey, CacheMechanism, CachePolicy, CacheRetention, TtlBucket,
 };
@@ -66,15 +62,5 @@ pub fn cache_policy(
         cache_key: cache_key.map(|k| CacheKey(k.to_string())),
         prompt_cache_options: None,
         affinity_header: None,
-    }
-}
-
-/// 固定输入（system + user + 单工具），供无缓存回归断言复用
-pub fn baseline_context<'a>(messages: &'a [Arc<AgentMessage>]) -> RequestBuildContext<'a> {
-    RequestBuildContext {
-        system_prompt: Some("系统提示".to_string()),
-        messages,
-        tools: vec![tool("read_file")],
-        wire_mode: SystemPromptWireMode::NativeSystemRole,
     }
 }
