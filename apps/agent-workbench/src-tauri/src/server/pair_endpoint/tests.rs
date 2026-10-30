@@ -61,7 +61,7 @@ fn disabled_state() -> ServerState {
 /// 激活配对并返回展示码
 fn activate(coordinator: &PairingCoordinator) -> String {
     coordinator
-        .start_pairing(now_ms())
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功")
         .code
 }
@@ -178,7 +178,10 @@ async fn wrong_code_401_and_correct_code_200_with_label_echo() {
     let tokens = state.tokens();
     let mut guard = tokens.lock().unwrap();
     assert!(
-        matches!(guard.verify(token, now_ms()), TokenVerdict::Valid),
+        matches!(
+            guard.verify(token, conex_shared::time::now_millis()),
+            TokenVerdict::Valid
+        ),
         "新令牌必须立即通过路由层令牌库校验"
     );
 }
@@ -331,8 +334,12 @@ fn pair_hello_success_returns_token_and_label() {
         "mobileLongPub": "long-pub-1",
         "platform": "android",
     });
-    let (token, label, device_id) = handle_pair_hello(&body, state.pairing().as_deref(), now_ms())
-        .expect("合法 hello 必须成功");
+    let (token, label, device_id) = handle_pair_hello(
+        &body,
+        state.pairing().as_deref(),
+        conex_shared::time::now_millis(),
+    )
+    .expect("合法 hello 必须成功");
     assert_eq!(token.len(), 64);
     assert_eq!(label, "我的手机");
     assert_eq!(device_id, "dev-1");
@@ -352,8 +359,12 @@ fn pair_hello_truncates_label_and_defaults_blank() {
         "mobilePub": "pub-2",
         "mobileLongPub": "long-pub-2",
     });
-    let (_, label, _) = handle_pair_hello(&body, state.pairing().as_deref(), now_ms())
-        .expect("合法 hello 必须成功");
+    let (_, label, _) = handle_pair_hello(
+        &body,
+        state.pairing().as_deref(),
+        conex_shared::time::now_millis(),
+    )
+    .expect("合法 hello 必须成功");
     assert_eq!(label.chars().count(), 64, "设备名必须截断到 64 字符");
     // 空白名 → remote-device（码一次性：重新激活拿新码）
     let code = activate(&coordinator);
@@ -364,16 +375,24 @@ fn pair_hello_truncates_label_and_defaults_blank() {
         "mobilePub": "pub-2",
         "mobileLongPub": "long-pub-2",
     });
-    let (_, label, _) = handle_pair_hello(&body, state.pairing().as_deref(), now_ms())
-        .expect("合法 hello 必须成功");
+    let (_, label, _) = handle_pair_hello(
+        &body,
+        state.pairing().as_deref(),
+        conex_shared::time::now_millis(),
+    )
+    .expect("合法 hello 必须成功");
     assert_eq!(label, "remote-device");
 }
 
 /// pair.hello 载荷非法 → Err(CmdInvalid)；协调器未装配 → Err(Internal)
 #[test]
 fn pair_hello_invalid_payload_and_unwired_coordinator() {
-    let err = handle_pair_hello(&serde_json::json!({ "deviceName": "x" }), None, now_ms())
-        .expect_err("协调器未装配必须 Err(Internal)");
+    let err = handle_pair_hello(
+        &serde_json::json!({ "deviceName": "x" }),
+        None,
+        conex_shared::time::now_millis(),
+    )
+    .expect_err("协调器未装配必须 Err(Internal)");
     assert_eq!(err.0, DeviceErrorCode::Internal);
     // 载荷缺 code → CmdInvalid
     let (state, coordinator) = test_state();
@@ -381,7 +400,7 @@ fn pair_hello_invalid_payload_and_unwired_coordinator() {
     let err = handle_pair_hello(
         &serde_json::json!({ "deviceId": "dev-3", "deviceName": "x" }),
         state.pairing().as_deref(),
-        now_ms(),
+        conex_shared::time::now_millis(),
     )
     .expect_err("缺 code 载荷必须 Err(CmdInvalid)");
     assert_eq!(err.0, DeviceErrorCode::CmdInvalid);

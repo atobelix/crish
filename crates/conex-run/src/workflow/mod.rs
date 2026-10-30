@@ -67,9 +67,3 @@ pub use store::{MemoryWorkflowStore, SessionMetaWorkflowStore, WorkflowStore};
 
 /// cron id 前缀（`cron-<seq>`，§4.4 冻结命名）
 pub(crate) const CRON_ID_PREFIX: &str = "cron-";
-
-/// 当前 epoch 毫秒（workflow 全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-pub(crate) fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}

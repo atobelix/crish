@@ -17,13 +17,13 @@
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
-use conex_types::device::PairCode;
+use conex_device_protocol::PairCode;
 
 use super::auth::TokenStore;
 use super::pair::{PairState, PairStateMachine, VerifyOutcome};
 use super::ws::WsRegistry;
 use super::ServerError;
-use conex_types::device::DeviceErrorCode;
+use conex_device_protocol::DeviceErrorCode;
 
 /// 重绑钩子：配对模式开启（Lan）/关闭（Loopback）时通知持有者重建监听。
 /// main.rs 装配真实重绑；测试注入记录器验证钩子触发。

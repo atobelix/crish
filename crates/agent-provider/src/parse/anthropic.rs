@@ -22,13 +22,13 @@
 //! 本层只产出事件序列；message_start 携带的 model 名仅注释记录，model-mismatch
 //! 诊断属外层职责（chat/responses 路径同）。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 anthropic_tests.rs /
-//! anthropic_tests_usage.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 anthropic/tests.rs 与
+//! anthropic/tests_usage.rs）：
 //! - [anthropic_core]：解析核心（AnthropicParser 状态机：push_frame / finish /
 //!   pending tool_use / 空流保护）
 //! - [anthropic_map]：消息转换与映射面（stop_reason / usage / 错误帧 / 字段辅助函数）
 
-/// 测试专用接线：旁挂测试（anthropic_tests.rs / anthropic_tests_usage.rs）经
+/// 测试专用接线：旁挂测试（anthropic/tests.rs / anthropic/tests_usage.rs）经
 /// `use super::*` 消费以下符号，门面自身不使用（pub(crate) 不扩大对外 API；
 /// 非 test 构建下允许 unused）。
 #[cfg_attr(not(test), allow(unused_imports))]
@@ -38,9 +38,7 @@ pub(crate) use crate::sse::frame::SseFrame;
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use serde_json::{Map, Value};
 
-#[path = "anthropic_core.rs"]
 mod anthropic_core;
-#[path = "anthropic_map.rs"]
 mod anthropic_map;
 
 pub use anthropic_core::AnthropicParser;
@@ -50,8 +48,6 @@ pub use anthropic_map::{
 };
 
 #[cfg(test)]
-#[path = "anthropic_tests.rs"]
 mod tests;
 #[cfg(test)]
-#[path = "anthropic_tests_usage.rs"]
 mod tests_usage;

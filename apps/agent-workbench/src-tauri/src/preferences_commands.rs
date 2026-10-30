@@ -6,7 +6,7 @@
 //! - 读全量与单 key 读写均保证字段级无损 deepEqual；
 //! - 变更记录 updated_at 毫秒时间戳。
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde_json::Value;
 use tauri::State;
 
@@ -389,10 +389,7 @@ pub async fn prefs_set(
     let serialized = serde_json::to_string(&value)
         .map_err(|e| CoreError::invalid_input(format!("cannot serialize preference value: {e}")))?;
 
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let now_ms = conex_shared::time::unix_millis();
 
     tokio::task::spawn_blocking(move || db.set_preference(&key, &serialized, now_ms))
         .await

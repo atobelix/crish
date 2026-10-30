@@ -13,7 +13,7 @@
 //! 其余内部失败 → `Internal`。
 
 use super::utf8_buffer::Utf8ChunkBuffer;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -25,7 +25,6 @@ use std::{
         Arc, Mutex, OnceLock,
     },
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
 
@@ -135,7 +134,7 @@ impl PtySession {
 
     /// 刷新活跃时刻（stdout 输出 >0 字节、键盘输入、ping 等自动调用）
     pub(crate) fn touch(&self) {
-        self.touch_at(crate::server::now_ms());
+        self.touch_at(conex_shared::time::now_millis());
     }
 
     pub(crate) fn touch_at(&self, now: u64) {
@@ -143,7 +142,7 @@ impl PtySession {
     }
 
     pub(crate) fn set_state(&self, new_state: PtyLivenessState) {
-        self.set_state_at(new_state, crate::server::now_ms());
+        self.set_state_at(new_state, conex_shared::time::now_millis());
     }
 
     pub(crate) fn set_state_at(&self, new_state: PtyLivenessState, now: u64) {
@@ -211,11 +210,8 @@ fn registry() -> &'static Mutex<HashMap<String, PtySession>> {
 /// Generate a unique `pty-…` id (pure; unit-testable without a PTY).
 pub(crate) fn next_pty_id() -> String {
     let seq = PTY_SEQ.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("pty-{seq}-{nanos}")
+    let stamp = conex_shared::time::now_millis();
+    format!("pty-{seq}-{stamp}")
 }
 
 // ── shell / cwd helpers ──────────────────────────────────────────────────────
@@ -470,7 +466,7 @@ pub(crate) fn create_session(
         writer: Arc::new(Mutex::new(writer)),
         master: pair.master,
         killer: Mutex::new(killer),
-        last_activity_at_ms: AtomicU64::new(crate::server::now_ms()),
+        last_activity_at_ms: AtomicU64::new(conex_shared::time::now_millis()),
         state: Mutex::new(PtyLivenessState::Active),
         detached_at_ms: AtomicU64::new(0),
     };
@@ -533,7 +529,7 @@ pub(crate) fn create_session(
                                 guard.push_str(&flushed);
                             }
                         }
-                        flush_now(&pending, &last_flush_ms, crate::server::now_ms());
+                        flush_now(&pending, &last_flush_ms, conex_shared::time::now_millis());
                         // 子进程退出
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
@@ -543,7 +539,7 @@ pub(crate) fn create_session(
                         break;
                     }
                     Ok(n) => {
-                        let now_ms = crate::server::now_ms();
+                        let now_ms = conex_shared::time::now_millis();
                         // 只要产生输出（stdout > 0 字节），自动续约活性，绝不误杀正在进行的长编译任务！
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
@@ -590,7 +586,8 @@ pub(crate) fn create_session(
                                     scheduled_clone.store(false, Ordering::SeqCst);
                                     return;
                                 };
-                                last_flush_clone.store(crate::server::now_ms(), Ordering::Relaxed);
+                                last_flush_clone
+                                    .store(conex_shared::time::now_millis(), Ordering::Relaxed);
                                 let _ = app_for_timer.emit(
                                     "workbench://pty-output",
                                     PtyOutputEvent {
@@ -608,7 +605,7 @@ pub(crate) fn create_session(
                                 guard.push_str(&flushed);
                             }
                         }
-                        flush_now(&pending, &last_flush_ms, crate::server::now_ms());
+                        flush_now(&pending, &last_flush_ms, conex_shared::time::now_millis());
                         tracing::debug!(
                             target: "pty",
                             pty_id = %emit_id,

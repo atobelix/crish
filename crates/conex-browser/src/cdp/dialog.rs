@@ -77,10 +77,7 @@ impl DialogRegistry {
         match event {
             BrowserEvent::DialogOpened(info) => {
                 let gen = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
-                let opened_at_ms = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
+                let opened_at_ms = conex_shared::time::now_millis();
                 {
                     let mut states = self.states.lock().unwrap_or_else(|p| p.into_inner());
                     states.insert(

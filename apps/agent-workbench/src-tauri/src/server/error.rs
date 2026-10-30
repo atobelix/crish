@@ -13,7 +13,7 @@ use axum::{
     Json,
 };
 
-use conex_types::device::{DeviceErrorCode, ErrorBody};
+use conex_device_protocol::{DeviceErrorCode, ErrorBody};
 
 /// 服务错误（内部统一错误类型；HTTP 侧经 [ServerError::http_status] 与
 /// [ServerError::error_body] 出网）
@@ -78,7 +78,7 @@ impl ServerError {
     /// 六 kind 细分；77 码不透传）
     // R1-02 备注：R1-03 CoreStateBackend 消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn from_core_error(err: &conex_types::CoreError) -> Self {
+    pub fn from_core_error(err: &conex_types::ipc_error::CoreError) -> Self {
         Self::Protocol {
             code: DeviceErrorCode::from_core_error(err),
             message: err.to_string(),
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn from_core_error_reuses_single_source_mapping() {
-        use conex_types::CoreError;
+        use conex_types::ipc_error::CoreError;
         assert_eq!(
             ServerError::from_core_error(&CoreError::NotFound("run not found".into()))
                 .device_code(),

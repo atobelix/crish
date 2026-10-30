@@ -34,14 +34,14 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use conex_run::core_event_bridge::Emitter;
-use conex_types::device::{
+use conex_device_protocol::{
     ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, DeviceEndpoint,
     DeviceEnvelope, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, EventsPush,
     HeartbeatOk, ListCommandsResult, ListSessionsParams, ListSessionsResult, MessageKind,
     ResumeDone, ResumePage, RunControlParams, RunControlResult, RunSnapshotParams,
     RunSnapshotResult, RunTaskParams, RunTaskResult,
 };
+use conex_run::core_event_bridge::Emitter;
 use crish_agent_workbench::server::backend::ApiBackend;
 use crish_agent_workbench::server::pairing::PairingCoordinator;
 use crish_agent_workbench::server::{

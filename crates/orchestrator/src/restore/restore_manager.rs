@@ -225,61 +225,55 @@ impl RestoreManager {
         // FlowScheduler::load 重建为 Running 节点，is_ready 要求 Pending →
         // 永不重派发、流程永久卡死（flow_graph.rs:1473-1476）。与主 run
         // 打断对称：running → failed + ended_at + resumable=1（可恢复），
-        // 并收集父会话汇总通知源。仅 LocalDb 路径可用（as_local_db 下转；
-        // InMemoryStore 等测试替身无 session_agents 面，跳过——生产恒为
-        // LocalDbStore）
+        // 并收集父会话汇总通知源。
         let mut interrupted_subagents = Vec::new();
-        if let Some(db) = store.as_local_db() {
-            let running_rows = db
-                .load_running_session_agent_rows()
-                .map_err(|e| RestoreError::new("load_running_agent_rows", e.to_string()))?;
-            if !running_rows.is_empty() {
-                let ended_at = SystemClock.now_ms();
-                for row in &running_rows {
-                    let affected = db
-                        .mark_session_agent_interrupted(
-                            &row.parent_session_id,
-                            &row.subagent_run_id,
-                            ended_at,
-                            INTERRUPTED_SUBAGENT_SUMMARY,
-                        )
-                        .map_err(|e| {
-                            RestoreError::new("normalize_session_agent", e.to_string())
-                        })?;
-                    if affected == 0 {
-                        tracing::warn!(
-                            target: "restore",
-                            session_id = %row.parent_session_id,
-                            subagent_run_id = %row.subagent_run_id,
-                            "归一目标行已消失或已终态，跳过"
-                        );
-                        continue;
-                    }
-                    let label = row
-                        .display_label
-                        .clone()
-                        .filter(|label| !label.is_empty())
-                        .or_else(|| {
-                            Some(row.description.clone()).filter(|desc| !desc.is_empty())
-                        })
-                        .unwrap_or_else(|| row.id.clone());
-                    interrupted_subagents.push(InterruptedSubagent {
-                        parent_session_id: row.parent_session_id.clone(),
-                        agent_id: row.id.clone(),
-                        subagent_run_id: row.subagent_run_id.clone(),
-                        subagent_session_id: row.sub_session_id.clone(),
-                        label,
-                        model_override: row.model_override.clone(),
-                        capability_mode: row.capability_mode.clone(),
-                        interrupted_at: ended_at,
-                    });
-                    tracing::info!(
+        let running_rows = store
+            .load_running_session_agent_rows()
+            .await
+            .map_err(|e| RestoreError::new("load_running_agent_rows", e.to_string()))?;
+        if !running_rows.is_empty() {
+            let ended_at = SystemClock.now_ms();
+            for row in &running_rows {
+                let affected = store
+                    .mark_session_agent_interrupted(
+                        &row.parent_session_id,
+                        &row.subagent_run_id,
+                        ended_at,
+                        INTERRUPTED_SUBAGENT_SUMMARY,
+                    )
+                    .await
+                    .map_err(|e| RestoreError::new("normalize_session_agent", e.to_string()))?;
+                if affected == 0 {
+                    tracing::warn!(
                         target: "restore",
                         session_id = %row.parent_session_id,
                         subagent_run_id = %row.subagent_run_id,
-                        "session_agents running 行归一 failed + resumable（崩溃恢复）"
+                        "归一目标行已消失或已终态，跳过"
                     );
+                    continue;
                 }
+                let label = row
+                    .display_label
+                    .clone()
+                    .filter(|label| !label.is_empty())
+                    .or_else(|| Some(row.description.clone()).filter(|desc| !desc.is_empty()))
+                    .unwrap_or_else(|| row.id.clone());
+                interrupted_subagents.push(InterruptedSubagent {
+                    parent_session_id: row.parent_session_id.clone(),
+                    agent_id: row.id.clone(),
+                    subagent_run_id: row.subagent_run_id.clone(),
+                    subagent_session_id: row.sub_session_id.clone(),
+                    label,
+                    model_override: row.model_override.clone(),
+                    capability_mode: row.capability_mode.clone(),
+                    interrupted_at: ended_at,
+                });
+                tracing::info!(
+                    target: "restore",
+                    session_id = %row.parent_session_id,
+                    subagent_run_id = %row.subagent_run_id,
+                    "session_agents running 行归一 failed + resumable（崩溃恢复）"
+                );
             }
         }
 
@@ -693,9 +687,11 @@ fn extract_declared_tool_calls(
         }
     }
     if let Some(json) = blocks_json {
-        if let Ok(blocks) = serde_json::from_str::<Vec<conex_types::AgentMessageBlock>>(json) {
+        if let Ok(blocks) =
+            serde_json::from_str::<Vec<conex_types::message::AgentMessageBlock>>(json)
+        {
             for b in blocks {
-                if let conex_types::AgentMessageBlock::ToolCall(call) = b {
+                if let conex_types::message::AgentMessageBlock::ToolCall(call) = b {
                     out.push((call.id, call.tool_name));
                 }
             }
@@ -765,7 +761,7 @@ fn extract_declared_from_message_end(
 ///    tool-start，04 §5.2 / D-3）：先合成 ToolStart 再追加 ToolEnd，
 ///    保证事件包络严格成对。
 ///
-/// 声明源：`as_local_db().load_session_body`（生产 LocalDb）→ `tool_calls_json` /
+/// 声明源：`load_session_messages`（session_messages 物化视图）→ `tool_calls_json` /
 /// `blocks_json`；回退 `message-end` 事件载荷。自愈成功后可选回写
 /// `session_messages.tool_call_results_json`（04 §5.4）。
 ///
@@ -811,27 +807,25 @@ async fn heal_orphaned_tool_calls(
             }
         }
 
-        // 首选：session_messages 物化视图（as_local_db 下转；InMemory 跳过）
-        if let Some(db) = store.as_local_db() {
-            if let Ok(messages) = db.load_session_body(&session_id) {
-                for m in &messages {
-                    if m.sender != "assistant" {
-                        continue;
-                    }
-                    for (id, name) in extract_declared_tool_calls(
-                        m.tool_calls_json.as_deref(),
-                        m.blocks_json.as_deref(),
-                    ) {
-                        // 已有 run_id（来自 message-end）优先保留；无则 None
-                        declared
-                            .entry(id)
-                            .and_modify(|slot| slot.0 = name.clone())
-                            .or_insert((name, None));
-                    }
-                    message_resolved.extend(extract_resolved_call_ids(
-                        m.tool_call_results_json.as_deref(),
-                    ));
+        // 首选：session_messages 物化视图（Store 必需能力；读失败 fail-open）
+        if let Ok(messages) = store.load_session_messages(&session_id).await {
+            for m in &messages {
+                if m.sender != "assistant" {
+                    continue;
                 }
+                for (id, name) in extract_declared_tool_calls(
+                    m.tool_calls_json.as_deref(),
+                    m.blocks_json.as_deref(),
+                ) {
+                    // 已有 run_id（来自 message-end）优先保留；无则 None
+                    declared
+                        .entry(id)
+                        .and_modify(|slot| slot.0 = name.clone())
+                        .or_insert((name, None));
+                }
+                message_resolved.extend(extract_resolved_call_ids(
+                    m.tool_call_results_json.as_deref(),
+                ));
             }
         }
 
@@ -871,7 +865,7 @@ async fn heal_orphaned_tool_calls(
             )
             .await?
             {
-                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name);
+                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name).await;
                 healed.push(HealedToolRecord {
                     session_id: session_id.clone(),
                     run_id,
@@ -896,7 +890,7 @@ async fn heal_orphaned_tool_calls(
             )
             .await?
             {
-                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name);
+                write_healed_result_to_messages(store, &session_id, &call_id, &tool_name).await;
                 healed.push(HealedToolRecord {
                     session_id: session_id.clone(),
                     run_id,
@@ -957,13 +951,13 @@ async fn heal_one_orphan(
         let tool_start = AgentEvent::ToolStart {
             session_id: session_id.to_string(),
             batch_id,
-            call: conex_types::ToolBatchCall {
+            call: conex_types::tool::ToolBatchCall {
                 id: call_id.to_string(),
                 tool_name: tool_name.to_string(),
                 summary: "Synthesized tool start during crash recovery".to_string(),
                 input: input.unwrap_or(serde_json::json!({})),
-                category: conex_types::ToolCategory::Internal,
-                concurrency: conex_types::ToolConcurrency::Sequential,
+                category: conex_types::tool::ToolCategory::Internal,
+                concurrency: conex_types::tool::ToolConcurrency::Sequential,
             },
             timestamp: format_iso_utc_ms(healed_at),
             turn_index: None,
@@ -990,10 +984,10 @@ async fn heal_one_orphan(
     let tool_end = AgentEvent::ToolEnd {
         session_id: session_id.to_string(),
         batch_id,
-        result: conex_types::ToolBatchResult {
+        result: conex_types::tool::ToolBatchResult {
             id: call_id.to_string(),
             tool_name: tool_name.to_string(),
-            output: conex_types::ToolOutput {
+            output: conex_types::tool::ToolOutput {
                 text: Some(
                     "Execution outcome unknown: daemon or host process terminated \
                      abnormally before tool completion."
@@ -1034,23 +1028,21 @@ async fn heal_one_orphan(
 
 /// 自愈成功后把合成结果写回 `session_messages.tool_call_results_json`（04 §5.4）。
 ///
-/// 仅 LocalDb 路径生效；失败仅告警不回滚 events（events 已是权威，正文视图
-/// 允许短暂落后，下次 hydrate 合成仍可出站）。幂等：call_id 已在结果集则跳过。
-fn write_healed_result_to_messages(
+/// 经 [Store] 必需能力读写正文视图；失败仅告警不回滚 events（events 已是
+/// 权威，正文视图允许短暂落后，下次 hydrate 合成仍可出站）。幂等：call_id
+/// 已在结果集则跳过。
+async fn write_healed_result_to_messages(
     store: &dyn Store,
     session_id: &str,
     call_id: &str,
     tool_name: &str,
 ) {
-    let Some(db) = store.as_local_db() else {
-        return;
-    };
-    let Ok(mut messages) = db.load_session_body(session_id) else {
+    let Ok(mut messages) = store.load_session_messages(session_id).await else {
         tracing::warn!(
             target: "restore",
             session_id = %session_id,
             call_id = %call_id,
-            "自愈正文回写跳过：load_session_body 失败"
+            "自愈正文回写跳过：load_session_messages 失败"
         );
         return;
     };
@@ -1093,7 +1085,7 @@ fn write_healed_result_to_messages(
     if !changed {
         return;
     }
-    if let Err(e) = db.save_session_body(session_id, &messages) {
+    if let Err(e) = store.save_session_messages(session_id, &messages).await {
         tracing::warn!(
             target: "restore",
             session_id = %session_id,

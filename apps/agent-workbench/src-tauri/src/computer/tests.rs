@@ -217,7 +217,7 @@ fn restore_emits_state_changed() {
 /// - `enable_rejected_when_browser_active`（浏览器活跃 → `tool.session.exclusive`）；
 /// - `persist_failure_maps_to_not_ready`（落盘失败 → `tool.computer.not_ready`）。
 ///
-/// 注册面负向断言见 `tests/config_command_names_contract.rs`。
+/// 注册面负向断言见 `command_manifest/tests/config_command_names_contract.rs`。
 #[test]
 fn retired_computer_command_surface_is_physically_removed() {
     // needle 分片拼接：避免断言文案自身命中源文本

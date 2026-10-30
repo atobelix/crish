@@ -130,62 +130,10 @@ pub enum RingChoice {
     FollowUp,
 }
 
-/// 控制总线队列中的单条控制意图（对齐 TS RunControlIntent）
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ControlIntent {
-    /// 稳定 id，可观测 / 可测
-    pub id: String,
-    pub kind: ControlKind,
-    /// L0-L3 代号
-    pub level: ControlLevel,
-    /// 入队时间（ms epoch）
-    pub created_at: u64,
-    /// soft_inject / steer / follow_up 附带消息
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<AgentMessage>,
-    /// 人类可读原因
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    /// 来源（ui / hook / policy / system）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-}
-
-/// request() 入参：id / createdAt / level 可由总线补齐
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ControlIntentInput {
-    pub kind: ControlKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<AgentMessage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<u64>,
-    /// 省略时按 kind 推导 level
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub level: Option<ControlLevel>,
-}
-
-impl ControlIntentInput {
-    /// 最简入队入口（kind + 可选消息）
-    pub fn new(kind: ControlKind) -> Self {
-        Self {
-            kind,
-            message: None,
-            reason: None,
-            source: None,
-            id: None,
-            created_at: None,
-            level: None,
-        }
-    }
-}
+// 控制意图结构体拆至 control/intent.rs（纯体积拆分，零逻辑改动）；
+// 经 pub use 保持 `session_loop::control::{ControlIntent, ControlIntentInput}` 路径不变。
+mod intent;
+pub use intent::{ControlIntent, ControlIntentInput};
 
 /// drain 后的聚合动作（供 session-loop 一次决策，对齐 TS ControlDrainAction）
 #[derive(Debug, Clone, PartialEq)]
@@ -656,10 +604,7 @@ mod tests {
         let mut bus = ControlBus::new();
         assert!(!bus.stop_signal().is_aborted());
         bus.request_cooperative_stop(Some("enough".to_string()), None);
-        assert!(
-            bus.stop_signal().is_aborted(),
-            "协作停止入队即触发停止信号"
-        );
+        assert!(bus.stop_signal().is_aborted(), "协作停止入队即触发停止信号");
     }
 
     /// 无 L1 消息的混合队列（如仅 cooperative_stop + continue）→ cooperative_stop

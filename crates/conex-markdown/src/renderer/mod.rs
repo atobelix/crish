@@ -340,11 +340,7 @@ fn truncate_input(raw: &str) -> (&str, bool) {
 fn render_uncached(raw: &str, options: RenderOptions, stream_mode: bool) -> RenderResult {
     let (truncated_text, truncated) = truncate_input(raw);
     let normalized: Cow<'_, str> = if truncated_text.contains('\r') {
-        Cow::Owned(
-            truncated_text
-                .replace("\r\n", "\n")
-                .replace('\r', "\n"),
-        )
+        Cow::Owned(truncated_text.replace("\r\n", "\n").replace('\r', "\n"))
     } else {
         Cow::Borrowed(truncated_text)
     };

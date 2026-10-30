@@ -7,7 +7,7 @@
 //!   transport 源（连接失败/流中断）按 runtime 行为必须可重试（02 §五 #11）；
 //! - 错误码复用 conex-types error.rs 既有 13 类，不重复定义（任务书 B2.7 复用 04 §1.2）。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 error_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 error/tests.rs）：
 //! - [error_classify]：消息模式检测辅助（error-classifier.ts 各正则的 Rust 形态，
 //!   classify_provider_error 的兜底判定面）
 //!
@@ -22,7 +22,6 @@ use thiserror::Error;
 use crate::retry::parse_retry_after_ms;
 use crate::sse::{SseFrameError, SseReadError};
 
-#[path = "error_classify.rs"]
 mod error_classify;
 
 use error_classify::{
@@ -432,5 +431,4 @@ impl RequestBuildError {
 }
 
 #[cfg(test)]
-#[path = "error_tests.rs"]
 mod tests;

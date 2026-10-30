@@ -1,4 +1,4 @@
-//! 路由型审计 sink（15-T-6 裁决 D9）：run 级桥注册表 + G10 denied 计数
+//! 路由型审计 sink（15-T-6 裁决 D9）：run 级桥注册表
 //!
 //! - 工具级审计（shell/delete 等工具经 `BuiltinToolConfig.audit_sink`
 //!   发射的 security-audit）按 session_id 路由到该会话当前活动 run 的
@@ -8,19 +8,15 @@
 //! - **域隔离边界**（30 §9 最终口径）：任务域审计（10-P3
 //!   TaskAuditAccumulator → EventBridge 直发，operation=command-exec）
 //!   **不经本 sink**——本 sink 只承接工具面审计，两路均以
-//!   security-audit 事件形态经 run 桥到达前端，无重复无遗漏；
-//! - 计数面（G10）：denied 决策同步计入共享 [DeniedStats]（与
-//!   agent-tools `CountingAuditSink` :94-105 同构语义），月度报告
-//!   经 [DeniedStats::summary] 拉取。
+//!   security-audit 事件形态经 run 桥到达前端，无重复无遗漏。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use agent_tools::audit::AuditSink;
 use agent_tools::audit::SecurityAuditSink;
-use conex_types::denied_stats::DeniedStats;
-use conex_types::events::{AgentEvent, SecurityAuditDecision};
+use conex_types::events::AgentEvent;
 
 /// 毒丸恢复计数（B1-5 观测化：RoutingAuditSink routes 锁中毒恢复次数；
 /// 对齐 registry.rs / note_memory.rs 「tracing::error! 成对 + 计数」样板，
@@ -34,23 +30,17 @@ pub fn audit_poison_recovery_count() -> u64 {
     POISON_RECOVERIES.load(Ordering::Relaxed)
 }
 
-/// 路由型审计 sink（15-T-6 接线，裁决 D9）：run 级桥注册表 +
-/// G10 denied 计数
-#[derive(Debug)]
+/// 路由型审计 sink（15-T-6 接线，裁决 D9）：run 级桥注册表
+#[derive(Debug, Default)]
 pub struct RoutingAuditSink {
     /// session_id → 该会话当前活动 run 的审计桥（run 启动注册、收口注销）
     routes: Mutex<HashMap<String, AuditSink>>,
-    /// G10 denied 计数（引擎级共享实例）
-    stats: Arc<DeniedStats>,
 }
 
 impl RoutingAuditSink {
-    /// 新建路由注册表（共享统计实例）
-    pub fn new(stats: Arc<DeniedStats>) -> Self {
-        Self {
-            routes: Mutex::new(HashMap::new()),
-            stats,
-        }
+    /// 新建空路由注册表
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// run 启动注册；同 session 多 run 并发 → 后注册者覆盖（新 run 覆盖
@@ -122,19 +112,9 @@ impl RoutingAuditSink {
 
 impl SecurityAuditSink for RoutingAuditSink {
     fn emit(&self, event: &AgentEvent) {
-        let AgentEvent::SecurityAudit {
-            session_id,
-            decision,
-            ..
-        } = event
-        else {
+        let AgentEvent::SecurityAudit { session_id, .. } = event else {
             return;
         };
-        // G10：denied 决策同步计数（与 CountingAuditSink 同构语义，
-        // 其余决策转发不计数）
-        if *decision == SecurityAuditDecision::Denied {
-            self.stats.record_security_audit_denied();
-        }
         // 锁内仅取路由句柄克隆，不持锁跨 emit 调用（sink 可能重入）
         let sink = self
             .routes

@@ -23,9 +23,7 @@ use conex_types::tool::{
 };
 
 use crate::safe_point::AbortSignal;
-use crate::tool_events::{
-    ApprovalDecision, ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent,
-};
+use crate::tool_events::{ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 use std::sync::Arc;
 
@@ -198,7 +196,7 @@ fn tool_output_from_result(
     result: &ClassifiedToolResult,
 ) -> (
     ToolOutput,
-    Option<conex_compaction::tool_output::ToolOutputTruncationRecord>,
+    Option<conex_compaction::ToolOutputTruncationRecord>,
 ) {
     // D1 Arc 出口（ClassifiedToolResult.output = Arc<Value>）：读路径
     // as_ref 解引用，不碰装配行
@@ -253,16 +251,16 @@ fn tool_output_from_result(
 fn apply_g8_tool_output_truncation(
     result: &ClassifiedToolResult,
     output: &mut ToolOutput,
-) -> Option<conex_compaction::tool_output::ToolOutputTruncationRecord> {
+) -> Option<conex_compaction::ToolOutputTruncationRecord> {
     let text = output.text.as_mut()?;
-    let trunc = conex_compaction::tool_output::truncate_tool_output(
+    let trunc = conex_compaction::truncate_tool_output(
         text,
-        &conex_compaction::tool_output::ToolOutputTruncationLimits::default(),
+        &conex_compaction::ToolOutputTruncationLimits::default(),
     );
     if !trunc.truncated {
         return None;
     }
-    let record = conex_compaction::tool_output::ToolOutputTruncationRecord::from_result(&trunc);
+    let record = conex_compaction::ToolOutputTruncationRecord::from_result(&trunc);
     tracing::info!(
         target: "run",
         tool_name = %result.tool_name,
@@ -429,15 +427,8 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     session_id: session_id.clone(),
                     tool_call_id: call_id.clone(),
                     request_id: None,
-                    decision: match decision {
-                        ApprovalDecision::Approved => {
-                            conex_types::events::ApprovalDecision::Approved
-                        }
-                        ApprovalDecision::Denied { .. } => {
-                            conex_types::events::ApprovalDecision::Denied
-                        }
-                        ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
-                    },
+                    // 领域枚举与 wire 同源（approved|denied|expired 三值）
+                    decision: *decision,
                     timestamp: conex_shared::time::now_iso_utc(),
                 }
             }
@@ -551,5 +542,4 @@ fn tool_output_from_parts(
 }
 
 #[cfg(test)]
-#[path = "executing_tools_tests.rs"]
 mod tests;

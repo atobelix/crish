@@ -27,5 +27,7 @@ hex = { workspace = true }
 # CrishErrorPayload / CrishErrorCategory 来自 conex-types（ROUND-10-rust.md §3.2）；
 # conex-shared 提供日志日期键与崩溃时间戳的时间真源。两者均为内部叶子依赖。
 conex-types = { path = "../conex-types" }
+# 多端设备协议（TY-P5）：redact.rs 的 PairCode 打码规则与设备配对码同源
+conex-device-protocol = { path = "../conex-device-protocol" }
 # 时间真源（X-03）：公历换算与当前毫秒统一走 conex_shared::time，禁止本地副本
 conex-shared = { path = "../conex-shared" }

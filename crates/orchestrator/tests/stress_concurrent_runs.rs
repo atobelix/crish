@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use conex_db::{DbFailure, DbFailureKind, LocalDb, ReaderPool, ReaderPoolConfig, RunStatus};
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use orchestrator::events::{drive_outcome, EventQueue, PersistFailureInfo};
 use orchestrator::lifecycle::{ForceCancelSink, SubagentLifecycleService};
 use orchestrator::persist::{InMemoryStore, LocalDbStore, Store};

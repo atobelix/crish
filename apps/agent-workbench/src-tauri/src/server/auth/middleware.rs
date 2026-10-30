@@ -7,14 +7,14 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use conex_types::device::{DeviceErrorCode, ErrorBody};
+use conex_device_protocol::{DeviceErrorCode, ErrorBody};
 use sha2::{Digest, Sha256};
 
 use super::hmac::{canonical_http_signing_payload, verify_hmac_sha256};
 use super::nonce::NonceCheckResult;
 use super::token::TokenVerdict;
 use super::SERVER_TIME_HEADER;
-use crate::server::{now_ms, ServerState};
+use crate::server::ServerState;
 
 /// Bearer 令牌校验中间件（D2 §7.1 零信任：除 /v1/info 与 /v1/pair 外全部
 /// 接口必须携带有效令牌；校验失败 → 401 + ErrorBody 载荷；全部响应透传 X-Server-Time-Ms）
@@ -23,7 +23,7 @@ pub async fn require_bearer_token(
     request: Request,
     next: Next,
 ) -> Response {
-    let now = now_ms();
+    let now = conex_shared::time::now_millis();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
         let mut resp = (
             StatusCode::UNAUTHORIZED,
@@ -83,7 +83,7 @@ pub async fn require_signed_request(
     request: Request,
     next: Next,
 ) -> Response {
-    let now = now_ms();
+    let now = conex_shared::time::now_millis();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
         let mut resp = (
             StatusCode::UNAUTHORIZED,

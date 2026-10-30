@@ -98,10 +98,7 @@ fn guard_nesting_denied() {
         err.message().contains("所有子 Agent 由主 Agent 分配"),
         "文案必须带「所有子 Agent 由主 Agent 分配」指引"
     );
-    assert!(
-        err.message().contains("请通过消息"),
-        "文案必须带上报指引"
-    );
+    assert!(err.message().contains("请通过消息"), "文案必须带上报指引");
     assert_eq!(
         err,
         RecursionGuardRejection::NestingDenied { current: 2, max: 1 }
@@ -290,10 +287,7 @@ async fn nesting_denied_maps_to_structured_tool_error() {
         err.to_string().contains("所有子 Agent 由主 Agent 分配"),
         "文案必须带「所有子 Agent 由主 Agent 分配」指引"
     );
-    assert!(
-        err.to_string().contains("请通过消息"),
-        "文案必须带上报指引"
-    );
+    assert!(err.to_string().contains("请通过消息"), "文案必须带上报指引");
 }
 
 #[tokio::test]

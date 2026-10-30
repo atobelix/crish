@@ -18,9 +18,7 @@ use std::os::windows::io::RawHandle;
 use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, HANDLE};
 use windows_sys::Win32::System::JobObjects::*;
-use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
-};
+use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 
 /// 封装 Win32 HANDLE 的结构体，供 OnceLock 静态存储使用
 #[cfg(windows)]
@@ -51,9 +49,7 @@ unsafe impl Sync for JobHandle {}
 /// 记录警告日志并安全关闭创建的 Job 句柄，返回 `Ok(std::ptr::null_mut())`，绝不崩溃中断。
 #[cfg(windows)]
 #[allow(unsafe_code)]
-pub fn configure_job_object_for_process(
-    h_process: HANDLE,
-) -> Result<HANDLE, std::io::Error> {
+pub fn configure_job_object_for_process(h_process: HANDLE) -> Result<HANDLE, std::io::Error> {
     use core::mem::size_of;
     use core::ptr;
 
@@ -282,10 +278,7 @@ pub(crate) fn create_kill_on_close_job_object() -> Result<HANDLE, String> {
 /// 第二防线：若遇到 `ERROR_ACCESS_DENIED`（如嵌套沙箱不可嵌套），安全优雅降级为 `Ok(())` 并记录 warn 日志。
 #[cfg(windows)]
 #[allow(unsafe_code)]
-pub(super) fn assign_process_to_job(
-    job: HANDLE,
-    child_handle: RawHandle,
-) -> Result<(), String> {
+pub(super) fn assign_process_to_job(job: HANDLE, child_handle: RawHandle) -> Result<(), String> {
     // SAFETY: hJob 与 processHandle 由调用方保证有效
     unsafe {
         if AssignProcessToJobObject(job, child_handle as HANDLE) == 0 {

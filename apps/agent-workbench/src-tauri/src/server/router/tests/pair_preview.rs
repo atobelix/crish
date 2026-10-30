@@ -30,7 +30,7 @@ fn test_pair_state() -> (ServerState, Arc<crate::server::pairing::PairingCoordin
 /// 激活配对并返回展示码（CXN-XXXX-XXXX-XXXX）
 fn activate_pairing(coordinator: &crate::server::pairing::PairingCoordinator) -> String {
     coordinator
-        .start_pairing(now_ms())
+        .start_pairing(conex_shared::time::now_millis())
         .expect("激活配对必须成功")
         .code
 }

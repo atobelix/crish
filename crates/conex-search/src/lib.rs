@@ -159,7 +159,7 @@ pub mod fuzzy {
 
 pub mod search {
     use super::fuzzy::{FuzzyMatcher, PreparedQuery};
-    use conex_types::FileHit;
+    use conex_types::search::FileHit;
     use std::cmp::Ordering;
     use std::collections::BinaryHeap;
 

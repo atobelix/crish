@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use agent_tools::tools::subagent::SubagentState;
-use conex_types::{CoreError, SessionAgent};
+use conex_types::ipc_error::CoreError;
+use conex_types::session_record::SessionAgent;
 use orchestrator::flow_graph::{
     FailStrategy, FlowDeclaration, FlowNodeRuntime, FlowNodeState, FLOW_DECLARATION_KEY,
     FLOW_ON_FAILED_KEY, FLOW_STATE_KEY,

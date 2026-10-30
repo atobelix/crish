@@ -36,12 +36,15 @@
 //! # SR-06f · 拆分门面（结构轮 · 2026-08-13-wave · ≠ 关闭任何 EL）
 //!
 //! 本文件为薄门面：共享失败面（`unwired_failure` / `err_outcome`）+ 测试助手
-//! `apply_md_for_test` + 三模 `#[path]` 接线 + 公开符号 `pub use` 保持。
+//! `apply_md_for_test` + 四子模（与 `note_commands/` 目录一一对应，无 `#[path]`）
+//! + 公开符号 `pub use` 保持。
+//!
 //! 实现按逻辑域拆（子模经 `super::` 引用共享面）：
-//! - `note_commands_apply.rs`：写路径（apply_md / send_to_note / apply_ops）
-//! - `note_commands_hydrate.rs`：投影/查询面（hydrate / query_blocks）
-//! - `note_commands_mirror.rs`：mirror 面（detect / import 提案 + wire 转换）
-//! - `note_commands_tests.rs`：测试旁挂（`#[cfg(test)] #[path] mod tests;`）
+//! - `note_commands/apply.rs`：写路径（apply_md / send_to_note / apply_ops）
+//! - `note_commands/document.rs`：文档 CRUD（create / delete / list / rename）
+//! - `note_commands/hydrate.rs`：投影/查询面（hydrate / query_blocks）
+//! - `note_commands/mirror.rs`：mirror 面（detect / import 提案 + wire 转换）
+//! - `note_commands/tests.rs`：测试子模（`#[cfg(test)] mod tests;`）
 //!
 //! 公开 API 不 break：command_registry.rs `command_registry!` 的 `note_commands::*` 路径零改动。
 
@@ -71,49 +74,45 @@ fn err_outcome(err: NoteBackendError) -> JsonValue {
     })
 }
 
-// ── SR-06f 拆分接线：apply / hydrate / mirror 三模（`#[path]` 显式）────
+// ── SR-06f 拆分接线：apply / document / hydrate / mirror 四子模 ──────
 
-#[path = "note_commands_apply.rs"]
-mod note_commands_apply;
-#[path = "note_commands_document.rs"]
-mod note_commands_document;
-#[path = "note_commands_hydrate.rs"]
-mod note_commands_hydrate;
-#[path = "note_commands_mirror.rs"]
-mod note_commands_mirror;
+mod apply;
+mod document;
+mod hydrate;
+mod mirror;
 
 // 公开 API 保持：command_registry.rs `command_registry!` 引用的命令路径不变
-pub use note_commands_apply::{
+pub use apply::{
     note_apply_ops, note_document_apply_md, note_redo_text, note_send_to_note, note_undo_text,
 };
-pub use note_commands_document::{
+pub use document::{
     note_document_create, note_document_delete, note_document_list, note_document_rename,
 };
-pub use note_commands_hydrate::{note_document_hydrate, note_document_recent, note_query_blocks};
-pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
+pub use hydrate::{note_document_hydrate, note_document_recent, note_query_blocks};
+pub use mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
 // 从注册路径（command_registry.rs command_registry! 的 `note_commands::*`）所在模块
 // 解析包装符号——门面必须透出，否则 bin 编译失败（de8e744e 欠验债，
 // 此处补闭环；零逻辑改动）。
-pub use note_commands_apply::{
+pub use apply::{
     __cmd__note_apply_ops, __cmd__note_document_apply_md, __cmd__note_redo_text,
     __cmd__note_send_to_note, __cmd__note_undo_text, __tauri_command_name_note_apply_ops,
     __tauri_command_name_note_document_apply_md, __tauri_command_name_note_redo_text,
     __tauri_command_name_note_send_to_note, __tauri_command_name_note_undo_text,
 };
-pub use note_commands_document::{
+pub use document::{
     __cmd__note_document_create, __cmd__note_document_delete, __cmd__note_document_list,
     __cmd__note_document_rename, __tauri_command_name_note_document_create,
     __tauri_command_name_note_document_delete, __tauri_command_name_note_document_list,
     __tauri_command_name_note_document_rename,
 };
-pub use note_commands_hydrate::{
+pub use hydrate::{
     __cmd__note_document_hydrate, __cmd__note_document_recent, __cmd__note_query_blocks,
     __tauri_command_name_note_document_hydrate, __tauri_command_name_note_document_recent,
     __tauri_command_name_note_query_blocks,
 };
-pub use note_commands_mirror::{
+pub use mirror::{
     __cmd__note_detect_mirror_drift, __cmd__note_import_mirror_proposal,
     __tauri_command_name_note_detect_mirror_drift,
     __tauri_command_name_note_import_mirror_proposal,
@@ -128,7 +127,6 @@ pub(crate) async fn apply_md_for_test(
     backend.apply_md_fragment(req).await
 }
 
-// 测试外置旁挂（父模接线；用例形状与拆分前一致，零删除）
+// 测试子模（父模接线；用例形状与拆分前一致，零删除）
 #[cfg(test)]
-#[path = "note_commands_tests.rs"]
 mod tests;

@@ -6,10 +6,10 @@ use crate::wait_channel::EventStreamBroadcast;
 use agent_tools::tools::subagent::{
     SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
 };
+use async_trait::async_trait;
 use conex_agents::guard::{
     check_recursion_guard, RecursionGuardSnapshot, SpawnPolicy, DEFAULT_SPAWN_POLICY,
 };
-use async_trait::async_trait;
 use conex_db::LocalDb;
 use orchestrator::steering_queue::PendingMessageQueue;
 
@@ -25,8 +25,7 @@ pub struct SubagentSpawnerImpl {
     /// 会话级派遣策略（`agent_policy` 持久化后的内存真值）
     pub session_policies: Mutex<HashMap<String, SpawnPolicy>>,
     /// 子代理路由注册（mailbox；spawn/终态时登记与注销）
-    pub registrar:
-        Mutex<Option<Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>>>,
+    pub registrar: Mutex<Option<Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>>>,
     /// 自增序号（agent id / run id / 会话 id 唯一性）
     pub seq: AtomicUsize,
     /// run 启动器（注入槽：CoreRunState 构造后经 [Self::init] 注入）
@@ -185,9 +184,13 @@ impl SubagentSpawnerImpl {
     pub fn get_active_run_permission_mode(
         &self,
         run_id: Option<&str>,
-    ) -> Option<conex_types::PermissionMode> {
+    ) -> Option<conex_types::permission::PermissionMode> {
         let run_id = run_id?;
-        let launcher = self.launcher.lock().unwrap_or_else(|e| e.into_inner()).clone()?;
+        let launcher = self
+            .launcher
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()?;
         launcher.get_active_run_permission_mode(run_id)
     }
 

@@ -1,6 +1,6 @@
 //! 结构化 Markdown 摘要模板渲染（conex-compaction）
 
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 /// 结构化摘要模板（P4 §3.4.3）：Goal / Constraints / Progress / Key
 /// Decisions / Next Steps / Critical Context 六节，无内容节写 `(none)`。

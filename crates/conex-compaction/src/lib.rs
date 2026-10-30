@@ -1,15 +1,9 @@
 //! 上下文压缩引擎（conex-compaction）
 //!
-//! 双面结构（P4 阶段 2-1 / 阶段 3-1，T-32）：
-//!
-//! - **旧 `Message` 面**：`compaction::CompactionEngine::compact(&[Message])`
-//!   三字段模型（id/role/content），供 UI 手动压缩工具命令
-//!   `core_compact_messages` 使用（core_commands.rs:191-207，IPC 面保留兼容）；
-//! - **`AgentMessage` 面**：`estimate_context_tokens` /
-//!   `find_cut_point` / `compact_agent_messages` / `should_compact`，基于
-//!   `conex_types::message::AgentMessage`（blocks 形态），供 session-loop
-//!   预算层与预检触发（T-33）内联消费。旧面标记为"已迁移"：新功能一律在
-//!   AgentMessage 面实现，旧面不再演进。
+//! 单一 `AgentMessage` 面（CP-01 收敛）：
+//! `estimate_context_tokens` / `find_cut_point` / `compact_agent_messages` /
+//! `should_compact`，基于 `conex_types::message::AgentMessage`（blocks 形态），
+//! 供 session-loop 预算层与预检触发（T-33）内联消费。
 //!
 //! 核心算法对齐参考实现：
 //!
@@ -20,38 +14,55 @@
 //!   折叠链（compacted-summary 前缀，紧邻 system）为切割下界（B1/B2，00-plan §4）；
 //! - 摘要：中性句柄 stub（T-13，R-C 永不改写）+ 可选 LLM 摘要器（L2 迭代合并，
 //!   同步成功且输出为 Schema V1 JSON 文档时以 md 渲染进链，R-G 语源唯一）。
+//!
+//! 公开面（CP-04）：子模块私有，每个公开符号只有根路径
+//! `conex_compaction::X` 一条。
 
-pub mod ai_summary;
-pub mod clean_output;
-pub mod cut_point;
-pub mod engine;
-pub mod estimate;
-pub mod plan;
-pub mod recovery;
-pub mod summary_document;
-pub mod template;
-pub mod tokens;
-pub mod tool_output;
+mod ai_summary;
+mod cut_point;
+mod engine;
+mod estimate;
+mod plan;
+mod recovery;
+mod summary_document;
+mod template;
+mod tokens;
+mod tool_output;
 
-pub mod compaction {
-    pub use crate::cut_point::*;
-    pub use crate::engine::*;
-    pub use crate::plan::*;
-}
-
-pub use ai_summary::push_critical_context;
+pub use ai_summary::{
+    build_summarize_prompt, compaction_event_details, covers_up_to_turn_for_dropped,
+    is_acceptable_summary, is_degenerate_summary, retry_allowed, summarize_with_guard,
+    RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy, MIN_SUMMARY_SEED_CHARS_DEFAULT,
+    SESSION_META_KEY_COMPACT_SUMMARY_MAX_ATTEMPTS, SESSION_META_KEY_COMPACT_SUMMARY_MIN_CHARS,
+    SESSION_META_KEY_COMPACT_SUMMARY_RETRY_INTERVAL_MS,
+    SESSION_META_KEY_COMPACT_SUMMARY_WALL_CLOCK_BUDGET_MS, SUMMARY_MAX_ATTEMPTS_DEFAULT,
+    SUMMARY_RETRY_INTERVAL_MS_DEFAULT, SUMMARY_WALL_CLOCK_BUDGET_MS_DEFAULT,
+};
 pub use cut_point::{
-    enforce_tool_batch_closure, is_within_keep_budget, KEEP_RECENT_TOKENS_DEFAULT,
+    enforce_tool_batch_closure, find_cut_point, is_within_keep_budget, KEEP_RECENT_TOKENS_DEFAULT,
     MIN_RECENT_TURNS_DEFAULT,
 };
-pub use engine::{CompactionEngine, CompactionPreview};
-pub use estimate::{EstimateContext, EstimateSource};
+pub use engine::{preview_compaction, CompactionEngine, CompactionPreview};
+pub use estimate::{
+    estimate_agent_context, estimate_context_tokens, should_compact, EstimateContext,
+    EstimateSource,
+};
 pub use plan::{
     CompactionPlan, CompactionPolicy, StubPolicy, Summarizer, MAX_SUMMARY_TOKENS_DEFAULT,
     SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
+};
+pub use recovery::{slot_text, CompactionBlockMeta, SummaryState};
+pub use summary_document::{
+    summary_to_markdown, validate_summary_document, SummaryDocError, SummaryDocument, SummaryTier,
+    SUMMARY_SCHEMA_VERSION,
 };
 pub use template::structured_summary_template;
 pub use tokens::{
     count_agent_message_tokens, count_tokens, count_tokens_fast, count_tool_output_tokens,
     IMAGE_TOKEN_COST, MESSAGE_FRAMING_TOKENS, TOOL_CALL_FRAMING_TOKENS,
+};
+pub use tool_output::{
+    estimate_after_truncation, truncate_tool_output, ToolOutputTruncationLimits,
+    ToolOutputTruncationRecord, ToolOutputTruncationResult, SESSION_META_KEY_TOOL_OUTPUT_MAX_BYTES,
+    SESSION_META_KEY_TOOL_OUTPUT_MAX_LINES,
 };

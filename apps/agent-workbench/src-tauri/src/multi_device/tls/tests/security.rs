@@ -20,8 +20,7 @@ impl FingerprintVerifier {
     fn new(pinned: String) -> Self {
         Self {
             pinned,
-            supported: rustls::crypto::ring::default_provider()
-                .signature_verification_algorithms,
+            supported: rustls::crypto::ring::default_provider().signature_verification_algorithms,
         }
     }
 }
@@ -119,8 +118,7 @@ fn client_config_restricted(
 fn fingerprint_verifier_rejects_wrong_pin_unit() {
     // D5 §9.4 tls_wrong_fingerprint_rejected 的验证器单元面（不依赖网络）。
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let name = rustls::pki_types::ServerName::try_from("crish-remote").expect("常量域名恒合法");
     let now = rustls::pki_types::UnixTime::now();
     // 正确指纹 → 放行。
@@ -152,8 +150,7 @@ fn fingerprint_verifier_rejects_wrong_pin_unit() {
         "错误指纹必须拒绝（T-03）"
     );
     // 主机名不匹配 → 拒绝（TLS-05 主机名校验由移动端承担）。
-    let other_name =
-        rustls::pki_types::ServerName::try_from("evil.example.com").expect("域名合法");
+    let other_name = rustls::pki_types::ServerName::try_from("evil.example.com").expect("域名合法");
     assert!(
         ok_verifier
             .verify_server_cert(
@@ -173,8 +170,7 @@ async fn tls_wrong_fingerprint_rejected_handshake() {
     // T-03 自动化（D5 §9.1）：注入错误指纹 → 握手失败，无降级路径；
     // 控制组：正确指纹 → 握手成功。
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let wrong = client_config_with_pin("0".repeat(64));
     assert!(
         !try_handshake_with(&material, wrong).await,
@@ -197,8 +193,7 @@ async fn tls_weak_cipher_absent_exact_aead_allowlist() {
         TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     };
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let ca = load_cert_der(&dir.path().join(CA_CERT_FILE)).expect("读回 CA 证书");
     // 1.3：白名单外（AES-128-GCM）→ 拒绝。
     let client = client_config_restricted(
@@ -248,8 +243,7 @@ fn session_resumption_tickets_disabled() {
     // TLS-07：默认装配不签发会话票据（rustls 默认 NeverProducesTickets），
     // 跨重启/跨装配不存在可复用的票据——比「重启清空票据密钥」更强。
     let dir = tempfile::tempdir().expect("创建临时目录");
-    let material =
-        load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
+    let material = load_or_generate_with(dir.path(), &CertOptions::default()).expect("首次生成");
     let config = material.server_config().expect("装配 ServerConfig");
     assert!(!config.ticketer.enabled(), "会话复用票据必须禁用（TLS-07）");
 }

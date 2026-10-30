@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 use crate::cut_point::{KEEP_RECENT_TOKENS_DEFAULT, MIN_RECENT_TURNS_DEFAULT};
 use crate::tokens::{count_agent_message_tokens, count_tokens};
@@ -163,12 +163,6 @@ pub(crate) fn llm_blocked_plan(
     }
 }
 
-/// L1 静态摘要占位符（旧 Message 面 / 兼容测试仍使用；AgentMessage
-/// 面已由 [stub_placeholder] 取代——R-E：旧面保留，新面中性句柄）
-pub(crate) fn summary_placeholder(dropped_count: usize) -> String {
-    format!("[Compacted {dropped_count} earlier message(s) to fit context window]")
-}
-
 /// 中性句柄 stub（T-13；R-C：永不改写；无"生成中/失败"措辞——
 /// 文本是压缩时刻状态快照，摘要就绪以块表/工具为准，不误导模型）
 ///
@@ -178,15 +172,15 @@ pub(crate) fn stub_placeholder(block_id: &str, count: usize, _generation: u32) -
     format!("[Compacted({block_id}) {count} 条消息 · 摘要见块表]")
 }
 
-/// 摘要文本按 token 上限钳制（保证 count_tokens(结果) ≤ max_tokens）
+/// 摘要文本按 token 上限钳制（保证 count_tokens(结果) ≤ max_summary_tokens）
 ///
-/// 字符预算 = max_tokens × 4（ASCII 4 字符/token 的保守上界），截断后
+/// 字符预算 = max_summary_tokens × 4（ASCII 4 字符/token 的保守上界），截断后
 /// 再按启发式计数逐档收缩；省略号占 1 token 预算（内容预算先减 1）。
-pub(crate) fn truncate_summary(summary: &str, max_tokens: usize) -> String {
-    if count_tokens(summary) <= max_tokens {
+pub(crate) fn truncate_summary(summary: &str, max_summary_tokens: usize) -> String {
+    if count_tokens(summary) <= max_summary_tokens {
         return summary.to_string();
     }
-    let content_budget = max_tokens.saturating_sub(1);
+    let content_budget = max_summary_tokens.saturating_sub(1);
     let mut truncated: String = summary
         .chars()
         .take(content_budget.saturating_mul(4))

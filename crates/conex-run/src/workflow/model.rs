@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sched::CronTaskStatus;
-use crate::workflow::now_ms;
 use crate::workflow::schedule::{epoch_ms_to_iso, WorkflowScheduleWire};
 
 /// workflow 存储条目（sched_<cronId> 键 JSON 形状）
@@ -50,9 +49,9 @@ pub struct StoredWorkflow {
     pub mode: Option<String>,
     #[serde(default = "default_manual_schedule")]
     pub schedule: WorkflowScheduleWire,
-    #[serde(default = "now_ms")]
+    #[serde(default = "default_timestamp_ms")]
     pub created_at_ms: u64,
-    #[serde(default = "now_ms")]
+    #[serde(default = "default_timestamp_ms")]
     pub updated_at_ms: u64,
     #[serde(default)]
     pub last_run_at_ms: Option<u64>,
@@ -78,6 +77,11 @@ fn default_workflow_name() -> String {
 
 fn default_manual_schedule() -> WorkflowScheduleWire {
     WorkflowScheduleWire::Manual
+}
+
+/// 反序列化缺省时间戳（epoch 毫秒；时钟早于 1970 时取 0）
+fn default_timestamp_ms() -> u64 {
+    conex_shared::time::now_millis()
 }
 
 impl StoredWorkflow {

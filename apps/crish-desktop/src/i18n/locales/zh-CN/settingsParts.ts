@@ -1,29 +1,12 @@
 // 设置词典拆分部分：第 13-26 节，自 settings.ts 移出以满足行数门禁。
 // 键与文案与原 settings.ts 逐字节一致，且须与 en-US/settingsParts.ts 保持键集合一致；
 // 主文件 settings.ts 通过 spread 聚合本对象。
+import { settingsPartAbout } from './settingsPartAbout';
 import { settingsPartExtensions } from './settingsPartExtensions';
 
 export const settingsPartRest = {
   ...settingsPartExtensions,
-
-  // ── 14. 关于与合规 (about.*) ──
-  'about.title': '关于 Crish Desktop',
-  'about.desc': '开源许可证披露、内核版本信息与第三方组件致谢',
-  'about.appName': 'Crish Desktop',
-  'about.appSubtitle': '本地优先自主 Agent 桌面开发环境',
-  'about.appVersion': '应用版本',
-  'about.kernelVersion': 'Conex 内核版本',
-  'about.runtimeVersion': '运行时版本',
-  'about.osArch': '系统架构',
-  'about.licenseName': 'MIT 开源许可证',
-  'about.licenseNotice': '遵循宽松开源协议分发，享有充分的商业与学术自由',
-  'about.copyrightHolder': 'Copyright (c) 2026 atobelix',
-  'about.thirdPartyNotices': '第三方开源依赖与法律合规披露',
-  'about.viewFullLicense': '查看完整开源许可证',
-  'about.copySysInfo': '复制系统诊断信息',
-  'about.copySysInfoSuccess': '系统信息已成功复制到剪贴板',
-  'about.githubRepo': 'GitHub 开源仓库',
-  'about.securityReport': '报告安全漏洞',
+  ...settingsPartAbout,
 
   // ── 15. 实验特性 (experimental.*) ──
   'experimental.title': '实验性功能 (Labs)',

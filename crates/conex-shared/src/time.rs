@@ -59,9 +59,7 @@ pub fn format_iso_utc_ms(epoch_ms: i64) -> String {
         seconds_of_day / 60 % 60,
         seconds_of_day % 60,
     );
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
 
 /// 毫秒时间戳 → `YYYY-MM-DD`（UTC 日期）。
@@ -69,6 +67,30 @@ pub fn format_date_utc(epoch_ms: i64) -> String {
     let days = epoch_ms.div_euclid(86_400_000);
     let (year, month, day) = civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// 当前 Unix 毫秒（协议 u64 面；时钟早于 epoch 时返回 0）。
+pub fn now_millis() -> u64 {
+    u64::try_from(unix_millis()).unwrap_or(0)
+}
+
+/// 当前 Unix 秒（协议 u64 面；时钟早于 epoch 时返回 0）。
+pub fn now_secs() -> u64 {
+    now_millis() / 1_000
+}
+
+/// 毫秒时间戳 → `YYYYMMDD_HHMMSS`（UTC，文件名/版本戳）。
+pub fn compact_utc_stamp(epoch_ms: i64) -> String {
+    let secs = epoch_ms.div_euclid(1_000);
+    let days = secs.div_euclid(86_400);
+    let seconds_of_day = secs.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    let (hours, mins, sec) = (
+        seconds_of_day / 3_600,
+        seconds_of_day / 60 % 60,
+        seconds_of_day % 60,
+    );
+    format!("{year:04}{month:02}{day:02}_{hours:02}{mins:02}{sec:02}")
 }
 
 /// 任意 [`SystemTime`]（如文件 mtime）→ Unix 毫秒；早于 epoch 返回负值。
@@ -79,14 +101,9 @@ pub fn millis_of(t: SystemTime) -> i64 {
     }
 }
 
-/// 当前 Unix 毫秒（消息 id 前缀用）。
-///
-/// 兼容既有 u128 调用面；P3 会统一改为 i64（见 `docs/refactor-plans/x03-time-utils.md`）。
-pub fn unix_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0)
+/// 当前 Unix 毫秒（时钟早于 1970 时返回负值）。
+pub fn unix_millis() -> i64 {
+    millis_of(SystemTime::now())
 }
 
 /// 解析 ISO8601 UTC 时间戳（接受 `YYYY-MM-DDTHH:MM:SS[.fraction]Z`）。
@@ -150,8 +167,7 @@ fn valid_calendar_date(year: i64, month: i64, day: i64) -> bool {
     if !(1..=12).contains(&month) || day < 1 {
         return false;
     }
-    let leap = year.rem_euclid(4) == 0
-        && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0);
+    let leap = year.rem_euclid(4) == 0 && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0);
     let max_day = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
@@ -214,10 +230,19 @@ mod tests {
             let text = format_iso_utc_ms(value);
             assert_eq!(parse_iso8601_ms(&text), Some(value), "{text}");
         }
-        assert_eq!(parse_iso8601_ms("2026-08-03T12:00:00Z"), Some(1_785_758_400_000));
-        assert_eq!(parse_iso8601_ms("2026-08-03T12:00:00.5Z"), Some(1_785_758_400_500));
+        assert_eq!(
+            parse_iso8601_ms("2026-08-03T12:00:00Z"),
+            Some(1_785_758_400_000)
+        );
+        assert_eq!(
+            parse_iso8601_ms("2026-08-03T12:00:00.5Z"),
+            Some(1_785_758_400_500)
+        );
         assert_eq!(parse_iso8601_ms("2023-02-29T00:00:00Z"), None);
-        assert_eq!(parse_iso8601_ms("2024-02-29T00:00:00Z"), Some(1_709_164_800_000));
+        assert_eq!(
+            parse_iso8601_ms("2024-02-29T00:00:00Z"),
+            Some(1_709_164_800_000)
+        );
         assert_eq!(parse_iso8601_ms("2026-13-01T00:00:00Z"), None);
         assert_eq!(parse_iso8601_ms("2026-01-32T00:00:00Z"), None);
         assert_eq!(parse_iso8601_ms("2026-01-01T24:00:00Z"), None);

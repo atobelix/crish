@@ -1,7 +1,7 @@
 // =======================================================================
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Source of truth: crates/conex-types/src/device/**
-// Registry: crates/conex-types/contracts/device-protocol.json
+// Source of truth: crates/conex-device-protocol/src/**
+// Registry: crates/conex-device-protocol/contracts/device-protocol.json
 // Generator: scripts/generate-engine-bindings.mjs
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================

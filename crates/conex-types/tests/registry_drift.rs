@@ -28,21 +28,28 @@
 //! 任何一侧改动不同步（改 enum 不更新注册表 / 改注册表不匹配 serde），
 //! `cargo test -p conex-types` 立即失败。
 
+use conex_types::error::ProviderErrorKind;
+use conex_types::events::{
+    AgentEvent, ApprovalDecision, BackpressureLevel, MissAttribution, PermissionRequest,
+    RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
+    ToolMetadata,
+};
+use conex_types::impact::ImpactAssessment;
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+};
+use conex_types::session::AgentEndReason;
 use conex_types::tool::{
     CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
     ContextCompressionHandoffMetadata, ContextCompressionPolicyAction,
     ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionReason,
     ContextCompressionRecord, ContextCompressionTrigger,
 };
-use conex_types::{
-    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageMetadataKind,
-    AgentMessageRole, ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution,
-    PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind,
-    RunCacheStats, RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
-    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
-    TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
-    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
+use conex_types::tool::{
+    ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -1877,42 +1884,46 @@ fn registry_drift_timeline_truncate_registered() {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 9. 设备协议注册表护栏（R0-03：device-protocol.json ↔
-//    crates/conex-types/src/device/** 双向锁定）
+//    crates/conex-device-protocol/src/** 双向锁定）
 //
-// 唯一事实源：crates/conex-types/src/device/ 模块族（R0-02b 交付），注册表
-// contracts/device-protocol.json 是给生成脚本（scripts/generate-engine-
-// bindings.mjs，R0-03 泛化为多注册表分发）的机器可读导出。本段把注册表与
-// Rust 侧真实 serde 行为锁定：
+// 唯一事实源：crates/conex-device-protocol/src/（TY-P5 从 conex-types 拆出），
+// 注册表 crates/conex-device-protocol/contracts/device-protocol.json 是给
+// 生成脚本（scripts/generate-engine-bindings.mjs，R0-03 泛化为多注册表分发）
+// 的机器可读导出。本段把注册表与 Rust 侧真实 serde 行为锁定：
 //
 // - kind 全量：注册表 103 条 kind（messageId 1-103 连续）== 模块
-//   [conex_types::device::all_kinds]（静态 29 + remote 37 + result 37），
+//   [conex_device_protocol::all_kinds]（静态 29 + remote 37 + result 37），
 //   且 messages 与 kinds 一一对应（id/kind/rustVariant 引用可解析）；
 // - 错误码全量：注册表 errors 段（common+protocol+business）去重后 45 个
-//   == [conex_types::device::ALL_ERROR_CODES]，且 common 码必须重新登记在
+//   == [conex_device_protocol::ALL_ERROR_CODES]，且 common 码必须重新登记在
 //   protocol|business（防分段漂移）；
 // - 能力位全量：注册表 capabilities 段 17 位 ==
-//   [conex_types::device::ALL_CAPABILITIES] 的 wire 名（serde camelCase）；
+//   [conex_device_protocol::ALL_CAPABILITIES] 的 wire 名（serde camelCase）；
 // - 事件双面策略：注册表 events 段 49 条与 engine-events.json /
 //   [AgentEvent::ALL_TYPE_NAMES] 同名同序；sync 标志 == [SYNC_ELIGIBLE_TYPES]
 //   白名单；strategy 与 [event_cross_strategy] 逐一锁定（13/18/10 分组）；
 // - 消息体字段：29 条静态消息（内联 fields）按注册表必填字段构造样本 →
 //   反序列化为对应 Rust 类型 → 回序列化，断言必填字段在场且无注册表外
 //   字段（字段名漂移即失败）；
-// - 协议常量：注册表 constants 段关键项与 [conex_types::device::version]
+// - 协议常量：注册表 constants 段关键项与 [conex_device_protocol::version]
 //   常量一致（MAX_FRAME_BYTES / EVENT_WINDOW / MAX_SUBSCRIPTIONS /
 //   MAX_STREAMS 等）。
 //
 // 任何一侧改动不同步（改 Rust 类型不更新注册表 / 改注册表不匹配 serde），
-// `cargo test -p conex-types` 立即失败；生成产物（TS 面）漂移由
-// packages/shared-types/src/generated/device/drift.test.ts 与 CI
+// `cargo test -p conex-types --test registry_drift` 立即失败；生成产物（TS 面）
+// 漂移由 packages/shared-types/src/generated/device/drift.test.ts 与 CI
 // engine-bindings-drift job 兜底。
+//
+// 注：本段是唯一跨 crate 的测试引用——dev-dependency 单向（conex-types 的
+// 测试目标 → conex-device-protocol），lib 依赖图仍保持
+// conex-device-protocol → conex-types 单向（c.1 边界）。
 
-use conex_types::device::events::event_cross_strategy;
-use conex_types::device::version::{
+use conex_device_protocol::events::event_cross_strategy;
+use conex_device_protocol::version::{
     ALL_CAPABILITIES, EVENT_WINDOW, MAX_FRAME_BYTES, MAX_STREAMS, MAX_SUBSCRIPTIONS,
     MIN_PROTOCOL_VERSION, PROTOCOL_VERSION,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     all_kinds, CommandRequest, CommandResult, DeviceErrorCode, DeviceReady, DeviceUnlink,
     ErrorBody, EventAck, EventsPush, Heartbeat, HeartbeatOk, Hello, HelloOk, PairAudit,
     PairChallenge, PairHello, PairOk, PairVerify, Refresh, Resume, ResumeDone, ResumePage,
@@ -1920,7 +1931,7 @@ use conex_types::device::{
     StreamResume, Subscribe, SubscribeAll, SubscribeOk, ALL_ERROR_CODES, REMOTE_KINDS,
     RESULT_KINDS,
 };
-use conex_types::device::{Capability, EventRedactStrategy, SYNC_ELIGIBLE_TYPES};
+use conex_device_protocol::{Capability, EventRedactStrategy, SYNC_ELIGIBLE_TYPES};
 
 /// 设备注册表 JSON 结构（与 contracts/device-protocol.json 逐字段对应）
 #[derive(serde::Deserialize)]
@@ -2027,9 +2038,11 @@ struct DeviceCapabilitySpec {
 }
 
 fn device_registry() -> DeviceRegistry {
+    // TY-P5：设备协议注册表随 crate 拆分迁到 conex-device-protocol/contracts，
+    // 测试文件保留在本 crate（dev-dependency 单向，见段首注）
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/contracts/device-protocol.json"
+        "/../conex-device-protocol/contracts/device-protocol.json"
     );
     let text =
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读取设备注册表 {path} 失败：{e}"));

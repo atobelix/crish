@@ -252,37 +252,37 @@ impl ApiBackend for MockBackend {
     }
     async fn run_control(
         &self,
-        params: conex_types::device::RunControlParams,
-    ) -> Result<conex_types::device::RunControlResult, ServerError> {
+        params: conex_device_protocol::RunControlParams,
+    ) -> Result<conex_device_protocol::RunControlResult, ServerError> {
         self.fail()?;
         // 记录收到的参数（路径 runId 覆盖断言）
         *self.last_run_control.lock().unwrap() = Some(params.clone());
-        Ok(conex_types::device::RunControlResult { ok: true })
+        Ok(conex_device_protocol::RunControlResult { ok: true })
     }
     async fn cancel_run(
         &self,
-        params: conex_types::device::CancelRunParams,
-    ) -> Result<conex_types::device::CancelRunResult, ServerError> {
+        params: conex_device_protocol::CancelRunParams,
+    ) -> Result<conex_device_protocol::CancelRunResult, ServerError> {
         self.fail()?;
         if params.run_id == "r-missing" {
             return Err(Self::not_found("run not found（mock）"));
         }
-        Ok(conex_types::device::CancelRunResult {
+        Ok(conex_device_protocol::CancelRunResult {
             ok: true,
             run_id: params.run_id,
         })
     }
     async fn approve(
         &self,
-        params: conex_types::device::ApproveParams,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+        params: conex_device_protocol::ApproveParams,
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         self.fail()?;
         self.decide(&params.tool_call_id, "approved")
     }
     async fn deny(
         &self,
         params: DenyParams,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         self.fail()?;
         *self.last_deny_reason.lock().unwrap() = params.reason.clone();
         self.decide(&params.tool_call_id, "denied")
@@ -290,12 +290,12 @@ impl ApiBackend for MockBackend {
 
     async fn list_pending_approvals(
         &self,
-        _params: conex_types::device::ListPendingApprovalsParams,
-    ) -> Result<conex_types::device::ListPendingApprovalsResult, ServerError> {
+        _params: conex_device_protocol::ListPendingApprovalsParams,
+    ) -> Result<conex_device_protocol::ListPendingApprovalsResult, ServerError> {
         self.fail()?;
-        Ok(conex_types::device::ListPendingApprovalsResult {
+        Ok(conex_device_protocol::ListPendingApprovalsResult {
             approvals: vec![
-                conex_types::device::PendingApproval {
+                conex_device_protocol::PendingApproval {
                     request_id: "approval-tc-9".to_string(),
                     tool_call_id: "tc-9".to_string(),
                     tool_name: "shell:write".to_string(),
@@ -305,13 +305,13 @@ impl ApiBackend for MockBackend {
                     run_id: Some("r-1".to_string()),
                     requester_run_id: None,
                     reason: None,
-                    arbiter: conex_types::device::Arbiter::User,
+                    arbiter: conex_device_protocol::Arbiter::User,
                     requested_at: 1_754_700_000_000,
                     expires_at: 1_754_700_120_000,
                     danger_level: 2,
                     param_keys: Some(vec!["script".to_string()]),
                 },
-                conex_types::device::PendingApproval {
+                conex_device_protocol::PendingApproval {
                     request_id: "approval-tc-8".to_string(),
                     tool_call_id: "tc-8".to_string(),
                     tool_name: "read_file".to_string(),
@@ -321,7 +321,7 @@ impl ApiBackend for MockBackend {
                     run_id: Some("r-1".to_string()),
                     requester_run_id: None,
                     reason: None,
-                    arbiter: conex_types::device::Arbiter::User,
+                    arbiter: conex_device_protocol::Arbiter::User,
                     requested_at: 1_754_700_000_000,
                     expires_at: 1_754_700_120_000,
                     danger_level: 1,
@@ -334,29 +334,29 @@ impl ApiBackend for MockBackend {
 
     async fn approval_history(
         &self,
-        _params: conex_types::device::ApprovalHistoryParams,
-    ) -> Result<conex_types::device::ApprovalHistoryResult, ServerError> {
+        _params: conex_device_protocol::ApprovalHistoryParams,
+    ) -> Result<conex_device_protocol::ApprovalHistoryResult, ServerError> {
         self.fail()?;
-        Ok(conex_types::device::ApprovalHistoryResult {
+        Ok(conex_device_protocol::ApprovalHistoryResult {
             items: vec![
-                conex_types::device::ApprovalHistoryItem {
+                conex_device_protocol::ApprovalHistoryItem {
                     sequence: 12,
                     tool_call_id: "tc-5".to_string(),
                     tool_name: None,
                     decision: conex_types::events::ApprovalDecision::Approved,
                     reason: None,
-                    channel: Some(conex_types::device::ApprovalChannel::Mobile),
+                    channel: Some(conex_device_protocol::ApprovalChannel::Mobile),
                     resolved_at: Some(1_754_700_005_000),
                     session_id: Some("s-1".to_string()),
                     run_id: Some("r-1".to_string()),
                 },
-                conex_types::device::ApprovalHistoryItem {
+                conex_device_protocol::ApprovalHistoryItem {
                     sequence: 14,
                     tool_call_id: "tc-6".to_string(),
                     tool_name: None,
                     decision: conex_types::events::ApprovalDecision::Denied,
                     reason: Some("风险过高".to_string()),
-                    channel: Some(conex_types::device::ApprovalChannel::Mobile),
+                    channel: Some(conex_device_protocol::ApprovalChannel::Mobile),
                     resolved_at: Some(1_754_700_006_000),
                     session_id: Some("s-1".to_string()),
                     run_id: Some("r-1".to_string()),
@@ -369,11 +369,11 @@ impl ApiBackend for MockBackend {
 
     async fn settings_get(
         &self,
-        params: conex_types::device::GetSettingsParams,
-    ) -> Result<conex_types::device::GetSettingsResult, ServerError> {
+        params: conex_device_protocol::GetSettingsParams,
+    ) -> Result<conex_device_protocol::GetSettingsResult, ServerError> {
         self.fail()?;
         *self.last_settings_keys.lock().unwrap() = params.keys.clone();
-        Ok(conex_types::device::GetSettingsResult {
+        Ok(conex_device_protocol::GetSettingsResult {
             settings: serde_json::json!({
                 "apiKey": "",
                 "baseUrl": "https://api.example.com",
@@ -389,7 +389,7 @@ impl ApiBackend for MockBackend {
     async fn settings_set(
         &self,
         params: SettingsUpdateParams,
-    ) -> Result<conex_types::device::GetSettingsResult, ServerError> {
+    ) -> Result<conex_device_protocol::GetSettingsResult, ServerError> {
         self.fail()?;
         if params.credential_mode.is_some() || params.endpoint.is_some() || params.stream.is_some()
         {
@@ -397,7 +397,7 @@ impl ApiBackend for MockBackend {
                 "credentialMode / endpoint / stream 不在 REST 非敏感配置更新面（mock）",
             ));
         }
-        Ok(conex_types::device::GetSettingsResult {
+        Ok(conex_device_protocol::GetSettingsResult {
             settings: serde_json::json!({
                 "apiKey": "",
                 "baseUrl": params.base_url.unwrap_or_else(|| "https://api.example.com".to_string()),

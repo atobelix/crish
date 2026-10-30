@@ -4,7 +4,7 @@
 // - D3 §4.4：X25519 ECDH（一次性对 + 长期对）+ HKDF-SHA256 派生链
 //   （psk → master → token_key/enc_key/refresh_key 三子钥）；
 // - M6 §10.3：X25519 公钥 wire 形态 = base64（44 字符，32 字节材料）；
-// - Rust 侧 crates/conex-types/src/device/token.rs 只承载 PairingTokenSet
+// - Rust 侧 crates/conex-device-protocol/src/token.rs 只承载 PairingTokenSet
 //   格式（三子钥 base64），密码学计算在网关层派生——本接口即为移动端
 //   网关层密钥协商的注入面。
 //

@@ -10,6 +10,10 @@
 use crate::{StoreError, WorkspaceStore};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// 进程内文档编号单调序号（同毫秒建多文档时保证 doc_id 唯一）
+static DOC_ID_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// 数据库底层查询行映射
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,12 +62,9 @@ impl DocMetaRow {
     }
 }
 
-/// 获取当前 13 位毫秒级时间戳
+/// 获取当前 13 位毫秒级时间戳（全仓 epoch ms 真源：`conex_shared::time`）
 pub fn current_time_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
+    conex_shared::time::unix_millis()
 }
 
 /// 时间戳规范化为 13 位毫秒 Unix 时间戳。
@@ -268,15 +269,13 @@ impl WorkspaceStore {
     /// 对齐 doc 06 §3.2: 兼容 create_document
     pub fn create_document(&self, title: Option<&str>) -> Result<NoteDocumentMeta, StoreError> {
         let now_ms = current_time_ms();
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .subsec_nanos();
+        // 同毫秒内多次建文档仍需唯一 doc_id：进程内单调序号提供熵（替代原 subsec_nanos）
+        let seq = DOC_ID_SEQ.fetch_add(1, Ordering::Relaxed);
 
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(now_ms.to_le_bytes());
-        hasher.update(nanos.to_le_bytes());
+        hasher.update(seq.to_le_bytes());
         let hash_hex = hex::encode(hasher.finalize());
         let random_part = &hash_hex[..8];
         let doc_id = format!("doc_{:x}_{}", now_ms, random_part);

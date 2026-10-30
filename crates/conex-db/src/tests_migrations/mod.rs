@@ -6,7 +6,8 @@
 use super::*;
 use crate::migrate_steps::{migrate_v10_to_v11, step_10_to_11};
 use crate::schema::create_v5_schema;
-use conex_types::{RunCacheStats, SessionIndexEntry, SessionMessage};
+use conex_types::events::RunCacheStats;
+use conex_types::session_record::{SessionIndexEntry, SessionMessage};
 use rusqlite::Connection;
 use std::collections::HashMap;
 
@@ -67,10 +68,7 @@ impl TempV5Db {
         let dir = std::env::temp_dir().join(format!(
             "conex-v5-{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or_default()
+            conex_shared::time::unix_millis()
         ));
         if let Err(err) = std::fs::create_dir_all(&dir) {
             // 创建失败会让后续 open 以真实错误暴露；此处留痕以区分「目录建不出来」

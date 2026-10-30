@@ -37,10 +37,7 @@ pub(crate) fn cleanup_orphan_sessions_conn(
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(ORPHAN_GRACE_MS);
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let now_ms = conex_shared::time::unix_millis();
     let grace_cutoff = now_ms - grace_ms;
 
     // 豁免条件（两个删除分支共用）：引擎子代理会话 + 活动 run 会话 +

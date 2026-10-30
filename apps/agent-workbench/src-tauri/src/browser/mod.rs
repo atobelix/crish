@@ -84,15 +84,7 @@ pub(crate) mod frame_stream;
 #[cfg(windows)]
 pub mod inspector_bridge;
 pub(crate) mod mcp_attach;
-#[cfg(not(windows))]
-#[path = "native_commands_fallback.rs"]
 pub mod native_commands;
-#[cfg(windows)]
-pub mod native_commands;
-#[cfg(not(windows))]
-#[path = "native_manager_fallback.rs"]
-pub mod native_manager;
-#[cfg(windows)]
 pub mod native_manager;
 pub mod native_tokens;
 pub mod native_types;
@@ -138,13 +130,13 @@ use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
     BrowserManager, BrowserSession, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
-use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
 use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{
     ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView,
 };
 use conex_run::core_event_bridge::Emitter;
+use conex_types::error::codes::TOOL_BROWSER_NOT_READY;
 use frame_stream::{FrameStreamController, FrameStreamState};
 use mcp_attach::McpAttachEndpoint;
 use panel_input::{BrowserInputEvent, PanelInputRouter};
@@ -577,7 +569,6 @@ impl BrowserSlot {
     }
 
     /// 挂接事件发射器与状态转发任务见 [`slot_events`]。
-
     /// 会话存在且端点匹配（快速路径判定）。
     fn has_session_matching(&self, manager: &BrowserManager) -> bool {
         let present = self

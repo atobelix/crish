@@ -15,6 +15,7 @@
 //!   empty_content_wire_value，R1 T1.7；消费接线归 R3 T3.6 / R2 T2.2-T2.3）
 //! - [attachment_wire]：XML CDATA 防逃逸沙箱与 ANSI 清洗（详案 04 §2.4；
 //!   wire 组装归后续轮次接线，00-总方案 §三 #5 wire 权威在 Rust）
+//! - [clean_output]：工具输出清洗管线（R1-R6；wire 投影面私有策略）
 
 pub mod attachment_wire;
 pub mod build;
@@ -28,6 +29,10 @@ pub mod schema;
 pub mod tools;
 pub mod vendor;
 pub mod wire_protocol;
+
+// T-34（R-J）：provider wire 投影面的工具输出清洗策略——私有于 request 层
+// （不对外导出；规则 R1-R6 确定性 + 幂等）
+mod clean_output;
 
 // DeepSeek 请求体不变量测试钉死（T-22，P3 步骤 4；只读既有源码，只挂测试）
 #[cfg(test)]

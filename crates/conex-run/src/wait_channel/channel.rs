@@ -12,7 +12,7 @@ use agent_tools::tools::wait_subagents::{
 use async_trait::async_trait;
 
 use super::broadcast::EventStreamBroadcast;
-use super::{now_ms, ControlBusResolver, SubagentStatusSource, WaitStore};
+use super::{ControlBusResolver, SubagentStatusSource, WaitStore};
 
 // ── WaitChannel（SubagentWaitChannel 契约实现）─────────────────────
 
@@ -97,7 +97,7 @@ impl SubagentWaitChannel for WaitChannel {
         &self,
         subagent_ids: &[String],
     ) -> Result<Vec<SubagentWaitStatus>, SubagentWaitError> {
-        let now = now_ms();
+        let now = conex_shared::time::now_millis();
         let rows = self.agents.load_agents();
         Ok(subagent_ids
             .iter()
@@ -145,7 +145,7 @@ impl SubagentWaitChannel for WaitChannel {
             .filter(|d| d.subagent_ids.iter().any(|id| subagent_ids.contains(id)))
             .map(|d| d.dispatched_at_ms)
             .max()
-            .unwrap_or_else(now_ms);
+            .unwrap_or_else(conex_shared::time::now_millis);
         let rx = self.terminal_stream.subscribe();
         Ok(wait_for_terminal_events(
             subagent_ids,

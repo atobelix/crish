@@ -22,7 +22,7 @@ import {
   useVirtualizerScrollRefs,
 } from './messageVirtualizerScrollState';
 import {
-  messageVirtualizerPropsEqual,
+  memoizeMessageVirtualizer,
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
@@ -539,9 +539,5 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   );
 };
 
-export const MessageVirtualizer = React.memo(
-  MessageVirtualizerInner,
-  messageVirtualizerPropsEqual
-);
-
-MessageVirtualizer.displayName = 'MessageVirtualizer';
+export const MessageVirtualizer =
+  memoizeMessageVirtualizer(MessageVirtualizerInner);

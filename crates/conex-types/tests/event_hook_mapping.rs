@@ -23,7 +23,7 @@
 //! 本护栏锁「事件 enum ↔ 钩子映射表」；两侧独立、互补。
 
 use conex_types::events::event_backpressure;
-use conex_types::{AgentEvent, BackpressureLevel};
+use conex_types::events::{AgentEvent, BackpressureLevel};
 use serde_json::json;
 use std::collections::BTreeSet;
 

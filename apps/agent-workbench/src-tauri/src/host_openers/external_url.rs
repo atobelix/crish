@@ -3,7 +3,7 @@
 //! Markdown 外链统一走这里，前端不再使用 `window.open`（避免 WebView2
 //! 内部导航与仿冒宿主风险）。
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 use super::execute::open_with_shell_execute;
 

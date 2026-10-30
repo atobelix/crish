@@ -25,8 +25,8 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use session_loop::r#loop::AgentEndReason;
 use futures::StreamExt;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AbortSignal, AgentSessionLoop, DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
     ProviderStreamEvent, ProviderStreamItem, StopReason, TestProvider,

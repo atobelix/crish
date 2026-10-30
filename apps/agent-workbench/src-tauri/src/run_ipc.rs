@@ -23,7 +23,6 @@ use conex_run::run::{
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 
 #[cfg(test)]
-#[path = "run_ipc_tests.rs"]
 mod tests;
 
 // ── 回收站根解析（宿主侧）──────────────────────────────────────────
@@ -261,7 +260,7 @@ pub(crate) async fn core_set_run_permission_mode(
     session_id: String,
     mode: String,
 ) -> Result<(), CoreError> {
-    let parsed = conex_types::device::PermissionMode::parse_alias(Some(&mode))
+    let parsed = conex_types::permission::PermissionMode::parse_alias(Some(&mode))
         .ok_or_else(|| CoreError::invalid_input(format!("未知权限模式：{mode}")))?;
     state
         .inner()

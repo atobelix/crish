@@ -25,17 +25,12 @@
 //!
 //! 运行：`cargo test -p conex-db --test orphan_grace_contract`
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use conex_db::{LocalDb, RunStatus, ORPHAN_GRACE_MS, ORPHAN_GRACE_MS_KEY};
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 
-/// 当前 epoch 毫秒（与库层 cleanup 的 now_ms 口径一致）
+/// 当前 epoch 毫秒（与库层 cleanup 的口径一致）
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    conex_shared::time::unix_millis()
 }
 
 /// 构造会话索引条目（updated_at 由调用方注入，时间可控）

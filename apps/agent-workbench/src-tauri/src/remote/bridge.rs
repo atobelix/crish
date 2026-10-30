@@ -53,7 +53,11 @@ async fn run_bridge(
     let (relay_out_tx, mut relay_out_rx) = mpsc::channel::<String>(OUTBOUND_CAPACITY);
     let relay_sender = tokio::spawn(async move {
         while let Some(message) = relay_out_rx.recv().await {
-            if relay_sink.send(Message::Text(message.into())).await.is_err() {
+            if relay_sink
+                .send(Message::Text(message.into()))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -137,10 +141,7 @@ async fn handle_relay_text(
     match kind {
         "relay.ready" => Ok(()),
         "relay.peer" => {
-            let online = value
-                .get("state")
-                .and_then(|value| value.as_str())
-                == Some("online");
+            let online = value.get("state").and_then(|value| value.as_str()) == Some("online");
             if online {
                 if local_sink.is_none() {
                     let ws = connect_local(local_addr, local_secret).await?;
@@ -227,9 +228,10 @@ async fn connect_local(
         .map_err(|error| format!("local bridge request invalid: {error}"))?;
     let header = HeaderValue::from_str(&format!("Bearer {local_secret}"))
         .map_err(|error| format!("local bridge secret invalid: {error}"))?;
-    request
-        .headers_mut()
-        .insert(tokio_tungstenite::tungstenite::http::header::AUTHORIZATION, header);
+    request.headers_mut().insert(
+        tokio_tungstenite::tungstenite::http::header::AUTHORIZATION,
+        header,
+    );
     let (ws, _) = connect_async(request)
         .await
         .map_err(|error| format!("local bridge connect failed: {error}"))?;

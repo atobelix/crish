@@ -240,15 +240,16 @@ mod tests {
             TaskType::Implementation.default_capability(),
             SubagentCapabilityMode::Execute
         );
-        assert!(!TaskType::Analysis
-            .default_capability()
-            .allows_execute());
+        assert!(!TaskType::Analysis.default_capability().allows_execute());
     }
 
     #[test]
     fn state_maps_pending_to_running_and_stopped_to_failed() {
         assert_eq!(SubagentState::Pending.to_db_status(), "running");
-        assert_eq!(SubagentState::from_db_status("stopped"), SubagentState::Failed);
+        assert_eq!(
+            SubagentState::from_db_status("stopped"),
+            SubagentState::Failed
+        );
         assert!(is_db_status_allowed("stopped"));
     }
 }

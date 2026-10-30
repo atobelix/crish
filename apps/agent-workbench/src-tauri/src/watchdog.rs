@@ -41,7 +41,7 @@
 #![allow(dead_code)]
 
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use agent_tools::tools::wait_subagents::{DispatchDeclaration, MAX_WAIT_TIMEOUT_MS};
 use conex_run::wake_watcher::LastWakeupTracker;
@@ -56,14 +56,6 @@ pub(crate) const DEFAULT_WATCHDOG_IDLE_MINUTES: u64 = MAX_WAIT_TIMEOUT_MS / 60_0
 /// 周期扫描间隔（默认 60s）
 #[allow(dead_code)]
 pub(crate) const DEFAULT_WATCHDOG_PERIOD: Duration = Duration::from_secs(60);
-
-/// 当前 epoch 毫秒（watchdog 全域时间基准）
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
-}
 
 /// steering 分组名（group_id = `watchdog-<session>`，replaceOrEnqueue 去重；
 /// 对齐 recovery.rs:371-380 与 timers.rs:71-73 的分组模式）
@@ -115,7 +107,7 @@ impl Default for WatchdogOptions {
         Self {
             idle_minutes: DEFAULT_WATCHDOG_IDLE_MINUTES,
             period: DEFAULT_WATCHDOG_PERIOD,
-            now: Arc::new(now_ms),
+            now: Arc::new(conex_shared::time::now_millis),
         }
     }
 }

@@ -127,7 +127,9 @@
     /// 从事件列表取最近一次压缩记录（断言辅助）
     fn compression_record(state: &LoopState) -> Option<conex_types::tool::ContextCompressionRecord> {
         state.events.iter().rev().find_map(|e| match e {
-            AgentEvent::ContextCompressionEnd { result: Some(record), .. } => Some(record.clone()),
+            AgentEvent::ContextCompressionEnd { result: Some(record), .. } => {
+                Some((**record).clone())
+            }
             _ => None,
         })
     }

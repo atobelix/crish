@@ -51,7 +51,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::serve::ListenerExt;
 use axum::Router;
-use conex_types::device::{ALL_CAPABILITIES, MIN_PROTOCOL_VERSION, PROTOCOL_VERSION};
+use conex_device_protocol::{ALL_CAPABILITIES, MIN_PROTOCOL_VERSION, PROTOCOL_VERSION};
 use serde::Serialize;
 use tokio::sync::watch;
 
@@ -340,15 +340,15 @@ async fn wait_for_shutdown(mut rx: watch::Receiver<bool>) {
     let _ = rx.changed().await;
 }
 
-/// TLS 包装监听器（axum Listener 适配，R1-11 wss 装配）
-///
-/// accept 语义（D5 §2.1 降级保护 / T-04 落点）：TCP accept 后先做 TLS
-/// 握手——明文 ws:// 握手（无 ClientHello）或伪造证书客户端在**握手层**
-/// 被拒绝：记录诊断（TLS-08 握手失败日志，审计通道的最小落地）后继续
-/// 接受下一条连接，不终止 serve（垃圾连接不构成拒绝服务面）。
-///
-/// Connected / ConnectInfo 语义（R1 收口 /v1/pair 每源 IP 限速）：axum
-// 客户端地址注入（R1 收口 /v1/pair 每源 IP 限速）说明：axum 0.8 的
+// TLS 包装监听器（axum Listener 适配，R1-11 wss 装配）。
+//
+// accept 语义（D5 §2.1 降级保护 / T-04 落点）：TCP accept 后先做 TLS
+// 握手——明文 ws:// 握手（无 ClientHello）或伪造证书客户端在握手层
+// 被拒绝：记录诊断（TLS-08 握手失败日志，审计通道的最小落地）后继续
+// 接受下一条连接，不终止 serve（垃圾连接不构成拒绝服务面）。
+//
+// Connected / ConnectInfo 语义（R1 收口 /v1/pair 每源 IP 限速）：axum
+// 客户端地址注入说明：axum 0.8 的
 // `into_make_service_with_connect_info::<SocketAddr>` 要求
 // `SocketAddr: Connected<IncomingStream<'_, L>>`，但只对
 // `tokio::net::TcpListener` 预置该实现——自定义 [TlsListener] 无法直接
@@ -420,7 +420,7 @@ impl ServerState {
                 auth::DEFAULT_CLOCK_SKEW_MS,
             )),
             relay_loopback_secret: handle.config.relay_loopback_secret.clone(),
-            _started_at_ms: now_ms(),
+            _started_at_ms: conex_shared::time::now_millis(),
         }
     }
 
@@ -494,7 +494,7 @@ impl ServerState {
             port: self.actual_addr.port(),
             bind_mode: self.config.bind_mode,
             pairing_active: self.config.pairing_enabled,
-            server_time_ms: now_ms(),
+            server_time_ms: conex_shared::time::now_millis(),
             capabilities: service_capabilities(),
         }
     }
@@ -557,14 +557,6 @@ impl ServerState {
     pub fn started_at_ms(&self) -> u64 {
         self._started_at_ms
     }
-}
-
-/// 当前 UTC 毫秒时间戳（epoch ms）
-pub(crate) fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -15,8 +15,7 @@ use orchestrator::PendingMessageQueue;
 use std::sync::Mutex;
 
 use crate::sched::{
-    LocalDbSchedStore, MemorySchedStore, QueuePendingSink, SchedEventSink, SchedStore,
-    SchedulerRegistry,
+    LocalDbSchedStore, QueuePendingSink, SchedEventSink, SchedStore, SchedulerRegistry,
 };
 
 /// 壳层装配钩子（browser/computer 工具族注册 + workflow 创建通道绑定面）
@@ -96,14 +95,6 @@ pub fn note_backend() -> Option<Arc<dyn NoteBackend>> {
     factory()
 }
 
-/// 当前 UTC 毫秒时间戳（epoch ms；冷缓存预警判定用）
-pub fn unix_millis_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
-}
-
 // ── 进程级 tokio runtime 句柄槽（原 tauri::async_runtime 的解耦替代）──
 
 static RUNTIME_HANDLE: RwLock<Option<tokio::runtime::Handle>> = RwLock::new(None);
@@ -163,8 +154,7 @@ pub fn block_on_here<F: std::future::Future>(future: F) -> F::Output {
 /// T-CF-09：Cron 调度注册表装配（A5 提供 pub 构造器与 restore；已按 A5
 /// 落盘签名对齐：pending / events / store / launcher 四适配——pending 落
 /// 真实 PendingMessageQueue（与定时器同队列）、events 用 sched 的事件槽、
-/// store 用 D6 §3.1 段 2 装配替换：Some(db) → LocalDb 真适配；None →
-/// 内存版回退）。
+/// store 恒走 LocalDb 真适配（db 为必需依赖，不存在无库回退））。
 ///
 /// is_daemon 独立 run 拉起点（DaemonRunLauncher）暂不接线：RunProducer 的
 /// prompt 注入适配在 run 域，未接线时 daemon 触发降级为 steering 注入
@@ -172,13 +162,9 @@ pub fn block_on_here<F: std::future::Future>(future: F) -> F::Output {
 pub fn assemble_scheduler_registry(
     timer_steering_queue: &Arc<Mutex<PendingMessageQueue>>,
     scheduler_event_sink: Arc<SchedEventSink>,
-    db: Option<LocalDb>,
+    db: LocalDb,
 ) -> Option<Arc<SchedulerRegistry>> {
-    // 装配分支（LocalDb 真适配 / 内存回退）经 dyn SchedStore 收口
-    let sched_store: Arc<dyn SchedStore> = match &db {
-        Some(db) => Arc::new(LocalDbSchedStore::new(db.clone())),
-        None => MemorySchedStore::shared(),
-    };
+    let sched_store: Arc<dyn SchedStore> = Arc::new(LocalDbSchedStore::new(db));
     let registry = Arc::new(SchedulerRegistry::new(
         Arc::new(QueuePendingSink::new(Arc::clone(timer_steering_queue))),
         scheduler_event_sink,

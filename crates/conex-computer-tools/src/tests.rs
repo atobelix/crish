@@ -5,7 +5,6 @@
 //! 实现，测试直接用真实现 + 状态断言；仅会话注入面用 [`MockComputerOps`]
 //! 替身（零注入断言 = dispatch 调用计数）。停止自查仅查 abort_token
 //! （维度 1 收敛：EmergencyStop 删除后统一走 run 级 abort_signal）。
-
 use super::*;
 use agent_tools::context::{create_mock_tool_context, ToolContext};
 use async_trait::async_trait;
@@ -18,6 +17,7 @@ use conex_computer::screen::CapturedFrame;
 use conex_computer::security::SessionEnablement;
 use conex_computer::{Action, ActionResult, SessionError};
 use conex_shared::gate::{TargetDenial, TargetDenialKind};
+use conex_types::error::codes;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -543,7 +543,7 @@ async fn snapshot_failure_maps_to_execution_failed() {
     let err = exec("computer_snapshot", &config, json!({}), &ctx)
         .await
         .expect_err("感知失败应报错");
-    assert_eq!(err.code(), conex_types::error::codes::TOOL_EXECUTION_FAILED);
+    assert_eq!(err.code(), codes::TOOL_EXECUTION_FAILED);
     assert!(
         err.to_string().contains("无活动窗口"),
         "消息携带语义：{err}"
@@ -561,7 +561,7 @@ async fn screenshot_failure_maps_to_execution_failed() {
     let err = exec("computer_screenshot", &config, json!({}), &ctx)
         .await
         .expect_err("截屏失败应报错");
-    assert_eq!(err.code(), conex_types::error::codes::TOOL_EXECUTION_FAILED);
+    assert_eq!(err.code(), codes::TOOL_EXECUTION_FAILED);
 }
 
 // ===== 返回形状 =====

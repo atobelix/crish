@@ -1,7 +1,7 @@
 // F4 文件域命令构造与响应解析（R2-06 数据层纯逻辑，文件域文件浏览数据面）
 //
 // 对齐依据：
-// - 字段真源：crates/conex-types/contracts/device-protocol.json（C16-C23 参数/响应
+// - 字段真源：crates/conex-device-protocol/contracts/device-protocol.json（C16-C23 参数/响应
 //   类型 + commands 段 name/kind/paramsType/resultType；M6 §4.3 逐条展开）；
 // - 命令信封：remote.* 消息体 = CommandRequest {command, params, timeoutMs?}
 //   （M6 §3.1 / 生成解析器 parseCommandRequest，parser.ts:422-435），kind 与

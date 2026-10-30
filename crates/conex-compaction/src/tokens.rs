@@ -6,7 +6,8 @@
 //! - 常见 JSON 与代码复合符号簇聚类（彻底消除 JSON 300% 虚假高估）；
 //! - 消息 Wire 协议 Framing 固定开销（单条消息 4 Tokens，工具调用/回执追加 8 Tokens）。
 
-use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolOutput};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::tool::ToolOutput;
 
 /// 图片固定 token 计价（对齐 jcode IMAGE_TOKEN_COST=1600，P4 §3.3.1）
 pub const IMAGE_TOKEN_COST: usize = 1_600;
@@ -325,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_message_framing_overhead() {
-        use conex_types::AgentMessageBlock;
+        use conex_types::message::AgentMessageBlock;
 
         let empty_msg = AgentMessage {
             id: "m1".to_string(),

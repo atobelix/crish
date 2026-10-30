@@ -33,6 +33,7 @@ use super::end::{EndDecision, ProviderErrorSummary};
 use super::{LoopError, SessionLoopOptions};
 
 pub(crate) mod awaiting_input;
+pub(crate) mod control_intents;
 pub(crate) mod executing_tools;
 pub(crate) mod no_tool_calls;
 pub(crate) mod prepare_turn;
@@ -116,7 +117,7 @@ pub(crate) struct LoopState {
     /// 护栏计数（时间戳 / 单 run / 溢出重试 / LLM 不可用）/ 缓存跟踪器 /
     /// 摘要调度与协调器 / 待重试快照归组为 `CompactionRuntime` 子结构
     /// （定义与字段文档在 compaction_dispatch.rs，C1a 详案 C1c 段）；
-    /// LoopState 只留组合引用，run 起始归零见 loop_exec.rs。
+    /// LoopState 只留组合引用，run 起始归零见 loop/exec.rs。
     pub(crate) compaction: CompactionRuntime,
     /// 预算/用量运行态（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
     /// EV-11 每 turn usage 槽位归组为 `BudgetState` 子结构
@@ -485,6 +486,7 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
 ///
 /// 返回 [Some] 表示 run 已可收敛（force_cancel / cooperative_stop），
 /// [None] 表示继续（soft_inject 只读消费后消息已落环）。
+/// EV-04：control-intent 两态发射（enqueued 先、consumed 后，intent_id 配对）。
 pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>, LoopError> {
     // AbortSignal 等价 L3 强停，优先于总线内任何意图（01 §2.10）
     let (action, drained) = {
@@ -510,29 +512,7 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
     // intent_id 两态配对（Delta 可丢观测事件；软注入消息本体不入事件，
     // message-start/end 已可见；cooperative_stop 的 reason 经 intent 透出，
     // 不再丢弃）
-    let session_id = state.machine.context().session_id.clone();
-    for intent in &drained {
-        state.events.push(AgentEvent::ControlIntent {
-            session_id: session_id.clone(),
-            timestamp: conex_shared::time::now_iso_utc(),
-            kind: intent.kind.as_event_kind().to_string(),
-            intent_id: intent.id.clone(),
-            source: intent.source.clone(),
-            reason: intent.reason.clone(),
-            state: "enqueued".to_string(),
-        });
-    }
-    for intent in &drained {
-        state.events.push(AgentEvent::ControlIntent {
-            session_id: session_id.clone(),
-            timestamp: conex_shared::time::now_iso_utc(),
-            kind: intent.kind.as_event_kind().to_string(),
-            intent_id: intent.id.clone(),
-            source: intent.source.clone(),
-            reason: intent.reason.clone(),
-            state: "consumed".to_string(),
-        });
-    }
+    control_intents::emit_control_intents(state, &drained);
     // 重构（BC01-2）：仅在真正终止（ForceCancel / CooperativeStop）时补发 TurnEnd；
     // 软注入绝不触碰 TurnEnd，避免单回合双终态；强停时先将中断合成工具消息入树，再发射 TurnEnd。
     match action {
@@ -678,7 +658,7 @@ mod tests {
             AgentEvent::ContextCompressionEnd {
                 result: Some(record),
                 ..
-            } => Some(record.clone()),
+            } => Some((**record).clone()),
             _ => None,
         })
     }

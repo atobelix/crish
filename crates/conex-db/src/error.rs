@@ -2,7 +2,7 @@
 //! 与库的锁 / IO / 迁移 / 打开 / 导入等失败类别定义（R6 目标形状，Display 保持
 //! 操作名语义——session_commands 的 `format!("{}: {}", e.kind, ...)` 兼容）。
 
-use conex_types::{codes, CrishError};
+use conex_types::error::{codes, CrishError};
 
 /// 失败类别（R6 目标形状；`kind` 由 String 收敛为枚举，Display 保持
 /// 操作名语义——session_commands 的 `format!("{}: {}", e.kind, ...)` 兼容）。

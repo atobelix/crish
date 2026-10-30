@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use conex_db::RunStatus;
+use conex_types::error::codes;
 
 use crate::run::RunStateMachine;
 
@@ -202,7 +203,7 @@ impl std::error::Error for RewindError {}
 
 impl From<SessionTreeError> for RewindError {
     fn from(err: SessionTreeError) -> Self {
-        Self::new("session.invalid_state", err.to_string())
+        Self::new(codes::SESSION_INVALID_STATE, err.to_string())
     }
 }
 
@@ -347,7 +348,7 @@ fn plan_workspace_restore(
         Some(target) => target,
         None if policy == RewindRestorePolicy::Required => {
             return Err(RewindError::new(
-                "store.write_failed",
+                codes::STORE_WRITE_FAILED,
                 "conversation-rewind 需要工作区检查点（restorePolicy=required）",
             ));
         }

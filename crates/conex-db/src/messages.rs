@@ -8,7 +8,7 @@
 //! - **禁止**无条件全量 `DELETE FROM session_messages WHERE session_id = ?1` 毁窗。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::SessionMessage;
+use conex_types::session_record::SessionMessage;
 use rusqlite::OptionalExtension;
 
 impl LocalDb {

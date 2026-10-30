@@ -1,7 +1,7 @@
 # mock daemon v0（R0-06）——多端互通联调夹具服务器
 
 > 定位：多端互通 R0 阶段产物，**纯测试基建，不进生产代码**。按
-> `crates/conex-types/contracts/device-protocol.json`（协议注册表唯一真源）生成的
+> `crates/conex-device-protocol/contracts/device-protocol.json`（协议注册表唯一真源）生成的
 > WebSocket 夹具服务器 + 夹具事件集，供移动端（R2）连接层联调使用。
 > 协议契约：`docs/multi-device/Z0-master-plan.md` §9.2 R0-06 / §12 验收门禁；
 > `docs/multi-device/plans/M5-mobile-engineering.md`（连接层）、`M6-protocol-messages.md`（消息定义）。

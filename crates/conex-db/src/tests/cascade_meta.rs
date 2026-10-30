@@ -1,7 +1,7 @@
 //! 会话删除级联、session_meta 前缀键清理、孤儿清理、touch / insert 时间戳。
 
 use super::*;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 
 #[test]
 fn delete_session_cascades() {
@@ -249,10 +249,7 @@ fn insert_session_writes_current_updated_at() {
     let ts = list[0].updated_at;
     assert!(ts > 0, "自愈行 updated_at 不得为 0（宽限期需生效）");
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let now = conex_shared::time::unix_millis();
     assert!(
         now - ts < 60_000,
         "updated_at 应为当前时间附近（now={now}, ts={ts}）"

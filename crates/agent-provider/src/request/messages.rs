@@ -5,7 +5,7 @@
 //!   `System instructions for this run:\n\n` 前缀（02 §六.11）
 //! - tool → 每个 tool-result block 一个 `{role:'tool', tool_call_id, content}`
 //!   ——**T-34（R-J）**：文本在 wire 投影面统一经
-//!   [conex_compaction::clean_output::clean_output]（默认
+//!   [crate::request::clean_output::clean_output]（默认
 //!   [CleanupOptions]）清洗（R1-R6：ANSI 剥离 / 行尾空白 / 空行合并 /
 //!   重复行折叠 / 超长行截断 / JSON 压缩）；落库/事件/工具返回保持 raw，
 //!   清洗只发生在请求构造面（可重复计算、确定性、幂等——历史回放与
@@ -15,14 +15,14 @@
 //!
 //! 不做 LruMap 消息转换缓存（02 §五.13：Rust 无 GC 压力，非热路径）。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 messages_tests/）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 messages/tests/）：
 //! - [messages_content]：内容构造域（user_message_content / normalize_content_parts /
 //!   stringify_tool_output / strip_inline_data_urls / sanitize_tool_call_id /
 //!   responses_input_content 等纯函数与内容载体转换）
 
 use std::borrow::Borrow;
 
-use conex_compaction::clean_output::{clean_output, CleanupOptions};
+use crate::request::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::SystemPromptWireMode;
 use serde_json::{json, Map, Value};
@@ -32,9 +32,7 @@ use crate::request::cache::CacheControl;
 use crate::request::compat::empty_content_wire_value;
 use crate::request::schema::canonical_json_string;
 
-#[path = "messages_compat.rs"]
 mod messages_compat;
-#[path = "messages_content.rs"]
 mod messages_content;
 
 pub(crate) use messages_content::responses_input_content;
@@ -424,10 +422,10 @@ fn tool_result_chat_message(
     output: &conex_types::tool::ToolOutput,
 ) -> ChatMessage {
     let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
-    let text = if cleaned.cleaned.is_empty() {
+    let text = if cleaned.is_empty() {
         "(no output)".to_string()
     } else {
-        cleaned.cleaned
+        cleaned
     };
     ChatMessage {
         role: "tool".to_string(),
@@ -481,10 +479,10 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                             &stringify_tool_output(output),
                             &CleanupOptions::default(),
                         );
-                        let text = if cleaned.cleaned.is_empty() {
+                        let text = if cleaned.is_empty() {
                             "(no output)".to_string()
                         } else {
-                            cleaned.cleaned
+                            cleaned
                         };
                         result.push(json!({
                             "type": "function_call_output",
@@ -577,10 +575,10 @@ pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
                             &stringify_tool_output(output),
                             &CleanupOptions::default(),
                         );
-                        let text = if cleaned.cleaned.is_empty() {
+                        let text = if cleaned.is_empty() {
                             "(no output)".to_string()
                         } else {
-                            cleaned.cleaned
+                            cleaned
                         };
                         result.push(json!({
                             "type": "function_call_output",
@@ -720,5 +718,4 @@ pub fn validate_chat_pairing_from_messages(
 }
 
 #[cfg(test)]
-#[path = "messages_tests/mod.rs"]
 mod tests;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::CoreError;
+use crate::ipc_error::CoreError;
 
 #[test]
 fn to_error_payload_roundtrip() {

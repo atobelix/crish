@@ -6,7 +6,7 @@ use async_trait::async_trait;
 #[cfg(test)]
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 
@@ -18,13 +18,6 @@ pub const SESSION_META_SCHED_KEY_PREFIX: &str = "sched_";
 pub const SESSION_META_SCHED_INDEX_KEY: &str = "sched_index";
 /// 历史索引键（兼容存量观察点与测试）
 pub const LEGACY_SESSION_META_SCHED_INDEX_KEY: &str = "sched_ids";
-
-/// 当前 epoch 毫秒（cron 全域时间基准）
-/// 当前 epoch 毫秒（调度器全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-pub fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}
 
 /// 从 cron id 解析序号（`cron-<seq>` → `seq`；恢复时推进分配器防撞 id）
 pub fn cron_seq(cron_id: &str) -> Option<u64> {
@@ -102,18 +95,23 @@ pub struct CronTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_session_id: Option<String>,
     /// 任务创建时刻（epoch 毫秒）
-    #[serde(default = "now_ms")]
+    #[serde(default = "default_timestamp_ms")]
     pub created_at_ms: u64,
     /// 任务最后更新时刻（epoch 毫秒）
-    #[serde(default = "now_ms")]
+    #[serde(default = "default_timestamp_ms")]
     pub updated_at_ms: u64,
+}
+
+/// 反序列化缺省时间戳（epoch 毫秒；时钟早于 1970 时取 0）
+fn default_timestamp_ms() -> u64 {
+    conex_shared::time::now_millis()
 }
 
 impl CronTask {
     pub fn set_status(&mut self, status: CronTaskStatus) {
         self.status = status;
         self.enabled = status.is_active();
-        self.updated_at_ms = now_ms();
+        self.updated_at_ms = default_timestamp_ms();
     }
 }
 

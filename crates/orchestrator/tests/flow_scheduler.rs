@@ -26,7 +26,7 @@ use agent_tools::tools::subagent::{
 use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_test_utils::TempWorkspace;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 use orchestrator::flow_graph::{
     FailStrategy, FlowDeclaration, FlowError, FlowGraphError, FlowMetaStore, FlowNode,
     FlowNodeState, FlowReportKind, FlowScheduler, FLOW_AUTO_COMPOSITE_KEY, FLOW_DECLARATION_KEY,

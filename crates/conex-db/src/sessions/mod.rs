@@ -2,7 +2,7 @@
 //! （session_meta）读写。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use rusqlite::OptionalExtension;
 
 mod lease;

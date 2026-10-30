@@ -5,14 +5,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::sched::cron::{parse_cron, CronSchedule, SystemLocal};
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 use super::entry::{fire_delay_ms, spawn_fire_task, CronEntry};
 use super::store::SchedStore;
 use super::types::{
-    cron_seq, now_ms, CronTask, CronTaskInput, CronTaskStatus, CronTaskUpdatePatch,
-    DaemonRunLauncher, EventSink, PendingSink, ScheduledTaskLauncher, SchedulerError,
-    CRON_ID_PREFIX,
+    cron_seq, CronTask, CronTaskInput, CronTaskStatus, CronTaskUpdatePatch, DaemonRunLauncher,
+    EventSink, PendingSink, ScheduledTaskLauncher, SchedulerError, CRON_ID_PREFIX,
 };
 
 /// 注册表组件集合
@@ -104,7 +103,7 @@ impl SchedulerRegistry {
     pub async fn register(&self, input: CronTaskInput) -> Result<String, SchedulerError> {
         let schedule: CronSchedule = parse_cron(&input.expression)
             .map_err(|error| SchedulerError::InvalidExpression(format!("{error:?}")))?;
-        let now = now_ms();
+        let now = conex_shared::time::now_millis();
         let next_fire_at_ms = schedule
             .next_fire_after(now, &SystemLocal)
             .ok_or_else(|| SchedulerError::NoNextFire(input.expression.clone()))?;
@@ -195,7 +194,7 @@ impl SchedulerRegistry {
 
     /// 恢复指定 cron 任务（重算 next_fire_after，generation += 1，spawn 新 sleep 协程，status 置为 Active，写库持久化）
     pub async fn resume_task(&self, cron_id: &str) -> Result<(), CoreError> {
-        let now = now_ms();
+        let now = conex_shared::time::now_millis();
         let task_to_save: CronTask;
         let delay_ms: u64;
 
@@ -264,7 +263,7 @@ impl SchedulerRegistry {
         cron_id: &str,
         patch: CronTaskUpdatePatch,
     ) -> Result<(), CoreError> {
-        let now = now_ms();
+        let now = conex_shared::time::now_millis();
         let task_to_save: CronTask;
 
         {
@@ -399,7 +398,7 @@ impl SchedulerRegistry {
             return;
         }
 
-        let now = now_ms();
+        let now = conex_shared::time::now_millis();
         for task in self.components.store.load_all() {
             // 序号推进（恢复的 id 防新注册撞号）
             if let Some(seq) = cron_seq(&task.cron_id) {
@@ -523,7 +522,8 @@ impl SchedulerRegistry {
 
     /// 暂停定时自动执行（R2-12c C31 pauseAutomation；F6 §8.2 全局内存态防抖开关）
     pub fn pause_for(&self, duration_sec: u64) -> u64 {
-        let paused_until = now_ms().saturating_add(duration_sec.saturating_mul(1000));
+        let paused_until =
+            conex_shared::time::now_millis().saturating_add(duration_sec.saturating_mul(1000));
         *self
             .components
             .pause

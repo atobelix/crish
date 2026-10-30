@@ -4,23 +4,19 @@
 //! 已下沉 `conex-run`（`conex_run::engine_handle` / `engine_provider` /
 //! `engine_channels` / `run_producer` / `context_injection` / `audit`）。
 //! 本文件只做壳域 mod 接线：
-//! - [engine_build]：[EngineHost] 宿主聚合（browser/computer/workflow 通道
-//!   + 全局注入）+ [EngineHostHooks]/[RunLaunchHooks] 实现 + MCP 自动拉起；
-//! - 测试旁挂 `engine_tests.rs`（`#[path]` 接线，无孤儿）。
+//! - [build]：`engine/build.rs`（[EngineHost] 宿主聚合（browser/computer/workflow
+//!   通道 + 全局注入）+ [EngineHostHooks]/[RunLaunchHooks] 实现 + MCP 自动拉起）；
+//! - 测试子模 `engine/tests.rs`（`#[cfg(test)] mod tests;`，无孤儿）。
 //!
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分不关任何 EL；crate 下沉后壳域仅剩
 //! 宿主装配面）。
 
-// B1-5 接线修正：子模以 `#[path]` 显式接线（同目录旁挂，对齐
-// note_commands.rs 先例）——rustc 2018+ 对非根模块文件只解析
-// 目录式子模块路径（`engine/engine_audit.rs`），旁挂文件必须 #[path]
-#[path = "engine_build.rs"]
-pub(crate) mod engine_build;
+// 目录式子模块（`engine/build.rs`，与目录一致，无 `#[path]`）
+pub(crate) mod build;
 
-pub(crate) use engine_build::*;
+pub(crate) use build::*;
 
-// ── 测试（SR-04 外置；engine_tests.rs 旁挂，`#[path]` 接线，无孤儿）──
+// ── 测试（SR-04 外置；engine/tests.rs，`#[cfg(test)] mod tests;`，无孤儿）──
 
 #[cfg(test)]
-#[path = "engine_tests.rs"]
 mod tests;

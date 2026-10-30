@@ -1,7 +1,7 @@
 // F1 监控域命令构造与响应解析（R2-07 命令批 B1：10 条只读监控命令）
 //
 // 对齐依据：
-// - 字段真源：crates/conex-types/contracts/device-protocol.json（C01-C10 参数/响应
+// - 字段真源：crates/conex-device-protocol/contracts/device-protocol.json（C01-C10 参数/响应
 //   类型 + commands 段 name/kind/paramsType/resultType/tauriCommand；M6 §4.1
 //   逐条展开）；
 // - 命令信封：remote.* 消息体 = CommandRequest {command, params, timeoutMs?}

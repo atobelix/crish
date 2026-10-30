@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 use crate::tokens::count_agent_message_tokens;
 
@@ -125,8 +125,34 @@ pub fn enforce_tool_batch_closure(
     Some(cut)
 }
 
+/// 计算合法切割点：返回保留段起始索引（None = 放弃压缩）
+///
+/// 策略（P4 §3.4.2，对齐 pi findCutPoint / jcode safe_compaction_cutoff）：
+///
+/// 1. **尾部倒推预算**：从末尾向前累计 token 至 `keep_recent_tokens`，
+///    累计达标处的消息纳入保留段；扫描区间自折叠链后起算（链 token
+///    不计入预算，T-02）；
+/// 2. **完整回合下限**：保留段内 user 消息数不得少于 `min_recent_turns`
+///    （不足时向前扩展保留段；回合 = 一个 user 消息及其后的
+///    assistant/tool 消息组）；
+/// 3. **合法切割点（tool 配对保护）**：保留段内每个 `ToolResult` 必须
+///    能在保留段内找到对应 `ToolCall`；存在孤儿 id 时向前扩展保留段
+///    直到全部配对；仍无法配对（数据异常）或保留段覆盖全部消息
+///    （无可丢内容）时返回 None——宁可暂不压缩也不破坏语义。
+///
+/// **折叠链下界（T-01~T-05）**：切割点恒 `> fold_start`（system 段后
+/// 首个非链下标）——链消息（compacted-summary 前缀）永不进保留区/丢弃区
+/// （B1 冻结、B2 单调），cut ≤ fold_start 一律 None。
+pub fn find_cut_point(
+    messages: &[Arc<AgentMessage>],
+    keep_recent_tokens: usize,
+    min_recent_turns: u32,
+) -> Option<usize> {
+    find_cut_point_inner(messages, keep_recent_tokens, min_recent_turns, true)
+}
+
 /// 切割点核心（`tool_pair_protection` 由调用方按策略控制；
-/// 公开入口 [crate::engine::CompactionEngine::find_cut_point] 恒开启保护）
+/// 公开入口 [crate::find_cut_point] 恒开启保护）
 ///
 /// 折叠链钳制（00-plan §4.2 T-01~T-05，B1/B2 不变量）：
 /// 链消息（compacted-summary 前缀，紧邻 system 之后）永不进保留区，

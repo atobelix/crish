@@ -94,7 +94,7 @@ pub fn new_meta(origin: ProfileOrigin, source: Option<BrowserSource>) -> Profile
         source,
         persist: false,
         verify_result: None,
-        created_at: now_unix_str(),
+        created_at: conex_shared::time::now_secs().to_string(),
         last_used_at: None,
         state: ProfileState::Active,
     }
@@ -189,14 +189,6 @@ pub fn list_managed(managed_root: &Path) -> Vec<PathBuf> {
                 .is_some_and(|n| !n.starts_with('.'))
         })
         .collect()
-}
-
-/// 当前 unix 秒时间戳字符串（meta 时间字段，§7.1；避免引入 chrono 依赖）。
-pub(crate) fn now_unix_str() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs().to_string())
-        .unwrap_or_default()
 }
 
 /// 短随机 id（原子写临时文件 / staging 临时目录名后缀，防并发碰撞）。

@@ -4,11 +4,8 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-#[path = "config_parse.rs"]
 mod config_parse;
-#[path = "model_identity.rs"]
 mod model_identity;
-#[path = "model_pricing.rs"]
 mod model_pricing;
 
 pub use config_parse::YamlParseError;
@@ -386,9 +383,7 @@ impl ThinkingMapExt for Option<IndexMap<String, String>> {
 }
 
 #[cfg(test)]
-#[path = "catalog_types_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "config_contract_tests.rs"]
 mod contract_tests;

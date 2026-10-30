@@ -19,10 +19,10 @@ use agent_provider::request::{
 };
 use agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel;
 use agent_tools::tools::kill_subagent::{KillSubagentToolResult, SubagentKillChannel};
-use agent_tools::tools::switch_agent_model::SubagentModelChannel;
 use agent_tools::tools::send_message::{
     MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel,
 };
+use agent_tools::tools::switch_agent_model::SubagentModelChannel;
 use conex_agents::task::SubagentCapabilityMode;
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use conex_types::tool::SystemPromptWireMode;
@@ -156,7 +156,7 @@ impl conex_compaction::Summarizer for ProviderSummarizer {
     ) -> Result<String, String> {
         // 提示词 = 引擎侧单源（ai_summary::build_summarize_prompt，Schema V1
         // JSON 输出契约，P1-C 对齐后不再是五字段孤儿）
-        let prompt = conex_compaction::ai_summary::build_summarize_prompt(dropped, existing);
+        let prompt = conex_compaction::build_summarize_prompt(dropped, existing);
         let body = self.build_request_body(&prompt);
         // DEEPCHECK-05 #10 修复：摘要请求体恒 chat 形状 → URL 恒 chat-completions
         // （responses 端点配置下也禁止把 chat body 发往 /responses）
@@ -793,10 +793,7 @@ impl BridgeLiveSink {
     fn maybe_flush_live(&self) {
         use std::sync::atomic::Ordering;
         const LIVE_FLUSH_INTERVAL_MS: u64 = 8;
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        let now_ms = conex_shared::time::now_millis();
         let last = self.last_flush_ms.load(Ordering::Relaxed);
         let elapsed = now_ms.saturating_sub(last);
         if elapsed >= LIVE_FLUSH_INTERVAL_MS {
@@ -819,10 +816,7 @@ impl BridgeLiveSink {
             crate::engine_assembly::spawn_here(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
                 trailing_scheduled.store(false, Ordering::SeqCst);
-                let now_ms = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
+                let now_ms = conex_shared::time::now_millis();
                 last_flush_ms.store(now_ms, Ordering::Relaxed);
                 let _ = bridge.flush();
             });

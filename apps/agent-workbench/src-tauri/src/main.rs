@@ -92,7 +92,7 @@ pub(crate) mod remote;
 // 见 push_wiring.rs 模块头注记）
 mod push_wiring;
 
-#[path = "server/core_backend/mod.rs"]
+// 本地服务 REST 后端（CoreStateBackend）：物理目录 src/core_backend/；直调 bin-only 命令面，不能并入 server（lib 亦编译 server）
 pub(crate) mod core_backend;
 mod server;
 mod session_commands;
@@ -372,7 +372,7 @@ fn main() {
                 .is_empty();
             app.manage(Arc::clone(&search_state));
             let compaction = core_commands::SharedCompactionState::new();
-            // 压缩为纯内存能力（conex-compaction），core_compact_messages 已接线）
+            // 压缩为纯内存能力（conex-compaction），core_compact_now 已接线）
             compaction.set_ready(true);
             let compaction_ready = compaction.is_ready();
             app.manage(compaction);
@@ -461,7 +461,7 @@ fn main() {
 
             // 核心运行状态（store / 快照 / 事件桥 / 诊断 / 后台任务管理器注入）
             let core_state = Arc::new(conex_run::run::CoreRunState::new(
-                Arc::clone(&store),
+                Arc::clone(&store), shared_db.local_db(),
                 Arc::clone(&snapshots),
                 bridge.clone(),
                 Arc::clone(diagnostics),
@@ -624,7 +624,7 @@ fn main() {
                 tauri::async_runtime::spawn(async move {
                     let wake = push_emitter.wake_notify();
                     loop {
-                        let now = server::now_ms();
+                        let now = conex_shared::time::now_millis();
                         let wait_ms = push_emitter
                             .next_expiry_ms(now)
                             .map(|exp| exp.saturating_sub(now))
@@ -634,7 +634,7 @@ fn main() {
                             _ = tokio::time::sleep(std::time::Duration::from_millis(wait_ms)) => {}
                             _ = wake.notified() => {}
                         }
-                        push_emitter.flush(server::now_ms());
+                        push_emitter.flush(conex_shared::time::now_millis());
                     }
                 });
             }
@@ -685,7 +685,7 @@ fn main() {
                         .with_search_index_ready(search_index_ready)
                         .with_compaction_ready(compaction_ready)
                         .with_search_state(Arc::clone(&search_state))
-                        .with_workspace_ops(core_backend::workspace_ops::AppWorkspaceOps::new(
+                        .with_workspace_ops(core_backend::workspace_ops::AppWorkspaceOps::create(
                             app_handle.clone(),
                         ));
                 if let Ok(guard) = crate::workspace::resolve_guard(&app_handle, "") {

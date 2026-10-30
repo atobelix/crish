@@ -4,6 +4,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../../hooks/useToastQueue';
 import { onScopedUiEvent } from '../../hooks/useLeafUiEvent';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
+import { useChatExportMarkdown } from './useChatExportMarkdown';
 import { useLayoutTreeStore } from '../../store/storeAccess';
 import { resolveLeafIdForSession } from '../../store/storeAccess';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -84,25 +85,7 @@ export function useChatHandlers({
     (s) => s.appSettings?.maxRetryAttempts ?? 10
   );
 
-  const handleExportMarkdown = useCallback(() => {
-    const byId = getCompositionRoot().session.getState().sessionsById;
-    const session = byId[activeSessionId ?? ''];
-    if (!session) return;
-    void (async () => {
-      try {
-        const { tryDownloadSessionMarkdown } =
-          await import('../../api/sessionExport');
-        const result = tryDownloadSessionMarkdown(session, new Date(), {
-          sessionsById: byId,
-        });
-        if (result.ok === false) {
-          toast.show(result.error || '导出失败');
-        }
-      } catch {
-        toast.show('导出失败');
-      }
-    })();
-  }, [activeSessionId]);
+  const handleExportMarkdown = useChatExportMarkdown(activeSessionId);
 
   const handleOpenConversationRewind = useCallback(() => {
     void (async () => {

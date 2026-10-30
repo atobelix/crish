@@ -232,7 +232,7 @@ impl LocalDb {
                     summary_json,
                     height as i64,
                     attempts as i64,
-                    now_ms(),
+                    conex_shared::time::unix_millis(),
                 ],
             )
             .map_err(|e| DbFailure {
@@ -508,14 +508,6 @@ const BLOCK_SELECT_SQL: &str = "SELECT
         state, summary_json, schema_version, height, tier, attempts,
         created_at, updated_at
      FROM compression_blocks WHERE session_id = ?1";
-
-/// 当前 UTC 毫秒时间戳（epoch ms；块行时间列，对齐 runs.rs 既有模式）。
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or_default()
-}
 
 /// 行 → 结构映射（dropped_message_ids JSON 反序列化；state 字面量宽松解析）。
 fn block_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CompactionBlockRow> {

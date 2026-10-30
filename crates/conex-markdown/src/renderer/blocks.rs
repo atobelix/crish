@@ -152,9 +152,7 @@ impl Renderer {
         }
 
         if checked {
-            self.push_str(
-                "<input type=\"checkbox\" class=\"md-task-checkbox\" checked disabled>",
-            );
+            self.push_str("<input type=\"checkbox\" class=\"md-task-checkbox\" checked disabled>");
         } else {
             self.push_str("<input type=\"checkbox\" class=\"md-task-checkbox\" disabled>");
         }

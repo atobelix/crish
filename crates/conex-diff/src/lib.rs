@@ -1,5 +1,5 @@
 pub mod diff_engine {
-    use conex_types::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
+    use conex_types::diff::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
     use similar::{Algorithm, ChangeTag, TextDiff};
 
     const CONTEXT_LINES: usize = 3;
@@ -371,7 +371,7 @@ pub mod diff_engine {
 #[cfg(test)]
 mod tests {
     use super::diff_engine::DiffEngine;
-    use conex_types::DiffLineKind;
+    use conex_types::diff::DiffLineKind;
 
     #[test]
     fn identical_texts_produce_empty_diff() {

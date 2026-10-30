@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 // 单一权威枚举重导出
-pub use conex_types::PermissionMode;
+pub use conex_types::permission::PermissionMode;
 
 /// 权限裁决三态结果
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

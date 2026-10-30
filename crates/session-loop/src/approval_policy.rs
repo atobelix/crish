@@ -12,12 +12,12 @@
 //! - 遵循单一真理源 (SSOT)；
 //! - 严禁打补丁，面向未来，代码简洁。
 
-use std::path::PathBuf;
-use std::time::Duration;
-use agent_tools::permission::PermissionMode;
 use crate::tool_events::ApprovalRequester;
+use agent_tools::permission::PermissionMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::PathBuf;
+use std::time::Duration;
 
 /// 倒计时超时策略动作枚举
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,9 +131,7 @@ pub fn generate_semantic_denial_message(
             将写操作范围缩减至工作区临时目录（.agent-outputs/）、或跳过本分支推进其他并行任务；\n\
          3. 继续完成其余既定目标，并在最终总结中向用户说明此操作被策略拒绝的情况。",
     );
-    format!(
-        "ToolExecutionDenied: 操作 '{tool_name}' 未获批准。\n原因: {reason}\n{base_guidance}"
-    )
+    format!("ToolExecutionDenied: 操作 '{tool_name}' 未获批准。\n原因: {reason}\n{base_guidance}")
 }
 
 impl ApprovalPolicyEngine for DefaultApprovalPolicyEngine {
@@ -150,7 +148,9 @@ impl ApprovalPolicyEngine for DefaultApprovalPolicyEngine {
         if ctx.danger_level >= 3 {
             return TimeoutAction::Deny {
                 reason: "安全红线拦截：严禁执行破坏性高危操作".to_string(),
-                guidance: Some("该操作命中安全红线已被策略引擎永久否决。请改用只读或无害化命令。".to_string()),
+                guidance: Some(
+                    "该操作命中安全红线已被策略引擎永久否决。请改用只读或无害化命令。".to_string(),
+                ),
             };
         }
 
@@ -177,12 +177,16 @@ impl ApprovalPolicyEngine for DefaultApprovalPolicyEngine {
                 "无人值守模式：高危操作倒计时到达，策略引擎安全拒绝并引导换路 (Semantic Deny)"
             );
             return TimeoutAction::Deny {
-                reason: format!("无人值守安全拦截：操作 '{}' 超出无人值守自决权限阈值。", ctx.tool_name),
+                reason: format!(
+                    "无人值守安全拦截：操作 '{}' 超出无人值守自决权限阈值。",
+                    ctx.tool_name
+                ),
                 guidance: Some(
                     "【行动指引】\n\
                      1. 严禁以相同参数反复重试此工具调用；\n\
                      2. 请切换为只读分析（如使用 grep/read_file 调研）或寻求非破坏性替代路径；\n\
-                     3. 继续执行其他子任务。".to_string(),
+                     3. 继续执行其他子任务。"
+                        .to_string(),
                 ),
             };
         }
@@ -212,7 +216,10 @@ mod tests {
             workspace_root: None,
             reason: None,
         };
-        assert_eq!(engine.resolve_timeout(&ctx_unattended), Duration::from_secs(60));
+        assert_eq!(
+            engine.resolve_timeout(&ctx_unattended),
+            Duration::from_secs(60)
+        );
 
         let ctx_attended = TimeoutEvaluationContext {
             tool_name: "write_file",
@@ -226,7 +233,10 @@ mod tests {
             workspace_root: None,
             reason: None,
         };
-        assert_eq!(engine.resolve_timeout(&ctx_attended), Duration::from_secs(120));
+        assert_eq!(
+            engine.resolve_timeout(&ctx_attended),
+            Duration::from_secs(120)
+        );
     }
 
     #[test]

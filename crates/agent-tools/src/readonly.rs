@@ -28,8 +28,8 @@ use crate::definition::ToolError;
 use crate::registry::ToolRegistry;
 
 // 工具名单唯一真源 = conex-agents::capability（本模块只做注册表过滤）
-pub use conex_agents::capability::{READONLY_TOOL_NAMES, WRITE_TOOL_NAMES};
 use conex_agents::capability::COMMUNICATION_TOOL_NAMES;
+pub use conex_agents::capability::{READONLY_TOOL_NAMES, WRITE_TOOL_NAMES};
 use conex_agents::task::SubagentCapabilityMode;
 
 /// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
@@ -124,9 +124,9 @@ pub fn filter_registry_for_task_type(
         }),
         // implementation → 全工具集剔除 browser_* 前缀（27 §3 / 31 评审 F1，
         // fail-closed：子代理永不获得浏览器共享会话操作权；注释见函数头）
-        "implementation" => filter_registry(registry, |name| {
-            keep(name) || !name.starts_with("browser_")
-        }),
+        "implementation" => {
+            filter_registry(registry, |name| keep(name) || !name.starts_with("browser_"))
+        }
         // 未知/缺省：最安全回退（对齐缺省 task_type = analysis 的口径）
         _ => filter_registry(registry, |name| {
             keep(name) || READONLY_TOOL_NAMES.contains(&name)

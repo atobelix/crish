@@ -2,17 +2,19 @@
 //!
 //! 经 run/mod.rs 聚合接线；顶层符号 pub 化供兄弟模与门面 re-export。
 
+mod danger;
+
+pub use danger::derive_danger_level;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use conex_types::device::{
+use conex_device_protocol::{
     ApprovalChannel as RemoteApprovalChannel, ApprovalHistoryItem, ApprovalHistoryResult, Arbiter,
     PendingApproval,
 };
-use conex_types::events::{
-    AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
-};
+use conex_types::events::{AgentEvent, AgentEventEnvelope, ApprovalDecision, PermissionRequest};
 use orchestrator::persist::Store;
 use orchestrator::run::RunHandle;
 use serde::Serialize;
@@ -21,12 +23,11 @@ use session_loop::approval_policy::{
     TimeoutAction, TimeoutEvaluationContext,
 };
 use session_loop::approval_router::{classify_source, route_approval, route_approval_guarded};
-use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
+use session_loop::tool_events::{ApprovalOutcome, ApprovalRequester};
 use session_loop::ApprovalGate;
 
 use crate::core_error::CoreError;
 
-use super::run_history::iso8601_to_epoch_millis;
 use super::run_launch::active_run;
 use super::{ActiveRun, CoreRunState};
 
@@ -74,7 +75,7 @@ pub struct PendingRequestMeta {
 
 /// 单一原子待审批条目（消除双锁竞态，通道与元数据严格同生共死）
 pub struct PendingApprovalEntry {
-    pub tx: tokio::sync::oneshot::Sender<ApprovalDecision>,
+    pub tx: tokio::sync::oneshot::Sender<ApprovalOutcome>,
     pub meta: PendingRequestMeta,
 }
 
@@ -187,7 +188,7 @@ impl ApprovalGateImpl {
     pub async fn resolve(
         &self,
         tool_call_id: &str,
-        decision: ApprovalDecision,
+        outcome: ApprovalOutcome,
     ) -> Result<(), CoreError> {
         let entry = self
             .pending_registry
@@ -200,7 +201,7 @@ impl ApprovalGateImpl {
                     self.run_id
                 ))
             })?;
-        let _ = entry.tx.send(decision);
+        let _ = entry.tx.send(outcome);
         // 状态机恢复：awaiting-approval → running（B4.1 审批恢复路径）
         let mut handle = self.handle.lock().await;
         if let Err(error) = handle.resolve_approval(self.store.as_ref()).await {
@@ -244,7 +245,7 @@ impl ApprovalGate for ApprovalGateImpl {
         args: &serde_json::Value,
         requester: Option<&ApprovalRequester>,
         approval_reason: Option<&str>,
-    ) -> ApprovalDecision {
+    ) -> ApprovalOutcome {
         // 1. 来源分类 + 裁决者路由（T-D-14 权限传递层）：子代理来源 →
         //    主 agent 裁决（默认）；主 agent 来源 → 用户（现状不变）；
         //    死锁检测命中（主 agent 正在 wait 该子代理）→ 转用户兜底。
@@ -277,7 +278,7 @@ impl ApprovalGate for ApprovalGateImpl {
             session_id: &self.session_id,
             run_id: &self.run_id,
             requester,
-            permission_mode: conex_types::PermissionMode::Smart,
+            permission_mode: conex_types::permission::PermissionMode::Smart,
             unattended_mode: self.unattended_mode,
             workspace_root: workspace_root_path.as_ref(),
             reason: requester.and_then(|r| r.reason.as_deref()),
@@ -286,7 +287,7 @@ impl ApprovalGate for ApprovalGateImpl {
         let effective_timeout = self
             .approval_timeout
             .unwrap_or_else(|| self.policy_engine.resolve_timeout(&eval_ctx));
-        let requested_at_ms = crate::engine_assembly::unix_millis_now();
+        let requested_at_ms = conex_shared::time::now_millis();
         let expires_at_ms = requested_at_ms + effective_timeout.as_millis() as u64;
         let timeout_action = self.policy_engine.evaluate_timeout_action(&eval_ctx);
 
@@ -338,7 +339,7 @@ impl ApprovalGate for ApprovalGateImpl {
         (self.broadcast)(AgentEvent::ApprovalRequested {
             session_id: self.session_id.clone(),
             request,
-            timestamp: crate::engine_provider::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
         });
 
         // 4. 状态机联动：running → awaiting-approval（落库，中间态可观测）
@@ -383,7 +384,7 @@ impl ApprovalGate for ApprovalGateImpl {
 
         // 6. 等待决策（tokio::time::timeout 超时唯一决断）
         match tokio::time::timeout(effective_timeout, rx).await {
-            Ok(Ok(decision)) => decision,
+            Ok(Ok(outcome)) => outcome,
             Ok(Err(_)) | Err(_) => {
                 // 倒计时到达，单锁原子弹出条目
                 let removed = {
@@ -395,7 +396,7 @@ impl ApprovalGate for ApprovalGateImpl {
                 };
 
                 if removed.is_none() {
-                    return ApprovalDecision::Expired;
+                    return ApprovalOutcome::expired();
                 }
 
                 // 状态机恢复：awaiting-approval → running
@@ -419,10 +420,10 @@ impl ApprovalGate for ApprovalGateImpl {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Approved,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            decision: ApprovalDecision::Approved,
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
-                        ApprovalDecision::Approved
+                        ApprovalOutcome::approved()
                     }
                     TimeoutAction::Deny { reason, guidance } => {
                         let full_reason = generate_semantic_denial_message(
@@ -434,22 +435,20 @@ impl ApprovalGate for ApprovalGateImpl {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Denied,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            decision: ApprovalDecision::Denied,
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
-                        ApprovalDecision::Denied {
-                            reason: full_reason,
-                        }
+                        ApprovalOutcome::denied(full_reason)
                     }
                     TimeoutAction::Expire => {
                         (self.broadcast)(AgentEvent::ApprovalResolved {
                             session_id: self.session_id.clone(),
                             tool_call_id: call_id.to_string(),
                             request_id: Some(format!("approval-{call_id}")),
-                            decision: WireApprovalDecision::Expired,
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            decision: ApprovalDecision::Expired,
+                            timestamp: conex_shared::time::now_iso_utc(),
                         });
-                        ApprovalDecision::Expired
+                        ApprovalOutcome::expired()
                     }
                 }
             }
@@ -476,9 +475,9 @@ pub async fn approve_tool_impl(
     }
     active
         .approval
-        .resolve(tool_call_id, ApprovalDecision::Approved)
+        .resolve(tool_call_id, ApprovalOutcome::approved())
         .await?;
-    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Approved).await;
+    emit_approval_resolved(&active, tool_call_id, ApprovalDecision::Approved).await;
     Ok(ApproveResponse {
         ok: true,
         tool_call_id: tool_call_id.to_string(),
@@ -499,12 +498,10 @@ pub async fn deny_tool_impl(
         .approval
         .resolve(
             tool_call_id,
-            ApprovalDecision::Denied {
-                reason: reason.unwrap_or("user denied").to_string(),
-            },
+            ApprovalOutcome::denied(reason.unwrap_or("user denied")),
         )
         .await?;
-    emit_approval_resolved(&active, tool_call_id, WireApprovalDecision::Denied).await;
+    emit_approval_resolved(&active, tool_call_id, ApprovalDecision::Denied).await;
     Ok(ApproveResponse {
         ok: true,
         tool_call_id: tool_call_id.to_string(),
@@ -661,32 +658,6 @@ pub fn list_pending_approvals_impl(state: &CoreRunState) -> Vec<PendingApproval>
         .collect()
 }
 
-/// 危险级别推导（R1-04 / M6 C13：桌面按 F2 §2.2 表推导，移动端不重算）
-///
-/// 轻量启发式（与前端 approvalHandlers S9 宽容解析同语义的子集）：
-/// 删除类工具 / 参数含删除语义 → 2（高风险，移动端二次确认），其余
-/// 常规确认 → 1。红线请求不会到达审批门（exec_verdict 裁决中心对红线
-/// 任何模式先行 Deny），此处无需红线分支。
-pub fn derive_danger_level(tool_name: &str, param_keys: &[String]) -> u8 {
-    const DESTRUCTIVE_TOOLS: [&str; 5] = [
-        "shell:write",
-        "shell:exec",
-        "git:revert",
-        "file:delete",
-        "workspace:delete",
-    ];
-    if DESTRUCTIVE_TOOLS.contains(&tool_name) {
-        return 2;
-    }
-    if param_keys
-        .iter()
-        .any(|k| k.contains("delete") || k.contains("remove") || k.contains("overwrite"))
-    {
-        return 2;
-    }
-    1
-}
-
 /// 审批历史补拉（R1-04 / M6 C14：approval-resolved 事件白名单投影——
 /// events 表按事件类型过滤，不携带参数全量（同 C13 隐私红线）。
 /// sessionId 提供时按会话内 sequence 水位过滤，缺省跨会话按落库时刻
@@ -698,14 +669,7 @@ pub async fn approval_history_impl(
     limit: Option<u32>,
 ) -> Result<ApprovalHistoryResult, CoreError> {
     let limit = limit.unwrap_or(100).clamp(1, 500) as usize;
-    let Some(db) = state.local_db() else {
-        // 无本地库（测试替身 store）：诚实返回空历史（不编造）
-        return Ok(ApprovalHistoryResult {
-            items: Vec::new(),
-            next_after_sequence: None,
-            has_more: None,
-        });
-    };
+    let db = state.local_db();
     let after = after_sequence.unwrap_or(0);
     // 会话范围：显式 sessionId → 单会话；缺省 → 全部会话索引
     let session_ids: Vec<String> = match session_id {
@@ -750,11 +714,15 @@ pub async fn approval_history_impl(
                 .to_string();
             let decision =
                 serde_json::from_value(payload.get("decision").cloned().unwrap_or_default())
-                    .unwrap_or(conex_types::events::ApprovalDecision::Expired);
+                    .unwrap_or(ApprovalDecision::Expired);
             let resolved_at = payload
                 .get("timestamp")
                 .and_then(serde_json::Value::as_str)
-                .map(|iso| iso8601_to_epoch_millis(iso).max(0) as u64);
+                .map(|iso| {
+                    conex_shared::time::parse_iso8601_ms(iso)
+                        .unwrap_or(0)
+                        .max(0) as u64
+                });
             Some(ApprovalHistoryItem {
                 sequence: sequence.max(0) as u64,
                 tool_call_id,
@@ -790,14 +758,14 @@ pub fn map_db_failure(error: conex_db::DbFailure) -> CoreError {
 pub async fn emit_approval_resolved(
     active: &ActiveRun,
     tool_call_id: &str,
-    decision: WireApprovalDecision,
+    decision: ApprovalDecision,
 ) {
     let event = AgentEvent::ApprovalResolved {
         session_id: active.session_id.clone(),
         tool_call_id: tool_call_id.to_string(),
         request_id: None,
         decision,
-        timestamp: crate::engine_provider::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
     };
     let mut queue = active.queue.lock().await;
     match queue.push(&active.session_id, event).await {

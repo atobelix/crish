@@ -424,9 +424,6 @@ impl RecoveryCoordinator {
                     max: self.budget.limit(),
                 })?,
             )?;
-            // G10 月度统计收集点：恢复预算 denied 计数（进程级累计，
-            // 月度报告经 conex_types::denied_stats 拉取；持久化由事件留痕承载）
-            conex_types::denied_stats::global_denied_stats().record_recovery_budget_denied();
             return self.report_to_user(ctx);
         }
         // 阶梯 2：steering 条目 + 通知落库

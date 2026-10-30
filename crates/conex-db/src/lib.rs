@@ -262,16 +262,12 @@ impl LocalDb {
     /// 由系统 temp 目录清理策略兜底。调用面（42 处测试）零改动。
     pub fn open_in_memory() -> Result<Self, DbFailure> {
         use std::sync::atomic::{AtomicU64, Ordering};
-        use std::time::{SystemTime, UNIX_EPOCH};
 
         static MEM_SEQ: AtomicU64 = AtomicU64::new(0);
         let temp_dir = std::env::temp_dir();
         let path = reserve_unique_temp_path(|| {
             let seq = MEM_SEQ.fetch_add(1, Ordering::Relaxed);
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
+            let timestamp = conex_shared::time::unix_millis();
             temp_dir.join(format!(
                 "conex_mem_{}_{}_{}.db",
                 std::process::id(),
@@ -421,14 +417,10 @@ mod temp_path_tests {
 
     use super::reserve_unique_temp_path;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn colliding_candidate_is_retried_without_overwriting_existing_file() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
+        let nonce = conex_shared::time::unix_millis();
         let test_dir = std::env::temp_dir().join(format!(
             "conex_temp_path_test_{}_{}",
             std::process::id(),

@@ -29,8 +29,10 @@
 //! [BudgetState] 子结构（07 §4.2-2）。
 use std::sync::Arc;
 
-use conex_compaction::compaction::StubPolicy;
-use conex_compaction::{CompactionEngine, CompactionPlan, EstimateContext, Summarizer};
+use conex_compaction::{
+    estimate_context_tokens, preview_compaction, should_compact, CompactionEngine, CompactionPlan,
+    EstimateContext, StubPolicy, Summarizer,
+};
 use conex_types::context::ContextBudget;
 use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{AgentMessage, AgentMessageRole};
@@ -92,8 +94,7 @@ pub(crate) fn clamp_max_tokens(requested: u32, estimate: u64, budget: &ContextBu
 /// - **启发式兜底**：全部消息块级估算 + system / tools 前缀折算
 ///   （工具 schema 整体 JSON 体积，P4 §3.3.1 源 2）。
 pub(crate) fn estimate_context(state: &LoopState) -> EstimateContext {
-    let engine = CompactionEngine::new(0);
-    engine.estimate_context_tokens(
+    estimate_context_tokens(
         &state.conversation,
         tools_prefix_json(state),
         state.options.assembly.system_prompt.as_deref(),
@@ -236,7 +237,11 @@ pub(crate) fn check_compaction_debounce(
     let current_turn = state.machine.context().turn_index as u64;
 
     // 规则 1: 轮次间隔防抖
-    let min_turn_interval = state.options.compaction.min_turn_interval.max(gen.min_turn_interval);
+    let min_turn_interval = state
+        .options
+        .compaction
+        .min_turn_interval
+        .max(gen.min_turn_interval);
     if current_turn < last_turn.saturating_add(min_turn_interval) {
         tracing::info!(
             current_turn,
@@ -248,7 +253,11 @@ pub(crate) fn check_compaction_debounce(
     }
 
     // 规则 2: Token 增量防抖
-    let min_token_delta = state.options.compaction.min_token_delta.max(gen.min_token_delta);
+    let min_token_delta = state
+        .options
+        .compaction
+        .min_token_delta
+        .max(gen.min_token_delta);
     if estimate_tokens < gen.last_compaction_tokens.saturating_add(min_token_delta) {
         tracing::info!(
             estimate_tokens,
@@ -296,8 +305,7 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     streaming::ensure_tools_snapshot(state);
     let estimate = estimate_context(state);
     let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
-    let engine = CompactionEngine::new(0);
-    if !engine.should_compact(estimate.tokens, u64::from(budget_tokens)) {
+    if !should_compact(estimate.tokens, u64::from(budget_tokens)) {
         return false;
     }
     // 会话级自适应增量防抖判定（P-05 §2.1）
@@ -346,8 +354,7 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
     streaming::ensure_tools_snapshot(state);
     let estimate = estimate_context(state);
     let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
-    let engine = CompactionEngine::new(0);
-    let over_threshold = engine.should_compact(estimate.tokens, u64::from(budget_tokens));
+    let over_threshold = should_compact(estimate.tokens, u64::from(budget_tokens));
     if !over_threshold {
         // 未超阈值 → 不压缩（不消耗计数）；仍执行被动摘要重试
         // （待重试块存在时补摘要，不阻塞发送）
@@ -404,12 +411,12 @@ pub(crate) async fn compact_with_llm_guard(
         StubPolicy::LlmRequired
     };
     let next_gen = state.compaction.next_generation(&state.conversation);
-    let engine = CompactionEngine::new(0).with_generation(next_gen);
+    let engine = CompactionEngine::new().with_generation(next_gen);
     // D10-A / DEL-9：摘要经 spawn_blocking 预计算（summarize_via_blocking
     // 单源 helper），引擎只消费 precomputed——run loop 无同步 summarize 直调。
     // preview 与引擎 cut 同源；preview None = 无压缩动作（引擎将 noop）。
     let summarize_precomputed = if let Some(summarizer) = state.compaction.summarizer.clone() {
-        match engine.preview_compaction(&state.conversation, policy) {
+        match preview_compaction(&state.conversation, policy) {
             Some(preview) => {
                 let wall_ms = state
                     .options
@@ -576,7 +583,7 @@ pub(crate) async fn apply_compaction(
         }
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
-    let boundary_ms = conex_shared::time::unix_millis() as i64;
+    let boundary_ms = conex_shared::time::unix_millis();
     tracing::info!(
         tokens_before = plan.tokens_before,
         tokens_after = plan.tokens_after,
@@ -862,7 +869,7 @@ pub(crate) async fn apply_compaction(
     state.emit_event(AgentEvent::ContextCompressionEnd {
         session_id: session_id.clone(),
         timestamp: conex_shared::time::now_iso_utc(),
-        result: Some(record),
+        result: Some(Box::new(record)),
         aborted: false,
         error: None,
     });
@@ -920,7 +927,7 @@ fn policy_tier_for(trigger: ContextCompressionTrigger) -> ContextCompressionPoli
 /// （[crate::r#loop::handlers::LoopState::compaction]），字段文档随迁本处。
 ///
 /// 生命周期 = LoopState：构造派生见 `LoopState::new`（mod.rs）与
-/// `loop_runner with_options` 同步；run 起始归零见 loop_exec.rs（压缩
+/// `runner with_options` 同步；run 起始归零见 exec.rs（压缩
 /// 护栏 + cache_tracker 复位同批，P5 §3.4.5 fresh run 语义）。
 pub(crate) struct CompactionRuntime {
     /// 压缩策略（经 SessionLoopOptions 注入，P4 §3.4.2）：None = 无自动压缩。
@@ -947,7 +954,7 @@ pub(crate) struct CompactionRuntime {
     /// 在 plan.llm_unavailable 且无豁免时置 true，fatal 文案经
     /// compression_fatal_note 输出「LLM 不可用」附注（显式失败不静默丢语义，
     /// 信息分级约束 C：经 runtime-error 事件呈现，不进对话）；fresh run
-    /// 归零（loop_exec.rs run 起始同批）。
+    /// 归零（exec.rs run 起始同批）。
     pub(crate) overflow_llm_unavailable: bool,
     /// 缓存跟踪器（P5 S2 / T-36）：None = 未配置缓存测量（行为与现状一致）；
     /// 构造 / 复位点 = LoopState 构造 + run() 起始（fresh run，P5 §3.4.5）；
@@ -999,7 +1006,7 @@ pub(crate) struct BudgetState {
 
 impl CompactionRuntime {
     /// 从 options 派生构造（LoopState::new 构造期调用；with_options 覆盖
-    /// options 时由 loop_runner 派生状态同步刷新，run 起始复位见 loop_exec.rs）
+    /// options 时由 runner 派生状态同步刷新，run 起始复位见 exec.rs）
     pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
         Self {
             compaction_policy: options.compaction.compaction_policy.clone(),

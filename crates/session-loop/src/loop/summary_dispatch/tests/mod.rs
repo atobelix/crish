@@ -1,8 +1,7 @@
 use super::run::{jittered_ms, run_summary_task_with_abort};
 use super::*;
 use crate::safe_point::AbortSignal;
-use conex_compaction::summary_document::validate_summary_document;
-use conex_compaction::{recovery::SummaryState, Summarizer};
+use conex_compaction::{validate_summary_document, Summarizer, SummaryState};
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use std::sync::Arc;

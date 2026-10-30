@@ -4,8 +4,8 @@ use crate::server::backend::SettingsUpdateParams;
 use crate::server::{ServerError, ServerState};
 use axum::extract::{Path, RawQuery, State};
 use axum::Json;
-use conex_types::device::commands::{SettingsConfirmParams, SettingsConfirmResult};
-use conex_types::device::{
+use conex_device_protocol::commands::{SettingsConfirmParams, SettingsConfirmResult};
+use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetKind,
     AssetUrlParams, AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams,
     GetSettingsParams, GetSettingsResult, ListPendingApprovalsParams, ListPendingApprovalsResult,

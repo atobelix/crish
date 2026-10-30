@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（165 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（173 条 = 与 command_manifest/mod.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -411,11 +411,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'search index rebuild',
   },
   {
-    command: 'core_compact_messages',
-    status: 'implemented',
-    feature: 'conversation compaction',
-  },
-  {
     command: 'core_count_tokens',
     status: 'implemented',
     feature: 'token counting',
@@ -609,8 +604,8 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'workflow runs list',
   },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-  // Markdown 2.0：恢复 core_md_render_stream（活跃尾块 Rust 流式渲染）。
-  // 单条 core_md_render 已退役（前端只消费 batch/stream）。
+  // Markdown 2.0：core_md_render 单条渲染已退役（无前端消费），
+  // 恢复 core_md_render_stream（活跃尾块 Rust 流式渲染），batch/stream 保留。
   {
     command: 'core_md_render_batch',
     status: 'implemented',

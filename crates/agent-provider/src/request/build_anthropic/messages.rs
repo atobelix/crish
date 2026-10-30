@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 
-use conex_compaction::clean_output::{clean_output, CleanupOptions};
+use crate::request::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 
@@ -201,10 +201,10 @@ fn tool_result_anthropic_content(message: &AgentMessage) -> Vec<Value> {
                 );
                 tr.insert(
                     "content".to_string(),
-                    json!(if cleaned.cleaned.is_empty() {
+                    json!(if cleaned.is_empty() {
                         "(no output)".to_string()
                     } else {
-                        cleaned.cleaned
+                        cleaned
                     }),
                 );
                 if *is_error {

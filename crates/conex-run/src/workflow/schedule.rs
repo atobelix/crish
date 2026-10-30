@@ -169,35 +169,7 @@ pub(crate) fn next_fire_after_ms(expression: &str, after_ms: u64) -> Option<u64>
 
 // ── 时间展示（ISO-8601 UTC；next_fire 为本地时刻，展示做 UTC 归一）──────
 
-/// 从 epoch 天数求公历（年/月/日），Hinnant 逆算法
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719468;
-    let era = if z >= 0 { z } else { z - 146096 } / 146097;
-    let doe = (z - era * 146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
 /// epoch 毫秒 → ISO-8601 UTC（`YYYY-MM-DDTHH:MM:SS.mmmZ`；前端 Date.parse 可直接解析）
 pub(crate) fn epoch_ms_to_iso(ms: u64) -> String {
-    let secs = ms / 1000;
-    let days = (secs / 86_400) as i64;
-    let rem = secs % 86_400;
-    let (h, m, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
-    let (y, mo, d) = civil_from_days(days);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        y,
-        mo,
-        d,
-        h,
-        m,
-        s,
-        ms % 1000
-    )
+    conex_shared::time::format_iso_utc_ms(i64::try_from(ms).unwrap_or(i64::MAX))
 }

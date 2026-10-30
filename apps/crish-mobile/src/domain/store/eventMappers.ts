@@ -1,7 +1,7 @@
 // 事件消费映射（F1 §2.5 矩阵 / F3 §2 分类 → store 动作）：纯函数、可单测
 // 输入 = events.push.body.event 的 AgentEventEnvelope 扁平 JSON（M6 §10.5）或设备帧（WsGateway 分发产物）
 // 职责：type → ingest 路由表；未知 type 宽容跳过（对齐 MessageKind::Unknown 语义，
-//       crates/conex-types/src/device/envelope.rs:164-206：未登记 kind → Unknown 兜底不崩溃）。
+//       crates/conex-device-protocol/src/envelope.rs:164-206：未登记 kind → Unknown 兜底不崩溃）。
 // T1b 统一输入流收敛战役：timeline-truncate 路由 + parseEngineEvent 严格解析（未知/畸形宽容跳过），
 //       generated 唯一解析权威（详案 T1b / T3）——新类型自动获严格结构校验。
 import { ENGINE_EVENT_TYPES } from '@crish/shared-types';

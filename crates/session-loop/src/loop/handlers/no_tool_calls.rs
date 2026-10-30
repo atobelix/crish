@@ -95,7 +95,7 @@ pub(crate) async fn handle(
             state.max_tokens = state.max_tokens.saturating_mul(2);
             // EV-03（D-03）：length 升级诊断——provider-diagnostic
             // kind=length-escalation（attempt/maxTokens 前后值随载荷，
-            // 对齐 stream_error_retry.rs 的 phase=Retry 载荷先例）
+            // 对齐 stream_error/retry.rs 的 phase=Retry 载荷先例）
             super::stream_error::emit_length_escalation_diagnostic(
                 state,
                 state.length_upgrades,

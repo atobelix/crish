@@ -2,10 +2,10 @@
 
 use super::build::build_tree;
 use super::params::ProjectTreeParams;
+use conex_shared::time::millis_of;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::SystemTime;
 
 /// 树节点（构建期完成排序与子树大小计算，渲染期只读）
 pub(super) struct TreeNode {
@@ -103,12 +103,12 @@ fn fingerprints_valid(entry: &TreeEntry) -> bool {
     })
 }
 
-/// 目录 mtime 纪元纳秒（stat 失败回退 0——与记录期同口径，恒不匹配则重建）
+/// 目录 mtime 纪元纳秒（时间真源 = `conex_shared::time`，毫秒换算为纳秒；stat 失败回退 0——与记录期同口径，恒不匹配则重建）
 pub(super) fn dir_mtime_ns(dir: &Path) -> u64 {
     std::fs::metadata(dir)
         .ok()
         .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-        .map(|d| d.as_nanos() as u64)
+        .map(millis_of)
+        .map(|ms| u64::try_from(ms).unwrap_or(0).saturating_mul(1_000_000))
         .unwrap_or(0)
 }

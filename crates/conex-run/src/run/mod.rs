@@ -53,7 +53,7 @@ pub(crate) use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 pub(crate) use conex_db::LocalDb;
 // E2 F4（手动压缩命令面）：LlmRequired = 无 Summarizer / 摘要失败 → 放弃
 // 压缩（禁止纯丢弃式线性压缩，E2 §2 F1 L1/L2）
-pub(crate) use conex_compaction::compaction::StubPolicy;
+pub(crate) use conex_compaction::StubPolicy;
 pub(crate) use conex_types::events::{
     AgentEvent, AgentEventEnvelope, RunCacheStats, RunTerminalStatus,
 };
@@ -67,13 +67,14 @@ pub(crate) use session_loop::r#loop::stage_summary::{
 };
 // E2 F4：压缩记录（context-compression-end 载荷）+ Manual 触发/原因变体 +
 // 块语义 details 构造（orchestrator::blocks 消费面，blocks.rs:96-137）
+pub(crate) use conex_types::context::ContextBudget;
+pub(crate) use conex_types::error::{codes, CrishError, CrishErrorPayload};
+pub(crate) use conex_types::history::HistoryMessage;
+pub(crate) use conex_types::permission::PermissionMode;
 pub(crate) use conex_types::session::AgentEndReason;
 pub(crate) use conex_types::tool::{
     compaction_block_details, ContextCompressionReason, ContextCompressionRecord,
     ContextCompressionTrigger,
-};
-pub(crate) use conex_types::{
-    codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage, PermissionMode,
 };
 pub(crate) use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 pub(crate) use orchestrator::persist::{SessionSequencer, Store};
@@ -111,9 +112,7 @@ pub(crate) use crate::wait_channel::{ControlBusResolver, SubagentWaitRegistry};
 #[cfg(test)]
 pub(crate) use conex_types::error::ProviderErrorKind;
 #[cfg(test)]
-pub(crate) use conex_types::events::{
-    ApprovalDecision as WireApprovalDecision, SecurityAuditDecision, SecurityAuditOperation,
-};
+pub(crate) use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 #[cfg(test)]
 pub(crate) use conex_types::impact::ImpactAssessment;
 #[cfg(test)]
@@ -122,8 +121,6 @@ pub(crate) use orchestrator::recovery::{RunFailureContext, RECOVER_EPISODES_KEY}
 pub(crate) use orchestrator::restore::{RestoreMode, StateSnapshot};
 #[cfg(test)]
 pub(crate) use orchestrator::ToolCallStamp;
-#[cfg(test)]
-pub(crate) use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
 
 // ── 会话元数据键约定（checkpoint 阶段标记 / 产出目录键共用）────────
 
@@ -248,5 +245,4 @@ pub(crate) use run_resume::*;
 pub use run_retry::*;
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

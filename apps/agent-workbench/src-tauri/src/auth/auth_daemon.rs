@@ -301,7 +301,13 @@ impl AuthManager {
         self.wait_restored().await;
         let (tokens, user) = self
             .client
-            .confirm_email_code(EmailCodeScene::Register, email, code, device_id, device_name)
+            .confirm_email_code(
+                EmailCodeScene::Register,
+                email,
+                code,
+                device_id,
+                device_name,
+            )
             .await?;
         self.apply_session(tokens, user.clone(), email).await?;
         Ok(user)
@@ -462,10 +468,7 @@ impl AuthManager {
             .access_token()
             .await
             .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-        self.client
-            .get_profile(&token)
-            .await
-            .map_err(Into::into)
+        self.client.get_profile(&token).await.map_err(Into::into)
     }
 
     pub async fn update_profile(
@@ -505,10 +508,7 @@ impl AuthManager {
             .access_token()
             .await
             .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-        self.client
-            .list_sessions(&token)
-            .await
-            .map_err(Into::into)
+        self.client.list_sessions(&token).await.map_err(Into::into)
     }
 
     pub async fn revoke_session(&self, session_id: &str) -> Result<()> {
@@ -540,7 +540,7 @@ impl AuthManager {
             let elapsed_ms = cur.obtained_at.elapsed().as_millis() as u64;
             let total_ms = cur.expires_in_secs * 1000;
             let remaining_ms = total_ms.saturating_sub(elapsed_ms);
-            let now_ms = crate::server::now_ms();
+            let now_ms = conex_shared::time::now_millis();
 
             SessionSnapshot {
                 is_logged_in: true,
@@ -557,8 +557,7 @@ impl AuthManager {
             }
         }
     }
-
-    }
+}
 
 /// 单次续期检查的结果（驱动守护循环退避节奏）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

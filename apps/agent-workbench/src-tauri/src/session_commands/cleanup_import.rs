@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use conex_types::ImportStats;
+use conex_types::session_record::ImportStats;
 use tauri::State;
 
 use super::{guard_cleanup_keep, map_db_err, SharedDb};

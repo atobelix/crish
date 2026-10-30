@@ -531,7 +531,7 @@ impl HttpStreamParser {
 }
 
 /// 进程级 LIVE_CATALOG 为共享静态：live_catalog_tests 与
-/// engine_provider_tests 必须共用同一把锁串行安装夹具（`test-hooks`
+/// engine_provider/tests.rs 必须共用同一把锁串行安装夹具（`test-hooks`
 /// 门控——壳层测试跨 crate 共用同一实例；生产构建不暴露）。
 #[cfg(any(test, feature = "test-hooks"))]
 pub static LIVE_CATALOG_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

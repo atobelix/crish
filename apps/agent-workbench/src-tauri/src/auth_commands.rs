@@ -11,9 +11,7 @@ use crate::auth::client::{
     PasswordCodeScene,
 };
 use crate::auth::{AuthManager, CloudDeviceItem, SessionSnapshot, UserProfile};
-use crate::remote::client::{
-    fetch_relay_devices, http_client, ticket_base_url, RelayTicketError,
-};
+use crate::remote::client::{fetch_relay_devices, http_client, ticket_base_url, RelayTicketError};
 use conex_run::core_error::CoreError;
 
 /// `CloudAuthError` → `CoreError`（kind 语义对齐 PE-03 §2.4.2 映射表）：

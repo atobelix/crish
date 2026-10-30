@@ -41,7 +41,7 @@ fn test_coordinator() -> (Arc<PairingCoordinator>, Arc<Mutex<Vec<bool>>>) {
 }
 
 fn valid_code(coordinator: &PairingCoordinator) -> String {
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let result = coordinator.start_pairing(now).expect("激活配对必须成功");
     result.code
 }
@@ -49,7 +49,7 @@ fn valid_code(coordinator: &PairingCoordinator) -> String {
 #[test]
 fn start_pairing_activates_lan_and_returns_metadata() {
     let (coordinator, rebinds) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let result = coordinator.start_pairing(now).expect("激活配对必须成功");
 
     // CXN 展示形态：CXN-XXXX-XXXX-XXXX
@@ -168,7 +168,7 @@ fn local_ip_list_contains_recommended() {
 #[test]
 fn complete_pairing_issues_token_and_keeps_lan() {
     let (coordinator, rebinds) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
 
     let raw = coordinator
@@ -194,7 +194,7 @@ fn complete_pairing_issues_token_and_keeps_lan() {
 fn active_devices_track_issued_and_revoked_tokens() {
     let (coordinator, _) = test_coordinator();
     assert!(!coordinator.has_active_devices(), "初始无设备");
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
     coordinator
         .complete_pairing(&code, "active-device", now)
@@ -207,7 +207,7 @@ fn active_devices_track_issued_and_revoked_tokens() {
 #[test]
 fn complete_pairing_wrong_code_counts_failure() {
     let (coordinator, _) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     valid_code(&coordinator);
 
     let err = coordinator
@@ -225,7 +225,7 @@ fn complete_pairing_wrong_code_counts_failure() {
 #[test]
 fn t05_bruteforce_destroys_pair_session_via_coordinator() {
     let (coordinator, _) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
 
     // 4 次错误：仅计数
@@ -282,7 +282,7 @@ fn t05_bruteforce_destroys_pair_session_via_coordinator() {
 #[test]
 fn cancel_pairing_restores_loopback_and_rebinds() {
     let (coordinator, rebinds) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     valid_code(&coordinator);
     assert!(coordinator.pairing_enabled());
 
@@ -301,7 +301,7 @@ fn cancel_pairing_restores_loopback_and_rebinds() {
 #[test]
 fn cancel_pairing_revokes_all_tokens_and_kicks_ws() {
     let (coordinator, ws, rebinds) = test_coordinator_with_ws();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
     let raw = coordinator
         .complete_pairing(&code, "d1", now)
@@ -352,7 +352,7 @@ fn cancel_pairing_revokes_all_tokens_and_kicks_ws() {
 #[test]
 fn revoke_all_clears_devices_and_closes_pairing() {
     let (coordinator, rebinds) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
     coordinator
         .complete_pairing(&code, "d1", now)
@@ -370,7 +370,7 @@ fn revoke_all_clears_devices_and_closes_pairing() {
 #[test]
 fn revoke_device_removes_single_and_kicks_ws() {
     let (coordinator, _) = test_coordinator();
-    let now = crate::server::now_ms();
+    let now = conex_shared::time::now_millis();
     let code = valid_code(&coordinator);
     coordinator
         .complete_pairing(&code, "d1", now)

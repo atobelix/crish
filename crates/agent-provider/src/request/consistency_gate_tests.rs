@@ -26,7 +26,7 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 use crate::models::{ModelCatalog, ModelCatalogEntry, ModelCatalogFile};
-use crate::request::build::dialect::{
+use crate::request::vendor::dialect::{
     assemble_thinking_dialect, DialectBuildOptions, ReasoningEffort as DialectEffort,
     ThinkingDialectFormat,
 };
@@ -34,7 +34,7 @@ use crate::request::{
     describe_model, normalize_reasoning_effort, ModelCapability, ReasoningEffort,
 };
 
-/// 构造 fake 目录：给定 `(vendor::model, 条目)` 对（与 capability_tests 同构只读构造）。
+/// 构造 fake 目录：给定 `(vendor::model, 条目)` 对（与 capability/tests.rs 同构只读构造）。
 fn fake_catalog(entries: &[(String, ModelCatalogEntry)]) -> ModelCatalog {
     let mut map = BTreeMap::new();
     for (key, entry) in entries {

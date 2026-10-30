@@ -18,7 +18,7 @@ use session_loop::{
 };
 
 use crate::context_injection::ContextInjector;
-use crate::engine_assembly::{note_backend, unix_millis_now};
+use crate::engine_assembly::note_backend;
 use crate::engine_handle::{
     cold_cache_warning_event, model_switched, waste_alert_event, SessionCacheState, SharedProvider,
 };
@@ -248,7 +248,7 @@ impl SessionLoopProducer {
                 .events
                 .push(conex_types::events::AgentEvent::CacheStatsUpdated {
                     session_id: self.session_id.clone(),
-                    timestamp: crate::engine_provider::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                     stats: *stats,
                 });
         }
@@ -297,9 +297,12 @@ impl SessionLoopProducer {
         let Some(last) = &self.cache_session.last_stats else {
             return;
         };
-        if let Some(event) =
-            cold_cache_warning_event(&self.session_id, config, last, unix_millis_now())
-        {
+        if let Some(event) = cold_cache_warning_event(
+            &self.session_id,
+            config,
+            last,
+            conex_shared::time::now_millis(),
+        ) {
             sink.push(event);
         }
     }

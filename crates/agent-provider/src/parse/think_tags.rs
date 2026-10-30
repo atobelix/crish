@@ -523,5 +523,4 @@ impl StreamingTagExtractor {
 }
 
 #[cfg(test)]
-#[path = "think_tags_tests.rs"]
 mod tests;

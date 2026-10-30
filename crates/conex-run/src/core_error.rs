@@ -3,7 +3,7 @@
 //! `CoreError` 权威定义在 `conex-types`（serde tagged enum：
 //! `{"kind": "InvalidInput"|"Encoding"|"Io"|"NotFound"|"Cancelled"|"Internal", "detail": ...}`），
 //! 本模块是命令面的唯一 import 点，只做三件事：
-//! 1. 重导出 `CoreError`（禁止各命令文件散落 `use conex_types::CoreError`）；
+//! 1. 重导出 `CoreError`（禁止各命令文件散落 `use conex_types::ipc_error::CoreError`）；
 //! 2. `map_store_err` / `map_run_err`：把存储层 / run 生命周期错误无损映射为 CoreError
 //!    （detail 保留操作名 + 人读消息，77 码侧按 PE-03 §2.4.2 映射表成文）；
 //! 3. 77 码显式映射经 `conex_types::error::core_error_code` 展开（G11a：本层
@@ -23,7 +23,7 @@
 // 触发 E0252），命令面统一从本模块 import（PE-03 T03.3 约定）。
 
 /// 命令面唯一错误类型（serde `{kind, detail}` 协议，`conex-types` 权威定义）。
-pub use conex_types::CoreError;
+pub use conex_types::ipc_error::CoreError;
 
 /// 内部 String 错误 → `CoreError::Internal` 兜底（历史 String 契约在命令
 /// 边界的统一收口：宿主环境/内部辅助错误无更细 kind 可分时使用）。

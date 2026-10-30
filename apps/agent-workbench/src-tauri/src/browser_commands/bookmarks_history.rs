@@ -2,6 +2,7 @@ use super::common::{invalid_input, map_browser_err};
 use conex_browser::import::bookmarks::{parse_bookmarks, persist_bookmarks, BookmarksOptions};
 use conex_browser::import::history::{persist_history, read_history, HistoryOptions};
 use conex_run::core_error::CoreError;
+use conex_shared::time::unix_secs;
 use serde::Serialize;
 use std::path::Path;
 
@@ -49,14 +50,6 @@ pub(crate) struct HistoryImportPayload {
     pub skipped_invalid_url: usize,
 }
 
-/// 当前 unix 秒（导入时刻注入面；时钟异常回退 0）。
-fn unix_now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 /// 导入书签（G-4 收尾，03-方案 §4.2 U4）：Chrome Bookmarks JSON（§6.1
 /// 四树解析，幂等去重 + 数量上限 + 深度守卫）→ 落库 conex-db
 /// imported_bookmarks（(url, name) 主键 INSERT OR IGNORE 幂等）。
@@ -74,7 +67,7 @@ pub(crate) async fn browser_import_bookmarks(
     let report = parse_bookmarks(&json, &BookmarksOptions::default())
         .map_err(|e| map_browser_err(invalid_input(e.to_string())))?;
     let db = db_state.inner().local_db();
-    let now = unix_now_secs();
+    let now = unix_secs();
     let parsed_items = report.items.len();
     let persist_stats = tokio::task::spawn_blocking(move || {
         let mut sink = crate::browser_import_sinks::LocalDbBookmarkSink::new(db);
@@ -112,7 +105,7 @@ pub(crate) async fn browser_import_history(
     db_state: tauri::State<'_, crate::session_commands::SharedDb>,
 ) -> Result<HistoryImportPayload, CoreError> {
     let db = db_state.inner().local_db();
-    let now = unix_now_secs();
+    let now = unix_secs();
     let (report, persist_stats) = tokio::task::spawn_blocking(move || {
         let report = read_history(Path::new(&path), &HistoryOptions::default())
             .map_err(|e| map_browser_err(invalid_input(e.to_string())))?;

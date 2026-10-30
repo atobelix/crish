@@ -21,7 +21,8 @@
 use std::sync::Arc;
 
 use conex_db::{DbFailure, LocalDb};
-use conex_types::{CoreError, SessionAgent, SessionIndexEntry, SessionMessage};
+use conex_types::ipc_error::CoreError;
+use conex_types::session_record::{SessionAgent, SessionIndexEntry, SessionMessage};
 use tauri::State;
 
 mod cleanup_import;

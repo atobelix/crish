@@ -11,7 +11,7 @@ pub(crate) mod path_safety;
 pub(crate) mod resolve;
 pub(crate) mod types;
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 use crate::host_openers::discovery::discover_host_openers;
 use crate::host_openers::execute::{open_host_target, open_path_with_default_app};

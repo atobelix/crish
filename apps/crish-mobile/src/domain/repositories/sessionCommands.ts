@@ -2,9 +2,9 @@
 // searchSessions 4 条会话命令）
 //
 // 对齐依据：
-// - 字段真源：crates/conex-types/contracts/device-protocol.json（C24-C27 参数/响应
+// - 字段真源：crates/conex-device-protocol/contracts/device-protocol.json（C24-C27 参数/响应
 //   类型 + commands 段 name/kind/paramsType/resultType/tauriCommand；M6 §4.4
-//   逐条展开）；Rust 侧同构体 crates/conex-types/src/device/commands.rs:1076-1168
+//   逐条展开）；Rust 侧同构体 crates/conex-device-protocol/src/commands/session_run.rs
 //   （serde camelCase，注册表与 Rust 结构逐字节同构）；
 // - 命令信封：remote.* 消息体 = CommandRequest {command, params, timeoutMs?}
 //   （M6 §3.1 / 生成解析器 parseCommandRequest，parser.ts:422-435），kind 与

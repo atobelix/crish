@@ -19,3 +19,10 @@ thiserror = { workspace = true }
 once_cell = { workspace = true }
 # 时间真源（X-03）：cron 公历换算与错误时间戳统一走 conex_shared::time，禁止本地副本
 conex-shared = { path = "../conex-shared" }
+
+[dev-dependencies]
+# 设备协议注册表护栏（tests/registry_drift.rs §9）需要核对
+# device-protocol.json ↔ Rust serde 行为：注册表与类型已随 TY-P5 迁到
+# conex-device-protocol。dev-only 单向引用——本 crate 的 lib 不依赖设备协议，
+# 依赖图仍保持 conex-device-protocol → conex-types 单向（c.1 边界）。
+conex-device-protocol = { path = "../conex-device-protocol" }

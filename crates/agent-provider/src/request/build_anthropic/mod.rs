@@ -33,7 +33,7 @@
 //! 复用基建：thinking 预算经 [super::vendor::effort_to_budget_tokens] /
 //! [super::vendor::thinking_to_budget_tokens] 换算；消息块消毒复用
 //! [super::messages::sanitize_tool_call_id] 与 T-34 清洗
-//! [conex_compaction::clean_output::clean_output]；input_schema 复用
+//! [crate::request::clean_output::clean_output]；input_schema 复用
 //! [super::schema::canonicalize_schema]。
 
 mod body;
@@ -53,7 +53,6 @@ use crate::error::RequestBuildError;
 use serde_json::Value;
 
 #[cfg(test)]
-#[path = "../build_anthropic_tests.rs"]
 mod tests;
 
 /// anthropic.messages 接口显式版本头

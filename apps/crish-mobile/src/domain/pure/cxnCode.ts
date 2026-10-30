@@ -1,4 +1,4 @@
-// CXN 配对码规范纯函数（D3 §4.1 / crates/conex-types/src/device/pair.rs 对齐）
+// CXN 配对码规范纯函数（D3 §4.1 / crates/conex-device-protocol/src/pair.rs 对齐）
 // 格式：CXN-XXXX-XXXX-XXXX（12 有效字符，3 组 × 4，60bit 熵）
 // 字符集：ABCDEFGHJKLMNPQRSTUVWXYZ23456789（32 字符，去 0/O/1/I/L 易混淆集）
 

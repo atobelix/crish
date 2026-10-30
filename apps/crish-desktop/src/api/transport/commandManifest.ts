@@ -45,8 +45,8 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（165 = 注册面 165 全实装；与
- * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（173 = 注册面 173 全实装；与
+ * command_manifest/mod.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
@@ -161,7 +161,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_check_command', 'core', 'engine'),
     entry('core_search_files', 'core', 'engine'),
     entry('core_rebuild_search_index', 'core', 'engine'),
-    entry('core_compact_messages', 'core', 'engine'),
     entry('core_count_tokens', 'core', 'engine'),
     entry('core_compute_diff', 'core', 'engine'),
     // ── 查询与运行（A/B，§2.2）──

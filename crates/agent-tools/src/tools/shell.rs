@@ -15,28 +15,15 @@ use crate::tools::{
     resolve_workspace_path,
 };
 use async_trait::async_trait;
+use conex_types::error::codes;
 use conex_types::events::SecurityAuditOperation;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-/// 越界命令：需上层审批（保留供错误码兼容）
-#[allow(dead_code)]
-pub(crate) const TOOL_REQUIRES_APPROVAL: &str = "tool.requires_approval";
-/// 红线命令：直接拒绝（保留供错误码兼容）
-#[allow(dead_code)]
-pub(crate) const TOOL_COMMAND_BLOCKED: &str = "tool.command_blocked";
-/// 用户明确拒绝（保留供错误码兼容）
-#[allow(dead_code)]
-pub(crate) const TOOL_USER_DENIED: &str = "tool.user_denied";
 
 /// 命令长度上限（对齐 workbench_run_shell）
 const MAX_COMMAND_LEN: usize = 32_000;
 /// 超时上限（毫秒）
 const MAX_TIMEOUT_MS: u64 = 600_000;
-
-/// cd 形态拦截错误码（已废除）
-#[allow(dead_code)]
-pub(crate) const TOOL_CD_BLOCKED: &str = "tool.cd_blocked";
 
 /// auto-background 模式等待窗口缺省值（毫秒，T-AB-02）
 const DEFAULT_WAIT_MS_BEFORE_ASYNC: u64 = 3_000;
@@ -242,7 +229,7 @@ impl ShellCommandTool {
                 vec![command.clone()],
             );
             return Prepared::Done(Err(ToolError::new(
-                TOOL_COMMAND_BLOCKED,
+                codes::TOOL_COMMAND_BLOCKED,
                 format!(
                     "PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"
                 ),
@@ -346,20 +333,14 @@ impl Tool for ShellCommandTool {
 }
 
 // ==================== 拆分接线 ====================
-#[path = "shell_exec.rs"]
 mod shell_exec;
-#[path = "shell_invoke.rs"]
 mod shell_invoke;
-#[path = "shell_output.rs"]
 mod shell_output;
-#[path = "shell_path_guard.rs"]
 mod shell_path_guard;
-#[path = "shell_redirect.rs"]
 mod shell_redirect;
 
 pub(crate) use shell_exec::{run_command_maybe_background, run_command_streaming};
 pub(crate) use shell_invoke::{parse_mode, ShellMode};
 
 #[cfg(test)]
-#[path = "shell_tests/mod.rs"]
 mod tests;

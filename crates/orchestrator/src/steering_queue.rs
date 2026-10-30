@@ -121,10 +121,7 @@ pub enum MessageEntryState {
     /// 可用状态（待消费）
     Available,
     /// 租借在途中（已被 Run 预占处理中）
-    Leased {
-        lease_id: u64,
-        expires_at_ms: u64,
-    },
+    Leased { lease_id: u64, expires_at_ms: u64 },
     /// 已确认消费（已物理清除或生命周期终结）
     Committed,
 }
@@ -399,14 +396,17 @@ impl PendingMessageQueue {
 
     /// 是否有待处理条目（O(1) 判定）
     pub fn has_pending(&self) -> bool {
-        self.entries.iter().any(|e| e.state == MessageEntryState::Available)
+        self.entries
+            .iter()
+            .any(|e| e.state == MessageEntryState::Available)
     }
 
     /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
-        self.entries
-            .iter()
-            .any(|e| e.state == MessageEntryState::Available && Self::matches_session(&e.entry.session_id, session_id))
+        self.entries.iter().any(|e| {
+            e.state == MessageEntryState::Available
+                && Self::matches_session(&e.entry.session_id, session_id)
+        })
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
@@ -418,13 +418,11 @@ impl PendingMessageQueue {
 
     /// 指定会话是否含 steering 条目
     pub fn has_pending_steering_for(&self, session_id: &str) -> bool {
-        self.entries
-            .iter()
-            .any(|e| {
-                e.state == MessageEntryState::Available
-                    && Self::matches_session(&e.entry.session_id, session_id)
-                    && e.entry.is_steering
-            })
+        self.entries.iter().any(|e| {
+            e.state == MessageEntryState::Available
+                && Self::matches_session(&e.entry.session_id, session_id)
+                && e.entry.is_steering
+        })
     }
 
     /// 预览可用队首（不移除）

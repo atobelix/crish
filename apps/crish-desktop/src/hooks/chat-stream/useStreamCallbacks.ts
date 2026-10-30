@@ -187,7 +187,7 @@ export function useStreamCallbacks(
   runStreamingAssistant: StreamRunStarter;
   /** 默认 Stop = L2 cooperative */
   handleStopGeneration: (targetSessionId?: string) => void;
-  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  /** 静默 Stop（内部编排复用，不弹 toast） */
   handleSilentStopGeneration: (targetSessionId?: string) => void;
   /** 强制取消 = L3 force（UI 二次确认后调用） */
   handleForceCancelGeneration: (targetSessionId?: string) => void;
@@ -209,8 +209,10 @@ export function useStreamCallbacks(
    * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()。
    * opts.silent = 内部编排复用（如编辑重发的先行停止）：只做本地收口与 wire
    * 派发，不弹停止类 toast——停止是手段，不得冒充用户可见语义。
-   * 共享 wire：api/streamStop.dispatchStreamStopCancel → createStreamCancel / compositionRoot
-   *（Wave C：core_run_control 单一命令面，cancel-run 双线已删）。
+   * wire：收口完成后 sessionStreams.cancel(sid, mode) → 句柄 cancel；停止意图面
+   * 经 api/streamStop（markStreamingActive / cancelModeFromForce）→
+   * createStreamCancel → compositionRoot（Wave C：core_run_control 单一命令面，
+   * cancel-run 双线已删）。
    * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
    */
   const finalizeStopGeneration = (
@@ -342,7 +344,7 @@ export function useStreamCallbacks(
     finalizeStopGeneration(false, targetSessionId);
   };
 
-  /** 内部编排专用（编辑重发先行停止等）：静默收口，不弹停止类 toast */
+  /** 静默 Stop：内部编排复用，不弹 toast */
   const handleSilentStopGeneration = (targetSessionId?: string) => {
     finalizeStopGeneration(false, targetSessionId, { silent: true });
   };

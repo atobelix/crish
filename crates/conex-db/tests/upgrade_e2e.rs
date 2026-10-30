@@ -16,7 +16,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use conex_db::{LocalDb, RunStatus, LATEST_VERSION, SCHEMA_VERSION_STRING};
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

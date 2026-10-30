@@ -6,12 +6,12 @@ use super::options::{
 };
 use super::pairing::fail_closed_anthropic_pairing_gate;
 use crate::models::catalog_types::ThinkingFormat;
-use crate::request::build::dialect::{
-    self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
-};
 use crate::request::cache::allocate_breakpoints;
 use crate::request::schema::canonicalize_schema;
 use crate::request::tools::ToolChoice;
+use crate::request::vendor::dialect::{
+    self, assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat,
+};
 use crate::request::vendor::ReasoningEffort;
 use crate::request::{RequestBuildContext, ThinkingIntensity};
 use serde_json::{json, Map, Value};

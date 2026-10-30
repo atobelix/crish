@@ -35,7 +35,8 @@ use std::sync::Arc;
 use conex_db::{DbFailure, LocalDb};
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEventEnvelope, SubagentEndStatus};
-use conex_types::{HistoryMessage, SessionAgent, SessionMessage};
+use conex_types::history::HistoryMessage;
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use serde::Serialize;
 
 use crate::normalize::normalize_envelope;

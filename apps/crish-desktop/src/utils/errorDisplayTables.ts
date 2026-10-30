@@ -298,6 +298,15 @@ export const BUILTIN_ACTION_DISPLAY: Readonly<Record<string, string>> = {
   'action.tool.outcome_unknown':
     'Tool outcome is unknown. Please verify manually.',
   'action.tool.exec_failed': 'Please check tool parameters and try again.',
+  // X04 P4：ToolErrorKind 双向映射登记的 4 个新动作键
+  'action.tool.check_permission':
+    'Operation denied. Please check the permission settings.',
+  'action.tool.request_approval':
+    'This tool requires approval before it can run.',
+  'action.tool.check_policy':
+    'Blocked by safety policy. Please review the request.',
+  'action.tool.check_network':
+    'The response stream failed. Please check the connection and retry.',
 
   // browser
   'action.browser.wait_ready': 'Please wait for the browser to become ready.',

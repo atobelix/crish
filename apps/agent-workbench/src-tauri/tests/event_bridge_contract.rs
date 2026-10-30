@@ -29,10 +29,14 @@
 use std::sync::{Arc, Mutex};
 
 use conex_run::core_event_bridge::{Emitter, EventBridge};
-use conex_types::{
-    AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
-    AgentMessageRole, ApprovalDecision, PermissionRequest, RunTerminalStatus, ToolBatchCall,
-    ToolBatchResult, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
+use conex_types::events::{
+    AgentEvent, AgentEventEnvelope, ApprovalDecision, PermissionRequest, RunTerminalStatus,
+    ToolMetadata,
+};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::session::AgentEndReason;
+use conex_types::tool::{
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput,
 };
 use serde_json::Value;
 

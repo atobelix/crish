@@ -1,5 +1,5 @@
 use super::{codes, CrishError};
-use crate::CoreError;
+use crate::ipc_error::CoreError;
 
 // ── CoreError → 78 码显式映射（PE-03 T03.3 动作 1，AU-04 D8 边界）──
 //

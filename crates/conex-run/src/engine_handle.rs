@@ -27,7 +27,6 @@ use agent_tools::tools::wait_subagents::SubagentWaitChannel;
 use agent_tools::WorkflowCreationChannel;
 use async_trait::async_trait;
 use conex_db::LocalDb;
-use conex_types::denied_stats::DeniedStats;
 use conex_types::events::RunCacheStats;
 use conex_types::response::ClassifiedStreamError;
 use orchestrator::PendingMessageQueue;
@@ -43,8 +42,8 @@ use crate::engine_provider::{
 use crate::sched::{SchedEventSink, SchedulerRegistry};
 use crate::timers::{AgentEventSink, TimerRegistry};
 use crate::wait_channel::{
-    EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore, WaitChannel,
-    WaitDispatchStore, WaitStore,
+    EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, WaitChannel, WaitDispatchStore,
+    WaitStore,
 };
 use crate::wake_watcher::LastWakeupTracker;
 
@@ -128,23 +127,24 @@ pub struct EngineHandle {
 impl EngineHandle {
     /// 初始化引擎（加载生效配置 + 内置工具注册；失败仅降级未就绪）。
     ///
-    /// spawn 通道未注入（None）——run_subagent 返回 common.unsupported 降级；
-    /// 生产装配走 [Self::new_with_spawner]。
+    /// [LocalDb] 是必需依赖（timer/sched/wait 三 store 真适配 + 子代理策略
+    /// 持久化）；spawn 通道未注入（None）——run_subagent 返回
+    /// common.unsupported 降级；生产装配走 [Self::new_with_spawner]。
     pub fn new(
         background_manager: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
+        db: LocalDb,
     ) -> Self {
-        Self::new_with_spawner(background_manager, None, None)
+        Self::new_with_spawner(background_manager, None, db)
     }
 
     /// 初始化引擎并注入子代理 spawn 通道与 LocalDb 连接（生产装配点：
     /// CoreRunState 创建 spawner 实例后传入；D6 §3.1 段 2 + D4 §3.8 ②
-    /// 装配替换：`db: Option<LocalDb>`（W4 统一签名，CoreRunState::new 经
-    /// `store.as_local_db()` 下转传入）——Some(db) → timer/sched/wait 三
-    /// store 真适配，None（InMemoryStore 测试替身）→ 内存版回退保测试面）。
+    /// 装配替换：`db: LocalDb` 为必需依赖——timer/sched/wait 三 store
+    /// 恒走真适配，生产路径不再存在「无库回退」）。
     pub fn new_with_spawner(
         background_manager: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
         subagent_spawner: Option<Arc<dyn SubagentSpawner>>,
-        db: Option<LocalDb>,
+        db: LocalDb,
     ) -> Self {
         let client = build_http_client(None);
         let core = assemble_engine_core(EngineAssemblyConfig {
@@ -462,11 +462,8 @@ impl EngineHandle {
     }
 }
 
-impl Default for EngineHandle {
-    fn default() -> Self {
-        Self::new(None)
-    }
-}
+// EngineHandle 无 Default：装配必须有真实 [LocalDb]（timer/sched/wait 三
+// store 真适配），不存在「无库缺省引擎」。
 
 // ── 引擎装配（crate 域；壳层域工具族经 EngineHostHooks 注入）────────
 
@@ -476,8 +473,8 @@ pub struct EngineAssemblyConfig {
     pub background_manager: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
     /// 子代理 spawn 通道（run_subagent 工具；None = common.unsupported 降级）
     pub subagent_spawner: Option<Arc<dyn SubagentSpawner>>,
-    /// LocalDb 连接（timer/sched/wait 三 store 真适配；None = 内存回退）
-    pub db: Option<LocalDb>,
+    /// LocalDb 连接（timer/sched/wait 三 store 真适配的必需依赖）
+    pub db: LocalDb,
     /// create_workflow 工具通道（延迟绑定面；None = common.unsupported 降级）
     pub workflow_creation_channel: Option<Arc<dyn WorkflowCreationChannel>>,
 }
@@ -519,8 +516,7 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
     } = config;
 
     // G5 T-CF-06/07：TimerRegistry 装配（pending sink = 真实
-    // PendingMessageQueue、event sink = 缓冲适配、store = D6 §3.1 段 2
-    // 装配替换：Some(db) → LocalDb 真适配；None → 内存版回退）
+    // PendingMessageQueue、event sink = 缓冲适配、store = LocalDb 真适配）
     let timer_steering_queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
     // P4（30 方案 §4）：事件缓冲实例由引擎持有（TimerRegistry 注入同一
     // Arc——缓冲 → 转发同实例，不出现第二份无人消费的缓冲）
@@ -528,11 +524,8 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
     // 显式 trait 化（先 clone 出 Arc<AgentEventSink> 再经赋值 unsize 强转
     // ——Arc::clone 泛型推断无法经引用反向强转）
     let timer_event_sink_trait: Arc<dyn crate::timers::EventSink> = timer_event_sink.clone();
-    // 装配分支（LocalDb 真适配 / 内存回退）经 dyn TimerStore 收口
-    let timer_store: Arc<dyn crate::timers::TimerStore> = match &db {
-        Some(db) => Arc::new(crate::timers::LocalDbTimerStore::new(db.clone())),
-        None => crate::timers::MemoryTimerStore::shared(),
-    };
+    let timer_store: Arc<dyn crate::timers::TimerStore> =
+        Arc::new(crate::timers::LocalDbTimerStore::new(db.clone()));
     let timer_registry = Arc::new(TimerRegistry::new(
         Arc::new(crate::timers::QueuePendingSink::new(Arc::clone(
             &timer_steering_queue,
@@ -560,10 +553,7 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
     // ── T-CF-10：WaitChannel 装配（SubagentWaitChannel 契约实现）──
     // dispatch 声明存储与 watchdog 共享（同一实例双 trait 注入）；终态
     // 事件流广播为事件收口旁路点的订阅面。
-    let dispatch_store: Arc<dyn WaitDispatchStore> = match &db {
-        Some(db) => Arc::new(LocalDbWaitStore::new(db.clone())),
-        None => Arc::new(MemoryWaitStore::new()),
-    };
+    let dispatch_store: Arc<dyn WaitDispatchStore> = Arc::new(LocalDbWaitStore::new(db.clone()));
     // 审计 01 W1（任务连续性推进轮）：三通道 + 控制总线解析器延迟绑定
     // 板卡——真实现经 finalize_continuity_channels 绑定；未绑定窗口内
     // resolver 恒 None（inject 返回结构化 InjectFailed），行为与装配前一致
@@ -590,17 +580,15 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         db.clone(),
     );
 
-    // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配 ──
-    // G10 denied 计数实例（引擎级共享）+ run 级桥注册表
-    let audit_sink = Arc::new(RoutingAuditSink::new(Arc::new(DeniedStats::new())));
+    // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配（run 级桥注册表）──
+    let audit_sink = Arc::new(RoutingAuditSink::new());
 
     // 会话级子代理策略服务（configure_agents）：LocalDb 持久化 + spawner 同步
-    let agent_policy = db.as_ref().map(|db| {
-        Arc::new(crate::agent_policy::AgentPolicyService::new(
-            db.clone(),
-            subagent_spawner.clone(),
-        ))
-    });
+    // （db 为必需依赖 → 策略服务恒装配）
+    let agent_policy = Some(Arc::new(crate::agent_policy::AgentPolicyService::new(
+        db.clone(),
+        subagent_spawner.clone(),
+    )));
 
     // 子代理邮箱（report/ask/request）：投递到主 agent followUp/steer 环
     let agent_mailbox = Arc::new(crate::agent_mailbox::AgentMailbox::new(
@@ -608,10 +596,8 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         agent_policy.clone(),
     ));
     if let Some(spawner) = subagent_spawner.as_ref() {
-        spawner.set_child_registrar(
-            Arc::clone(&agent_mailbox)
-                as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>,
-        );
+        spawner.set_child_registrar(Arc::clone(&agent_mailbox)
+            as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>);
     }
 
     // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：后台管理器
@@ -630,21 +616,16 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
             Arc::clone(&continuity) as Arc<dyn MainAgentMessageChannel>
         ),
         agent_policy_channel: agent_policy.as_ref().map(|service| {
-            Arc::clone(service)
-                as Arc<dyn agent_tools::tools::configure_agents::AgentPolicyChannel>
+            Arc::clone(service) as Arc<dyn agent_tools::tools::configure_agents::AgentPolicyChannel>
         }),
         subagent_report_channel: Some(Arc::clone(&agent_mailbox)
             as Arc<dyn agent_tools::tools::subagent_report::SubagentReportChannel>),
-        subagent_capability_channel: Some(
-            Arc::clone(&continuity)
-                as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>,
-        ),
+        subagent_capability_channel: Some(Arc::clone(&continuity)
+            as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>),
         child_agent_registrar: Some(Arc::clone(&agent_mailbox)
             as Arc<dyn agent_tools::tools::subagent_report::ChildAgentRegistrar>),
-        subagent_model_channel: Some(
-            Arc::clone(&continuity)
-                as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>,
-        ),
+        subagent_model_channel: Some(Arc::clone(&continuity)
+            as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>),
         audit_sink: Some(Arc::clone(&audit_sink) as agent_tools::audit::AuditSink),
         ..agent_tools::tools::BuiltinToolConfig::default()
     };
@@ -784,7 +765,7 @@ pub fn cold_cache_warning_event(
     cold_cache_check(Some(&baseline), now_ms, config.ttl_seconds).map(|warning| {
         conex_types::events::AgentEvent::ColdCacheWarning {
             session_id: session_id.to_string(),
-            timestamp: crate::engine_provider::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             ttl_seconds: warning.ttl_seconds,
             idle_ms: warning.idle_ms,
             resend_estimate_tokens: warning.resend_estimate,
@@ -830,7 +811,7 @@ pub fn waste_alert_event(
     }
     Some(conex_types::events::AgentEvent::CacheWasteAlert {
         session_id: session_id.to_string(),
-        timestamp: crate::engine_provider::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         attribution: conex_types::events::MissAttribution::Unknown,
         missed_tokens: stats.missed_tokens,
         idle_ms: 0,

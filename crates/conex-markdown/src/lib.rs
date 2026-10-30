@@ -24,9 +24,7 @@ pub mod types;
 pub mod url_safety;
 
 pub use highlight::{clear_cache, highlight_code, highlight_code_lines};
-pub use html::{
-    escape_html, escape_html_attr, escape_html_attr_into, escape_html_into,
-};
+pub use html::{escape_html, escape_html_attr, escape_html_attr_into, escape_html_into};
 pub use renderer::{
     lookup_gfm_emoji, render_markdown, render_markdown_batch, render_markdown_stream,
     translate_gfm_emoji, translate_gfm_emoji_cow, translate_gfm_emoji_with,

@@ -25,8 +25,7 @@ vi.mock('../../app/compositionRoot', () => ({
   }),
 }));
 
-vi.mock('../../store/storeAccess', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../store/storeAccess')>()),
+vi.mock('../../api/storeAccess', () => ({
   openSettings: vi.fn(),
 }));
 
@@ -60,9 +59,6 @@ async function loadCatalog(input: string[]): Promise<void> {
       activeModel: { providerId: 'openai', modelId: 'gpt-4o' },
       providers: providers(input),
     },
-  }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({
-    path: CATALOG_PATH,
   }));
   mockTauriCommand('workbench_save_models_yaml', () => ({
     path: CATALOG_PATH,

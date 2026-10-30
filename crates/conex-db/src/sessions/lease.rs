@@ -21,10 +21,7 @@ impl LocalDb {
         let instance_id = instance_id.to_string();
         let ttl = ttl_ms.unwrap_or(crate::RECOVERY_LEASE_TTL_MS);
         let result = self.update_session_meta(crate::RECOVERY_LEASE_KEY, move |current| {
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
+            let now_ms = conex_shared::time::unix_millis();
             if let Some(val_str) = current {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(val_str) {
                     if let Some(exp) = v.get("expiresAt").and_then(|e| e.as_i64()) {
@@ -61,10 +58,7 @@ impl LocalDb {
             if v.get("instanceId").and_then(|e| e.as_str()) != Some(instance_id.as_str()) {
                 return None;
             }
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
+            let now_ms = conex_shared::time::unix_millis();
             let lease_payload = serde_json::json!({
                 "instanceId": instance_id,
                 "acquiredAt": v.get("acquiredAt").and_then(|e| e.as_i64()).unwrap_or(now_ms),

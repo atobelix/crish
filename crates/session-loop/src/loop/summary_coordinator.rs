@@ -402,8 +402,7 @@ mod tests {
 
     use super::super::summary_dispatch::SummaryBackgroundSink;
     use super::*;
-    use conex_compaction::recovery::SummaryState;
-    use conex_compaction::Summarizer;
+    use conex_compaction::{Summarizer, SummaryState};
     use conex_types::events::AgentEvent;
     use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
     use std::time::Duration;

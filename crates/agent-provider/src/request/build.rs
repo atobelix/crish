@@ -6,8 +6,8 @@
 //! （None 字段一律省略）。endpoint 缺省恒 chat-completions（00 D3：config 已保证，
 //! 此处提供 [resolve_endpoint] 兜底）。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 build_chat_tests.rs /
-//! build_cache_tests.rs / build_responses_tests.rs，公共测试构造经 build_tests_common.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 build/tests/：
+//! chat_tests / cache_tests / responses_tests，公共测试构造 test_common）：
 //! - [build_chat]：chat-completions 请求体构建域（[build_chat_completions_request_body]）
 //! - [build_responses]：Responses API 请求体构建与会话亲和头域
 //!   （[build_responses_request_body] / [affinity_http_headers]）
@@ -23,29 +23,20 @@ use super::messages::ReasoningContentMode;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ReasoningVendor, ThinkingIntensity};
 
-#[path = "build_chat.rs"]
 mod build_chat;
-#[path = "build_responses.rs"]
 mod build_responses;
-#[path = "vendor/dialect.rs"]
-pub mod dialect;
+
+// 思考方言单模块（plans/04 §3.2）归 vendor 目录：本模块只引入别名，公开面
+// 仍由下方 `pub use dialect::{...}` 维持（四个 builder 共用同一
+// `assemble_thinking_dialect`，杜绝双份类型与双实现漂移）。
+use super::vendor::dialect;
 
 pub use build_chat::build_chat_completions_request_body;
 pub use build_responses::{affinity_http_headers, build_responses_request_body};
 pub use dialect::{assemble_thinking_dialect, DialectBuildOptions, ThinkingDialectFormat};
 
 #[cfg(test)]
-#[path = "build_cache_tests.rs"]
-mod cache_tests;
-#[cfg(test)]
-#[path = "build_chat_tests.rs"]
-mod chat_tests;
-#[cfg(test)]
-#[path = "build_responses_tests.rs"]
-mod responses_tests;
-#[cfg(test)]
-#[path = "build_tests_common.rs"]
-mod test_common;
+mod tests;
 
 /// maxTokens 字段名（对齐 OpenAICompatibleMaxTokensField）
 // G2 允许理由（clippy::enum_variant_names）：变体名按协议源命名对齐

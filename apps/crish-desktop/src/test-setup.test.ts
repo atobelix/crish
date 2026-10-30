@@ -135,9 +135,9 @@ describe('Tauri invoke mock 三态语义', () => {
     });
 
     it('invokeResult 包装层返回 error 状态', async () => {
-      mockTauriError('core_compact_messages', new Error('OOM'));
+      mockTauriError('core_count_tokens', new Error('OOM'));
 
-      const res = await invokeResult('core_compact_messages', {});
+      const res = await invokeResult('core_count_tokens', {});
       expect(res.status).toBe('error');
       if (res.status === 'error') {
         expect(res.message).toBe('OOM');

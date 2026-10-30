@@ -2,11 +2,12 @@
 /**
  * 契约绑定生成器（R0-03 多注册表分发泛化，前身 R3 T6 引擎绑定生成器）。
  *
- * 扫描 crates/conex-types/contracts/*.json 注册表，按 `contract` 字段分发：
+ * 扫描显式登记的注册表路径，按 `contract` 字段分发（TY-P5：device 协议拆出
+ * 独立 crate 后不再按目录通配，避免漏扫/误扫）：
  * - engine-events  → packages/shared-types/src/generated/engine/
  *   （41 事件注册表，真源 crates/conex-types/src/events.rs，行为与 R3 T6 一致）
  * - device-protocol → packages/shared-types/src/generated/device/
- *   （多端互通 103 kind 注册表，真源 crates/conex-types/src/device/**）
+ *   （多端互通 103 kind 注册表，真源 crates/conex-device-protocol/src/**）
  * - error-codes     → packages/shared-types/src/generated/errors/
  *   （错误码单一真源契约，真源 crates/conex-types/src/error/**）
  *
@@ -23,13 +24,22 @@
  *   node scripts/generate-engine-bindings.mjs --out <dir>         # 覆盖输出目录
  */
 
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONTRACTS_DIR = join(ROOT, "crates", "conex-types", "contracts");
+/** 设备协议注册表目录（TY-P5：独立 crate `conex-device-protocol`） */
+const DEVICE_CONTRACTS_DIR = join(ROOT, "crates", "conex-device-protocol", "contracts");
 const GENERATED_DIR = join(ROOT, "packages", "shared-types", "src", "generated");
+
+/** 注册表扫描清单（显式登记；新增注册表在此追加一行） */
+const REGISTRY_PATHS = [
+  join(CONTRACTS_DIR, "engine-events.json"),
+  join(DEVICE_CONTRACTS_DIR, "device-protocol.json"),
+  join(CONTRACTS_DIR, "error-codes.json"),
+];
 
 /** 注册表契约 → 输出子目录分发表（新增注册表在此登记） */
 const REGISTRY_TARGETS = {
@@ -53,8 +63,8 @@ const HEADER = [
 const DEVICE_HEADER = [
   "// =======================================================================",
   "// GENERATED FILE - DO NOT EDIT BY HAND.",
-  "// Source of truth: crates/conex-types/src/device/**",
-  "// Registry: crates/conex-types/contracts/device-protocol.json",
+  "// Source of truth: crates/conex-device-protocol/src/**",
+  "// Registry: crates/conex-device-protocol/contracts/device-protocol.json",
   "// Generator: scripts/generate-engine-bindings.mjs",
   "// Regenerate: node scripts/generate-engine-bindings.mjs",
   "// =======================================================================",
@@ -1549,9 +1559,7 @@ function main() {
   if (opts.registry) {
     registryPaths = [opts.registry];
   } else {
-    registryPaths = readdirSync(CONTRACTS_DIR)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => join(CONTRACTS_DIR, f));
+    registryPaths = REGISTRY_PATHS.filter((p) => existsSync(p));
   }
 
   // engine 注册表（device 事件段交叉校验真源；缺失时跳过交叉校验）

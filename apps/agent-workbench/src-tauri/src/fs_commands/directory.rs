@@ -1,7 +1,6 @@
-use std::time::UNIX_EPOCH;
-
 // U-BLOCK / D0：条目上限唯一定义面 = conex-shared::perf_budget
 use conex_shared::perf_budget::FS_LIST_DIRECTORY_DEFAULT_LIMIT;
+use conex_shared::time::millis_of;
 
 use crate::fs_commands::types::{
     DirectoryItem, FileCommandError, ListDirectoryResult, WorkspaceFsGuard, ERR_NOT_DIRECTORY,
@@ -74,8 +73,8 @@ fn list_directory_entries(
             let modified = metadata
                 .modified()
                 .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_millis().to_string());
+                .map(millis_of)
+                .map(|ms| ms.to_string());
             Some(DirectoryItem {
                 name,
                 is_dir,

@@ -19,7 +19,7 @@
 //! summary / existing 素材）均为**确定性序列化**——同文档同输出、无时间戳、
 //! 无随机量，使触发后的新前缀可重复命中 provider 缓存。
 
-use conex_compaction::summary_document::{summary_to_markdown, SUMMARY_SCHEMA_VERSION};
+use conex_compaction::{summary_to_markdown, SummaryDocument, SummaryTier, SUMMARY_SCHEMA_VERSION};
 use conex_types::checkpoint::CheckpointPayload;
 
 /// 默认里程碑阶梯（E2 §7.1：`compact_stage_ratios` 默认 [0.4, 0.6, 0.8]；
@@ -134,7 +134,7 @@ pub fn next_pending_milestone(ratio: f64, ratios: &[f64], triggered: &[u32]) -> 
 /// 里程碑下标 → tier 标记（E2 §6.2：`"stage-N"`，N 从 1 起；默认阶梯
 /// [0.4, 0.6, 0.8] 对应 stage-1 / stage-2 / stage-3）。
 pub fn stage_tier(stage_index: u32) -> String {
-    format!("stage-{}", stage_index + 1)
+    SummaryTier::stage(stage_index).to_string()
 }
 
 /// 阶段总结覆盖的消息 id 区间（Schema V1 custom `range` 字段，E2 §6.2：
@@ -151,11 +151,11 @@ pub struct StageSummaryRange {
 
 /// 阶段总结文档构造入参（对齐 Schema V1 骨架，E2 §6.2 / 07 §4.2）。
 ///
-/// 构造辅助 [build_stage_summary_document] 产出合法 Schema V1 JSON：
+/// 构造辅助 [build_stage_summary_document] 产出强类型 Schema V1 文档：
 /// schemaVersion/blockId/generation/droppedIds=[]/height=1/
 /// tier="stage-N"/goal/constraints/progress/decisions/nextSteps/
 /// criticalContext + custom `range`（覆盖消息 id 区间）。required 骨架
-/// 与压缩摘要完全一致（校验兼容，summary_document.rs 不变）。
+/// 与压缩摘要完全一致（同一 [SummaryDocument] 契约）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StageSummaryDocument {
     /// 里程碑下标（0-based；tier = stage-{stage_index + 1}）
@@ -174,45 +174,48 @@ pub struct StageSummaryDocument {
     pub decisions: Vec<String>,
     /// 下一步清单（nextSteps 字段；终结摘要 / checkpoint 继承面）
     pub next_steps: Vec<String>,
-    /// 关键上下文（criticalContext 字段）
-    pub critical_context: String,
+    /// 关键上下文（criticalContext 字段；prompt 契约的字符串数组形态）
+    pub critical_context: Vec<String>,
     /// 覆盖消息 id 区间（custom range 字段；None = 不输出）
     pub range: Option<StageSummaryRange>,
 }
 
-/// 构造阶段总结 Schema V1 文档（纯函数；产出可经
-/// [conex_compaction::summary_document::validate_summary_document] 校验）。
-pub fn build_stage_summary_document(input: &StageSummaryDocument) -> serde_json::Value {
-    let mut doc = serde_json::json!({
-        "schemaVersion": SUMMARY_SCHEMA_VERSION,
-        "blockId": input.block_id,
-        "generation": input.generation,
-        "droppedIds": [],
-        "height": 1,
-        "tier": stage_tier(input.stage_index),
-        "goal": input.goal,
-        "constraints": input.constraints,
-        "progress": input.progress,
-        "decisions": input.decisions,
-        "nextSteps": input.next_steps,
-        "criticalContext": input.critical_context,
-    });
+/// 构造阶段总结 Schema V1 文档（纯函数；产出为强类型
+/// [SummaryDocument]，可直接渲染 / 落 checkpoint 载荷）。
+pub fn build_stage_summary_document(input: &StageSummaryDocument) -> SummaryDocument {
+    let mut extra = serde_json::Map::new();
     if let Some(range) = &input.range {
-        doc["range"] = serde_json::json!({
-            "startMessageId": range.start_message_id,
-            "endMessageId": range.end_message_id,
-            "messageCount": range.message_count,
-        });
+        extra.insert(
+            "range".to_string(),
+            serde_json::json!({
+                "startMessageId": range.start_message_id,
+                "endMessageId": range.end_message_id,
+                "messageCount": range.message_count,
+            }),
+        );
     }
-    doc
+    SummaryDocument {
+        schema_version: SUMMARY_SCHEMA_VERSION,
+        block_id: input.block_id.clone(),
+        generation: input.generation,
+        dropped_ids: Vec::new(),
+        height: 1,
+        tier: SummaryTier::stage(input.stage_index),
+        goal: input.goal.clone(),
+        constraints: input.constraints.clone(),
+        progress: input.progress.clone(),
+        decisions: input.decisions.clone(),
+        next_steps: input.next_steps.clone(),
+        critical_context: input.critical_context.clone(),
+        extra,
+    }
 }
 
 /// 阶段总结 md 渲染（确定性投影：同文档同输出、无时间戳；骨架节复用
 /// Schema V1 渲染面，另加 tier 标注头——系统提示词段注入 / 观测展示用）。
-pub fn stage_summary_to_markdown(doc: &serde_json::Value) -> String {
-    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
+pub fn stage_summary_to_markdown(doc: &SummaryDocument) -> String {
     let mut out = String::new();
-    out.push_str(&format!("## 阶段性总结（{tier}）\n"));
+    out.push_str(&format!("## 阶段性总结（{}）\n", doc.tier));
     out.push_str(&summary_to_markdown(doc));
     out
 }
@@ -230,23 +233,22 @@ pub struct StageSummaryInheritance<'a> {
     pub next_steps: Vec<&'a str>,
 }
 
-/// 提取阶段总结的可继承字段（纯函数；字段缺失/非字符串 → 空面）。
-pub fn stage_summary_inheritance(doc: &serde_json::Value) -> StageSummaryInheritance<'_> {
+/// 提取阶段总结的可继承字段（纯函数；空数组 → 空面）。
+pub fn stage_summary_inheritance(doc: &SummaryDocument) -> StageSummaryInheritance<'_> {
     StageSummaryInheritance {
-        goal: doc.get("goal").and_then(|v| v.as_str()),
-        progress: string_array(doc, "progress"),
-        next_steps: string_array(doc, "nextSteps"),
+        goal: Some(doc.goal.as_str()),
+        progress: doc.progress.iter().map(String::as_str).collect(),
+        next_steps: doc.next_steps.iter().map(String::as_str).collect(),
     }
 }
 
 /// 终结摘要 existing 素材文本（确定性序列化：tier 标注 + goal/nextSteps
 /// 全量字段，供 Summarizer::summarize(dropped, existing) 的 existing 入参
 /// 迭代合并——阶段总结产出 progress/nextSteps 被终结摘要继承）。
-pub fn stage_summary_to_existing_text(doc: &serde_json::Value) -> String {
+pub fn stage_summary_to_existing_text(doc: &SummaryDocument) -> String {
     let inherited = stage_summary_inheritance(doc);
-    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
     let mut out = String::new();
-    out.push_str(&format!("[{tier} 阶段总结]\n"));
+    out.push_str(&format!("[{} 阶段总结]\n", doc.tier));
     if let Some(goal) = inherited.goal {
         out.push_str(&format!("目标：{goal}\n"));
     }
@@ -273,42 +275,21 @@ pub fn stage_summary_to_existing_text(doc: &serde_json::Value) -> String {
 /// - timestamp None（采集端补当前时间，与 CHECKPOINT 行标记同通道语义）。
 ///
 /// 实际落库由 D7 面 / 后续批次接线（本函数为转换接口）。
-pub fn stage_summary_to_checkpoint_payload(doc: &serde_json::Value) -> CheckpointPayload {
-    let goal = doc
-        .get("goal")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let progress: Vec<String> = string_array(doc, "progress")
-        .into_iter()
-        .map(str::to_string)
-        .collect();
-    let next_steps: Vec<String> = string_array(doc, "nextSteps")
-        .into_iter()
-        .map(str::to_string)
-        .collect();
-    let tier = doc.get("tier").and_then(|v| v.as_str()).unwrap_or("stage");
+pub fn stage_summary_to_checkpoint_payload(doc: &SummaryDocument) -> CheckpointPayload {
+    let progress = doc.progress.clone();
     let summary = if progress.is_empty() {
-        format!("[{tier}] 阶段无进展记录")
+        format!("[{}] 阶段无进展记录", doc.tier)
     } else {
-        format!("[{tier}] {}", progress.join("；"))
+        format!("[{}] {}", doc.tier, progress.join("；"))
     };
     CheckpointPayload {
-        target: goal,
+        target: doc.goal.clone(),
         summary,
         timestamp: None,
         completed: progress,
         files: Vec::new(),
-        next: next_steps,
+        next: doc.next_steps.clone(),
     }
-}
-
-/// 字符串数组字段读取（非数组 / 非字符串项跳过）
-fn string_array<'a>(doc: &'a serde_json::Value, key: &str) -> Vec<&'a str> {
-    doc.get(key)
-        .and_then(|v| v.as_array())
-        .map(|items| items.iter().filter_map(|item| item.as_str()).collect())
-        .unwrap_or_default()
 }
 
 /// 已触发里程碑集合（对话生命周期内每阶梯只触发一次，E2 §6.2）。
@@ -346,5 +327,4 @@ impl StageMilestoneState {
 }
 
 #[cfg(test)]
-#[path = "stage_summary_tests.rs"]
 mod tests;

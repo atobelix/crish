@@ -115,7 +115,7 @@ export function startObservationWiring(
   };
 }
 
-/** 认证失效错误码（crates/conex-types/src/device/error.rs auth 域；命中 → 令牌过期态） */
+/** 认证失效错误码（crates/conex-device-protocol/src/error.rs auth 域；命中 → 令牌过期态） */
 const AUTH_EXPIRED_ERROR_CODES: ReadonlySet<string> = new Set([
   'auth.expired',
   'auth.device_revoked',

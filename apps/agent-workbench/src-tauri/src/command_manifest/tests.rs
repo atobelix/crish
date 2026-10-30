@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod config_command_names_contract;
+
 /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
 /// 变更时双端同步——T-F 06 退役 5 条后 95 → 90，浏览器域追加
 /// browser_input / browser_start_frames / browser_stop_frames /
@@ -47,12 +49,12 @@ fn manifest_count_matches_registered_surface() {
         .count();
     let pending = total - registered;
     assert_eq!(
-        total, 174,
-        "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153，原生子 Webview 七命令追加后 160，Hit-Test 能力命令后 161，Inspector 后 162，运行时权限切换后 163，Markdown 2.0 流式渲染命令后 164，外链命令后 165，multi_device_export_ca 后 166，auth_get_relay_ticket / auth_revoke_device 下线后 164，完整账号体系七命令（验证码 / 资料 / 头像 / 会话）后 171，注销 / 先码后密码三命令后 174"
+        total, 172,
+        "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153，原生子 Webview 七命令追加后 160，Hit-Test 能力命令后 161，Inspector 后 162，运行时权限切换后 163，Markdown 2.0 流式渲染命令后 164，外链命令后 165，multi_device_export_ca 后 166，auth_get_relay_ticket / auth_revoke_device 下线后 164，完整账号体系七命令（验证码 / 资料 / 头像 / 会话）后 171，注销 / 先码后密码三命令后 174，旧 Message 面压缩命令死链退役后 173，core_md_render 幽灵退役后 172"
     );
     assert_eq!(
-        registered, 174,
-        "注册面 174（全部为 registered=true 实装命令）"
+        registered, 172,
+        "注册面 172（全部为 registered=true 实装命令）"
     );
     assert_eq!(pending, 0, "登记先行 0");
 }

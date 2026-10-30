@@ -9,7 +9,7 @@
 //! 快速模式：`cargo bench -p conex-db --bench db_write -- --measurement-time 1 --warm-up-time 0.2`
 
 use conex_db::LocalDb;
-use conex_types::SessionMessage;
+use conex_types::session_record::SessionMessage;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// 构造一条会话消息（正文可配大小）

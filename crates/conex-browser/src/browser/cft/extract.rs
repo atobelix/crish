@@ -125,10 +125,7 @@ pub(super) fn extract_zip_limited(
             {
                 if let Some(mode) = entry.unix_mode() {
                     use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(
-                        &dest,
-                        std::fs::Permissions::from_mode(mode & 0o777),
-                    )?;
+                    std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode & 0o777))?;
                 }
             }
         }

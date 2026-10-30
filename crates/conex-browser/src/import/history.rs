@@ -218,11 +218,7 @@ pub fn read_history(path: &Path, opts: &HistoryOptions) -> Result<HistoryReport,
 
 /// 默认起始时间（unix 秒）：当前时间 - [`HISTORY_DEFAULT_DAYS`] 天。
 fn default_since_unix_secs() -> i64 {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    now - HISTORY_DEFAULT_DAYS * 86_400
+    conex_shared::time::unix_secs() - HISTORY_DEFAULT_DAYS * 86_400
 }
 
 /// 默认起始时间（WebKit 微秒，供查询过滤）。

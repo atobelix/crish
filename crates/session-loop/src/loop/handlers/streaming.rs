@@ -41,9 +41,8 @@ use super::super::handlers::{
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
-
-/// 工具在派发执行前因流式以错误截断终止而被阻断（BC02-2 防火墙）
-pub(crate) const TOOL_STREAM_ERROR_BEFORE_DISPATCH: &str = "tool.stream_error_before_dispatch";
+/// BC02-2 防火墙拦截码（X04 P4：改用生成常量，禁止模块内自建字面量镜像）
+use conex_types::error::codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH;
 
 /// streaming handler（01 §2.4）
 pub(crate) async fn handle(
@@ -79,7 +78,7 @@ pub(crate) async fn handle(
     // （request 最后使用点 = stream 调用，NLL 允许此后 &mut state；
     // 消费循环尚未开始，锚点必然先于任何 message-delta）。
     let request = build_request(state);
-    let request_started_at_ms = conex_shared::time::unix_millis() as u64;
+    let request_started_at_ms = conex_shared::time::now_millis();
     let result = provider.stream(&request).await;
     emit_provider_request_anchored(state, request_started_at_ms);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
@@ -458,13 +457,21 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
     //（turn-end 正常发射点），补发闭合（current_turn_index 为 None 时
     // 幂等无操作；stream_error 阶梯复用本路径同样覆盖）
     emit_missing_turn_end(state);
-    let action = {
+    let (action, trace) = {
         let mut bus = state.control_bus.lock().unwrap_or_else(|e| {
             tracing::error!(target: "session_loop", "control_bus 锁中毒，按恢复模式继续：{e}");
             e.into_inner()
         });
-        crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal))
+        let action =
+            crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal));
+        let trace = if state.abort_signal.is_aborted() {
+            Vec::new()
+        } else {
+            bus.take_trace()
+        };
+        (action, trace)
     };
+    super::control_intents::emit_control_intents(state, &trace);
     match action {
         Some(crate::safe_point::ControlAction::ForceCancel { reason }) => {
             // T06.3 Q02：取消原因经 aborted_with_diagnostic 透出
@@ -670,7 +677,7 @@ fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
     };
     let completion = get("completionTokens").unwrap_or(0);
     let total = get("totalTokens").unwrap_or(0);
-    let completed_at_ms = conex_shared::time::unix_millis() as u64;
+    let completed_at_ms = conex_shared::time::now_millis();
     if let Some(miss) = tracker.record_usage(scalars, completion, total, completed_at_ms) {
         tracing::debug!(
             missed_tokens = miss.missed_tokens,

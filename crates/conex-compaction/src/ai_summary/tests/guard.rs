@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::ai_summary::{
     retry_allowed, summarize_with_guard, RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy,
 };
-use crate::compaction::{CompactionEngine, CompactionPolicy};
+use crate::{CompactionEngine, CompactionPolicy};
 
 // ── 重试决策（纯函数）──
 
@@ -190,7 +190,7 @@ fn retry_guard_wrapper_success_into_engine() {
         SummaryRetryPolicy::default(),
         empty_wait(),
     );
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",
@@ -263,7 +263,7 @@ fn retry_guard_wrapper_degrades_into_engine_placeholder() {
         SummaryRetryPolicy::default(),
         empty_wait(),
     );
-    let engine = CompactionEngine::new(0);
+    let engine = CompactionEngine::new();
     let messages = vec![
         amsg(
             "u1",

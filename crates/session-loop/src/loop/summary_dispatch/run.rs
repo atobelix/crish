@@ -5,8 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::safe_point::AbortSignal;
-use conex_compaction::summary_document::{summary_to_markdown, validate_summary_document};
-use conex_compaction::{recovery::SummaryState, Summarizer};
+use conex_compaction::{summary_to_markdown, validate_summary_document, Summarizer, SummaryState};
 use conex_types::message::AgentMessage;
 
 use super::{

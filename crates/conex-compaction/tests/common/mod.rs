@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use conex_types::{
-    AgentMessage, AgentMessageBlock, AgentMessageRole, Message, ToolCallBlock, ToolOutput,
-};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+use conex_types::tool::ToolOutput;
 use std::sync::Arc;
 
 pub fn text_block(text: &str) -> AgentMessageBlock {
@@ -78,15 +77,6 @@ pub fn usage_msg(id: &str, created_at: &str, input_total: u64, text: &str) -> Ar
     )
 }
 
-pub fn msg(id: &str, role: &str, content: &str) -> Message {
-    Message {
-        id: id.to_string(),
-        role: role.to_string(),
-        content: content.to_string(),
-        images: None,
-    }
-}
-
 pub fn summary_doc_json(goal: &str) -> String {
     serde_json::json!({
         "schemaVersion": 1,
@@ -100,13 +90,13 @@ pub fn summary_doc_json(goal: &str) -> String {
         "progress": [],
         "decisions": [],
         "nextSteps": [],
-        "criticalContext": "",
+        "criticalContext": [],
     })
     .to_string()
 }
 
 pub fn first_compaction_fixture() -> (conex_compaction::CompactionEngine, Vec<Arc<AgentMessage>>) {
-    let engine = conex_compaction::CompactionEngine::new(0);
+    let engine = conex_compaction::CompactionEngine::new();
     let messages = vec![
         amsg(
             "s1",

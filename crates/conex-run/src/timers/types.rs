@@ -11,12 +11,6 @@ pub const TIMER_ID_PREFIX: &str = "timer-";
 /// 注册时长上限（秒，与工具 schema 一致）
 pub const MAX_DURATION_SECONDS: u64 = 86400;
 
-/// 当前 epoch 毫秒（定时器全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-pub fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}
-
 /// 从 timer id 解析序号（`timer-<seq>` → `seq`；恢复时推进分配器防撞 id）
 pub fn timer_seq(timer_id: &str) -> Option<u64> {
     timer_id

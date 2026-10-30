@@ -11,9 +11,9 @@
 //   cxnCode（PairCode::normalize 语义镜像）。
 //
 // 真源索引：
-// - crates/conex-types/contracts/device-protocol.json（协议注册表）
-// - crates/conex-types/src/device/pair.rs（PairCode/PairHello/PairOk）
-// - crates/conex-types/src/device/error.rs（DeviceErrorCode/ErrorBody）
+// - crates/conex-device-protocol/contracts/device-protocol.json（协议注册表）
+// - crates/conex-device-protocol/src/pair.rs（PairCode/PairHello/PairOk）
+// - crates/conex-device-protocol/src/error.rs（DeviceErrorCode/ErrorBody）
 // - apps/agent-workbench/src-tauri/src/server/pair_endpoint.rs（pair_ok_body/error_response）
 // - apps/agent-workbench/src-tauri/src/server/pairing.rs（qr_data_for）
 // - scripts/mock-daemon/src/connection.ts + tests/pairing.test.ts（参考对拍写法）
@@ -62,7 +62,7 @@ interface DeviceProtocolRegistry {
 /** 注册表路径：apps/crish-mobile/src/pairing → 仓库根 crates/... */
 const REGISTRY_PATH = join(
   __dirname,
-  '../../../../crates/conex-types/contracts/device-protocol.json'
+  '../../../../crates/conex-device-protocol/contracts/device-protocol.json'
 );
 
 function loadRegistry(): DeviceProtocolRegistry {
@@ -225,7 +225,7 @@ describe('parsePairOk × pair_endpoint.rs pair_ok_body（Rust 形状 fixture）'
 // ── 3. parsePairError × error.rs ErrorBody（错误码映射全表） ───────────────
 
 describe('parsePairError × error.rs ErrorBody（DeviceErrorCode 映射 fixture）', () => {
-  // ErrorBody JSON 形状（crates/conex-types/src/device/error.rs:421-436）：
+  // ErrorBody JSON 形状（crates/conex-device-protocol/src/error.rs:421-436）：
   //   { code: <wire 字符串>, message: <≤512>, retryable: <bool> }
   //   （reqMsgId/detail 可选，serde skip_serializing_if=None，error.rs:431-435）
   // DeviceErrorCode wire 值：serde rename 锁死（error.rs:19-38 pair.* 域）。

@@ -294,7 +294,7 @@ fn recovery_fork_completion_is_atomic_and_retry_deduplicates_event() {
             .unwrap();
         db.insert_run("child-1", "s1", RunStatus::Running, None, 0)
             .unwrap();
-        db.upsert_session_agent(&conex_types::SessionAgent {
+        db.upsert_session_agent(&conex_types::session_record::SessionAgent {
             id: "child-agent".to_string(),
             subagent_run_id: "child-1".to_string(),
             parent_session_id: "s1".to_string(),

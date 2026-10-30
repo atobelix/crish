@@ -997,7 +997,7 @@ pub(crate) fn register_all(registry: &ToolRegistry, ctx: Arc<GuardCtx>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use conex_types::error::codes;
     /// 参数解析透传：click 参数 → Action::Click（按钮/次数/坐标/修饰键）。
     #[test]
     fn parse_click_maps_fields() {
@@ -1028,9 +1028,9 @@ mod tests {
     #[test]
     fn parse_hold_key_rejects_bad_key_and_duration() {
         let err = parse_hold_key_name(&json!({ "key": "not-a-key" })).expect_err("未知键名应拒绝");
-        assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_INVALID_PARAMS);
+        assert_eq!(err.code(), codes::TOOL_COMPUTER_INVALID_PARAMS);
         let err = parse_hold_key_duration(&json!({ "duration": 200 })).expect_err("超长应拒绝");
-        assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_INVALID_PARAMS);
+        assert_eq!(err.code(), codes::TOOL_COMPUTER_INVALID_PARAMS);
     }
 
     /// 截图后处理：PNG 输入 → PNG 原样输出 + region 裁剪尺寸正确 + 越界拒绝。
@@ -1064,10 +1064,10 @@ mod tests {
 
         // 越界拒绝：x1 超出帧宽 → coords_out_of_bounds
         let err = postprocess_frame(&png, "png", 80, Some([0, 0, 5, 4])).expect_err("越界应拒绝");
-        assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
+        assert_eq!(err.code(), codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
         // 非法 region（反向区间）同样拒绝
         let err = postprocess_frame(&png, "png", 80, Some([2, 0, 1, 4])).expect_err("反向应拒绝");
-        assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
+        assert_eq!(err.code(), codes::TOOL_COMPUTER_COORDS_OUT_OF_BOUNDS);
     }
 
     /// 快照树预算：max_depth / max_elements 二次截断 + 截断标记并入。

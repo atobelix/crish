@@ -130,16 +130,15 @@ pub(crate) async fn retract_impl(
 
     // ⑦ 物理下推：SQLite 消息持久层截断 target_message_id 之后的消息
     // 彻底根除应用重启或水合后被撤回消息死灰复燃
-    if let Some(db) = state.local_db() {
-        if let Err(e) = db.truncate_session_messages_after(session_id, target_message_id) {
-            tracing::warn!(
-                target: "retraction",
-                session_id = %session_id,
-                target_message_id = %target_message_id,
-                error = %e,
-                "撤回持久化物理下推警告（session_messages 截断未匹配或失败）"
-            );
-        }
+    let db = state.local_db();
+    if let Err(e) = db.truncate_session_messages_after(session_id, target_message_id) {
+        tracing::warn!(
+            target: "retraction",
+            session_id = %session_id,
+            target_message_id = %target_message_id,
+            error = %e,
+            "撤回持久化物理下推警告（session_messages 截断未匹配或失败）"
+        );
     }
 
     Ok(RetractResponse {
@@ -347,7 +346,7 @@ impl RetractionBackend for ShellRetractionBackend {
             run_id,
             boundary_seq,
             target_message_id,
-            &conex_run::engine_provider::now_iso_utc(),
+            &conex_shared::time::now_iso_utc(),
         );
         // 经挂载冻结护栏的队列发射（timeline-truncate 为撤离事件放行；
         // 自身占 sequence = frozen_seq + 1）
@@ -454,8 +453,7 @@ async fn collect_post_boundary_write_operations(
     Ok(operations)
 }
 
-// ── 测试（SR-01 · 测外置 · 旁挂 retraction_commands_tests.rs · ≠ EL）──
+// ── 测试（SR-01 · 测外置 · 子模 retraction_commands/tests.rs · ≠ EL）──
 
 #[cfg(test)]
-#[path = "retraction_commands_tests.rs"]
 mod tests;

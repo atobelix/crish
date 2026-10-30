@@ -145,61 +145,63 @@ impl backend::ApiBackend for TestBackendStub {
 
     async fn get_run_snapshot(
         &self,
-        _params: conex_types::device::RunSnapshotParams,
-    ) -> Result<conex_types::device::RunSnapshotResult, ServerError> {
+        _params: conex_device_protocol::RunSnapshotParams,
+    ) -> Result<conex_device_protocol::RunSnapshotResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn read_session_events(
         &self,
-        _params: conex_types::device::EventPageParams,
-    ) -> Result<conex_types::device::EventPageResult, ServerError> {
+        _params: conex_device_protocol::EventPageParams,
+    ) -> Result<conex_device_protocol::EventPageResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn list_sessions(
         &self,
-        _params: conex_types::device::ListSessionsParams,
-    ) -> Result<conex_types::device::ListSessionsResult, ServerError> {
+        _params: conex_device_protocol::ListSessionsParams,
+    ) -> Result<conex_device_protocol::ListSessionsResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
-    async fn list_commands(&self) -> Result<conex_types::device::ListCommandsResult, ServerError> {
+    async fn list_commands(
+        &self,
+    ) -> Result<conex_device_protocol::ListCommandsResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn run_task(
         &self,
-        _p: conex_types::device::RunTaskParams,
-    ) -> Result<conex_types::device::RunTaskResult, ServerError> {
+        _p: conex_device_protocol::RunTaskParams,
+    ) -> Result<conex_device_protocol::RunTaskResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn run_control(
         &self,
-        _p: conex_types::device::RunControlParams,
-    ) -> Result<conex_types::device::RunControlResult, ServerError> {
+        _p: conex_device_protocol::RunControlParams,
+    ) -> Result<conex_device_protocol::RunControlResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn cancel_run(
         &self,
-        _p: conex_types::device::CancelRunParams,
-    ) -> Result<conex_types::device::CancelRunResult, ServerError> {
+        _p: conex_device_protocol::CancelRunParams,
+    ) -> Result<conex_device_protocol::CancelRunResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn approve(
         &self,
-        _p: conex_types::device::ApproveParams,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+        _p: conex_device_protocol::ApproveParams,
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 
     async fn deny(
         &self,
-        _p: conex_types::device::DenyParams,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+        _p: conex_device_protocol::DenyParams,
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         Err(ServerError::internal("test stub"))
     }
 }
@@ -229,7 +231,7 @@ async fn subscribe_and_receive_push(
         "v": 1,
         "kind": "events.subscribe",
         "msgId": "asm-subscribe-1",
-        "ts": now_ms(),
+        "ts": conex_shared::time::now_millis(),
         "from": "mobile",
         "to": "desktop",
         "auth": { "deviceId": "", "nonce": "", "sig": "", "ts": 0 },
@@ -306,7 +308,9 @@ async fn assembled_router_serves_real_backend_fanout_and_401() {
     config.port = 0;
     let token = {
         let mut store = auth::TokenStore::new(config.pairing_file_path.clone());
-        store.issue("asm-device", now_ms()).expect("签发必须成功")
+        store
+            .issue("asm-device", conex_shared::time::now_millis())
+            .expect("签发必须成功")
     };
 
     let instance = ServerInstance::bind(config).await.expect("绑定失败");

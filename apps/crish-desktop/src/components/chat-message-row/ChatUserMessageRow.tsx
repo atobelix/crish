@@ -321,8 +321,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const hasTextContent =
     Boolean(
       parsedStructured.isStructured
-        ? parsedStructured.userInputText &&
-            parsedStructured.userInputText.trim()
+        ? parsedStructured.userInputText && parsedStructured.userInputText.trim()
         : displayText && displayText.trim()
     ) ||
     isQueued ||

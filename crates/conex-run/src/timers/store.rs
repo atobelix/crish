@@ -1,6 +1,8 @@
 //! 定时器持久化存储抽象与实现（内存版与 LocalDb 真适配）
 
+#[cfg(any(test, feature = "test-support"))]
 use std::collections::HashMap;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::{Arc, Mutex};
 
 use conex_db::LocalDb;
@@ -25,14 +27,16 @@ pub trait TimerStore: Send + Sync {
     fn save(&self, declaration: &TimerDeclaration);
 }
 
-/// 内存持久化适配（测试 + 引擎默认装配；conex-db session_meta 真适配
-/// 在 R-CF3 接线——键形状已冻结为 `timer_<id>`）
+/// 内存持久化适配（仅测试构建：`cfg(test)` / `test-support`；生产装配恒用
+/// [LocalDbTimerStore]）
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 pub struct MemoryTimerStore {
     /// timer_<id> → TimerDeclaration JSON
     map: Mutex<HashMap<String, String>>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl MemoryTimerStore {
     /// 共享实例（重启恢复测试中两个注册表共用同一存储）
     pub fn shared() -> Arc<Self> {
@@ -40,6 +44,7 @@ impl MemoryTimerStore {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl TimerStore for MemoryTimerStore {
     fn load_all(&self) -> Vec<TimerDeclaration> {
         self.map

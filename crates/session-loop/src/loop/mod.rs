@@ -24,9 +24,9 @@
 //! SR-06c · 拆分 · ≠ EL：本文件为门面——模块接线 + 公共面 re-export +
 //! 循环错误/恢复契约（LoopError / TurnEndContext / TurnEndHook /
 //! RecoveryDecision / RecoveryHook）+ 常量；配置面
-//! （[SessionLoopOptions] / [RetryBackoffConfig]）→ loop_options.rs；
-//! 装配面（[AgentSessionLoop] 结构 + builder）→ loop_runner.rs；
-//! run 控制面 → loop_exec.rs；测试旁挂 loop_tests.rs（`#[path]` 接线，
+//! （[SessionLoopOptions] / [RetryBackoffConfig]）→ options.rs；
+//! 装配面（[AgentSessionLoop] 结构 + builder）→ runner.rs；
+//! run 控制面 → exec.rs；测试旁挂 loop_tests.rs（include! 接线，
 //! 无孤儿；crate::r#loop::* 路径不 break）。
 
 /// 压缩编排面（C1a：预算钳制/估算/预检/边界/溢出触发 + LLM 守卫 +
@@ -47,11 +47,8 @@ pub mod summary_coordinator;
 /// （T-42）与壳层回调接线（orchestrator 块表推进）消费同一任务类型面。
 pub mod summary_dispatch;
 
-#[path = "loop_exec.rs"]
 mod exec;
-#[path = "loop_options.rs"]
 mod options;
-#[path = "loop_runner.rs"]
 mod runner;
 
 #[cfg(test)]

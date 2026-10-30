@@ -498,7 +498,7 @@ fn parse_payload_extracts_envelope_fields() {
             session_id: "s-7".to_string(),
             timer_id: "timer-1".to_string(),
             prompt: "检查".to_string(),
-            fired_at_ms: now_ms(),
+            fired_at_ms: conex_shared::time::now_millis(),
         },
         None,
         Some(5),

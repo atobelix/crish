@@ -472,7 +472,7 @@ pub(crate) mod idle_resume {
                         "自主目标触发防复读安全熔断：连续 3 次无物理产出且无活跃外部任务，刚性安全熔断挂起等待用户干预澄清 (SuspendedWaitingClarification)"
                     );
 
-                    let now = crate::engine_provider::now_iso_utc();
+                    let now = conex_shared::time::now_iso_utc();
                     emit_envelope_event(
                         &active.queue,
                         &active.bridge,
@@ -610,7 +610,7 @@ pub(crate) mod idle_resume {
                 // 3g. 恢复条目入队 → drain 注入 → 拉起；注入文本最小化
                 //     「继续任务」（约束 C：kind/retries 走 provider-diagnostic
                 //     事件 + 临时通知，不进对话、不给 AI）
-                let now = now_ms_internal();
+                let now = conex_shared::time::now_millis();
                 let entry = SteeringInputEntry {
                     session_id: active.session_id.clone(),
                     id: format!("recovery-main-{}-{now}", active.run_id),
@@ -691,7 +691,7 @@ pub(crate) mod idle_resume {
                 let continuation_msg = AgentMessage {
                     id: crate::engine_provider::new_message_id("episode-bridge"),
                     role: AgentMessageRole::System,
-                    created_at: crate::engine_provider::now_iso_utc(),
+                    created_at: conex_shared::time::now_iso_utc(),
                     blocks: vec![AgentMessageBlock::Text {
                         text: "【系统跨周期接续 (Cross-Episode Continuation)】\n\
                          前序执行周期已达轮次上限（物理切片点）。\n\
@@ -781,7 +781,7 @@ pub(crate) mod idle_resume {
         }
         // 注入锁定模板（E1 §3.2：测试断言绑定）；history 经 SessionHistoryCache
         // 天然含已产出前缀，不重复注入（前缀不变性，约束 B）
-        let now = now_ms_internal();
+        let now = conex_shared::time::now_millis();
         let text = format!(
             "上一轮生成中断({}),请从断点继续完成,不要重复已输出的内容",
             resume_kind_label(kind)
@@ -813,7 +813,7 @@ pub(crate) mod idle_resume {
         AgentMessage {
             id: crate::engine_provider::new_message_id("goal-continue"),
             role: AgentMessageRole::User,
-            created_at: crate::engine_provider::now_iso_utc(),
+            created_at: conex_shared::time::now_iso_utc(),
             blocks: vec![AgentMessageBlock::Text { text }],
             metadata: Some(serde_json::json!({
                 "kind": AgentMessageMetadataKind::GoalContinue
@@ -894,7 +894,6 @@ pub(crate) mod idle_resume {
             event,
         )
         .await;
-        conex_types::denied_stats::global_denied_stats().record_recovery_budget_denied();
     }
 
     /// D1 §3.2.2（C5）：熔断触发边沿观测事件（[Self::update_provider_fail_
@@ -903,7 +902,7 @@ pub(crate) mod idle_resume {
     /// detail=Some("circuit-trip") 语义对齐 02-定夺 W1（熔断侧 subagentRunId
     /// = None、detail=Some）。
     pub(crate) async fn emit_circuit_trip_events(active: &ActiveRun, session_id: &str) {
-        let now = crate::engine_provider::now_iso_utc();
+        let now = conex_shared::time::now_iso_utc();
         emit_envelope_event(
         &active.queue,
         &active.bridge,
@@ -1009,7 +1008,7 @@ pub(crate) mod idle_resume {
         vec![AgentMessage {
             id: first.id.clone(),
             role: AgentMessageRole::User,
-            created_at: crate::engine_provider::now_iso_utc(),
+            created_at: conex_shared::time::now_iso_utc(),
             blocks: vec![AgentMessageBlock::Text { text }],
             metadata: Some(meta),
             client_message_id: None,
@@ -1104,7 +1103,7 @@ pub(crate) mod idle_resume {
                         session_id,
                         AgentEvent::CheckpointCreated {
                             session_id: session_id.to_string(),
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                             checkpoint: record,
                         },
                     )
@@ -1147,9 +1146,9 @@ pub(crate) mod idle_resume {
                 tree.read_leaf_checkpoint(None),
             )
         })
-        .unwrap_or((None, conex_types::LeafCheckpointState::Absent));
+        .unwrap_or((None, conex_types::checkpoint::LeafCheckpointState::Absent));
         match checkpoint {
-            conex_types::LeafCheckpointState::Present(payload) => {
+            conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
                 // EV-02：恢复注入命中 → checkpoint-restored（record.checkpoint_id
                 // = 叶子 id，与 created 事件的 record.id 配对；restored = 检查点
                 // 涉及文件清单；metadata 承载载荷全文）
@@ -1168,7 +1167,7 @@ pub(crate) mod idle_resume {
                         session_id,
                         AgentEvent::CheckpointRestored {
                             session_id: session_id.to_string(),
-                            timestamp: crate::engine_provider::now_iso_utc(),
+                            timestamp: conex_shared::time::now_iso_utc(),
                             restore: record,
                         },
                     )
@@ -1192,7 +1191,7 @@ pub(crate) mod idle_resume {
                     },
                 )
             }
-            conex_types::LeafCheckpointState::Corrupt(message) => {
+            conex_types::checkpoint::LeafCheckpointState::Corrupt(message) => {
                 tracing::warn!(
                     target: "run",
                     session_id,
@@ -1273,9 +1272,7 @@ pub(crate) mod idle_resume {
     /// F5：读取已触发里程碑下标集合（session_meta 键；缺失/坏 JSON → 空集
     /// fail-open，不 panic）
     pub(crate) fn stage_triggered_indices(state: &CoreRunState, session_id: &str) -> Vec<u32> {
-        let Some(db) = state.local_db() else {
-            return Vec::new();
-        };
+        let db = state.local_db();
         db.get_session_meta(&stage_triggered_meta_key(session_id))
             .ok()
             .flatten()
@@ -1286,9 +1283,7 @@ pub(crate) mod idle_resume {
     /// F5：写入已触发里程碑下标集合（失败仅告警——下次收口按当前集合重判，
     /// 幂等语义）
     pub(crate) fn save_stage_triggered(state: &CoreRunState, session_id: &str, indices: &[u32]) {
-        let Some(db) = state.local_db() else {
-            return;
-        };
+        let db = state.local_db();
         let raw = serde_json::to_string(indices).unwrap_or_else(|_| "[]".to_string());
         if let Err(error) = db.set_session_meta(&stage_triggered_meta_key(session_id), &raw) {
             tracing::warn!(
@@ -1305,9 +1300,7 @@ pub(crate) mod idle_resume {
         state: &CoreRunState,
         session_id: &str,
     ) -> Vec<(String, String)> {
-        let Some(db) = state.local_db() else {
-            return Vec::new();
-        };
+        let db = state.local_db();
         let Some(raw) = db
             .get_session_meta(&stage_summaries_meta_key(session_id))
             .ok()
@@ -1336,9 +1329,7 @@ pub(crate) mod idle_resume {
         tier: &str,
         markdown: &str,
     ) {
-        let Some(db) = state.local_db() else {
-            return;
-        };
+        let db = state.local_db();
         let key = stage_summaries_meta_key(session_id);
         let mut items: Vec<serde_json::Value> = db
             .get_session_meta(&key)
@@ -1389,20 +1380,6 @@ pub(crate) mod idle_resume {
         }
     }
 
-    /// F5：Schema V1 字符串数组字段提取（非数组/非字符串项跳过；阶段总结
-    /// 构造辅助）
-    pub(crate) fn stage_doc_string_array(doc: &serde_json::Value, key: &str) -> Vec<String> {
-        doc.get(key)
-            .and_then(|v| v.as_array())
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| item.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
     /// EV-07：stage-summary-milestone 发射单点（[evaluate_stage_milestones]
     /// 各态调用；milestone_type = reached/summarizing/produced/persisted，
     /// Delta 可丢观测事件，不进主链；Summarizer 缺失时止于 reached——
@@ -1421,7 +1398,7 @@ pub(crate) mod idle_resume {
             session_id,
             AgentEvent::StageSummaryMilestone {
                 session_id: session_id.to_string(),
-                timestamp: crate::engine_provider::now_iso_utc(),
+                timestamp: conex_shared::time::now_iso_utc(),
                 milestone_type: milestone_type.to_string(),
                 tier: Some(tier.to_string()),
                 milestone_index: Some(milestone_index),
@@ -1459,10 +1436,7 @@ pub(crate) mod idle_resume {
         // 默认 40/60/80%——stage_ratios_from_session_meta fail-open）
         let ratios = {
             let db = state.local_db();
-            let meta = |key: &str| {
-                db.as_ref()
-                    .and_then(|d| d.get_session_meta(key).ok().flatten())
-            };
+            let meta = |key: &str| db.get_session_meta(key).ok().flatten();
             stage_ratios_from_session_meta(meta)
                 .unwrap_or_else(|| DEFAULT_COMPACT_STAGE_RATIOS.to_vec())
         };
@@ -1528,16 +1502,16 @@ pub(crate) mod idle_resume {
                 return;
             }
         };
-        // Schema V1 校验 + 字段提取（goal/constraints/progress/decisions/
-        // nextSteps/criticalContext）；非法输出 → 不标记（下轮重试）
-        let llm_doc: serde_json::Value = match serde_json::from_str(&text) {
+        // Schema V1 强类型校验（字段缺失 / 类型错一律失败，走既有降级）；
+        // 非法输出 → 不标记（下轮重试）
+        let llm_doc = match conex_compaction::validate_summary_document(&text, usize::MAX) {
             Ok(doc) => doc,
             Err(error) => {
                 tracing::warn!(
                     target: "run",
                     session_id,
                     error = %error,
-                    "阶段总结非 Schema V1 JSON → 不标记（下轮收口重试）"
+                    "阶段总结非 Schema V1 文档 → 不标记（下轮收口重试）"
                 );
                 return;
             }
@@ -1549,20 +1523,12 @@ pub(crate) mod idle_resume {
             stage_index: index,
             block_id: format!("stage-summary-{}", index + 1),
             generation: 1,
-            goal: llm_doc
-                .get("goal")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            constraints: stage_doc_string_array(&llm_doc, "constraints"),
-            progress: stage_doc_string_array(&llm_doc, "progress"),
-            decisions: stage_doc_string_array(&llm_doc, "decisions"),
-            next_steps: stage_doc_string_array(&llm_doc, "nextSteps"),
-            critical_context: llm_doc
-                .get("criticalContext")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
+            goal: llm_doc.goal,
+            constraints: llm_doc.constraints,
+            progress: llm_doc.progress,
+            decisions: llm_doc.decisions,
+            next_steps: llm_doc.next_steps,
+            critical_context: llm_doc.critical_context,
             range: Some(StageSummaryRange {
                 start_message_id: messages.first().map(|m| m.id.clone()).unwrap_or_default(),
                 end_message_id: messages.last().map(|m| m.id.clone()).unwrap_or_default(),
@@ -1620,7 +1586,7 @@ pub(crate) mod idle_resume {
         if mode == "goal-continue" || inject.is_empty() {
             return;
         }
-        let now = now_ms_internal();
+        let now = conex_shared::time::now_millis();
         let mut queue = state
             .pending_queue
             .lock()
@@ -1676,11 +1642,15 @@ pub(crate) mod idle_resume {
         let meta_key = crate::run::session_meta_key_of(&session_id, "permission_mode");
         let restored_mode = state
             .local_db()
-            .and_then(|db| {
-                db.get_session_meta(&meta_key)
+            .get_session_meta(&meta_key)
+            .ok()
+            .flatten()
+            .or_else(|| {
+                state
+                    .local_db()
+                    .get_session_meta("permission_mode")
                     .ok()
                     .flatten()
-                    .or_else(|| db.get_session_meta("permission_mode").ok().flatten())
             })
             .or_else(|| {
                 state

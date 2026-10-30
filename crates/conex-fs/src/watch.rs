@@ -19,7 +19,6 @@ use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Rename 聚合窗口（毫秒）：窗口内 Remove → Create 配对为 Renamed。
 /// 默认 2000ms（独立删除后短期内重建同名文件会被聚合为 Renamed，
@@ -849,13 +848,9 @@ fn seg_match_chars(pat: &[char], s: &[char]) -> bool {
     pi == pat.len()
 }
 
-/// 当前纪元毫秒（对齐全仓 epoch ms 惯例；本 crate 叶子依赖不引
-/// agent-tools 的 epoch_millis，本地等价实现）
+/// 当前纪元毫秒（全仓 epoch ms 真源：`conex_shared::time`）
 fn epoch_millis_now() -> i64 {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(d) => d.as_millis() as i64,
-        Err(_) => 0,
-    }
+    conex_shared::time::unix_millis()
 }
 
 #[cfg(test)]

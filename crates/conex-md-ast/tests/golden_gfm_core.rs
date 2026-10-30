@@ -78,7 +78,10 @@ fn golden_gfm_core_table_kind_and_cells() {
 
     let serialized = assert_roundtrip(&out.tree);
     assert!(serialized.contains("| 左 | 中 | 右 |"), "{serialized}");
-    assert!(serialized.contains("| :--- | :---: | ---: |"), "{serialized}");
+    assert!(
+        serialized.contains("| :--- | :---: | ---: |"),
+        "{serialized}"
+    );
 }
 
 /// GFM 任务列表 → `TaskItem` + `TASK_CHECKED_ATTR`；普通 bullet 不受影响。
@@ -86,7 +89,11 @@ fn golden_gfm_core_table_kind_and_cells() {
 fn golden_gfm_core_task_list_kind_and_attrs() {
     let md = include_str!("golden/gfm-core/task_list.md");
     let out = parse_document_detailed(md).expect("parse task_list");
-    assert!(out.lossy.is_empty(), "task list is lossless: {:?}", out.lossy);
+    assert!(
+        out.lossy.is_empty(),
+        "task list is lossless: {:?}",
+        out.lossy
+    );
 
     let done = bid("11111111-1111-4111-a111-111111111111");
     let todo = bid("22222222-2222-4222-a222-222222222222");
@@ -157,7 +164,10 @@ fn golden_gfm_core_table_empty_cell() {
     let n = out.tree.get(&table_id).unwrap();
     assert_eq!(n.kind, BlockKind::Table);
     let snap = n.text_snapshot.as_deref().unwrap_or("");
-    assert!(snap.contains("有") && snap.contains("空中"), "cells: {snap}");
+    assert!(
+        snap.contains("有") && snap.contains("空中"),
+        "cells: {snap}"
+    );
     assert!(
         snap.lines().any(|l| l.matches('|').count() >= 3),
         "empty cell keeps table shape: {snap}"
@@ -250,18 +260,17 @@ fn golden_gfm_core_task_nested_table_child() {
     let n_parent = tree.get(&parent).unwrap();
     assert_eq!(n_parent.kind, BlockKind::TaskItem { ordered: false });
     assert_eq!(attr_bool(n_parent, TASK_CHECKED_ATTR), Some(true));
-    assert_eq!(n_parent.text_snapshot.as_deref(), Some("父任务：嵌套表容器"));
+    assert_eq!(
+        n_parent.text_snapshot.as_deref(),
+        Some("父任务：嵌套表容器")
+    );
     assert_eq!(n_parent.children, vec![table]);
 
     let n_table = tree.get(&table).unwrap();
     assert_eq!(n_table.kind, BlockKind::Table);
     assert_eq!(n_table.parent, Some(parent));
     assert!(n_table.children.is_empty());
-    assert!(n_table
-        .text_snapshot
-        .as_deref()
-        .unwrap_or("")
-        .contains('|'));
+    assert!(n_table.text_snapshot.as_deref().unwrap_or("").contains('|'));
 
     let n_sib = tree.get(&sibling).unwrap();
     assert_eq!(n_sib.kind, BlockKind::TaskItem { ordered: false });

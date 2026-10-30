@@ -382,7 +382,7 @@ mod tests {
         );
         // 实际端口已注入配对协调器（二维码数据同源：restart_server 的
         // set_port 生效，QR 内嵌 19082 而非默认 8765）
-        let now = server::now_ms();
+        let now = conex_shared::time::now_millis();
         let result = service
             .pairing
             .start_pairing(now)
@@ -420,7 +420,7 @@ mod tests {
         assert!(!config.pairing_enabled);
 
         // 配对开启 → Lan（协调器状态驱动）
-        let now = server::now_ms();
+        let now = conex_shared::time::now_millis();
         service
             .pairing
             .start_pairing(now)

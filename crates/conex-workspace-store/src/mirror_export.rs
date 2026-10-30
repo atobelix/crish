@@ -55,10 +55,7 @@ impl WorkspaceStore {
 
         // 2. Windows 3 阶段原子写状态机
         let pid = std::process::id();
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+        let nanos = conex_shared::time::unix_millis();
         let tmp_name = format!(".conex-tmp-{safe}-{pid}-{nanos}.tmp");
         let bak_name = format!(".conex-bak-{safe}-{pid}-{nanos}.bak");
         let tmp_path = mirror_root.join(tmp_name);

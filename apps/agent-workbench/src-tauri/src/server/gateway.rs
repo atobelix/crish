@@ -18,7 +18,7 @@
 //!   （判定逻辑单一事实源；当前超时值沿用 D2 §10.2 的 90s 心跳超时——10s
 //!   空闲读超时与 30s 服务端 Ping 节奏不兼容，见 R1-10 汇报）。
 
-use conex_types::device::version::MAX_FRAME_BYTES;
+use conex_device_protocol::version::MAX_FRAME_BYTES;
 
 /// 空闲读超时（毫秒）：D5 §7.2「空闲读超时 10s」/ §7.5 慢速攻击覆盖半帧
 // R1-10 备注：当前 ws.rs 心跳侧沿用 D2 90s 超时（10s 与 30s Ping 节奏不

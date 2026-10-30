@@ -35,5 +35,7 @@ mod tests;
 pub use self::types::SESSION_META_SCHED_INDEX_KEY;
 
 pub use self::registry::SchedulerRegistry;
-pub use self::store::{LocalDbSchedStore, MemorySchedStore, SchedStore};
+#[cfg(any(test, feature = "test-support"))]
+pub use self::store::MemorySchedStore;
+pub use self::store::{LocalDbSchedStore, SchedStore};
 pub use self::types::*;

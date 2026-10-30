@@ -25,10 +25,49 @@ fn build_raw_html_builder() -> Builder<'static> {
     // 语义化排版标签。刻意不含 button/input/script/style/iframe/form 等
     // 可执行或可伪造交互的标签；任务列表 checkbox 由渲染器自己生成，不走这里。
     b.add_tags([
-        "a", "abbr", "b", "blockquote", "br", "caption", "code", "dd", "del", "details", "div",
-        "dl", "dt", "em", "figcaption", "figure", "hr", "i", "img", "kbd", "li", "mark", "ol",
-        "p", "pre", "q", "s", "section", "small", "span", "strong", "sub", "summary", "sup",
-        "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
+        "a",
+        "abbr",
+        "b",
+        "blockquote",
+        "br",
+        "caption",
+        "code",
+        "dd",
+        "del",
+        "details",
+        "div",
+        "dl",
+        "dt",
+        "em",
+        "figcaption",
+        "figure",
+        "hr",
+        "i",
+        "img",
+        "kbd",
+        "li",
+        "mark",
+        "ol",
+        "p",
+        "pre",
+        "q",
+        "s",
+        "section",
+        "small",
+        "span",
+        "strong",
+        "sub",
+        "summary",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "u",
+        "ul",
     ]);
 
     b.add_tag_attributes("a", ["href", "title"]);
@@ -48,24 +87,22 @@ fn build_raw_html_builder() -> Builder<'static> {
     b.url_relative(UrlRelative::PassThrough);
     b.link_rel(Some("noopener noreferrer"));
 
-    b.attribute_filter(|element, attribute, value| {
-        match (element, attribute) {
-            ("a", "href") => {
-                if is_safe_href(value) {
-                    Some(Cow::Borrowed(value))
-                } else {
-                    None
-                }
+    b.attribute_filter(|element, attribute, value| match (element, attribute) {
+        ("a", "href") => {
+            if is_safe_href(value) {
+                Some(Cow::Borrowed(value))
+            } else {
+                None
             }
-            ("img", "src") => {
-                if is_safe_img_src(value) {
-                    Some(Cow::Borrowed(value))
-                } else {
-                    None
-                }
-            }
-            _ => Some(Cow::Borrowed(value)),
         }
+        ("img", "src") => {
+            if is_safe_img_src(value) {
+                Some(Cow::Borrowed(value))
+            } else {
+                None
+            }
+        }
+        _ => Some(Cow::Borrowed(value)),
     });
 
     b
@@ -118,9 +155,7 @@ pub fn html_tag_delta(html: &str) -> i32 {
         }
         let name_start = j;
         while j < bytes.len()
-            && (bytes[j].is_ascii_alphanumeric()
-                || bytes[j] == b'-'
-                || bytes[j] == b':')
+            && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'-' || bytes[j] == b':')
         {
             j += 1;
         }

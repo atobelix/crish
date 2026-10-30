@@ -16,12 +16,12 @@
 //!
 //! 空流保护（162-169）：无内容事件且无终态帧且无 usage → `stop{error}`。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 gemini_tests.rs /
-//! gemini_tests_usage.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 gemini/tests.rs 与
+//! gemini/tests_usage.rs）：
 //! - [gemini_core]：解析核心（GeminiParser 状态机：push_frame / finish / 空流保护）
 //! - [gemini_map]：消息转换与映射面（finishReason / usage / 错误帧 / 阻断 / 工具参数归一化）
 
-/// 测试专用接线：旁挂测试（gemini_tests.rs / gemini_tests_usage.rs）经
+/// 测试专用接线：旁挂测试（gemini/tests.rs / gemini/tests_usage.rs）经
 /// `use super::*` 消费以下符号，门面自身不使用（pub(crate) 不扩大对外 API；
 /// 非 test 构建下允许 unused）。
 #[cfg_attr(not(test), allow(unused_imports))]
@@ -31,9 +31,7 @@ pub(crate) use crate::sse::frame::SseFrame;
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use serde_json::Value;
 
-#[path = "gemini_core.rs"]
 mod gemini_core;
-#[path = "gemini_map.rs"]
 mod gemini_map;
 
 pub use gemini_core::GeminiParser;
@@ -42,8 +40,6 @@ pub use gemini_map::{
 };
 
 #[cfg(test)]
-#[path = "gemini_tests.rs"]
 mod tests;
 #[cfg(test)]
-#[path = "gemini_tests_usage.rs"]
 mod tests_usage;

@@ -8,13 +8,13 @@
 //! - `read_chunk` / `file_info` 保留为测试直接覆盖的核心实现（本文件测试
 //!   逐条断言），等待 core_* 命令面迁移时复用。
 
+use conex_shared::time::millis_of;
 use memmap2::Mmap;
 use serde::Serialize;
 use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::Path,
-    time::UNIX_EPOCH,
 };
 
 // 测试专用：非 test 构建下无 bin 消费者（perf_fs_* 命令已删，PE-03 迁移
@@ -110,14 +110,14 @@ pub(crate) fn file_info(path: &Path) -> Result<FileInfo, String> {
     let modified = meta
         .modified()
         .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
+        .map(millis_of)
+        .and_then(|ms| u64::try_from(ms).ok())
         .unwrap_or(0);
     let created = meta
         .created()
         .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64);
+        .map(millis_of)
+        .and_then(|ms| u64::try_from(ms).ok());
     Ok(FileInfo {
         size: meta.len(),
         modified,

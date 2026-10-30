@@ -413,7 +413,7 @@ async fn local_db_scheduler_registry_persists_and_recovers() {
 #[tokio::test]
 async fn test_restore_idempotency_and_offline_task_pre_insert() {
     let store = MemorySchedStore::shared();
-    let now = now_ms();
+    let now = conex_shared::time::now_millis();
     let expired_task = CronTask {
         cron_id: "cron-offline-9".to_string(),
         expression: "* * * * *".to_string(),

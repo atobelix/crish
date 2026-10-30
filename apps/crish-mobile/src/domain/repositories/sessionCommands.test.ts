@@ -9,7 +9,7 @@
 // 文件、零基线新增、不改 tsconfig（monitorCommands.test.ts 同款先例）。
 //
 // 策略（任务书 fixture 纪律，对齐 monitorCommands.test.ts 先例）：
-// - 注册表为单一真源：运行时直读 crates/conex-types/contracts/device-protocol.json
+// - 注册表为单一真源：运行时直读 crates/conex-device-protocol/contracts/device-protocol.json
 //   （commands 段 C24-C27 + types 段 paramsType/resultType 字段表），
 //   注册表漂移时测试红；
 // - 对拍面：build*Request（4 条命令的 kind/body.command/params 键集）、
@@ -23,9 +23,9 @@
 //   断言（只读核对结论，不调用桌面代码）。
 //
 // 真源索引：
-// - crates/conex-types/contracts/device-protocol.json（协议注册表唯一真源）
+// - crates/conex-device-protocol/contracts/device-protocol.json（协议注册表唯一真源）
 // - M6 §4.4（F5 会话域 4 条命令逐条展开：参数 schema + 响应 schema + 错误码）
-// - crates/conex-types/src/device/commands.rs:1076-1168（Rust 同构体）
+// - crates/conex-device-protocol/src/commands/session_run.rs（Rust 同构体）
 // - apps/agent-workbench/src-tauri/src/server/router.rs（只读 REST 端点表）
 // - apps/agent-workbench/src-tauri/src/server/core_backend.rs（响应数据面 +
 //   apply_remote_mode 降级面，只读核对）
@@ -86,7 +86,7 @@ interface DeviceProtocolRegistry {
 /** 注册表路径：apps/crish-mobile/src/domain/repositories → 仓库根 crates/... */
 const REGISTRY_PATH = join(
   __dirname,
-  '../../../../../crates/conex-types/contracts/device-protocol.json'
+  '../../../../../crates/conex-device-protocol/contracts/device-protocol.json'
 );
 
 function loadRegistry(): DeviceProtocolRegistry {

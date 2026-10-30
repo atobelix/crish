@@ -185,12 +185,7 @@ pub trait SubagentSpawner: Send + Sync + std::fmt::Debug {
     }
 
     /// 更新会话级派遣策略（`configure_agents` 落地；默认 no-op 兼容测试替身）。
-    fn set_session_policy(
-        &self,
-        _session_id: &str,
-        _policy: conex_agents::guard::SpawnPolicy,
-    ) {
-    }
+    fn set_session_policy(&self, _session_id: &str, _policy: conex_agents::guard::SpawnPolicy) {}
 
     /// 为流程节点派发子代理，并声明此 flow 是否启用了生命周期事件。
     /// 默认实现保留既有 spawner 行为；未接管事件的调度器会自行发射。

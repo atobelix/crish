@@ -423,10 +423,7 @@ fn cron_next_fire_after_recomputes_on_dst_switch() {
 #[test]
 fn system_local_offset_smoke() {
     let tz = SystemLocal;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as i64;
+    let now = conex_shared::time::unix_millis();
     let offset = tz.offset_minutes_at(now);
     assert!(
         (-12 * 60..=14 * 60).contains(&offset),
@@ -441,10 +438,7 @@ fn system_local_offset_smoke() {
 #[test]
 fn cron_next_fire_after_public_path_structural() {
     let sched = parse_cron("*/5 * * * *").unwrap();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
+    let now = conex_shared::time::now_millis();
     let next = sched
         .next_fire_after(now, &SystemLocal)
         .expect("必须有下一命中");

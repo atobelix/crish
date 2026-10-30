@@ -1,10 +1,9 @@
 use super::*;
 
-use conex_types::ToolCallBlock;
+use conex_types::message::ToolCallBlock;
 
-use crate::ai_summary::{
-    build_summarize_prompt, is_acceptable_summary, is_degenerate_summary, push_critical_context,
-};
+use crate::ai_summary::{build_summarize_prompt, is_acceptable_summary, is_degenerate_summary};
+use crate::summary_document::{validate_summary_document, SummaryDocument};
 
 // ── 摘要提示词 ──
 
@@ -35,8 +34,19 @@ fn summarize_prompt_contains_schema_json_instruction_and_dropped_context() {
         ),
     ];
     let prompt = build_summarize_prompt(&flat(&dropped), Some("OLD SUMMARY"));
-    // Schema V1 12 required 字段点名在场（与引擎校验单轨一致）
-    for field in crate::summary_document::SUMMARY_REQUIRED_FIELDS {
+    // Schema V1 required 字段点名在场（字段清单由强类型序列化键派生，
+    // 与引擎校验单轨一致）
+    let sample: SummaryDocument = validate_summary_document(
+        r#"{"schemaVersion":1,"blockId":"summary","generation":1,"droppedIds":[],"height":1,"tier":"chunk","goal":"","constraints":[],"progress":[],"decisions":[],"nextSteps":[],"criticalContext":[]}"#,
+        4096,
+    )
+    .expect("基准文档合法");
+    for field in serde_json::to_value(&sample)
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+    {
         assert!(prompt.contains(field), "提示词须点名 required 字段 {field}");
     }
     // 丢弃消息上下文 + 迭代合并
@@ -103,80 +113,4 @@ fn acceptable_summary_accepts_valid_template_and_schema_json() {
     assert!(!is_acceptable_summary("", 500));
     assert!(!is_acceptable_summary("退化", 500));
     assert!(is_acceptable_summary(&"长".repeat(500), 500));
-}
-
-#[test]
-fn test_push_critical_context_array_strings() {
-    let doc = serde_json::json!({
-        "criticalContext": [
-            "crates/conex-compaction/src/tokens.rs",
-            "enforce_tool_batch_closure",
-            "ERR_CONTEXT_OVERFLOW"
-        ]
-    });
-    let mut out = String::new();
-    push_critical_context(&mut out, &doc);
-    assert_eq!(
-        out,
-        "- crates/conex-compaction/src/tokens.rs\n- enforce_tool_batch_closure\n- ERR_CONTEXT_OVERFLOW\n"
-    );
-}
-
-#[test]
-fn test_push_critical_context_array_objects() {
-    let doc = serde_json::json!({
-        "criticalContext": [
-            { "path": "src/main.rs", "error": "timeout" },
-            { "command": "cargo test", "exitCode": "1" }
-        ]
-    });
-    let mut out = String::new();
-    push_critical_context(&mut out, &doc);
-    assert!(
-        out.contains("- path: src/main.rs, error: timeout\n")
-            || out.contains("- error: timeout, path: src/main.rs\n")
-    );
-    assert!(out.contains("command: cargo test"));
-}
-
-#[test]
-fn test_push_critical_context_top_level_object() {
-    let doc = serde_json::json!({
-        "criticalContext": {
-            "failedPath": "src/lib.rs:42",
-            "status": "failed"
-        }
-    });
-    let mut out = String::new();
-    push_critical_context(&mut out, &doc);
-    assert!(out.contains("- failedPath: src/lib.rs:42\n"));
-    assert!(out.contains("- status: failed\n"));
-}
-
-#[test]
-fn test_push_critical_context_multiline_string() {
-    let doc = serde_json::json!({
-        "criticalContext": "src/lib.rs:100\n- error: already formatted\nsymbol: tokenize"
-    });
-    let mut out = String::new();
-    push_critical_context(&mut out, &doc);
-    assert_eq!(
-        out,
-        "- src/lib.rs:100\n- error: already formatted\n- symbol: tokenize\n"
-    );
-}
-
-#[test]
-fn test_push_critical_context_empty_and_missing() {
-    let mut out = String::new();
-    push_critical_context(&mut out, &serde_json::json!({}));
-    assert!(out.is_empty());
-
-    let mut out = String::new();
-    push_critical_context(&mut out, &serde_json::json!({ "criticalContext": [] }));
-    assert!(out.is_empty());
-
-    let mut out = String::new();
-    push_critical_context(&mut out, &serde_json::json!({ "criticalContext": "" }));
-    assert!(out.is_empty());
 }

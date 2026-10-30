@@ -278,6 +278,91 @@ impl Store for FailNReserves {
     async fn delete_pending_input(&self, id: &str) -> crate::persist::StoreResult<bool> {
         self.inner.delete_pending_input(id).await
     }
+
+    async fn touch_session(&self, session_id: &str) -> crate::persist::StoreResult<()> {
+        self.inner.touch_session(session_id).await
+    }
+
+    fn get_run_usage(
+        &self,
+        run_id: &str,
+    ) -> crate::persist::StoreResult<Option<conex_types::events::RunCacheStats>> {
+        self.inner.get_run_usage(run_id)
+    }
+
+    fn save_run_usage(
+        &self,
+        run_id: &str,
+        stats: conex_types::events::RunCacheStats,
+    ) -> crate::persist::StoreResult<()> {
+        self.inner.save_run_usage(run_id, stats)
+    }
+
+    async fn load_running_session_agent_rows(
+        &self,
+    ) -> crate::persist::StoreResult<Vec<conex_types::session_record::SessionAgent>> {
+        self.inner.load_running_session_agent_rows().await
+    }
+
+    async fn mark_session_agent_interrupted(
+        &self,
+        parent_session_id: &str,
+        subagent_run_id: &str,
+        ended_at_ms: i64,
+        summary: &str,
+    ) -> crate::persist::StoreResult<usize> {
+        self.inner
+            .mark_session_agent_interrupted(
+                parent_session_id,
+                subagent_run_id,
+                ended_at_ms,
+                summary,
+            )
+            .await
+    }
+
+    async fn load_session_messages(
+        &self,
+        session_id: &str,
+    ) -> crate::persist::StoreResult<Vec<conex_types::session_record::SessionMessage>> {
+        self.inner.load_session_messages(session_id).await
+    }
+
+    async fn save_session_messages(
+        &self,
+        session_id: &str,
+        messages: &[conex_types::session_record::SessionMessage],
+    ) -> crate::persist::StoreResult<()> {
+        self.inner.save_session_messages(session_id, messages).await
+    }
+
+    async fn insert_compression_block(
+        &self,
+        session_id: &str,
+        record: &conex_types::tool::ContextCompressionRecord,
+        sequence: u64,
+    ) -> crate::persist::StoreResult<()> {
+        self.inner
+            .insert_compression_block(session_id, record, sequence)
+            .await
+    }
+
+    fn update_compression_block_summary(
+        &self,
+        session_id: &str,
+        block_id: &str,
+        state: conex_db::BlockState,
+        summary_json: Option<&str>,
+        attempts: u32,
+    ) -> crate::persist::StoreResult<()> {
+        self.inner.update_compression_block_summary(
+            session_id,
+            block_id,
+            state,
+            summary_json,
+            attempts,
+        )
+    }
 }
 
 /// C3：取号失败不推进本地镜像；终态经 store.reserve_sequence 重试取号，

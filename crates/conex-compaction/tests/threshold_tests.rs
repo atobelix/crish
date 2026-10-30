@@ -2,9 +2,10 @@ mod common;
 
 use common::{amsg, text_block, thought_block, usage_msg};
 use conex_compaction::{
-    count_agent_message_tokens, count_tokens, CompactionEngine, EstimateSource,
+    count_agent_message_tokens, count_tokens, estimate_agent_context, estimate_context_tokens,
+    should_compact, EstimateSource,
 };
-use conex_types::AgentMessageRole;
+use conex_types::message::AgentMessageRole;
 
 /// 时间戳护栏用例的毫秒常量（与消息 `created_at` 一一对应）：
 /// `2026-08-03T10:00:01.500Z` / `2026-08-03T09:59:59.500Z`
@@ -13,7 +14,6 @@ const GUARD_BEFORE_MS: i64 = 1_785_751_199_500;
 
 #[test]
 fn estimate_heuristic_mixed_ascii_cjk() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![
         amsg(
             "m1",
@@ -32,7 +32,7 @@ fn estimate_heuristic_mixed_ascii_cjk() {
     ];
     let expected =
         count_agent_message_tokens(&messages[0]) + count_agent_message_tokens(&messages[1]);
-    let result = engine.estimate_context_tokens(&messages, None, None, None);
+    let result = estimate_context_tokens(&messages, None, None, None);
     assert_eq!(result.source, EstimateSource::Heuristic);
     assert_eq!(result.tokens, expected as u64);
     assert_eq!(result.usage_message_id, None);
@@ -42,7 +42,6 @@ fn estimate_heuristic_mixed_ascii_cjk() {
 
 #[test]
 fn estimate_tools_system_counted_in_heuristic_only() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![amsg(
         "m1",
         AgentMessageRole::User,
@@ -52,7 +51,7 @@ fn estimate_tools_system_counted_in_heuristic_only() {
     )];
     let tools = r#"[{"type":"function","function":{"name":"read_file"}}]"#;
     let system = "You are a helpful assistant.";
-    let heuristic = engine.estimate_context_tokens(&messages, Some(tools), Some(system), None);
+    let heuristic = estimate_context_tokens(&messages, Some(tools), Some(system), None);
     assert_eq!(heuristic.source, EstimateSource::Heuristic);
     assert_eq!(
         heuristic.tokens,
@@ -63,7 +62,6 @@ fn estimate_tools_system_counted_in_heuristic_only() {
 
 #[test]
 fn estimate_usage_priority_and_tail_heuristic() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![
         usage_msg("a1", "2026-08-03T10:00:00.000Z", 800, "first response"),
         amsg(
@@ -74,7 +72,7 @@ fn estimate_usage_priority_and_tail_heuristic() {
             None,
         ),
     ];
-    let result = engine.estimate_context_tokens(&messages, None, None, None);
+    let result = estimate_context_tokens(&messages, None, None, None);
     assert_eq!(result.source, EstimateSource::Usage);
     assert_eq!(result.usage_message_id.as_deref(), Some("a1"));
     assert_eq!(
@@ -85,7 +83,6 @@ fn estimate_usage_priority_and_tail_heuristic() {
 
 #[test]
 fn estimate_usage_ignores_aborted_and_zero_usage() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![
         usage_msg("a1", "2026-08-03T10:00:00.000Z", 500, "first"),
         amsg(
@@ -100,7 +97,7 @@ fn estimate_usage_ignores_aborted_and_zero_usage() {
             })),
         ),
     ];
-    let result = engine.estimate_context_tokens(&messages, None, None, None);
+    let result = estimate_context_tokens(&messages, None, None, None);
     assert_eq!(result.source, EstimateSource::Usage);
     assert_eq!(result.usage_message_id.as_deref(), Some("a1"));
     assert_eq!(
@@ -119,7 +116,7 @@ fn estimate_usage_ignores_aborted_and_zero_usage() {
             "cacheBreakdown": { "inputTotal": 0, "read": 0, "write": 0, "miss": 0 },
         })),
     )];
-    let result = engine.estimate_context_tokens(&messages, None, None, None);
+    let result = estimate_context_tokens(&messages, None, None, None);
     assert_eq!(result.source, EstimateSource::Heuristic);
     assert_eq!(
         result.tokens,
@@ -129,10 +126,9 @@ fn estimate_usage_ignores_aborted_and_zero_usage() {
 
 #[test]
 fn estimate_timestamp_guard_invalidates_stale_usage() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![usage_msg("a1", "2026-08-03T10:00:00.000Z", 800, "old")];
     let boundary = GUARD_BOUNDARY_MS;
-    let result = engine.estimate_context_tokens(&messages, None, None, Some(boundary));
+    let result = estimate_context_tokens(&messages, None, None, Some(boundary));
     assert_eq!(result.source, EstimateSource::Heuristic);
     assert_eq!(result.usage_message_id, None);
     assert_eq!(
@@ -140,14 +136,13 @@ fn estimate_timestamp_guard_invalidates_stale_usage() {
         count_agent_message_tokens(&messages[0]) as u64
     );
 
-    let result = engine.estimate_context_tokens(&messages, None, None, Some(GUARD_BEFORE_MS));
+    let result = estimate_context_tokens(&messages, None, None, Some(GUARD_BEFORE_MS));
     assert_eq!(result.source, EstimateSource::Usage);
     assert_eq!(result.tokens, 800);
 }
 
 #[test]
 fn estimate_agent_context_p4_compat_entry() {
-    let engine = CompactionEngine::new(0);
     let messages = vec![
         usage_msg("a1", "2026-08-03T10:00:00.000Z", 300, "resp"),
         amsg(
@@ -158,28 +153,27 @@ fn estimate_agent_context_p4_compat_entry() {
             None,
         ),
     ];
-    let result = engine.estimate_agent_context(&messages, Some("a1"));
+    let result = estimate_agent_context(&messages, Some("a1"));
     assert_eq!(result.source, EstimateSource::Usage);
     assert_eq!(
         result.tokens,
         300 + count_agent_message_tokens(&messages[1]) as u64
     );
 
-    let result = engine.estimate_agent_context(&messages, Some("missing"));
+    let result = estimate_agent_context(&messages, Some("missing"));
     assert_eq!(result.source, EstimateSource::Heuristic);
 }
 
 #[test]
 fn estimate_empty_messages() {
-    let engine = CompactionEngine::new(0);
-    let result = engine.estimate_context_tokens(&[], None, None, None);
+    let result = estimate_context_tokens(&[], None, None, None);
     assert_eq!(result.tokens, 0);
     assert_eq!(result.source, EstimateSource::Heuristic);
     assert_eq!(result.usage_message_id, None);
 
     let tools = "tools-json";
     let system = "system-prompt";
-    let result = engine.estimate_context_tokens(&[], Some(tools), Some(system), None);
+    let result = estimate_context_tokens(&[], Some(tools), Some(system), None);
     assert_eq!(
         result.tokens,
         (count_tokens(tools) + count_tokens(system)) as u64
@@ -188,10 +182,9 @@ fn estimate_empty_messages() {
 
 #[test]
 fn should_compact_threshold() {
-    let engine = CompactionEngine::new(0);
-    assert!(!engine.should_compact(999, 1000));
-    assert!(engine.should_compact(1000, 1000));
-    assert!(engine.should_compact(1001, 1000));
+    assert!(!should_compact(999, 1000));
+    assert!(should_compact(1000, 1000));
+    assert!(should_compact(1001, 1000));
     let budget = 64_000u64 - 16_384u64;
-    assert!(engine.should_compact(budget, budget));
+    assert!(should_compact(budget, budget));
 }

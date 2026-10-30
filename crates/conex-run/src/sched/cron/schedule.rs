@@ -35,8 +35,8 @@ fn weekday_sunday0(days: i64) -> u32 {
 /// epoch 毫秒 + 时区偏移 → 本地墙钟字段（年 月 日 时 分；秒与毫秒不参与
 /// cron 匹配，直接丢弃——触发时刻恒为整分钟）
 fn epoch_ms_to_local_fields(after_ms: u64, offset_minutes: i32) -> (i64, u32, u32, u32, u32) {
-    let total_secs = i64::try_from(after_ms / 1000).unwrap_or(i64::MAX)
-        + i64::from(offset_minutes) * 60;
+    let total_secs =
+        i64::try_from(after_ms / 1000).unwrap_or(i64::MAX) + i64::from(offset_minutes) * 60;
     let days = total_secs.div_euclid(86_400);
     let secs_of_day = total_secs.rem_euclid(86_400);
     let (y, m, d) = civil_from_days(days);
@@ -69,8 +69,7 @@ impl CronSchedule {
     /// 时刻的偏移算候选，再用候选时刻的偏移复核；两次偏移不同（跨 DST 切换）
     /// 则按新偏移重算一次，避免切换点前后偏一小时。
     pub fn next_fire_after(&self, after_ms: u64, tz: &dyn LocalOffset) -> Option<u64> {
-        let offset_at_after =
-            tz.offset_minutes_at(i64::try_from(after_ms).unwrap_or(i64::MAX));
+        let offset_at_after = tz.offset_minutes_at(i64::try_from(after_ms).unwrap_or(i64::MAX));
         let candidate = self.next_fire_after_in_offset(after_ms, offset_at_after)?;
         let offset_at_candidate =
             tz.offset_minutes_at(i64::try_from(candidate).unwrap_or(i64::MAX));

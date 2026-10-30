@@ -24,8 +24,8 @@ use conex_test_utils::clock::TimePauseGuard;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use session_loop::r#loop::AgentEndReason;
 use conex_types::tool::ToolOutput;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream,
     ProviderRequest, ProviderStreamEvent, ReasoningEffort, RecoverySteeringStrategy,
@@ -1699,7 +1699,7 @@ async fn turn_pair_invariant_fatal_tool_error() {
 }
 
 /// EV-08：瞬态错误无重试预算（transient_retry_limit=0）→ 直接 error 收场，
-/// turn 对恒成对（修复前 stream_error_fatal 直接 error 收敛不经 turn_complete
+/// turn 对恒成对（修复前 stream_error/fatal.rs 直接 error 收敛不经 turn_complete
 /// → 孤儿 turn-start；converge 兜底闭合）
 #[tokio::test]
 async fn turn_pair_invariant_transient_fatal_no_retry() {
@@ -2095,7 +2095,7 @@ async fn empty_response_emits_steering_evaluated_event() {
 
 /// EV-03（D-03）：length 阶梯升级后 provider-diagnostic kind=length-escalation
 /// （attempt=1、maxTokens 8192→16384 前后值随 reason 载荷；对齐
-/// stream_error_retry.rs 的 phase=Retry 载荷先例）
+/// stream_error/retry.rs 的 phase=Retry 载荷先例）
 #[tokio::test]
 async fn length_ladder_emits_length_escalation_diagnostic() {
     let provider = TestProvider::with_scripts(vec![

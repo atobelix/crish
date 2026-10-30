@@ -30,7 +30,7 @@ use async_trait::async_trait;
 use conex_db::{DbFailure, DbFailureKind, LocalDb, RunStatus};
 use conex_test_utils::TempWorkspace;
 use conex_types::error::ProviderErrorKind;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 use orchestrator::recovery::{
     fingerprint, RecoveryAction, RecoveryCoordinator, RecoveryError, RecoveryLadder,
     RecoveryNotification, RecoveryRetryPolicy, RecoveryStore, RunFailureContext,

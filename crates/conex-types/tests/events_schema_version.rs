@@ -21,7 +21,7 @@
 //! - 任务域七变体（T-AB-17，01 方案 §4.5 冻结契约）serde roundtrip /
 //!   camelCase / 缺省字段 / 信封 schemaVersion。
 
-use conex_types::{
+use conex_types::events::{
     AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats, EVENT_ENVELOPE_SCHEMA_VERSION,
 };
 use serde_json::{json, Value};
@@ -431,7 +431,8 @@ fn v1_event_types() -> &'static [&'static str] {
 
 // ── 5. 安全审计域（I2-S8）：security-audit serde 契约 ──
 
-use conex_types::{ImpactAssessment, SecurityAuditDecision, SecurityAuditOperation};
+use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
+use conex_types::impact::ImpactAssessment;
 
 #[test]
 fn security_audit_roundtrip_and_camel_case() {
@@ -556,7 +557,7 @@ fn security_audit_missing_optional_fields_default_to_none() {
 
 // ── 6. 子代理域（I5-M7：C8 事件契约）serde 契约 ──
 
-use conex_types::{SubagentEndStatus, SubagentEventKind, SubagentEventPayload};
+use conex_types::events::{SubagentEndStatus, SubagentEventKind, SubagentEventPayload};
 
 fn subagent_started_event() -> AgentEvent {
     AgentEvent::SubagentStarted {
@@ -914,7 +915,7 @@ fn task_killed_diagnostics_omitted_when_none() {
 #[test]
 fn task_events_backpressure_levels() {
     use conex_types::events::event_backpressure;
-    use conex_types::BackpressureLevel;
+    use conex_types::events::BackpressureLevel;
     fn started(task_id: &str) -> AgentEvent {
         AgentEvent::TaskStarted {
             session_id: "s1".into(),

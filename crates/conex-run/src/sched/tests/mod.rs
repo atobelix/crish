@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 

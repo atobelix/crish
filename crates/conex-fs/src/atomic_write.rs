@@ -17,7 +17,6 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -78,10 +77,7 @@ impl AtomicWriteTx {
             .unwrap_or("file");
         let pid = std::process::id();
         let seq = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(d) => d.as_nanos(),
-            Err(_) => 0,
-        };
+        let nanos = conex_shared::time::unix_millis();
 
         let tmp_name = format!(".conex-tmp-{file_stem}-{pid}-{nanos}-{seq}.tmp");
         let bak_name = format!(".conex-bak-{file_stem}-{pid}-{nanos}-{seq}.bak");
@@ -589,10 +585,7 @@ mod tests {
             "conex-atomic-write-test-{}-{}-{}",
             name,
             std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
+            conex_shared::time::unix_millis()
         ));
         let _ = fs::create_dir_all(&p);
         p

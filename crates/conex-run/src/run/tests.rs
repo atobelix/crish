@@ -8,6 +8,7 @@
 #![allow(clippy::await_holding_lock)] // 测试驱动中持有测试同步锁跨越 step 调度 await
 
 use super::*;
+use conex_types::events::ApprovalDecision;
 use conex_types::message::{
     AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
 };
@@ -20,6 +21,7 @@ use agent_provider::config::Endpoint;
 use session_loop::provider::ProviderCall;
 use session_loop::stream::{ProviderStreamEvent, StopReason};
 use session_loop::testing::TestProvider;
+use session_loop::tool_events::{ApprovalOutcome, ApprovalRequester};
 use std::collections::BTreeMap;
 use std::time::Duration;
 // T4.3-R2：本地 HTTP 请求捕获服务器（真实 wire 层载荷断言）
@@ -77,24 +79,6 @@ fn tool_result_block(id: &str, output: &str) -> AgentMessageBlock {
         output: ToolOutput::text(output.to_string()),
         is_error: false,
     }
-}
-
-/// 错误文案 → payload：77 码兜底 + 人读文案
-#[test]
-fn failure_payload_uses_common_unknown_code() {
-    let payload = crish_payload_from_message("provider 调用失败");
-    assert_eq!(payload.code, codes::COMMON_UNKNOWN);
-    assert!(payload.message.contains("provider 调用失败"));
-    assert!(!payload.retryable);
-}
-
-/// 审批映射：wire 决策规范值（approved / denied / expired，03 §5.3-3）
-#[test]
-fn approval_decisions_map_to_wire_values() {
-    let json = serde_json::to_string(&WireApprovalDecision::Denied).unwrap();
-    assert_eq!(json, "\"denied\"");
-    let approved = serde_json::to_string(&WireApprovalDecision::Approved).unwrap();
-    assert_eq!(approved, "\"approved\"");
 }
 
 // ── T-D-14 权限传递层：审批门载荷与裁决者路由 ──
@@ -165,14 +149,15 @@ async fn gate_routes_subagent_request_to_main_agent_arbiter() {
     });
     // 等待广播 + pending 注册后裁决（主 agent 裁决 = 同一 resolve 入口）
     tokio::time::sleep(Duration::from_millis(100)).await;
-    gate.resolve("tc-1", ApprovalDecision::Approved)
+    gate.resolve("tc-1", ApprovalOutcome::approved())
         .await
         .expect("resolve 应放行（I-02 校验通过）");
     let decision = tokio::time::timeout(Duration::from_secs(2), wait)
         .await
         .expect("审批应在时限内返回")
         .expect("request_approval 不应 panic");
-    assert_eq!(decision, ApprovalDecision::Approved);
+    assert_eq!(decision.decision, ApprovalDecision::Approved);
+    assert_eq!(decision.reason, None);
     // 广播载荷：requesterRunId / reason / 路由 arbiter=main-agent
     let payloads = emitter.0.lock().unwrap().clone();
     let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
@@ -247,7 +232,7 @@ async fn t10_active_run(
         subagent: None,
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -255,9 +240,7 @@ async fn t10_active_run(
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     });
     state
         .active_runs
@@ -348,7 +331,7 @@ async fn t10_approve_forged_tool_call_id_returns_not_found_no_event() {
         .await
         .expect("审批应在时限内返回")
         .expect("request_approval 不应 panic");
-    assert_eq!(decision, ApprovalDecision::Approved);
+    assert_eq!(decision.decision, ApprovalDecision::Approved);
     // 裁决后落地 approval-resolved（真实验证：事件只在真实裁决后出现）
     let payloads = emitter.0.lock().unwrap().clone();
     assert!(
@@ -417,10 +400,11 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
         .expect("短超时应在时限内返回")
         .expect("request_approval 不应 panic");
     assert_eq!(
-        decision,
+        decision.decision,
         ApprovalDecision::Expired,
         "超时必须是 Expired 权威收场"
     );
+    assert_eq!(decision.reason, None, "Expired 不携带拒绝原因");
     assert!(
         !gate.contains_pending("tc-expired"),
         "过期后待审批集合必须清除（迟到裁决 NotFound 的前提）"
@@ -460,8 +444,13 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
         .expect("裁决应在时限内返回")
         .expect("request_approval 不应 panic");
     assert!(
-        matches!(decision, ApprovalDecision::Denied { .. }),
+        matches!(decision.decision, ApprovalDecision::Denied),
         "首次裁决应为 Denied"
+    );
+    assert_eq!(
+        decision.reason.as_deref(),
+        Some("风险过高"),
+        "拒绝原因必须随审批结果保留（R5）"
     );
     let err = approve_tool_impl(
         &state,
@@ -549,7 +538,7 @@ async fn gate_deflects_approval_when_arbiter_waiting_on_subagent() {
                 .await
         });
         tokio::time::sleep(Duration::from_millis(100)).await;
-        gate.resolve("tc-1", ApprovalDecision::Approved)
+        gate.resolve("tc-1", ApprovalOutcome::approved())
             .await
             .expect("resolve 应放行");
         let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
@@ -585,7 +574,7 @@ async fn main_agent_gate_payload_has_no_requester_fields() {
             .await
     });
     tokio::time::sleep(Duration::from_millis(100)).await;
-    gate.resolve("tc-1", ApprovalDecision::Approved)
+    gate.resolve("tc-1", ApprovalOutcome::approved())
         .await
         .expect("resolve 应放行");
     let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
@@ -1021,15 +1010,24 @@ providers:
 #[test]
 fn iso8601_epoch_millis_roundtrip() {
     let epoch = 1_785_456_000_123;
-    assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:00.123Z"), epoch);
-    assert_eq!(epoch_millis_to_iso8601(epoch), "2026-07-31T00:00:00.123Z");
+    assert_eq!(
+        conex_shared::time::parse_iso8601_ms("2026-07-31T00:00:00.123Z").unwrap_or(0),
+        epoch
+    );
+    assert_eq!(
+        conex_shared::time::format_iso_utc_ms(epoch),
+        "2026-07-31T00:00:00.123Z"
+    );
     // 宽容解析：无毫秒段
     assert_eq!(
-        iso8601_to_epoch_millis("2026-07-31T00:00:01Z"),
+        conex_shared::time::parse_iso8601_ms("2026-07-31T00:00:01Z").unwrap_or(0),
         1_785_456_001_000
     );
     // 失败兜底 0
-    assert_eq!(iso8601_to_epoch_millis("not-a-date"), 0);
+    assert_eq!(
+        conex_shared::time::parse_iso8601_ms("not-a-date").unwrap_or(0),
+        0
+    );
 }
 
 // ── T-40：缓存测量收口（R5-D3 轮末合并接线 ②③④）────────────
@@ -1059,6 +1057,19 @@ static CORE_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// 测试用 CoreRunState（临时目录快照存储 + 记录型事件桥 + 独立诊断）
 fn core_state_with_store(store: Arc<dyn Store>) -> Arc<CoreRunState> {
+    // 默认给独立内存库；与 store 绑定同一库的用例走 core_state_with_db
+    core_state_with_db(store, LocalDb::open_in_memory().unwrap())
+}
+
+/// 测试用 LocalDb（CoreRunState 的必需依赖；与 store 独立时仅承载引擎
+/// 装配面，不参与事件持久化断言）。
+fn test_local_db() -> LocalDb {
+    LocalDb::open_in_memory().expect("测试用内存 LocalDb")
+}
+
+/// 测试用 CoreRunState（store 与 LocalDb 同一底层库——session_meta /
+/// 会话索引 / usage_records 断言面）
+fn core_state_with_db(store: Arc<dyn Store>, db: LocalDb) -> Arc<CoreRunState> {
     let (bridge, _emitter) = recording_bridge();
     let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let snapshots: Arc<dyn SnapshotStore> = Arc::new(
@@ -1069,6 +1080,7 @@ fn core_state_with_store(store: Arc<dyn Store>) -> Arc<CoreRunState> {
     );
     Arc::new(CoreRunState::new(
         store,
+        db,
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -1094,8 +1106,8 @@ fn summarizer_factory_injection_channel() {
     }
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     // 生产装配（COMPACTION-01 P0-3）：CoreRunState::new 已装配真实
     // 工厂——测试显式清空回到「无注入」基线（provider 未就绪时工厂
@@ -1135,7 +1147,7 @@ fn summary_dispatch_config_reads_session_meta() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
 
     // 无任何配置键 → None（与轮次 4 summary_dispatch: None 语义一致）
     assert!(state.summary_dispatch_config("s1").is_none());
@@ -1158,8 +1170,8 @@ fn summary_dispatch_config_malformed_falls_back_to_defaults() {
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta("compact_summary_backoff_ms", "oops")
         .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let config = state
         .summary_dispatch_config("s1")
         .expect("有键即构造（解析失败兜底缺省）");
@@ -1173,8 +1185,8 @@ fn summary_dispatch_config_malformed_falls_back_to_defaults() {
 fn summary_coordinator_registry_is_session_scoped() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     let c1 = state.summary_coordinator_for("s1");
     let c1_again = state.summary_coordinator_for("s1");
@@ -1198,8 +1210,8 @@ fn summary_coordinator_registry_is_session_scoped() {
 fn compaction_policy_assembled_with_defaults() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     let policy = state
         .compaction_policy_for("s1")
@@ -1239,7 +1251,7 @@ fn compaction_policy_overrides_and_malformed_fall_back() {
     db.set_session_meta("compact_min_recent_turns", "4")
         .unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
 
     let policy = state.compaction_policy_for("s1").expect("装配 policy");
     assert_eq!(
@@ -1289,7 +1301,7 @@ impl conex_compaction::Summarizer for FakeLlmSummarizer {
         _dropped: &[conex_types::message::AgentMessage],
         _existing: Option<&str>,
     ) -> Result<String, String> {
-        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":"关键上下文"}"#.to_string())
+        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":["关键上下文"]}"#.to_string())
     }
 }
 
@@ -1691,12 +1703,13 @@ async fn subagent_run_abort_terminates_without_estop_bridge() {
 /// 独立临时 config 目录（不清理：静态 store 在测试结束后仍可能绑定该
 /// 目录，删除会触发后续只读初始化的缺省回落——保留无害且避免竞态）。
 fn temp_config_dir() -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let dir =
-        std::env::temp_dir().join(format!("conex-config-test-{}-{nanos}", std::process::id()));
+    static CONFIG_DIR_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "conex-config-test-{}-{}-{}",
+        std::process::id(),
+        conex_shared::time::unix_millis(),
+        CONFIG_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("create config dir");
     dir
 }
@@ -1902,7 +1915,7 @@ async fn provider_apply_swaps_next_request_payload() {
     let captured = server.wait_for(1).await;
     assert_eq!(captured.len(), 1, "应恰好捕获 1 个请求");
     assert!(
-        captured[0].path.starts_with("/v1-new/chat/completions"),
+        captured[0].path.starts_with("/v1-new/v1/chat/completions"),
         "请求 URL 必须用新 baseUrl：{}",
         captured[0].path
     );
@@ -2195,6 +2208,7 @@ async fn snapshot_skipped_before_restore_ready_preserves_main_snapshot() {
     snapshots.save_snapshot(&prior).unwrap();
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -2267,6 +2281,7 @@ async fn snapshot_skipped_after_restore_failed_preserves_main_snapshot() {
     let snapshots: Arc<dyn SnapshotStore> = failing.clone();
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         recording_bridge().0,
         Arc::new(StatusDiagnostics::new()),
@@ -2326,6 +2341,7 @@ async fn snapshot_concurrent_saves_are_mutexed() {
         Arc::new(orchestrator::restore::SnapshotFileStore::new(&path));
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         recording_bridge().0,
         Arc::new(StatusDiagnostics::new()),
@@ -2439,7 +2455,7 @@ fn run_usage_returns_persisted_stats_from_local_db() {
     let stats = cache_stats(Some(61_000), 12_000);
     db.save_run_usage("r1", stats).unwrap();
 
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     let usage = state.run_usage("r1").expect("已落库 usage 必须返回");
     assert_eq!(usage.prompt_tokens, 10_000);
     assert_eq!(usage.completion_tokens, 100);
@@ -2454,15 +2470,6 @@ fn run_usage_returns_persisted_stats_from_local_db() {
     assert_eq!(usage.warm_until_ms, Some(61_000));
     // 不存在的 run → None（前端回退估算）
     assert!(state.run_usage("missing").is_none());
-}
-
-/// ③ 兜底：store 非 LocalDb（InMemoryStore 测试替身）→ run_usage
-/// None（local_db 下转失败路径，usage 查询回退前端估算）
-#[test]
-fn run_usage_falls_back_none_without_local_db() {
-    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    assert!(state.local_db().is_none(), "非 LocalDb store 不得下转");
-    assert!(state.run_usage("r1").is_none());
 }
 
 /// 验收（30 方案 P3）：steering_queue 访问器与引擎队列同一 Arc 实例
@@ -2537,7 +2544,7 @@ async fn main_assembly_shared_queue_single_instance() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.upsert_session_entry(&subagent_test_session_entry("s1"))
         .expect("会话条目");
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     // main.rs 装配轮同序构造
     let workflow_state = crate::workflow::WorkflowBackend::new(
         Arc::new(crate::workflow::SessionMetaWorkflowStore::new(db)),
@@ -2583,7 +2590,7 @@ async fn write_back_cache_stats_persists_run_usage_to_local_db() {
     db.insert_session("s1", "s1").unwrap();
     db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 0)
         .unwrap();
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
 
     let stats = cache_stats(Some(61_000), 12_000);
     write_back_cache_stats(&state, "s1", "r1", "conex", stats).await;
@@ -2610,14 +2617,6 @@ async fn write_back_cache_stats_persists_run_usage_to_local_db() {
         .expect("仪表盘查询不应失败");
     assert_eq!(dashboard_again.hero.total_messages, 1);
     assert_eq!(dashboard_again.total_input, 10_000);
-}
-
-/// ② 兜底：store 非 LocalDb（InMemoryStore）→ 落库跳过（无 SQLite
-/// 连接），收口流程不 panic、不中断
-#[tokio::test]
-async fn write_back_cache_stats_skips_save_without_local_db() {
-    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
-    write_back_cache_stats(&state, "s1", "r1", "", cache_stats(None, 0)).await;
 }
 
 /// ④ EngineHandle 会话缓存状态写读面（跨 CoreRunState 可达）：
@@ -2897,27 +2896,28 @@ async fn runtime_permission_switch_propagates_to_child_cell() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert("run-parent".to_string(), Arc::clone(&parent));
-    let child = conex_agents::permission::PermissionCell::child(
-        Arc::clone(&parent.permission),
-        None,
-    );
+    let child =
+        conex_agents::permission::PermissionCell::child(Arc::clone(&parent.permission), None);
 
     state
-        .set_run_permission_mode("run-parent", conex_types::PermissionMode::Full)
+        .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Full)
         .expect("切换权限");
     assert_eq!(
         child.effective(),
-        conex_types::PermissionMode::Full,
+        conex_types::permission::PermissionMode::Full,
         "父切换 Full 后子代理自动跟随"
     );
 
     state
-        .set_run_permission_mode("run-parent", conex_types::PermissionMode::Ask)
+        .set_run_permission_mode("run-parent", conex_types::permission::PermissionMode::Ask)
         .expect("切换权限");
-    assert_eq!(child.effective(), conex_types::PermissionMode::Ask);
+    assert_eq!(
+        child.effective(),
+        conex_types::permission::PermissionMode::Ask
+    );
     assert!(
         state
-            .set_run_permission_mode("missing-run", conex_types::PermissionMode::Full)
+            .set_run_permission_mode("missing-run", conex_types::permission::PermissionMode::Full)
             .is_err(),
         "未知 run 必须报错而非静默"
     );
@@ -2989,7 +2989,7 @@ async fn heartbeat_persist_updates_running_subagent_row() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     let mut active = build_active_run(&state, "s1", "run-child").await;
     Arc::get_mut(&mut active).expect("唯一引用").subagent =
         Some(crate::subagent_spawner::SubagentRunConfig {
@@ -3010,7 +3010,7 @@ async fn heartbeat_persist_updates_running_subagent_row() {
         .unwrap_or_else(|e| e.into_inner())
         .insert("run-child".to_string(), Arc::clone(&active));
 
-    let agent_row = conex_types::SessionAgent {
+    let agent_row = conex_types::session_record::SessionAgent {
         id: "sub-1".to_string(),
         subagent_run_id: "run-child".to_string(),
         parent_session_id: "s1".to_string(),
@@ -3055,8 +3055,8 @@ async fn model_and_capability_persist_for_terminal_subagent() {
     let db = LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
-    let row = conex_types::SessionAgent {
+    let state = core_state_with_db(store, db.clone());
+    let row = conex_types::session_record::SessionAgent {
         id: "sub-1".to_string(),
         subagent_run_id: "run-child".to_string(),
         parent_session_id: "s1".to_string(),
@@ -3105,7 +3105,9 @@ async fn model_and_capability_persist_for_terminal_subagent() {
     assert_eq!(rows[0].model_override, None);
 
     assert!(
-        state.set_subagent_model("s1", "missing", Some("x".to_string())).is_err(),
+        state
+            .set_subagent_model("s1", "missing", Some("x".to_string()))
+            .is_err(),
         "未知 agent 必须 NotFound"
     );
     assert!(
@@ -3170,7 +3172,7 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         // L4（F12）：测试驱动路径未装配审计落库 worker（收口跳过）
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -3178,9 +3180,7 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     })
 }
 
@@ -3480,9 +3480,7 @@ async fn failed_resume_launch_reinstates_drained_queue_entries() {
         queue.has_pending_for("s1"),
         "拉起失败后本轮条目必须回灌队列"
     );
-    let requeued = queue
-        .peek_for("s1")
-        .expect("回灌条目必须可读");
+    let requeued = queue.peek_for("s1").expect("回灌条目必须可读");
     assert!(
         requeued.text.contains(original_text),
         "回灌内容必须保留原唤醒文本：{}",
@@ -3885,8 +3883,8 @@ fn restore_outcome_with(
 #[tokio::test]
 async fn restore_enqueues_main_run_entry() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome =
         restore_outcome_with(vec![interrupted_run("run-main-1", "sess-main")], Vec::new());
     state.enqueue_restore_entries(&outcome).await;
@@ -3926,7 +3924,7 @@ async fn restore_notifies_parent_for_subagent() {
     db.insert_session("sess-main", "sess-main")
         .expect("父会话行");
     // session_agents 行（父归属：主会话 sess-main 派发子代理 sub-run-1-1）
-    db.upsert_session_agent(&conex_types::SessionAgent {
+    db.upsert_session_agent(&conex_types::session_record::SessionAgent {
         id: "sub-1-1".to_string(),
         subagent_run_id: "sub-run-1-1".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -3951,8 +3949,8 @@ async fn restore_notifies_parent_for_subagent() {
         last_heartbeat_ms: None,
     })
     .expect("session_agents 行落库");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome = restore_outcome_with(
         vec![interrupted_run("sub-run-1-1", "sub-sess-1-1")],
         vec![SessionRecord {
@@ -3997,8 +3995,8 @@ async fn restore_notifies_parent_for_subagent() {
 #[tokio::test]
 async fn restore_enqueues_single_subagent_summary_per_parent() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let mut outcome = restore_outcome_with(
         // 同一子代理 run 的旧逐条记录：应被汇总覆盖（不重复通知）
         vec![interrupted_run("sub-run-1", "sub-sess-1-1")],
@@ -4041,7 +4039,11 @@ async fn restore_enqueues_single_subagent_summary_per_parent() {
         "汇总按父会话分组去重"
     );
     assert!(entry.is_steering, "汇总为 steering 受保护条目");
-    assert!(entry.text.contains("2 个子代理"), "摘要含数量：{}", entry.text);
+    assert!(
+        entry.text.contains("2 个子代理"),
+        "摘要含数量：{}",
+        entry.text
+    );
     assert!(entry.text.contains("调研员（grok-3）"), "摘要含标签与模型");
     assert!(entry.text.contains("实现者"), "摘要含全部标签");
     assert!(
@@ -4055,8 +4057,8 @@ async fn restore_enqueues_single_subagent_summary_per_parent() {
 #[tokio::test]
 async fn restore_skips_when_parent_unresolvable() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome = restore_outcome_with(
         vec![interrupted_run("sub-run-orphan", "sub-sess-9-9")],
         Vec::new(),
@@ -4073,8 +4075,8 @@ async fn restore_skips_when_parent_unresolvable() {
 #[tokio::test]
 async fn restore_entries_dedup_by_group() {
     let db = LocalDb::open_in_memory().unwrap();
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let outcome =
         restore_outcome_with(vec![interrupted_run("run-main-1", "sess-main")], Vec::new());
     state.enqueue_restore_entries(&outcome).await;
@@ -4562,8 +4564,8 @@ async fn goal_round_no_output_counts_streak() {
         &GoalState::new("测试目标", 12, 2).to_json(),
     )
     .expect("goal_state 落键");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let active = build_active_run(&state, "s1", "run-1").await;
     let verdict = decide_idle_resume(
         &state,
@@ -4601,8 +4603,8 @@ async fn goal_state_is_isolated_per_session() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.insert_session("s1", "s1").expect("会话行 s1");
     db.insert_session("s2", "s2").expect("会话行 s2");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     state
         .save_goal_state("s1", &GoalState::new("A 会话目标", 5, 2))
@@ -4621,8 +4623,8 @@ async fn provider_fail_streak_is_isolated_per_session() {
     let db = LocalDb::open_in_memory().expect("内存库");
     db.insert_session("s1", "s1").expect("会话行 s1");
     db.insert_session("s2", "s2").expect("会话行 s2");
-    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
 
     state.update_provider_fail_streak("s1", true).await;
     assert_eq!(
@@ -5575,6 +5577,7 @@ async fn fault_inject_test_state(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -6406,7 +6409,7 @@ fn retry_backoff_config_parses_session_meta() {
 #[test]
 fn retry_backoff_config_reads_session_meta_key() {
     let db = LocalDb::open_in_memory().unwrap();
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     assert!(
         state.retry_backoff_config("s1").is_none(),
         "缺键 → None = 现状立即重试"
@@ -6614,7 +6617,7 @@ async fn checkpoint_restored_event_emitted_on_present_inject() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要B".to_string(),
             timestamp: None,
@@ -6744,7 +6747,7 @@ async fn checkpoint_collected_written_on_close() {
     let trees = state.session_trees.lock().unwrap();
     let tree = trees.get("s1").unwrap().lock().unwrap();
     match tree.read_leaf_checkpoint(None) {
-        conex_types::LeafCheckpointState::Present(payload) => {
+        conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
             assert_eq!(payload.target, "T1", "目标保真");
             assert_eq!(payload.summary, "S1", "摘要保真");
             assert_eq!(payload.completed, vec!["c1".to_string()], "已完成保真");
@@ -6781,7 +6784,7 @@ async fn checkpoint_collect_corrupt_degrades() {
     let tree = trees.get("s1").unwrap().lock().unwrap();
     assert_eq!(
         tree.read_leaf_checkpoint(None),
-        conex_types::LeafCheckpointState::Absent,
+        conex_types::checkpoint::LeafCheckpointState::Absent,
         "采集侧损坏 → 不写叶子（降级现状）"
     );
 }
@@ -6796,7 +6799,7 @@ async fn checkpoint_injection_present_contains_summary() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要B".to_string(),
             timestamp: None,
@@ -6875,7 +6878,7 @@ async fn checkpoint_injection_summary_truncated() {
         .expect("追加叶子");
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: long_summary.clone(),
             timestamp: None,
@@ -6907,7 +6910,7 @@ async fn checkpoint_injection_list_items_limited() {
     let completed: Vec<String> = (0..8).map(|i| format!("步骤{i}")).collect();
     tree.set_leaf_checkpoint(
         "leaf-1",
-        &conex_types::CheckpointPayload {
+        &conex_types::checkpoint::CheckpointPayload {
             target: "目标A".to_string(),
             summary: "摘要".to_string(),
             timestamp: None,
@@ -6960,8 +6963,8 @@ async fn checkpoint_collect_skips_without_tree() {
 // ======================================================================
 
 /// 会话索引条目（测试用主会话）
-fn subagent_test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
-    conex_types::SessionIndexEntry {
+fn subagent_test_session_entry(id: &str) -> conex_types::session_record::SessionIndexEntry {
+    conex_types::session_record::SessionIndexEntry {
         id: id.to_string(),
         title: format!("会话 {id}"),
         folder: String::new(),
@@ -7031,6 +7034,7 @@ fn subagent_state_with_providers(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -7192,7 +7196,7 @@ async fn resolve_all_pending_approvals(state: &CoreRunState, window: Duration) -
                 };
                 if let Some(call_id) = call_id {
                     run.approval
-                        .resolve(&call_id, ApprovalDecision::Approved)
+                        .resolve(&call_id, ApprovalOutcome::approved())
                         .await
                         .expect("主 agent 裁决应成功");
                     resolved += 1;
@@ -7669,7 +7673,7 @@ async fn subagent_approval_carries_requester_run_id_and_resolves() {
                     };
                     if let Some(call_id) = call_id {
                         run.approval
-                            .resolve(&call_id, ApprovalDecision::Approved)
+                            .resolve(&call_id, ApprovalOutcome::approved())
                             .await
                             .expect("主 agent 裁决应成功");
                         break (true, got);
@@ -7819,7 +7823,7 @@ async fn kill_all_delivers_force_cancel_and_normalizes_rows() {
     // 子代理行落库（模拟 spawner 产物；running 状态）
     {
         let mut rows = db.load_session_agents("sess-main").unwrap();
-        rows.push(conex_types::SessionAgent {
+        rows.push(conex_types::session_record::SessionAgent {
             id: "sub-kill".to_string(),
             subagent_run_id: sub_run_id.to_string(),
             parent_session_id: "sess-main".to_string(),
@@ -7891,7 +7895,7 @@ async fn kill_all_delivers_force_cancel_and_normalizes_rows() {
 
     // 不可达 run（无活动实例）→ 未终态汇总（不 panic）
     let mut ghost_rows = db.load_session_agents("sess-main").unwrap();
-    ghost_rows.push(conex_types::SessionAgent {
+    ghost_rows.push(conex_types::session_record::SessionAgent {
         id: "sub-ghost".to_string(),
         subagent_run_id: "sub-run-ghost".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -8018,6 +8022,7 @@ fn run_control_test_state_on_db_with_model(
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
+        db.clone(),
         snapshots,
         bridge,
         Arc::new(StatusDiagnostics::new()),
@@ -8191,10 +8196,7 @@ async fn diag_goal_overwrite_dump() {
         .await
         .expect("run 发起成功");
     for i in 0..50 {
-        let raw = db
-            .get_session_meta(&goal_key("s1"))
-            .ok()
-            .flatten();
+        let raw = db.get_session_meta(&goal_key("s1")).ok().flatten();
         match raw {
             Some(raw) => {
                 let goal: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
@@ -8602,6 +8604,7 @@ async fn timer_and_cron_events_drain_forwarded_e2e() {
     );
     let state = Arc::new(CoreRunState::new(
         Arc::new(InMemoryStore::new()),
+        test_local_db(),
         snapshots,
         bridge.clone(),
         Arc::new(StatusDiagnostics::new()),
@@ -9649,7 +9652,7 @@ async fn insert_continuity_run(
         subagent,
         audit_persist: Mutex::new(None),
         permission: conex_agents::permission::PermissionCell::root(
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
         ),
         capability: conex_agents::capability::CapabilityCell::root(
             conex_agents::task::SubagentCapabilityMode::All,
@@ -9657,9 +9660,7 @@ async fn insert_continuity_run(
         model: Arc::new(conex_agents::model::ModelCell::new(None)),
         project_name: String::new(),
         phase: std::sync::RwLock::new(crate::run::run_core::ExecutionPhase::Active),
-        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(
-            conex_shared::time::unix_millis() as u64
-        ),
+        last_heartbeat_ms: std::sync::atomic::AtomicU64::new(conex_shared::time::now_millis()),
     });
     state
         .active_runs
@@ -9921,7 +9922,7 @@ async fn continuity_kill_channel_lifecycle_paths() {
     // 会话条目前置（session_agents 外键约束；对齐子代理 e2e 装配）
     db.upsert_session_entry(&subagent_test_session_entry("sess-main"))
         .expect("会话条目");
-    let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+    let state = core_state_with_db(Arc::new(LocalDbStore::new(db.clone())), db.clone());
     state.finalize_continuity_channels();
     let tool = state
         .engine
@@ -9936,7 +9937,7 @@ async fn continuity_kill_channel_lifecycle_paths() {
         .unwrap_err();
     assert_eq!(err.code(), conex_types::error::codes::SUBAGENT_NOT_FOUND);
     // ② running 行 + 活动 run → killed：L3 强停意图 + 行归一 failed
-    let row = conex_types::SessionAgent {
+    let row = conex_types::session_record::SessionAgent {
         id: "sub-1-0".to_string(),
         subagent_run_id: "sub-run-1-0".to_string(),
         parent_session_id: "sess-main".to_string(),
@@ -9973,9 +9974,9 @@ async fn continuity_kill_channel_lifecycle_paths() {
             allowed_write_paths: None,
             output_dir: None,
             started_at_ms: 1_000,
-        permission_mode: None,
-        capability_mode: None,
-        model_override: None,
+            permission_mode: None,
+            capability_mode: None,
+            model_override: None,
         }),
     )
     .await;
@@ -10059,7 +10060,7 @@ async fn compact_now_manual_roundtrip_replaces_cache_emits_events_and_writes_blo
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     // 预置超预算对话（缓存路径：引擎权威增量；30 条 ≈ 60k token）
     let messages = big_llm_conversation(30);
@@ -10125,8 +10126,8 @@ async fn compact_now_manual_roundtrip_replaces_cache_emits_events_and_writes_blo
 async fn compact_now_rejects_busy_session() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let active = build_active_run(&state, "s1", "run-1").await;
     state
@@ -10146,8 +10147,8 @@ async fn compact_now_rejects_busy_session() {
 async fn compact_now_validates_target_tokens() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let error = compact_now_impl(&state, "s1", Some(1000))
         .await
@@ -10160,8 +10161,8 @@ async fn compact_now_validates_target_tokens() {
 async fn compact_now_rejects_without_summarizer() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     state.set_summarizer_factory(None);
     let messages = big_llm_conversation(30);
     let history: Vec<HistoryMessage> = messages
@@ -10181,8 +10182,8 @@ async fn compact_now_rejects_without_summarizer() {
 async fn compact_now_rejects_noop_short_conversation() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     let messages = [
         Arc::new(amsg(
@@ -10218,8 +10219,8 @@ async fn stage_milestone_triggers_once_and_suppresses_repeat() {
     db.insert_session("s1", "s1").unwrap();
     db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
         .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     inject_fake_summarizer(&state);
     // 会话树（checkpoint 落载荷面）
     let mut tree = SessionTree::new("s1");
@@ -10249,7 +10250,7 @@ async fn stage_milestone_triggers_once_and_suppresses_repeat() {
         let trees = state.session_trees.lock().unwrap();
         let tree = trees.get("s1").unwrap().lock().unwrap();
         match tree.read_leaf_checkpoint(None) {
-            conex_types::LeafCheckpointState::Present(payload) => {
+            conex_types::checkpoint::LeafCheckpointState::Present(payload) => {
                 assert_eq!(payload.target, "测试目标", "target ← goal");
                 assert_eq!(
                     payload.next,
@@ -10282,10 +10283,11 @@ fn core_state_with_emitter(db: LocalDb) -> (Arc<CoreRunState>, Arc<RecordingEmit
             std::process::id()
         ))),
     );
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
     (
         Arc::new(CoreRunState::new(
             store,
+            db,
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),
@@ -10500,7 +10502,7 @@ fn stage_summary_injected_into_system_prompt() {
     let db = conex_db::LocalDb::open_in_memory().unwrap();
     db.insert_session("s1", "s1").unwrap();
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
-    let state = core_state_with_store(store);
+    let state = core_state_with_db(store, db.clone());
     // 无总结 → 原样（build_system_prompt trim 规范化后输出）
     let base = assemble_system_prompt_with_stages(&state, "s1", Some("  基础提示词  ".to_string()));
     assert_eq!(base.as_deref(), Some("基础提示词"), "无总结原样返回");
@@ -10721,147 +10723,8 @@ fn dm07_envelope(event_type: &str, run_id: Option<&str>, sequence: u64) -> Strin
     .to_string()
 }
 
-/// DM-07 记录型 store 包装：断言 query_events / query_events_by_run 收到
-/// 的 limit 下推参数（其余方法原样委托内层，行为零改动）
-struct RecordingStore {
-    inner: Arc<dyn Store>,
-    session_limits: Arc<Mutex<Vec<Option<u64>>>>,
-    run_limits: Arc<Mutex<Vec<Option<u64>>>>,
-}
-
-#[async_trait::async_trait]
-impl Store for RecordingStore {
-    async fn insert_run(
-        &self,
-        run_id: &str,
-        session_id: &str,
-        status: conex_db::RunStatus,
-        end_reason: Option<&str>,
-        cursor: i64,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .insert_run(run_id, session_id, status, end_reason, cursor)
-            .await
-    }
-
-    async fn update_run_status(
-        &self,
-        run_id: &str,
-        status: conex_db::RunStatus,
-        end_reason: Option<&str>,
-        cursor: Option<i64>,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .update_run_status(run_id, status, end_reason, cursor)
-            .await
-    }
-
-    async fn reserve_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
-        self.inner.reserve_sequence(session_id).await
-    }
-
-    async fn seed_sequence(
-        &self,
-        session_id: &str,
-        next_sequence: u64,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner.seed_sequence(session_id, next_sequence).await
-    }
-
-    async fn append_event(
-        &self,
-        session_id: &str,
-        sequence: u64,
-        event_type: &str,
-        payload: &str,
-        run_id: Option<&str>,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .append_event(session_id, sequence, event_type, payload, run_id)
-            .await
-    }
-
-    async fn query_events(
-        &self,
-        session_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.session_limits
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(limit);
-        self.inner
-            .query_events(session_id, after_sequence, limit)
-            .await
-    }
-
-    async fn query_events_by_run(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.run_limits
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(limit);
-        self.inner
-            .query_events_by_run(session_id, run_id, after_sequence, limit)
-            .await
-    }
-
-    // 1C-1 下推面（Store trait 新增方法）：本桩仅关注 query_events /
-    // query_events_by_run 的 limit 记录，其余一律原样委托内层。
-    async fn max_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
-        self.inner.max_sequence(session_id).await
-    }
-
-    async fn query_events_by_type(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        event_type: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
-        self.inner
-            .query_events_by_type(session_id, run_id, event_type, after_sequence, limit)
-            .await
-    }
-
-    async fn query_runs(&self) -> orchestrator::persist::StoreResult<Vec<conex_db::StoredRun>> {
-        self.inner.query_runs().await
-    }
-
-    async fn save_pending_input(
-        &self,
-        id: &str,
-        session_id: &str,
-        run_id: Option<&str>,
-        payload: &str,
-    ) -> orchestrator::persist::StoreResult<()> {
-        self.inner
-            .save_pending_input(id, session_id, run_id, payload)
-            .await
-    }
-
-    async fn load_pending_inputs(
-        &self,
-        session_id: &str,
-    ) -> orchestrator::persist::StoreResult<Vec<conex_db::PendingInput>> {
-        self.inner.load_pending_inputs(session_id).await
-    }
-
-    async fn delete_pending_input(&self, id: &str) -> orchestrator::persist::StoreResult<bool> {
-        self.inner.delete_pending_input(id).await
-    }
-
-    fn as_local_db(&self) -> Option<conex_db::LocalDb> {
-        self.inner.as_local_db()
-    }
-}
+mod recording_store;
+use recording_store::RecordingStore;
 
 /// DM-07 验收 ①：run 查询返回全链含终态后 tail——agent-start…run-terminal +
 /// 终态后同 runId 尾事件（audit-flush 收尾区，R-06）；goal-* 轮次域不命中。
@@ -10911,8 +10774,8 @@ async fn read_run_events_full_chain_with_tail() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
         .await
         .unwrap();
@@ -10993,8 +10856,8 @@ async fn read_run_events_interleaved_runs_only_own() {
         Some("r2"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let seqs = |page: crate::core_query::EventPage| {
         page.events
             .iter()
@@ -11036,8 +10899,8 @@ async fn read_run_events_pagination_global_sequence() {
         )
         .unwrap();
     }
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let seqs = |page: crate::core_query::EventPage| {
         page.events
             .iter()
@@ -11099,11 +10962,11 @@ async fn read_run_events_limit_pushdown_has_more() {
     let session_limits = Arc::new(Mutex::new(Vec::new()));
     let run_limits = Arc::new(Mutex::new(Vec::new()));
     let recording = RecordingStore {
-        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         session_limits: Arc::clone(&session_limits),
         run_limits: Arc::clone(&run_limits),
     };
-    let state = core_state_with_store(Arc::new(recording));
+    let state = core_state_with_db(Arc::new(recording), db.clone());
     let p1 = super::read_run_events_impl(&state, "r1", Some("s1"), None, Some(2))
         .await
         .unwrap();
@@ -11182,8 +11045,8 @@ async fn read_run_events_excludes_goal_round() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", Some("s1"), None, None)
         .await
         .unwrap();
@@ -11222,8 +11085,8 @@ async fn read_run_events_session_lookup_via_run_record() {
         Some("r1"),
     )
     .unwrap();
-    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
-    let state = core_state_with_store(store);
+    let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+    let state = core_state_with_db(store, db.clone());
     let page = super::read_run_events_impl(&state, "r1", None, None, None)
         .await
         .unwrap();
@@ -11253,11 +11116,11 @@ async fn core_read_session_events_limit_pushdown() {
     let session_limits = Arc::new(Mutex::new(Vec::new()));
     let run_limits = Arc::new(Mutex::new(Vec::new()));
     let recording = RecordingStore {
-        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db)),
+        inner: Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         session_limits: Arc::clone(&session_limits),
         run_limits: Arc::clone(&run_limits),
     };
-    let state = core_state_with_store(Arc::new(recording));
+    let state = core_state_with_db(Arc::new(recording), db.clone());
     let page = super::read_session_events_impl(&state, "s1", None, Some(2))
         .await
         .unwrap();
@@ -11270,3 +11133,5 @@ async fn core_read_session_events_limit_pushdown() {
     assert!(page.has_more);
     assert_eq!(page.next_after_sequence, 2, "游标 = 页末全局 sequence");
 }
+
+mod extra;

@@ -6,7 +6,7 @@
 //! - 重试判定（[should_retry]：仅瞬态类可重试，次数/预算上限钳制）
 //! - Retry-After 解析（[parse_retry_after_ms]：秒数 / HTTP-date 三种格式）
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use conex_types::error::ProviderErrorKind;
 
@@ -247,7 +247,7 @@ pub fn parse_retry_after_ms(value: Option<&str>, now: SystemTime) -> Option<Dura
     }
     let epoch = parse_http_date(value)?;
     let then = Duration::from_secs(epoch.max(0) as u64);
-    let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let now = Duration::from_millis(u64::try_from(conex_shared::time::millis_of(now)).unwrap_or(0));
     Some(clamp_retry_after(then.saturating_sub(now)))
 }
 
@@ -306,7 +306,7 @@ fn parse_http_date(value: &str) -> Option<i64> {
     // 回绕为负）。钳制后远超 1970 的时刻仍远超 5 分钟上限，由
     // clamp_retry_after 收敛；远早于 1970 的时刻视为已过 → 0，语义不变。
     let year = year.clamp(1970, 9999);
-    let days = days_from_civil(year, month, day);
+    let days = conex_shared::time::days_from_civil(year, month, day);
     Some(days * 86_400 + hour as i64 * 3_600 + minute as i64 * 60 + second as i64)
 }
 
@@ -328,15 +328,4 @@ fn parse_time(token: &str) -> Option<(u32, u32, u32)> {
     let minute = parts.next()?.parse::<u32>().ok()?;
     let second = parts.next()?.parse::<u32>().ok()?;
     Some((hour, minute, second))
-}
-
-/// 民用日期 → 距 1970-01-01 的天数（Howard Hinnant days_from_civil 算法）
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = if year >= 0 { year } else { year - 399 } / 400;
-    let year_of_era = year - era * 400;
-    let offset = if month > 2 { month - 3 } else { month + 9 };
-    let day_of_year = (153 * offset as i64 + 2) / 5 + day as i64 - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
 }

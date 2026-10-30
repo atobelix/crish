@@ -82,7 +82,7 @@ impl LastWakeupTracker {
 
     /// 标记一次事件唤醒（时刻取系统时钟；事件收口处接线调用）
     pub fn mark_wakeup(&self) {
-        self.mark_wakeup_at(now_ms());
+        self.mark_wakeup_at(conex_shared::time::now_millis());
     }
 
     /// 标记一次事件唤醒（指定时刻；测试与旁路接线共用）
@@ -96,12 +96,6 @@ impl LastWakeupTracker {
     }
 }
 
-/// 当前 epoch 毫秒（wake_watcher 全域时间基准；实现复用
-/// [crate::engine_assembly::unix_millis_now]，全 crate 单一时间源）
-fn now_ms() -> u64 {
-    crate::engine_assembly::unix_millis_now()
-}
-
 /// 拉起器（拉 run 的注入接口；生产由 `CoreRunState::build_wake_watcher` 包装
 /// `spawn_idle_resume_run(state, session_id, Vec::new())`，测试 = 替身
 /// 计数——避免本模块直接依赖 run 状态）
@@ -111,10 +105,10 @@ pub type WakeLauncher =
 /// 事务感知拉起器（接收 session_id, lease_id, 预占的 entries 批次；返回启动结果 Result<(), String>）
 pub type TransactionalWakeLauncher = Arc<
     dyn Fn(
-        String,
-        u64,
-        Vec<SteeringInputEntry>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
+            String,
+            u64,
+            Vec<SteeringInputEntry>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
         + Send
         + Sync,
 >;
@@ -153,7 +147,7 @@ impl Default for WakeWatcherOptions {
             period: DEFAULT_WAKE_PERIOD,
             min_launch_interval: DEFAULT_MIN_LAUNCH_INTERVAL,
             max_empty_streak: DEFAULT_MAX_EMPTY_STREAK,
-            now: Arc::new(now_ms),
+            now: Arc::new(conex_shared::time::now_millis),
             lease_duration: Duration::from_secs(60),
             batch_limit: 10,
             launch_verifier: None,
@@ -226,14 +220,15 @@ impl WakeWatcher {
         launcher: WakeLauncher,
         options: WakeWatcherOptions,
     ) -> Self {
-        let tx_launcher: TransactionalWakeLauncher =
-            Arc::new(move |sid: String, _lease_id: u64, _entries: Vec<SteeringInputEntry>| {
+        let tx_launcher: TransactionalWakeLauncher = Arc::new(
+            move |sid: String, _lease_id: u64, _entries: Vec<SteeringInputEntry>| {
                 let launcher = Arc::clone(&launcher);
                 Box::pin(async move {
                     (launcher)(sid).await;
                     Ok(())
                 })
-            });
+            },
+        );
 
         Self::with_launcher(
             session_id,
@@ -343,7 +338,7 @@ impl WakeWatcher {
     /// 标记用户显式停止（测试与调试入口）
     #[cfg(test)]
     pub fn set_user_stopped(&self) {
-        self.set_user_stopped_at(now_ms());
+        self.set_user_stopped_at(conex_shared::time::now_millis());
     }
 
     /// 标记用户显式停止（指定时刻；测试与壳层接线共用）
@@ -498,7 +493,8 @@ impl WakeWatcher {
 
         // 3. 执行拉起流程，并捕获可能的 panic 或异步失败
         let fut = (self.launcher)(self.session_id.clone(), lease_id, entries.clone());
-        let outcome = futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(fut)).await;
+        let outcome =
+            futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(fut)).await;
 
         // 4. 首轮启动成功确认判定
         let is_successful = match outcome {
@@ -858,15 +854,14 @@ mod tests {
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let launches = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&launches);
-        let ok_launcher: TransactionalWakeLauncher =
-            Arc::new(move |_sid, _lease_id, entries| {
-                let counter = Arc::clone(&counter);
-                Box::pin(async move {
-                    assert_eq!(entries.len(), 1, "事务拉起器应收到预占条目");
-                    counter.fetch_add(1, Ordering::SeqCst);
-                    Ok(())
-                })
-            });
+        let ok_launcher: TransactionalWakeLauncher = Arc::new(move |_sid, _lease_id, entries| {
+            let counter = Arc::clone(&counter);
+            Box::pin(async move {
+                assert_eq!(entries.len(), 1, "事务拉起器应收到预占条目");
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+        });
         let watcher = Arc::new(WakeWatcher::with_transactional_launcher(
             "sess-1".to_string(),
             Arc::clone(&queue),
@@ -909,10 +904,9 @@ mod tests {
     async fn watcher_transactional_rollback_on_failure() {
         let (_, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let failed_launcher: TransactionalWakeLauncher =
-            Arc::new(|_sid, _lease_id, _entries| {
-                Box::pin(async move { Err("模拟网络 503 或启动排他锁冲突".to_string()) })
-            });
+        let failed_launcher: TransactionalWakeLauncher = Arc::new(|_sid, _lease_id, _entries| {
+            Box::pin(async move { Err("模拟网络 503 或启动排他锁冲突".to_string()) })
+        });
 
         let watcher = Arc::new(WakeWatcher::with_transactional_launcher(
             "sess-1".to_string(),
@@ -980,12 +974,11 @@ mod tests {
     async fn watcher_transactional_rollback_on_panic() {
         let (_, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let panic_launcher: TransactionalWakeLauncher =
-            Arc::new(|_sid, _lease_id, _entries| {
-                Box::pin(async move {
-                    panic!("模拟宿主在拉起过程中发生意外 panic 崩溃！");
-                })
-            });
+        let panic_launcher: TransactionalWakeLauncher = Arc::new(|_sid, _lease_id, _entries| {
+            Box::pin(async move {
+                panic!("模拟宿主在拉起过程中发生意外 panic 崩溃！");
+            })
+        });
 
         let watcher = Arc::new(WakeWatcher::with_transactional_launcher(
             "sess-1".to_string(),
@@ -1015,14 +1008,13 @@ mod tests {
         let received_entries = Arc::new(Mutex::new(Vec::new()));
         let received_probe = Arc::clone(&received_entries);
 
-        let launcher: TransactionalWakeLauncher =
-            Arc::new(move |_sid, _lease_id, entries| {
-                let r = Arc::clone(&received_probe);
-                Box::pin(async move {
-                    *r.lock().unwrap() = entries;
-                    Ok(())
-                })
-            });
+        let launcher: TransactionalWakeLauncher = Arc::new(move |_sid, _lease_id, entries| {
+            let r = Arc::clone(&received_probe);
+            Box::pin(async move {
+                *r.lock().unwrap() = entries;
+                Ok(())
+            })
+        });
 
         let watcher = Arc::new(WakeWatcher::with_transactional_launcher(
             "sess-1".to_string(),

@@ -134,7 +134,7 @@ pub use stream::{
 };
 pub use testing::{TestProvider, TestTool};
 pub use tool_events::{
-    ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
+    ApprovalGate, ApprovalOutcome, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 pub use tool_exec::{ToolBatchOutcome, ToolExecCtx, ToolExecutor};

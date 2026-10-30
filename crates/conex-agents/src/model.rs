@@ -20,10 +20,7 @@ impl ModelCell {
 
     /// 当前覆盖模型
     pub fn get(&self) -> Option<String> {
-        self.model
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.model.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 设置覆盖（下一次模型调用生效）

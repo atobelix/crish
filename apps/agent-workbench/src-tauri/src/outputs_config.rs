@@ -26,7 +26,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 
 /// 默认产出根目录名（对齐 REQ-G03：`<workspace_root>/.agent-outputs/`）
 pub(crate) const DEFAULT_OUTPUTS_DIR_NAME: &str = ".agent-outputs";

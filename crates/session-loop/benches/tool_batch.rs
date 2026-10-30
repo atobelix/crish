@@ -18,7 +18,7 @@ use agent_tools::registry::ToolRegistry;
 use conex_types::tool::{ToolBatchCall, ToolCategory, ToolConcurrency};
 use criterion::{criterion_group, criterion_main, Criterion};
 use session_loop::tool_events::{
-    ApprovalDecision, ApprovalGate, ApprovalRequester, ToolBatchOptions,
+    ApprovalGate, ApprovalOutcome, ApprovalRequester, ToolBatchOptions,
 };
 use session_loop::tool_exec::{ToolExecCtx, ToolExecutor};
 
@@ -66,8 +66,8 @@ impl ApprovalGate for InstantApprovalGate {
         _args: &serde_json::Value,
         _requester: Option<&ApprovalRequester>,
         _reason: Option<&str>,
-    ) -> ApprovalDecision {
-        ApprovalDecision::Approved
+    ) -> ApprovalOutcome {
+        ApprovalOutcome::approved()
     }
 }
 
@@ -159,7 +159,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
-                    permission_mode: Some(conex_types::PermissionMode::Full),
+                    permission_mode: Some(conex_types::permission::PermissionMode::Full),
                     ..ToolBatchOptions::default()
                 };
                 let gate = Arc::new(InstantApprovalGate);

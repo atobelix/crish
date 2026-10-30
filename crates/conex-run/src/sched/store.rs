@@ -1,14 +1,15 @@
 //! Cron 调度存储适配器（内存与 LocalDb session_meta 持久化；T-CF-09 / T-CF-12）
 
+#[cfg(any(test, feature = "test-support"))]
 use std::collections::HashMap;
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::{Arc, Mutex};
-
-use conex_db::LocalDb;
 
 use super::types::{
     CronTask, CronTaskStatus, LEGACY_SESSION_META_SCHED_INDEX_KEY, SESSION_META_SCHED_INDEX_KEY,
     SESSION_META_SCHED_KEY_PREFIX,
 };
+use conex_db::LocalDb;
 
 /// session_meta 持久化适配（conex-db `sched_*` 键读写）
 pub trait SchedStore: Send + Sync {
@@ -115,7 +116,8 @@ pub fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask) -> Opt
     serde_json::to_string(&map).ok()
 }
 
-/// 内存持久化适配（测试 + 引擎默认装配）
+/// 内存持久化适配（仅测试构建：`cfg(test)` / `test-support`）
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 pub struct MemorySchedStore {
     /// sched_<cron_id> → CronTask JSON
@@ -126,6 +128,7 @@ pub struct MemorySchedStore {
     existing_sessions: Mutex<Option<std::collections::HashSet<String>>>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl MemorySchedStore {
     /// 共享实例（重启恢复测试中两个注册表共用同一存储）
     pub fn shared() -> Arc<Self> {
@@ -148,6 +151,7 @@ impl MemorySchedStore {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl SchedStore for MemorySchedStore {
     fn load_all(&self) -> Vec<CronTask> {
         self.map

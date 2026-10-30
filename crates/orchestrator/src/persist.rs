@@ -3,8 +3,9 @@
 //! [Store] trait 把 run 记录与事件流的落库统一为连接抽象，方法签名对齐
 //! conex-db 的 insert_run / update_run_status / append_event / query_events
 //! （04 §1.3 复用），提供两种实现：
-//! - [InMemoryStore]：测试用内存实现，可注入追加延迟（慢 store）与故障
-//!   （写失败 latch 语义），供 B4.2 验收用例使用；
+//! - `InMemoryStore`：测试用内存实现（见 `in_memory` 子模块，仅
+//!   `cfg(test)` / `test-support` 编译，可注入追加延迟与写失败 latch），
+//!   生产构建不含；
 //! - [LocalDbStore]：conex-db 的 SQLite 实现（生产路径，同步调用包在
 //!   async 边界内）。
 //!
@@ -12,10 +13,9 @@
 //! failed(event-store-write-failed)，不假装可回放（由 [crate::events]
 //! 的 drive 流程消费）。
 //!
-//! E1 收敛（05 §5.2）：`Store::as_local_db` 保留 trait 默认方法（`None`），
-//! 3 处消费方 `blocks.rs:50` / `restore_manager.rs:144` / `run_core.rs:408`
-//! 已统一为 `store.as_local_db()` 直接调用；自由函数已彻底删除
-//! （`cargo check` / 全仓 grep 零命中）。
+//! E1 收敛（05 §5.2）：生产所需能力（session_agents 行、run usage、
+//! touch_session、会话正文、压缩块）是 [Store] 的必需方法，调用方直接
+//! 调用；早期下转型访问器已删除（自由函数已彻底删除）。
 //!
 //! E2 评估（05 §5.2 保守路线：仅签名对齐，不改 `Cargo.toml`，不拆 crate）：
 //! 三存储 trait（`Store` / `RecoveryStore` / `FlowMetaStore`）评估统一为
@@ -26,17 +26,23 @@
 //! `EventStore` supertrait 合并（async/sync 差异 + 循环依赖风险），仅在本文件
 //! 沉淀分层 trait 定义与文档，待主控协调时机再合并。
 
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use conex_db::{DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun};
-use conex_types::{codes, CrishError};
+use conex_db::{BlockState, DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, StoredRun};
+use conex_types::error::{codes, CrishError};
+use conex_types::events::RunCacheStats;
+use conex_types::session_record::{SessionAgent, SessionMessage};
 
 use crate::session::SessionTreeEntry;
-use conex_shared::time::{Clock, SystemClock};
+
+// 测试用内存 Store 替身：仅测试构建或 `test-support` feature 下编译，
+// 生产 lib 不暴露（`persist::InMemoryStore` 路径在测试/跨 crate dev 依赖中保持可用）。
+#[cfg(any(test, feature = "test-support"))]
+mod in_memory;
+#[cfg(any(test, feature = "test-support"))]
+pub use in_memory::InMemoryStore;
 
 /// 存储层错误（kind 为操作名，message 为详情；cause 保留底层 DbFailure
 /// 上下文，T06.5.8：From<StoreError> for CrishError 时 cause 链不丢失）
@@ -46,7 +52,7 @@ pub struct StoreError {
     pub kind: String,
     /// 错误详情
     pub message: String,
-    /// 底层数据库失败（None = InMemoryStore 等无底层来源）
+    /// 底层数据库失败（None = 测试用内存实现等无底层来源）
     pub cause: Option<Box<DbFailure>>,
 }
 
@@ -94,17 +100,29 @@ fn store_error_code(kind: &str) -> Option<&'static str> {
         // 锁竞争 / 锁中毒 → store.write_failed（Transient, retryable）
         "lock" => Some(codes::STORE_WRITE_FAILED),
         // run 记录写路径 → event_store.append_failed
-        "append_event" | "insert_run" | "update_run_status" | "touch_session"
-        | "serialize_event" | "reserve_sequence" | "seed_sequence" => {
-            Some(codes::EVENT_STORE_APPEND_FAILED)
-        }
+        "append_event"
+        | "insert_run"
+        | "update_run_status"
+        | "touch_session"
+        | "save_run_usage"
+        | "serialize_event"
+        | "reserve_sequence"
+        | "seed_sequence"
+        | "mark_session_agent_interrupted"
+        | "save_session_messages"
+        | "insert_block"
+        | "update_block_state"
+        | "update_compression_block_summary" => Some(codes::EVENT_STORE_APPEND_FAILED),
         // 读路径 → event_store.read_failed
         "query_events"
         | "query_events_by_run"
         | "query_events_by_type"
         | "max_sequence"
         | "query_runs"
-        | "load_pending_inputs" => Some(codes::EVENT_STORE_READ_FAILED),
+        | "load_pending_inputs"
+        | "get_run_usage"
+        | "load_running_session_agent_rows"
+        | "load_session_messages" => Some(codes::EVENT_STORE_READ_FAILED),
         // 待处理输入写路径 → store.write_failed
         "save_pending_input" | "delete_pending_input" => Some(codes::STORE_WRITE_FAILED),
         _ => None,
@@ -298,29 +316,67 @@ pub trait Store: Send + Sync {
     /// 删除一条待处理输入（返回是否实际删除了行）
     async fn delete_pending_input(&self, id: &str) -> StoreResult<bool>;
 
-    /// 下转型访问器：返回底层 [LocalDb] 连接（T-40：CoreRunState 消费
-    /// `get_run_usage` / `save_run_usage` 的 run usage 数据面，runs 表
-    /// v5 列）。
-    ///
-    /// 默认返回 None（非破坏性）——[InMemoryStore] 等测试替身无 SQLite
-    /// 连接；[LocalDbStore] 覆写为克隆连接（Arc +1）。
-    fn as_local_db(&self) -> Option<LocalDb> {
-        None
-    }
-
     /// 刷新会话 `updated_at`（F-005 touch 接线，R2 §3 结构性缺位修复）。
     ///
     /// 由 run 生命周期落库点（启动 / 非终态状态迁移）调用，使孤儿清理
     /// 宽限期（`updated_at < grace_cutoff`）随 run 活动重新起算——引擎侧
     /// 会话不再依赖前端 350ms persist 顺带刷新，宽限期语义在生产域生效。
     ///
-    /// 默认 no-op（对齐 [Self::as_local_db] 的「可选能力默认空实现」
-    /// 模式）：[InMemoryStore] 等测试替身无 sessions 表，无需刷新；
-    /// [LocalDbStore] 覆写为真实单语句 UPDATE（sessions.rs touch_session）。
-    async fn touch_session(&self, _session_id: &str) -> StoreResult<()> {
-        // 默认 no-op：按契约不使用会话 id（参数以 `_` 前缀显式表达）
-        Ok(())
-    }
+    /// 必需能力（无默认实现）：[LocalDbStore] 下推真实单语句 UPDATE
+    /// （sessions.rs touch_session）；内存实现按内存表语义记账。
+    async fn touch_session(&self, session_id: &str) -> StoreResult<()>;
+
+    /// 读 run 级缓存统计（runs 表 v5 列；None = 无样本 / v4 迁移旧行）。
+    ///
+    /// 必需能力：run usage 数据面不再经下转型访问底层连接。
+    fn get_run_usage(&self, run_id: &str) -> StoreResult<Option<RunCacheStats>>;
+
+    /// 写 run 级缓存统计（runs 表 v5 列；缺行静默跳过）。
+    ///
+    /// 必需能力：run usage 数据面不再经下转型访问底层连接。
+    fn save_run_usage(&self, run_id: &str, stats: RunCacheStats) -> StoreResult<()>;
+
+    /// 加载全部 `status = running` 的子代理行（启动对账 / 残留 running 归一）。
+    async fn load_running_session_agent_rows(&self) -> StoreResult<Vec<SessionAgent>>;
+
+    /// 把崩溃残留的 running 子代理行归一为 failed + ended_at + resumable。
+    ///
+    /// 返回受影响行数（0 = 行已消失 / 已终态）。
+    async fn mark_session_agent_interrupted(
+        &self,
+        parent_session_id: &str,
+        subagent_run_id: &str,
+        ended_at_ms: i64,
+        summary: &str,
+    ) -> StoreResult<usize>;
+
+    /// 加载会话正文消息（session_messages 物化视图；按 seq 升序）。
+    async fn load_session_messages(&self, session_id: &str) -> StoreResult<Vec<SessionMessage>>;
+
+    /// 保存会话正文消息（session_messages 物化视图全量 Upsert）。
+    async fn save_session_messages(
+        &self,
+        session_id: &str,
+        messages: &[SessionMessage],
+    ) -> StoreResult<()>;
+
+    /// 写入压缩块行（context-compression-end 事件同源同序；幂等）。
+    async fn insert_compression_block(
+        &self,
+        session_id: &str,
+        record: &conex_types::tool::ContextCompressionRecord,
+        sequence: u64,
+    ) -> StoreResult<()>;
+
+    /// 推进压缩块摘要状态（两阶段写协议阶段二；行不存在则无操作）。
+    fn update_compression_block_summary(
+        &self,
+        session_id: &str,
+        block_id: &str,
+        state: BlockState,
+        summary_json: Option<&str>,
+        attempts: u32,
+    ) -> StoreResult<()>;
 }
 
 // ── E2 存储分层评估（保守路线：仅签名对齐） ──────────────────────────
@@ -341,7 +397,7 @@ pub trait Store: Send + Sync {
 // 本文件仅沉淀签名对齐的 trait 定义与文档，Store 本体保持现有方法集，
 // 不强制 `Store: MetaStore + RunStore + EventStore` 的 supertrait 约束
 // （async/sync 差异 + 循环依赖风险），待主控协调再合并。自由函数已删除，
-// `Store::as_local_db` trait 默认方法保留（E1）。
+// 下转型访问器已删除（能力改为 [Store] 必需方法）。
 
 /// 同步 meta 最小公共面（E2 保守路线：与 RecoveryStore / FlowMetaStore 对齐）
 ///
@@ -372,9 +428,10 @@ pub trait EventStore: Send + Sync {}
 
 // Store 逻辑分层说明（E2 保守路线）:
 //
-// - `Store` 当前为单一 async trait（含 run + event + touch_session +
-//   as_local_db）；评估分层为 `Store: MetaStore + RunStore + EventStore` 时，
-//   `MetaStore` 为同步 meta 面（本文件新增），`RunStore`/`EventStore` 为 async 面；
+// - `Store` 当前为单一 async trait（含 run + event + 正文 / 子代理行 /
+//   压缩块 / run usage 等必需能力）；评估分层为 `Store: MetaStore + RunStore
+//   + EventStore` 时，`MetaStore` 为同步 meta 面（本文件新增），
+//   `RunStore`/`EventStore` 为 async 面；
 // - 保守路线不强制合并（不改 Store 定义），仅保证三 trait 的
 //   `get_meta`/`set_meta` 签名形状对齐，不改 Cargo.toml，不拆 crate。
 
@@ -444,422 +501,6 @@ fn map_stored_events(rows: Vec<conex_db::StoredEvent>) -> Vec<PersistedEvent> {
         .collect()
 }
 
-/// 内存实现（测试用）
-///
-/// - [Self::set_append_delay] 模拟慢 store（持久化事件追加耗时，验证
-///   delta 不阻塞 drive loop）；
-/// - [Self::fail_next_append] / [Self::fail_all_appends] 注入持久化故障
-///   （写失败 latch：一旦失败持续失败，与 conex-db 的 failure latch 同构）。
-#[derive(Debug, Clone)]
-pub struct InMemoryStore {
-    inner: Arc<Mutex<InMemoryInner>>,
-}
-
-#[derive(Debug, Default)]
-struct InMemoryInner {
-    runs: Vec<StoredRun>,
-    events: Vec<PersistedEvent>,
-    pending_inputs: Vec<PendingInput>,
-    recovery_fork_tree_entries: HashMap<String, Vec<RecoveryForkTreeEntry>>,
-    /// 会话 → 最近一次已分配 sequence（T08.12：会话级原子计数器的本地镜像）
-    sequence_counters: HashMap<String, u64>,
-    append_delay: Duration,
-    fail_all_message: Option<String>,
-    next_failures: Vec<String>,
-}
-
-impl InMemoryStore {
-    /// 新建空的内存存储
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(InMemoryInner::default())),
-        }
-    }
-
-    /// 注入持久化事件追加延迟（模拟慢 store；仅测试用）
-    pub fn set_append_delay(&self, delay: Duration) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.append_delay = delay;
-        }
-    }
-
-    /// 注入一次追加失败（每次 append 消费一条；耗尽后恢复正常）
-    pub fn fail_next_append(&self, message: impl Into<String>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.next_failures.push(message.into());
-        }
-    }
-
-    /// 注入持续追加失败（模拟 store 彻底损坏，写失败 latch）
-    pub fn fail_all_appends(&self, message: impl Into<String>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.fail_all_message = Some(message.into());
-        }
-    }
-
-    /// 当前全部 run 记录快照（断言用）
-    pub fn runs(&self) -> Vec<StoredRun> {
-        self.inner
-            .lock()
-            .map(|guard| guard.runs.clone())
-            .unwrap_or_default()
-    }
-
-    /// 当前已落库事件快照（断言用）
-    pub fn events(&self) -> Vec<PersistedEvent> {
-        self.inner
-            .lock()
-            .map(|guard| guard.events.clone())
-            .unwrap_or_default()
-    }
-
-    /// 直接注入待处理输入（测试用，可指定 created_at 精确控制 FIFO 顺序）
-    pub fn seed_pending_inputs(&self, inputs: Vec<PendingInput>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            for input in inputs {
-                guard.pending_inputs.retain(|p| p.id != input.id);
-                guard.pending_inputs.push(input);
-            }
-        }
-    }
-
-    /// Seed Recovery fork tree entries for restore and snapshot tests.
-    pub fn seed_recovery_fork_tree_entry(&self, session_id: &str, entry: RecoveryForkTreeEntry) {
-        if let Ok(mut guard) = self.inner.lock() {
-            let entries = guard
-                .recovery_fork_tree_entries
-                .entry(session_id.to_string())
-                .or_default();
-            entries.retain(|existing| existing.entry.id != entry.entry.id);
-            entries.push(entry);
-            entries.sort_by_key(|entry| entry.event_sequence);
-        }
-    }
-}
-
-impl Default for InMemoryStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait]
-impl Store for InMemoryStore {
-    async fn insert_run(
-        &self,
-        run_id: &str,
-        session_id: &str,
-        status: RunStatus,
-        end_reason: Option<&str>,
-        cursor: i64,
-    ) -> StoreResult<()> {
-        let now = SystemClock.now_ms();
-        let run = StoredRun {
-            run_id: run_id.to_string(),
-            session_id: session_id.to_string(),
-            status,
-            end_reason: end_reason.map(str::to_string),
-            cursor,
-            created_at: now,
-            updated_at: now,
-        };
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        guard.runs.retain(|r| r.run_id != run_id);
-        guard.runs.push(run);
-        Ok(())
-    }
-
-    async fn update_run_status(
-        &self,
-        run_id: &str,
-        status: RunStatus,
-        end_reason: Option<&str>,
-        cursor: Option<i64>,
-    ) -> StoreResult<()> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let run = guard
-            .runs
-            .iter_mut()
-            .find(|r| r.run_id == run_id)
-            .ok_or_else(|| StoreError::new("update_run_status", format!("run 不存在: {run_id}")))?;
-        run.status = status;
-        if end_reason.is_some() {
-            run.end_reason = end_reason.map(str::to_string);
-        }
-        if cursor.is_some() {
-            run.cursor = cursor.unwrap_or_default();
-        }
-        run.updated_at = SystemClock.now_ms();
-        Ok(())
-    }
-
-    async fn reserve_sequence(&self, session_id: &str) -> StoreResult<u64> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        // store 彻底损坏（写失败 latch）时取号同样失败
-        if let Some(message) = &guard.fail_all_message {
-            return Err(StoreError::new("reserve_sequence", message.clone()));
-        }
-        // 首次取号：以已落库 max(sequence) 对齐（T08.12 隐式预热，Q24/Q23 兜底）
-        let max_persisted = guard
-            .events
-            .iter()
-            .filter(|e| e.session_id == session_id)
-            .map(|e| e.sequence)
-            .max()
-            .unwrap_or(0);
-        let counter = guard
-            .sequence_counters
-            .entry(session_id.to_string())
-            .and_modify(|v| *v = (*v).max(max_persisted))
-            .or_insert(max_persisted);
-        *counter += 1;
-        Ok(*counter)
-    }
-
-    async fn seed_sequence(&self, session_id: &str, next_sequence: u64) -> StoreResult<()> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let counter = guard
-            .sequence_counters
-            .entry(session_id.to_string())
-            .or_insert(0);
-        // MAX 语义：只抬高不回退（与 conex-db seed_sequence 一致）
-        *counter = (*counter).max(next_sequence.saturating_sub(1));
-        Ok(())
-    }
-
-    async fn append_event(
-        &self,
-        session_id: &str,
-        sequence: u64,
-        event_type: &str,
-        payload: &str,
-        run_id: Option<&str>,
-    ) -> StoreResult<()> {
-        // 模拟慢 store 的持久化耗时（delta 路径不会走到这里）
-        let delay = self
-            .inner
-            .lock()
-            .map(|guard| guard.append_delay)
-            .unwrap_or_default();
-        if !delay.is_zero() {
-            tokio::time::sleep(delay).await;
-        }
-
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        if let Some(message) = &guard.fail_all_message {
-            return Err(StoreError::new("append_event", message.clone()));
-        }
-        if !guard.next_failures.is_empty() {
-            return Err(StoreError::new(
-                "append_event",
-                guard.next_failures.remove(0),
-            ));
-        }
-        // 对齐 events 表的 UNIQUE(session_id, sequence) 约束
-        if guard
-            .events
-            .iter()
-            .any(|e| e.session_id == session_id && e.sequence == sequence)
-        {
-            return Err(StoreError::new(
-                "append_event",
-                format!("sequence 重复: {sequence}"),
-            ));
-        }
-        guard.events.push(PersistedEvent {
-            session_id: session_id.to_string(),
-            sequence,
-            event_type: event_type.to_string(),
-            payload: payload.to_string(),
-            run_id: run_id.map(str::to_string),
-            created_at: SystemClock.now_ms().to_string(),
-        });
-        Ok(())
-    }
-
-    async fn query_events(
-        &self,
-        session_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> StoreResult<Vec<PersistedEvent>> {
-        let guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let mut events: Vec<PersistedEvent> = guard
-            .events
-            .iter()
-            .filter(|e| e.session_id == session_id && e.sequence > after_sequence)
-            .cloned()
-            .collect();
-        events.sort_by_key(|e| e.sequence);
-        if let Some(limit) = limit {
-            events.truncate(limit as usize);
-        }
-        Ok(events)
-    }
-
-    async fn load_recovery_fork_tree_entries(
-        &self,
-        session_id: &str,
-    ) -> StoreResult<Vec<RecoveryForkTreeEntry>> {
-        self.inner
-            .lock()
-            .map(|guard| {
-                guard
-                    .recovery_fork_tree_entries
-                    .get(session_id)
-                    .cloned()
-                    .unwrap_or_default()
-            })
-            .map_err(|error| StoreError::new("lock", error.to_string()))
-    }
-
-    async fn query_events_by_run(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> StoreResult<Vec<PersistedEvent>> {
-        let guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let mut events: Vec<PersistedEvent> = guard
-            .events
-            .iter()
-            .filter(|e| {
-                e.session_id == session_id
-                    && e.run_id.as_deref() == Some(run_id)
-                    && e.sequence > after_sequence
-            })
-            .cloned()
-            .collect();
-        events.sort_by_key(|e| e.sequence);
-        if let Some(limit) = limit {
-            events.truncate(limit as usize);
-        }
-        Ok(events)
-    }
-
-    async fn max_sequence(&self, session_id: &str) -> StoreResult<u64> {
-        let guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        Ok(guard
-            .events
-            .iter()
-            .filter(|e| e.session_id == session_id)
-            .map(|e| e.sequence)
-            .max()
-            .unwrap_or(0))
-    }
-
-    async fn query_events_by_type(
-        &self,
-        session_id: &str,
-        run_id: &str,
-        event_type: &str,
-        after_sequence: u64,
-        limit: Option<u64>,
-    ) -> StoreResult<Vec<PersistedEvent>> {
-        let guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let mut events: Vec<PersistedEvent> = guard
-            .events
-            .iter()
-            .filter(|e| {
-                e.session_id == session_id
-                    && e.run_id.as_deref() == Some(run_id)
-                    && e.sequence > after_sequence
-                    && e.event_type == event_type
-            })
-            .cloned()
-            .collect();
-        events.sort_by_key(|e| e.sequence);
-        if let Some(limit) = limit {
-            events.truncate(limit as usize);
-        }
-        Ok(events)
-    }
-
-    async fn query_runs(&self) -> StoreResult<Vec<StoredRun>> {
-        self.inner
-            .lock()
-            .map(|guard| guard.runs.clone())
-            .map_err(|e| StoreError::new("lock", e.to_string()))
-    }
-
-    async fn save_pending_input(
-        &self,
-        id: &str,
-        session_id: &str,
-        run_id: Option<&str>,
-        payload: &str,
-    ) -> StoreResult<()> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let input = PendingInput {
-            id: id.to_string(),
-            session_id: session_id.to_string(),
-            run_id: run_id.map(str::to_string),
-            payload: payload.to_string(),
-            created_at: SystemClock.now_ms(),
-        };
-        guard.pending_inputs.retain(|p| p.id != id);
-        guard.pending_inputs.push(input);
-        Ok(())
-    }
-
-    async fn load_pending_inputs(&self, session_id: &str) -> StoreResult<Vec<PendingInput>> {
-        let guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let mut inputs: Vec<PendingInput> = guard
-            .pending_inputs
-            .iter()
-            .filter(|p| p.session_id == session_id)
-            .cloned()
-            .collect();
-        // FIFO：创建时间升序，含 id 决胜（对齐 conex-db load_pending_inputs）
-        inputs.sort_by_key(|p| (p.created_at, p.id.clone()));
-        Ok(inputs)
-    }
-
-    async fn delete_pending_input(&self, id: &str) -> StoreResult<bool> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|e| StoreError::new("lock", e.to_string()))?;
-        let before = guard.pending_inputs.len();
-        guard.pending_inputs.retain(|p| p.id != id);
-        Ok(guard.pending_inputs.len() != before)
-    }
-}
-
 /// 在 tokio 阻塞线程池上执行一次同步 DB 调用（T08.5 / AA-07 P05 消除）。
 ///
 /// 要点（与 session_commands.rs:76-79 既有模式一致）：
@@ -914,12 +555,6 @@ impl LocalDbStore {
 
 #[async_trait]
 impl Store for LocalDbStore {
-    /// T-40：下转型返回底层 [LocalDb]（Clone = Arc +1）——run usage
-    /// 数据面（get_run_usage / save_run_usage，runs 表 v5 列）经此访问。
-    fn as_local_db(&self) -> Option<LocalDb> {
-        Some(self.db.clone())
-    }
-
     async fn insert_run(
         &self,
         run_id: &str,
@@ -1165,6 +800,143 @@ impl Store for LocalDbStore {
         // 无事务、无读改写——与前端 350ms persist 的 upsert 无竞态面）
         blocking_db_call("touch_session", move || db.touch_session(&session_id)).await
     }
+
+    fn get_run_usage(&self, run_id: &str) -> StoreResult<Option<RunCacheStats>> {
+        // run usage 查询是同步只读面（调用方 run_usage 本身同步），与旧
+        // local_db 下转的调用形态一致（单语句短锁）
+        self.db
+            .get_run_usage(run_id)
+            .map_err(|failure| db_err("get_run_usage", failure))
+    }
+
+    fn save_run_usage(&self, run_id: &str, stats: RunCacheStats) -> StoreResult<()> {
+        // 调用方负责把它放进 spawn_blocking（write_back_cache_stats）；与
+        // 旧 local_db 下转时同一纪律
+        self.db
+            .save_run_usage(run_id, stats)
+            .map_err(|failure| db_err("save_run_usage", failure))
+    }
+
+    async fn load_running_session_agent_rows(&self) -> StoreResult<Vec<SessionAgent>> {
+        let db = self.db.clone();
+        blocking_db_call("load_running_session_agent_rows", move || {
+            db.load_running_session_agent_rows()
+        })
+        .await
+    }
+
+    async fn mark_session_agent_interrupted(
+        &self,
+        parent_session_id: &str,
+        subagent_run_id: &str,
+        ended_at_ms: i64,
+        summary: &str,
+    ) -> StoreResult<usize> {
+        let db = self.db.clone();
+        let parent_session_id = parent_session_id.to_string();
+        let subagent_run_id = subagent_run_id.to_string();
+        let summary = summary.to_string();
+        blocking_db_call("mark_session_agent_interrupted", move || {
+            db.mark_session_agent_interrupted(
+                &parent_session_id,
+                &subagent_run_id,
+                ended_at_ms,
+                &summary,
+            )
+        })
+        .await
+    }
+
+    async fn load_session_messages(&self, session_id: &str) -> StoreResult<Vec<SessionMessage>> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        blocking_db_call("load_session_messages", move || {
+            db.load_session_body(&session_id)
+        })
+        .await
+    }
+
+    async fn save_session_messages(
+        &self,
+        session_id: &str,
+        messages: &[SessionMessage],
+    ) -> StoreResult<()> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        let messages = messages.to_vec();
+        blocking_db_call("save_session_messages", move || {
+            db.save_session_body(&session_id, &messages)
+        })
+        .await
+    }
+
+    async fn insert_compression_block(
+        &self,
+        session_id: &str,
+        record: &conex_types::tool::ContextCompressionRecord,
+        sequence: u64,
+    ) -> StoreResult<()> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        let record = record.clone();
+        // 块构建依赖 events 计数（generation 兜底）与块表链尾（prev 兜底）；
+        // insert_block 走 write_blocking，必须整体放进 spawn_blocking。
+        blocking_db_call("insert_compression_block", move || {
+            let generation = record
+                .details
+                .as_ref()
+                .and_then(|details| details.get("generation"))
+                .and_then(serde_json::Value::as_u64)
+                .map(|generation| generation as u32)
+                .or_else(|| {
+                    db.count_compression_events(&session_id)
+                        .ok()
+                        .map(|count| count as u32)
+                })
+                .unwrap_or(1);
+            let prev_block_id = record
+                .details
+                .as_ref()
+                .and_then(|details| details.get("prevBlockId"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    db.list_blocks(&session_id, Some(1))
+                        .ok()
+                        .and_then(|blocks| blocks.first().map(|block| block.block_id.clone()))
+                });
+            let row = crate::blocks::build_block_row(
+                &session_id,
+                &record,
+                sequence,
+                generation,
+                prev_block_id,
+            );
+            db.insert_block(&row)
+        })
+        .await
+    }
+
+    fn update_compression_block_summary(
+        &self,
+        session_id: &str,
+        block_id: &str,
+        state: BlockState,
+        summary_json: Option<&str>,
+        attempts: u32,
+    ) -> StoreResult<()> {
+        // height 保持既有值（V1 不读表合并 → 不推进高度；缺行时兜底 1）
+        let height = self
+            .db
+            .get_block(session_id, block_id)
+            .ok()
+            .flatten()
+            .map(|row| row.height)
+            .unwrap_or(1);
+        self.db
+            .update_block_state(session_id, block_id, state, summary_json, height, attempts)
+            .map_err(|failure| db_err("update_compression_block_summary", failure))
+    }
 }
 
 // ── EV-12 输入留痕：session-loop PendingInputStore 适配 ────────────────
@@ -1194,45 +966,37 @@ impl session_loop::input::PendingInputStore for LocalDbStore {
     }
 }
 
-#[async_trait]
-impl session_loop::input::PendingInputStore for InMemoryStore {
-    async fn save_pending_input(
-        &self,
-        id: &str,
-        session_id: &str,
-        run_id: Option<&str>,
-        payload: &str,
-    ) -> Result<(), String> {
-        <Self as Store>::save_pending_input(self, id, session_id, run_id, payload)
-            .await
-            .map_err(|e| e.message)
-    }
-
-    async fn delete_pending_input(&self, id: &str) -> Result<bool, String> {
-        <Self as Store>::delete_pending_input(self, id)
-            .await
-            .map_err(|e| e.message)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::CrishErrorCategory;
+    use conex_types::error::CrishErrorCategory;
+    use std::time::Duration;
 
-    /// T-40：下转型访问器——LocalDbStore 返回底层连接（run usage 数据面），
-    /// InMemoryStore 保持默认 None（无 SQLite 连接）
+    /// X-06 P3：生产必需能力是 [Store] 方法（无下转型）——LocalDbStore 的
+    /// run usage 往返与 touch_session 均经 trait 面完成
     #[test]
-    fn as_local_db_downcasts_local_db_store_only() {
+    fn local_db_store_required_capabilities_roundtrip() {
         let db = LocalDb::open_in_memory().unwrap();
-        let local: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
-        assert!(local.as_local_db().is_some(), "LocalDbStore 必须可下转");
+        db.insert_session("s1", "s1").unwrap();
+        db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 0)
+            .unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
 
-        let memory: Arc<dyn Store> = Arc::new(InMemoryStore::new());
-        assert!(
-            memory.as_local_db().is_none(),
-            "InMemoryStore 无 SQLite 连接（默认 None）"
-        );
+        let stats = RunCacheStats {
+            prompt_tokens: 10,
+            completion_tokens: 2,
+            total_tokens: 12,
+            sample_count: 1,
+            ..RunCacheStats::default()
+        };
+        store.save_run_usage("r1", stats).unwrap();
+        assert_eq!(store.get_run_usage("r1").unwrap(), Some(stats));
+        assert!(store.get_run_usage("missing").unwrap().is_none());
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            store.touch_session("s1").await.unwrap();
+        });
     }
 
     #[test]
@@ -1263,6 +1027,61 @@ mod tests {
             assert_eq!(runs[0].status, RunStatus::Failed);
             assert_eq!(runs[0].end_reason.as_deref(), Some("stop"));
             assert_eq!(runs[0].cursor, 4, "终态 cursor 落库（T08.4）");
+        });
+    }
+
+    /// X-06 P3 R2：内存 Store 必须完整实现中断对账能力——running 子代理行
+    /// 归一到 failed + ended_at + resumable（与 LocalDb 语义一致）。
+    #[test]
+    fn in_memory_store_interrupts_running_session_agents() {
+        use conex_types::session_record::SessionAgent;
+
+        let store = InMemoryStore::new();
+        store.seed_session_agent(SessionAgent {
+            id: "a1".into(),
+            subagent_run_id: "sr1".into(),
+            parent_session_id: "s1".into(),
+            parent_run_id: "r1".into(),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: String::new(),
+            status: "running".into(),
+            summary: None,
+            messages: vec![],
+            started_at: 0,
+            ended_at: None,
+            depth: None,
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+            sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
+        });
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            assert_eq!(
+                store.load_running_session_agent_rows().await.unwrap().len(),
+                1
+            );
+            let affected = store
+                .mark_session_agent_interrupted("s1", "sr1", 42, "interrupted")
+                .await
+                .unwrap();
+            assert_eq!(affected, 1);
+            let rows = store.session_agents();
+            assert_eq!(rows[0].status, "failed");
+            assert_eq!(rows[0].ended_at, Some(42));
+            assert!(rows[0].resumable);
+            assert!(store
+                .load_running_session_agent_rows()
+                .await
+                .unwrap()
+                .is_empty());
         });
     }
 

@@ -13,7 +13,7 @@ use conex_types::timer::{TimerCondition, TimerDeclaration, TimerHandle};
 use crate::timers::early_exit::{clear_early_exit, fire_timer, panic_message};
 use crate::timers::store::TimerStore;
 use crate::timers::types::{
-    now_ms, timer_seq, EventSink, PendingSink, TimerCancelReason, TimerEvent, MAX_DURATION_SECONDS,
+    timer_seq, EventSink, PendingSink, TimerCancelReason, TimerEvent, MAX_DURATION_SECONDS,
     TIMER_ID_PREFIX,
 };
 
@@ -41,20 +41,25 @@ pub struct TimerRegistry {
     pub store: Arc<dyn TimerStore>,
     /// timer-<seq> 原子计数
     pub seq: AtomicU64,
-    /// 全域时间基准（epoch 毫秒；生产 = [now_ms]，测试 = AtomicU64 驱动，
-    /// 对齐 watchdog.rs 时钟注入模式——到期判定 / 事件时间戳统一走注入
-    /// 基准，消除「注入时钟与 Instant 真实时钟混用」）
+    /// 全域时间基准（epoch 毫秒；生产 = `conex_shared::time::unix_millis`，
+    /// 测试 = AtomicU64 驱动，对齐 watchdog.rs 时钟注入模式——到期判定 /
+    /// 事件时间戳统一走注入基准，消除「注入时钟与 Instant 真实时钟混用」）
     pub now: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
 impl TimerRegistry {
-    /// 新建注册表（适配器由装配方注入；时间基准 = 生产实时钟 [now_ms]）
+    /// 新建注册表（适配器由装配方注入；时间基准 = 生产实时钟）
     pub fn new(
         pending: Arc<dyn PendingSink>,
         events: Arc<dyn EventSink>,
         store: Arc<dyn TimerStore>,
     ) -> Self {
-        Self::with_clock(pending, events, store, Arc::new(now_ms))
+        Self::with_clock(
+            pending,
+            events,
+            store,
+            Arc::new(conex_shared::time::now_millis),
+        )
     }
 
     /// 新建注册表并注入自定义时间基准（测试面注入 Arc 驱动的

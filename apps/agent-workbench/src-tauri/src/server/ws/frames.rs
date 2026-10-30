@@ -56,7 +56,7 @@ pub(super) fn outbound_frame(conn_id: u64, kind: MessageKind, body: Value) -> St
     let envelope = DeviceEnvelope::unsigned(
         kind,
         next_msg_id(conn_id),
-        now_ms(),
+        conex_shared::time::now_millis(),
         DeviceEndpoint::Desktop,
         DeviceEndpoint::Mobile,
         body,
@@ -83,7 +83,7 @@ pub(super) fn kicked_envelope(reason: &str, conn_id: u64) -> DeviceEnvelope {
     DeviceEnvelope::unsigned(
         MessageKind::Error,
         next_msg_id(conn_id),
-        now_ms(),
+        conex_shared::time::now_millis(),
         DeviceEndpoint::Desktop,
         DeviceEndpoint::Mobile,
         serde_json::to_value(body).unwrap_or_default(),

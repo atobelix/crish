@@ -5,7 +5,7 @@
 //!
 //! ## 消息处理（客户端 → 服务端，DeviceEnvelope 帧）
 //!
-//! - `events.subscribe`：按会话订阅（≤ [conex_types::device::MAX_SUBSCRIPTIONS]
+//! - `events.subscribe`：按会话订阅（≤ [conex_device_protocol::MAX_SUBSCRIPTIONS]
 //!   =32）；回执 `events.subscribe.ok`（逐会话 nextSequence / stale，D3 §7.3）；
 //! - `events.subscribeAll`：全局轻订阅（type 白名单；无专用回执，静默成功）；
 //! - `events.resume`：游标续传（开区间分页复用 [crate::server::backend::
@@ -64,10 +64,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use conex_types::device::version::{
+use conex_device_protocol::version::{
     EVENT_WINDOW, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     DeviceEndpoint, DeviceEnvelope, DeviceErrorCode, ErrorBody, EventAck, EventsPush, MessageKind,
     Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll, SubscribeOk,
     PROTOCOL_VERSION,
@@ -80,7 +80,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
-use crate::server::{auth, gateway, now_ms, ServerError, ServerState};
+use crate::server::{auth, gateway, ServerError, ServerState};
 
 /// WS 事件端点路径（R1-02 占位登记；R1-05 注册路由）
 pub const WS_EVENTS_PATH: &str = "/v1/events";
@@ -269,7 +269,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         )
             .into_response();
     };
-    let verdict = lock(&state.tokens()).verify(&token, now_ms());
+    let verdict = lock(&state.tokens()).verify(&token, conex_shared::time::now_millis());
     match verdict {
         auth::TokenVerdict::Valid => {}
         auth::TokenVerdict::Revoked => {

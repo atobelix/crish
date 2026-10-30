@@ -16,6 +16,9 @@ default = []
 # 跨 crate 测试钩子（壳层 dev-dependency 开启；发布构建不暴露这些 API）。
 # 覆盖：poison/inject 替身、catalog yaml 注入、scheduler fire override 等。
 test-hooks = []
+# 跨 crate 测试替身（仅测试构建）：内存版 timer / sched / wait store——
+# 生产装配恒用 LocalDb 真适配，这些内存实现只在测试图内编译
+test-support = []
 
 [dependencies]
 # 运行编排域 crate：run 状态机 / idle 续跑 / 重试熔断 / 审批 / 历史缓存 /
@@ -32,6 +35,8 @@ conex-fs = { path = "../conex-fs" }
 conex-shared = { path = "../conex-shared" }
 conex-telemetry = { path = "../conex-telemetry" }
 conex-types = { path = "../conex-types" }
+# 多端设备协议（TY-P5）：审批/命令桥接面消费 commands 类型（run_approval / run_commands）
+conex-device-protocol = { path = "../conex-device-protocol" }
 orchestrator = { path = "../orchestrator" }
 session-loop = { path = "../session-loop" }
 # trash 服务契约（conex-fs::trash 返回 anyhow::Result）
@@ -52,5 +57,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# 内联测试（run_commands / run_launch / run_core / stream_error_retry）使用
+# orchestrator 的 persist::InMemoryStore 测试替身：仅 dev 构建图启用 test-support
+orchestrator = { path = "../orchestrator", features = ["test-support"] }
 # 部分内联测试使用多线程 runtime（spawn 语义断言）
 tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

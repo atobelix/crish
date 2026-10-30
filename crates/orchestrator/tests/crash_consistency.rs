@@ -39,7 +39,7 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEvent, RunTerminalStatus};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::session::AgentEndReason;
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use orchestrator::events::{drive_outcome, EventQueue};
 use orchestrator::flow_graph::{
     FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler, FLOW_RELEASED_KEY,
@@ -1298,20 +1298,21 @@ async fn kill_all_rows_stay_terminal_across_restart() {
         let mut rows = db.load_session_agents(session_id).unwrap();
         let now = now_ms();
         for row in &mut rows {
-            row.messages.push(conex_types::SessionMessage {
-                id: format!("msg-{}", row.id),
-                sender: "user".to_string(),
-                text: Some(format!("产出 {}", row.id)),
-                thinking: None,
-                timestamp: now,
-                status: None,
-                stream_text_offset: None,
-                thinking_time: None,
-                tool_calls_json: None,
-                blocks_json: None,
-                tool_call_results_json: None,
-                usage: None,
-            });
+            row.messages
+                .push(conex_types::session_record::SessionMessage {
+                    id: format!("msg-{}", row.id),
+                    sender: "user".to_string(),
+                    text: Some(format!("产出 {}", row.id)),
+                    thinking: None,
+                    timestamp: now,
+                    status: None,
+                    stream_text_offset: None,
+                    thinking_time: None,
+                    tool_calls_json: None,
+                    blocks_json: None,
+                    tool_call_results_json: None,
+                    usage: None,
+                });
         }
         db.save_session_agents(session_id, &rows).unwrap();
         // kill_all：逐个投递 L3 强停 + 行归一 failed（终态收口在服务侧）
@@ -1426,7 +1427,8 @@ async fn running_subagents_normalized_across_crash_restart() {
     );
     assert!(
         rows.iter()
-            .all(|r| r.summary.as_deref() == Some(orchestrator::restore::INTERRUPTED_SUBAGENT_SUMMARY)),
+            .all(|r| r.summary.as_deref()
+                == Some(orchestrator::restore::INTERRUPTED_SUBAGENT_SUMMARY)),
         "中断摘要落库（保留已有 summary 语义由 DB 层单测覆盖）"
     );
     assert!(
@@ -1867,13 +1869,13 @@ fn tool_start_payload(session: &str, call_id: &str, tool_name: &str) -> String {
     let event = AgentEvent::ToolStart {
         session_id: session.to_string(),
         batch_id: "b1".to_string(),
-        call: conex_types::ToolBatchCall {
+        call: conex_types::tool::ToolBatchCall {
             id: call_id.to_string(),
             tool_name: tool_name.to_string(),
             summary: "run".to_string(),
             input: serde_json::json!({}),
-            category: conex_types::ToolCategory::Internal,
-            concurrency: conex_types::ToolConcurrency::Sequential,
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: conex_types::tool::ToolConcurrency::Sequential,
         },
         timestamp: "2026-09-12T00:00:00.000Z".to_string(),
         turn_index: None,
@@ -2112,7 +2114,7 @@ async fn restore_heals_mixed_orphan_and_complete_envelopes() {
 }
 
 /// LocalDb 全包络：session_messages 物化视图携带 tool_calls_json 声明，
-/// events 无 tool-start → 恢复后经 as_local_db 读声明并补齐双事件。
+/// events 无 tool-start → 恢复后经 Store 读声明并补齐双事件。
 #[tokio::test]
 async fn restore_heals_full_envelope_from_session_messages_localdb() {
     let dir = std::env::temp_dir().join(format!(
@@ -2190,10 +2192,9 @@ async fn restore_heals_full_envelope_from_session_messages_localdb() {
     // 04 §5.4：自愈结果回写 session_messages.tool_call_results_json
     {
         let reloaded = store
-            .as_local_db()
-            .expect("LocalDbStore 下转")
-            .load_session_body("s1")
-            .unwrap();
+            .load_session_messages("s1")
+            .await
+            .expect("load_session_messages 读取成功");
         let results_json = reloaded[0]
             .tool_call_results_json
             .as_deref()
@@ -2290,4 +2291,57 @@ async fn restore_skips_declared_call_with_message_level_result() {
 
     drop(store);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// X-06 P3 R2：InMemoryStore 也必须完整承担恢复对账能力——running 子代理行
+/// 经 RestoreManager 归一到 failed + ended_at + resumable（不再走替身跳过路径）。
+#[tokio::test]
+async fn restore_normalizes_running_session_agents_with_in_memory_store() {
+    let (mem, store) = setup();
+    store
+        .insert_run("r1", "s1", RunStatus::Running, None, 0)
+        .await
+        .unwrap();
+    mem.seed_session_agent(SessionAgent {
+        id: "a1".into(),
+        subagent_run_id: "sr1".into(),
+        parent_session_id: "s1".into(),
+        parent_run_id: "r1".into(),
+        parent_tool_call_id: None,
+        description: String::new(),
+        mode: String::new(),
+        status: "running".into(),
+        summary: None,
+        messages: vec![],
+        started_at: 0,
+        ended_at: None,
+        depth: None,
+        subagent_path_json: None,
+        task_type: None,
+        display_label: None,
+        allowed_write_paths_json: None,
+        sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
+    });
+
+    RestoreManager::new()
+        .restore(store.as_ref(), &NoSnapshots)
+        .await
+        .expect("内存 store 恢复应成功");
+
+    let rows = mem.session_agents();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "failed");
+    assert!(rows[0].ended_at.is_some());
+    assert!(rows[0].resumable);
+    assert!(
+        mem.load_running_session_agent_rows()
+            .await
+            .unwrap()
+            .is_empty(),
+        "恢复后不得残留 running 子代理行"
+    );
 }

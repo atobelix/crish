@@ -312,9 +312,9 @@ impl Lowerer<'_> {
 
             let line = node_line(child);
             let (text, trailing) = split_list_item(li);
-            let number = start
-                .checked_add(item_index)
-                .ok_or_else(|| MdError::Parse(format!("line {line}: 有序列表项序号超过支持范围")))?;
+            let number = start.checked_add(item_index).ok_or_else(|| {
+                MdError::Parse(format!("line {line}: 有序列表项序号超过支持范围"))
+            })?;
             item_index += 1;
 
             let mut props = BlockProps::default();
@@ -577,14 +577,7 @@ fn table_plain(table: &markdown::mdast::Table) -> String {
                 cells.iter().map(|_| "---").collect()
             } else {
                 (0..cells.len())
-                    .map(|i| {
-                        table
-                            .align
-                            .get(i)
-                            .copied()
-                            .map(align_sep)
-                            .unwrap_or("---")
-                    })
+                    .map(|i| table.align.get(i).copied().map(align_sep).unwrap_or("---"))
                     .collect()
             };
             rows.push(format!("| {} |", seps.join(" | ")));

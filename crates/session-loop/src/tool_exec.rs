@@ -57,7 +57,7 @@ use crate::approval_router::{
 use crate::hooks::{HookEvent, HookRegistry};
 use crate::safe_point::AbortSignal;
 use crate::tool_events::{
-    ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
+    ApprovalGate, ApprovalOutcome, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 use agent_tools::context::{AbortToken, ExploreDocsQuotaContext, ToolContext};
@@ -75,6 +75,7 @@ use agent_tools::permission::{PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
 use agent_tools::write_paths::WritePathRegistry;
+use conex_types::events::ApprovalDecision;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -162,7 +163,7 @@ impl ParallelExecObs {
 
     /// 当前活跃并行数。
     ///
-    /// 当前消费方：`tool_exec_tests.rs` 三测断言批后 `active == 0`
+    /// 当前消费方：`tool_exec/tests/` 三测断言批后 `active == 0`
     ///（证明 permit/计数无泄漏）。生产路径只 `enter`/`leave`，不读本方法。
     ///
     /// 接线计划：生产埋点若要暴露瞬时并行度，经本方法读值写入 tracing
@@ -177,7 +178,7 @@ impl ParallelExecObs {
 
     /// 并发峰值（自创建以来观测到的最大活跃数）。
     ///
-    /// 当前消费方：`tool_exec_tests.rs` 三测断言峰值 ∈ [2, 上限] 或恰为 1
+    /// 当前消费方：`tool_exec/tests/` 三测断言峰值 ∈ [2, 上限] 或恰为 1
     ///（`max_parallel=1` 串行化）。生产路径只 `enter` 内 `fetch_max`，不读本方法。
     ///
     /// 接线计划：生产埋点若要对齐 B5 做批级峰值观测，经本方法读值；
@@ -192,14 +193,10 @@ impl ParallelExecObs {
 
 // SR-03 · 拆分 · ≠ EL：批调度/单工具/裁决/中间件四模拆出，本文件为薄门面
 //（barrel）；公开符号 ToolExecCtx / ToolBatchOutcome / ToolExecutor 仍在本
-// 文件定义，调用方路径零改动。
-#[path = "exec_batch.rs"]
+// 文件定义，调用方路径零改动。子模块物理落位 `tool_exec/` 目录，与模块树一致。
 mod exec_batch;
-#[path = "exec_middleware.rs"]
 mod exec_middleware;
-#[path = "exec_single/mod.rs"]
 mod exec_single;
-#[path = "exec_verdict.rs"]
 mod exec_verdict;
 
 // 内部面 re-export：子模块与测试经 `use super::*` 消费（公开 API 不变）
@@ -232,7 +229,4 @@ pub struct ToolExecutor {
 }
 
 #[cfg(test)]
-#[path = "tool_exec_tests/mod.rs"]
-mod tool_exec_tests;
-#[cfg(test)]
-use tool_exec_tests as tests;
+mod tests;

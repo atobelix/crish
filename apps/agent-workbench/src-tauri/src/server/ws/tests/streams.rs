@@ -34,7 +34,9 @@ async fn upgrade_rejects_revoked_token() {
     let path = std::env::temp_dir().join(format!("pairing-revoke-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let mut store = TokenStore::new(path.clone());
-    let raw = store.issue("revoke-me", now_ms()).unwrap();
+    let raw = store
+        .issue("revoke-me", conex_shared::time::now_millis())
+        .unwrap();
     let hash = sha256_hex(raw.as_bytes());
     assert!(store.revoke(&hash), "撤销必须命中");
     // 撤销令牌连接 → 拒绝（101 前 401）
@@ -405,12 +407,12 @@ async fn heartbeat_gets_ok() {
     send_envelope_text(
         &mut ws,
         "heartbeat",
-        serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+        serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
     )
     .await;
     let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
     assert_eq!(kind, "heartbeat.ok");
-    let ok: conex_types::device::HeartbeatOk = serde_json::from_value(body).unwrap();
+    let ok: conex_device_protocol::HeartbeatOk = serde_json::from_value(body).unwrap();
     assert!(ok.server_time > 0, "heartbeat.ok 必须携带桌面时钟");
 }
 
@@ -495,10 +497,10 @@ async fn ping_pong_keeps_alive_during_silence() {
                             let envelope = DeviceEnvelope::unsigned(
                                 MessageKind::Heartbeat,
                                 format!("m-test-{:08}", MSG_COUNTER.fetch_add(1, Ordering::Relaxed)),
-                                now_ms(),
+                                conex_shared::time::now_millis(),
                                 DeviceEndpoint::Mobile,
                                 DeviceEndpoint::Desktop,
-                                serde_json::json!({ "ts": now_ms(), "deviceTimeMs": now_ms() }),
+                                serde_json::json!({ "ts": conex_shared::time::now_millis(), "deviceTimeMs": conex_shared::time::now_millis() }),
                             );
                             if ws
                                 .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -549,7 +551,7 @@ async fn ping_pong_keeps_alive_during_silence() {
     };
     let (kind, body) = parse_frame(&frame);
     assert_eq!(kind, "heartbeat.ok", "Ping/Pong 保活下 100s 后连接必须存活");
-    let ok: conex_types::device::HeartbeatOk = serde_json::from_value(body).unwrap();
+    let ok: conex_device_protocol::HeartbeatOk = serde_json::from_value(body).unwrap();
     assert!(ok.server_time > 0);
     drop(cmd_tx);
     let _ = reader_task.await;

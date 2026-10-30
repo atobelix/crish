@@ -142,10 +142,10 @@ impl ActiveRun {
         delta_sink_active: bool,
         subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
         audit_persist: Option<tokio::task::JoinHandle<()>>,
-        permission_mode: conex_types::PermissionMode,
+        permission_mode: conex_types::permission::PermissionMode,
         project_name: String,
     ) -> Self {
-        let now = conex_shared::time::unix_millis() as u64;
+        let now = conex_shared::time::now_millis();
         Self {
             session_id,
             run_id,
@@ -174,14 +174,14 @@ impl ActiveRun {
     /// 刷新心跳时间戳（避免边界瞬态抖动与活跃态超时）
     pub fn touch_heartbeat(&self) {
         self.last_heartbeat_ms.store(
-            conex_shared::time::unix_millis() as u64,
+            conex_shared::time::now_millis(),
             std::sync::atomic::Ordering::Relaxed,
         );
     }
 
     /// 进入挂起状态并登记时效租约（Lease）
     pub fn enter_suspended_phase(&self, duration: std::time::Duration, reason: SuspensionReason) {
-        let until_ms = conex_shared::time::unix_millis() as u64 + duration.as_millis() as u64;
+        let until_ms = conex_shared::time::now_millis() + duration.as_millis() as u64;
         let mut phase_guard = self.phase.write().unwrap_or_else(|e| e.into_inner());
         *phase_guard = ExecutionPhase::Suspended { until_ms, reason };
         // 挂起时同步刷新一次心跳时间戳，避免瞬态边界抖动
@@ -349,6 +349,10 @@ pub fn spawn_audit_persistence(
 pub struct CoreRunState {
     /// 事件存储连接（run 记录 + 事件流 + pending 输入）
     pub(crate) store: Arc<dyn Store>,
+    /// 底层 SQLite 连接（run 生命周期数据面：session_meta / 会话索引 /
+    /// 恢复租约 / 子代理行 / usage_records；引擎装配与 run 查询的必需依赖，
+    /// 不再经 store 下转型获取）
+    pub(crate) db: LocalDb,
     /// run 管理器（注册 + 生命周期）
     pub(crate) run_manager: RunManager,
     /// 引擎句柄（provider 配置 + 工具注册表 + engineReady；Arc 包装——
@@ -513,6 +517,7 @@ impl CoreRunState {
     /// 共享同一实例，避免「写入侧与读取侧实例漂移」）
     pub fn new(
         store: Arc<dyn Store>,
+        db: LocalDb,
         snapshots: Arc<dyn SnapshotStore>,
         bridge: EventBridge,
         diagnostics: Arc<StatusDiagnostics>,
@@ -543,10 +548,9 @@ impl CoreRunState {
             // run_subagent 返回 common.unsupported 降级）
             Some(Arc::clone(&subagent_spawner)
                 as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>),
-            // D6 §3.1 段 2 + D4 §3.8 ②（W4 统一签名）：store 下转
-            // LocalDb 连接注入——Some → timer/sched/wait 三 store 真适配
-            // （重启恢复数据面）；None（InMemoryStore 测试替身）→ 内存版
-            store.as_local_db(),
+            // D6 §3.1 段 2 + D4 §3.8 ②（W4 统一签名）：LocalDb 是引擎装配
+            // 必需依赖——timer/sched/wait 三 store 恒走真适配
+            db.clone(),
         ));
         // COMPACTION-01 P0-3（生产闭环）：真实 LLM 摘要器工厂装配——会话级
         // SummarizerFactory = production_summarizer_factory（返回
@@ -672,6 +676,7 @@ impl CoreRunState {
             summary_coordinators,
             summarizer_factory: Mutex::new(summarizer_factory),
             subagent_wait_registry,
+            db,
         }
     }
 
@@ -777,13 +782,11 @@ impl CoreRunState {
     /// run usage 域（T-40 真实实现，R5-D3 轮末合并接线）
     ///
     /// 数据源 = runs 表 v5 列（T-39 `get_run_usage`，drive_run_loop 收口
-    /// `save_run_usage` 写入）；经 [Self::local_db] 下转型取底层连接。
-    /// 无 LocalDb（InMemoryStore 等测试替身）/ 无样本（sample_count == 0，
-    /// 含 v4 迁移旧行）/ 读失败 → None——前端回退估算（contract 注释约定：
-    /// usage 域未接线时 None）。
+    /// `save_run_usage` 写入）；经 [Store] 必需方法读取（无下转型）。
+    /// 无样本（sample_count == 0，含 v4 迁移旧行）/ 读失败 → None——前端
+    /// 回退估算（contract 注释约定：usage 域未接线时 None）。
     pub fn run_usage(&self, run_id: &str) -> Option<RunUsage> {
-        let db = self.local_db()?;
-        let stats = match db.get_run_usage(run_id) {
+        let stats = match self.store.get_run_usage(run_id) {
             Ok(Some(stats)) => stats,
             Ok(None) => return None,
             Err(error) => {
@@ -806,16 +809,13 @@ impl CoreRunState {
         RunUsage::from_run_cache_stats(stats, pricing.as_ref())
     }
 
-    /// T-40（R5-D3 轮末合并接线 ④）：store 下转型取 [LocalDb]——run
-    /// usage 数据面（get_run_usage / save_run_usage，runs 表 v5 列）经
-    /// 此访问。
+    /// 底层 [LocalDb] 连接访问器（run 生命周期数据面：session_meta / 会话
+    /// 索引 / 恢复租约 / 子代理行 / usage_records）。
     ///
-    /// 实现说明：生产路径 store 恒为 [orchestrator::persist::LocalDbStore]
-    /// （main.rs 接线），经 [Store::as_local_db] 返回连接克隆（Arc +1）；
-    /// 非 LocalDb 实现（InMemoryStore 测试替身）保持默认 None——usage
-    /// 查询回退前端估算，不阻塞其他功能。
-    pub fn local_db(&self) -> Option<LocalDb> {
-        self.store.as_local_db()
+    /// db 是 [Self::new] 的必需依赖（生产由 main.rs 注入同一连接），不存在
+    /// 「无库回退」路径。
+    pub fn local_db(&self) -> LocalDb {
+        self.db.clone()
     }
 
     /// 引擎句柄（27 方案 S5/S6 装配面访问器：run 装配块取浏览器会话槽
@@ -912,7 +912,7 @@ impl CoreRunState {
     ///   引擎支持；V1 已删除
     ///   文档化、不改变行为，预留给 V2。
     pub fn summary_dispatch_config(&self, session_id: &str) -> Option<SummaryDispatchConfig> {
-        let db = self.local_db()?;
+        let db = self.local_db();
         // 仅当任一配置键存在时构造（无键 = 生产缺省 None，行为不变）
         let has_key = [
             session_loop::META_KEY_SUMMARY_BACKOFF_MS,
@@ -955,8 +955,8 @@ impl CoreRunState {
     pub fn compaction_policy_for(
         &self,
         session_id: &str,
-    ) -> Option<conex_compaction::compaction::CompactionPolicy> {
-        let db = self.local_db()?;
+    ) -> Option<conex_compaction::CompactionPolicy> {
+        let db = self.local_db();
         let policy =
             compaction_policy_from_session_meta(|key| db.get_session_meta(key).ok().flatten());
         tracing::debug!(
@@ -1046,7 +1046,7 @@ impl CoreRunState {
 
     /// 装配 spawner 注入面（main.rs 在 Arc 构造完成后调用）：启动器
     /// （Weak 引用本状态，run 启动走 run_task_impl 同通道）、行存储
-    /// （LocalDb 下转型）、wait 通道终态广播、跨 run steering 队列
+    /// （同一 LocalDb 连接）、wait 通道终态广播、跨 run steering 队列
     /// （主 agent 唤醒通知落点）。
     pub fn finalize_subagent_spawner(self: &Arc<Self>) {
         let launcher: Arc<dyn crate::subagent_spawner::SubagentRunLauncher> =
@@ -1055,7 +1055,7 @@ impl CoreRunState {
             });
         self.subagent_spawner.init(
             Some(launcher),
-            self.local_db(),
+            Some(self.local_db()),
             Some(self.engine.terminal_stream()),
             Some(Arc::clone(&self.pending_queue)),
         );
@@ -1099,9 +1099,8 @@ impl CoreRunState {
     ///
     /// F2-27：new 的同步读（4-5 键）经专用线程执行（std::thread::scope
     /// 承接，SQLite 工作不落在 tokio worker 上）——惰性一次性构造，进程
-    /// 内每会话仅一次。local_db() 为 None（测试替身 store）→ None 降级
-    /// （协调器不可用，行为与接线前一致；同步 SQLite 操作沿用
-    /// save_run_usage 的专用线程隔离模式）。
+    /// 内每会话仅一次（同步 SQLite 操作沿用 save_run_usage 的专用线程
+    /// 隔离模式）。
     pub fn coordinator_for(
         &self,
         session_id: &str,
@@ -1116,8 +1115,8 @@ impl CoreRunState {
                 return Some(Arc::clone(existing));
             }
         }
-        // 2. local_db() 为 None（测试替身 store）→ None 降级
-        let db = self.local_db()?;
+        // 2. 取必需依赖的 LocalDb 连接
+        let db = self.local_db();
         // 3. 五件套装配（tree 与 coordinator 同批装配）
         let tree = {
             let mut trees = self.session_trees.lock().unwrap_or_else(|e| e.into_inner());
@@ -1188,13 +1187,13 @@ impl CoreRunState {
 impl CoreRunState {
     /// 子代理生命周期服务（T-D-09：kill_all / resume_subagent 命令面
     /// 依赖；db 与 [orchestrator::lifecycle::ForceCancelSink]（本状态实现）
-    /// 装配；LocalDb 不可用（测试替身 store）→ None）。审计 01 W1：
+    /// 装配）。审计 01 W1：
     /// kill_subagent 工具通道（[Self::kill_subagent_via_lifecycle]）生产
     /// 消费——T-D-12 陈旧 dead_code 豁免已删除（D4 A5/T7b）
     pub fn lifecycle_service(
         self: &Arc<Self>,
     ) -> Option<orchestrator::lifecycle::SubagentLifecycleService> {
-        let db = self.local_db()?;
+        let db = self.local_db();
         // Arc 宽化：CoreRunState 实现 ForceCancelSink → trait object 引用
         // （先克隆具体类型再宽化——编译器对 Arc::clone 的 trait object
         // 目标推断不收敛，显式两步断开）
@@ -1349,12 +1348,11 @@ impl CoreRunState {
             cell.set(mode);
         }
         // 持久化能力快照（跨重启保留；运行中/终态行都可更新）
-        if let Some(db) = self.local_db() {
-            let affected = db
-                .update_session_agent_capability(session_id, agent_or_run, mode.as_str())
-                .map_err(|error| CoreError::internal(format!("能力快照落库失败：{error}")))?;
-            found |= affected > 0;
-        }
+        let db = self.local_db();
+        let affected = db
+            .update_session_agent_capability(session_id, agent_or_run, mode.as_str())
+            .map_err(|error| CoreError::internal(format!("能力快照落库失败：{error}")))?;
+        found |= affected > 0;
         if !found {
             return Err(CoreError::NotFound(format!(
                 "subagent not found: {agent_or_run}"
@@ -1364,11 +1362,7 @@ impl CoreRunState {
     }
 
     /// 运行时切换 run 模型（`None` = 跟随引擎默认；下一 turn 生效）。
-    pub fn set_run_model(
-        &self,
-        run_id: &str,
-        model: Option<String>,
-    ) -> Result<(), CoreError> {
+    pub fn set_run_model(&self, run_id: &str, model: Option<String>) -> Result<(), CoreError> {
         let cell = self
             .active_runs
             .lock()
@@ -1419,12 +1413,11 @@ impl CoreRunState {
             (Some(cell), _) => cell.clear(),
             _ => {}
         }
-        if let Some(db) = self.local_db() {
-            let affected = db
-                .update_session_agent_model(session_id, agent_or_run, model.as_deref())
-                .map_err(|error| CoreError::internal(format!("模型覆盖落库失败：{error}")))?;
-            found |= affected > 0;
-        }
+        let db = self.local_db();
+        let affected = db
+            .update_session_agent_model(session_id, agent_or_run, model.as_deref())
+            .map_err(|error| CoreError::internal(format!("模型覆盖落库失败：{error}")))?;
+        found |= affected > 0;
         if !found {
             return Err(CoreError::NotFound(format!(
                 "subagent not found: {agent_or_run}"
@@ -1437,7 +1430,7 @@ impl CoreRunState {
     pub fn set_run_permission_mode(
         &self,
         run_id: &str,
-        mode: conex_types::PermissionMode,
+        mode: conex_types::permission::PermissionMode,
     ) -> Result<(), CoreError> {
         let cell = self
             .permission_cell_for_run(run_id)
@@ -1452,7 +1445,7 @@ impl CoreRunState {
     pub fn set_session_permission_mode(
         &self,
         session_id: &str,
-        mode: conex_types::PermissionMode,
+        mode: conex_types::permission::PermissionMode,
     ) -> Result<(), CoreError> {
         let cells: Vec<Arc<conex_agents::permission::PermissionCell>> = {
             let active = self.active_runs.lock().unwrap_or_else(|e| e.into_inner());
@@ -1483,12 +1476,13 @@ impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
         run_task_impl(state, options).await
     }
 
-    fn get_active_run_permission_mode(&self, run_id: &str) -> Option<conex_types::PermissionMode> {
+    fn get_active_run_permission_mode(
+        &self,
+        run_id: &str,
+    ) -> Option<conex_types::permission::PermissionMode> {
         let state = self.state.upgrade()?;
         let active_runs = state.active_runs.lock().ok()?;
-        active_runs
-            .get(run_id)
-            .map(|r| r.permission.effective())
+        active_runs.get(run_id).map(|r| r.permission.effective())
     }
 }
 
@@ -1681,7 +1675,7 @@ impl CoreRunState {
             id: message_id.clone(),
             text: message.to_string(),
             attachments: Vec::new(),
-            enqueued_at: now_ms_internal(),
+            enqueued_at: conex_shared::time::now_millis(),
             group_id: Some("main-agent-msg".to_string()),
             is_steering: true,
         };
@@ -1714,8 +1708,10 @@ impl CoreRunState {
         board.bind_control_bus(Arc::clone(&adapter) as Arc<dyn ControlBusResolver>);
         board.bind_kill(Arc::clone(&adapter) as Arc<dyn SubagentKillChannel>);
         board.bind_inject(Arc::clone(&adapter) as Arc<dyn SubagentInjectChannel>);
-        board.bind_capability_grant(Arc::clone(&adapter) as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>);
-        board.bind_model_switch(Arc::clone(&adapter) as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>);
+        board.bind_capability_grant(Arc::clone(&adapter)
+            as Arc<dyn agent_tools::tools::grant_capability::SubagentCapabilityGrantChannel>);
+        board.bind_model_switch(Arc::clone(&adapter)
+            as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>);
         board.bind_self_message(adapter as Arc<dyn MainAgentMessageChannel>);
         tracing::info!(
             target: "engine",
@@ -1836,9 +1832,7 @@ pub async fn write_back_cache_stats(
         );
     }
 
-    let Some(db) = state.local_db() else {
-        return;
-    };
+    let db = state.local_db();
 
     // 主轨落库（03 §3.2）：run 收口即写 usage_records——覆盖桌面 UI、
     // 手机端与定时任务发起的全部 run，不依赖前端 chat-stream 回调。
@@ -1853,9 +1847,10 @@ pub async fn write_back_cache_stats(
         .and_then(|config| config.provider_id.clone())
         .unwrap_or_default();
     let pricing = provider_config.as_ref().and_then(|config| {
-        config.provider_id.as_deref().and_then(|provider_id| {
-            crate::pricing::live_model_pricing(provider_id, &config.model)
-        })
+        config
+            .provider_id
+            .as_deref()
+            .and_then(|provider_id| crate::pricing::live_model_pricing(provider_id, &config.model))
     });
     let usage_record = crate::core_query::RunUsage::from_run_cache_stats(stats, pricing.as_ref())
         .map(|usage| {
@@ -1883,13 +1878,15 @@ pub async fn write_back_cache_stats(
                 cache_write_tokens: usage.cache_write_tokens.unwrap_or(0),
                 cost_cny,
                 cost_usd,
-                timestamp: conex_shared::time::unix_millis() as i64,
+                timestamp: conex_shared::time::unix_millis(),
             }
         });
 
     let run_id_owned = run_id.to_string();
+    let store = Arc::clone(&state.store);
     let write_result = tokio::task::spawn_blocking(move || {
-        let save = db.save_run_usage(&run_id_owned, stats);
+        // run usage 走 [Store] 必需方法（LocalDb 实现在阻塞线程内直调）
+        let save = store.save_run_usage(&run_id_owned, stats);
         if let Some(record) = usage_record {
             // 幂等守卫：run 级最多一条（收口重入 / 重试不得重复计费）
             match db.usage_record_exists_for_run(&run_id_owned) {
@@ -2017,7 +2014,7 @@ mod phase_tests {
             false,
             None,
             None,
-            conex_types::PermissionMode::default(),
+            conex_types::permission::PermissionMode::default(),
             String::new(),
         );
 
@@ -2027,7 +2024,7 @@ mod phase_tests {
         assert!(initial_heartbeat > 0);
 
         // 进入 429 挂起租约
-        let before_suspend = conex_shared::time::unix_millis() as u64;
+        let before_suspend = conex_shared::time::now_millis();
         let sleep_duration = Duration::from_millis(5000);
         active.enter_suspended_phase(
             sleep_duration,

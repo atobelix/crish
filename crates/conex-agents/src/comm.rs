@@ -117,9 +117,9 @@ impl AgentMessage {
 
 fn uuid_like(now_ms: i64, from: &str) -> String {
     // 轻量唯一后缀：时间戳 + 发送方哈希（无 uuid 依赖；冲突由调用方 id 覆盖）
-    let hash = from
-        .bytes()
-        .fold(0u64, |acc, byte| acc.wrapping_mul(31).wrapping_add(byte as u64));
+    let hash = from.bytes().fold(0u64, |acc, byte| {
+        acc.wrapping_mul(31).wrapping_add(byte as u64)
+    });
     format!("{now_ms:x}{hash:x}")
 }
 
@@ -207,9 +207,7 @@ impl DigestBuffer {
         if self.items.is_empty() {
             return false;
         }
-        if self.items.len() >= policy.digest_max_items
-            || self.bytes >= policy.digest_max_bytes
-        {
+        if self.items.len() >= policy.digest_max_items || self.bytes >= policy.digest_max_bytes {
             return true;
         }
         self.first_at_ms
@@ -276,14 +274,23 @@ mod tests {
         assert!(!bucket.try_take(0), "容量耗尽");
         assert!(bucket.try_take(500), "500ms 补充 1 个");
         assert!(bucket.try_take(1_000), "1s 补满至 2");
-        assert!((bucket.available(10_000) - 2.0).abs() < 1e-9, "不得超过容量");
+        assert!(
+            (bucket.available(10_000) - 2.0).abs() < 1e-9,
+            "不得超过容量"
+        );
     }
 
     #[test]
     fn digest_flushes_on_items_bytes_or_interval() {
         let policy = CommunicationPreset::Normal.policy();
         let mut buffer = DigestBuffer::default();
-        buffer.push(AgentMessage::new("s", "p", AgentMessageKind::Progress, "a", 0));
+        buffer.push(AgentMessage::new(
+            "s",
+            "p",
+            AgentMessageKind::Progress,
+            "a",
+            0,
+        ));
         assert!(!buffer.should_flush(&policy, 0));
         assert!(buffer.should_flush(&policy, policy.digest_interval_ms as i64));
 
@@ -304,12 +311,10 @@ mod tests {
     fn dedupe_key_replaces_latest() {
         let mut buffer = DigestBuffer::default();
         buffer.push(
-            AgentMessage::new("s", "p", AgentMessageKind::Progress, "old", 0)
-                .with_dedupe("step-1"),
+            AgentMessage::new("s", "p", AgentMessageKind::Progress, "old", 0).with_dedupe("step-1"),
         );
         buffer.push(
-            AgentMessage::new("s", "p", AgentMessageKind::Progress, "new", 1)
-                .with_dedupe("step-1"),
+            AgentMessage::new("s", "p", AgentMessageKind::Progress, "new", 1).with_dedupe("step-1"),
         );
         assert_eq!(buffer.len(), 1);
         let digest = buffer
@@ -321,8 +326,8 @@ mod tests {
 
     #[test]
     fn expired_messages_are_detected() {
-        let message = AgentMessage::new("s", "p", AgentMessageKind::Progress, "x", 0)
-            .with_expiry(100);
+        let message =
+            AgentMessage::new("s", "p", AgentMessageKind::Progress, "x", 0).with_expiry(100);
         assert!(!message.is_expired(99));
         assert!(message.is_expired(100));
     }
@@ -389,9 +394,8 @@ mod tests {
             "摘要缓冲字节不得超过上限：{max_digest_bytes}"
         );
         // 紧急配额 = 初始容量 + 24h 补充（每小时 refill 条）
-        let cap = policy.critical_capacity as usize
-            + (24 * policy.critical_refill_per_hour as usize)
-            + 1;
+        let cap =
+            policy.critical_capacity as usize + (24 * policy.critical_refill_per_hour as usize) + 1;
         assert!(
             critical_grants <= cap,
             "24h 紧急消息授权不得超过容量+补充速率：{critical_grants} > {cap}"

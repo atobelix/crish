@@ -9,22 +9,22 @@ use crate::server::{ServerConfig, ServerHandle};
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{StatusCode, Uri};
-use conex_types::device::commands::{SettingsConfirmAction, SettingsConfirmStatus};
-use conex_types::device::commands::{
+use conex_device_protocol::commands::{SettingsConfirmAction, SettingsConfirmStatus};
+use conex_device_protocol::commands::{
     SettingsConfirmParams, SettingsConfirmResult, TaskOutputParams, TaskOutputResult,
 };
-use conex_types::device::version::PAGE_SIZE_DEFAULT;
-use conex_types::device::{
+use conex_device_protocol::version::PAGE_SIZE_DEFAULT;
+use conex_device_protocol::{
     CommandSurface, FileSearchHit, ManifestEntry, RunTaskParams, RunTaskResult,
 };
-use conex_types::device::{
+use conex_device_protocol::{
     DenyParams, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, FlowSnapshotParams,
     FlowSnapshotResult, ListCommandsResult, ListSessionsParams, ListSessionsResult,
     ListTasksParams, ListTasksResult, PauseAutomationParams, PauseAutomationResult,
     RunControlParams, RunEventsParams, RunSnapshotParams, RunSnapshotResult, SearchFilesParams,
     SearchFilesResult, SearchIndexResult,
 };
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -70,7 +70,7 @@ fn issue_token(state: &ServerState) -> String {
         .tokens()
         .lock()
         .unwrap()
-        .issue("test-device", now_ms())
+        .issue("test-device", conex_shared::time::now_millis())
         .expect("签发必须成功")
 }
 
@@ -147,7 +147,7 @@ struct MockBackend {
     last_settings_keys: std::sync::Mutex<Option<Vec<String>>>,
     /// 最近一次 run_task 收到的权限模式申报（R1-10 T-08：远程申报
     /// 原样抵达后端装配面——降级由 apply_remote_mode 在装配面执行）
-    last_run_permission_mode: std::sync::Mutex<Option<conex_types::device::PermissionMode>>,
+    last_run_permission_mode: std::sync::Mutex<Option<conex_types::permission::PermissionMode>>,
     /// 最近一次 search_files 收到的参数（R2-12c C21 透传断言）
     last_search_files: std::sync::Mutex<Option<SearchFilesParams>>,
     /// 最近一次 settings_confirm 收到的参数（R2-12c C30 透传断言）
@@ -258,7 +258,7 @@ impl MockBackend {
         &self,
         tool_call_id: &str,
         decision: &'static str,
-    ) -> Result<conex_types::device::ApproveResult, ServerError> {
+    ) -> Result<conex_device_protocol::ApproveResult, ServerError> {
         if tool_call_id == "tc-missing" {
             return Err(Self::not_found("tool_call_id 从未出现（mock）"));
         }
@@ -270,7 +270,7 @@ impl MockBackend {
             ));
         }
         resolved.insert(tool_call_id.to_string());
-        Ok(conex_types::device::ApproveResult {
+        Ok(conex_device_protocol::ApproveResult {
             ok: true,
             tool_call_id: tool_call_id.to_string(),
             decision: serde_json::from_value(serde_json::Value::String(decision.to_string()))

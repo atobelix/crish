@@ -1,7 +1,7 @@
 //! 终端面板 shell 执行辅助：cwd 解析、PowerShell/bash 调用组装、
 //! base64 编码与输出截断解码（自 process.rs 原样搬迁）
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use std::path::{Path, PathBuf};
 
 use super::MAX_SHELL_OUTPUT_BYTES;

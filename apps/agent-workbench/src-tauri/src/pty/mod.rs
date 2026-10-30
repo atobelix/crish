@@ -29,7 +29,7 @@
 mod session;
 pub(crate) mod utf8_buffer;
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -168,7 +168,7 @@ pub(crate) fn notify_pty_activity(app: &AppHandle) {
                     continue;
                 }
                 idle_consecutive_ticks = 0;
-                let now = crate::server::now_ms();
+                let now = conex_shared::time::now_millis();
                 let killed = session::run_gc_sweep(now);
                 if !killed.is_empty() {
                     tracing::info!(

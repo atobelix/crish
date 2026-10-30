@@ -1,6 +1,7 @@
 //! Stream A: Tauri 命令层 —— Rust Markdown 渲染入口。
 //!
 //! 包装 `conex_markdown` 的渲染 API：
+//! - `core_md_render`: retired（无前端消费；单条渲染走 batch 单元素或 stream）。
 //! - `core_md_render_batch`：批量渲染（每条独立缓存）
 //! - `core_md_render_stream`：流式渲染（跳过 syntect 高亮，不写缓存）
 //!
@@ -10,7 +11,7 @@
 //!
 //! 对应 JS wrapper：`crish-desktop/src/api/rustCore.ts`。
 
-use conex_types::CoreError;
+use conex_types::ipc_error::CoreError;
 use serde::Serialize;
 
 use conex_markdown::{MarkdownVariant, RenderOptions, RenderResult};

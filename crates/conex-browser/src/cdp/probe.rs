@@ -21,7 +21,7 @@ use crate::cdp::error::CdpError;
 use crate::cdp::sender::{Command, CommandSender};
 use futures_util::future::join_all;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 /// 探测总预算（≤10s，§6.1）。
 pub const PROBE_BUDGET: Duration = Duration::from_secs(10);
@@ -142,10 +142,7 @@ pub struct CapabilityReport {
 /// 执行能力探测（发送层全命令过闸门；总预算 ≤ 10s）。
 pub async fn run(sender: &CommandSender) -> CapabilityReport {
     let start = Instant::now();
-    let detected_at_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let detected_at_ms = conex_shared::time::now_millis();
 
     // 1. 版本（先决：Input/Emulation/Storage 推理依赖）
     let version = fetch_version(sender).await;

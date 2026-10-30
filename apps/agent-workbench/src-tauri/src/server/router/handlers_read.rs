@@ -1,10 +1,10 @@
 //! 只读查询面 handler（R1-03：info/hello + F1 监控域 C01-C10）
 
-use crate::server::{now_ms, ServerError, ServerState};
+use crate::server::{ServerError, ServerState};
 use axum::extract::{Path, RawQuery, State};
 use axum::Json;
-use conex_types::device::commands::{TaskOutputParams, TaskOutputResult};
-use conex_types::device::{
+use conex_device_protocol::commands::{TaskOutputParams, TaskOutputResult};
+use conex_device_protocol::{
     EventPageParams, EventPageResult, FlowSnapshotParams, FlowSnapshotResult, ListCommandsResult,
     ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, RunEventsParams,
     RunSnapshotParams, RunSnapshotResult, SearchIndexResult,
@@ -25,7 +25,7 @@ pub(super) async fn handle_hello(State(state): State<ServerState>) -> Json<Hello
     Json(HelloInfo {
         server_version: info.version,
         protocol_version: info.protocol_version,
-        server_time_ms: now_ms(),
+        server_time_ms: conex_shared::time::now_millis(),
     })
 }
 

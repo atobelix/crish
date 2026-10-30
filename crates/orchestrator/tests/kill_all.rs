@@ -20,7 +20,7 @@ use agent_tools::tools::subagent::{
 use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_types::error::ProviderErrorKind;
-use conex_types::{SessionAgent, SessionMessage};
+use conex_types::session_record::{SessionAgent, SessionMessage};
 use orchestrator::flow_graph::{FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler};
 use orchestrator::lifecycle::{LifecycleError, ResumeOutcome, SubagentLifecycleService};
 use orchestrator::recovery::{
@@ -1364,7 +1364,7 @@ async fn prepare_resume_errors_structured() {
 /// W3 契约：row.messages → HistoryMessage 保真映射（subagent_history）
 #[tokio::test]
 async fn subagent_history_maps_messages_faithfully() {
-    use conex_types::HistoryMessage;
+    use conex_types::history::HistoryMessage;
     let now = now_ms();
     let row = agent_row(
         "sub-1",

@@ -14,7 +14,7 @@ use super::agents::parse_session_agents_safe;
 use super::agents::save_session_agents_conn;
 use super::messages::parse_session_messages_flexible;
 use super::{DbFailure, DbFailureKind, LocalDb};
-use conex_types::{ImportStats, SessionIndexEntry};
+use conex_types::session_record::{ImportStats, SessionIndexEntry};
 use std::collections::HashMap;
 
 impl LocalDb {

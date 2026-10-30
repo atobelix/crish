@@ -689,6 +689,14 @@
       "title": "工具分发前已中止"
     },
     {
+      "action": "action.tool.request_approval",
+      "category": "permanent",
+      "code": "tool.approval_expired",
+      "public": true,
+      "retryable": false,
+      "title": "审批已过期"
+    },
+    {
       "action": "action.browser.none",
       "category": "permanent",
       "code": "tool.browser.cancelled",
@@ -767,6 +775,22 @@
       "public": true,
       "retryable": false,
       "title": "工具已被取消"
+    },
+    {
+      "action": "action.tool.check_policy",
+      "category": "security",
+      "code": "tool.cd_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "目录切换命令被拦截"
+    },
+    {
+      "action": "action.tool.check_policy",
+      "category": "security",
+      "code": "tool.command_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "命令被安全策略拦截"
     },
     {
       "action": "action.computer.none",
@@ -873,12 +897,60 @@
       "title": "路径越界"
     },
     {
+      "action": "action.tool.check_policy",
+      "category": "security",
+      "code": "tool.policy_blocked",
+      "public": true,
+      "retryable": false,
+      "title": "安全策略阻断"
+    },
+    {
+      "action": "action.tool.request_approval",
+      "category": "permanent",
+      "code": "tool.requires_approval",
+      "public": true,
+      "retryable": false,
+      "title": "工具调用需要审批"
+    },
+    {
       "action": "action.session.wait_switch",
       "category": "permanent",
       "code": "tool.session.exclusive",
       "public": true,
       "retryable": false,
       "title": "会话互斥"
+    },
+    {
+      "action": "action.tool.check_policy",
+      "category": "permanent",
+      "code": "tool.soft_deny",
+      "public": true,
+      "retryable": false,
+      "title": "工具调用被软拒绝"
+    },
+    {
+      "action": "action.tool.check_network",
+      "category": "permanent",
+      "code": "tool.stream_error_before_dispatch",
+      "public": true,
+      "retryable": false,
+      "title": "流式错误导致工具未派发"
+    },
+    {
+      "action": "action.tool.retry",
+      "category": "transient",
+      "code": "tool.timeout",
+      "public": true,
+      "retryable": true,
+      "title": "工具执行超时"
+    },
+    {
+      "action": "action.tool.check_permission",
+      "category": "permanent",
+      "code": "tool.user_denied",
+      "public": true,
+      "retryable": false,
+      "title": "用户拒绝执行"
     },
     {
       "action": "action.tool.refresh_and_retry",
@@ -906,6 +978,6 @@
     }
   ],
   "contract": "error-codes",
-  "count": 113,
+  "count": 122,
   "schemaVersion": 1
 }

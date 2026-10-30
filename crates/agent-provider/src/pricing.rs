@@ -316,5 +316,4 @@ impl PricingEngine {
 }
 
 #[cfg(test)]
-#[path = "pricing_tests.rs"]
-mod pricing_tests;
+mod tests;

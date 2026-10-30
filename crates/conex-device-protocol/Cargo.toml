@@ -1,0 +1,21 @@
+[package]
+name = "conex-device-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# 依赖方向单向（TY-P5 / c.1）：设备协议 → 引擎领域类型。
+# 命令载荷与事件面引用 ApprovalDecision / PermissionMode / CoreError /
+# SessionIndexEntry 等领域类型；conex-types 不反向依赖本 crate。
+conex-types = { path = "../conex-types" }

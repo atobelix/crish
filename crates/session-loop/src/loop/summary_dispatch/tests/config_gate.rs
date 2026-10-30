@@ -80,7 +80,7 @@ fn retry_guard_defaults_match_plan() {
 fn max_attempts_key_aliases_ai_summary_single_source() {
     assert_eq!(
         META_KEY_SUMMARY_MAX_ATTEMPTS,
-        conex_compaction::ai_summary::SESSION_META_KEY_COMPACT_SUMMARY_MAX_ATTEMPTS,
+        conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_ATTEMPTS,
         "compact_summary_max_attempts 键必须与 ai_summary.rs 同一常量（S2 统一口径）"
     );
 }

@@ -10,7 +10,7 @@
 // 处理（R2-06 已提交），本文件择优采用显式引用，确保新增文件 tsc 归零。
 //
 // 策略（任务书 fixture 纪律，对齐 filesCommands.test.ts 先例）：
-// - 注册表为单一真源：运行时直读 crates/conex-types/contracts/device-protocol.json
+// - 注册表为单一真源：运行时直读 crates/conex-device-protocol/contracts/device-protocol.json
 //   （commands 段 C01-C10 + types 段 paramsType/resultType 字段表），
 //   注册表漂移时测试红；
 // - 对拍面：build*Request（10 条命令的 kind/body.command/params 键集）、
@@ -25,7 +25,7 @@
 //   router.rs:618 normalize_max_events，构造侧透传）。
 //
 // 真源索引：
-// - crates/conex-types/contracts/device-protocol.json（协议注册表唯一真源）
+// - crates/conex-device-protocol/contracts/device-protocol.json（协议注册表唯一真源）
 // - M6 §4.1（F1 域 10 条命令逐条展开：参数 schema + 响应 schema + 错误码）
 // - apps/agent-workbench/src-tauri/src/server/router.rs（只读 REST 端点表）
 // - apps/agent-workbench/src-tauri/src/server/core_backend.rs（响应数据面）
@@ -92,7 +92,7 @@ interface DeviceProtocolRegistry {
 /** 注册表路径：apps/crish-mobile/src/domain/repositories → 仓库根 crates/... */
 const REGISTRY_PATH = join(
   __dirname,
-  '../../../../../crates/conex-types/contracts/device-protocol.json'
+  '../../../../../crates/conex-device-protocol/contracts/device-protocol.json'
 );
 
 function loadRegistry(): DeviceProtocolRegistry {

@@ -1,7 +1,7 @@
 //! 全局恢复排他租约与子代理（session_agents）持久化：增量 Upsert、移除差集、导入路径。
 
 use super::*;
-use conex_types::SessionAgent;
+use conex_types::session_record::SessionAgent;
 use std::collections::HashMap;
 
 #[test]
