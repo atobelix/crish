@@ -30,7 +30,7 @@ use error_classify::{
     detect_long_rate_limit_lock, detect_network_message, detect_quota_message,
     detect_rate_limit_message, detect_server_message, detect_timeout_message,
     extract_seconds_from_text, is_server_status, looks_like_gateway_challenge,
-    looks_like_payload_too_large_message,
+    looks_like_payload_too_large_message, server_body_hint,
 };
 
 /// 超时位置（02 §六.2：first-byte 与 idle 超时独立可配；请求级超时来自 reqwest）
@@ -127,8 +127,20 @@ pub enum ProviderError {
         retry_after: Option<Duration>,
     },
     /// 第 10 行：HTTP 500/502/503/504/520/522/523/524 等，可重试
-    #[error("服务端错误（HTTP {status:?}）")]
-    Server { status: Option<u16> },
+    /// （body_hint = 响应体摘要 ≤200 字符：上游原因透传——「该模型无可用上游」
+    /// 等服务端语义直达用户，而非裸状态码；与 InvalidRequest/Unknown 携带
+    /// body 的先例一致，密钥脱敏由展示层统一处理）
+    #[error(
+        "服务端错误（HTTP {status:?}）{}",
+        body_hint
+            .as_deref()
+            .map(|b| format!("：{b}"))
+            .unwrap_or_default()
+    )]
+    Server {
+        status: Option<u16>,
+        body_hint: Option<String>,
+    },
     /// 第 11 行：超时（first-byte / idle / 请求级），可重试
     #[error("请求超时（{kind:?}）")]
     Timeout { kind: TimeoutKind },
@@ -299,10 +311,16 @@ pub fn classify_provider_error(
         };
     }
     if is_server_status(status) {
-        return ProviderError::Server { status };
+        return ProviderError::Server {
+            status,
+            body_hint: server_body_hint(message),
+        };
     }
     if detect_server_message(&lower) {
-        return ProviderError::Server { status };
+        return ProviderError::Server {
+            status,
+            body_hint: server_body_hint(message),
+        };
     }
     if detect_timeout_message(&lower) {
         return ProviderError::Timeout {

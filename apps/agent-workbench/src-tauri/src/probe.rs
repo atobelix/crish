@@ -130,11 +130,13 @@ pub fn parse_scanned_models(body: &serde_json::Value, profile_id: &str) -> Vec<S
 }
 
 /// 代理和自定义头直接读取同一配置快照；非法配置返回错误，不静默跳过。
+/// 代理策略与引擎主链路（engine_provider/connection.rs）对齐：默认跟随
+/// 系统代理解析（reqwest 环境代理语义），`provider.proxy_url` 显式配置优先。
 fn probe_client(
     config: &ResolvedProviderConfig,
     timeout: Duration,
 ) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().timeout(timeout).no_proxy();
+    let mut builder = reqwest::Client::builder().timeout(timeout);
     if let Some(proxy) = &config.provider.proxy_url {
         builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|_| "代理地址无效")?);
     }
@@ -186,11 +188,9 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
     if timeout.is_zero() {
         return failure("探活超时必须大于零".into());
     }
-    let client = match reqwest::Client::builder()
-        .timeout(timeout)
-        .no_proxy()
-        .build()
-    {
+    // 代理策略与引擎主链路一致：默认跟随系统代理解析（不再硬编码 no_proxy），
+    // 本机依赖 TUN/代理出网时探活与实连行为保持同路
+    let client = match reqwest::Client::builder().timeout(timeout).build() {
         Ok(client) => client,
         Err(_) => return failure("无法创建探活连接".into()),
     };

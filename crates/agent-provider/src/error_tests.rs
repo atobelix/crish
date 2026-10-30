@@ -290,7 +290,9 @@ fn row10_server_error() {
         assert_eq!(
             error,
             ProviderError::Server {
-                status: Some(status)
+                status: Some(status),
+                // 空响应体 → 不携带 body hint
+                body_hint: None
             }
         );
         assert!(error.is_retryable());
@@ -569,7 +571,13 @@ fn kind_mapping_covers_all_13_classes() {
             },
             Kind::RateLimit,
         ),
-        (ProviderError::Server { status: None }, Kind::ServerError),
+        (
+            ProviderError::Server {
+                status: None,
+                body_hint: None,
+            },
+            Kind::ServerError,
+        ),
         (
             ProviderError::Timeout {
                 kind: TimeoutKind::Request,
@@ -608,7 +616,11 @@ fn retryable_matrix_matches_default_retryable() {
         retry_after: None,
     }
     .is_retryable());
-    assert!(ProviderError::Server { status: None }.is_retryable());
+    assert!(ProviderError::Server {
+        status: None,
+        body_hint: None
+    }
+    .is_retryable());
     assert!(ProviderError::Timeout {
         kind: TimeoutKind::Request
     }
@@ -653,7 +665,10 @@ fn to_crish_error_uses_existing_codes() {
             codes::PROVIDER_RATE_LIMIT,
         ),
         (
-            ProviderError::Server { status: None },
+            ProviderError::Server {
+                status: None,
+                body_hint: None,
+            },
             codes::PROVIDER_SERVER,
         ),
         (

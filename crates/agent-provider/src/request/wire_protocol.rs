@@ -158,7 +158,7 @@ pub fn resolve_effective_protocol_from_context(
 /// 1. 去除 `base_url` 末尾所有斜杠 `/`；
 /// 2. 若为 `AnthropicMessages`：如果 `base_url` 已经以 `/v1/messages` 或 `/messages` 结尾，直接返回；若以 `/v1` 结尾，追加 `/messages`，否则追加 `/v1/messages`；
 /// 3. 若为 `OpenAiResponses`：如果 `base_url` 已经以 `/responses` 结尾，直接返回；若以 `/v1` 结尾，追加 `/responses`，否则追加 `/v1/responses`；
-/// 4. 若为 `OpenAiChat`：如果 `base_url` 已经以 `/chat/completions` 结尾，直接返回；无论是否已带 `/v1` 或兼容网关路径，规范化拼装追加 `/chat/completions`，避免 `//` 或 `/v1/v1`；
+/// 4. 若为 `OpenAiChat`：如果 `base_url` 已经以 `/chat/completions` 结尾，直接返回；若以 `/v1` 结尾，追加 `/chat/completions`；否则通用归一追加 `/v1/chat/completions`（OpenAI 兼容生态事实标准路径，无域名特判），避免 `//` 或 `/v1/v1`；
 /// 5. 若为 `GoogleGenerateContent`：若以 `/v1beta` 结尾则直接返回，否则追加 `/v1beta`。
 pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
     let (trimmed_base, query) = if let Some((p, q)) = base_url.trim().split_once('?') {
@@ -190,11 +190,11 @@ pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
                 trimmed_base.to_string()
             } else if trimmed_base.ends_with("/v1") {
                 format!("{trimmed_base}/chat/completions")
-            } else if trimmed_base.contains("sensenova.cn") || trimmed_base.ends_with("openai.com")
-            {
-                format!("{trimmed_base}/v1/chat/completions")
             } else {
-                format!("{trimmed_base}/chat/completions")
+                // 通用归一：未含版本段即补 `/v1`（OpenAI 兼容生态事实标准路径，
+                // 覆盖 openai.com / sensenova / 各类中转站 / DeepSeek 等；
+                // 旧域名特判已废除——特判结果与本归一逐例一致）
+                format!("{trimmed_base}/v1/chat/completions")
             }
         }
         ProtocolKind::GoogleGenerateContent => {

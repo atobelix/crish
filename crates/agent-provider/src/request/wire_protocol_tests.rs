@@ -596,14 +596,20 @@ fn test_build_endpoint_url_openai_chat() {
         build_endpoint_url(p, "https://dashscope.aliyuncs.com/compatible-mode/v1/"),
         "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     );
-    // 3. DeepSeek / 第三方直出根路径
+    // 3. DeepSeek / 第三方裸域名：通用归一补 /v1（OpenAI 兼容生态事实标准路径；
+    //    DeepSeek 官方同时支持 /chat/completions 与 /v1/chat/completions）
     assert_eq!(
         build_endpoint_url(p, "https://api.deepseek.com"),
-        "https://api.deepseek.com/chat/completions"
+        "https://api.deepseek.com/v1/chat/completions"
     );
     assert_eq!(
         build_endpoint_url(p, "https://api.deepseek.com/"),
-        "https://api.deepseek.com/chat/completions"
+        "https://api.deepseek.com/v1/chat/completions"
+    );
+    // 3b. 通用 OpenAI 兼容中转站（如自建 relay 裸域名）：同规则补 /v1
+    assert_eq!(
+        build_endpoint_url(p, "https://relay.example.me/"),
+        "https://relay.example.me/v1/chat/completions"
     );
     // 4. 幂等：已包含 /chat/completions
     assert_eq!(
@@ -671,7 +677,7 @@ fn test_wire_protocol_resolve_endpoint_url_method() {
     // 测试别名常量的调用
     assert_eq!(
         WireProtocol::OpenAiChat.resolve_endpoint_url("https://api.deepseek.com"),
-        "https://api.deepseek.com/chat/completions"
+        "https://api.deepseek.com/v1/chat/completions"
     );
     assert_eq!(
         WireProtocol::OpenAiResponses.resolve_endpoint_url("https://api.openai.com"),
