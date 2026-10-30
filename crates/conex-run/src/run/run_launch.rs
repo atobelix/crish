@@ -1966,7 +1966,7 @@ pub async fn compact_now_impl(
     let end_event = AgentEvent::ContextCompressionEnd {
         session_id: session_id.to_string(),
         timestamp: now_iso,
-        result: Some(record),
+        result: Some(Box::new(record)),
         aborted: false,
         error: None,
     };

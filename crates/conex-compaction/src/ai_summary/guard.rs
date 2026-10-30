@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 use super::prompt::is_acceptable_summary;
 use super::{

@@ -4,7 +4,7 @@ mod common;
 
 use common::{amsg, text_block, tool_call_block, tool_result_block};
 use conex_compaction::{CompactionEngine, CompactionPolicy};
-use conex_types::AgentMessageRole;
+use conex_types::message::AgentMessageRole;
 
 #[test]
 fn test_post_append_emergency_preflight() {

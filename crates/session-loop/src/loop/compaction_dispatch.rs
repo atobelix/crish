@@ -861,7 +861,7 @@ pub(crate) async fn apply_compaction(
     state.emit_event(AgentEvent::ContextCompressionEnd {
         session_id: session_id.clone(),
         timestamp: conex_shared::time::now_iso_utc(),
-        result: Some(record),
+        result: Some(Box::new(record)),
         aborted: false,
         error: None,
     });

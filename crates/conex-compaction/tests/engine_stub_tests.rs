@@ -6,7 +6,7 @@ use common::{amsg, summary_doc_json, text_block};
 use conex_compaction::{
     count_agent_message_tokens, count_tokens, CompactionEngine, CompactionPolicy, Summarizer,
 };
-use conex_types::{AgentMessage, AgentMessageRole};
+use conex_types::message::{AgentMessage, AgentMessageRole};
 
 #[test]
 fn compact_uses_summarizer_and_iterative_merge() {

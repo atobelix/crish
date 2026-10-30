@@ -102,7 +102,7 @@ fn find_compression_record(events: &[AgentEvent]) -> Option<ContextCompressionRe
         AgentEvent::ContextCompressionEnd {
             result: Some(record),
             ..
-        } => Some(record.clone()),
+        } => Some((**record).clone()),
         _ => None,
     })
 }

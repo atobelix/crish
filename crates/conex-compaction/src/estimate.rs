@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use conex_shared::time::parse_iso8601_ms;
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 use crate::tokens::{count_agent_message_tokens, count_tokens};
 

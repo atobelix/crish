@@ -7,7 +7,7 @@ use common::{
 use conex_compaction::{
     count_agent_message_tokens, find_cut_point, CompactionEngine, CompactionPolicy,
 };
-use conex_types::AgentMessageRole;
+use conex_types::message::AgentMessageRole;
 
 #[test]
 fn cut_point_accumulates_from_tail_to_budget() {

@@ -1,6 +1,6 @@
 //! 压缩事件 details 载荷与 covers_up_to_turn 计算（从 ai_summary.rs 纯搬迁）
 
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 // ── covers_up_to_turn（02 Top 9：摘要覆盖到哪一轮，供拼接注入）──
 
@@ -11,7 +11,7 @@ use conex_types::AgentMessage;
 pub fn covers_up_to_turn_for_dropped(dropped: &[AgentMessage]) -> Option<u32> {
     let turns = dropped
         .iter()
-        .filter(|m| m.role == conex_types::AgentMessageRole::User)
+        .filter(|m| m.role == conex_types::message::AgentMessageRole::User)
         .count() as u32;
     if turns == 0 {
         None

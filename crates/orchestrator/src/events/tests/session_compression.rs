@@ -152,7 +152,7 @@ async fn drive_outcome_writes_compression_block_row() {
         AgentEvent::ContextCompressionEnd {
             session_id: "s1".to_string(),
             timestamp: ts(),
-            result: Some(record),
+            result: Some(Box::new(record)),
             aborted: false,
             error: None,
         },
@@ -211,7 +211,7 @@ async fn drive_outcome_compression_block_replay_idempotent() {
     let compression = |id: &str| AgentEvent::ContextCompressionEnd {
         session_id: "s1".to_string(),
         timestamp: ts(),
-        result: Some(conex_types::tool::ContextCompressionRecord {
+        result: Some(Box::new(conex_types::tool::ContextCompressionRecord {
             id: id.to_string(),
             trigger: conex_types::tool::ContextCompressionTrigger::Threshold,
             reason: None,
@@ -227,7 +227,7 @@ async fn drive_outcome_compression_block_replay_idempotent() {
             handoff: None,
             cache_boundary: None,
             details: None,
-        }),
+        })),
         aborted: false,
         error: None,
     };

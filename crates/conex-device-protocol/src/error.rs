@@ -11,6 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use conex_types::ipc_error::CoreError;
+
 /// 跨端错误码（D3 §6.2 / M6 §6.2 协议级 + 业务级全表，共 45 个注册码）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum DeviceErrorCode {
@@ -381,9 +383,9 @@ impl DeviceErrorCode {
     /// - NotFound：审批域语义升级为 cmd.approval_mismatch（携带冲突信号）；
     /// - Cancelled → cmd.cancelled；Encoding → file.encoding；
     /// - Io → internal；Internal：含 "engine not ready" → cmd.engine_not_ready。
-    pub fn from_core_error(err: &conex_types::CoreError) -> Self {
+    pub fn from_core_error(err: &CoreError) -> Self {
         match err {
-            conex_types::CoreError::InvalidInput(detail) => {
+            CoreError::InvalidInput(detail) => {
                 if detail.contains("workspace_not_granted") {
                     DeviceErrorCode::FileNotGranted
                 } else if detail.contains("file_exists") {
@@ -396,7 +398,7 @@ impl DeviceErrorCode {
                     DeviceErrorCode::CmdInvalid
                 }
             }
-            conex_types::CoreError::NotFound(detail) => {
+            CoreError::NotFound(detail) => {
                 // 审批域 NotFound 升级为冲突信号（F2 §11.2）
                 if detail.contains("approval") || detail.contains("pending") {
                     DeviceErrorCode::CmdApprovalMismatch
@@ -404,10 +406,10 @@ impl DeviceErrorCode {
                     DeviceErrorCode::CmdNotFound
                 }
             }
-            conex_types::CoreError::Cancelled => DeviceErrorCode::CmdCancelled,
-            conex_types::CoreError::Encoding(_) => DeviceErrorCode::FileEncoding,
-            conex_types::CoreError::Io(_) => DeviceErrorCode::Internal,
-            conex_types::CoreError::Internal(msg) => {
+            CoreError::Cancelled => DeviceErrorCode::CmdCancelled,
+            CoreError::Encoding(_) => DeviceErrorCode::FileEncoding,
+            CoreError::Io(_) => DeviceErrorCode::Internal,
+            CoreError::Internal(msg) => {
                 if msg.to_lowercase().contains("engine not ready") {
                     DeviceErrorCode::CmdEngineNotReady
                 } else {
@@ -548,8 +550,6 @@ mod tests {
 
     #[test]
     fn from_core_error_mapping() {
-        use conex_types::CoreError;
-
         assert_eq!(
             DeviceErrorCode::from_core_error(&CoreError::NotFound("run not found".into())),
             DeviceErrorCode::CmdNotFound

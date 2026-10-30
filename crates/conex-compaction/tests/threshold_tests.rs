@@ -5,7 +5,7 @@ use conex_compaction::{
     count_agent_message_tokens, count_tokens, estimate_agent_context, estimate_context_tokens,
     should_compact, EstimateSource,
 };
-use conex_types::AgentMessageRole;
+use conex_types::message::AgentMessageRole;
 
 /// 时间戳护栏用例的毫秒常量（与消息 `created_at` 一一对应）：
 /// `2026-08-03T10:00:01.500Z` / `2026-08-03T09:59:59.500Z`

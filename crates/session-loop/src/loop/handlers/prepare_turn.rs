@@ -309,7 +309,7 @@ mod tests {
             AgentEvent::ContextCompressionEnd {
                 result: Some(record),
                 ..
-            } => Some(record.clone()),
+            } => Some((**record).clone()),
             _ => None,
         });
         let record = record.expect("超阈值必须发生边界压缩");

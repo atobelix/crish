@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use conex_types::AgentMessage;
+use conex_types::message::AgentMessage;
 
 use crate::cut_point::{KEEP_RECENT_TOKENS_DEFAULT, MIN_RECENT_TURNS_DEFAULT};
 use crate::tokens::{count_agent_message_tokens, count_tokens};

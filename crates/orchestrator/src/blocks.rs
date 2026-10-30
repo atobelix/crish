@@ -200,7 +200,7 @@ mod tests {
         AgentEvent::ContextCompressionEnd {
             session_id: "s1".to_string(),
             timestamp: "2026-08-08T00:00:00.000Z".to_string(),
-            result: Some(record),
+            result: Some(Box::new(record)),
             aborted: false,
             error: None,
         }

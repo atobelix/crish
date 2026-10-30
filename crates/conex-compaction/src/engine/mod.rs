@@ -9,7 +9,7 @@ mod stub;
 
 use std::sync::Arc;
 
-use conex_types::{AgentMessage, AgentMessageRole};
+use conex_types::message::{AgentMessage, AgentMessageRole};
 
 use crate::cut_point::find_cut_point_inner;
 use crate::plan::{
@@ -444,7 +444,7 @@ fn assemble_compacted_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+    use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
     #[test]
     fn test_explicit_generation_generates_correct_block_id() {

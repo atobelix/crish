@@ -1,6 +1,6 @@
 //! 摘要提示词构建与退化摘要判定（从 ai_summary.rs 纯搬迁）
 
-use conex_types::{AgentMessage, AgentMessageBlock};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 use crate::summary_document::validate_summary_document;
 
@@ -97,12 +97,12 @@ pub fn build_summarize_prompt(dropped: &[AgentMessage], existing: Option<&str>) 
     out
 }
 
-fn role_name(role: conex_types::AgentMessageRole) -> &'static str {
+fn role_name(role: AgentMessageRole) -> &'static str {
     match role {
-        conex_types::AgentMessageRole::System => "系统",
-        conex_types::AgentMessageRole::User => "用户",
-        conex_types::AgentMessageRole::Assistant => "助手",
-        conex_types::AgentMessageRole::Tool => "工具",
+        AgentMessageRole::System => "系统",
+        AgentMessageRole::User => "用户",
+        AgentMessageRole::Assistant => "助手",
+        AgentMessageRole::Tool => "工具",
     }
 }
 

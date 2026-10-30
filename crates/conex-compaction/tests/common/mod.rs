@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock, ToolOutput};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+use conex_types::tool::ToolOutput;
 use std::sync::Arc;
 
 pub fn text_block(text: &str) -> AgentMessageBlock {

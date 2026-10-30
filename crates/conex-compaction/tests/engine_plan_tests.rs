@@ -4,7 +4,7 @@ mod common;
 
 use common::{amsg, text_block, tool_call_block, tool_result_block};
 use conex_compaction::{count_agent_message_tokens, CompactionEngine, CompactionPolicy};
-use conex_types::AgentMessageRole;
+use conex_types::message::AgentMessageRole;
 
 #[test]
 fn compact_empty_input() {

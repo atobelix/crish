@@ -333,7 +333,7 @@ fn all_events() -> Vec<AgentEvent> {
         AgentEvent::ContextCompressionEnd {
             session_id: s.clone(),
             timestamp: TS.into(),
-            result: Some(compression_record()),
+            result: Some(Box::new(compression_record())),
             aborted: false,
             error: None,
         },
@@ -1304,7 +1304,7 @@ fn tool_batch_and_compression_events_camel_case_fields() {
     let compress_end = serde_json::to_value(AgentEvent::ContextCompressionEnd {
         session_id: "s1".into(),
         timestamp: TS.into(),
-        result: Some(compression_record()),
+        result: Some(Box::new(compression_record())),
         aborted: false,
         error: None,
     })

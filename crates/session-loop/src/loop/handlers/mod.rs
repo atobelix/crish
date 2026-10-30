@@ -658,7 +658,7 @@ mod tests {
             AgentEvent::ContextCompressionEnd {
                 result: Some(record),
                 ..
-            } => Some(record.clone()),
+            } => Some((**record).clone()),
             _ => None,
         })
     }

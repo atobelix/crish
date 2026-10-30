@@ -1,6 +1,6 @@
 use super::*;
 
-use conex_types::ToolCallBlock;
+use conex_types::message::ToolCallBlock;
 
 use crate::ai_summary::{build_summarize_prompt, is_acceptable_summary, is_degenerate_summary};
 use crate::summary_document::{validate_summary_document, SummaryDocument};

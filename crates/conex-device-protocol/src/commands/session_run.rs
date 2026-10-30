@@ -142,7 +142,7 @@ pub struct ListSessionsParams {
 #[serde(rename_all = "camelCase")]
 pub struct ListSessionsResult {
     /// 会话索引条目（≤1000）
-    pub sessions: Vec<conex_types::SessionIndexEntry>,
+    pub sessions: Vec<conex_types::session_record::SessionIndexEntry>,
 }
 
 /// C06 参数（空）

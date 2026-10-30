@@ -27,7 +27,7 @@ use std::collections::HashMap;
 
 use crate::skip_false;
 use conex_types::events::{AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION};
-use conex_types::SessionIndexEntry;
+use conex_types::session_record::SessionIndexEntry;
 
 /// 跨端事件裁剪策略（M6 §5.1 三档；wire kebab-case）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

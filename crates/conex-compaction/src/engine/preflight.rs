@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 use crate::cut_point::find_cut_point_inner;
 use crate::plan::{CompactionPlan, CompactionPolicy, StubPolicy, Summarizer};
