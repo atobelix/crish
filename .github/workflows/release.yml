@@ -245,7 +245,6 @@ jobs:
 
   release-android:
     name: Build & Release Android APK
-    needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -322,4 +321,5 @@ jobs:
           cp "$APK_FILE" "$DEST_NAME"
           sha256sum "$DEST_NAME" > "${DEST_NAME}.sha256"
           echo "Uploading $DEST_NAME to GitHub Release $RELEASE_VERSION..."
+          gh release view "$RELEASE_VERSION" >/dev/null 2>&1 || gh release create "$RELEASE_VERSION" --title "$RELEASE_VERSION" --notes "Release $RELEASE_VERSION"
           gh release upload "$RELEASE_VERSION" "$DEST_NAME" "${DEST_NAME}.sha256" --clobber
