@@ -7,17 +7,30 @@ use super::*;
 /// 结构：注册（上限/踢旧）→ split（sender 独占写端）→ 三个并发任务
 /// （sender / 广播 drain / 心跳）+ 主消息循环；任一任务退出 → 踢出信号
 /// → 全链收尾 → 注销。
+/// WS 握手元信息（收敛长参数列表；语义同原逐项参数）。
+pub(super) struct WsConnectionMeta {
+    pub token_hash: String,
+    pub label: String,
+    pub pair_pending: bool,
+    pub initial_token: Option<String>,
+    pub trusted_relay: bool,
+    /// 对端 IP（实现波总方案 H1：WS pair.hello 源 IP 限速用；relay 桥 = None）
+    pub peer_ip: Option<std::net::IpAddr>,
+}
+
 pub(super) async fn handle_socket(
     socket: axum::extract::ws::WebSocket,
     state: ServerState,
-    token_hash: String,
-    label: String,
-    pair_pending: bool,
-    initial_token: Option<String>,
-    trusted_relay: bool,
-    // 对端 IP（实现波总方案 H1：WS pair.hello 源 IP 限速用；relay 桥 = None）
-    peer_ip: Option<std::net::IpAddr>,
+    meta: WsConnectionMeta,
 ) {
+    let WsConnectionMeta {
+        token_hash,
+        label,
+        pair_pending,
+        initial_token,
+        trusted_relay,
+        peer_ip,
+    } = meta;
     let registry = state.ws_registry();
     let (kill_tx, kill_rx) = watch::channel::<Option<String>>(None);
     let outcome = registry.register(&token_hash, &label, kill_tx.clone(), virtual_now_ms());

@@ -49,7 +49,7 @@ mod frames;
 mod handlers;
 mod registry;
 
-use connection::handle_socket;
+use connection::{handle_socket, WsConnectionMeta};
 use frames::*;
 use handlers::handle_text;
 
@@ -326,12 +326,14 @@ pub async fn handle_ws_upgrade(
         handle_socket(
             socket,
             state,
-            token_hash,
-            label,
-            false,
-            Some(token_clone),
-            false,
-            Some(addr.ip()),
+            WsConnectionMeta {
+                token_hash,
+                label,
+                pair_pending: false,
+                initial_token: Some(token_clone),
+                trusted_relay: false,
+                peer_ip: Some(addr.ip()),
+            },
         )
     })
 }
@@ -381,12 +383,14 @@ pub async fn handle_relay_loopback_upgrade(
         handle_socket(
             socket,
             state,
-            token_hash,
-            "relay-loopback".to_string(),
-            false,
-            None,
-            true,
-            None,
+            WsConnectionMeta {
+                token_hash,
+                label: "relay-loopback".to_string(),
+                pair_pending: false,
+                initial_token: None,
+                trusted_relay: true,
+                peer_ip: None,
+            },
         )
     })
 }
@@ -412,12 +416,14 @@ async fn upgrade_pairing(
         handle_socket(
             socket,
             state,
-            token_hash,
-            "pairing".to_string(),
-            true,
-            None,
-            false,
-            peer_ip,
+            WsConnectionMeta {
+                token_hash,
+                label: "pairing".to_string(),
+                pair_pending: true,
+                initial_token: None,
+                trusted_relay: false,
+                peer_ip,
+            },
         )
     })
 }

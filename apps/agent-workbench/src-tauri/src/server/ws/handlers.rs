@@ -295,7 +295,7 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
     // 打满 5 次错误码，恶意锁定销毁合法用户的配对会话。
     if let Some(ip) = ctx.peer_ip {
         if let crate::server::limiter::PairRateOutcome::Rejected { limit, current } =
-            ctx.state.pair_limiter().check_and_count(ip, now_ms())
+            ctx.state.pair_limiter().check_and_count(ip, conex_shared::time::now_millis())
         {
             let frame = error_frame(
                 ctx.conn_id,
