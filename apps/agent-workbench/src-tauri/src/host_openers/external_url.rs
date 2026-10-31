@@ -5,6 +5,7 @@
 
 use conex_types::CoreError;
 
+#[cfg(windows)]
 use super::execute::open_with_shell_execute;
 
 /// 校验并交给系统默认浏览器打开外部 URL。

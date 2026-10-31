@@ -69,7 +69,7 @@ jobs:
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
       - run: npm install -g npm@11.6.2 && npm ci
       - name: Build frontend dependencies
-        run: npm run build:shared-types
+        run: npm run build:packages
       - name: Prebuild Android native project
         working-directory: apps/crish-mobile
         run: npx expo prebuild --platform android --clean --no-install
