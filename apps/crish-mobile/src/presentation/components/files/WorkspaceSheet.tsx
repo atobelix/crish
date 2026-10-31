@@ -56,23 +56,12 @@ export function WorkspaceSheet({
               subtitle={workspace.root}
               divider={index < workspaces.length - 1}
               onPress={switching ? undefined : () => onSelect(workspace.root)}
-              leading={
-                <Icon
-                  name="folder"
-                  size={18}
-                  color={
-                    active
-                      ? theme.colors.accentStrong
-                      : theme.colors.textSecondary
-                  }
-                />
-              }
               trailing={
                 active ? (
                   <Icon
                     name="check"
                     size={16}
-                    color={theme.colors.accentStrong}
+                    color={theme.colors.actionPrimary}
                   />
                 ) : undefined
               }

@@ -4,11 +4,8 @@
 // 建立审批接线」「未配对/登出时何时销毁接线并清空会话数据」。
 import { authStore } from '@/domain/store/authStore';
 import { accountStore } from '@/domain/store/accountStore';
-import { connectionStore } from '@/domain/store/connectionStore';
 import { eventStore } from '@/domain/store/eventStore';
 import { sessionStore } from '@/domain/store/sessionStore';
-import { approvalStore } from '@/domain/store/approvalStore';
-import { filesStore } from '@/domain/store/filesStore';
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
   ensureObservationWiring: jest.fn(),
@@ -24,6 +21,7 @@ jest.mock('@/adapters/wiring/approvalWiring', () => ({
 jest.mock('./accountRuntime', () => ({
   startAccountRuntime: jest.fn(),
   stopAccountRuntime: jest.fn(),
+  syncAccountRemote: jest.fn(),
 }));
 
 import {

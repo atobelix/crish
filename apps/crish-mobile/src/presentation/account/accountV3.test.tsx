@@ -279,8 +279,12 @@ describe('AccountCodeScreen', () => {
 });
 
 describe('AccountPasswordScreen', () => {
-  it('登录失败：显示「邮箱或密码不正确」', async () => {
-    jest.mocked(loginAccountWithPassword).mockResolvedValue(false);
+  it('登录失败：凭据错误显示「邮箱或密码不正确」', async () => {
+    jest.mocked(loginAccountWithPassword).mockResolvedValue({
+      ok: false,
+      kind: 'credentials',
+      message: '邮箱或密码不正确',
+    });
     const view = await renderScreen(
       <AccountPasswordScreen
         initialEmail="a@b.co"
@@ -352,7 +356,7 @@ describe('AccountSetPasswordScreen', () => {
       setupToken: 'st-1',
     });
     await confirmAccountCode('123456');
-    jest.mocked(setAccountPasswordWithToken).mockResolvedValue(true);
+    jest.mocked(setAccountPasswordWithToken).mockResolvedValue({ ok: true });
 
     const onDone = jest.fn();
     const view = await renderScreen(

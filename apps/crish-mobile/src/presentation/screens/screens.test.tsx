@@ -17,7 +17,6 @@ import ApprovalDetailScreen from './approvalDetailScreen';
 import NotificationCenterScreen from './notificationCenterScreen';
 import FilesScreen from './filesScreen';
 import SettingsScreenView from '@/presentation/components/settings/SettingsScreenView';
-import PairWelcomeScreen from '@/presentation/pair/pairWelcomeScreen';
 import PairManualScreen from '@/presentation/pair/pairManualScreen';
 import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
 
@@ -338,20 +337,6 @@ describe('Files / Settings / Pairing', () => {
     fireEvent.press(view.getByText('深色'));
     expect(vm.setThemeMode).toHaveBeenCalledWith('dark');
     expect(view.getByText('解除配对')).toBeTruthy();
-  });
-
-  it('配对欢迎页主按钮', async () => {
-    const onScan = jest.fn();
-    const view = await renderScreen(
-      <PairWelcomeScreen
-        onLogin={jest.fn()}
-        onOpenManual={jest.fn()}
-        onOpenScan={onScan}
-        onEnterApp={jest.fn()}
-      />
-    );
-    fireEvent.press(view.getByTestId('pair-welcome-scan'));
-    expect(onScan).toHaveBeenCalled();
   });
 
   it('手动配对输入校验与提交', async () => {

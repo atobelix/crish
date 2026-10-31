@@ -178,7 +178,8 @@ async function runFullChain(
       challenge: 'ch-1',
       desktopPub: opts.desktopPub ?? pushDesktopPub(),
       desktopId: 'crish-desktop',
-      tlsFingerprint: 'fp-1',
+      // 合法 64 位 hex 样例（fail-closed 后 ok/challenge 必带指纹）
+      tlsFingerprint: 'ab'.repeat(32),
     })
   );
   h.wiring.getPairingClient()!.gateway.dispatchFrame(
@@ -236,7 +237,7 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
         challenge: 'ch-1',
         desktopPub,
         desktopId: 'crish-desktop',
-        tlsFingerprint: 'fp-1',
+        tlsFingerprint: 'cd'.repeat(32),
       })
     );
     expect(h.wiring.getMachineState().state).toBe('waiting-verify');
@@ -326,7 +327,7 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
         challenge: 'c',
         desktopPub,
         desktopId: 'd',
-        tlsFingerprint: 'fp',
+        tlsFingerprint: 'ef'.repeat(32),
       })
     );
     h.wiring
@@ -361,7 +362,7 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
     });
   });
 
-  it('简化链（当前桌面实现：无 challenge，hello → ok 直接完成）：paired 但 sessionKeys=null，token 回退持久化并连接', async () => {
+  it('简化链（hello → ok 直接完成，ok 携带指纹）：paired 但 sessionKeys=null，token 回退持久化并连接', async () => {
     const h = makeHarness();
     h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
     h.sockets[0]!.onopen!();
@@ -371,6 +372,8 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
         desktopId: 'crish-desktop',
         ttl: 86400,
         token: 'tok-plain',
+        // fail-closed 后桌面 pair.ok 必带指纹（pair_endpoint.rs pair_ok_body）
+        tlsFingerprint: 'ab'.repeat(32),
       })
     );
     await flush();
@@ -557,11 +560,14 @@ describe('错误路径（派生失败 / 持久化失败 / 错误帧 / 传输失�
     );
     wiring.beginPairing({ code: VALID_CODE, host: '10.0.0.2' });
     sockets[0]!.onopen!();
-    wiring
-      .getPairingClient()!
-      .gateway.dispatchFrame(
-        frame('pair.ok', { desktopId: 'd', ttl: 60, token: 'tok' })
-      );
+    wiring.getPairingClient()!.gateway.dispatchFrame(
+      frame('pair.ok', {
+        desktopId: 'd',
+        ttl: 60,
+        token: 'tok',
+        tlsFingerprint: 'ab'.repeat(32),
+      })
+    );
     await flush();
     expect(errors[0]?.code).toBe('pairing.persist_failed');
     expect(sessionCtxs).toHaveLength(0); // 持久化失败：不产生连接
@@ -1024,7 +1030,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
         challenge: 'ch-1',
         desktopPub: pushDesktopPub(),
         desktopId: 'crish-desktop',
-        tlsFingerprint: 'fp-1',
+        tlsFingerprint: 'ab'.repeat(32),
       })
     );
     h.wiring.getPairingClient()!.gateway.dispatchFrame(
@@ -1074,7 +1080,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
         challenge: 'ch-1',
         desktopPub: pushDesktopPub(),
         desktopId: 'crish-desktop',
-        tlsFingerprint: 'fp-1',
+        tlsFingerprint: 'ab'.repeat(32),
       })
     );
     h.wiring.getPairingClient()!.gateway.dispatchFrame(

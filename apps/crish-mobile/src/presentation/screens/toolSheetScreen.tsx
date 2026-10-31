@@ -133,9 +133,7 @@ export default function ToolSheetScreen({
           { paddingBottom: theme.space.section },
           tools.length === 0 && styles.emptyContent,
         ]}
-        ListEmptyComponent={
-          <EmptyState icon="wrench" title="这个会话还没有工具调用" />
-        }
+        ListEmptyComponent={<EmptyState title="这个会话还没有工具调用" />}
       />
       {!following && running ? (
         <ScrollToBottomButton

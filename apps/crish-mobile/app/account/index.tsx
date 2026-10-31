@@ -1,8 +1,8 @@
 // "/account"：账号 v3 账号页。
 import { router } from 'expo-router';
 import { AccountHomeScreen } from '@/presentation/account/accountHomeScreen';
-import { RequireAccount } from '../_components/RequireAccount';
-import { useSafeBack } from '../_components/useSafeBack';
+import { RequireAccount } from '@/presentation/components/auth/RequireAccount';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function AccountHomeRoute() {
   const goBack = useSafeBack();

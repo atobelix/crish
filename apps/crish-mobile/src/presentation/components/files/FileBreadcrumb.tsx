@@ -31,7 +31,7 @@ export const FileBreadcrumb = memo(function FileBreadcrumb({
 }: FileBreadcrumbProps) {
   const theme = useTheme();
   return (
-    <View style={[styles.bar, { borderBottomColor: theme.colors.border }]}>
+    <View style={[styles.bar, { borderBottomColor: theme.colors.hairline }]}>
       <IconButton
         name="chevron-left"
         accessibilityLabel="返回上级目录"

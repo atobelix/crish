@@ -1,6 +1,6 @@
 import ApprovalHistoryScreen from '@/presentation/screens/approvalHistoryScreen';
-import { Protected } from './_components/Protected';
-import { useSafeBack } from './_components/useSafeBack';
+import { Protected } from '@/presentation/components/auth/Protected';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function ApprovalHistoryRoute() {
   const goBack = useSafeBack();

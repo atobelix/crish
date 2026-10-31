@@ -54,7 +54,7 @@
     "startup:cold": "npx tsx tests/startup/measure-cold-start.ts",
     "startup:warm": "npx tsx tests/startup/measure-warm-start.ts",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
-    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils && tsc --noEmit -p packages/block-paper-contract && tsc --noEmit -p packages/editor-kit && tsc --noEmit -p packages/block-paper && tsc --noEmit -p packages/conversation-flow && tsc --noEmit -p packages/plugin-import-claude-codex && tsc --noEmit -p packages/test-utils",
+    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils && tsc --noEmit -p packages/block-paper-contract && tsc --noEmit -p packages/editor-kit && tsc --noEmit -p packages/block-paper && tsc --noEmit -p packages/conversation-flow && tsc --noEmit -p packages/plugin-import-claude-codex && tsc --noEmit -p packages/test-utils && npm --workspace @crish/crish-mobile run typecheck",
     "diff:all": "node scripts/show-full-diff.mjs",
     "diff:save": "node scripts/show-full-diff.mjs --silent --out .agent-outputs/workspace-full-diff.patch",
     "check:runtime-status-ssot": "node scripts/check-runtime-status-ssot.mjs",

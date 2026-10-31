@@ -32,7 +32,7 @@ export function FilePreview({
     <View style={styles.container}>
       {showHeader ? (
         <View
-          style={[styles.header, { borderBottomColor: theme.colors.border }]}
+          style={[styles.header, { borderBottomColor: theme.colors.hairline }]}
         >
           <Pressable
             testID="preview-back"
@@ -66,7 +66,6 @@ export function FilePreview({
             { backgroundColor: theme.colors.warningSoft },
           ]}
         >
-          <Icon name="shield" size={14} color={theme.colors.warning} />
           <AppText variant="meta" color="warning">
             敏感文件，内容不会缓存
           </AppText>
@@ -79,18 +78,17 @@ export function FilePreview({
         </View>
       ) : vm.status === 'error' ? (
         <EmptyState
-          icon="alert-circle"
           title={mapFilesErrorCode(vm.errorCode).title}
           action={
             <Button label="重试" variant="secondary" onPress={vm.retry} />
           }
         />
       ) : vm.status === 'too-large' ? (
-        <EmptyState icon="file" title="文件过大，无法预览" />
+        <EmptyState title="文件过大，无法预览" />
       ) : vm.status === 'binary' ? (
-        <EmptyState icon="file" title="二进制文件，无法预览" />
+        <EmptyState title="二进制文件，无法预览" />
       ) : vm.status === 'unsupported-encoding' ? (
-        <EmptyState icon="file" title="文件编码不受支持" />
+        <EmptyState title="文件编码不受支持" />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {numberedLines(vm.content).map((line, index) => (

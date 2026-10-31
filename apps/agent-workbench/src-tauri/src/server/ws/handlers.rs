@@ -290,6 +290,22 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
         );
         return send_frame(ctx, frame).await;
     }
+    // 源 IP 限速（实现波总方案 H1 / R02 遗漏项 1）：对齐 REST /v1/pair 的
+    // 10 次/分钟口径——此前 WS 消息链完全绕过限速，攻击者可毫秒级并发试探
+    // 打满 5 次错误码，恶意锁定销毁合法用户的配对会话。
+    if let Some(ip) = ctx.peer_ip {
+        if let crate::server::limiter::PairRateOutcome::Rejected { limit, current } =
+            ctx.state.pair_limiter().check_and_count(ip, now_ms())
+        {
+            let frame = error_frame(
+                ctx.conn_id,
+                DeviceErrorCode::CmdTooManyRequests,
+                format!("配对请求过于频繁：每源 IP 每分钟最多 {limit} 次（当前窗口已 {current} 次）"),
+                Some(msg_id),
+            );
+            return send_frame(ctx, frame).await;
+        }
+    }
     let reply = crate::server::pair_endpoint::handle_pair_hello(
         &body,
         ctx.state.pairing().as_deref(),
@@ -303,9 +319,12 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
         }
     };
     // D3 §4.8 step 5/6：pair.ok + device.ready
+    // pair.ok 必带 tlsFingerprint（实现波总方案 H1）：TLS 启用 → CA 指纹；
+    // None 时移动端 fail-closed 拒绝完成配对
     let ok = crate::server::pair_endpoint::pair_ok_body(
         crate::server::pair_endpoint::DESKTOP_ID,
         &token,
+        ctx.state.ca_fingerprint().as_deref(),
     );
     if send_envelope(ctx, MessageKind::PairOk, ok).await == Action::Close {
         return Action::Close;

@@ -1,23 +1,14 @@
-// 工具抽屉里的单行：图标 · 工具名 · 目标（等宽）· 状态；点开在行内显示输出。
+// 工具抽屉里的单行：工具名（等宽真名）· 目标摘要 · 状态点；点开在行内显示输出。
+// N05 裁定：删除「按工具名猜语义图标」（猜测即装饰）；执行中/完成/失败统一
+// 8px 静态色点（brand/success/danger）——PulseDot 呼吸脉冲违 U8 已物理删除。
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, Icon, type IconName } from '@/presentation/ui';
+import { AppText } from '@/presentation/ui';
 import type { ToolBlock } from '@/presentation/timeline/buildTimeline';
-import { PulseDot } from './PulseDot';
 
 export interface ToolRowProps {
   tool: ToolBlock;
-}
-
-/** 按工具名猜一个语义图标（只用于视觉区分，不影响行为） */
-export function toolIconFor(toolName: string): IconName {
-  const name = toolName.toLowerCase();
-  if (/(bash|shell|exec|command|terminal)/.test(name)) return 'terminal';
-  if (/(grep|search|find|glob)/.test(name)) return 'search';
-  if (/(write|edit|patch|replace)/.test(name)) return 'file-code';
-  if (/(read|view|cat)/.test(name)) return 'file-text';
-  return 'wrench';
 }
 
 function statusLabel(status: ToolBlock['status']): string {
@@ -53,11 +44,6 @@ export function ToolRow({ tool }: ToolRowProps) {
           pressed && { backgroundColor: theme.colors.fillPressed },
         ]}
       >
-        <Icon
-          name={toolIconFor(tool.toolName)}
-          size={theme.size.icon}
-          color={theme.colors.textSecondary}
-        />
         <View style={styles.body}>
           <AppText variant="callout" numberOfLines={1}>
             {tool.toolName}
@@ -90,26 +76,24 @@ export function ToolRow({ tool }: ToolRowProps) {
 
 function ToolStatus({ status }: { status: ToolBlock['status'] }) {
   const theme = useTheme();
-  switch (status) {
-    case 'running':
-      return <PulseDot testID="tool-status-running" />;
-    case 'error':
-      return (
-        <Icon
-          name="x"
-          size={theme.size.iconSmall}
-          color={theme.colors.danger}
-        />
-      );
-    case 'done':
-      return (
-        <Icon
-          name="check"
-          size={theme.size.iconSmall}
-          color={theme.colors.success}
-        />
-      );
-  }
+  const color =
+    status === 'running'
+      ? theme.colors.brand
+      : status === 'error'
+        ? theme.colors.danger
+        : theme.colors.success;
+  return (
+    <View
+      testID={`tool-status-${status}`}
+      accessibilityLabel={statusLabel(status)}
+      style={{
+        width: theme.size.dot,
+        height: theme.size.dot,
+        borderRadius: theme.radius.pill,
+        backgroundColor: color,
+      }}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

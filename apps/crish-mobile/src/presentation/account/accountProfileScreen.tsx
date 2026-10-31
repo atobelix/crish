@@ -218,8 +218,6 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
                   width: cameraSize,
                   height: cameraSize,
                   borderRadius: cameraSize / 2,
-                  borderWidth: theme.layout.avatarRing,
-                  borderColor: theme.colors.canvas,
                   backgroundColor: theme.colors.field,
                 },
               ]}

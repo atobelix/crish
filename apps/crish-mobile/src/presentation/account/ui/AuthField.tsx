@@ -1,8 +1,9 @@
 // 账号输入框：无描边，圆角 18、高 56（多行 104）。
-// 聚焦时底色在 160ms 内由 field 过渡到 fieldFocus；出错时底色换 dangerSoft，下方一行红字。
-import { useRef, useState } from 'react';
+// 聚焦/失焦 = 表面色一次状态切换（field ↔ fieldFocus），无逐帧插值
+// （实现波总方案 F4：删除旧 Animated useNativeDriver:false 的 JS 线程色值插值，
+// 与软键盘弹起不再争抢 JS 线程）；出错时底色换 dangerSoft + 下方一行红字。
+import { useState } from 'react';
 import {
-  Animated,
   Pressable,
   StyleSheet,
   TextInput,
@@ -34,30 +35,20 @@ export function AuthField({
   ...input
 }: AuthFieldProps) {
   const theme = useTheme();
-  const focus = useRef(new Animated.Value(0)).current;
+  const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(true);
   const hasError = error !== undefined && error !== null;
 
-  const animateTo = (toValue: number) => {
-    Animated.timing(focus, {
-      toValue,
-      duration: theme.motion.account.fieldFocus,
-      // 颜色插值不支持原生驱动
-      useNativeDriver: false,
-    }).start();
-  };
-
   const backgroundColor = hasError
     ? theme.colors.dangerSoft
-    : focus.interpolate({
-        inputRange: [0, 1],
-        outputRange: [theme.colors.field, theme.colors.fieldFocus],
-      });
+    : focused
+      ? theme.colors.fieldFocus
+      : theme.colors.field;
   const height = tall ? theme.size.fieldTall : theme.size.field;
 
   return (
     <View>
-      <Animated.View
+      <View
         style={[
           styles.box,
           tall ? styles.boxTall : null,
@@ -78,11 +69,11 @@ export function AuthField({
           placeholderTextColor={theme.colors.textTertiary}
           selectionColor={theme.colors.textPrimary}
           onFocus={(event) => {
-            animateTo(1);
+            setFocused(true);
             onFocus?.(event);
           }}
           onBlur={(event) => {
-            animateTo(0);
+            setFocused(false);
             onBlur?.(event);
           }}
           style={[
@@ -111,7 +102,7 @@ export function AuthField({
             />
           </Pressable>
         ) : null}
-      </Animated.View>
+      </View>
       {hasError && error ? (
         <AppText
           variant="footnote"

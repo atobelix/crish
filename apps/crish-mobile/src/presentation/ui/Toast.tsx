@@ -1,5 +1,7 @@
 // 轻量 Toast：操作结果反馈；墨色胶囊悬浮在输入条上方、2.5s 自动消失。
-// 墨色底上统一用反色前景，语气靠图标形状区分。
+// 墨色底上统一用反色前景；语气由「成功/警示」圆点符号区分（info 无符号）。
+// Reanimated 进出场（FadeInDown/FadeOutDown，实现波总方案 F5）；
+// displayMs 走 theme.motion.toast 单一真源。
 import {
   createContext,
   useCallback,
@@ -9,11 +11,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import AppText from './AppText';
-import Icon, { type IconName } from './Icon';
+import Icon from './Icon';
 
 export type ToastTone = 'success' | 'error' | 'info';
 
@@ -34,14 +37,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = useCallback((message: string, tone: ToastTone = 'info') => {
-    if (timer.current) clearTimeout(timer.current);
-    setToast({ message, tone });
-    timer.current = setTimeout(() => {
-      setToast(null);
-      timer.current = null;
-    }, 2500);
-  }, []);
+  const showToast = useCallback(
+    (message: string, tone: ToastTone = 'info') => {
+      if (timer.current) clearTimeout(timer.current);
+      setToast({ message, tone });
+      timer.current = setTimeout(() => {
+        setToast(null);
+        timer.current = null;
+      }, theme.motion.toast.displayMs);
+    },
+    [theme.motion.toast.displayMs]
+  );
 
   useEffect(
     () => () => {
@@ -50,19 +56,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const icon: IconName =
+  const icon: 'check' | 'alert-circle' | null =
     toast?.tone === 'error'
       ? 'alert-circle'
       : toast?.tone === 'success'
-        ? 'check-circle'
-        : 'info';
+        ? 'check'
+        : null;
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {toast ? (
-        <View
+        <Animated.View
           pointerEvents="none"
+          entering={FadeInDown.springify().damping(20)}
+          exiting={FadeOutDown.duration(theme.motion.duration.fast)}
           style={[
             styles.host,
             {
@@ -75,14 +83,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               gap: theme.space.sm,
               backgroundColor: theme.colors.actionPrimary,
             },
-            theme.shadow.md,
           ]}
         >
-          <Icon
-            name={icon}
-            size={theme.size.iconSmall}
-            color={theme.colors.actionPrimaryText}
-          />
+          {icon ? (
+            <Icon
+              name={icon}
+              size={theme.size.iconSmall}
+              color={theme.colors.actionPrimaryText}
+            />
+          ) : null}
           <AppText
             variant="footnote"
             color="actionPrimaryText"
@@ -91,7 +100,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             {toast.message}
           </AppText>
-        </View>
+        </Animated.View>
       ) : null}
     </ToastContext.Provider>
   );

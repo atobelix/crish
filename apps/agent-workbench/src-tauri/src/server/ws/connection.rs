@@ -15,6 +15,8 @@ pub(super) async fn handle_socket(
     pair_pending: bool,
     initial_token: Option<String>,
     trusted_relay: bool,
+    // 对端 IP（实现波总方案 H1：WS pair.hello 源 IP 限速用；relay 桥 = None）
+    peer_ip: Option<std::net::IpAddr>,
 ) {
     let registry = state.ws_registry();
     let (kill_tx, kill_rx) = watch::channel::<Option<String>>(None);
@@ -116,6 +118,7 @@ pub(super) async fn handle_socket(
         token_key: Some(token_key),
         token_hash: token_hash.clone(),
         trusted_relay,
+        peer_ip,
     };
     while let Some(frame) = ws_receiver.next().await {
         match frame {

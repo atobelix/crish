@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import RunDetailScreen from '@/presentation/screens/runDetailScreen';
-import { Protected } from '../_components/Protected';
-import { useSafeBack } from '../_components/useSafeBack';
+import { Protected } from '@/presentation/components/auth/Protected';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function RunDetailRoute() {
   const { runId } = useLocalSearchParams<{ runId: string }>();

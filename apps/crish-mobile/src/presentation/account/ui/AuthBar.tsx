@@ -1,9 +1,9 @@
-// 账号页顶栏：左侧玻璃返回钮、居中 17/600 标题、右侧可选操作位（如「保存」）。
+// 账号页顶栏：左侧返回圆钮、居中 17/600 标题、右侧可选操作位（如「保存」）。
+// 返回钮统一 IconButton floating（GlassBackButton 重复实现已删除，实现波总方案 G4）。
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText } from '@/presentation/ui';
-import { GlassBackButton } from './GlassBackButton';
+import { AppText, IconButton } from '@/presentation/ui';
 
 export interface AuthBarProps {
   title?: string;
@@ -22,7 +22,15 @@ export function AuthBar({ title, onBack, right }: AuthBarProps) {
       ]}
     >
       <View style={side}>
-        {onBack ? <GlassBackButton onPress={onBack} /> : null}
+        {onBack ? (
+          <IconButton
+            name="chevron-left"
+            variant="floating"
+            accessibilityLabel="返回"
+            onPress={onBack}
+            testID="auth-bar-back"
+          />
+        ) : null}
       </View>
       <AppText
         variant="headline"

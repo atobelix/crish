@@ -39,6 +39,11 @@ beforeEach(() => {
   authStore.setState({ host: '192.168.1.100', pairState: 'paired' });
 });
 
+afterEach(() => {
+  // 收口未打开的连接（握手看门狗等句柄），杜绝 jest worker 强退告警
+  resetObservationWiringForTest();
+});
+
 describe('createFilesContext（R2-06b 装配）', () => {
   it('装配 repository + dirCache + previewCache 三件套', () => {
     const ctx = createFilesContext(makeGateway(), () => 1000);

@@ -24,8 +24,8 @@ export interface NotificationRow {
 
 /** notifications 表 DAO 接口 */
 export interface NotificationsDao {
-  /** 幂等写入：同 id 覆盖（去重键，D7 §3.4.1） */
-  upsert(row: NotificationRow): Promise<'inserted' | 'updated'>;
+  /** 幂等写入：同 id 覆盖（原子 ON CONFLICT upsert，双通道并发安全，D7 §3.4.1） */
+  upsert(row: NotificationRow): Promise<void>;
   /** 按去重键查询 */
   findById(id: string): Promise<NotificationRow | null>;
   /** 按状态列表（角标统计/清理用，received_at 降序） */
@@ -46,31 +46,17 @@ const SELECT_NOTIFICATION = `SELECT id, kind, tool_call_id AS toolCallId, run_id
 export class SqlNotificationsDao implements NotificationsDao {
   constructor(private readonly driver: SqlDriver) {}
 
-  async upsert(row: NotificationRow): Promise<'inserted' | 'updated'> {
-    const existing = await this.driver.getFirst<{ id: string }>(
-      'SELECT id FROM notifications WHERE id = ?',
-      [row.id]
-    );
-    if (existing !== null) {
-      await this.driver.exec(
-        `UPDATE notifications SET kind = ?, tool_call_id = ?, run_id = ?, seq = ?, title = ?, body = ?, route = ?, status = ?, received_at = ? WHERE id = ?`,
-        [
-          row.kind,
-          row.toolCallId,
-          row.runId,
-          row.seq,
-          row.title,
-          row.body,
-          row.route,
-          row.status,
-          row.receivedAt,
-          row.id,
-        ]
-      );
-      return 'updated';
-    }
+  /**
+   * 原子 upsert：单条 `INSERT ... ON CONFLICT(id) DO UPDATE`。
+   * 消除 Check-Then-Act 竞态（WS 实时帧与系统推送并发写同一 id 时，
+   * 两段式会同时查空并同时 INSERT → UNIQUE 冲突异常中断摄入管道）。
+   */
+  async upsert(row: NotificationRow): Promise<void> {
     await this.driver.exec(
-      `INSERT INTO notifications (id, kind, tool_call_id, run_id, seq, title, body, route, status, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notifications (id, kind, tool_call_id, run_id, seq, title, body, route, status, received_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         kind = ?, tool_call_id = ?, run_id = ?, seq = ?, title = ?, body = ?, route = ?, status = ?, received_at = ?`,
       [
         row.id,
         row.kind,
@@ -82,9 +68,17 @@ export class SqlNotificationsDao implements NotificationsDao {
         row.route,
         row.status,
         row.receivedAt,
+        row.kind,
+        row.toolCallId,
+        row.runId,
+        row.seq,
+        row.title,
+        row.body,
+        row.route,
+        row.status,
+        row.receivedAt,
       ]
     );
-    return 'inserted';
   }
 
   async findById(id: string): Promise<NotificationRow | null> {

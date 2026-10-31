@@ -18,7 +18,10 @@
 //   app 层启动装配的专属入口被 _layout 直接引用（保持 db 桶纯存储层）。
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { expoSqlDriver, migrateIfNeeded } from './db';
-import { configureSqlitePersistence } from '@/adapters/persistence/persistBootstrap';
+import {
+  configureSqlitePersistence,
+  getSqlDriver,
+} from '@/adapters/persistence/persistBootstrap';
 import { settingsStore } from '@/domain/store/settingsStore';
 import { notificationStore } from '@/domain/store/notificationStore';
 
@@ -46,8 +49,36 @@ export interface DbBootstrapResult {
  * openDatabaseAsync → PRAGMA（WAL/外键）→ migrateIfNeeded → configureSqlitePersistence
  * → settings/notification hydrate。任一环节失败不抛错：降级内存态 + 日志注记，
  * 保证 app 启动不被 DB 故障阻塞（首个失败即退出装配，后续环节不再执行）。
+ *
+ * 单飞语义：同参数重复调用共享同一次装配 promise（重复 open 有二次连接风险）；
+ * 测试注入 options.open 时绕过备忘（各测试独立装配）。
  */
-export async function ensureDatabaseForApp(
+let bootstrapPromise: Promise<DbBootstrapResult> | null = null;
+
+export function ensureDatabaseForApp(
+  options?: DbBootstrapOptions
+): Promise<DbBootstrapResult> {
+  if (options?.open) {
+    return doEnsureDatabaseForApp(options);
+  }
+  if (!bootstrapPromise) {
+    bootstrapPromise = doEnsureDatabaseForApp();
+  }
+  return bootstrapPromise;
+}
+
+/**
+ * 等待 DB 装配收敛（供依赖持久化的装配点使用，如审批 Outbox）：
+ * 成功 → driver；失败 → null（调用方按「DB 明确故障」显式降级，禁止静默竞态降级）。
+ */
+export async function ensureDatabaseReady(): Promise<
+  ReturnType<typeof getSqlDriver>
+> {
+  await ensureDatabaseForApp();
+  return getSqlDriver();
+}
+
+async function doEnsureDatabaseForApp(
   options?: DbBootstrapOptions
 ): Promise<DbBootstrapResult> {
   try {

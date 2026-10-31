@@ -44,9 +44,7 @@ function makePersist(initial?: InAppNotification[]): NotificationsPersist & {
   for (const row of initial ?? []) map.set(row.id, row);
   return {
     upsert: jest.fn(async (row: InAppNotification) => {
-      const existed = map.has(row.id);
       map.set(row.id, row);
-      return existed ? ('updated' as const) : ('inserted' as const);
     }),
     updateStatus: jest.fn(async (id: string, status: NotificationStatus) => {
       const row = map.get(id);

@@ -31,7 +31,7 @@ import {
 /** 持久化接口（notificationsDao 注入面；真实实现 = SqlNotificationsDao，R2-13） */
 export interface NotificationsPersist {
   /** 幂等写入（同 id 覆盖；接线层先落库再推 store 链路用） */
-  upsert(row: InAppNotification): Promise<'inserted' | 'updated'>;
+  upsert(row: InAppNotification): Promise<void>;
   /** 状态迁移（shown → resolved/dismissed） */
   updateStatus(id: string, status: NotificationStatus): Promise<void>;
   /** 清理 resolved 且早于 beforeMs（M5 §5.5：7 天） */
@@ -60,6 +60,8 @@ export interface NotificationState extends NotificationListState {
    * 返回清理条数；接线层同步落库 deleteResolvedOlderThan。
    */
   clearResolved: (beforeMs?: number, nowMs?: number) => number;
+  /** 全量复位（解绑/换机：清空内存镜像与未读角标；落盘历史由各 Dao 生命周期自理） */
+  reset: () => void;
 }
 
 /** 默认持久化实现（接线层启动时注入一次；测试按参数注入优先，同 authStore 模式） */
@@ -143,6 +145,13 @@ export const notificationStore: StoreApi<NotificationState> =
         });
         return removed;
       },
+
+      reset: () =>
+        set((s) => {
+          s.items = [];
+          s.unreadCount = 0;
+          s.hydrated = false;
+        }),
     }))
   );
 

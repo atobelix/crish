@@ -1,9 +1,13 @@
-// 根布局：安全区 / 主题 / Toast / 启动装配 / 认证水合闸门 / 导航栈 / 全局审批悬浮卡。
-import { useEffect, useRef } from 'react';
+// 根布局：安全区 / 主题 / Toast / 启动装配 / 认证水合闸门（纯本地）/ 导航栈 / 全局审批悬浮卡。
+// 启动时序（实现波总方案 维 A）：本地水合 ≤50ms 即放行首屏；远程校正、DB 装配、
+// 通知层全部后台并行，不经闸门。原生 Splash 由 preventAutoHideAsync 保持到首帧渲染，
+// 无 JS 自绘中间帧（无 BrandMark、无 Spinner）。
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
@@ -18,25 +22,31 @@ import {
 } from '@/notifications/notificationBootstrap';
 import { ErrorBoundary } from '@/presentation/components/ErrorBoundary';
 import { ApprovalFloat } from '@/presentation/components/approval/ApprovalFloat';
-import { BrandMark, Spinner, ToastProvider } from '@/presentation/ui';
+import { ToastProvider } from '@/presentation/ui';
+import { useAndroidBackGuard } from '@/presentation/navigation/useSafeBack';
 
-/** 账号 v3 页面（统一推入时长） */
-const ACCOUNT_V3_ROUTES = [
-  'account/index',
-  'account/login',
-  'account/code',
-  'account/password',
-  'account/set-password',
-  'account/profile',
-  'account/sessions',
-  'account/delete',
-] as const;
+// 原生开屏保持：JS 首帧渲染完成前不自动隐藏（模块顶层一次性调用）
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  /* swallow-ok: 已隐藏或非原生环境静默忽略 */
+});
 
 function RootShell() {
   const theme = useTheme();
   const hydrated = useAuthStore((s) => s.hydrated);
   const accountHydrated = useAccountStore((s) => s.hydrated);
   const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
+  const splashHiddenRef = useRef(false);
+  // Android 深链冷启动单屏：物理返回键兜底回首页，不直接退出应用
+  useAndroidBackGuard();
+
+  // 首帧布局完成即淡出原生开屏：此后闸门放行前后均无中间帧
+  useLayoutEffect(() => {
+    if (splashHiddenRef.current) return;
+    splashHiddenRef.current = true;
+    void SplashScreen.hideAsync().catch(() => {
+      /* swallow-ok: 已隐藏或非原生环境静默忽略 */
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,13 +72,17 @@ function RootShell() {
   }, []);
 
   useEffect(() => {
+    // DB 装配与运行时并行（非闸门）；审批接线自行等待 DB 就绪（见 approvalWiring）
     void ensureDatabaseForApp();
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
-    void ensureNotificationsForApp({ navigate: (path) => router.push(path) })
+    void ensureNotificationsForApp({
+      // navigate 幂等：目标已在栈顶时不重复推入（通知重复点击/同页多通知）
+      navigate: (path) => router.navigate(path),
+    })
       .then((handle) => {
         if (cancelled) handle.dispose();
         else notificationLayerRef.current = handle;
@@ -85,17 +99,10 @@ function RootShell() {
     };
   }, [hydrated]);
 
+  // 闸门仅依赖本地水合（SecureStore 读取，≤50ms）；期间原生 Splash 仍在屏
   if (!hydrated || !accountHydrated) {
     return (
-      <View
-        style={[
-          styles.splash,
-          { gap: theme.space.xl, backgroundColor: theme.colors.canvas },
-        ]}
-      >
-        <BrandMark size={64} />
-        <Spinner />
-      </View>
+      <View style={[styles.flex, { backgroundColor: theme.colors.canvas }]} />
     );
   }
 
@@ -113,14 +120,6 @@ function RootShell() {
         <Stack.Screen name="settings" />
         <Stack.Screen name="pair" />
         <Stack.Screen name="welcome" />
-        {/* 账号 v3：推入时长取 motion.account.push（iOS 生效；自定义缓动曲线原生栈不支持） */}
-        {ACCOUNT_V3_ROUTES.map((name) => (
-          <Stack.Screen
-            key={name}
-            name={name}
-            options={{ animationDuration: theme.motion.account.push }}
-          />
-        ))}
         <Stack.Screen name="run/[runId]" />
         <Stack.Screen name="terminal/[runId]" />
         <Stack.Screen name="approval-history" />
@@ -164,7 +163,7 @@ function RootShell() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView>
+    <GestureHandlerRootView style={styles.flex}>
       <View style={styles.flex}>
         <SafeAreaProvider>
           <ToastProvider>
@@ -180,9 +179,4 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

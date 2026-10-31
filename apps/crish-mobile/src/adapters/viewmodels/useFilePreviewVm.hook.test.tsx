@@ -147,7 +147,7 @@ describe('错误映射', () => {
   it('file.too_large → too-large 占位态', async () => {
     contextRef.value = makeContext({
       readFile: jest.fn(async () => {
-        throw new FilesCommandError('file.too_large', 'too big');
+        throw new FilesCommandError('file.too_large', 'too big', false);
       }),
     });
     fileRef.value = fileEntry();
@@ -160,7 +160,7 @@ describe('错误映射', () => {
   it('file.binary → binary 占位态', async () => {
     contextRef.value = makeContext({
       readFile: jest.fn(async () => {
-        throw new FilesCommandError('file.binary', 'binary');
+        throw new FilesCommandError('file.binary', 'binary', false);
       }),
     });
     fileRef.value = fileEntry();

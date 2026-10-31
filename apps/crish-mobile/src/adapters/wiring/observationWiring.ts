@@ -1,7 +1,8 @@
 // 观测面接线装配（M5 §4.3.1 装配点 / D4 §6.3 端点解析）：
 // - startObservationWiring：ReconnectingWsClient（R2-02b）+ FeedBridge 组合——
 //   onPhaseChange → 相位投影（eventStore.network + connectionStore.phase），
-//   onProjection → 对账驱动（resume/full-replay/cleanup），client.gateway 注入 bridge；
+//   client.gateway 注入 bridge；重连后的订阅/对账统一走
+//   events.subscribe.ok（FeedBridge.onOpen / approvalWiring.onSyncReady）；
 // - ensureObservationWiring 单例：首页挂载启动（幂等）；端点 =
 //   EXPO_PUBLIC_ENGINE_URL（优先级 1，D8 §6.2）?? resolveWsUrl(authStore.host)，
 //   未配对（host 为空）→ 不启动返回 null；
@@ -11,7 +12,6 @@ import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
 import { WsGateway } from '@/network/WsGateway';
 import { resolveWsUrl, engineTlsEnabled } from '@/network/EndpointResolver';
 import { authStore } from '@/domain/store/authStore';
-import type { ReconnectProjection } from '@/network/ReconnectingWsClient';
 import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { FeedBridge, type ListSessionsRepository } from './feedBridge';
 import { TerminalWiring } from './terminalWiring';
@@ -100,8 +100,6 @@ export function startObservationWiring(
         openListeners.forEach((listener) => listener());
       }
     },
-    onProjection: (projection: ReconnectProjection) =>
-      bridge.handleProjection(projection),
   });
   return {
     client,
@@ -189,7 +187,7 @@ export function ensureRelayObservationWiring(opts: {
   return singleton;
 }
 
-/** 销毁观测面单例（解绑 / 换主机 / 测试隔离）：退订、断开、清空 */
+/** 销毁观测面单例（解绑 / 换主机 / 测试隔离）：退订、断开、清空全部监听 */
 export function disposeObservationWiring(): void {
   singleton?.client.disconnect();
   singleton?.bridge.detach();
@@ -197,6 +195,8 @@ export function disposeObservationWiring(): void {
   singleton?.push.detach();
   singleton?.dispose();
   singleton = null;
+  // 连接就绪监听随单例生命周期收口：不清除会随重建累积悬挂闭包（内存泄漏 + 幽灵回调）
+  openListeners.clear();
 }
 
 /** 测试隔离别名（保持既有测试语义） */

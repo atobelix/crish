@@ -213,9 +213,11 @@ describe('重发与设密', () => {
       setupToken: 'st-1',
     });
     await confirmAccountCode('123456');
-    setPasswordMock.mockResolvedValue(true);
+    setPasswordMock.mockResolvedValue({ ok: true });
 
-    await expect(completeAccountPassword('new-password-1')).resolves.toBe(true);
+    await expect(completeAccountPassword('new-password-1')).resolves.toEqual({
+      ok: true,
+    });
     expect(setPasswordMock).toHaveBeenCalledWith('st-1', 'new-password-1');
     expect(getAccountFlowDraft()).toBeNull();
   });

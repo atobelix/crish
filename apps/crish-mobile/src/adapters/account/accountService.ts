@@ -155,59 +155,100 @@ async function loadDevicesBestEffort(token: string): Promise<AccountDevice[]> {
   }
 }
 
-/** 冷启动恢复账号；无凭据 → loggedOut，不抛错。 */
+/**
+ * 冷启动本地水合（首屏闸门唯一依赖，≤50ms，零网络）：
+ * - SecureStore 读取全程容错：底层 Keystore 加解密异常一律视为无凭据
+ *   （loggedOut + hydrated 置位），杜绝启动守卫永久停留在开屏的死锁；
+ * - 命中会话 → 恢复 accessToken + 用户/资料快照，立即 `loggedIn`；
+ *   远程校正（令牌有效性 / 设备 / 资料）全部交给 `reconcileAccountRemote` 后台静默执行。
+ */
 export async function hydrateAccount(): Promise<void> {
-  const state = accountStore.getState();
-  if (state.hydrated) return;
-  const session = await loadAccountSession(driver);
-  if (!session) {
-    accountStore.getState().setHydrated(true);
-    accountStore.getState().setStatus('loggedOut');
+  if (accountStore.getState().hydrated) return;
+  const store = accountStore.getState();
+  try {
+    const session = await loadAccountSession(driver);
+    if (!session || !session.userJson) {
+      store.setHydrated(true);
+      store.setStatus('loggedOut');
+      return;
+    }
+    store.setAccessToken(session.accessToken);
+    if (session.deviceId) cachedDeviceId = session.deviceId;
+    try {
+      store.setUser(JSON.parse(session.userJson) as AccountUser);
+      if (session.profileJson) {
+        store.setProfile(JSON.parse(session.profileJson) as AccountProfile);
+      }
+      store.setStatus('loggedIn');
+    } catch {
+      // 快照损坏：凭据仍在但本地无法恢复登录态，交由远程校正或重新登录
+      store.setStatus('loggedOut');
+    }
+  } catch {
+    // SecureStore 硬件级异常（Keystore 损坏 / 未设锁屏等）：不阻断启动
+    store.setHydrated(true);
+    store.setStatus('loggedOut');
     return;
   }
-  const deviceId = session.deviceId || (await accountDeviceId());
-  accountStore.getState().setAccessToken(session.accessToken);
+  store.setHydrated(true);
+}
+
+/**
+ * 后台静默校正（不阻塞首屏）：令牌有效性 → 资料/设备 → 持久化快照。
+ * - 网络/超时失败：保持本地登录态，错误进 store 供连接横幅展示；
+ * - 401 且刷新失败：平滑登出（守卫自然接管，不做任何强制跳转）。
+ */
+export async function reconcileAccountRemote(): Promise<void> {
+  const state = accountStore.getState();
+  if (state.status !== 'loggedIn') return;
   try {
-    let user: AccountUser | null = session.accessToken
-      ? await fetchAccountMe(session.accessToken).catch(async (error) => {
-          if (error instanceof AccountApiError && error.status === 401) {
-            const refreshed = await refreshAccessToken();
-            if (!refreshed) return null;
-            return fetchAccountMe(refreshed);
-          }
-          throw error;
-        })
-      : null;
+    let token = state.accessToken;
+    if (!token) return;
+    let user = await fetchAccountMe(token).catch(async (error) => {
+      if (error instanceof AccountApiError && error.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) return null;
+        return fetchAccountMe(refreshed);
+      }
+      throw error;
+    });
     if (!user) {
       const refreshed = await refreshAccessToken();
-      if (!refreshed) return;
+      if (!refreshed) {
+        await clearAll();
+        accountStore.getState().setHydrated(true);
+        accountStore.getState().setStatus('loggedOut');
+        return;
+      }
+      token = refreshed;
       user = await fetchAccountMe(refreshed);
     }
-    const token = currentAccessToken();
-    if (!token) return;
+    const currentToken = currentAccessToken();
+    if (!currentToken) return;
     const [devices, profile] = await Promise.all([
-      loadDevicesBestEffort(token),
-      fetchAccountProfile(token).catch(() => null),
+      loadDevicesBestEffort(currentToken),
+      fetchAccountProfile(currentToken).catch(() => null),
     ]);
-    accountStore.getState().setUser(user);
-    if (profile) accountStore.getState().setProfile(profile);
-    accountStore.getState().setDevices(devices);
-    accountStore.getState().setStatus('loggedIn');
-    accountStore.getState().setError(null);
+    const store = accountStore.getState();
+    store.setUser(user);
+    if (profile) store.setProfile(profile);
+    store.setDevices(devices);
+    store.setStatus('loggedIn');
+    store.setError(null);
+    const session = await loadAccountSession(driver);
     await persist({
-      accessToken: token,
-      refreshToken: session.refreshToken,
-      deviceId,
+      accessToken: currentToken,
+      refreshToken: session?.refreshToken ?? '',
+      deviceId: session?.deviceId ?? (await accountDeviceId()),
       userId: user.id,
       email: user.email,
+      userJson: JSON.stringify(user),
+      profileJson: profile ? JSON.stringify(profile) : null,
     });
   } catch (error) {
-    accountStore.getState().setStatus('error');
     accountStore
       .getState()
-      .setError(error instanceof Error ? error.message : '账号恢复失败');
-  } finally {
-    accountStore.getState().setHydrated(true);
+      .setError(error instanceof Error ? error.message : '账号状态校正失败');
   }
 }
 
@@ -217,39 +258,65 @@ async function applyTokenPair(
   deviceId: string
 ): Promise<void> {
   const user = pair.user ?? (await fetchAccountMe(pair.accessToken));
+  const [devices, profile] = await Promise.all([
+    loadDevicesBestEffort(pair.accessToken),
+    fetchAccountProfile(pair.accessToken).catch(() => null),
+  ]);
   await persist({
     accessToken: pair.accessToken,
     refreshToken: pair.refreshToken,
     deviceId,
     userId: user.id,
     email: user.email,
+    userJson: JSON.stringify(user),
+    profileJson: profile ? JSON.stringify(profile) : null,
   });
   const store = accountStore.getState();
   store.setAccessToken(pair.accessToken);
   store.setUser(user);
-  const [devices, profile] = await Promise.all([
-    loadDevicesBestEffort(pair.accessToken),
-    fetchAccountProfile(pair.accessToken).catch(() => null),
-  ]);
-  if (profile) accountStore.getState().setProfile(profile);
-  accountStore.getState().setDevices(devices);
-  accountStore.getState().setStatus('loggedIn');
-  accountStore.getState().setHydrated(true);
+  if (profile) store.setProfile(profile);
+  store.setDevices(devices);
+  store.setStatus('loggedIn');
+  store.setHydrated(true);
 }
 
-async function runLoginFlow(operation: () => Promise<void>): Promise<boolean> {
+/** 登录失败分类：凭据错误（401/403）与网络故障分开呈现，禁止把断网误报为密码错误。 */
+export type LoginFailureKind = 'credentials' | 'network';
+
+export type LoginResult =
+  { ok: true } | { ok: false; kind: LoginFailureKind; message: string };
+
+function classifyLoginError(error: unknown): LoginResult {
+  if (
+    error instanceof AccountApiError &&
+    (error.status === 401 || error.status === 403)
+  ) {
+    return { ok: false, kind: 'credentials', message: '邮箱或密码不正确' };
+  }
+  return {
+    ok: false,
+    kind: 'network',
+    message:
+      error instanceof Error && error.message
+        ? `网络异常，请检查网络后重试（${error.message}）`
+        : '网络异常，请检查网络后重试',
+  };
+}
+
+async function runLoginFlow(
+  operation: () => Promise<void>
+): Promise<LoginResult> {
   const store = accountStore.getState();
   store.setStatus('loggingIn');
   store.setError(null);
   try {
     await operation();
-    return true;
+    return { ok: true };
   } catch (error) {
     accountStore.getState().setStatus('error');
-    accountStore
-      .getState()
-      .setError(error instanceof Error ? error.message : '登录失败');
-    return false;
+    const result = classifyLoginError(error);
+    accountStore.getState().setError(result.ok ? null : result.message);
+    return result;
   }
 }
 
@@ -257,7 +324,7 @@ async function runLoginFlow(operation: () => Promise<void>): Promise<boolean> {
 export function loginAccountWithPassword(
   email: string,
   password: string
-): Promise<boolean> {
+): Promise<LoginResult> {
   return runLoginFlow(async () => {
     const deviceId = await accountDeviceId();
     const pair = await loginAccount(email, password, deviceId, deviceName());
@@ -305,7 +372,7 @@ export async function verifyAccountResetCode(
 export function setAccountPasswordWithToken(
   setupToken: string,
   password: string
-): Promise<boolean> {
+): Promise<LoginResult> {
   return runLoginFlow(async () => {
     const deviceId = await accountDeviceId();
     const pair = await setAccountPassword(

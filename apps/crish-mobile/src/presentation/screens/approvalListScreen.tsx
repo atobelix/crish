@@ -4,7 +4,7 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useApprovalListVm } from '@/adapters/viewmodels/useApprovalListVm';
 import { useSessionStore } from '@/adapters/hooks/useAppStore';
-import { AppText, EmptyState, Icon } from '@/presentation/ui';
+import { AppText, EmptyState } from '@/presentation/ui';
 import { ApprovalListItem } from '@/presentation/components/approval/ApprovalListItem';
 
 export interface ApprovalListScreenProps {
@@ -60,11 +60,6 @@ export default function ApprovalListScreen({
             },
           ]}
         >
-          <Icon
-            name="wifi-off"
-            size={theme.size.iconSmall}
-            color={theme.colors.warning}
-          />
           <AppText variant="footnote" color="warning">
             {vm.outboxCount} 条决策等待网络恢复后发送
           </AppText>
@@ -96,7 +91,7 @@ export default function ApprovalListScreen({
             tintColor={theme.colors.textTertiary}
           />
         }
-        ListEmptyComponent={<EmptyState icon="shield" title="暂无待审批" />}
+        ListEmptyComponent={<EmptyState title="暂无待审批" />}
       />
     </View>
   );

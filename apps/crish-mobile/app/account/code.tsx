@@ -5,8 +5,8 @@ import {
   finishAccountFlow,
   paramOf,
   parseAccountFlowNext,
-} from '../_components/accountNavigation';
-import { useSafeBack } from '../_components/useSafeBack';
+} from '@/presentation/navigation/accountNavigation';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function AccountCodeRoute() {
   const goBack = useSafeBack();

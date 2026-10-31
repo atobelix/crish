@@ -58,7 +58,7 @@ export default function ApprovalHistoryScreen({
     <Screen>
       <AppHeader title="已处理" onBack={onBack} />
       {sections.length === 0 ? (
-        <EmptyState icon="clock" title="暂无已处理记录" />
+        <EmptyState title="暂无已处理记录" />
       ) : (
         <SectionList
           testID="approval-history-list"

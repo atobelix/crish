@@ -40,7 +40,6 @@ export function NewTaskSheet({
       footer={
         <Button
           label="发送"
-          icon="send"
           onPress={vm.submit}
           disabled={!vm.canSubmit}
           loading={vm.busy}
@@ -112,10 +111,10 @@ function SessionChip({
       style={({ pressed }) => [
         styles.chip,
         {
+          // 选中态用底色色阶表达（U8：不画选中描边）
           backgroundColor: active
-            ? theme.colors.accentSoft
-            : theme.colors.surfaceSubtle,
-          borderColor: active ? theme.colors.accent : 'transparent',
+            ? theme.colors.brandSoft
+            : theme.colors.fillSubtle,
         },
         pressed && { opacity: 0.75 },
       ]}
@@ -151,7 +150,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
     maxWidth: 180,
     borderRadius: 9999,
-    borderWidth: 1,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',

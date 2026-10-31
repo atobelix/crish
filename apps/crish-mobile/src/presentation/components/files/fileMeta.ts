@@ -82,11 +82,12 @@ export function detectFileKind(name: string): FileKind {
   return 'binary';
 }
 
+/** N05 收敛：文件类型图标只保留 folder/file 两个符号（细分类型由色点表达） */
 export const FILE_KIND_ICON: Record<FileKind, IconName> = {
-  text: 'file-text',
-  image: 'file-image',
+  text: 'file',
+  image: 'file',
   pdf: 'file',
-  table: 'file-text',
+  table: 'file',
   binary: 'file',
 };
 

@@ -1,4 +1,5 @@
-// 新对话空态："/"。头栏（汉堡 · 设备胶囊 · 铃铛）+ 居中品牌与问候 + 底部 Composer。
+// 新对话空态："/"。头栏（汉堡 · 设备胶囊 · 铃铛）+ 居中问候 + 底部 Composer。
+// U10/D7 裁定：空态不展示品牌大图标，视觉焦点归一到底部输入框。
 // 输入框上方不放任何 Chip 或建议；提交后新建会话并替换到会话页。
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -8,7 +9,6 @@ import { useNewChatVm } from '@/adapters/viewmodels/useNewChatVm';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
 import {
   AppText,
-  BrandMark,
   Composer,
   IconButton,
   Screen,
@@ -86,7 +86,6 @@ export default function NewChatScreen({
           { gap: theme.space.md, paddingHorizontal: theme.space.screenX },
         ]}
       >
-        <BrandMark size={theme.size.avatar} />
         <AppText variant="title2" style={styles.centerText}>
           {greeting}
         </AppText>

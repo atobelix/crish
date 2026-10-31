@@ -276,30 +276,34 @@ describe('FeedBridge events.resume.page（续传分页闭环，M6 §9.3 ③）',
     bridge.detach();
   });
 
-  it('events.resume 失败 → 清在途 + warn 留痕（下轮投影可重试）', async () => {
+  it('events.resume 失败 → 清在途 + warn 留痕（下轮空洞可重试）', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       // 无 send 注入 → invoke 立即 reject（transport.closed）
       const gateway = new WsGateway();
       const bridge = new FeedBridge({ gateway });
       bridge.attach();
+      // 本地已有 seq 1；收到 seq 3 → 空洞探测触发 events.resume
+      eventStore
+        .getState()
+        .hydrate('s-1', [
+          { type: 'message-end', sessionId: 's-1', sequence: 1 },
+        ]);
       await act(async () => {
-        bridge.handleProjection({
-          resume: ['s-1'],
-          fullReplay: [],
-          fresh: [],
-          cleanup: [],
-        });
+        gateway.dispatchFrame(
+          frame('events.push', {
+            event: { type: 'message-end', sessionId: 's-1', sequence: 3 },
+          })
+        );
         await Promise.resolve();
       });
-      // 在途已清 → 再次投影可重试（不再静默吞）
+      // 在途已清 → 再次空洞探测可重试（不再静默吞）
       await act(async () => {
-        bridge.handleProjection({
-          resume: ['s-1'],
-          fullReplay: [],
-          fresh: [],
-          cleanup: [],
-        });
+        gateway.dispatchFrame(
+          frame('events.push', {
+            event: { type: 'message-end', sessionId: 's-1', sequence: 4 },
+          })
+        );
         await Promise.resolve();
       });
       expect(warnSpy).toHaveBeenCalledWith(
@@ -358,8 +362,8 @@ describe('FeedBridge 相位投影（M5 §4.3.1 投影表）', () => {
   });
 });
 
-describe('FeedBridge 重连对账驱动（M6 §9.3 ①~③）', () => {
-  it('resume 增量补齐：以本地游标发起 events.resume', async () => {
+describe('FeedBridge 序列空洞自愈（实现波总方案 C1：stash + resume 按序 drain）', () => {
+  it('空洞探测：以本地游标发起 events.resume，乱序高帧暂存不推进游标', async () => {
     const sent: string[] = [];
     const gateway = new WsGateway({ send: (raw) => sent.push(raw) });
     const bridge = new FeedBridge({ gateway });
@@ -369,12 +373,11 @@ describe('FeedBridge 重连对账驱动（M6 §9.3 ①~③）', () => {
       .getState()
       .hydrate('s-1', [{ type: 'message-end', sessionId: 's-1', sequence: 5 }]);
     await act(async () => {
-      bridge.handleProjection({
-        resume: ['s-1'],
-        fullReplay: [],
-        fresh: [],
-        cleanup: [],
-      });
+      gateway.dispatchFrame(
+        frame('events.push', {
+          event: { type: 'message-end', sessionId: 's-1', sequence: 7 },
+        })
+      );
     });
     const resume = sent
       .map(
@@ -388,67 +391,41 @@ describe('FeedBridge 重连对账驱动（M6 §9.3 ①~③）', () => {
     expect(
       (resume.body as unknown as { afterSequence: number }).afterSequence
     ).toBe(5);
+    // 乱序高帧已暂存：窗口仍是 5，lastSeq 未被推进（补洞帧不会被判 duplicate）
+    expect(eventStore.getState().windows['s-1']!.lastSeq).toBe(5);
+    expect(eventStore.getState().windows['s-1']!.entries).toHaveLength(1);
     bridge.detach();
   });
 
-  it('fullReplay / fresh：afterSequence=0 全量回放', async () => {
-    const sent: string[] = [];
-    const gateway = new WsGateway({ send: (raw) => sent.push(raw) });
+  it('空洞闭合：补洞页到达后 stash 帧按序入库，无 duplicate 丢弃', async () => {
+    const gateway = new WsGateway({ send: () => {} });
     const bridge = new FeedBridge({ gateway });
     bridge.attach();
+    eventStore
+      .getState()
+      .hydrate('s-1', [{ type: 'message-end', sessionId: 's-1', sequence: 1 }]);
     await act(async () => {
-      bridge.handleProjection({
-        resume: [],
-        fullReplay: ['s-full'],
-        fresh: ['s-fresh'],
-        cleanup: [],
-      });
-    });
-    const resumes = sent
-      .map(
-        (raw) =>
-          JSON.parse(raw) as {
-            kind: string;
-            body: { params?: { afterSequence?: number } };
-          }
-      )
-      .filter((f) => f.kind === 'events.resume');
-    expect(resumes).toHaveLength(2);
-    for (const r of resumes) {
-      expect(
-        (r.body as unknown as { afterSequence: number }).afterSequence
-      ).toBe(0);
-    }
-    bridge.detach();
-  });
-
-  it('cleanup：本地投影 + 事件窗口清理 + 会话索引重拉', async () => {
-    const sent: string[] = [];
-    const gateway = new WsGateway({ send: (raw) => sent.push(raw) });
-    const listSessions = jest
-      .fn()
-      .mockResolvedValue([{ id: 's-keep', updatedAt: 1000 }]);
-    const bridge = new FeedBridge({ gateway, listSessions });
-    bridge.attach();
-    sessionStore.getState().upsert({ id: 's-gone', updatedAt: 1000 });
-    eventStore.getState().ingest('s-gone', {
-      type: 'message-end',
-      sessionId: 's-gone',
-      sequence: 1,
+      // 乱序帧 3 到达 → 暂存 + 触发 resume
+      gateway.dispatchFrame(
+        frame('events.push', {
+          event: { type: 'message-end', sessionId: 's-1', sequence: 3 },
+        })
+      );
     });
     await act(async () => {
-      bridge.handleProjection({
-        resume: [],
-        fullReplay: [],
-        fresh: [],
-        cleanup: ['s-gone'],
-      });
-      await Promise.resolve();
+      // 补洞帧 2 到达（resume.page）→ 空洞闭合 → stash 的 3 按序入库
+      gateway.dispatchFrame(
+        frame('events.resume.page', {
+          sessionId: 's-1',
+          events: [{ type: 'message-end', sessionId: 's-1', sequence: 2 }],
+          nextAfterSequence: 2,
+          hasMore: false,
+        })
+      );
     });
-    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual([
-      's-keep',
-    ]);
-    expect(eventStore.getState().windows['s-gone']).toBeUndefined();
+    const entries = eventStore.getState().windows['s-1']!.entries;
+    expect(entries.map((e) => e.sequence)).toEqual([1, 2, 3]);
+    expect(eventStore.getState().windows['s-1']!.lastSeq).toBe(3);
     bridge.detach();
   });
 });

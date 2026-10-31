@@ -11,8 +11,6 @@ import {
   Badge,
   Card,
   Dialog,
-  Icon,
-  type IconName,
   ListRow,
   Screen,
   SectionHeader,
@@ -34,17 +32,6 @@ const NOTIFY_SCENES = [
   { scene: 'taskDone' as const, label: '任务完成' },
   { scene: 'message' as const, label: '新消息' },
 ];
-
-function LeadingIcon({ name, color }: { name: IconName; color?: string }) {
-  const theme = useTheme();
-  return (
-    <Icon
-      name={name}
-      size={theme.size.icon}
-      color={color ?? theme.colors.textSecondary}
-    />
-  );
-}
 
 export interface SettingsScreenViewProps {
   vm: SettingsVm;
@@ -86,7 +73,6 @@ export default function SettingsScreenView({
           <Card padded={false} tone="grouped">
             {accountStatus === 'loggedIn' && accountUser ? (
               <ListRow
-                leading={<LeadingIcon name="user" />}
                 title={accountUser.name ?? accountUser.email}
                 subtitle={accountUser.email}
                 onPress={onOpenProfile}
@@ -94,7 +80,6 @@ export default function SettingsScreenView({
               />
             ) : (
               <ListRow
-                leading={<LeadingIcon name="user" />}
                 title="登录 Crish 账号"
                 subtitle="登录后自动发现电脑并远程连接"
                 onPress={onOpenAccount}
@@ -116,12 +101,6 @@ export default function SettingsScreenView({
           <SectionHeader title="连接" />
           <Card padded={false} tone="grouped">
             <ListRow
-              leading={
-                <LeadingIcon
-                  name="monitor"
-                  color={vm.connected ? theme.colors.success : undefined}
-                />
-              }
               title="桌面连接"
               subtitle={
                 vm.host
@@ -139,7 +118,6 @@ export default function SettingsScreenView({
               }
             />
             <ListRow
-              leading={<LeadingIcon name="refresh" />}
               title="重新连接"
               onPress={() => {
                 reconnectNow();
@@ -147,13 +125,11 @@ export default function SettingsScreenView({
               divider
             />
             <ListRow
-              leading={<LeadingIcon name="info" />}
               title="连接帮助"
               onPress={() => setHelpOpen(true)}
               divider
             />
             <ListRow
-              leading={<LeadingIcon name="shield" />}
               title="安全连接"
               subtitle="系统 CA 信任 · 首次连接需安装桌面证书"
               onPress={() => setHelpOpen(true)}
@@ -248,9 +224,6 @@ export default function SettingsScreenView({
         <View style={{ gap: theme.space.xs }}>
           <Card padded={false} tone="grouped">
             <ListRow
-              leading={
-                <LeadingIcon name="log-out" color={theme.colors.danger} />
-              }
               title="解除配对"
               destructive
               onPress={() => setRemoveOpen(true)}

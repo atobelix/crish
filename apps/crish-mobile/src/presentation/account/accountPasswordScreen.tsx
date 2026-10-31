@@ -1,4 +1,6 @@
-// 账号 v3 密码登录：邮箱 + 密码；失败时密码框染 dangerSoft 并提示，附「忘记密码」。
+// 账号 v3 密码登录：邮箱 + 密码；登录失败按结构化结果区分「凭据错误」与
+// 「网络故障」（实现波总方案 A4：网络超时不再误报为「邮箱或密码不正确」），
+// 附「忘记密码」。提交期间输入框锁定（editable=false），按钮保留动词 + Spinner。
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -27,7 +29,7 @@ export function AccountPasswordScreen({
   const theme = useTheme();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
-  const [failed, setFailed] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -47,12 +49,14 @@ export function AccountPasswordScreen({
   const submit = async () => {
     if (!ready || busy) return;
     setBusy(true);
-    setFailed(false);
-    // runLoginFlow 只回传布尔值，网络错误与凭据错误暂无法区分（见交付报告）
-    const ok = await loginAccountWithPassword(normalizeEmail(email), password);
+    setLoginError(null);
+    const result = await loginAccountWithPassword(
+      normalizeEmail(email),
+      password
+    );
     setBusy(false);
-    if (ok) onSuccess();
-    else setFailed(true);
+    if (result.ok) onSuccess();
+    else setLoginError(result.message);
   };
 
   return (
@@ -65,8 +69,10 @@ export function AccountPasswordScreen({
           value={email}
           onChangeText={(text) => {
             setEmail(text);
-            setFailed(false);
+            setLoginError(null);
           }}
+          error={loginError}
+          editable={!busy}
           placeholder="邮箱"
           autoFocus={!initialEmail}
           autoCapitalize="none"
@@ -80,9 +86,9 @@ export function AccountPasswordScreen({
           value={password}
           onChangeText={(text) => {
             setPassword(text);
-            setFailed(false);
+            setLoginError(null);
           }}
-          error={failed ? '邮箱或密码不正确' : null}
+          editable={!busy}
           placeholder="密码"
           secure
           autoFocus={Boolean(initialEmail)}
@@ -93,6 +99,7 @@ export function AccountPasswordScreen({
         />
         <AuthButton
           label="登录"
+          loadingLabel="正在登录…"
           testID="account-password-submit"
           disabled={!ready}
           loading={busy}
@@ -103,7 +110,8 @@ export function AccountPasswordScreen({
           variant="ghost"
           testID="account-password-forgot"
           loading={resetBusy}
-          disabled={!isValidEmail(email)}
+          loadingLabel="正在发送验证码…"
+          disabled={!isValidEmail(email) || busy}
           onPress={() => void forgot()}
         />
         {resetError ? (

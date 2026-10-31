@@ -1,9 +1,10 @@
 // 审批已处理行：决策 / 工具 / 渠道 / 时间。
+// N05 裁定：决策文字自带色彩层级（绿/红/灰），左侧图标圆盘属重复装饰，不显示。
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { ApprovalRecord } from '@/domain/types/domain';
-import { AppText, Icon, ListRow } from '@/presentation/ui';
+import { AppText, ListRow } from '@/presentation/ui';
 
 export function formatHistoryTime(ms: number): string {
   const date = new Date(ms);
@@ -42,12 +43,6 @@ export const ApprovalHistoryRow = memo(function ApprovalHistoryRow({
       : record.decision === 'denied'
         ? theme.colors.danger
         : theme.colors.textTertiary;
-  const icon =
-    record.decision === 'approved'
-      ? 'check'
-      : record.decision === 'denied'
-        ? 'x'
-        : 'clock';
   const subtitle = [HISTORY_CHANNEL_TEXT[record.channel], record.reason]
     .filter(Boolean)
     .join(' · ');
@@ -58,19 +53,6 @@ export const ApprovalHistoryRow = memo(function ApprovalHistoryRow({
       title={record.toolName}
       subtitle={subtitle || undefined}
       divider={divider}
-      leading={
-        <View
-          style={[
-            styles.icon,
-            {
-              borderRadius: theme.radius.pill,
-              backgroundColor: theme.colors.fillSubtle,
-            },
-          ]}
-        >
-          <Icon name={icon} size={14} color={color} />
-        </View>
-      }
       trailing={
         <View style={styles.trailing}>
           <AppText variant="caption" style={{ color }}>
@@ -86,12 +68,6 @@ export const ApprovalHistoryRow = memo(function ApprovalHistoryRow({
 });
 
 const styles = StyleSheet.create({
-  icon: {
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   trailing: {
     alignItems: 'flex-end',
     gap: 2,

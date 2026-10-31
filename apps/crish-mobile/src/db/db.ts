@@ -9,7 +9,10 @@ import { MIGRATIONS, type Migration } from './migrations';
 /**
  * 迁移执行（M5 §5.4 migrateIfNeeded 形态，注入 driver 便于 jest 内存 mock 验证）：
  * - 读取 PRAGMA user_version 得到当前版本；
- * - 从当前版本逐级执行迁移 SQL（每级一个事务），完成后置 user_version = v + 1；
+ * - 降级防御：本地版本高于迁移数组（旧版 APK 装到高版本库）→ 抛错拒绝打开，
+ *   杜绝结构不匹配静默运行；
+ * - 从当前版本逐级执行迁移 SQL（每级一个事务，PRAGMA user_version 在事务提交后
+ *   单独执行——SQLite 规范：元数据 PRAGMA 在活动事务内不保证原子/持久化）；
  * - 重复执行幂等：版本已到最新则跳过（不重复建表、不动业务数据）；
  * - 全新库（v0）直达最新。
  * @returns 迁移后的版本号
@@ -22,14 +25,20 @@ export async function migrateIfNeeded(
     'PRAGMA user_version'
   );
   const current = row?.user_version ?? 0;
+  if (current > migrations.length) {
+    throw new Error(
+      `数据库版本高于应用迁移目标（local=${current} target=${migrations.length}），禁止降级运行`
+    );
+  }
   for (let v = current; v < migrations.length; v++) {
     const migration = migrations[v]!;
     await db.withTransaction(async () => {
       for (const sql of migration.sql) {
         await db.exec(sql);
       }
-      await db.exec(`PRAGMA user_version = ${v + 1}`);
     });
+    // 版本推进在事务提交后单独执行：元数据 PRAGMA 在活动事务内不保证原子/持久化
+    await db.exec(`PRAGMA user_version = ${v + 1}`);
   }
   return Math.max(current, migrations.length);
 }

@@ -112,7 +112,7 @@ export default function FilesScreen() {
                   <Icon
                     name="check"
                     size={16}
-                    color={theme.colors.accentStrong}
+                    color={theme.colors.actionPrimary}
                   />
                 ) : undefined
               }

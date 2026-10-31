@@ -96,8 +96,11 @@ fn resolve_rejects_parent_traversal_components() {
         );
     }
     // Windows 绝对路径（盘符前缀）→ 走工作区内校验拒绝
-    let err = resolve_outputs_root(Some(Path::new("C:\\x")), ws.path(), false).unwrap_err();
-    assert!(err.contains("工作区内"), "C:\\x 应因工作区外被拒：{err}");
+    #[cfg(windows)]
+    {
+        let err = resolve_outputs_root(Some(Path::new("C:\\x")), ws.path(), false).unwrap_err();
+        assert!(err.contains("工作区内"), "C:\\x 应因工作区外被拒：{err}");
+    }
 }
 
 // ── 会话级键编码 ──

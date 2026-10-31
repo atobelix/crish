@@ -291,6 +291,7 @@ apps/agent-workbench/src-tauri/src/browser/mod.rs 703
 apps/agent-workbench/src-tauri/src/browser/native_manager/windows.rs 1251
 apps/agent-workbench/src-tauri/src/engine/tests.rs 3920
 apps/agent-workbench/src-tauri/src/main.rs 933
+apps/agent-workbench/src-tauri/src/multi_device/tls.rs 605
 apps/agent-workbench/src-tauri/src/note_commands/tests.rs 711
 apps/agent-workbench/src-tauri/src/pty/session.rs 893
 apps/agent-workbench/src-tauri/src/run_ipc/tests.rs 822

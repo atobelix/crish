@@ -87,7 +87,6 @@ export function FileBrowser({
             <Spinner />
           ) : view === 'disconnected' ? (
             <EmptyState
-              icon="wifi-off"
               title="未连接"
               action={
                 <Button
@@ -99,7 +98,6 @@ export function FileBrowser({
             />
           ) : view === 'error' ? (
             <EmptyState
-              icon="alert-circle"
               title={mapFilesErrorCode(vm.errorCode).title}
               action={
                 <Button label="重试" variant="secondary" onPress={vm.retry} />
@@ -107,7 +105,6 @@ export function FileBrowser({
             />
           ) : (
             <EmptyState
-              icon="folder"
               title="该目录为空"
               action={
                 <Button label="刷新" variant="secondary" onPress={vm.refresh} />

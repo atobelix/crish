@@ -15,8 +15,6 @@ export { CODE_LENGTH, CodeCells } from './CodeCells';
 export type { CodeCellsProps } from './CodeCells';
 export { GlassBackdrop } from './GlassBackdrop';
 export type { GlassBackdropProps } from './GlassBackdrop';
-export { GlassBackButton } from './GlassBackButton';
-export type { GlassBackButtonProps } from './GlassBackButton';
 export { NavRow } from './NavRow';
 export type { NavRowProps } from './NavRow';
 export { SignOutSheet } from './SignOutSheet';

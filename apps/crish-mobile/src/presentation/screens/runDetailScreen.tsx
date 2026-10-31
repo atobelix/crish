@@ -152,7 +152,6 @@ export default function RunDetailScreen({
       ) : null}
       {blocks.length === 0 ? (
         <EmptyState
-          icon="activity"
           title="暂无运行记录"
           action={<Button label="返回" variant="secondary" onPress={onBack} />}
         />

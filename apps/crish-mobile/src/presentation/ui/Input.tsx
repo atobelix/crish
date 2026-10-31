@@ -1,4 +1,6 @@
-// 输入原子：标准表单态（48 高、control 圆角、柔和聚焦边框）与搜索态（无边框透明）。
+// 输入原子：标准表单态（纯表面色阶表达焦点，零描边零阴影）。
+// 焦点表达 = 表面色 fillSubtle ↔ fieldFocus 切换 + 原生光标（U8 禁描边铁律）；
+// 错误表达 = 底色 dangerSoft 染色 + 下方红字，不画红框。
 // 对话输入条见 Composer，不在这里。
 import { forwardRef, useState } from 'react';
 import {
@@ -13,14 +15,10 @@ import {
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
-import Icon, { type IconName } from './Icon';
 
 export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
-  /** 无边框搜索态（用于列表内搜索） */
-  search?: boolean;
-  leadingIcon?: IconName;
   containerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<TextStyle>;
   testID?: string;
@@ -30,8 +28,6 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   {
     label,
     error,
-    search = false,
-    leadingIcon,
     containerStyle,
     style,
     editable = true,
@@ -46,11 +42,12 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
   const multiline = rest.multiline === true;
-  const borderColor = error
-    ? theme.colors.danger
+  // 焦点/错误全部用表面色阶表达：无 borderWidth、无 borderColor、无阴影
+  const surface = error
+    ? theme.colors.dangerSoft
     : focused
-      ? theme.colors.borderFocus
-      : theme.colors.borderStrong;
+      ? theme.colors.fieldFocus
+      : theme.colors.fillSubtle;
 
   return (
     <View style={[styles.wrapper, { gap: theme.space.xs }, containerStyle]}>
@@ -66,37 +63,24 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
       <View
         style={[
           styles.shell,
-          { gap: theme.space.sm },
-          search
-            ? { height: theme.size.touch, paddingHorizontal: theme.space.xs }
-            : {
-                height: theme.size.touchLarge,
-                borderWidth: 1,
-                borderRadius: theme.radius.control,
-                paddingHorizontal: theme.space.md,
-                backgroundColor: theme.colors.fillSubtle,
-                borderColor,
-              },
-          multiline && {
-            height: 'auto',
-            minHeight: theme.size.inputMultilineMin,
-            alignItems: 'flex-start',
-            paddingVertical: theme.space.sm,
+          {
+            gap: theme.space.sm,
+            height: multiline ? 'auto' : theme.size.touchLarge,
+            minHeight: multiline ? theme.size.inputMultilineMin : undefined,
+            borderRadius: theme.radius.control,
+            paddingHorizontal: theme.space.md,
+            paddingVertical: multiline ? theme.space.sm : undefined,
+            alignItems: multiline ? 'flex-start' : 'center',
+            backgroundColor: surface,
           },
           !editable && styles.disabled,
         ]}
       >
-        {leadingIcon || search ? (
-          <Icon
-            name={leadingIcon ?? 'search'}
-            size={theme.size.iconSmall}
-            color={theme.colors.textTertiary}
-          />
-        ) : null}
         <TextInput
           ref={ref}
           testID={testID}
           editable={editable}
+          selectionColor={theme.colors.textPrimary}
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
@@ -138,11 +122,9 @@ const styles = StyleSheet.create({
   },
   shell: {
     flexDirection: 'row',
-    alignItems: 'center',
   },
   input: {
     flex: 1,
-    height: '100%',
     paddingVertical: 0,
   },
   multilineInput: {

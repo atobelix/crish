@@ -1,25 +1,25 @@
-// ReconnectingWsClient 纯逻辑单测（R2-02）：退避序列 / 心跳假死判定 / 相位投影映射表全量
-// + R2-02 部分 2：connect/disconnect 原生 WS 接线（mock WebSocket 事件序列驱动状态机）
+// ReconnectingWsClient 纯逻辑单测（R2-02）：退避序列 / 心跳假死判定全量
+// + connect/disconnect 原生 WS 接线（mock WebSocket 事件序列驱动状态机）
+// + 握手看门狗 / 连接稳定后退避清零（实现波总方案 C3）。
+// （原 projectReconnect/classifyReconcile 投影纯函数已删除——重连对账单一链路
+//   = events.subscribe.ok，见 feedBridge/approvalWiring 测试。）
 import {
+  CONNECT_TIMEOUT_MS,
+  CONNECTION_STABLE_MS,
   HEARTBEAT_DEAD_MS,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_FACTOR,
-  RECONCILE_REBUILD_THRESHOLD,
   RETRY_BACKOFF_BASE_MS,
   RETRY_BACKOFF_CAP_MS,
   RETRY_BACKOFF_MULTIPLIER,
   RETRY_JITTER_MAX_MS,
   ReconnectingWsClient,
-  classifyReconcile,
   isHeartbeatDead,
   nextRetryDelayMs,
-  projectReconnect,
   shouldSendHeartbeat,
 } from '../ReconnectingWsClient';
 import type {
-  ReconcileSnapshot,
   ReconnectingWsClientOptions,
-  ReconnectProjection,
   WsSocket,
 } from '../ReconnectingWsClient';
 import {
@@ -98,158 +98,6 @@ describe('心跳定时（D3 §9.3：30s 心跳 / 3×间隔 90s 假死）', () =>
   });
 });
 
-describe('classifyReconcile 对账分类（M6 §9.3 ①订阅 ②投影 ③游标）', () => {
-  const snap = (p: Partial<ReconcileSnapshot>): ReconcileSnapshot => ({
-    sessionId: 's-001',
-    localCursor: 0,
-    serverNext: 0,
-    serverStale: false,
-    ...p,
-  });
-
-  test('本地无投影 → fresh（② 权威有本地无 → 写入投影 + 初始化游标）', () => {
-    expect(
-      classifyReconcile(snap({ localCursor: undefined, serverNext: 120 }))
-    ).toBe('fresh');
-  });
-
-  test('服务端无此会话（serverNext=-1）→ cleanup（② 清理本地投影 + 游标 + 队列）', () => {
-    expect(classifyReconcile(snap({ localCursor: 120, serverNext: -1 }))).toBe(
-      'cleanup'
-    );
-  });
-
-  test('stale=true（本地游标超服务端 max）→ full-replay（① 全量回放）', () => {
-    expect(
-      classifyReconcile(
-        snap({ localCursor: 200, serverNext: 100, serverStale: true })
-      )
-    ).toBe('full-replay');
-  });
-
-  test('落后超重建阈值 5000 → full-replay（③ 快照重建）', () => {
-    expect(
-      classifyReconcile(
-        snap({ localCursor: 0, serverNext: RECONCILE_REBUILD_THRESHOLD + 1 })
-      )
-    ).toBe('full-replay');
-  });
-
-  test('落后恰为阈值 → resume（仅 > 阈值触发重建）', () => {
-    expect(
-      classifyReconcile(
-        snap({ localCursor: 0, serverNext: RECONCILE_REBUILD_THRESHOLD })
-      )
-    ).toBe('resume');
-  });
-
-  test('落后未超阈值 → resume（① stale=false 增量补齐）', () => {
-    expect(classifyReconcile(snap({ localCursor: 100, serverNext: 160 }))).toBe(
-      'resume'
-    );
-  });
-
-  test('游标一致 → noop', () => {
-    expect(classifyReconcile(snap({ localCursor: 100, serverNext: 100 }))).toBe(
-      'noop'
-    );
-  });
-});
-
-describe('projectReconnect 相位投影映射表全量（M6 §9.3 ①~⑤）', () => {
-  const snapshots: ReconcileSnapshot[] = [
-    {
-      sessionId: 's-fresh',
-      localCursor: undefined,
-      serverNext: 10,
-      serverStale: false,
-    },
-    {
-      sessionId: 's-resume',
-      localCursor: 5,
-      serverNext: 12,
-      serverStale: false,
-    },
-    {
-      sessionId: 's-replay',
-      localCursor: 0,
-      serverNext: 6000,
-      serverStale: false,
-    },
-    {
-      sessionId: 's-stale',
-      localCursor: 300,
-      serverNext: 100,
-      serverStale: true,
-    },
-    {
-      sessionId: 's-clean',
-      localCursor: 50,
-      serverNext: -1,
-      serverStale: false,
-    },
-    {
-      sessionId: 's-noop',
-      localCursor: 42,
-      serverNext: 42,
-      serverStale: false,
-    },
-  ];
-
-  test('非 open 相位一律空投影（对账入口仅在重连成功后）', () => {
-    for (const phase of [
-      'idle',
-      'connecting',
-      'reconnecting',
-      'dead',
-    ] as const) {
-      const p = projectReconnect(phase, snapshots, true);
-      expect(p.actions).toEqual([]);
-      expect(p.outboxFlush).toBe(false);
-      expect(p.log).toEqual([]);
-      expect(p.phase).toBe(phase);
-    }
-  });
-
-  test('open 相位：动作聚合 + 会话分组映射表全量', () => {
-    const p = projectReconnect('open', snapshots, false);
-    expect(p.actions).toEqual([
-      'fresh',
-      'resume',
-      'full-replay',
-      'full-replay',
-      'cleanup',
-      'noop',
-    ]);
-    expect(p.fresh).toEqual(['s-fresh']);
-    expect(p.resume).toEqual(['s-resume']);
-    expect(p.fullReplay).toEqual(['s-replay', 's-stale']);
-    expect(p.cleanup).toEqual(['s-clean']);
-    expect(p.outboxFlush).toBe(false);
-  });
-
-  test('④ 队列对账：outbox 有待提交 → outboxFlush + 留痕', () => {
-    const p = projectReconnect('open', [], true);
-    expect(p.outboxFlush).toBe(true);
-    expect(p.log.some((l) => l.includes('outbox'))).toBe(true);
-  });
-
-  test('⑤ 留痕：全部分歧写日志，不静默（noop 不写）', () => {
-    const p = projectReconnect('open', snapshots, false);
-    expect(p.log.length).toBeGreaterThanOrEqual(5);
-    expect(p.log.join('\n')).toContain('s-clean');
-    expect(p.log.join('\n')).toContain('s-resume');
-    expect(p.log.join('\n')).not.toContain('s-noop');
-  });
-
-  test('空快照 + 无 outbox → 空投影（幂等收敛，M6 §9.3 对账可重复执行）', () => {
-    const p = projectReconnect('open', [], false);
-    expect(p.actions).toEqual([]);
-    expect(p.log).toEqual([]);
-    expect(p.outboxFlush).toBe(false);
-  });
-});
-
 // ── R2-02 部分 2：connect/disconnect 原生 WS 接线（M5 §4.3.1 状态机）────────
 
 /**
@@ -320,7 +168,6 @@ interface Harness {
   ws: MockWebSocket;
   gateway: WsGateway;
   phaseCalls: WsPhase[];
-  projectionCalls: ReconnectProjection[];
 }
 
 /**
@@ -334,7 +181,6 @@ function makeHarness(
   MockWebSocket.instances = [];
   const factory = jest.fn((url: string) => new MockWebSocket(url));
   const phaseCalls: WsPhase[] = [];
-  const projectionCalls: ReconnectProjection[] = [];
   const gateway = new WsGateway();
   const client = new ReconnectingWsClient({
     url: 'wss://host:8765',
@@ -342,7 +188,6 @@ function makeHarness(
     gateway,
     jitterMaxMs: 0,
     onPhaseChange: (p) => phaseCalls.push(p),
-    onProjection: (p) => projectionCalls.push(p),
     ...opts,
   });
   if (cfg.autoConnect !== false) client.connect();
@@ -352,7 +197,6 @@ function makeHarness(
     ws: MockWebSocket.instances[0]!,
     gateway,
     phaseCalls,
-    projectionCalls,
   };
 }
 
@@ -364,8 +208,8 @@ describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
     jest.useRealTimers();
   });
 
-  test('connect → connecting → open；相位回调序列 + 投影调用（open 相位对账）', () => {
-    const { client, factory, ws, phaseCalls, projectionCalls } = makeHarness();
+  test('connect → connecting → open；相位回调序列（open 后 retryCount 延迟清零）', () => {
+    const { client, factory, ws, phaseCalls } = makeHarness();
     expect(client.url).toBe('wss://host:8765'); // url 透出（端点诊断/日志）
     client.connect();
     expect(client.phase).toBe('connecting');
@@ -375,27 +219,22 @@ describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
     ws.emitOpen();
     expect(client.phase).toBe('open');
     expect(phaseCalls).toEqual(['connecting', 'open']);
-    expect(projectionCalls).toHaveLength(1);
-    expect(projectionCalls[0]?.phase).toBe('open');
+    // 退避清零延后至连接稳定（CONNECTION_STABLE_MS）：刚 open 时不立刻清零
     expect(client.retryCount).toBe(0);
-    expect(client.lastProjection?.actions).toEqual([]);
+    jest.advanceTimersByTime(CONNECTION_STABLE_MS);
+    expect(client.retryCount).toBe(0);
   });
 
-  test('open 相位投影：注入对账源 → 动作分类正确（R2-05 接线点）', () => {
-    const snap: ReconcileSnapshot = {
-      sessionId: 's-1',
-      localCursor: 0,
-      serverNext: 5,
-      serverStale: false,
-    };
-    const { client, ws, projectionCalls } = makeHarness({
-      projections: () => ({ snapshots: [snap], outboxPending: true }),
-    });
+  test('握手看门狗：CONNECT_TIMEOUT_MS 未 open → 主动 close 进入退避（实现波总方案 C3）', () => {
+    const { client } = makeHarness({}, { autoConnect: false });
     client.connect();
-    ws.emitOpen();
-    expect(projectionCalls[0]?.actions).toEqual(['resume']);
-    expect(projectionCalls[0]?.outboxFlush).toBe(true);
-    expect(client.lastProjection?.resume).toEqual(['s-1']);
+    expect(client.phase).toBe('connecting');
+    const firstSocket = MockWebSocket.instances[0]!;
+    jest.advanceTimersByTime(CONNECT_TIMEOUT_MS - 1);
+    expect(firstSocket.closeSpy).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    // close() 同步触发 onclose → 退避重连
+    expect(client.phase).toBe('reconnecting');
   });
 
   test('双连接防护：connect 两次只建一个 socket（R2B §4）', () => {
@@ -602,19 +441,19 @@ describe('ReconnectingWsClient 重连退避（D4 §6.2.4 / M5 §4.3.2）', () =>
     expect(factory).toHaveBeenCalledTimes(delays.length + 1);
   });
 
-  test('重连成功：投影再次调用（open 相位）+ retryCount 归零', () => {
-    const { client, ws, projectionCalls } = makeHarness();
+  test('重连成功：稳定期后 retryCount 归零（弱网抖动不 reset，实现波总方案 C3）', () => {
+    const { client, ws } = makeHarness();
     client.connect();
     ws.emitOpen();
-    expect(projectionCalls).toHaveLength(1);
     ws.emitClose();
     jest.advanceTimersByTime(1000);
     expect(client.phase).toBe('connecting');
     MockWebSocket.instances[1]!.emitOpen();
+    // 刚 open：计数尚未清零（稳定窗口未满）
+    expect(client.retryCount).toBe(1);
+    jest.advanceTimersByTime(CONNECTION_STABLE_MS);
     expect(client.phase).toBe('open');
     expect(client.retryCount).toBe(0);
-    expect(projectionCalls).toHaveLength(2);
-    expect(projectionCalls[1]?.phase).toBe('open');
   });
 
   test('reconnecting 中 connect() → 取消退避立即重试（防双连接）', () => {
@@ -626,8 +465,11 @@ describe('ReconnectingWsClient 重连退避（D4 §6.2.4 / M5 §4.3.2）', () =>
     client.connect();
     expect(factory).toHaveBeenCalledTimes(2);
     expect(client.phase).toBe('connecting');
-    jest.advanceTimersByTime(60_000); // 原退避计时已取消
+    // 新 socket 挂起时看门狗会在 CONNECT_TIMEOUT_MS 主动放弃并退避；
+    // 这里只验证「原退避计时已取消」（小幅推进不产生新连接）
+    jest.advanceTimersByTime(CONNECT_TIMEOUT_MS - 1);
     expect(factory).toHaveBeenCalledTimes(2);
+    expect(client.phase).toBe('connecting');
   });
 
   test('offline 注入（NetInfo 断网，R2-03 接线点）→ 直接 dead 不重试', () => {

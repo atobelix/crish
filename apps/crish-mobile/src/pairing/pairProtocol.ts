@@ -171,29 +171,31 @@ export function isValidTlsFingerprint(value: string): boolean {
 export type FingerprintCheck =
   /** 两值一致（大小写不敏感，桌面输出小写 hex） */
   | { ok: true; defense: 'verified' }
-  /** 无历史存储值（首次配对，无可防御面） */
+  /** 无历史存储值（首次配对：以本次下发值落锚，TOFU） */
   | { ok: true; defense: 'no-stored' }
-  /** 桌面未下发指纹（当前简化链缺口）——无法钉扎，不阻断配对 */
-  | { ok: true; defense: 'no-delivered' }
+  /** 桌面未下发指纹 → 拒绝（fail-closed；实现波总方案 H1：
+   *  桌面 pair.ok 已强制下发，缺失 = 桌面端过旧或载荷被篡改） */
+  | { ok: false; defense: 'no-delivered' }
   /** 不一致（证书轮换/本地篡改）→ 拒绝（失败关闭） */
   | { ok: false; defense: 'mismatch' };
 
 /**
  * 指纹一致性校验（纯函数，O(1) 无副作用）：
  * stored = secure-store host_fingerprint 位（历史配对存储）；
- * delivered = 本次配对载荷下发的指纹（challenge 权威载体 ?? ok 扩展）。
- * 判定顺序：无存储 → no-stored；有存储无下发 → no-delivered（缺口放行）；
- * 两者齐备 → 大小写不敏感比对，一致 verified / 不一致 mismatch。
+ * delivered = 本次配对载荷下发的指纹（pair.ok 权威载体）。
+ * 判定顺序：桌面未下发 → no-delivered（fail-closed 拒绝）；无存储 →
+ * no-stored（首次配对落锚）；两者齐备 → 大小写不敏感比对，一致
+ * verified / 不一致 mismatch。
  */
 export function checkHostFingerprint(
   stored: string | undefined,
   delivered: string | undefined
 ): FingerprintCheck {
+  if (!delivered || delivered.length === 0) {
+    return { ok: false, defense: 'no-delivered' };
+  }
   if (!stored || stored.length === 0) {
     return { ok: true, defense: 'no-stored' };
-  }
-  if (!delivered || delivered.length === 0) {
-    return { ok: true, defense: 'no-delivered' };
   }
   const same = stored.trim().toLowerCase() === delivered.trim().toLowerCase();
   return same
