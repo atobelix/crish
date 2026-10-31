@@ -7,15 +7,7 @@
 // - Android 返回键：抽屉打开时优先收起；点击主卡片任意处收起；
 // - 控制器经 context 暴露 open/close/closeImmediate（N04 单入口编排：
 //   跳根栈页面 = 先 push 后无动画静默重置，杜绝双动画竞争）。
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -35,31 +27,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { CrishDrawerContent } from './CrishDrawerContent';
+import {
+  DrawerControllerContext,
+  type DrawerController,
+  useDrawerController,
+} from './DrawerContext';
 
-export interface DrawerController {
-  /** 弹簧动画展开 */
-  open: () => void;
-  /** 弹簧动画收起 */
-  close: () => void;
-  /** 无动画静默收起（跳根栈页面时的单入口编排用） */
-  closeImmediate: () => void;
-  /** 响应式开合状态（驱动点击关闭层与返回键订阅） */
-  isOpen: boolean;
-}
-
-const DrawerControllerContext = createContext<DrawerController | null>(null);
-
-/** 抽屉控制器（汉堡按钮/内容区消费；容器外调用返回 no-op，深链安全） */
-export function useDrawerController(): DrawerController {
-  return (
-    useContext(DrawerControllerContext) ?? {
-      open: () => {},
-      close: () => {},
-      closeImmediate: () => {},
-      isOpen: false,
-    }
-  );
-}
+export { useDrawerController, type DrawerController };
 
 /** 激活阈值：横向位移达到即认领手势 */
 const ACTIVATION_DX = 14;
@@ -104,7 +78,6 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
     []
   );
 
-  const swipeEdge = theme.layout.drawerSwipeEdgeWidth;
   const pan = Gesture.Pan()
     .manualActivation(true)
     .onTouchesDown((event, _stateManager) => {
@@ -119,15 +92,24 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       if (!touch) return;
       const dx = touch.absoluteX - startX.value;
       const dy = touch.absoluteY - startY.value;
-      // 关闭态：仅左缘手势带内起滑才可能激活（避开系统返回手势带之外的中部拖拽）
-      if (progress.value <= 0 && startX.value > swipeEdge) {
-        stateManager.fail();
-        return;
+      // 关闭态：屏幕绝大部分区域（左侧 75% 范围）起滑，只要明确向右滑动即顺滑激活抽屉
+      if (progress.value <= 0) {
+        if (startX.value > width * 0.75) {
+          stateManager.fail();
+          return;
+        }
+        if (dx > ACTIVATION_DX && dx > Math.abs(dy) * 0.7) {
+          stateManager.activate();
+          return;
+        }
+      } else {
+        // 打开态：水平拖拽超过激活阈值即接管拖动
+        if (Math.abs(dx) > ACTIVATION_DX && Math.abs(dx) > Math.abs(dy) * 0.7) {
+          stateManager.activate();
+          return;
+        }
       }
-      if (Math.abs(dx) > ACTIVATION_DX && Math.abs(dx) > Math.abs(dy) * 0.7) {
-        stateManager.activate();
-        return;
-      }
+      // 垂直滚动优先：纵向滚动距离明显大于横向时，手势失败让位于内部滚动视图
       if (Math.abs(dy) > FAIL_DY && Math.abs(dy) > Math.abs(dx)) {
         stateManager.fail();
       }
@@ -151,6 +133,12 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
 
   const cardStyle = useAnimatedStyle(() => {
     const p = progress.value;
+    const r = interpolate(
+      p,
+      [0, 1],
+      [0, theme.radius.sheet],
+      Extrapolation.CLAMP
+    );
     return {
       transform: [
         {
@@ -170,12 +158,20 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           ),
         },
       ],
-      borderRadius: interpolate(
-        p,
-        [0, 1],
-        [0, theme.radius.sheet],
-        Extrapolation.CLAMP
-      ),
+      borderRadius: r,
+    };
+  });
+
+  const cardInnerStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    const r = interpolate(
+      p,
+      [0, 1],
+      [0, theme.radius.sheet],
+      Extrapolation.CLAMP
+    );
+    return {
+      borderRadius: r,
     };
   });
 
@@ -231,23 +227,31 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           >
             {contentMounted ? <CrishDrawerContent /> : null}
           </Animated.View>
-          {/* 顶层：主界面卡片（位移 + 缩放 + 圆角渐变 + 轻投影） */}
+          {/* 顶层：主界面卡片（位移 + 缩放 + 圆角渐变 + 强立体投影容器） */}
           <Animated.View
             style={[
-              styles.card,
+              styles.cardContainer,
               { backgroundColor: theme.colors.surface },
-              theme.shadow.floating,
+              theme.shadow.sheet,
               cardStyle,
             ]}
           >
-            {children}
-            {/* 打开期点击主卡片任意处收起（关闭期不拦截任何交互） */}
-            <Pressable
-              accessibilityLabel="收起菜单"
-              onPress={() => controller.close()}
-              style={styles.tapDismiss}
-              pointerEvents={isOpen ? 'auto' : 'none'}
-            />
+            <Animated.View
+              style={[
+                styles.cardInner,
+                { backgroundColor: theme.colors.surface },
+                cardInnerStyle,
+              ]}
+            >
+              {children}
+              {/* 打开期点击主卡片任意处收起（关闭期不拦截任何交互） */}
+              <Pressable
+                accessibilityLabel="收起菜单"
+                onPress={() => controller.close()}
+                style={styles.tapDismiss}
+                pointerEvents={isOpen ? 'auto' : 'none'}
+              />
+            </Animated.View>
           </Animated.View>
         </View>
       </GestureDetector>
@@ -263,7 +267,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
-  card: { flex: 1, overflow: 'hidden' },
+  cardContainer: {
+    flex: 1,
+  },
+  cardInner: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   tapDismiss: {
     position: 'absolute',
     top: 0,

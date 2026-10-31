@@ -347,6 +347,14 @@ describe('网络层错误归一', () => {
     await expect(login()).rejects.toMatchObject({ code: 'timeout', status: 0 });
   });
 
+  it('React Native 取消异常（Fetch request has been canceled）→ timeout 码', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('Fetch request has been canceled');
+    }) as unknown as typeof fetch;
+
+    await expect(login()).rejects.toMatchObject({ code: 'timeout', status: 0 });
+  });
+
   it('其他网络异常 → network 码并保留原始消息', async () => {
     global.fetch = jest.fn(async () => {
       throw new Error('dns failure');

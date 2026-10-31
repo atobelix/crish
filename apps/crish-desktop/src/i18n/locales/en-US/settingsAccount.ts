@@ -33,6 +33,10 @@ export const settingsPartAccount = {
   // ── 登录弹窗 ──
   'account.auth.dialogLabel': 'Sign in to Crish',
   'account.auth.brandName': 'Crish',
+  'account.auth.sending': 'Sending…',
+  'account.auth.verifying': 'Verifying…',
+  'account.auth.loggingIn': 'Signing in…',
+  'account.auth.submitting': 'Submitting…',
   'account.auth.emailTitle': 'Sign in or sign up',
   'account.auth.emailPlaceholder': 'Email',
   'account.auth.register': 'Create an account',

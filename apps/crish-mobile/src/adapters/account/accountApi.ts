@@ -111,8 +111,13 @@ async function requestJson<T>(
     return body as T;
   } catch (error) {
     if (error instanceof AccountApiError) throw error;
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new AccountApiError(0, 'timeout', '网络超时，请稍后重试');
+    const isTimeout =
+      controller.signal.aborted ||
+      (error instanceof Error &&
+        (error.name === 'AbortError' ||
+          /canceled|abort|timeout/i.test(error.message)));
+    if (isTimeout) {
+      throw new AccountApiError(0, 'timeout', '网络请求超时，请稍后重试');
     }
     throw new AccountApiError(
       0,
