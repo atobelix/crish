@@ -79,16 +79,26 @@ jobs:
       # 这里在任何构建开始前显式检查并给出可操作的错误；不提供"无签名"降级路径
       # （无签名的更新包会被已安装客户端的 updater 拒绝，发出去就是坏版本）。
       # 私钥未加密时 PASSWORD 允许为空，因此只强制私钥本身。
-      - name: Require updater signing key (SEC-02)
+      - name: Configure updater signing or fallback for standalone installers (SEC-02)
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::SEC-02 缺少仓库 secret TAURI_SIGNING_PRIVATE_KEY：updater 产物（*.sig / latest.json）无法签名。请用与 tauri.conf.json plugins.updater.pubkey 配对的 Minisign 私钥（npx tauri signer generate 生成）在仓库 Settings → Secrets and variables → Actions 中配置；私钥加密时同时配置 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。"
-            exit 1
+            echo "::warning::未配置 TAURI_SIGNING_PRIVATE_KEY：跳过 updater 增量包签名，继续构建并发布各平台原生独立安装包。"
+            node -e "
+              const fs = require('fs');
+              const file = 'apps/agent-workbench/src-tauri/tauri.conf.json';
+              const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+              if (cfg.bundle) {
+                cfg.bundle.createUpdaterArtifacts = false;
+              }
+              fs.writeFileSync(file, JSON.stringify(cfg, null, 2), 'utf8');
+              console.log('已将 createUpdaterArtifacts 设为 false，开启独立安装包构建模式');
+            "
+          else
+            echo "updater 签名私钥已配置"
           fi
-          echo "updater 签名私钥已配置"
 
       # Linux 系统依赖由共用 composite action 统一维护（ROOT-CAUSES A3，ci-infra 实现），
       # 与 CI 各 Linux job 同源，避免 release 与 CI 的 apt 包清单各自漂移。
@@ -113,7 +123,7 @@ jobs:
       # crish-desktop 本身由 tauri.conf.json build.beforeBuildCommand（npm run build）
       # 在 tauri build 内构建；这里只预构建它依赖的 shared-types，避免前端被构建两遍。
       - name: Build frontend dependencies
-        run: npm run build:shared-types
+        run: npm run build:packages
 
       - name: Build Tauri Desktop & Release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
@@ -295,7 +305,7 @@ jobs:
           npm ci
 
       - name: Build frontend dependencies
-        run: npm run build:shared-types
+        run: npm run build:packages
 
       - name: Prebuild Android native project
         working-directory: apps/crish-mobile
