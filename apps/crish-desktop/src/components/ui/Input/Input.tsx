@@ -243,6 +243,29 @@ export function Input({
       .filter(Boolean)
       .join(' ') || undefined;
 
+  if (bare) {
+    return (
+      <input
+        ref={combinedRef}
+        id={inputId}
+        className={className}
+        value={value}
+        defaultValue={defaultValue}
+        disabled={disabled}
+        readOnly={readOnly}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        {...restProps}
+        type={inputType}
+        role={inputRole}
+      />
+    );
+  }
+
   const wrapClasses = inputWrapVariants({
     size,
     error: Boolean(error),

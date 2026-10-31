@@ -289,7 +289,7 @@ pub struct CloudAuthClient {
 impl CloudAuthClient {
     pub fn new(base_url: Option<String>) -> Self {
         let http = Client::builder()
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(25))
             .build()
             .unwrap_or_default();
         Self {

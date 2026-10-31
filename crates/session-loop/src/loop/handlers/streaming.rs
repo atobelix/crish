@@ -32,13 +32,13 @@ use crate::stream::{
     ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
 };
 
+use super::super::LoopError;
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, clamp_max_tokens, dispatch, emit_missing_turn_end, estimate_context,
-    last_assistant_with_tool_calls, new_message_id, synthesize_and_record_interrupted_calls,
-    HandlerOutcome, LoopState,
+    HandlerOutcome, LoopState, check_control, clamp_max_tokens, dispatch, emit_missing_turn_end,
+    estimate_context, last_assistant_with_tool_calls, new_message_id,
+    synthesize_and_record_interrupted_calls,
 };
-use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
 
 /// 工具在派发执行前因流式以错误截断终止而被阻断（BC02-2 防火墙）
@@ -453,44 +453,13 @@ async fn consume_classify(
 /// T09.9 Q40：stream_error 重试阶梯入口的 abort 收场复用本路径
 /// （「与正常收场共享决策路径」——收场决策单一化，不另起分支）。
 pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome, LoopError> {
-    // EV-08：孤儿 turn-start 兜底——abort 收场路径不经 turn_complete
-    //（turn-end 正常发射点），补发闭合（current_turn_index 为 None 时
-    // 幂等无操作；stream_error 阶梯复用本路径同样覆盖）
-    emit_missing_turn_end(state);
-    let action = {
-        let mut bus = state.control_bus.lock().unwrap_or_else(|e| {
-            tracing::error!(target: "session_loop", "control_bus 锁中毒，按恢复模式继续：{e}");
-            e.into_inner()
-        });
-        crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal))
-    };
-    match action {
-        Some(crate::safe_point::ControlAction::ForceCancel { reason }) => {
-            // T06.3 Q02：取消原因经 aborted_with_diagnostic 透出
-            // （不再写 state.abort_reason，该字段已删除）
-            dispatch(state, E::Abort)?;
-            Ok(HandlerOutcome::end(EndDecision::aborted_with_diagnostic(
-                state, reason,
-            )))
-        }
-        Some(crate::safe_point::ControlAction::CooperativeStop {
-            pending_messages, ..
-        }) => {
-            for message in pending_messages {
-                state.input_queue.enqueue_steer(message);
-            }
-            // D1：协作停止推 SM 到 done、不 abort（stopped 收场）
-            dispatch(state, E::NoToolCalls)?;
-            dispatch(state, E::ShouldStop)?;
-            Ok(HandlerOutcome::end(EndDecision::stopped(state)))
-        }
-        _ => {
-            // 防御性兜底：aborted=true 时 apply_safe_point_control 必为
-            // ForceCancel，其余情形按 ABORT 收场
-            dispatch(state, E::Abort)?;
-            Ok(HandlerOutcome::end(EndDecision::aborted(state)))
-        }
+    if let Some(end) = check_control(state)? {
+        return Ok(HandlerOutcome::end(end));
     }
+    // 防御性兜底：未命中任何总线控制意图时，补发闭合 turn-end 并按 ABORT 收场
+    emit_missing_turn_end(state);
+    dispatch(state, E::Abort)?;
+    Ok(HandlerOutcome::end(EndDecision::aborted(state)))
 }
 
 /// 构建 ProviderRequest（01 §2.4 步骤 1：对话 + 工具 + max_tokens 透传）

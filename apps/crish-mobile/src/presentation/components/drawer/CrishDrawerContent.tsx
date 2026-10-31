@@ -19,7 +19,7 @@ import { countUserDecisions } from '@/domain/pure/approvalAttention';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { AppText, IconButton } from '@/presentation/ui';
 import { SessionListItem } from '@/presentation/components/sessions/SessionListItem';
-import { useDrawerController } from './CrishDrawerLayout';
+import { useDrawerController } from './DrawerContext';
 
 /** 从当前路径解析聚焦会话 id（/session/[id]） */
 export function selectedSessionIdOf(pathname: string): string | null {

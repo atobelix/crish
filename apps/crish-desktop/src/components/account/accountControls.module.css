@@ -212,6 +212,13 @@
   color: var(--account-danger);
 }
 
+.hintText {
+  margin: 0;
+  font-size: var(--account-font-size-label);
+  line-height: var(--account-line-body);
+  color: var(--account-text-3);
+}
+
 .resend {
   font-size: var(--account-font-size-label);
   line-height: var(--account-line-body);

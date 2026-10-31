@@ -2,7 +2,7 @@
  * 6 位验证码格：一个透明的数字输入框覆盖在 6 个视觉格上，
  * 天然支持键盘输入、退格、粘贴与系统一次性验证码自动填充；填满即回调 onComplete。
  */
-import { useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { Input } from '../ui';
 import { ACCOUNT_CODE_LENGTH, normalizeCode } from './accountRules';
 import styles from './accountControls.module.css';
@@ -31,6 +31,7 @@ export function CodeCells({
 }: CodeCellsProps) {
   const [focused, setFocused] = useState(false);
   const activeIndex = value.length < ACCOUNT_CODE_LENGTH ? value.length : -1;
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const next = normalizeCode(event.target.value);
@@ -39,8 +40,16 @@ export function CodeCells({
     if (next.length === ACCOUNT_CODE_LENGTH) onComplete?.(next);
   };
 
+  const handleContainerClick = () => {
+    inputRef.current?.focus();
+  };
+
   return (
-    <div className={styles.cells} data-invalid={invalid ? 'true' : undefined}>
+    <div
+      className={styles.cells}
+      data-invalid={invalid ? 'true' : undefined}
+      onClick={handleContainerClick}
+    >
       {CELL_INDEXES.map((index) => {
         const char = value[index] ?? '';
         const active = focused && index === activeIndex;
@@ -58,6 +67,7 @@ export function CodeCells({
         );
       })}
       <Input
+        ref={inputRef}
         bare
         className={styles.cellsInput}
         value={value}

@@ -227,6 +227,23 @@ describe('ui/Input · 条件 Hook 回归（RUN-01）', () => {
     fireEvent.click(screen.getByRole('button', { name: '显示密码' }));
     expect(screen.getByLabelText('裸起始密码')).toHaveAttribute('type', 'text');
   });
+
+  it('bare 模式：直接渲染原生 input，不生成外层 wrap/shell 容器', () => {
+    const { container } = render(
+      <Input
+        bare
+        className="test-bare-class"
+        placeholder="裸输入框"
+        aria-label="裸输入"
+      />
+    );
+    const input = screen.getByRole('textbox', { name: '裸输入' });
+    expect(input).toBeInTheDocument();
+    expect(input.className).toBe('test-bare-class');
+    expect(input).toHaveAttribute('placeholder', '裸输入框');
+    expect(container.firstElementChild).toBe(input);
+    expect(container.querySelector('div')).toBeNull();
+  });
 });
 
 describe('ui/Textarea', () => {

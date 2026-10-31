@@ -80,6 +80,7 @@ pub(crate) fn workspace_root(app_dir: &Path) -> PathBuf {
     app_dir.to_path_buf()
 }
 
+#[cfg(debug_assertions)]
 fn find_agent_workbench_dir(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start);
     while let Some(dir) = current {

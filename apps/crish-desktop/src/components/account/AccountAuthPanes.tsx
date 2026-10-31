@@ -106,7 +106,9 @@ function EmailStep({ flow }: StepProps) {
           </div>
         ) : null}
         <PrimaryButton disabled={!isValidEmail(flow.email) || flow.busy}>
-          {t('settings.account.auth.continue')}
+          {flow.busy
+            ? t('settings.account.auth.sending')
+            : t('settings.account.auth.continue')}
         </PrimaryButton>
         <Button
           variant="unstyled"
@@ -147,7 +149,15 @@ function CodeStep({ flow }: StepProps) {
           autoFocus
         />
       </div>
-      {flow.error ? (
+      {flow.busy ? (
+        <div className={styles.messageRow}>
+          <p className={controls.hintText} role="status">
+            {flow.code.length === 6
+              ? t('settings.account.auth.verifying')
+              : t('settings.account.auth.sending')}
+          </p>
+        </div>
+      ) : flow.error ? (
         <div className={styles.messageRow}>
           <ErrorText>{flow.error}</ErrorText>
         </div>
@@ -205,7 +215,9 @@ function PasswordStep({ flow }: StepProps) {
       <PrimaryButton
         disabled={!isValidEmail(flow.email) || !flow.password || flow.busy}
       >
-        {t('settings.account.password.submit')}
+        {flow.busy
+          ? t('settings.account.auth.loggingIn')
+          : t('settings.account.password.submit')}
       </PrimaryButton>
     </StepForm>
   );
@@ -233,7 +245,13 @@ function SetPasswordStep({ flow }: StepProps) {
         />
         <PasswordStrengthHint password={flow.password} email={flow.email} />
       </div>
-      {flow.error ? (
+      {flow.busy ? (
+        <div className={styles.messageRow}>
+          <p className={controls.hintText} role="status">
+            {t('settings.account.auth.submitting')}
+          </p>
+        </div>
+      ) : flow.error ? (
         <div className={styles.messageRow}>
           <ErrorText>{flow.error}</ErrorText>
         </div>
@@ -241,7 +259,9 @@ function SetPasswordStep({ flow }: StepProps) {
       <PrimaryButton
         disabled={!isValidPassword(flow.password, flow.email) || flow.busy}
       >
-        {t('settings.account.set.submit')}
+        {flow.busy
+          ? t('settings.account.auth.submitting')
+          : t('settings.account.set.submit')}
       </PrimaryButton>
     </StepForm>
   );
