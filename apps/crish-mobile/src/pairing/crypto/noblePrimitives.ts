@@ -172,6 +172,14 @@ function getRandomSource(): RandomSource {
   return injectedRandomSource ?? resolveDefaultRandomSource();
 }
 
+/**
+ * CSPRNG 随机字节（项目统一随机源：注入 → Web Crypto → ExpoCrypto）。
+ * 供协议层（如会话签名 nonce）取安全随机数使用——禁止 Math.random。
+ */
+export function secureRandomBytes(bytes: number): Uint8Array {
+  return getRandomSource()(bytes);
+}
+
 /** @noble/curves + @noble/hashes 实现（无状态；随机源注入见文件头 DEF-3 修复） */
 export const noblePrimitives: KeyPrimitives = {
   generateKeyPair(): X25519KeyPair {

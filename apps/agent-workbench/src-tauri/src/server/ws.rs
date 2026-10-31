@@ -59,7 +59,9 @@ use std::sync::{Arc, Mutex};
 
 use axum::{
     body::Bytes,
-    extract::{FromRequestParts, Request, State, WebSocketUpgrade},
+    extract::{
+        connect_info::ConnectInfo, FromRequestParts, Request, State, WebSocketUpgrade,
+    },
     http::{header, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
     Json,
@@ -226,6 +228,8 @@ struct ConnCtx {
     token_hash: String,
     /// 本机中继桥连接：跳过设备 HMAC/配对相位门控（只允许 loopback + 桥密钥升级）
     trusted_relay: bool,
+    /// 对端 IP（pair.hello 源 IP 限速用；relay 桥 / 测试直构 = None）
+    peer_ip: Option<std::net::IpAddr>,
 }
 
 /// WS upgrade handler（GET /v1/events）
@@ -240,7 +244,11 @@ struct ConnCtx {
 /// 无令牌/无效令牌连接允许升级进入**配对态**（D3 §5.2「配对期帧无 auth」）
 /// ——连接注册为未认证，仅 pair.hello 可入，配对完成（签发令牌）后转入
 /// 会话态；无配对活动时保持零信任 401（D2 §7.1 不因本例外放宽）。
-pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Request) -> Response {
+pub async fn handle_ws_upgrade(
+    State(state): State<ServerState>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    request: Request,
+) -> Response {
     // Origin 双保险（D2 §10.1：非预期 Origin 拒绝；原生客户端无 Origin
     // 头 → 放行）
     if !origin_allowed(request.headers()) {
@@ -255,10 +263,11 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
     }
     // 配对升级例外判定（无令牌/无效令牌时是否放行配对态连接）
     let pair_pending = crate::server::pair_endpoint::pair_upgrade_allowed(&state);
+    let peer_ip = addr.ip();
     // 令牌提取（query 优先，Bearer 头兜底）
     let Some(token) = token_from_request(request.uri(), request.headers()) else {
         if pair_pending {
-            return upgrade_pairing(request, state).await;
+            return upgrade_pairing(request, state, Some(peer_ip)).await;
         }
         return (
             StatusCode::UNAUTHORIZED,
@@ -284,7 +293,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         }
         auth::TokenVerdict::Invalid => {
             if pair_pending {
-                return upgrade_pairing(request, state).await;
+                return upgrade_pairing(request, state, Some(peer_ip)).await;
             }
             return (
                 StatusCode::UNAUTHORIZED,
@@ -322,6 +331,7 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
             false,
             Some(token_clone),
             false,
+            Some(addr.ip()),
         )
     })
 }
@@ -376,6 +386,7 @@ pub async fn handle_relay_loopback_upgrade(
             false,
             None,
             true,
+            None,
         )
     })
 }
@@ -385,7 +396,11 @@ pub async fn handle_relay_loopback_upgrade(
 /// 占位令牌哈希唯一化（register 的「每令牌一主连接」语义防同占位互踢）；
 /// 配对完成时经 [WsRegistry::mark_authenticated] 迁移为真实令牌哈希
 /// （撤销全链从此可命中）。
-async fn upgrade_pairing(request: Request, state: ServerState) -> Response {
+async fn upgrade_pairing(
+    request: Request,
+    state: ServerState,
+    peer_ip: Option<std::net::IpAddr>,
+) -> Response {
     let (mut parts, _body) = request.into_parts();
     let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
         Ok(ws) => ws,
@@ -402,6 +417,7 @@ async fn upgrade_pairing(request: Request, state: ServerState) -> Response {
             true,
             None,
             false,
+            peer_ip,
         )
     })
 }

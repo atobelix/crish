@@ -2,8 +2,8 @@
 import { router } from 'expo-router';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { AccountDeleteScreen } from '@/presentation/account/accountDeleteScreen';
-import { RequireAccount } from '../_components/RequireAccount';
-import { useSafeBack } from '../_components/useSafeBack';
+import { RequireAccount } from '@/presentation/components/auth/RequireAccount';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function AccountDeleteRoute() {
   const goBack = useSafeBack();

@@ -227,6 +227,16 @@ impl TlsMaterial {
         })
     }
 
+    /// 从证书目录直接读取 CA 指纹（SHA-256(SPKI) 小写 hex 64 位）。
+    ///
+    /// 供 server 装配面在 pair.ok 下发 `tlsFingerprint` 用（实现波总方案 H1）：
+    /// 无需完整 TlsMaterial（不触私钥），只读 CA 证书文件；材料未生成/读取
+    /// 失败 → 错误透传（调用方按「无指纹 → 不下发」处理，移动端 fail-closed）。
+    pub fn ca_fingerprint_in(dir: &Path) -> Result<String, TlsError> {
+        let der = load_cert_der(&dir.join(CA_CERT_FILE))?;
+        spki_sha256_hex(der.as_ref())
+    }
+
     /// 装配 rustls ServerConfig（每次调用全新装配 → 票据密钥随机，跨重启失效，TLS-07）。
     ///
     /// rustls 0.23 的密码套件/密钥交换组由 CryptoProvider 承载（builder 链不再有

@@ -4,7 +4,6 @@ import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import {
   AppText,
   Badge,
-  BrandMark,
   Button,
   Icon,
   IconButton,
@@ -33,15 +32,14 @@ async function renderWithProviders(element: React.ReactElement) {
   return await render(element, { wrapper: Providers });
 }
 
-describe('text / icon / brand', () => {
-  it('renders text, icons, brand mark and spinner', async () => {
+describe('text / icon', () => {
+  it('renders text, icons and spinner', async () => {
     const view = await renderWithProviders(
       <>
         <AppText variant="largeTitle" color="danger">
           标题
         </AppText>
-        <Icon name="home" size={20} />
-        <BrandMark size={48} />
+        <Icon name="menu" size={20} />
         <Spinner centered />
       </>
     );

@@ -214,9 +214,13 @@ describe('证书指纹校验（D3 §4.6 应用层固定最小面）', () => {
     });
   });
 
-  it('有存储值但桌面未下发（当前简化链缺口）→ no-delivered 放行', () => {
+  it('桌面未下发指纹 → no-delivered 拒绝（fail-closed，实现波总方案 H1）', () => {
     expect(checkHostFingerprint(FP_A, undefined)).toEqual({
-      ok: true,
+      ok: false,
+      defense: 'no-delivered',
+    });
+    expect(checkHostFingerprint(undefined, undefined)).toEqual({
+      ok: false,
       defense: 'no-delivered',
     });
   });

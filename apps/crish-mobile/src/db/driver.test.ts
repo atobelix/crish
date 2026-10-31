@@ -31,12 +31,18 @@ describe('MemorySqlDriver 建表与元数据', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('未知语句前缀抛错（fail-fast）', async () => {
+  it('DROP TABLE 不存在的表抛错（fail-fast）', async () => {
     const db = new MemorySqlDriver();
     await setup(db);
-    await expect(db.exec('DROP TABLE demo')).rejects.toThrow(
-      '不支持的 SQL 前缀'
+    await expect(db.exec('DROP TABLE missing_table')).rejects.toThrow(
+      '表不存在'
     );
+    // DROP TABLE IF EXISTS 幂等（v2 幽灵表清理语义）
+    await expect(
+      db.exec('DROP TABLE IF EXISTS missing_table')
+    ).resolves.toBeUndefined();
+    // 未登记前缀仍 fail-fast
+    await expect(db.exec('VACUUM')).rejects.toThrow('不支持的 SQL 前缀');
   });
 
   it('不存在的表抛错', async () => {

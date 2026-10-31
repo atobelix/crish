@@ -24,7 +24,8 @@ export interface SqlDriver {
  * - CREATE TABLE IF NOT EXISTS <t> (<列定义>, ...)：列定义支持 列名 类型 [NOT NULL] [PRIMARY KEY]、
  *   PRIMARY KEY (a, b)、UNIQUE (a, b)、CHECK (...)（忽略）；
  * - CREATE INDEX IF NOT EXISTS ... ON ...：忽略（内存引擎不需要索引）；
- * - INSERT INTO <t> (<列>) VALUES (?, ...)：主键/唯一约束冲突抛错（对齐 SQLite）；
+ * - INSERT INTO <t> (<列>) VALUES (?, ...) [ON CONFLICT(<列>) DO UPDATE SET <列> = ?, ...]：
+ *   主键/唯一约束冲突抛错（对齐 SQLite）；带 ON CONFLICT DO UPDATE 时冲突改走原子更新分支；
  * - SELECT <*|列列表|COUNT(*)|MAX(列)> FROM <t> [WHERE ...] [ORDER BY 列 [ASC|DESC], ...] [LIMIT n] [OFFSET m]；
  * - UPDATE <t> SET 列 = ?, ... [WHERE ...]；DELETE FROM <t> [WHERE ...]；
  * - PRAGMA user_version（读/写）；
@@ -103,11 +104,26 @@ export class MemorySqlDriver implements SqlDriver {
     if (upper.startsWith('CREATE TABLE '))
       return this.execCreateTable(stmt, upper);
     if (upper.startsWith('CREATE INDEX ')) return []; // 索引为优化项，内存引擎忽略
+    if (upper.startsWith('DROP INDEX ')) return []; // 索引为优化项，内存引擎忽略
+    if (upper.startsWith('DROP TABLE ')) return this.execDropTable(stmt);
     if (upper.startsWith('INSERT INTO ')) return this.execInsert(stmt, params);
     if (upper.startsWith('SELECT ')) return this.execSelect(stmt, params);
     if (upper.startsWith('UPDATE ')) return this.execUpdate(stmt, params);
     if (upper.startsWith('DELETE FROM ')) return this.execDelete(stmt, params);
     throw new Error(`内存驱动不支持的 SQL 前缀：${stmt.slice(0, 40)}`);
+  }
+
+  /** DROP TABLE [IF EXISTS] <表名>：删除表结构与行（v2 幽灵表清理） */
+  private execDropTable(stmt: string): unknown[] {
+    const m = /^DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\S+?)\s*;?$/i.exec(stmt);
+    if (!m) throw new Error(`无法解析 DROP TABLE：${stmt.slice(0, 60)}`);
+    const name = m[1]!;
+    if (!this.tables.has(name) && !/if\s+exists/i.test(stmt)) {
+      throw new Error(`表不存在：${name}`);
+    }
+    this.tables.delete(name);
+    this.rows.delete(name);
+    return [];
   }
 
   // ---------------------------------------------------------------------------
@@ -171,8 +187,10 @@ export class MemorySqlDriver implements SqlDriver {
   // ---------------------------------------------------------------------------
 
   private execInsert(stmt: string, params: readonly unknown[]): unknown[] {
+    // 支持 INSERT ... ON CONFLICT(<列>) DO UPDATE SET <列> = ?, ...（原子 upsert；
+    // 语义对齐 SQLite：冲突时改走 UPDATE 分支，参数顺序 = VALUES 参数在前、SET 参数在后）
     const m =
-      /^INSERT\s+INTO\s+(\S+)\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*)\)\s*;?$/i.exec(
+      /^INSERT\s+INTO\s+(\S+)\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*?)\)\s*(?:ON\s+CONFLICT\s*\(([^)]*)\)\s*DO\s+UPDATE\s+SET\s+([\s\S]*?))?\s*;?$/i.exec(
         stmt
       );
     if (!m) throw new Error(`无法解析 INSERT：${stmt.slice(0, 80)}`);
@@ -199,15 +217,72 @@ export class MemorySqlDriver implements SqlDriver {
         row[cols[i]!] = lit[1]!;
       }
     }
+    const existing = this.findConflicting(m[1]!, table, row);
+    if (existing) {
+      if (m[5] === undefined) {
+        this.throwConflict(m[1]!, table, row);
+        return [];
+      }
+      // DO UPDATE 分支：SET 列 = ? 逐项绑定（参数接在 VALUES 参数之后）
+      const assignments = this.splitTopLevel(m[5]!).map((s) => s.trim());
+      for (const assignment of assignments) {
+        const am = /^(\S+)\s*=\s*(\?|\d+(?:\.\d+)?|NULL|'.*')$/s.exec(
+          assignment
+        );
+        if (!am) throw new Error(`ON CONFLICT SET 不支持：${assignment}`);
+        const col = am[1]!;
+        if (am[2] === '?') {
+          existing[col] = this.coerce(table.types.get(col), params[p++]);
+        } else if (/^\d+(\.\d+)?$/.test(am[2]!)) {
+          existing[col] = Number(am[2]);
+        } else if (am[2]!.toUpperCase() === 'NULL') {
+          existing[col] = null;
+        } else {
+          existing[col] = /^'(.*)'$/s.exec(am[2]!)![1]!;
+        }
+      }
+      return [];
+    }
     this.checkUnique(m[1]!, table, row);
     this.rows.get(m[1]!)!.push(row);
     return [];
+  }
+
+  /** 查找与 row 冲突（主键/唯一约束）的既有行（无冲突 → null） */
+  private findConflicting(
+    tableName: string,
+    table: { cols: string[]; pks: string[]; uniques: string[][] },
+    row: Record<string, unknown>
+  ): Record<string, unknown> | null {
+    const conflict = (cols: string[]) => {
+      const existing = this.rows.get(tableName) ?? [];
+      return existing.find((r) => cols.every((c) => this.eq(r[c], row[c])));
+    };
+    if (table.pks.length > 0) {
+      const hit = conflict(table.pks);
+      if (hit) return hit;
+    }
+    for (const u of table.uniques) {
+      const hit = conflict(u);
+      if (hit) return hit;
+    }
+    return null;
   }
 
   /** 校验主键/唯一约束冲突（对齐 SQLite 抛错） */
   private checkUnique(
     tableName: string,
     table: { cols: string[]; pks: string[]; uniques: string[][] },
+    row: Record<string, unknown>
+  ): void {
+    if (this.findConflicting(tableName, table, row) !== null) {
+      this.throwConflict(tableName, table, row);
+    }
+  }
+
+  private throwConflict(
+    tableName: string,
+    table: { pks: string[]; uniques: string[][] },
     row: Record<string, unknown>
   ): void {
     const conflict = (cols: string[]) => {

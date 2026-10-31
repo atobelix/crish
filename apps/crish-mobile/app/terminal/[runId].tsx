@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import TerminalScreen from '@/presentation/screens/terminalScreen';
-import { Protected } from '../_components/Protected';
-import { useSafeBack } from '../_components/useSafeBack';
+import { Protected } from '@/presentation/components/auth/Protected';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function TerminalRoute() {
   const { runId } = useLocalSearchParams<{ runId: string }>();

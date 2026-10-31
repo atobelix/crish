@@ -1,9 +1,9 @@
 // 迁移数组（M5 §5.4：有序 [v1, v2, …]，每项为「迁移名 + SQL 列表」）
 // 迁移纪律（M5 §5.4）：
 // - 只追加不改写：已发布迁移 SQL 禁止修改，新需求走 v2+；
-// - 业务数据保留：迁移不删表不清库（「移除本机」也保留 SQLite，D4 §5.8）；
+// - 业务数据保留：迁移不删业务表（v2 仅清理零读写的死 DDL 表，实现波总方案 D5）；
 // - 幂等测试：覆盖「从 v0 逐级升到最新」与「重复执行不报错」。
-import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { SCHEMA_SQL, SCHEMA_VERSION, V2_CLEANUP_SQL } from './schema';
 
 /** 单个迁移：name 为迁移名，sql 为按序执行的 SQL 列表 */
 export interface Migration {
@@ -21,6 +21,10 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     name: 'v1-initial',
     sql: SCHEMA_SQL,
+  },
+  {
+    name: 'v2-drop-ghost-tables',
+    sql: V2_CLEANUP_SQL,
   },
 ];
 

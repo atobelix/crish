@@ -60,7 +60,7 @@ export default function NotificationCenterScreen({
         }
       />
       {vm.items.length === 0 ? (
-        <EmptyState icon="bell" title="暂无通知" />
+        <EmptyState title="暂无通知" />
       ) : (
         <FlatList
           testID="notification-list"

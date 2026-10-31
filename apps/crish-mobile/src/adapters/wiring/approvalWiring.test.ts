@@ -8,6 +8,12 @@
 // - 对账：resume 后 remote.listPendingApprovals 双向往收敛（引擎有补入 / 本地无移除 /
 //   deciding 在途保留）；仓库失败宽容跳过。
 // 测试风格对齐 filesRepository.test.ts：真实 WsGateway（注入捕获 send）+ 手工 dispatch 响应帧。
+// DB 就绪门禁（实现波总方案 D3）在单测中桩为「driver 已收敛」：装配闭环在本文件验证，
+// 持久化语义由 dbBootstrap.test / outboxPersist.test 覆盖。
+jest.mock('@/db/dbBootstrap', () => ({
+  ensureDatabaseReady: jest.fn(async () => null),
+  ensureDatabaseForApp: jest.fn(async () => ({ ok: true, version: 2 })),
+}));
 import { WsGateway } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import { approvalStore } from '@/domain/store/approvalStore';
@@ -720,9 +726,11 @@ describe('approvalWiring：装配单例（ensureApprovalWiring）', () => {
         sent.push(JSON.parse(raw) as SentFrame);
       },
     });
-    const wiring = ensureApprovalWiring({ gateway });
+    // DB 就绪门禁为异步桩：同步返回 null，微任务收敛后单例就绪
+    ensureApprovalWiring({ gateway });
+    await tick();
+    const wiring = getApprovalWiring();
     expect(wiring).not.toBeNull();
-    expect(getApprovalWiring()).toBe(wiring);
 
     const store = approvalStore.getState();
     store.upsertPending({

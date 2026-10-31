@@ -199,7 +199,10 @@ fn wire_event_converts_to_loop_event() {
 /// 分类错误：ProviderError → ClassifiedStreamError（kind/retryable 透传）
 #[test]
 fn classified_error_preserves_kind_and_retryable() {
-    let error = agent_provider::error::ProviderError::Server { status: Some(503) };
+    let error = agent_provider::error::ProviderError::Server {
+        status: Some(503),
+        body_hint: None,
+    };
     let classified = to_classified(error);
     assert_eq!(classified.kind, ProviderErrorKind::ServerError);
     assert!(classified.retryable);

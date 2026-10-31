@@ -10,17 +10,23 @@ import type { OutgoingEnvelope } from '@/network/WsEnvelope';
 import { WsGateway } from '@/network/WsGateway';
 import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
 import type { JsonValue } from '@crish/shared-types';
+import { secureRandomBytes } from '@/pairing/crypto/noblePrimitives';
 import { ensureObservationWiring } from '../observationWiring';
 import type { PairingSessionContext } from './PairingWiring';
 
 /**
  * 随机 nonce（16 字节 → base64；D3 §5.1「随机16字节base64」）。
- * 随机源可注入（缺省 Math.random；RN/Hermes 可用，不依赖 crypto.getRandomValues）。
+ * CSPRNG：项目统一随机源（Web Crypto / ExpoCrypto，见 noblePrimitives），
+ * 杜绝 Math.random 伪随机（实现波总方案 V24）；随机源仍可注入（测试固定值）。
  */
-export function randomNonce(rand: () => number = Math.random): string {
+export function randomNonce(rand?: () => number): string {
   const bytes = new Uint8Array(16);
-  for (let i = 0; i < bytes.length; i += 1) {
-    bytes[i] = Math.floor(rand() * 256);
+  if (rand) {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(rand() * 256);
+    }
+  } else {
+    bytes.set(secureRandomBytes(16));
   }
   return signerBase64Encode(bytes);
 }

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { router } from 'expo-router';
 import NewChatScreen from '@/presentation/screens/newChatScreen';
-import { useOpenDrawer } from '../_components/useOpenDrawer';
+import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
 
 export default function NewChatRoute() {
   const openDrawer = useOpenDrawer();

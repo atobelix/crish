@@ -32,23 +32,12 @@ export class SqlSettingsDao implements SettingsDao {
   }
 
   async set(key: string, value: string): Promise<void> {
-    const existing = await this.driver.getFirst<{ key: string }>(
-      'SELECT key FROM settings WHERE key = ?',
-      [key]
+    // 原子 upsert：单条 ON CONFLICT 语句（消除 Check-Then-Act 竞态，同 notificationsDao）
+    await this.driver.exec(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?',
+      [key, value, value]
     );
-    if (existing !== null) {
-      await this.driver.exec('UPDATE settings SET value = ? WHERE key = ?', [
-        value,
-        key,
-      ]);
-      return;
-    }
-    await this.driver.exec('INSERT INTO settings (key, value) VALUES (?, ?)', [
-      key,
-      value,
-    ]);
   }
-
   async delete(key: string): Promise<void> {
     await this.driver.exec('DELETE FROM settings WHERE key = ?', [key]);
   }

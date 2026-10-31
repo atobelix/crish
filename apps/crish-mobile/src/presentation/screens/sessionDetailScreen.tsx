@@ -27,7 +27,6 @@ import { MenuButton } from '@/presentation/components/chat/MenuButton';
 import {
   AppText,
   Composer,
-  Icon,
   IconButton,
   ListRow,
   Screen,
@@ -211,7 +210,6 @@ export default function SessionDetailScreen({
         {currentRunId && onOpenRun ? (
           <ListRow
             title="运行详情"
-            leading={<Icon name="activity" size={theme.size.icon} />}
             onPress={closeMoreThen(() => onOpenRun(currentRunId))}
             divider
           />
@@ -219,7 +217,6 @@ export default function SessionDetailScreen({
         {currentRunId && onOpenTerminal ? (
           <ListRow
             title="终端输出"
-            leading={<Icon name="terminal" size={theme.size.icon} />}
             onPress={closeMoreThen(() => onOpenTerminal(currentRunId))}
             divider
           />
@@ -227,7 +224,6 @@ export default function SessionDetailScreen({
         {hasTools && onOpenTools ? (
           <ListRow
             title="工具调用"
-            leading={<Icon name="wrench" size={theme.size.icon} />}
             onPress={closeMoreThen(() => onOpenTools())}
             divider={false}
             testID="session-more-tools"

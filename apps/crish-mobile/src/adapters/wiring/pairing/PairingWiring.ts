@@ -625,34 +625,33 @@ export class PairingWiring {
     const deviceId = hello.deviceId;
     const tokenKey = s.sessionKeys?.tokenKey ?? ok.token; // 简化链回退
     const refreshKey = s.sessionKeys?.refreshKey ?? ok.token;
-    // ── 证书指纹收口（D3 §4.6 证书固定最小面）：下发值 = ok 扩展 ?? challenge
-    // 权威载体；格式非法（非 64 位 hex）→ 放弃钉扎（缺口记录，不阻断配对）；
-    // 与已存储 host_fingerprint 位比对（verifyStoredFingerprint：防本地篡改/
-    // 捕获证书轮换）——mismatch → 失败关闭：不持久化、不连接（失败关闭语义）。
+    // ── 证书指纹收口（D3 §4.6 / 实现波总方案 H1 fail-closed）：pair.ok 必带
+    // tlsFingerprint（桌面 pair_ok_body 强制下发）；缺失或格式非法 → 拒绝完成
+    // 配对（桌面端过旧 / 载荷被篡改，不留静默缺口）；与已存储 host_fingerprint
+    // 位比对——mismatch → 失败关闭：不持久化、不连接。
     const delivered =
       ok.tlsFingerprint ?? this.pendingHostFingerprint ?? undefined;
     const fingerprint =
       delivered !== undefined && isValidTlsFingerprint(delivered)
         ? delivered.trim().toLowerCase()
         : undefined;
-    if (delivered !== undefined && fingerprint === undefined) {
-      console.warn(
-        '[PairingWiring] 桌面下发证书指纹格式非法（需 64 位 hex），放弃钉扎（缺口记录）'
-      );
-    }
     const storedFingerprint = await this.driver.getItem(KEYS.HOST_FINGERPRINT);
-    if (
-      !verifyStoredFingerprint(storedFingerprint ?? undefined, fingerprint).ok
-    ) {
+    const check = verifyStoredFingerprint(
+      storedFingerprint ?? undefined,
+      fingerprint
+    );
+    if (!check.ok) {
       this.reportError({
         code: 'pairing.fingerprint_mismatch',
         message:
-          '配对载荷证书指纹与已存储指纹不一致（证书轮换/本地篡改），拒绝完成配对',
+          check.defense === 'no-delivered'
+            ? '桌面未下发证书指纹（桌面端版本过旧或配对载荷异常），拒绝完成配对——请升级桌面端后重试'
+            : '配对载荷证书指纹与已存储指纹不一致（证书轮换/本地篡改），拒绝完成配对',
         retryable: false,
       });
       authStore.getState().setPairingMeta({ stage: 'failed' });
       this.closePairingConnection();
-      return; // 指纹不一致：不持久化、不连接
+      return; // 指纹缺口/不一致：不持久化、不连接
     }
     const cred: PairingCredential = {
       tokenKey,

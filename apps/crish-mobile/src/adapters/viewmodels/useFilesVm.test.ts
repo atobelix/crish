@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe('errorCodeOf', () => {
   it('FilesCommandError 取协议错误码', () => {
-    expect(errorCodeOf(new FilesCommandError('not_found', 'x'))).toBe(
+    expect(errorCodeOf(new FilesCommandError('not_found', 'x', false))).toBe(
       'not_found'
     );
   });
@@ -102,7 +102,7 @@ describe('filesStore 导航动作（VM 直接驱动的数据面）', () => {
   });
 
   it('setSortMode 写入 store', () => {
-    filesStore.getState().setSortMode('date');
-    expect(filesStore.getState().sortMode).toBe('date');
+    filesStore.getState().setSortMode('mtime-desc');
+    expect(filesStore.getState().sortMode).toBe('mtime-desc');
   });
 });

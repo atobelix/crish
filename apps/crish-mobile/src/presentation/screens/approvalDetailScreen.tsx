@@ -139,13 +139,6 @@ export default function ApprovalDetailScreen({
           </>
         ) : vm.historyResult ? (
           <EmptyState
-            icon={
-              vm.historyResult.decision === 'approved'
-                ? 'check-circle'
-                : vm.historyResult.decision === 'denied'
-                  ? 'x'
-                  : 'clock'
-            }
             title={DECISION_TEXT[vm.historyResult.decision]}
             action={
               <Button label="关闭" variant="secondary" onPress={onBack} />
@@ -153,7 +146,6 @@ export default function ApprovalDetailScreen({
           />
         ) : (
           <EmptyState
-            icon="alert-circle"
             title="请求不存在或已过期"
             action={
               <Button label="关闭" variant="secondary" onPress={onBack} />

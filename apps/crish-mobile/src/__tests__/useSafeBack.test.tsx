@@ -10,7 +10,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import {
   useSafeBack,
   SAFE_BACK_FALLBACK_HREF,
-} from '../../app/_components/useSafeBack';
+} from '@/presentation/navigation/useSafeBack';
 
 jest.mock('expo-router', () => ({
   router: {

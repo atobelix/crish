@@ -1,10 +1,9 @@
-// 账号 v3 欢迎页：品牌标 + Crish，两种进入方式（邮箱账号 / 扫码直连电脑）。
+// 账号 v3 欢迎页：大标题 + 两种进入方式（邮箱账号 / 扫码直连电脑）。
+// N05/D7 裁定：品牌大图标删除（文字已足够，非必要不显示图标）。
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, BrandMark } from '@/presentation/ui';
+import { AppText } from '@/presentation/ui';
 import { AuthButton, AuthPage } from './ui';
-
-const BRAND_MARK_SIZE = 64;
 
 export interface WelcomeScreenProps {
   onContinueWithEmail: () => void;
@@ -19,7 +18,6 @@ export function WelcomeScreen({
   return (
     <AuthPage testID="welcome-screen">
       <View style={[styles.hero, { gap: theme.space.lg }]}>
-        <BrandMark size={BRAND_MARK_SIZE} />
         <AppText variant="bigTitle" color="textPrimary">
           Crish
         </AppText>

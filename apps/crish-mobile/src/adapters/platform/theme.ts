@@ -26,7 +26,6 @@ export interface ThemeColors {
   // 线
   hairline: string;
   borderStrong: string;
-  borderFocus: string;
   // 主操作（墨色）
   actionPrimary: string;
   actionPrimaryText: string;
@@ -59,29 +58,9 @@ export interface ThemeColors {
   /** 浮动圆钮与底部 sheet 的磨砂玻璃底色（叠在 BlurView 上） */
   glass: string;
   glassSheet: string;
-  /** @deprecated 迁移期别名 @see fillSubtle */
-  surfaceSubtle: string;
-  /** @deprecated 迁移期别名 @see hairline */
-  border: string;
-  /** @deprecated 迁移期别名 @see brand */
-  accent: string;
-  /** @deprecated 迁移期别名：主操作 @see actionPrimary ；品牌文字 @see brandStrong */
-  accentStrong: string;
-  /** @deprecated 迁移期别名 @see brandSoft */
-  accentSoft: string;
-  /** @deprecated 迁移期别名 @see actionPrimaryText */
-  accentForeground: string;
 }
 
-type BaseColors = Omit<
-  ThemeColors,
-  | 'surfaceSubtle'
-  | 'border'
-  | 'accent'
-  | 'accentStrong'
-  | 'accentSoft'
-  | 'accentForeground'
->;
+type BaseColors = ThemeColors;
 
 export interface ThemeSpace {
   xxs: number;
@@ -199,8 +178,12 @@ export interface ThemeLayout {
   /** 抽屉宽度 = min(屏宽 × ratio, maxWidth) */
   drawerWidthRatio: number;
   drawerMaxWidth: number;
-  /** 抽屉边缘滑出手势热区宽度（与 iOS 返回手势错开，需真机复核） */
+  /** 抽屉边缘滑出手势热区宽度（64dp：避开 Android 全面屏返回手势 0~32dp 感应带） */
   drawerSwipeEdgeWidth: number;
+  /** 抽屉完全展开时主界面卡片微缩放（景深） */
+  drawerCardScale: number;
+  /** 底层抽屉内容视差位移（负值 = 向左退让） */
+  drawerParallaxOffset: number;
   /** Composer 输入区最大高度（超出后内部滚动） */
   composerInputMaxHeight: number;
   /** 工具调用抽屉停靠点（屏高比例，升序） */
@@ -214,8 +197,8 @@ export interface ThemeLayout {
   /** 账号 v3 输入框内边距、页面水平边距 */
   fieldPadding: number;
   accountPageX: number;
-  /** 资料页相机钮外圈（与底色同色的描边） */
-  avatarRing: number;
+  /** 图标全局唯一标准线宽（24 网格） */
+  iconStroke: number;
 }
 
 export interface ThemeShadow {
@@ -232,6 +215,13 @@ export interface ThemeShadow {
 
 export type Bezier = readonly [number, number, number, number];
 
+/** 物理弹簧参数（Reanimated withSpring 消费；实现波总方案 F1 单一真源） */
+export interface SpringParams {
+  damping: number;
+  stiffness: number;
+  mass: number;
+}
+
 export interface ThemeMotion {
   duration: {
     micro: number;
@@ -243,15 +233,18 @@ export interface ThemeMotion {
   };
   easing: { standard: Bezier; emphasized: Bezier; decelerate: Bezier };
   enter: { duration: number; translateY: number };
-  /** 账号 v3：页面推入、输入框聚焦、sheet 弹簧、验证码出错抖动（按压统一走 pressScale） */
-  account: {
-    push: number;
-    pushEasing: Bezier;
-    fieldFocus: number;
-    sheetSpring: { damping: number; stiffness: number };
-    scrim: number;
-    shake: { duration: number; distance: number; count: number; clear: number };
+  /** 物理弹簧族：胶囊回弹 / 轻提示 / 面板 / 抽屉层叠 / 滑动确认回弹 */
+  spring: {
+    snappy: SpringParams;
+    bouncy: SpringParams;
+    sheet: SpringParams;
+    drawer: SpringParams;
+    slideThumb: SpringParams;
   };
+  /** 验证码出错抖动（Reanimated withSequence 消费） */
+  shake: { duration: number; distance: number; cycles: number };
+  /** 全局 Toast 展示时长 */
+  toast: { displayMs: number };
   pressScale: number;
   pressOpacity: number;
 }
@@ -289,7 +282,6 @@ const lightBase: BaseColors = {
   textDisabled: '#b5b5b5',
   hairline: '#ebebeb',
   borderStrong: '#e1e1e1',
-  borderFocus: '#cccccc',
   actionPrimary: '#0d0d0d',
   actionPrimaryText: '#ffffff',
   actionDisabled: '#ececec',
@@ -331,7 +323,6 @@ const darkBase: BaseColors = {
   textDisabled: '#5a5a5a',
   hairline: '#1b1b1b',
   borderStrong: '#2e2e2e',
-  borderFocus: '#4a4a4a',
   actionPrimary: '#f2f2f2',
   actionPrimaryText: '#0d0d0d',
   actionDisabled: '#202020',
@@ -357,19 +348,6 @@ const darkBase: BaseColors = {
   glass: 'rgba(32,32,32,0.68)',
   glassSheet: 'rgba(22,22,22,0.84)',
 };
-
-/** 迁移期别名：旧键指向新键的值，组件逐步改名后删除 */
-function withAliases(base: BaseColors): ThemeColors {
-  return {
-    ...base,
-    surfaceSubtle: base.fillSubtle,
-    border: base.hairline,
-    accent: base.brand,
-    accentStrong: base.actionPrimary,
-    accentSoft: base.brandSoft,
-    accentForeground: base.actionPrimaryText,
-  };
-}
 
 const space: ThemeSpace = {
   xxs: 2,
@@ -501,7 +479,12 @@ const size: ThemeSize = {
 const layout: ThemeLayout = {
   drawerWidthRatio: 0.84,
   drawerMaxWidth: 340,
-  drawerSwipeEdgeWidth: 32,
+  // 64dp：避开 Android 全面屏系统返回手势的 0~32dp 感应带（实现波总方案 D8）
+  drawerSwipeEdgeWidth: 64,
+  /** 抽屉完全展开时主界面卡片的微缩放景深比例 */
+  drawerCardScale: 0.94,
+  /** 底层抽屉内容随开合的视差位移（负值 = 向左退让） */
+  drawerParallaxOffset: -36,
   composerInputMaxHeight: 120,
   toolSheetDetents: [0.45, 0.92],
   approvalSheetDetents: [0.6, 0.92],
@@ -509,7 +492,8 @@ const layout: ThemeLayout = {
   brandMarkCorner: 0.3,
   fieldPadding: 18,
   accountPageX: 24,
-  avatarRing: 3,
+  /** 图标全局唯一标准线宽（24 网格） */
+  iconStroke: 2,
 };
 
 function makeShadow(
@@ -575,15 +559,16 @@ const motion: ThemeMotion = {
     emphasized: [0.16, 1, 0.3, 1],
     decelerate: [0, 0, 0.2, 1],
   },
-  enter: { duration: 180, translateY: 6 },
-  account: {
-    push: 320,
-    pushEasing: [0.32, 0.72, 0, 1],
-    fieldFocus: 160,
-    sheetSpring: { damping: 28, stiffness: 300 },
-    scrim: 200,
-    shake: { duration: 320, distance: 6, count: 3, clear: 150 },
+  enter: { duration: 150, translateY: 6 },
+  spring: {
+    snappy: { damping: 20, stiffness: 350, mass: 0.8 },
+    bouncy: { damping: 15, stiffness: 200, mass: 1 },
+    sheet: { damping: 28, stiffness: 300, mass: 1 },
+    drawer: { damping: 30, stiffness: 260, mass: 1 },
+    slideThumb: { damping: 25, stiffness: 320, mass: 0.9 },
   },
+  shake: { duration: 240, distance: 6, cycles: 3 },
+  toast: { displayMs: 2500 },
   pressScale: 0.98,
   pressOpacity: 0.7,
 };
@@ -614,7 +599,7 @@ function buildTheme(
 ): Theme {
   return {
     dark,
-    colors: withAliases(base),
+    colors: base,
     space,
     radius,
     type,

@@ -36,7 +36,7 @@ describe('layout atoms', () => {
             <AppText>卡片</AppText>
           </Card>
         </Screen>
-        <EmptyState icon="messages" title="还没有会话" action={<Badge dot />} />
+        <EmptyState title="还没有会话" action={<Badge dot />} />
         <AppHeader large title="首页" actions={<Badge dot />} />
         <AppHeader
           title="详情"

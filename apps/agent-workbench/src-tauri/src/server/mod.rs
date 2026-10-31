@@ -463,6 +463,24 @@ impl ServerState {
         self.pairing.clone()
     }
 
+    /// TLS 启用时的 CA 指纹（SHA-256(SPKI) 小写 hex 64 位；实现波总方案 H1）。
+    ///
+    /// 配对面在 pair.ok 中下发 `tlsFingerprint`，移动端据此落 pinning 锚并做
+    /// 一致性校验（fail-closed：无指纹 → 配对失败）。TLS 未启用 / 材料未生成
+    /// → None（移动端拒绝完成配对并提示升级桌面端）。
+    pub fn ca_fingerprint(&self) -> Option<String> {
+        if !self.config.tls_enabled {
+            return None;
+        }
+        let dir = self
+            .config
+            .tls_cert_dir
+            .clone()
+            .unwrap_or_else(crate::multi_device::tls::cert_dir);
+        crate::multi_device::tls::TlsMaterial::ca_fingerprint_in(&dir)
+            .ok()
+    }
+
     /// 多端服务开关（D5 D-01 红线 1 的路由层镜像：false 时 REST /v1/pair
     /// 返回 503——服务未开启语义；生产装配面 enabled=false 时根本不 bind，
     /// 本检查兜住路由层测试与异常装配）

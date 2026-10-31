@@ -1,8 +1,7 @@
 // 会话时间线渲染：用户气泡 / 助手无框正文 / 工具摘要行 / 审批一行状态 / 系统提示。
 // 渲染前先经 groupToolRuns 把相邻工具折叠成摘要，详情交给工具抽屉。
-import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import {
-  Animated,
   FlatList,
   StyleSheet,
   View,
@@ -11,7 +10,7 @@ import {
 } from 'react-native';
 import type { RefObject } from 'react';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, EmptyState, Icon, type TextColor } from '@/presentation/ui';
+import { AppText, EmptyState, type TextColor } from '@/presentation/ui';
 import { StreamingText } from '@/presentation/components/blocks/StreamingText';
 import type {
   ApprovalBlock,
@@ -69,11 +68,13 @@ export function TimelineView({
       testID="session-timeline"
       data={display}
       keyExtractor={(block) => `${block.kind}:${block.id}`}
+      // 滚动复用免动画（实现波总方案 F5/N04：删除每项 FadeIn 包裹——
+      // 回收再挂载反复淡入是高刷滚动闪烁根因）；首击不吞噬 + 滑动收键盘
       renderItem={({ item }) => (
-        <FadeIn>
-          <TimelineBlockView block={item} onOpenTools={onOpenTools} />
-        </FadeIn>
+        <TimelineBlockView block={item} onOpenTools={onOpenTools} />
       )}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={[
         {
           paddingHorizontal: theme.space.screenX,
@@ -88,7 +89,7 @@ export function TimelineView({
       initialNumToRender={16}
       maxToRenderPerBatch={16}
       windowSize={9}
-      ListEmptyComponent={<EmptyState icon="messages" title={emptyTitle} />}
+      ListEmptyComponent={<EmptyState title={emptyTitle} />}
     />
   );
 }
@@ -111,33 +112,6 @@ const TimelineBlockView = memo(function TimelineBlockView({
       return <NoticeView block={block} />;
   }
 });
-
-/** 新块进入：淡入上移（motion.enter） */
-function FadeIn({ children }: { children: ReactNode }) {
-  const theme = useTheme();
-  const { duration, translateY: offset } = theme.motion.enter;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(offset)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [opacity, translateY, duration]);
-  return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      {children}
-    </Animated.View>
-  );
-}
 
 function MessageView({ block }: { block: AssistantMessageBlock }) {
   const theme = useTheme();
@@ -181,11 +155,7 @@ function ApprovalView({ block }: { block: ApprovalBlock }) {
       accessibilityLabel={`审批：${block.toolName}，${label}`}
       style={[styles.inlineRow, { gap: theme.space.xs }]}
     >
-      <Icon
-        name="shield"
-        size={theme.size.iconSmall}
-        color={theme.colors[color]}
-      />
+      {/* N05 裁定：文字已含语义与色彩层级，前置盾牌属装饰，不显示 */}
       <AppText variant="footnote" color={color} numberOfLines={1}>
         {label} · {block.toolName}
       </AppText>
@@ -228,13 +198,7 @@ function NoticeView({ block }: { block: NoticeBlock }) {
   const color = noticeColor(block.tone);
   return (
     <View style={[styles.inlineRow, styles.center, { gap: theme.space.xs }]}>
-      {block.tone === 'danger' ? (
-        <Icon
-          name="alert-circle"
-          size={theme.size.iconSmall}
-          color={theme.colors[color]}
-        />
-      ) : null}
+      {/* N05 裁定：danger 红字已表达警示，前置叹号属装饰，不显示 */}
       <AppText variant="caption" color={color} style={styles.centerText}>
         {block.text}
       </AppText>

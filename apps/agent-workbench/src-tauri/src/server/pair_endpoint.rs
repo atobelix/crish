@@ -208,11 +208,20 @@ pub fn handle_pair_hello(
 /// pair.ok 载荷（D3 PairOk {desktopId, ttl} + token 明文扩展——本实现令牌 =
 /// TokenStore 明文 64-hex（R1-07 既定），任务书要求 ok 含 token 明文；
 /// 注册表 schema 未改（两端解析器对未知字段宽松，对拍不受影响））
-pub fn pair_ok_body(desktop_id: &str, token: &str) -> serde_json::Value {
+///
+/// `tls_fingerprint`（实现波总方案 H1）：TLS 启用时必发 CA 指纹
+/// （SHA-256(SPKI) 小写 hex 64 位），移动端落 pinning 锚；None = TLS 未启用 /
+/// 材料缺失，移动端 fail-closed 拒绝完成配对。
+pub fn pair_ok_body(
+    desktop_id: &str,
+    token: &str,
+    tls_fingerprint: Option<&str>,
+) -> serde_json::Value {
     serde_json::json!({
         "desktopId": desktop_id,
         "ttl": PAIR_TTL_SECONDS,
         "token": token,
+        "tlsFingerprint": tls_fingerprint,
     })
 }
 

@@ -55,15 +55,12 @@ export function ApprovalFloatCard({
       accessibilityLabel={`待审批：${item.request.toolName}，打开所属会话`}
       onPress={onOpenSession}
       style={[
-        styles.card,
         {
           padding: theme.space.lg,
           gap: theme.space.md,
           borderRadius: theme.radius.card,
           backgroundColor: theme.colors.surfaceRaised,
-          borderColor: theme.colors.hairline,
         },
-        theme.shadow.lg,
       ]}
     >
       <View style={[styles.row, { gap: theme.space.sm }]}>
@@ -128,7 +125,6 @@ export function ApprovalFloatCard({
         <Button
           label="查看并滑动确认"
           variant="primary"
-          icon="shield"
           onPress={onReview}
           testID="approval-float-review"
         />
@@ -138,7 +134,6 @@ export function ApprovalFloatCard({
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1 },
   tabular: { fontVariant: ['tabular-nums'] },

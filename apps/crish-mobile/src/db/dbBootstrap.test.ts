@@ -119,7 +119,7 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
     configureSqlitePersistence(null);
   });
 
-  it('装配链：open → pragma → user_version → migrate → configure → hydrate（顺序 + 8 表建成）', async () => {
+  it('装配链：open → pragma → user_version → migrate → configure → hydrate（顺序 + v2 收敛 3 表）', async () => {
     const open = jest.fn(async (name: string) => {
       calls.push('open');
       expect(name).toBe(MOBILE_DB_NAME);
@@ -128,21 +128,10 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     const result = await ensureDatabaseForApp({ open });
 
-    expect(result).toEqual({ ok: true, version: 1 });
-    // 真实迁移全链路：schema v1 的 8 表建成
+    expect(result).toEqual({ ok: true, version: 2 });
+    // 真实迁移全链路：v1 建 8 表 → v2 清理幽灵表，最终仅剩 3 张生效表
     const tables = driver.listTables();
-    for (const t of [
-      'events',
-      'approval_queue',
-      'approval_history',
-      'session_summaries',
-      'settings',
-      'push_tokens',
-      'device_info',
-      'notifications',
-    ]) {
-      expect(tables).toContain(t);
-    }
+    expect(tables).toEqual(['approval_queue', 'notifications', 'settings']);
     // 调用顺序：open < 连接 PRAGMA < user_version < 迁移 SQL < hydrate 读库
     const idx = (tag: string): number => calls.indexOf(tag);
     expect(idx('open')).toBeGreaterThanOrEqual(0);
@@ -160,7 +149,7 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     expect(jest.mocked(openDatabaseAsync)).toHaveBeenCalledWith(MOBILE_DB_NAME);
     expect(result.ok).toBe(true);
-    expect(result.version).toBe(1);
+    expect(result.version).toBe(2);
     expect(settingsStore.getState().hydrated).toBe(true);
     expect(notificationStore.getState().hydrated).toBe(true);
   });

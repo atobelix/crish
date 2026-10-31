@@ -33,9 +33,7 @@ export function ApprovalFloatPill({
           backgroundColor: pressed
             ? theme.colors.fillPressed
             : theme.colors.surfaceRaised,
-          borderColor: theme.colors.hairline,
         },
-        theme.shadow.md,
       ]}
     >
       <Badge dot tone="warning" />
@@ -51,7 +49,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   tabular: { fontVariant: ['tabular-nums'] },
 });

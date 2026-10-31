@@ -4,9 +4,9 @@
 //   → dispatchIngestActions（eventStore / sessionStore 动作执行）；
 // - 连接相位投影：WsPhase → eventStore.setNetwork（live/reconnecting/offline，F3 §3.2.1）
 //   + connectionStore.setPhase（mapWsPhase，M5 §4.3.1 投影表）；
-// - 重连对账驱动（M6 §9.3，R2-02b onProjection 消费）：resume/full-replay/fresh 会话
-//   逐条发 events.resume 请求（增量补齐 / 快照重建），resume.page hasMore 自动续页，
-//   cleanup 清理本地投影 + 事件窗口，对账后重拉会话索引（② 投影对账收敛）；
+// - 序列空洞自愈：乱序高帧暂存（stash）→ events.resume 增量补齐 → 按序 drain，
+//   补洞帧不再被「乱序帧先行推进 lastSeq」误判 duplicate（实现波总方案 C1）；
+//   resume.page hasMore 自动续页（M6 §9.3 ③ 增量补齐闭环）；
 // - 窗口卸载策略（R2UX-05-09：≤4 活跃窗口，超出卸载最久未活跃者）——接线层调度位；
 // - 设备在场查询：open 相位 fire-and-forget remote.listDevices → devicePresenceStore。
 // 注入模式：gateway 实例构造注入（测试 mock；生产由 ReconnectingWsClient.gateway 提供）。
@@ -60,6 +60,14 @@ export const MAX_SUBSCRIPTIONS = 32;
 
 /** 单会话回填页数上限（500 条窗口 + 起始页余量） */
 const MAX_BACKFILL_PAGES = 6;
+
+/** 从 events.push 信封提取会话级 sequence（缺省/畸形 → null） */
+function sequenceOfFrame(frame: InboundEnvelope): number | null {
+  const body = readRecord(frame.body) ?? {};
+  const ev = readRecord(body['event']) ?? {};
+  const seq = ev['sequence'];
+  return typeof seq === 'number' ? seq : null;
+}
 
 export interface FeedBridgeOptions {
   /** 网关实例（生产 = ReconnectingWsClient.gateway；测试注入 mock） */
@@ -129,8 +137,10 @@ export class FeedBridge {
       return;
     }
 
-    // 序列空洞探测（Sequence Gap Detection）：
-    // 若收到 events.push 且 sequence 大于当前游标 + 1，触发增量回放补洞自愈
+    // 序列空洞探测（Sequence Gap Detection，实现波总方案 C1）：
+    // 收到 events.push 且 sequence 大于当前游标 + 1 → 帧**暂存不投递**（防止
+    // 乱序高帧先行推进 lastSeq 导致补洞帧被判 duplicate 全弃），同时触发增量
+    // 回放补洞；空洞闭合后按序 drain 暂存帧。
     if (frame.kind === 'events.push') {
       const body = readRecord(frame.body) ?? {};
       const ev = readRecord(body['event']) ?? {};
@@ -140,7 +150,18 @@ export class FeedBridge {
       if (sessionId && seq !== null) {
         const currentSeq = lastSeqOf(sessionId);
         if (currentSeq > 0 && seq > currentSeq + 1) {
+          this.stashOutOfOrder(sessionId, seq, frame);
           this.resumeSession(sessionId, currentSeq);
+          return;
+        }
+        if (currentSeq > 0 && seq === currentSeq + 1) {
+          this.applyActions(
+            mapDeviceFrame({ kind: frame.kind, body: frame.body })
+          );
+          this.markActive(sessionId);
+          this.drainStash(sessionId);
+          this.unloadExcessWindows();
+          return;
         }
       }
     }
@@ -162,12 +183,58 @@ export class FeedBridge {
     if (sessionId) this.markActive(sessionId);
     const actions = mapDeviceFrame({ kind: frame.kind, body: frame.body });
     this.applyActions(actions);
+    if (sessionId) this.drainStash(sessionId);
     if (sessionId && readBool(body, 'hasMore')) {
       // 续页：以 store 游标（nextAfterSequence 已并入，只升不降）为下一页起点
       this.resumeSession(sessionId, lastSeqOf(sessionId));
     } else if (sessionId) {
       this.inflightResume.delete(sessionId);
     }
+  }
+
+  // ── 序列空洞暂存缓冲（实现波总方案 C1）──────────────────────────────────
+  // 空洞闭合前到达的高序号帧在此等待；drainStash 按序投递，任何帧不再
+  // 因「后到先入库推进 lastSeq」而丢失。
+
+  private readonly stashBySession = new Map<string, InboundEnvelope[]>();
+
+  /** 暂存乱序高帧（按 seq 升序插入；同 seq 去重） */
+  private stashOutOfOrder(
+    sessionId: string,
+    seq: number,
+    frame: InboundEnvelope
+  ): void {
+    const list = this.stashBySession.get(sessionId) ?? [];
+    if (list.some((f) => sequenceOfFrame(f) === seq)) return;
+    const next = [...list, frame];
+    next.sort((a, b) => (sequenceOfFrame(a) ?? 0) - (sequenceOfFrame(b) ?? 0));
+    this.stashBySession.set(sessionId, next);
+  }
+
+  /** 空洞闭合后按序 drain：seq ≤ 游标丢弃（重复），seq = 游标+1 投递，遇空洞停 */
+  private drainStash(sessionId: string): void {
+    const list = this.stashBySession.get(sessionId);
+    if (!list || list.length === 0) return;
+    this.stashBySession.delete(sessionId);
+    for (const frame of list) {
+      const seq = sequenceOfFrame(frame);
+      const currentSeq = lastSeqOf(sessionId);
+      if (seq !== null && currentSeq > 0) {
+        if (seq <= currentSeq) continue; // 补洞已覆盖该帧：判重丢弃
+        if (seq > currentSeq + 1) {
+          // 空洞仍未闭合：剩余帧重新入 stash，等下一页补洞
+          const rest = list.slice(list.indexOf(frame));
+          this.stashBySession.set(sessionId, rest);
+          return;
+        }
+      }
+      const actions = mapDeviceFrame({ kind: frame.kind, body: frame.body });
+      this.applyActions(actions);
+      for (const action of actions) {
+        if (action.kind === 'feed-append') this.markActive(action.sessionId);
+      }
+    }
+    this.unloadExcessWindows();
   }
 
   /** 统一动作执行入口（续页路径与普通路径共用） */
@@ -298,36 +365,6 @@ export class FeedBridge {
     }
   }
 
-  /**
-   * 重连对账驱动（ReconnectingWsClient.onProjection 转发，M6 §9.3 ①~③）：
-   * - resume：events.resume 增量补齐（afterSequence = 本地游标）；
-   * - full-replay / fresh：afterSequence = 0 全量回放/快照重建；
-   * - cleanup：本地投影 + 事件窗口清理（② 权威无本地有）；
-   * - 会话索引对账收敛（重连成功 → 重拉列表，F1 §5.4）。
-   */
-  handleProjection(projection: {
-    resume: readonly string[];
-    fullReplay: readonly string[];
-    fresh: readonly string[];
-    cleanup: readonly string[];
-  }): void {
-    for (const sessionId of projection.resume) {
-      this.resumeSession(sessionId, lastSeqOf(sessionId));
-    }
-    for (const sessionId of projection.fullReplay) {
-      this.resumeSession(sessionId, RESUME_FROM_ZERO);
-    }
-    for (const sessionId of projection.fresh) {
-      this.resumeSession(sessionId, RESUME_FROM_ZERO);
-    }
-    for (const sessionId of projection.cleanup) {
-      sessionStore.getState().remove(sessionId);
-      eventStore.getState().unloadWindow(sessionId);
-      this.activity.delete(sessionId);
-    }
-    void this.refreshSessions();
-  }
-
   /** 单会话续传请求（在途防重入；失败清在途，下轮投影可重试） */
   private resumeSession(sessionId: string, afterSequence: number): void {
     if (this.inflightResume.has(sessionId)) return;
@@ -382,6 +419,8 @@ export class FeedBridge {
       if (sessionId === undefined) break;
       eventStore.getState().unloadWindow(sessionId);
       this.activity.delete(sessionId);
+      // 窗口已卸载：其空洞暂存帧一并丢弃（重开窗口时 hydrateSession 全量回填）
+      this.stashBySession.delete(sessionId);
     }
   }
 }

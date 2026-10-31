@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import PairScanScreen from '@/presentation/pair/pairScanScreen';
-import { useSafeBack } from '../_components/useSafeBack';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function PairScanRoute() {
   const goBack = useSafeBack();

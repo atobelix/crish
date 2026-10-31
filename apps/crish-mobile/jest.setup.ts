@@ -79,9 +79,111 @@ jest.mock('expo-sqlite', () => ({
 jest.mock('react-native-gesture-handler', () => {
   const React = jest.requireActual<typeof ReactModule>('react');
   const { View } = jest.requireActual<typeof ReactNativeModule>('react-native');
+  // 链式手势配置桩：任意方法调用返回代理自身（生产 API 为链式 builder）
+  const chainable = (): Record<string, unknown> => {
+    const obj: Record<string, unknown> = {};
+    const proxy = new Proxy(obj, {
+      get: (t, prop: string | symbol) => {
+        if (typeof prop !== 'string') return undefined;
+        if (!(prop in t)) {
+          t[prop] = () => proxy;
+        }
+        return t[prop];
+      },
+    });
+    return proxy;
+  };
   return {
     GestureHandlerRootView: ({ children }: { children: ReactNode }) =>
       React.createElement(View, null, children),
+    GestureDetector: ({ children }: { children: ReactNode }) =>
+      React.createElement(View, null, children),
+    Gesture: {
+      Pan: () => chainable(),
+      Tap: () => chainable(),
+      Fling: () => chainable(),
+      Race: () => chainable(),
+    },
+  };
+});
+
+// Reanimated 4 jest 桩：jest 无 UI 线程 worklet 运行时——共享值为普通对象、
+// 动画助手恒等返回目标值、Animated.View 透传为 View（entering/exiting 丢弃）。
+// 手势/动画语义的真机验收走集中验收清单；单测只覆盖回调逻辑与渲染结构。
+jest.mock('react-native-reanimated', () => {
+  const React = jest.requireActual<typeof ReactModule>('react');
+  const { View, Text } =
+    jest.requireActual<typeof ReactNativeModule>('react-native');
+  const chainable = (): Record<string, unknown> => {
+    const obj: Record<string, unknown> = {};
+    const proxy = new Proxy(obj, {
+      get: (t, prop: string | symbol) => {
+        if (typeof prop !== 'string') return undefined;
+        if (!(prop in t)) {
+          t[prop] = () => proxy;
+        }
+        return t[prop];
+      },
+    });
+    return proxy;
+  };
+  const AnimatedView = ({
+    children,
+    style,
+    ...rest
+  }: {
+    children?: ReactNode;
+    style?: Record<string, unknown>;
+  }) => React.createElement(View, { style: style as never, ...rest }, children);
+  const AnimatedText = ({
+    children,
+    style,
+    ...rest
+  }: {
+    children?: ReactNode;
+    style?: Record<string, unknown>;
+  }) => React.createElement(Text, { style: style as never, ...rest }, children);
+  return {
+    __esModule: true,
+    // default 导出（`import Animated from 'react-native-reanimated'`）与命名
+    // 导出（`import { Animated, useSharedValue } from ...`）双形态同构
+    default: {
+      createAnimatedComponent: () => View,
+      View: AnimatedView,
+      Text: AnimatedText,
+    },
+    Animated: { View: AnimatedView, Text: AnimatedText },
+    useSharedValue: (initial: unknown) => ({ value: initial }),
+    useAnimatedStyle: (fn: () => unknown) =>
+      typeof fn === 'function' ? fn() : {},
+    useDerivedValue: (fn: () => unknown) => ({
+      value: typeof fn === 'function' ? fn() : fn,
+    }),
+    useAnimatedReaction: () => {},
+    useAnimatedKeyboard: () => ({ height: { value: 0 }, state: { value: 0 } }),
+    useReducedMotion: () => false,
+    interpolate: (_v: number, _input: number[], output: number[]) => output[0],
+    interpolateColor: (_v: number, _input: number[], output: unknown[]) =>
+      output[0],
+    runOnJS: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+    withSpring: (v: unknown) => v,
+    withTiming: (v: unknown) => v,
+    withDelay: (_ms: number, v: unknown) => v,
+    withRepeat: (v: unknown) => v,
+    withSequence: (...values: unknown[]) => values[values.length - 1],
+    cancelAnimation: () => {},
+    Extrapolation: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
+    FadeIn: chainable(),
+    FadeOut: chainable(),
+    FadeInDown: chainable(),
+    FadeOutDown: chainable(),
+    FadeInUp: chainable(),
+    FadeOutUp: chainable(),
+    SlideInUp: chainable(),
+    SlideOutUp: chainable(),
+    SlideInDown: chainable(),
+    SlideOutDown: chainable(),
+    LinearTransition: chainable(),
   };
 });
 

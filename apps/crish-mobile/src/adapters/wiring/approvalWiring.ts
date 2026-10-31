@@ -51,6 +51,8 @@ import {
   type OutboxPersistAdapter,
 } from '@/adapters/persistence/outboxPersist';
 import { getSqlDriver } from '@/adapters/persistence/persistBootstrap';
+import { ensureDatabaseReady } from '@/db/dbBootstrap';
+import { SqlApprovalQueueDao } from '@/db/dao';
 import { parseEngineEvent } from '@crish/shared-types';
 import type { PermissionRequest } from '@crish/shared-types';
 import { parseListPendingApprovalsResult } from '@crish/shared-types';
@@ -529,6 +531,11 @@ let singleton: ApprovalWiring | null = null;
  * 审批接线单例（审批中心页挂载调用；幂等）。
  * 网关缺省取观测面接线（ensureObservationWiring 的 ReconnectingWsClient.gateway，
  * 与事件流同一连接）；观测面未装配/未配对 → 返回 null 不启动。
+ *
+ * DB 就绪门禁（实现波总方案 D3）：Outbox 持久化必须绑定 SQLite——装配前等待
+ * `ensureDatabaseReady()`，杜绝「配对接线早于 DB → getSqlDriver() 为 null →
+ * 单例永久降级内存态」的启动竞态。仅当 DB 明确失败（driver=null）时才落入
+ * 内存态并 console.error 留痕（诚实降级，非静默竞态）。
  */
 export function ensureApprovalWiring(
   opts: Omit<ApprovalWiringOptions, 'gateway'> & { gateway?: WsGateway } = {}
@@ -541,13 +548,22 @@ export function ensureApprovalWiring(
     ensurePendingRegistration();
     return null;
   }
-  singleton = startApprovalWiring({
-    persistAdapter: createDefaultOutboxPersist(getSqlDriver()),
-    ...opts,
-    gateway,
+  void ensureDatabaseReady().then((driver) => {
+    if (singleton) return;
+    if (!driver) {
+      console.error(
+        '[approvalWiring] DB 装配失败，离线决策仅内存暂存（进程被杀将丢失）'
+      );
+    }
+    singleton = startApprovalWiring({
+      // driver=null 仅发生在 DB 明确故障；正常路径此处必为 SQLite driver
+      persistAdapter: createDefaultOutboxPersist(driver),
+      ...opts,
+      gateway,
+    });
+    void singleton.bridge.hydrate();
   });
-  void singleton.bridge.hydrate();
-  return singleton;
+  return null;
 }
 
 /**
@@ -579,12 +595,24 @@ export function resetApprovalWiringForTest(): void {
   clearPendingOpenRegistration();
 }
 
-/** 解绑 / 换机：销毁审批接线单例 */
+/** 解绑 / 换机：销毁审批接线单例，并穿透清理落盘真源（SQLite approval_queue）。 */
 export function disposeApprovalWiring(): void {
   singleton?.bridge.detach();
   singleton = null;
   clearPendingOpenRegistration();
   outboxState = createOutboxState();
+  // 磁盘残留必须同步清除：换机后旧桌面的离线决策若被新连接水合回放，
+  // 将构成跨主机越权执行（实现波总方案 V18a）。DB 未就绪/故障时无法清理，
+  // 交由 hydrate 门禁侧的隔离语义兜底（无凭据不装配）。
+  const driver = getSqlDriver();
+  if (driver) {
+    new SqlApprovalQueueDao(driver).clear().catch((error: unknown) => {
+      console.error(
+        '[approvalWiring] 解绑清理 approval_queue 失败：',
+        error instanceof Error ? error.message : String(error)
+      );
+    });
+  }
 }
 
 /** 撤销「等待 gateway 就绪」注册（解散单例时调用，避免悬挂回调） */

@@ -1,44 +1,62 @@
 // L2 滑动确认组件（F2 §5.3 危险操作二次确认「滑动以允许」/ R2UX §3.2 双阶段确认动效）
-// - 方案 A（注入式手势状态机）：buildSlideConfirmPanConfig 配置工厂 + slideConfirmMachine 纯函数
-//   承载全部滑动逻辑（拖动百分比 / 70% 阈值判定 / 回弹 / 触发 / busy 锁定），
-//   本组件薄层只做 PanResponder 事件转发与视觉映射（状态机全量单测于 slideConfirmMachine.test）；
-// - 拖动跟手（0ms 延迟）→ 过 70% 阈值变「松手确认」态（滑轨变绿，R2UX §3.2）→ 抬起触发；
-//   未过阈值抬起 → 回弹 spring 200ms（R2UX §2.2-3：刚度低、阻尼中，一次回弹不过冲）；
-// - 冲突仲裁（R2UX §2.1）：onMoveShouldSetPanResponder 走 shouldClaimSlidePan 水平判定，
-//   起点不劫持（onStartShouldSetPanResponder 恒 false），未过阈值不抢触摸；
-// - busy 锁定（R2UX-04-03）：disabled 期间手势锁定 + 视觉置灰（opacity 0.5，M4 §6.2-4）
-//   + 确认弹窗强制关闭（防双点，与拒绝弹窗同语义）；
-// - 无障碍（R2UX §4.1-3 / §4.4-3）：滑轨暴露为「允许」按钮，读屏激活走两段式确认
-//   （点允许 → 确认框 → 确认放行）；reduce-motion 时直接降级为两段式点按。
-import { useEffect, useMemo, useRef, useState } from 'react';
+// - Reanimated Worklet 手势（实现波总方案 F2）：Gesture.Pan + useSharedValue 驱动
+//   滑块位移——拖动全程 0 次 React 渲染（位移走 UI 线程），仅阈值跨越翻转
+//   armed 状态（≤2 次/手势）；未过阈值松手 → withSpring 物理回弹；
+// - 阈值语义（F2 §5.3「滑过 70% 才可抬起触发」）：releaseDecision 纯函数承载
+//   判定，组件与单测共用同一真理；进 100% 不自动触发（「抬起触发」语义）；
+// - busy 锁定：disabled 期间手势 enabled=false + 视觉置灰 + 确认弹窗强制关闭；
+// - 无障碍（R2UX §4.1-3 / §4.4-3）：滑轨暴露为「允许」按钮，读屏激活走两段式
+//   确认（点允许 → 确认框 → 确认放行）；reduce-motion 时整体降级为两段式点按；
+// - U8 零描边：滑轨/滑块一律表面色阶表达（armed → successSoft 轨道 + 图标变色），
+//   无 borderWidth、无阴影。
+import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  Animated,
-  PanResponder,
+  GestureResponderEvent,
   StyleSheet,
   Text,
-  View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { Button, Dialog } from '@/presentation/ui';
-import {
-  SLIDE_THUMB_SIZE,
-  createSlideConfirmState,
-  shouldClaimSlidePan,
-  slideCancel,
-  slideEnd,
-  slideMove,
-  slideStart,
-  slideUsableWidth,
-} from './slideConfirmMachine';
-import type { SlideConfirmState } from './slideConfirmMachine';
+
+/** 触发阈值（F2 §5.3 / R2UX §2.4-3：滑过 70% 才可抬起触发） */
+export const SLIDE_TRIGGER_THRESHOLD = 0.7;
+/** 滑块尺寸（触控目标 ≥44，R2UX §1.2 热区基线） */
+export const SLIDE_THUMB_SIZE = 44;
+
+/** 可滑动距离（轨道宽 - 滑块宽；轨道未测量（<=0）时返回 0） */
+export function slideUsableWidth(
+  trackWidthPx: number,
+  thumbSize: number = SLIDE_THUMB_SIZE
+): number {
+  return Math.max(trackWidthPx - thumbSize, 0);
+}
+
+/**
+ * 抬起判定（纯函数；worklet 与单测共用）：
+ * progress ≥ 阈值 → confirm（触发放行）；否则 rebound（弹簧回弹）。
+ */
+export function slideReleaseDecision(
+  progress: number,
+  threshold: number = SLIDE_TRIGGER_THRESHOLD
+): 'confirm' | 'rebound' {
+  return progress >= threshold ? 'confirm' : 'rebound';
+}
 
 export interface SlideToConfirmProps {
   /** 放行回调（滑动过阈值抬起 / 两段式确认后触发一次） */
   onConfirm: () => void;
   /** busy 锁定（store decisionBusy 驱动，组件不自行计时，R2UX-04-03） */
   disabled?: boolean;
-  /** 滑轨内文案（默认「⟶ 滑动以允许」，R2UX §3.2） */
+  /** 滑轨内文案（默认「滑动以允许」，R2UX §3.2） */
   label?: string;
   /** 无障碍 label（「类型 + 摘要」，R2UX-04-10） */
   accessibilityLabel?: string;
@@ -50,97 +68,10 @@ export interface SlideToConfirmProps {
   testID?: string;
 }
 
-/**
- * PanResponder 配置子集（与 react-native PanResponderCallbacks 结构兼容，
- * 参数放宽以便组件测试直接以合成 (evt, gestureState) 驱动）。
- */
-export interface SlidePanConfig {
-  onStartShouldSetPanResponder?: (evt?: unknown) => boolean;
-  onMoveShouldSetPanResponder?: (
-    evt?: unknown,
-    gs?: { dx: number; dy: number }
-  ) => boolean;
-  onPanResponderGrant?: (evt?: unknown) => void;
-  onPanResponderMove?: (evt?: unknown, gs?: { dx: number; dy: number }) => void;
-  onPanResponderRelease?: (evt?: unknown) => void;
-  onPanResponderTerminate?: (evt?: unknown) => void;
-  onPanResponderTerminationRequest?: (evt?: unknown) => boolean;
-}
-
-export interface SlidePanDeps {
-  getMachine: () => SlideConfirmState;
-  setMachine: (next: SlideConfirmState) => void;
-  getTrackWidth: () => number;
-  getDisabled: () => boolean;
-  getOnConfirm: () => () => void;
-  /** 滑块位移（Animated.Value：拖动 setValue 跟手 / 回弹 spring） */
-  thumbX: Animated.Value;
-}
-
-// 回弹 spring 参数（R2UX §2.2-3：刚度低、阻尼中，一次回弹不过冲；时长量级 ~SLIDE_REBOUND_MS）
-const REBOUND_SPRING = {
-  toValue: 0,
-  useNativeDriver: false,
-  speed: 18,
-  bounciness: 0,
-};
-
-/**
- * PanResponder 配置工厂（注入式手势状态机的事件转发层）：
- * - onStartShouldSetPanResponder 恒 false：起点不劫持触摸（R2UX §2.1）；
- * - onMoveShouldSetPanResponder 走 shouldClaimSlidePan 水平仲裁（busy 期间不劫持）；
- * - grant/move/release/terminate 仅转发到 slideConfirmMachine 纯函数并同步滑块位。
- */
-export function buildSlideConfirmPanConfig(deps: SlidePanDeps): SlidePanConfig {
-  const setThumbFrom = (state: SlideConfirmState) => {
-    deps.thumbX.setValue(
-      state.progress * slideUsableWidth(deps.getTrackWidth())
-    );
-  };
-  return {
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_evt, gs) =>
-      !deps.getDisabled() && shouldClaimSlidePan(gs?.dx ?? 0, gs?.dy ?? 0),
-    onPanResponderGrant: () => {
-      deps.setMachine(slideStart(deps.getMachine(), deps.getDisabled()));
-    },
-    onPanResponderMove: (_evt, gs) => {
-      const next = slideMove(
-        deps.getMachine(),
-        gs?.dx ?? 0,
-        deps.getTrackWidth(),
-        deps.getDisabled()
-      );
-      if (next !== deps.getMachine()) {
-        deps.setMachine(next);
-        setThumbFrom(next);
-      }
-    },
-    onPanResponderRelease: () => {
-      const { state, triggered } = slideEnd(
-        deps.getMachine(),
-        deps.getDisabled()
-      );
-      deps.setMachine(state);
-      if (triggered) {
-        deps.thumbX.setValue(slideUsableWidth(deps.getTrackWidth()));
-        deps.getOnConfirm()();
-      } else {
-        Animated.spring(deps.thumbX, REBOUND_SPRING).start();
-      }
-    },
-    onPanResponderTerminate: () => {
-      deps.setMachine(slideCancel(deps.getMachine(), deps.getDisabled()));
-      Animated.spring(deps.thumbX, REBOUND_SPRING).start();
-    },
-    onPanResponderTerminationRequest: () => false,
-  };
-}
-
 export default function SlideToConfirm({
   onConfirm,
   disabled = false,
-  label = '⟶ 滑动以允许',
+  label = '滑动以允许',
   accessibilityLabel,
   confirmTitle = '确认放行？',
   confirmDescription = '允许后将立即执行，不可撤销',
@@ -148,23 +79,15 @@ export default function SlideToConfirm({
   testID,
 }: SlideToConfirmProps) {
   const theme = useTheme();
-  const [machine, setMachine] = useState<SlideConfirmState>(
-    createSlideConfirmState
-  );
   const [trackWidth, setTrackWidth] = useState(0);
+  const [armed, setArmed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [reduceMotionDetected, setReduceMotionDetected] = useState(false);
-  const thumbX = useRef(new Animated.Value(0)).current;
-
-  // ref 镜像：PanResponder 配置仅创建一次，回调经 ref 读最新值（闭包不过期）
-  const machineRef = useRef(machine);
-  machineRef.current = machine;
-  const trackWidthRef = useRef(trackWidth);
-  trackWidthRef.current = trackWidth;
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
+  const thumbX = useSharedValue(0);
   const onConfirmRef = useRef(onConfirm);
   onConfirmRef.current = onConfirm;
+
+  const usable = slideUsableWidth(trackWidth);
 
   // reduce-motion 探测（R2UX §4.4-1：订阅变化即时响应；jest/无原生环境回落默认 false）
   useEffect(() => {
@@ -199,33 +122,51 @@ export default function SlideToConfirm({
 
   const effectiveReduceMotion = reduceMotion ?? reduceMotionDetected;
 
-  // busy 锁定：弹窗强制关闭 + 拖动中状态复位（防双点，R2UX-04-03 同拒绝弹窗语义）
+  // busy 锁定：弹窗强制关闭 + 复位滑块（防双点，R2UX-04-03 同拒绝弹窗语义）
   useEffect(() => {
     if (!disabled) return;
     setDialogOpen(false);
-    setMachine((current) =>
-      current.phase === 'dragging' || current.phase === 'armed'
-        ? createSlideConfirmState()
-        : current
-    );
-  }, [disabled]);
+    setArmed(false);
+    thumbX.value = 0;
+  }, [disabled, thumbX]);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create(
-        buildSlideConfirmPanConfig({
-          getMachine: () => machineRef.current,
-          setMachine,
-          getTrackWidth: () => trackWidthRef.current,
-          getDisabled: () => disabledRef.current,
-          getOnConfirm: () => onConfirmRef.current,
-          thumbX,
-        })
-      ),
-    [setMachine, thumbX]
+  const trigger = () => {
+    setArmed(false);
+    onConfirmRef.current();
+  };
+
+  const pan = Gesture.Pan()
+    .enabled(!disabled && usable > 0)
+    .onUpdate((event) => {
+      'worklet';
+      thumbX.value = Math.min(Math.max(event.translationX, 0), usable);
+    })
+    .onEnd(() => {
+      'worklet';
+      const progress = usable > 0 ? thumbX.value / usable : 0;
+      if (slideReleaseDecision(progress) === 'confirm') {
+        thumbX.value = usable;
+        runOnJS(trigger)();
+      } else {
+        thumbX.value = withSpring(0, theme.motion.spring.slideThumb);
+      }
+    });
+
+  // 阈值跨越翻转 armed（仅跨越时 1 次 React 渲染；拖动本身 0 渲染）
+  useAnimatedReaction(
+    () => (usable > 0 ? thumbX.value / usable : 0) >= SLIDE_TRIGGER_THRESHOLD,
+    (next, prev) => {
+      if (next !== prev) runOnJS(setArmed)(next);
+    },
+    [usable]
   );
 
-  const openTwoStep = () => {
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: thumbX.value }],
+  }));
+
+  const openTwoStep = (event?: GestureResponderEvent) => {
+    event?.preventDefault?.();
     if (disabled) return;
     setDialogOpen(true);
   };
@@ -235,16 +176,9 @@ export default function SlideToConfirm({
     onConfirmRef.current();
   };
 
-  const isArmed = machine.phase === 'armed';
-  const isTriggered = machine.phase === 'triggered';
-  const emphasized = isArmed || isTriggered;
-  const labelText = isArmed ? '松手确认' : label;
-  const trackColor = emphasized
-    ? theme.colors.success
-    : theme.colors.fillSubtle;
-  const labelColor = emphasized
-    ? theme.colors.actionPrimaryText
-    : theme.colors.textSecondary;
+  const labelText = armed ? '松手确认' : label;
+  const trackColor = armed ? theme.colors.successSoft : theme.colors.fillSubtle;
+  const labelColor = armed ? theme.colors.success : theme.colors.textSecondary;
 
   const twoStepDialog = (
     <Dialog
@@ -277,7 +211,7 @@ export default function SlideToConfirm({
         <Button
           label="允许"
           variant="primary"
-          onPress={openTwoStep}
+          onPress={() => openTwoStep()}
           disabled={disabled}
           testID={testID ?? 'slide-allow-button'}
           accessibilityLabel={accessibilityLabel}
@@ -290,54 +224,49 @@ export default function SlideToConfirm({
 
   return (
     <>
-      <View
-        testID={testID ?? 'slide-to-confirm'}
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? '允许此请求'}
-        accessibilityHint="水平滑动到阈值后松手放行；读屏用户可双击改用两段式确认"
-        accessibilityState={{ disabled }}
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: Math.round(machine.progress * 100),
-          text: labelText,
-        }}
-        onAccessibilityTap={openTwoStep}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        style={[
-          styles.track,
-          { borderRadius: theme.radius.pill },
-          {
-            backgroundColor: trackColor,
-            borderColor: theme.colors.borderStrong,
-          },
-          disabled && styles.disabled,
-        ]}
-        {...panResponder.panHandlers}
-      >
+      <GestureDetector gesture={pan}>
         <Animated.View
-          testID="slide-thumb"
+          testID={testID ?? 'slide-to-confirm'}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel ?? '允许此请求'}
+          accessibilityHint="水平滑动到阈值后松手放行；读屏用户可双击改用两段式确认"
+          accessibilityState={{ disabled }}
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: armed
+              ? 100
+              : Math.round(
+                  (usable > 0 ? (thumbX.value ?? 0) / usable : 0) * 100
+                ),
+            text: labelText,
+          }}
+          onAccessibilityTap={openTwoStep}
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
           style={[
-            styles.thumb,
-            {
-              backgroundColor: theme.colors.surfaceRaised,
-              borderColor: emphasized
-                ? theme.colors.success
-                : theme.colors.borderStrong,
-              transform: [{ translateX: thumbX }],
-            },
-            theme.shadow.sm,
+            styles.track,
+            { borderRadius: theme.radius.pill, backgroundColor: trackColor },
+            disabled && styles.disabled,
           ]}
-        />
-        <Text
-          testID="slide-label"
-          numberOfLines={1}
-          style={[theme.type.footnote, styles.label, { color: labelColor }]}
         >
-          {labelText}
-        </Text>
-      </View>
+          <Animated.View
+            testID="slide-thumb"
+            style={[
+              styles.thumb,
+              { backgroundColor: theme.colors.surfaceRaised },
+              thumbStyle,
+            ]}
+          />
+          <Text
+            testID="slide-label"
+            numberOfLines={1}
+            style={[theme.type.footnote, styles.label, { color: labelColor }]}
+          >
+            {labelText}
+          </Text>
+        </Animated.View>
+      </GestureDetector>
       {twoStepDialog}
     </>
   );
@@ -349,7 +278,6 @@ const styles = StyleSheet.create({
   },
   track: {
     height: 44,
-    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -360,7 +288,6 @@ const styles = StyleSheet.create({
     width: SLIDE_THUMB_SIZE,
     height: SLIDE_THUMB_SIZE,
     borderRadius: SLIDE_THUMB_SIZE / 2,
-    borderWidth: 1,
   },
   label: {
     fontWeight: '500',

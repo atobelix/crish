@@ -17,6 +17,7 @@ import {
   verifyAccountResetCode,
 } from '@/adapters/account/accountService';
 import { AccountApiError } from '@/adapters/account/accountApi';
+import type { LoginResult } from '@/adapters/account/accountService';
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
@@ -241,12 +242,14 @@ export async function confirmAccountCode(
   }
 }
 
-/** 设置密码页提交：凭 setupToken 完成注册 / 重置并建立会话。 */
+/** 设置密码页提交：凭 setupToken 完成注册 / 重置并建立会话（结构化结果）。 */
 export async function completeAccountPassword(
   password: string
-): Promise<boolean> {
-  if (!draft?.setupToken) return false;
-  const ok = await setAccountPasswordWithToken(draft.setupToken, password);
-  if (ok) clearAccountFlowDraft();
-  return ok;
+): Promise<LoginResult> {
+  if (!draft?.setupToken) {
+    return { ok: false, kind: 'network', message: '会话已失效，请返回重试' };
+  }
+  const result = await setAccountPasswordWithToken(draft.setupToken, password);
+  if (result.ok) clearAccountFlowDraft();
+  return result;
 }

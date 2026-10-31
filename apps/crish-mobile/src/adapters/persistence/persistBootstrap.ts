@@ -26,8 +26,8 @@ import type { InAppNotification } from '@/domain/store/notificationReducers';
 export class DaoNotificationsPersist implements NotificationsPersist {
   constructor(private readonly dao: NotificationsDao) {}
 
-  async upsert(row: InAppNotification): Promise<'inserted' | 'updated'> {
-    return this.dao.upsert(row);
+  async upsert(row: InAppNotification): Promise<void> {
+    await this.dao.upsert(row);
   }
 
   async updateStatus(

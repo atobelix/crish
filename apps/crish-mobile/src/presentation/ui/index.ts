@@ -5,8 +5,6 @@ export { default as AppText } from './AppText';
 export type { AppTextProps, TextColor, TextVariant } from './AppText';
 export { default as Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';
-export { default as BrandMark } from './BrandMark';
-export type { BrandMarkProps } from './BrandMark';
 export { default as Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { default as Card } from './Card';

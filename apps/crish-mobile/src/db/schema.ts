@@ -1,39 +1,30 @@
-// 本地存储 schema（Z0 R2-13 / M5 §5.2：8 表清单 + 索引）
+// 本地存储 schema（Z0 R2-13 / M5 §5.2；v2 收敛为 3 张生效表）
 // 纪律（M5 §1.2 规则 2）：存储层不得 import 网络层；与 src/network 互不可见。
 // 迁移纪律（M5 §5.4）：已发布迁移 SQL 禁止修改，新需求走 v2+；本文件只追加表定义。
 
 /**
- * 8 表清单（任务书 R2-13 候选，与 M5 §5.2 / D6 §10.6 / D7 §8.1 对齐）：
- * 1. events           事件流镜像（(session_id, sequence) 复合主键，D3 §7.4 会话级单调游标）
- * 2. approval_queue   outbox 待发队列（字段对齐 src/domain/data/outbox.ts，M5 §5.2 outbox / D6 §10.6 approval_queue）
- * 3. approval_history 审批决策记录（M5 §5.2 approvals；D6 §3.4 哲学：待办由 events 派生，本地只存已决历史）
- * 4. session_summaries 会话摘要（M5 §5.2 sessions，对应 OrchestratorSessionEventSummary）
- * 5. settings         键值存储（M5 §5.2 kv / §5.1 设置层；D6 §10.6 sync_meta）
- * 6. push_tokens      推送注册（D7 §8.1 移动端持有自己的 device token，上报桌面 push_devices）
- * 7. device_info      配对元数据非敏感部分（M5 §5.2 device_meta；敏感密钥在 secure-store）
- * 8. notifications    应用内通知/角标状态（M5 §5.2 notifications，推送去重键）
+ * 生效表清单（v2 收敛，实现波总方案 D5）：
+ * 1. approval_queue   outbox 待发队列（SqlApprovalQueueDao）
+ * 2. settings         键值存储（SqlSettingsDao）
+ * 3. notifications    应用内通知/角标状态（SqlNotificationsDao）
+ *
+ * v1 曾声明 8 表；其中 `events` / `approval_history` / `session_summaries` /
+ * `push_tokens` / `device_info` 五表自始至终无 DAO 无读写（早期全量镜像方案的
+ * 死 DDL，与「内存流投影伴侣」架构相悖），v2 迁移统一 DROP（见 V2_CLEANUP_SQL）。
  */
 
 /** 当前 schema 版本（PRAGMA user_version 目标值） */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
-/** 全部表名（供测试与工具使用） */
-export const TABLES = [
-  'events',
-  'approval_queue',
-  'approval_history',
-  'session_summaries',
-  'settings',
-  'push_tokens',
-  'device_info',
-  'notifications',
-] as const;
+/** 全部生效表名（供测试与工具使用） */
+export const TABLES = ['approval_queue', 'settings', 'notifications'] as const;
 
 export type TableName = (typeof TABLES)[number];
 
 /**
- * 建表 SQL（schema v1，逐条执行；PRAGMA user_version = 1 由迁移层负责）。
+ * v1 建表 SQL（历史迁移，append-only 保留原样；PRAGMA user_version = 1 由迁移层负责）。
  * 与 M5 §5.2 / D4 §7.2 对齐，字段名统一 snake_case。
+ * 注意：v1 按 8 表口径建表，其中 5 张死表由 v2 迁移统一 DROP（见 V2_CLEANUP_SQL）。
  */
 export const SCHEMA_SQL: readonly string[] = [
   // 事件流（M5 §5.2 events）：引擎事件信封本地镜像；sequence 为会话级单调游标。
@@ -149,4 +140,20 @@ export const SCHEMA_SQL: readonly string[] = [
     received_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status, received_at DESC)`,
+];
+
+/**
+ * v2 清理 SQL：删除 5 张幽灵表及其索引（零 DAO 零读写的死 DDL，实现波总方案 D5）。
+ * DROP IF EXISTS 保证从任意 v1 状态升级幂等。
+ */
+export const V2_CLEANUP_SQL: readonly string[] = [
+  `DROP INDEX IF EXISTS idx_events_run`,
+  `DROP INDEX IF EXISTS idx_events_type`,
+  `DROP INDEX IF EXISTS idx_approval_history_status`,
+  `DROP INDEX IF EXISTS idx_sessions_updated`,
+  `DROP TABLE IF EXISTS events`,
+  `DROP TABLE IF EXISTS approval_history`,
+  `DROP TABLE IF EXISTS session_summaries`,
+  `DROP TABLE IF EXISTS push_tokens`,
+  `DROP TABLE IF EXISTS device_info`,
 ];

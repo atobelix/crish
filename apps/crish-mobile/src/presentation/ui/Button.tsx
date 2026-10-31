@@ -1,5 +1,6 @@
-// 主按钮：48 高胶囊、四变体；加载态宽度不跳动。
+// 主按钮：48 高胶囊、四变体；加载态宽度不跳动（Spinner 与动词并列）。
 // primary 为墨色主操作；secondary 为浅灰填充，无描边。
+// N05/G4 裁定：按钮内不嵌图标（文字已足够），icon prop 删除。
 import {
   ActivityIndicator,
   Pressable,
@@ -10,7 +11,6 @@ import {
 } from 'react-native';
 import { useTheme, type Theme } from '@/adapters/platform/theme';
 import AppText from './AppText';
-import Icon, { type IconName } from './Icon';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -20,7 +20,6 @@ export interface ButtonProps {
   variant?: ButtonVariant;
   disabled?: boolean;
   loading?: boolean;
-  icon?: IconName;
   testID?: string;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -62,7 +61,6 @@ export function Button({
   variant = 'primary',
   disabled = false,
   loading = false,
-  icon,
   testID,
   accessibilityLabel,
   style,
@@ -93,11 +91,7 @@ export function Button({
       ]}
     >
       <View style={[styles.content, { gap: theme.space.sm }]}>
-        {loading ? (
-          <ActivityIndicator size="small" color={foreground} />
-        ) : icon ? (
-          <Icon name={icon} size={theme.size.iconSmall} color={foreground} />
-        ) : null}
+        {loading ? <ActivityIndicator size="small" color={foreground} /> : null}
         <AppText
           variant="bodyStrong"
           style={{ color: foreground }}

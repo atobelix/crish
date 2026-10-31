@@ -95,6 +95,11 @@ beforeEach(() => {
   authStore.setState({ host: '192.168.1.100', pairState: 'paired' });
 });
 
+afterEach(() => {
+  // 收口未打开的连接（握手看门狗等句柄），杜绝 jest worker 强退告警
+  resetObservationWiringForTest();
+});
+
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe('GatewayRunTaskRepository（C24 runTask 发送 + 解析）', () => {

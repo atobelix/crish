@@ -1,5 +1,5 @@
 import PairManualScreen from '@/presentation/pair/pairManualScreen';
-import { useSafeBack } from '../_components/useSafeBack';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function PairManualRoute() {
   const goBack = useSafeBack();

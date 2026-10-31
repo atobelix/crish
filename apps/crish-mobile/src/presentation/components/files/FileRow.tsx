@@ -54,13 +54,13 @@ export const FileRow = memo(function FileRow({
       style={({ pressed }) => [
         styles.row,
         {
-          borderBottomColor: theme.colors.border,
+          borderBottomColor: theme.colors.hairline,
           borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
         },
-        pressed && { backgroundColor: theme.colors.surfaceSubtle },
+        pressed && { backgroundColor: theme.colors.fillSubtle },
       ]}
     >
-      <Icon name={icon} size={20} color={color} />
+      <Icon name={icon} size={theme.size.icon} color={color} />
       <AppText variant="body" numberOfLines={1} style={styles.name}>
         {entry.name}
       </AppText>
@@ -79,13 +79,7 @@ export const FileRow = memo(function FileRow({
           {meta}
         </AppText>
       ) : null}
-      {entry.isDir ? (
-        <Icon
-          name="chevron-right"
-          size={14}
-          color={theme.colors.textTertiary}
-        />
-      ) : null}
+      {/* N05 裁定：folder 符号已标明目录，右侧箭头视觉重复，不显示 */}
     </Pressable>
   );
 });

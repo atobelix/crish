@@ -1,7 +1,7 @@
 // 会话页路由：配对守卫由 (main)/_layout.tsx 统一负责；汉堡打开抽屉，工具调用以 formSheet 打开。
 import { router, useLocalSearchParams } from 'expo-router';
 import SessionDetailScreen from '@/presentation/screens/sessionDetailScreen';
-import { useOpenDrawer } from '../../_components/useOpenDrawer';
+import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
 
 export default function SessionDetailRoute() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();

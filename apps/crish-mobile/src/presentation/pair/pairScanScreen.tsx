@@ -114,7 +114,6 @@ export default function PairScanScreen({
           <IconButton name="x" accessibilityLabel="关闭" onPress={onClose} />
         </View>
         <EmptyState
-          icon="qr-code"
           title="需要相机权限"
           action={
             <Button

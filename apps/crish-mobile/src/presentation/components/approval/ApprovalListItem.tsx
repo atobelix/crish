@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { ApprovalItem } from '@/domain/types/domain';
 import { formatRelativeTime } from '@/domain/pure/time';
-import { AppText, Badge, Icon } from '@/presentation/ui';
+import { AppText, Badge } from '@/presentation/ui';
 import {
   COUNTDOWN_WARNING_MS,
   formatRemainingMs,
@@ -56,11 +56,6 @@ export function ApprovalListItem({
           {item.request.toolName}
         </AppText>
         <View style={[styles.row, { gap: theme.space.xs }]}>
-          <Icon
-            name="clock"
-            size={theme.size.iconSmall}
-            color={urgent ? theme.colors.danger : theme.colors.textTertiary}
-          />
           <AppText
             variant="footnote"
             style={{

@@ -1,0 +1,79 @@
+# CI · 移动端流水线（apps/crish-mobile）
+#
+# 门禁与构建内容：
+# - 静态类型检查：@crish/crish-mobile typecheck
+# - 单元测试套件：jest 124 套全量测试
+# - Android 原生打包：assembleRelease (arm64-v8a 单架构，开启 R8 / 资源裁剪)
+# - 产出归档：crish-mobile-release-apk 上传为 CI Artifact
+
+name: CI · 移动端构建与测试
+
+on:
+  push:
+    paths:
+      - 'apps/crish-mobile/**'
+      - 'packages/shared-types/**'
+      - 'packages/shared-utils/**'
+      - '.github/workflows/mobile-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/crish-mobile/**'
+      - 'packages/shared-types/**'
+      - 'packages/shared-utils/**'
+      - '.github/workflows/mobile-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-test:
+    name: Typecheck & Unit Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install -g npm@11.6.2 && npm ci
+      - name: Typecheck Mobile
+        run: npm --workspace @crish/crish-mobile run typecheck
+      - name: Unit Test Mobile
+        run: npm test --workspace @crish/crish-mobile
+
+  mobile-build-apk:
+    name: Build Android Release APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - run: npm install -g npm@11.6.2 && npm ci
+      - name: Build frontend dependencies
+        run: npm run build:shared-types
+      - name: Build Android Release APK (arm64-v8a)
+        working-directory: apps/crish-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crish-mobile-release-apk
+          path: apps/crish-mobile/android/app/build/outputs/apk/release/*.apk

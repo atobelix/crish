@@ -4,8 +4,11 @@ import {
   AccountSetPasswordScreen,
   isSetPasswordMode,
 } from '@/presentation/account/accountSetPasswordScreen';
-import { finishAccountFlow, paramOf } from '../_components/accountNavigation';
-import { useSafeBack } from '../_components/useSafeBack';
+import {
+  finishAccountFlow,
+  paramOf,
+} from '@/presentation/navigation/accountNavigation';
+import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function AccountSetPasswordRoute() {
   const goBack = useSafeBack();

@@ -44,7 +44,7 @@
 const LAYERS = {
   0: 'packages/(shared-types|shared-utils)',
   1: 'packages/(logger|telemetry)',
-  2: 'apps/crish-desktop',
+  2: 'apps/(crish-desktop|crish-mobile)',
 };
 
 /**

@@ -1,8 +1,9 @@
 // 对话里的工具摘要行：相邻工具调用折叠成一行，点按打开工具抽屉并定位到这一组。
+// N05 裁定：文字已含语义（扳手/上箭头属装饰删除）；执行中状态用 8px 静态色点
+// （PulseDot 呼吸脉冲违 U8，已物理删除）。
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, Icon } from '@/presentation/ui';
-import { PulseDot } from '@/presentation/components/tools/PulseDot';
+import { AppText } from '@/presentation/ui';
 import { toolBlockSummary } from './buildTimeline';
 import type { ToolRunBlock } from './groupToolRuns';
 
@@ -46,14 +47,16 @@ export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
       ]}
     >
       {running ? (
-        <PulseDot testID="tool-run-pulse" />
-      ) : (
-        <Icon
-          name="wrench"
-          size={theme.size.iconSmall}
-          color={theme.colors.textTertiary}
+        <View
+          testID="tool-run-status-dot"
+          style={{
+            width: theme.size.dot,
+            height: theme.size.dot,
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.brand,
+          }}
         />
-      )}
+      ) : null}
       <View style={[styles.label, { gap: theme.space.xs }]}>
         <AppText
           variant="footnote"
@@ -69,13 +72,6 @@ export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
           </AppText>
         ) : null}
       </View>
-      {onOpen ? (
-        <Icon
-          name="arrow-up"
-          size={theme.size.iconSmall}
-          color={theme.colors.textTertiary}
-        />
-      ) : null}
     </Pressable>
   );
 }

@@ -1,9 +1,8 @@
-// 回到底部悬浮按钮：仅在离开底部时出现。
+// 回到底部悬浮按钮：仅在离开底部时出现。纯色胶囊（N05：文字已足够，删除箭头与发丝描边）。
 import { Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
-import Icon from './Icon';
 
 export interface ScrollToBottomButtonProps {
   onPress: () => void;
@@ -31,17 +30,10 @@ export function ScrollToBottomButton({
         {
           bottom: bottomOffset ?? insets.bottom + 24,
           backgroundColor: theme.colors.surfaceRaised,
-          borderColor: theme.colors.hairline,
         },
-        theme.shadow.sm,
         pressed && { opacity: 0.8 },
       ]}
     >
-      <Icon
-        name="chevron-down"
-        size={theme.size.iconSmall}
-        color={theme.colors.textPrimary}
-      />
       <AppText variant="footnote" color="textPrimary">
         回到底部
       </AppText>
@@ -54,11 +46,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignSelf: 'center',
     minHeight: 36,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
 });
 

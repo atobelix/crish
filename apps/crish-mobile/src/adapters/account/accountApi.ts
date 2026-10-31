@@ -8,6 +8,7 @@ import type {
   AccountUser,
   EmailCodeScene,
 } from '@/domain/types/account';
+import { REQUEST_TIMEOUT_MS } from './accountConstants';
 
 const AUTH_BASE_URL =
   process.env.EXPO_PUBLIC_AUTH_BASE_URL?.replace(/\/+$/, '') ||
@@ -15,8 +16,6 @@ const AUTH_BASE_URL =
 const RELAY_BASE_URL =
   process.env.EXPO_PUBLIC_RELAY_BASE_URL?.replace(/\/+$/, '') ||
   'https://proxy.flowbit.me:8443';
-
-const REQUEST_TIMEOUT_MS = 12_000;
 
 export class AccountApiError extends Error {
   readonly status: number;

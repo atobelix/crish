@@ -23,6 +23,7 @@ jest.mock('@/network/RelaySocket', () => ({
 
 jest.mock('@/adapters/account/accountService', () => ({
   hydrateAccount: jest.fn(async () => {}),
+  reconcileAccountRemote: jest.fn(async () => {}),
   refreshAccountDevices: jest.fn(async () => {}),
   requestClientTicket: jest.fn(async () => ({
     ticket: 'tk',

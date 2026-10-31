@@ -94,10 +94,10 @@ export function AccountSetPasswordScreen({
       else setError(result.message);
       return;
     }
-    const ok = await completeAccountPassword(password);
+    const result = await completeAccountPassword(password);
     setBusy(false);
-    if (ok) onDone();
-    else setError(storeError ?? '设置密码失败，请稍后重试');
+    if (result.ok) onDone();
+    else setError(result.message || storeError || '设置密码失败，请稍后重试');
   };
 
   return (

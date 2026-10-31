@@ -44,7 +44,7 @@ function Probe(): React.ReactElement {
 beforeEach(() => {
   latest = null;
   jest.clearAllMocks();
-  connectionStore.setState({ phase: 'idle', lastError: null });
+  connectionStore.setState({ phase: 'disconnected', lastError: null });
   sessionStore.setState({ sessions: [] });
   eventStore.setState({ windows: {} });
 });
@@ -66,8 +66,8 @@ describe('useSessionsVm', () => {
     expect(latest?.connected).toBe(true);
   });
 
-  it('phase=reconnecting 时 connected 为假', async () => {
-    connectionStore.setState({ phase: 'reconnecting' });
+  it('phase=recovering 时 connected 为假', async () => {
+    connectionStore.setState({ phase: 'recovering' });
     await render(<Probe />);
     expect(latest?.connected).toBe(false);
   });

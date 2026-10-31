@@ -19,11 +19,18 @@ import {
   disposeApprovalWiring,
   ensureApprovalWiring,
 } from '../wiring/approvalWiring';
-import { startAccountRuntime, stopAccountRuntime } from './accountRuntime';
+import {
+  startAccountRuntime,
+  stopAccountRuntime,
+  syncAccountRemote,
+} from './accountRuntime';
 
 let started = false;
 let appStateSub: { remove: () => void } | null = null;
 let authStateUnsub: (() => void) | null = null;
+
+/** 唤醒即时探活阈值：前台恢复时距上次收包超过该值即主动重连（不等被动心跳） */
+const WAKE_PROBE_MS = 15_000;
 
 function clearSessionData(): void {
   eventStore.getState().reset();
@@ -31,6 +38,8 @@ function clearSessionData(): void {
   approvalStore.getState().reset();
   terminalStore.getState().clearAll();
   filesStore.getState().resetWorkspace(null);
+  connectionStore.getState().reset();
+  notificationStore.getState().reset();
 }
 
 function handleAuthChange(): void {
@@ -52,10 +61,18 @@ function handleAppState(next: AppStateStatus): void {
   if (!wiring) {
     if (authStore.getState().pairState === 'paired') {
       ensureObservationWiring();
+    } else {
+      // 账号中继模式：长后台后接线实例可能已被销毁，唤醒即恢复
+      syncAccountRemote();
     }
     return;
   }
   if (wiring.client.phase === 'open') {
+    // 即时探活：后台期间连接可能已半开，距上次收包过久直接重建，消除 0~30s 假死窗口
+    if (Date.now() - wiring.client.lastRxMs > WAKE_PROBE_MS) {
+      wiring.reconnect();
+      return;
+    }
     wiring.bridge.syncSubscriptions();
     for (const sessionId of Object.keys(eventStore.getState().windows)) {
       void wiring.bridge.hydrateSession(sessionId);
@@ -123,5 +140,8 @@ export function reconnectNow(): void {
   }
   if (authStore.getState().pairState === 'paired') {
     ensureObservationWiring();
+    return;
   }
+  // 账号中继模式：接线不存在时按账号状态重建
+  syncAccountRemote();
 }

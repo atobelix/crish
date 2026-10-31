@@ -54,6 +54,7 @@ export function AccountEmailScreen({
             if (error) setError(null);
           }}
           error={error}
+          editable={!busy}
           placeholder="邮箱"
           autoFocus
           autoCapitalize="none"
@@ -66,6 +67,7 @@ export function AccountEmailScreen({
         />
         <AuthButton
           label="继续"
+          loadingLabel="正在发送…"
           testID="account-email-continue"
           disabled={!valid}
           loading={busy}
@@ -75,6 +77,7 @@ export function AccountEmailScreen({
           label="使用密码登录"
           variant="ghost"
           testID="account-email-use-password"
+          disabled={busy}
           onPress={() => onUsePassword(email.trim())}
         />
       </View>

@@ -136,6 +136,8 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
     deviceId: 'dev-1',
     userId: 'u-1',
     email: 'a@b.c',
+    userJson: '{"id":"u-1","email":"a@b.c","name":null}',
+    profileJson: null,
   };
 
   it('save 与 load 往返完整保留字段', async () => {
@@ -158,6 +160,8 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
       deviceId: 'dev-1',
       userId: null,
       email: null,
+      userJson: null,
+      profileJson: null,
     });
 
     expect(await store.getItem('account.access_token')).toBeNull();
@@ -169,6 +173,8 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
       deviceId: 'dev-1',
       userId: null,
       email: null,
+      userJson: null,
+      profileJson: null,
     });
   });
 

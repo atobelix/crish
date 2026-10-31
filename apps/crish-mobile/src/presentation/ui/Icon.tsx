@@ -1,27 +1,42 @@
-// 图标唯一入口：与桌面端同源（Hugeicons core-free-icons + React Native 渲染）。
-// 业务只写语义 IconName，不直接 import 图标库；图标数据按需逐文件加载。
-import { HugeiconsIcon } from '@hugeicons/react-native';
+// 图标唯一入口（实现波总方案 G4 / N05 落地）：内联 SVG Path 渲染。
+// 24 网格 / theme.layout.iconStroke 线宽 / 语义 token 染色；
+// 业务只写语义 IconName（iconPaths.ts 单一真源），禁止直接 import 图标库。
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/adapters/platform/theme';
-import { ICON_DATA, type IconName } from './iconData';
+import { ICON_PATHS, type IconName } from './iconPaths';
 
 export type { IconName };
 
 export interface IconProps {
   name: IconName;
+  /** 只允许 theme.size.icon* 阶梯（16/20/24），禁止裸数字 */
   size?: number;
+  /** 语义 token 色值（缺省 textSecondary） */
   color?: string;
+  /** 线宽覆盖（缺省 theme.layout.iconStroke = 2） */
   strokeWidth?: number;
 }
 
-export function Icon({ name, size, color, strokeWidth = 2 }: IconProps) {
+export function Icon({ name, size, color, strokeWidth }: IconProps) {
   const theme = useTheme();
+  const iconSize = size ?? theme.size.icon;
   return (
-    <HugeiconsIcon
-      icon={ICON_DATA[name]}
-      size={size ?? theme.size.icon}
-      color={color ?? theme.colors.textSecondary}
-      strokeWidth={strokeWidth}
-    />
+    <Svg
+      width={iconSize}
+      height={iconSize}
+      viewBox="0 0 24 24"
+      fill="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
+      <Path
+        d={ICON_PATHS[name]}
+        stroke={color ?? theme.colors.textSecondary}
+        strokeWidth={strokeWidth ?? theme.layout.iconStroke}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 

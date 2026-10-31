@@ -145,24 +145,33 @@ describe('loginAccountWithPassword', () => {
 
     const ok = await loginAccountWithPassword('a@b.c', 'pw');
 
-    expect(ok).toBe(true);
+    expect(ok).toEqual({ ok: true });
     expect(accountStore.getState().status).toBe('loggedIn');
     expect(accountStore.getState().accessToken).toBe('at');
     expect(accountStore.getState().user).toEqual(user);
     expect(accountStore.getState().devices).toHaveLength(1);
     expect(mockSecure.saveAccountSession).toHaveBeenCalled();
+    // 登录成功持久化用户快照（冷启动本地秒开，实现波总方案 A1）
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userJson: JSON.stringify(user) })
+    );
   });
 
-  it('登录失败时置 error 态并返回 false（不抛错）', async () => {
+  it('登录失败时置 error 态并返回结构化结果（凭据错误不抛错）', async () => {
     mockApi.loginAccount.mockRejectedValue(
       new AccountApiError(401, 'invalid_credentials', '凭据错误')
     );
 
     const ok = await loginAccountWithPassword('a@b.c', 'bad');
 
-    expect(ok).toBe(false);
+    expect(ok).toEqual({
+      ok: false,
+      kind: 'credentials',
+      message: '邮箱或密码不正确',
+    });
     expect(accountStore.getState().status).toBe('error');
-    expect(accountStore.getState().error).toBe('凭据错误');
+    expect(accountStore.getState().error).toBe('邮箱或密码不正确');
   });
 
   it('登录响应无 user 时回补 fetchAccountMe', async () => {
@@ -189,7 +198,7 @@ describe('loginAccountWithPassword', () => {
 
     const ok = await loginAccountWithPassword('a@b.c', 'pw');
 
-    expect(ok).toBe(true);
+    expect(ok).toEqual({ ok: true });
     expect(accountStore.getState().status).toBe('loggedIn');
     expect(accountStore.getState().devices).toEqual([]);
   });

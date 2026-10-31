@@ -24,7 +24,7 @@ describe('Toast', () => {
         </ToastProvider>
       </SafeAreaProvider>
     );
-    fireEvent.press(view.getByText('提示'));
+    await fireEvent.press(view.getByText('提示'));
     await waitFor(() => expect(view.getByText('已保存')).toBeTruthy());
   });
 });

@@ -45,6 +45,10 @@ export const ACCOUNT_KEYS = {
   DEVICE_ID: 'account.device_id',
   USER_ID: 'account.user_id',
   EMAIL: 'account.email',
+  /** 登录用户完整快照 JSON（冷启动本地秒开：不依赖网络即可恢复登录态） */
+  USER_JSON: 'account.user_json',
+  /** 账号资料快照 JSON（可空；与 user_json 同生命周期） */
+  PROFILE_JSON: 'account.profile_json',
 } as const;
 
 export interface AccountSession {
@@ -53,19 +57,32 @@ export interface AccountSession {
   deviceId: string;
   userId: string | null;
   email: string | null;
+  /** 用户快照 JSON（JSON.stringify(AccountUser)；未保存为 null） */
+  userJson: string | null;
+  /** 资料快照 JSON（JSON.stringify(AccountProfile)；未保存为 null） */
+  profileJson: string | null;
 }
 
 export async function loadAccountSession(
   driver: SecureStoreDriver
 ): Promise<AccountSession | null> {
-  const [refreshToken, deviceId, accessToken, userId, email] =
-    await Promise.all([
-      driver.getItem(ACCOUNT_KEYS.REFRESH_TOKEN),
-      driver.getItem(ACCOUNT_KEYS.DEVICE_ID),
-      driver.getItem(ACCOUNT_KEYS.ACCESS_TOKEN),
-      driver.getItem(ACCOUNT_KEYS.USER_ID),
-      driver.getItem(ACCOUNT_KEYS.EMAIL),
-    ]);
+  const [
+    refreshToken,
+    deviceId,
+    accessToken,
+    userId,
+    email,
+    userJson,
+    profileJson,
+  ] = await Promise.all([
+    driver.getItem(ACCOUNT_KEYS.REFRESH_TOKEN),
+    driver.getItem(ACCOUNT_KEYS.DEVICE_ID),
+    driver.getItem(ACCOUNT_KEYS.ACCESS_TOKEN),
+    driver.getItem(ACCOUNT_KEYS.USER_ID),
+    driver.getItem(ACCOUNT_KEYS.EMAIL),
+    driver.getItem(ACCOUNT_KEYS.USER_JSON),
+    driver.getItem(ACCOUNT_KEYS.PROFILE_JSON),
+  ]);
   if (refreshToken === null || deviceId === null) return null;
   return {
     accessToken,
@@ -73,6 +90,8 @@ export async function loadAccountSession(
     deviceId,
     userId,
     email,
+    userJson,
+    profileJson,
   };
 }
 
@@ -92,6 +111,12 @@ export async function saveAccountSession(
     session.email !== null
       ? driver.setItem(ACCOUNT_KEYS.EMAIL, session.email)
       : driver.deleteItem(ACCOUNT_KEYS.EMAIL),
+    session.userJson !== null
+      ? driver.setItem(ACCOUNT_KEYS.USER_JSON, session.userJson)
+      : driver.deleteItem(ACCOUNT_KEYS.USER_JSON),
+    session.profileJson !== null
+      ? driver.setItem(ACCOUNT_KEYS.PROFILE_JSON, session.profileJson)
+      : driver.deleteItem(ACCOUNT_KEYS.PROFILE_JSON),
   ]);
 }
 

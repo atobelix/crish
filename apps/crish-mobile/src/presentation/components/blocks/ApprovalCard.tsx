@@ -2,7 +2,7 @@
 import { StyleSheet, View } from 'react-native';
 import type { ApprovalItem } from '@/domain/types/domain';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, Icon } from '@/presentation/ui';
+import { AppText } from '@/presentation/ui';
 
 export interface ApprovalCardProps {
   item: ApprovalItem;
@@ -101,9 +101,12 @@ export default function ApprovalCard({ item, remainingMs }: ApprovalCardProps) {
   const urgent = remainingMs <= COUNTDOWN_WARNING_MS;
   const status = approvalStatusText(item);
   const expired = item.status === 'expired';
+  // 摘要优先级：风险命令（脱敏）→ 参数摘要 → 服务端 summary（对账补入项无参数
+  // 全量，D6 §7.2 隐私设计——但 summary 必须可见，杜绝盲批，实现波总方案 V21）
   const summary = item.riskMeta?.command
     ? `$ ${maskCommandSecrets(item.riskMeta.command)}`
-    : summarizeParameters(item.request.parameters);
+    : summarizeParameters(item.request.parameters) ||
+      item.request.summary.trim();
   const statusColor =
     status?.tone === 'danger'
       ? theme.colors.danger
@@ -145,13 +148,6 @@ export default function ApprovalCard({ item, remainingMs }: ApprovalCardProps) {
           {item.request.toolName}
         </AppText>
         <View style={styles.countdown}>
-          {!expired ? (
-            <Icon
-              name="clock"
-              size={14}
-              color={urgent ? theme.colors.danger : theme.colors.textTertiary}
-            />
-          ) : null}
           <AppText
             variant="footnote"
             style={{

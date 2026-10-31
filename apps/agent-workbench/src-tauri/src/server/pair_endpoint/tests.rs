@@ -388,13 +388,21 @@ fn pair_hello_invalid_payload_and_unwired_coordinator() {
 }
 
 /// pair.ok / device.ready 载荷形状（D3 §4.8：desktopId/ttl + token 扩展；
-/// deviceId）
+/// deviceId；tlsFingerprint 实现波总方案 H1——None 序列化为 null，
+/// Some 序列化为 64 位 hex）
 #[test]
 fn pair_ok_and_device_ready_body_shapes() {
-    let ok = pair_ok_body(DESKTOP_ID, "t".repeat(64).as_str());
+    let ok = pair_ok_body(DESKTOP_ID, "t".repeat(64).as_str(), None);
     assert_eq!(ok["desktopId"], DESKTOP_ID);
     assert_eq!(ok["ttl"], PAIR_TTL_SECONDS);
     assert_eq!(ok["token"], "t".repeat(64));
+    assert!(ok["tlsFingerprint"].is_null());
+    let ok_pinned = pair_ok_body(
+        DESKTOP_ID,
+        "t".repeat(64).as_str(),
+        Some(&"a".repeat(64)),
+    );
+    assert_eq!(ok_pinned["tlsFingerprint"], "a".repeat(64));
     let ready = device_ready_body("dev-9");
     assert_eq!(ready["deviceId"], "dev-9");
 }
