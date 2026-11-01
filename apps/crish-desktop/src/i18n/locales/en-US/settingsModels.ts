@@ -24,6 +24,8 @@ export const settingsPartModels = {
   'models.globalDefaultModel': 'Global Default Model',
   'models.globalDefaultModelDesc':
     'Optional. When not specified, select a model in chat',
+  'models.globalDefaultModelSharedNote':
+    'This is the same setting as the model selected at the top of the chat composer; changing it in either place takes effect in both',
 
   // ── models.yaml quick-access menu (models.yaml.*) ──
   'models.yaml.configFile': 'Model config file (models.yaml)',

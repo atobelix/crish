@@ -15,6 +15,7 @@ export const common: CommonTranslations = {
   search: 'Search',
   error: 'Error',
   success: 'Success',
+  recommended: 'Recommended',
   refresh: 'Refresh',
   back: 'Back',
   next: 'Next',

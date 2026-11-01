@@ -15,6 +15,7 @@ export const common: CommonTranslations = {
   search: '搜索',
   error: '错误',
   success: '成功',
+  recommended: '推荐',
   refresh: '刷新',
   back: '返回',
   next: '下一步',

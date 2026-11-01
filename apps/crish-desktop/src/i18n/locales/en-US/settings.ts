@@ -19,11 +19,11 @@ export const settings: SettingsTranslations = {
 
   // ── Settings Frame & Global Actions (frame.*) ──
   'frame.title': 'Settings',
-  'frame.searchPlaceholder': 'Search settings...',
-  'frame.searchAria': 'Search settings',
+  'frame.searchPlaceholder': 'Search categories…',
+  'frame.searchAria': 'Search categories',
   'sidebar.searchCategoriesAria': 'Search settings categories',
   'frame.clearSearch': 'Clear search',
-  'frame.emptyResult': 'No matching settings found',
+  'frame.emptyResult': 'No matching categories found',
   'frame.close': 'Close settings',
   'frame.closeWithEsc': 'Close (Esc)',
   'frame.closeAria': 'Close settings panel',
@@ -359,9 +359,15 @@ export const settings: SettingsTranslations = {
   'browser.browsingHistory': 'Browsing History',
   'browser.bookmarks': 'Bookmarks',
   'browser.clearHistory': 'Clear',
-  'browser.emptyBookmarks': 'Empty',
+  'browser.clearBookmarks': 'Clear',
+  'browser.clearHistoryConfirmTitle': 'Clear Browsing History',
+  'browser.clearHistoryConfirmDesc':
+    'All browsing history will be deleted. This action cannot be undone.',
+  'browser.clearBookmarksConfirmTitle': 'Clear Bookmarks',
+  'browser.clearBookmarksConfirmDesc':
+    'All bookmarks will be deleted. This action cannot be undone.',
   'browser.historyCleared': 'Browsing history cleared',
-  'browser.bookmarksCleared': 'Bookmarks emptied',
+  'browser.bookmarksCleared': 'Bookmarks cleared',
   'workflow.permissionLabel': 'Execution permission',
   'workflow.permissionAria': 'Execution permission mode',
 

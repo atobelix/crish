@@ -155,6 +155,7 @@ export const about: AboutTranslations = {
   termsOfService: 'Terms of Service',
   acknowledgements: 'Acknowledgements',
   copyright: '(c) {year} Conex. All rights reserved.',
+  copyrightHolder: 'Copyright (c) 2026 atobelix',
 };
 
 export default about;

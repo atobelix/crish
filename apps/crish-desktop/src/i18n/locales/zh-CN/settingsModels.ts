@@ -23,6 +23,8 @@ export const settingsPartModels = {
   'models.addProvider': '添加服务商',
   'models.globalDefaultModel': '全局默认模型',
   'models.globalDefaultModelDesc': '可选。不指定时，在对话里选择模型即可',
+  'models.globalDefaultModelSharedNote':
+    '与聊天输入框顶部所选模型为同一设置，在任一处修改都会互相生效',
 
   // ── 模型配置文件 models.yaml 直达菜单（models.yaml.*）──
   'models.yaml.configFile': '模型配置文件 (models.yaml)',

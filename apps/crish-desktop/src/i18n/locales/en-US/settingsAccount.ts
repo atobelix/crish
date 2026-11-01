@@ -11,6 +11,11 @@ export const settingsPartAccount = {
   'account.signOut': 'Sign out',
   'account.signedOut': 'Not signed in',
   'account.changePassword': 'Change password',
+  'account.changePassword.desc':
+    "We'll send a verification code to your account email. Enter it to set a new password.",
+  'account.uid.label': 'UID',
+  'account.uid.copy': 'Copy UID',
+  'account.uid.copied': 'UID copied',
 
   // ── 字段与验证码 ──
   'account.field.showPassword': 'Show password',
@@ -70,6 +75,11 @@ export const settingsPartAccount = {
 
   // ── 资料 ──
   'account.profile.label': 'Profile',
+  'account.profile.name': 'Nickname',
+  'account.profile.bio': 'Bio',
+  'account.profile.editEntry': 'Edit profile',
+  'account.profile.editDesc':
+    'Your avatar, nickname and bio are shown on your profile.',
   'account.profile.namePlaceholder': 'Nickname',
   'account.profile.bioPlaceholder': 'Bio',
   'account.profile.changeAvatar': 'Change avatar',
@@ -78,6 +88,8 @@ export const settingsPartAccount = {
 
   // ── 登录设备 ──
   'account.devices.label': 'Signed-in devices',
+  'account.devices.desc':
+    'These devices recently signed in to your account. You can sign out any device you do not recognize.',
   'account.devices.current': 'This device',
   'account.devices.online': 'Online',
   'account.devices.unknown': 'Unknown device',
@@ -88,8 +100,12 @@ export const settingsPartAccount = {
   'account.devices.loading': 'Loading…',
   'account.devices.empty': 'No signed-in devices',
 
+  // ── 安全 ──
+  'account.dangerZone': 'Account security',
+
   // ── 确认弹窗 ──
   'account.signOutConfirm.title': 'Sign out?',
+  'account.delete.rowTitle': 'Permanently delete account',
   'account.delete.entry': 'Delete account',
   'account.delete.title': 'Delete account',
   'account.delete.desc':

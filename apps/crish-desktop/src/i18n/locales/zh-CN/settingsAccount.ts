@@ -11,6 +11,11 @@ export const settingsPartAccount = {
   'account.signOut': '退出登录',
   'account.signedOut': '未登录',
   'account.changePassword': '修改密码',
+  'account.changePassword.desc':
+    '我们会向你的账号邮箱发送验证码，验证后即可设置新密码。',
+  'account.uid.label': 'UID',
+  'account.uid.copy': '复制 UID',
+  'account.uid.copied': 'UID 已复制',
 
   // ── 字段与验证码 ──
   'account.field.showPassword': '显示密码',
@@ -66,6 +71,10 @@ export const settingsPartAccount = {
 
   // ── 资料 ──
   'account.profile.label': '资料',
+  'account.profile.name': '昵称',
+  'account.profile.bio': '简介',
+  'account.profile.editEntry': '编辑资料',
+  'account.profile.editDesc': '头像、昵称与简介会展示在你的个人资料中。',
   'account.profile.namePlaceholder': '昵称',
   'account.profile.bioPlaceholder': '简介',
   'account.profile.changeAvatar': '更换头像',
@@ -74,6 +83,8 @@ export const settingsPartAccount = {
 
   // ── 登录设备 ──
   'account.devices.label': '登录设备',
+  'account.devices.desc':
+    '这些设备近期登录过你的账号，不认识的设备可以将其退出。',
   'account.devices.current': '本机',
   'account.devices.online': '在线',
   'account.devices.unknown': '未知设备',
@@ -83,8 +94,12 @@ export const settingsPartAccount = {
   'account.devices.loading': '正在加载…',
   'account.devices.empty': '暂无登录设备',
 
+  // ── 安全 ──
+  'account.dangerZone': '账号安全',
+
   // ── 确认弹窗 ──
   'account.signOutConfirm.title': '退出登录？',
+  'account.delete.rowTitle': '永久删除账号',
   'account.delete.entry': '注销账号',
   'account.delete.title': '注销账号',
   'account.delete.desc': '账号、资料与登录记录将被永久删除。',
