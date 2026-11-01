@@ -307,8 +307,6 @@ scripts/wire_*.py
 reference/*
 !reference/ui-replica/
 !reference/ui-replica/**
-reference/ui-replica/node_modules/
-reference/ui-replica/dist/
 reference/ui-replica/package-lock.json
 
 # markdown-editor 已独立（同上条目）：仅保留忽略语义，不再白名单入库。
@@ -323,8 +321,6 @@ reference/markdown-editor/package-lock.json
 # ui-replica-refactored (keep for architecture redesign)
 !reference/ui-replica-refactored/
 !reference/ui-replica-refactored/**
-reference/ui-replica-refactored/node_modules/
-reference/ui-replica-refactored/dist/
 
 # Interactive Table (交互表格1:1复刻设计资产)
 !reference/Interactive Table/
