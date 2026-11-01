@@ -377,8 +377,8 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       join(DIR, '../../components/binary-tree/TreeLeafPanel.tsx'),
       'utf8'
     );
-    expect(treeSrc).toMatch(/未知面板类型：/);
-    expect(treeSrc).toMatch(/未知|扩展未激活/);
+    expect(treeSrc).toMatch(/workspace\.leaf\.unknownPanelType/);
+    expect(treeSrc).toMatch(/unknownPanelType|panelRenderError/);
 
     activateNotePaper();
     render(<ResidualNoteTab {...ctx()} />);

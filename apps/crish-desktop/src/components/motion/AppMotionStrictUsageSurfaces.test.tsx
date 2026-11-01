@@ -18,7 +18,18 @@ describe('LazyMotion(strict) 运行时契约', () => {
   it('用量概览（SlotText / AnimatedCounter）在 AppMotionProvider 下不抛错', () => {
     const { container } = render(
       <AppMotionProvider>
-        <UsageSummaryHero totalTokens={123456} totalCost={1.23} />
+        <UsageSummaryHero
+          totalTokens={123456}
+          totalCost={1.23}
+          heroStats={{
+            dailyAverageTokens: 12345,
+            dailyAverageCost: 0.12,
+            totalMessages: 42,
+            topModel: 'gpt-5',
+            peakActiveHourRange: '14:00-15:00',
+            topProject: 'conex',
+          }}
+        />
       </AppMotionProvider>
     );
     expect(container.textContent).toContain('tokens');

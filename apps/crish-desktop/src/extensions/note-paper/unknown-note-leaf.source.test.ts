@@ -38,14 +38,14 @@ describe('07 · 未知 note 叶文案源码钉（≠ 真壳到达 · ≠ 打开�
   });
 
   it('未知 / 未注册 view 分支存在（未知面板类型）', () => {
-    expect(treeSrc).toMatch(/未知面板类型/);
+    expect(treeSrc).toMatch(/workspace\.leaf\.unknownPanelType/);
     expect(treeSrc).toMatch(/viewRegistry\.resolveView/);
     expect(treeSrc).toMatch(/<SlotOutlet[\s\S]*?fallback=\{/);
-    expect(treeSrc).toMatch(/未知面板类型：\{mainViewId\}/);
+    expect(treeSrc).toMatch(/unknownPanelType',\s*\{\s*viewId: mainViewId/);
   });
 
   it('文案钉通用未知回退，而非 note 内置名单兜底', () => {
-    expect(treeSrc).toMatch(/未知面板类型/);
+    expect(treeSrc).toMatch(/workspace\.leaf\.unknownPanelType/);
     expect(treeSrc).not.toMatch(/registerBuiltInViews/);
     expect(treeSrc).not.toMatch(/NotePaperStrictPanel|NoteLeafHost/);
     expect(treeSrc).not.toMatch(/case\s+['"]note['"]/);
