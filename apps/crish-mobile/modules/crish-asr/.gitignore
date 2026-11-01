@@ -1,0 +1,4 @@
+# sherpa-onnx 官方 AAR（≈49MB）由 android/build.gradle 在构建期下载并校验
+# SHA-256 后落入 libs/，并解压到 build/ 供 jar/jniLibs 引用，禁止提交进仓库。
+android/libs/
+android/build/

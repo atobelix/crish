@@ -18,7 +18,8 @@
     "exactOptionalPropertyTypes": false,
     "paths": {
       "@/*": ["./src/*"],
-      "@/assets/*": ["./assets/*"]
+      "@/assets/*": ["./assets/*"],
+      "crish-asr": ["./modules/crish-asr/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

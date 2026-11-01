@@ -10,6 +10,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useSessionStore } from '@/adapters/hooks/useAppStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { useSessionComposer } from '@/adapters/viewmodels/useSessionComposer';
+import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { ensureSessionHistory } from '@/adapters/runtime/appRuntime';
 import {
   buildSessionTimeline,
@@ -30,6 +31,7 @@ import {
   EdgeFade,
   Screen,
   ScrollToBottomButton,
+  useToast,
 } from '@/presentation/ui';
 
 export interface SessionDetailScreenProps {
@@ -65,6 +67,16 @@ export default function SessionDetailScreen({
       ...current,
       { id: `local-${runId}`, text: prompt, atMs: Date.now() },
     ]);
+  });
+
+  const { showToast } = useToast();
+  // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交
+  const voice = useVoiceInput({
+    onFillText: composer.setPrompt,
+    onSubmitText: (text) => {
+      void composer.submitText(text);
+    },
+    notify: showToast,
   });
 
   const currentRunId = latestRunIdOf(
@@ -223,6 +235,7 @@ export default function SessionDetailScreen({
           canSubmit={composer.canSubmit && !approvalLocked}
           editable={editable}
           maxLength={4096}
+          voice={voice}
         />
       </View>
 

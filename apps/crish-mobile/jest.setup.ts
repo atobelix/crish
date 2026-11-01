@@ -103,6 +103,8 @@ jest.mock('react-native-gesture-handler', () => {
       Tap: () => chainable(),
       Fling: () => chainable(),
       Race: () => chainable(),
+      LongPress: () => chainable(),
+      Simultaneous: () => chainable(),
     },
   };
 });

@@ -1,0 +1,76 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.crishasr'
+version = '1.0.0'
+
+// ── sherpa-onnx 官方 AAR（原生引擎）──────────────────────────────
+// 决策：不把 ≈49MB 的 AAR 二进制提交进仓库；构建期从 sherpa-onnx 官方
+// GitHub Release 拉取固定版本并校验 SHA-256 后落入 libs/（已 .gitignore）。
+//
+// 接入方式（两轮实证修正）：
+// 1) 下载必须在脚本求值（配置期）完成——依赖在任务图计算期即被解析，
+//    挂在 preBuild 任务上来不及；
+// 2) 库模块不能可靠消费本地 AAR（files() 直依赖在打 AAR 时被 AGP 拒绝、
+//    flatDir 按名解析在本工程解析不到），故配置期把 AAR 解压到 build/，
+//    classes.jar 走普通 jar 依赖、jni/ 走 jniLibs 源目录——均为库模块
+//    完全支持的标准通道。
+def sherpaAarVersion = '1.13.8'
+def sherpaAarName = "sherpa-onnx-${sherpaAarVersion}.aar"
+def sherpaAarFile = file("libs/${sherpaAarName}")
+def sherpaAarUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${sherpaAarVersion}/${sherpaAarName}"
+def sherpaAarSha256 = '633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96'
+def sherpaDir = file("build/sherpa-onnx-${sherpaAarVersion}")
+
+if (!sherpaAarFile.exists()) {
+  sherpaAarFile.parentFile.mkdirs()
+  def tmp = new File(sherpaAarFile.parentFile, sherpaAarName + '.tmp')
+  tmp.withOutputStream { out ->
+    new URL(sherpaAarUrl).withInputStream { input -> out << input }
+  }
+  def digest = java.security.MessageDigest.getInstance('SHA-256')
+  tmp.withInputStream { input ->
+    byte[] buffer = new byte[8192]
+    int read
+    while ((read = input.read(buffer)) > 0) {
+      digest.update(buffer, 0, read)
+    }
+  }
+  def actual = digest.digest().encodeHex().toString()
+  if (actual != sherpaAarSha256) {
+    tmp.delete()
+    throw new GradleException("sherpa-onnx AAR SHA-256 校验失败：期望 ${sherpaAarSha256}，实际 ${actual}")
+  }
+  if (!tmp.renameTo(sherpaAarFile)) {
+    throw new GradleException("sherpa-onnx AAR 落盘失败：${sherpaAarFile}")
+  }
+}
+
+if (!file("${sherpaDir}/classes.jar").exists()) {
+  delete(sherpaDir)
+  copy {
+    from zipTree(sherpaAarFile)
+    into sherpaDir
+    include 'classes.jar'
+    include 'jni/**'
+  }
+}
+
+android {
+  namespace "expo.modules.crishasr"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  sourceSets {
+    main {
+      jniLibs.srcDirs += "${sherpaDir}/jni"
+    }
+  }
+}
+
+dependencies {
+  implementation files("${sherpaDir}/classes.jar")
+}

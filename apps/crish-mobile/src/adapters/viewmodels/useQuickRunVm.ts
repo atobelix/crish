@@ -23,10 +23,7 @@ import {
   RunTaskCommandError,
   type QuickRunContext,
 } from '@/adapters/quickRunWiring';
-import type {
-  RunTaskParams,
-  PermissionMode,
-} from '@crish/shared-types';
+import type { RunTaskParams, PermissionMode } from '@crish/shared-types';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────
 
@@ -92,6 +89,8 @@ export interface QuickRunVm {
   selectSession: (sessionId: string | null) => void;
   /** 发起 run（busy 防重入；未连接/空 prompt 静默拒绝） */
   submit: () => void;
+  /** 以显式文本发起 run（语音输入松开直发：回填与提交同刻，不依赖 prompt 状态时序） */
+  submitText: (text: string) => void;
 }
 
 export function useQuickRunVm(
@@ -125,43 +124,54 @@ export function useQuickRunVm(
     setFeedback({ kind: 'idle' });
   }, []);
 
-  const submit = useCallback(() => {
-    if (busyRef.current) return;
-    const text = prompt.trim();
-    if (!connected || text.length === 0) return;
-    const ctx = ctxOf();
-    if (!ctx) {
-      // 接线未启动（未配对/未装配）：按未连接口径反馈（诚实化，不静默）
-      setFeedback({
-        kind: 'error',
-        code: 'transport.closed',
-        message: runTaskErrorTextOf('transport.closed'),
-      });
-      return;
-    }
-    busyRef.current = true;
-    setBusy(true);
-    setFeedback({ kind: 'sending' });
-    void ctx.repository
-      .runTask(runTaskParamsOf(text, selectedSessionId))
-      .then((res) => {
+  const submitWithText = useCallback(
+    (rawText: string) => {
+      if (busyRef.current) return;
+      const text = rawText.trim();
+      if (!connected || text.length === 0) return;
+      const ctx = ctxOf();
+      if (!ctx) {
+        // 接线未启动（未配对/未装配）：按未连接口径反馈（诚实化，不静默）
         setFeedback({
-          kind: 'success',
-          runId: res.runId,
-          sessionId: res.sessionId,
+          kind: 'error',
+          code: 'transport.closed',
+          message: runTaskErrorTextOf('transport.closed'),
         });
-        setPromptState(''); // 成功回执后清空输入（下次任务再输入）
-      })
-      .catch((e: unknown) => {
-        const code =
-          e instanceof RunTaskCommandError ? e.code : RUN_TASK_ERROR_INTERNAL;
-        setFeedback({ kind: 'error', code, message: runTaskErrorTextOf(code) });
-      })
-      .finally(() => {
-        busyRef.current = false;
-        setBusy(false);
-      });
-  }, [connected, prompt, selectedSessionId, ctxOf]);
+        return;
+      }
+      busyRef.current = true;
+      setBusy(true);
+      setFeedback({ kind: 'sending' });
+      void ctx.repository
+        .runTask(runTaskParamsOf(text, selectedSessionId))
+        .then((res) => {
+          setFeedback({
+            kind: 'success',
+            runId: res.runId,
+            sessionId: res.sessionId,
+          });
+          setPromptState(''); // 成功回执后清空输入（下次任务再输入）
+        })
+        .catch((e: unknown) => {
+          const code =
+            e instanceof RunTaskCommandError ? e.code : RUN_TASK_ERROR_INTERNAL;
+          setFeedback({
+            kind: 'error',
+            code,
+            message: runTaskErrorTextOf(code),
+          });
+        })
+        .finally(() => {
+          busyRef.current = false;
+          setBusy(false);
+        });
+    },
+    [connected, selectedSessionId, ctxOf]
+  );
+
+  const submit = useCallback(() => {
+    submitWithText(prompt);
+  }, [submitWithText, prompt]);
 
   return {
     connected,
@@ -174,5 +184,6 @@ export function useQuickRunVm(
     setPrompt,
     selectSession,
     submit,
+    submitText: submitWithText,
   };
 }

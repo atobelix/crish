@@ -1,0 +1,14 @@
+{
+  "description": "Crish 离线语音识别本地模块（sherpa-onnx SenseVoice-Small + Silero VAD 伪流式）",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "name": "crish-asr",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "sideEffects": false,
+  "types": "src/index.ts",
+  "version": "1.0.0"
+}

@@ -21,6 +21,8 @@ export interface SessionComposerVm {
   canSubmit: boolean;
   setPrompt: (text: string) => void;
   submit: () => Promise<boolean>;
+  /** 以显式文本提交（语音输入松开直发：回填与提交同刻发生，不能依赖 prompt 状态时序） */
+  submitText: (text: string) => Promise<boolean>;
 }
 
 export function useSessionComposer(
@@ -43,42 +45,50 @@ export function useSessionComposer(
     );
   }, []);
 
-  const submit = useCallback(async (): Promise<boolean> => {
-    const text = prompt.trim();
-    if (busyRef.current || !connected || text.length === 0) return false;
-    const context = getQuickRunContext();
-    if (!context) {
-      setFeedback({
-        kind: 'error',
-        message: runTaskErrorTextOf('transport.closed'),
-      });
-      return false;
-    }
-    busyRef.current = true;
-    setBusy(true);
-    setFeedback({ kind: 'sending', message: null });
-    try {
-      const result = await context.repository.runTask({
-        prompt: text,
-        sessionId,
-        permissionMode: 'ask',
-      });
-      setPromptState('');
-      setFeedback({ kind: 'success', message: null });
-      onSent?.(text, result.runId);
-      return true;
-    } catch (error) {
-      const code =
-        error instanceof RunTaskCommandError
-          ? error.code
-          : RUN_TASK_ERROR_INTERNAL;
-      setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
-      return false;
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }, [connected, onSent, prompt, sessionId]);
+  const submitWithText = useCallback(
+    async (rawText: string): Promise<boolean> => {
+      const text = rawText.trim();
+      if (busyRef.current || !connected || text.length === 0) return false;
+      const context = getQuickRunContext();
+      if (!context) {
+        setFeedback({
+          kind: 'error',
+          message: runTaskErrorTextOf('transport.closed'),
+        });
+        return false;
+      }
+      busyRef.current = true;
+      setBusy(true);
+      setFeedback({ kind: 'sending', message: null });
+      try {
+        const result = await context.repository.runTask({
+          prompt: text,
+          sessionId,
+          permissionMode: 'ask',
+        });
+        setPromptState('');
+        setFeedback({ kind: 'success', message: null });
+        onSent?.(text, result.runId);
+        return true;
+      } catch (error) {
+        const code =
+          error instanceof RunTaskCommandError
+            ? error.code
+            : RUN_TASK_ERROR_INTERNAL;
+        setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
+        return false;
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    },
+    [connected, onSent, sessionId]
+  );
+
+  const submit = useCallback(
+    (): Promise<boolean> => submitWithText(prompt),
+    [submitWithText, prompt]
+  );
 
   return {
     connected,
@@ -88,5 +98,6 @@ export function useSessionComposer(
     canSubmit: connected && !busy && prompt.trim().length > 0,
     setPrompt,
     submit,
+    submitText: submitWithText,
   };
 }

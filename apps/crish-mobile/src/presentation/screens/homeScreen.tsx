@@ -15,6 +15,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
 import { useDeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
+import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
@@ -58,6 +59,12 @@ export default function HomeScreen({
   const { showToast } = useToast();
   const { sessions, windows, connected } = useSessionsVm();
   const quickRun = useQuickRunVm();
+  // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交
+  const voice = useVoiceInput({
+    onFillText: quickRun.setPrompt,
+    onSubmitText: quickRun.submitText,
+    notify: showToast,
+  });
   const device = useDeviceStatusVm();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deviceOpen, setDeviceOpen] = useState(false);
@@ -196,6 +203,7 @@ export default function HomeScreen({
           canSubmit={quickRun.canSubmit}
           editable={connected && !quickRun.busy}
           maxLength={4096}
+          voice={voice}
         />
       </View>
 

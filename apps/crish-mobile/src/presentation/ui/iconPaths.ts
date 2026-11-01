@@ -20,6 +20,9 @@ export const ICON_PATHS = {
   add: 'M12 5v14M5 12h14',
   search: 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
+  mic:
+    'M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z' +
+    'M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8',
   refresh:
     'M23 4v6h-6M1 20v-6h6' +
     'M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15',
@@ -58,4 +61,4 @@ export const SHARP_ICONS: ReadonlySet<IconName> = new Set([
   'check',
 ] as IconName[]);
 
-export const ICON_NAME_LIMIT = 27;
+export const ICON_NAME_LIMIT = 28;

@@ -1,0 +1,4 @@
+{
+  "android": { "modules": ["expo.modules.crishasr.CrishAsrModule"] },
+  "platforms": ["android"]
+}
