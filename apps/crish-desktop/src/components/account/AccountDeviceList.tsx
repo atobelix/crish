@@ -1,6 +1,13 @@
 /**
- * 登录设备列表：本机置顶并带「本机」标签；在线显示品牌绿点 +「在线」，离线显示最近日期；
- * 行悬停显露「退出」，列表下方「退出其他设备」。
+ * 登录设备列表：本机置顶并带「本机」标签；在线显示品牌绿点 +「在线」，离线显示最近日期。
+ * 呈现与设置页同构：SettingsCard 分组卡 + SettingsRow 标准行（图标位 / 标题 /
+ * 状态副标题 / 右侧控件槽），不再自成一套块行体系；行内「退出」为常显的次级按钮
+ * （危险语义红字），「退出其他设备」收在卡片下方右对齐的动作区（与二级页操作区
+ * 同口径），不再悬停显形、也不是列表下方左侧的孤字。空态与加载态走共享
+ * SettingsEmpty（卡内居中块，role=status 语义保留），与诊断、多端互通等页
+ * 同一口径；说明文案已由 DevicesPane 的引言承担，空态不重复设副文案。
+ * 页标题由 DevicesPane 的页骨架承担，此处不自带标题。数据与撤销逻辑
+ * （sessions/devices 拉取与回调）不变。
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Button, AppIcon, cn, type IconName } from '../ui';
@@ -13,6 +20,11 @@ import {
   type AccountDeviceRow,
 } from './accountDevices';
 import { authErrorText } from './authErrorText';
+import {
+  SettingsCard,
+  SettingsEmpty,
+  SettingsRow,
+} from '../settings/SettingsUI';
 import controls from './accountControls.module.css';
 import styles from './account.module.css';
 
@@ -38,37 +50,45 @@ function DeviceRow({
         language
       );
   return (
-    <li className={styles.deviceRow}>
-      <span className={styles.deviceIcon} aria-hidden="true">
-        <AppIcon name={KIND_ICON[row.kind]} size={16} />
-      </span>
-      <span className={styles.deviceName}>
-        <span className={styles.deviceNameText}>
-          {row.name || t('settings.account.devices.unknown')}
-        </span>
-        {row.current ? (
-          <span className={styles.deviceTag}>
-            {t('settings.account.devices.current')}
+    <SettingsRow
+      icon={<AppIcon name={KIND_ICON[row.kind]} size={16} />}
+      title={
+        <span className={styles.deviceTitle}>
+          <span className={styles.deviceNameText}>
+            {row.name || t('settings.account.devices.unknown')}
           </span>
-        ) : null}
-      </span>
-      <span className={styles.deviceMeta}>
-        {row.online ? (
-          <span className={styles.onlineDot} aria-hidden="true" />
-        ) : null}
-        {meta}
-      </span>
-      {row.current ? null : (
-        <Button
-          variant="unstyled"
-          type="button"
-          className={cn(controls.textButton, styles.deviceRevoke)}
-          onClick={() => onRevoke(row.sessionId)}
-        >
-          {t('settings.account.devices.revoke')}
-        </Button>
-      )}
-    </li>
+          {row.current ? (
+            <span className={styles.deviceTag}>
+              {t('settings.account.devices.current')}
+            </span>
+          ) : null}
+        </span>
+      }
+      desc={
+        <span className={styles.deviceStatus}>
+          {row.online ? (
+            <span className={styles.onlineDot} aria-hidden="true" />
+          ) : null}
+          <span>{meta}</span>
+        </span>
+      }
+      control={
+        row.current ? undefined : (
+          <Button
+            variant="unstyled"
+            type="button"
+            className={cn(
+              controls.button,
+              controls.secondary,
+              styles.deviceRevoke
+            )}
+            onClick={() => onRevoke(row.sessionId)}
+          >
+            {t('settings.account.devices.revoke')}
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -117,36 +137,44 @@ export function AccountDeviceList() {
 
   return (
     <section
-      className={styles.section}
+      className={styles.deviceStack}
       aria-label={t('settings.account.devices.label')}
     >
-      <h3 className={controls.label}>{t('settings.account.devices.label')}</h3>
       {rows.length > 0 ? (
-        <ul className={styles.deviceList}>
+        <SettingsCard>
           {rows.map((row) => (
             <DeviceRow key={row.sessionId} row={row} onRevoke={handleRevoke} />
           ))}
-        </ul>
+        </SettingsCard>
       ) : (
-        <div className={styles.deviceHint} role="status">
-          {sessionsLoading
-            ? t('settings.account.devices.loading')
-            : t('settings.account.devices.empty')}
-        </div>
+        <SettingsCard>
+          <div role="status">
+            <SettingsEmpty
+              icon={<AppIcon name="monitor" size={24} aria-hidden />}
+              title={
+                sessionsLoading
+                  ? t('settings.account.devices.loading')
+                  : t('settings.account.devices.empty')
+              }
+            />
+          </div>
+        </SettingsCard>
       )}
       {error ? (
-        <div className={styles.afterList}>
-          <p className={controls.errorText} role="alert">
-            {error}
-          </p>
-        </div>
+        <p className={controls.errorText} role="alert">
+          {error}
+        </p>
       ) : null}
       {hasOthers ? (
-        <div className={styles.afterList}>
+        <div className={styles.deviceActions}>
           <Button
             variant="unstyled"
             type="button"
-            className={cn(controls.textButton, controls.textDanger)}
+            className={cn(
+              controls.button,
+              controls.secondary,
+              styles.deviceRevokeAll
+            )}
             disabled={busy}
             onClick={handleRevokeOthers}
           >

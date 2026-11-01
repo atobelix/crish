@@ -120,7 +120,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loading: false,
       error: null,
     });
-    await Promise.all([get().loadProfile(), get().loadDevices()]);
+    void Promise.all([get().loadProfile(), get().loadDevices()]);
   },
 
   logout: async () => {

@@ -1,13 +1,12 @@
 /* 设置「账户」分区：身份行 / 资料 / 登录设备 / 注销，以及修改密码子页与确认弹窗。
- * 颜色一律走 --account-*；段落间距 32、组内 8，内容最大宽 560。 */
+ * 颜色一律走 --account-*；段落间距 32、组内 8，内容最大宽 560。
+ * 二级页（改密 / 编辑资料 / 登录设备）单独一根 480 内容列：表单、按钮行同宽同边，
+ * 节奏统一为组间 24、组内 8/12、按钮行距上组 32。页内不设标题（面包屑为唯一页头），
+ * 功能性说明收为内容区顶部的一行引言（.subIntro）。 */
 
 .pane {
   max-width: var(--account-content-max);
   color: var(--account-text-1);
-}
-
-.section {
-  margin-top: var(--gap-section);
 }
 
 .stack {
@@ -21,6 +20,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  padding: var(--space-3) var(--space-3_5);
 }
 
 .avatarWrap {
@@ -116,8 +116,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: var(--account-avatar-size);
-  height: var(--account-avatar-size);
+  width: 36px;
+  height: 36px; /* 刻度外裸值：与 width 成对的头像占位固定尺寸，无既有档，授权保留 */
   border-radius: var(--radius-circle);
   background: var(--account-field);
   color: var(--account-text-4);
@@ -132,53 +132,27 @@
   color: var(--account-text-1);
 }
 
-/* ── 登录设备：48 行，悬停显露「退出」 ── */
-.deviceList {
+/* ── 登录设备：呈现与设置页同构——SettingsCard 分组卡 + SettingsRow 标准行
+ * （行解剖、卡底、状态台阶全部由 SettingsUI 体系承担，见 SettingsUI.module.css），
+ * 本文件只保留设备专属小件：列表纵向间距、标题行内排布、「本机」标签、状态行、
+ * 常显退出按钮的尺寸、卡片下方右对齐的「退出其他设备」动作区。
+ * 旧的自有块行体系（.deviceList / .deviceRow / .deviceIcon / .deviceMeta /
+ * .deviceHint / .afterList）已整体删除：它以 --surface-outer 自行派生行底
+ * （双主题各一份公式）、每行独立成块、行间露面板色，与设置页「整组一卡、
+ * 行是卡的成员」不是同一套语言——正是用户指出的「硬编码、每一行跟其他
+ * 设置界面不一样」的来源。 */
+.deviceStack {
   display: flex;
   flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.deviceRow {
-  display: flex;
-  align-items: center;
   gap: var(--space-3);
-  height: var(--account-row-height);
-  margin: 0 calc(-1 * var(--gap-group));
-  padding: 0 var(--gap-group);
-  border-radius: var(--account-radius);
-  transition: background-color var(--duration-snappy) var(--ease-standard);
 }
 
-.deviceRow:hover,
-.deviceRow:focus-within {
-  background: var(--account-hover);
-}
-
-.deviceIcon {
+/* 标题行内排布：设备名（过长省略）+「本机」标签横排；字体走 SettingsRow 标题档 */
+.deviceTitle {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--control-height-md);
-  height: var(--control-height-md);
-  border-radius: var(--account-radius);
-  background: var(--account-field);
-  color: var(--account-text-1);
-}
-
-.deviceName {
-  display: flex;
-  flex: 1;
   align-items: center;
   gap: var(--gap-group);
   min-width: 0;
-  font-size: var(--font-size-body);
-  font-weight: var(--fw-medium);
-  line-height: var(--account-line-body);
-  color: var(--account-text-1);
 }
 
 .deviceNameText {
@@ -187,25 +161,37 @@
   white-space: nowrap;
 }
 
+/* 「本机」标签：小胶囊，底色随所在表面派生一档（通用/暗色向提亮目标混，
+ * 浅色向深混——与字段、行底同一套双向口径），不写死色值 */
 .deviceTag {
   flex-shrink: 0;
   padding: calc(var(--gap-inline) / 2) var(--gap-group);
-  border-radius: var(--account-radius);
-  background: var(--account-secondary);
+  border-radius: var(--radius-option);
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 12%
+  );
   font-size: var(--font-size-meta);
   font-weight: var(--fw-regular);
   line-height: var(--account-line-caption);
   color: var(--account-text-2);
 }
 
-.deviceMeta {
-  display: flex;
-  flex-shrink: 0;
+:global(html[data-theme='light']) .deviceTag,
+:global(html[data-theme='default']) .deviceTag {
+  background: color-mix(
+    in oklab,
+    var(--surface-main),
+    var(--surface-deep-target) 6%
+  );
+}
+
+/* 状态行（SettingsRow 副标题内）：在线绿点 + 状态文字横排 */
+.deviceStatus {
+  display: inline-flex;
   align-items: center;
   gap: var(--gap-group);
-  font-size: var(--account-font-size-label);
-  line-height: var(--account-line-body);
-  color: var(--account-text-3);
 }
 
 .onlineDot {
@@ -215,28 +201,38 @@
   background: var(--brand);
 }
 
-/* 「退出」平时透明占位，行悬停 / 键盘聚焦时显露 */
-.deviceRevoke {
-  margin-left: var(--gap-group);
-  opacity: 0;
-  transition: opacity var(--duration-snappy) var(--ease-standard);
+/* 「退出」：行内常显按钮块（形态走 accountControls 的次级按钮 .button.secondary），
+ * 本类只在设备作用域内收小一档尺寸并给危险语义文字色（作用域 + :not(:disabled)
+ * 压过 .secondary 的文字色，禁用态仍走 .button:disabled 的灰字）。
+ * 不再 hover 才显形，也不是下划线文字链接（S6 定版，本次保留）。 */
+.deviceStack .deviceRevoke {
+  height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
 }
 
-.deviceRow:hover .deviceRevoke,
-.deviceRow:focus-within .deviceRevoke {
-  opacity: 1;
+.deviceStack .deviceRevoke:not(:disabled) {
+  color: var(--color-error);
 }
 
-.deviceHint {
-  font-size: var(--account-font-size-label);
-  line-height: var(--account-line-body);
-  color: var(--account-text-4);
+/* 「退出其他设备」动作区：卡片下方右对齐，与二级页操作区（.subActions）同口径——
+ * 标准次级按钮、32px 高（--control-height-md）、12px 圆角、危险红字；
+ * 不再是列表下方左侧 padding 里孤零零的一个按钮（用户原话「摆放有点随意」） */
+.deviceActions {
+  display: flex;
+  justify-content: flex-end;
 }
 
-.afterList {
-  margin-top: var(--gap-group);
+.deviceActions .deviceRevokeAll {
+  height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-option);
 }
 
+.deviceActions .deviceRevokeAll:not(:disabled) {
+  color: var(--color-error);
+}
 /* ── 修改密码子页：从右侧滑入 + 淡入 ── */
 .subPage {
   width: 100%;
@@ -244,7 +240,12 @@
   margin: 0 auto;
 }
 
+/* 二级页内容列：宽 480，覆盖 .pane 的 560 上限，表单/按钮行都以此为准；
+ * margin-inline: auto 在内容区内水平居中（.subPage 本身已居中，列再居中才不贴左） */
 .subPane {
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
   animation: account-sub-enter var(--duration-enter) var(--ease-emphasized) both;
 }
 
@@ -260,40 +261,196 @@
   }
 }
 
-.subHead {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-group);
-  margin-left: calc(-1 * var(--gap-group));
-}
-
-.subTitle {
+/* 页内引言：二级页不设页内标题（面包屑为唯一页头，避免两套页头重复占位），
+ * 功能性说明收为内容区顶部的一行小字：三级文字色、无标题 */
+.subIntro {
   margin: 0;
-  font-size: var(--font-size-heading);
-  font-weight: var(--fw-semibold);
-  line-height: var(--account-line-heading);
-  color: var(--account-text-1);
+  font-size: var(--font-size-sm);
+  line-height: var(--account-line-body);
+  color: var(--account-text-3);
 }
 
+/* 组间统一 24 */
 .subBlock {
   margin-top: var(--space-6);
 }
 
+/* 首组归零：页内无标题后，首个组块直接贴内容区顶部（顶留白由内容区内边距承担）；
+ * 有引言的页面首组不是 first-child，仍按组距 24 与引言分开 */
+.subPane > .subBlock:first-child {
+  margin-top: 0;
+}
+
+/* 组内多字段纵叠：字段间距 12，明显小于组间 24 */
+.subFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 二级页字段列与内容列同宽（占满 480），不再单独收窄 */
 .formWidth {
-  width: var(--account-form-width);
-  max-width: 100%;
+  width: 100%;
 }
 
 .subRow {
   margin-top: var(--gap-group);
 }
 
+/* 按钮行与内容列同宽：右对齐时按钮右缘与字段右缘齐平；距上一组 32；
+ * 两钮间距固定 8（--space-2），不随密度变的 --gap-group 漂移 */
 .subActions {
   display: flex;
-  gap: var(--gap-group);
-  margin-top: var(--space-6);
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-8);
 }
 
+/* 二级页操作按钮收小一档、更松：高由 --control-height-lg（40）收到 --control-height-md（32）、
+ * 左右内边距 16（--space-4）收到 12（--space-3）、字号 body 降到 sm；
+ * 圆角与同页字段/验证码格同档（--radius-option 12px，账号按钮默认走 --button-radius 10px）。
+ * 只在此作用域内覆写 accountControls 的 .button，不动全局口径 */
+.subActions button {
+  height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-option);
+}
+
+/* ── 编辑资料子页：大头像居中 + 「更换头像」 ── */
+.editAvatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-group);
+}
+
+.avatarLarge {
+  width: calc(var(--account-avatar-size) * 1.5);
+  height: calc(var(--account-avatar-size) * 1.5);
+}
+
+/* 编辑资料页头像本体即按钮（整块可点换头像），原下方「更换头像」文字按钮已去掉；
+ * 底部中央骑在头像下缘一个磨砂相机徽标作 affordance：深色半透明底 + backdrop blur，
+ * 图标走 --surface-overlay-fg（纯白，两主题同值），在照片类头像上也读得出；
+ * 徽标本身 pointer-events: none，点击/键盘都落在按钮本体，aria-label 仍是「更换头像」 */
+.editAvatarButton {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-circle);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.editAvatarButton:disabled {
+  cursor: default;
+}
+
+.editAvatarButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.avatarBadge {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border-radius: var(--radius-circle);
+  background: color-mix(in srgb, var(--shadow-color) 38%, transparent);
+  color: var(--surface-overlay-fg);
+  pointer-events: none;
+  transition: background-color var(--transition-fast);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .avatarBadge {
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    backdrop-filter: blur(6px) saturate(140%);
+  }
+}
+
+.editAvatarButton:hover:not(:disabled) .avatarBadge {
+  background: color-mix(in srgb, var(--shadow-color) 52%, transparent);
+}
+
+/* 简介多行域：对齐账号字段的无描边表面与三档状态（静止 = 基底；hover 叠
+ * --state-hover；聚焦恰回基底，2026-11-01 Phase 2 对齐全站输入框口径） */
+textarea.bioField {
+  width: 100%;
+  /* 默认 4 行，随输入长到 8 行，再长内部滚动（高度同步逻辑在 EditProfilePane）；
+   * 行高 20px + 上下内边距即一行的实际占高 */
+  min-height: calc(var(--account-line-body) * 4 + var(--space-3) * 2);
+  max-height: calc(var(--account-line-body) * 8 + var(--space-3) * 2);
+  overflow-y: auto;
+  padding: var(--space-3);
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--radius-option);
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 5%
+  );
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--font-size-body);
+  line-height: var(--account-line-body);
+  color: var(--account-text-1);
+  caret-color: var(--brand);
+  resize: none;
+  transition: background var(--transition-fast);
+}
+
+.bioField::placeholder {
+  color: var(--account-text-3);
+}
+
+.bioField:where(:hover:not(:focus)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)),
+    color-mix(in oklab, var(--surface-outer), var(--surface-tint-target) 5%);
+}
+
+.bioField:where(:focus, :focus:hover) {
+  outline: none;
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 5%
+  );
+}
+
+/* 浅色单独一档（只新增浅色作用域规则，暗色渲染一字不变）：2026-11-01 S8 改版，
+ * 推翻 S1/S2 的「向深压暗」口径，用户裁决输入框与暗色同理——比所在表面亮一档。
+ * 浅色主场景表面 = 设置面板 --surface-outer（#f9f9f9，249）；字段改用卡面色
+ * --surface-main（#ffffff，255），比面板亮 6 灰阶，与整卡白底同族的「亮框」。
+ * 状态档 2026-11-01 收口 Phase 2 再对齐全站三档（推翻 S8 的聚焦向深 2%）：
+ * hover（未聚焦）叠 --state-hover 一层；聚焦底色恰回基底（纯白）不变暗，
+ * 与 accountControls 字段同口径，账号页所有字段浅色下同深浅同行为。 */
+:global(html[data-theme='light']) .bioField,
+:global(html[data-theme='default']) .bioField {
+  background: var(--surface-main);
+}
+
+:global(html[data-theme='light']) .bioField:where(:hover:not(:focus)),
+:global(html[data-theme='default']) .bioField:where(:hover:not(:focus)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)), var(--surface-main);
+}
+
+:global(html[data-theme='light']) .bioField:where(:focus, :focus:hover),
+:global(html[data-theme='default']) .bioField:where(:focus, :focus:hover) {
+  background: var(--surface-main);
+}
 /* ── 确认弹窗：24 内边距，16/24 标题，按钮右对齐 ── */
 .confirmPanel {
   width: min(var(--account-confirm-width), calc(100vw - var(--space-8)));

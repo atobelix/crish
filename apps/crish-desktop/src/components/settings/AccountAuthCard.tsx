@@ -8,6 +8,7 @@ import { AppIcon, Button } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import { useAuthField } from '../../store/storeAccess';
 import { useAccountUiStore } from '../../store/accountUiStore';
+import { SettingsCard, SettingsRow } from './SettingsUI';
 import { AccountProfilePane } from '../account/AccountProfilePane';
 import { DeleteAccountDialog } from '../account/DeleteAccountDialog';
 import { SignOutConfirmDialog } from '../account/SignOutConfirmDialog';
@@ -40,25 +41,30 @@ export const AccountAuthCard: React.FC = () => {
           onRequestDelete={() => setConfirm('delete')}
         />
       ) : (
-        <div className={styles.pane}>
-          <div className={styles.identity}>
-            <div className={styles.signedOutAvatar} aria-hidden="true">
-              <AppIcon name="user" size={20} />
-            </div>
-            <div className={styles.identityText}>
-              <div className={styles.signedOutTitle}>
-                {t('settings.account.signedOut')}
+        <SettingsCard>
+          <SettingsRow
+            icon={
+              <div className={styles.signedOutAvatar} aria-hidden="true">
+                <AppIcon name="user" size={16} />
               </div>
-            </div>
-            <div className={styles.actions}>
-              {/* 全局原子 Button（primary variant / 设计 token）——账户区不再
-                  私设 unstyled 黑底按钮；登录弹窗为应用级单实例（AppGlobalDialogs） */}
-              <Button variant="primary" type="button" onClick={openLogin}>
-                {t('settings.account.signIn')}
+            }
+            title={t('settings.account.signedOut', '未登录')}
+            desc={t(
+              'settings.account.quick.signInTip',
+              '登录账户以同步配置并支持多端互通'
+            )}
+            control={
+              <Button
+                variant="primary"
+                size="sm"
+                type="button"
+                onClick={openLogin}
+              >
+                {t('settings.account.signIn', '登录')}
               </Button>
-            </div>
-          </div>
-        </div>
+            }
+          />
+        </SettingsCard>
       )}
       <SignOutConfirmDialog
         open={confirm === 'signOut'}

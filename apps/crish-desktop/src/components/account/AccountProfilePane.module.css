@@ -1,0 +1,23 @@
+/* 账号 UID 行（AccountProfilePane 专用）：值 + 复制按钮成组靠右、紧挨。
+ * 2026-11-01 收口 Phase 2 归位：本文件原挂在 settings/SettingsProfileTab
+ * 名下（设置页本体早已不引用），现随唯一消费方 AccountProfilePane 迁回
+ * 账号域；类名与规则一字未动，零视觉变化。 */
+.settingsPathEllipsis {
+  display: inline-block;
+  max-width: min(360px, 48vw);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--line-height-compact);
+  vertical-align: middle;
+}
+
+.accountUidControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}

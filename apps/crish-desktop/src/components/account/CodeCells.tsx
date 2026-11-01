@@ -2,7 +2,7 @@
  * 6 位验证码格：一个透明的数字输入框覆盖在 6 个视觉格上，
  * 天然支持键盘输入、退格、粘贴与系统一次性验证码自动填充；填满即回调 onComplete。
  */
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Input } from '../ui';
 import { ACCOUNT_CODE_LENGTH, normalizeCode } from './accountRules';
 import styles from './accountControls.module.css';
@@ -32,6 +32,21 @@ export function CodeCells({
   const [focused, setFocused] = useState(false);
   const activeIndex = value.length < ACCOUNT_CODE_LENGTH ? value.length : -1;
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 自动聚焦补正：原生 autoFocus 只在挂载瞬间生效；若组件在挂载前后被置
+  // disabled（如提交保存期间），浏览器会把已聚焦的 input 焦点丢回 body，
+  // disabled 解除后也不会自己恢复。故在 disabled 解除时用 rAF 补一次 focus：
+  // input 拿到焦点后 onFocus 置 focused，activeIndex（= value.length）
+  // 对应的格子随即亮起并显示品牌色光标。
+  // 注：改密页的自动发码不禁用本组件（禁用会把进页聚焦绑架给发码时序），
+  // 进页聚焦走原生 autoFocus + 本 effect 的挂载首跑即可稳定落焦。
+  useEffect(() => {
+    if (!autoFocus || disabled) return;
+    const raf = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [autoFocus, disabled]);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const next = normalizeCode(event.target.value);

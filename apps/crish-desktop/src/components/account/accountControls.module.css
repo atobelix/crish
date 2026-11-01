@@ -1,6 +1,10 @@
-/* 账号界面基础控件：无描边字段、按钮、验证码格、遮罩与弹窗外壳。
- * 设计语言：无阴影、无光圈、无描边；聚焦只换底色 + 品牌色光标，出错浅红底 + 红字。
- * 颜色一律走 --account-*（tokens-components.css），排版与间距走全局 token。 */
+/* 账号界面基础控件：全面对齐当前软件总体 Token 体系
+ * 核心铁律：拒绝任何形式的描边（border: none）；零硬编码样式。
+ * 表面与状态一律直接消费总体 Token：字段/验证码格底色 = 所在表面 --surface-outer 向提亮目标混 5%
+ * （与设置行底同源逻辑）。字段状态对齐全站输入框三档（与 ui/Input 同口径，2026-11-01 收口
+ * Phase 2 用户裁决）：静止 = 基底；hover（未聚焦时）叠 --state-hover 一层；聚焦（含聚焦+hover）
+ * 底色恰回基底——不再提亮（旧暗色 +4%）也不压暗（旧浅色 S8 的向深 2%「按压反馈」一并推翻）。
+ * 次级按钮走 --button-secondary-bg，其余走 --text-primary / --brand / --radius-option。 */
 
 /* ── 字段 ── */
 .field {
@@ -10,17 +14,35 @@
   height: var(--control-height-lg);
   padding: 0 var(--space-3);
   box-sizing: border-box;
-  border-radius: var(--account-radius);
-  background: var(--account-field);
-  transition: background-color var(--duration-snappy) var(--ease-standard);
+  border-radius: var(--radius-option);
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 5%
+  );
+  border: none;
+  box-shadow: none;
+  transition: background var(--transition-fast);
 }
 
-.field:focus-within {
-  background: var(--account-field-focus);
+/* hover（未聚焦）：基底上叠一层 --state-hover，与 ui/Input 三档同技法 */
+.field:where(:hover:not(:focus-within)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)),
+    color-mix(in oklab, var(--surface-outer), var(--surface-tint-target) 5%);
+}
+
+/* 聚焦（含聚焦 + hover）：底色恰回基底，不提亮不压暗 */
+.field:where(:focus-within) {
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 5%
+  );
 }
 
 .field[data-invalid='true'] {
-  background: var(--account-danger-fill);
+  background: var(--color-error-bg);
 }
 
 .fieldInput {
@@ -35,7 +57,7 @@
   font: inherit;
   font-size: var(--font-size-body);
   line-height: var(--account-line-body);
-  color: var(--account-text-1);
+  color: var(--text-primary);
   caret-color: var(--brand);
 }
 
@@ -46,7 +68,7 @@
 }
 
 .fieldInput::placeholder {
-  color: var(--account-text-4);
+  color: var(--text-tertiary);
 }
 
 .reveal {
@@ -56,16 +78,16 @@
   flex-shrink: 0;
   padding: var(--gap-inline);
   margin-right: calc(-1 * var(--gap-inline));
-  border-radius: var(--account-radius);
-  color: var(--account-text-4);
+  border-radius: var(--button-radius);
+  color: var(--text-tertiary);
   transition: color var(--duration-snappy) var(--ease-standard);
 }
 
 .reveal:hover {
-  color: var(--account-text-2);
+  color: var(--text-secondary);
 }
 
-/* ── 按钮：40 高、10 圆角、14/600；禁用 = 次级底 + 禁用字色（不叠透明度） ── */
+/* ── 按钮：对齐系统总体 Button 规范（--button-radius: 10px，--brand 翡翠绿） ── */
 .button {
   display: inline-flex;
   align-items: center;
@@ -74,67 +96,64 @@
   height: var(--control-height-lg);
   padding: 0 var(--space-4);
   box-sizing: border-box;
-  border-radius: var(--account-radius);
+  border-radius: var(--button-radius);
+  border: none;
   font-size: var(--font-size-body);
   font-weight: var(--fw-semibold);
   line-height: var(--account-line-body);
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background-color var(--duration-snappy) var(--ease-standard),
-    color var(--duration-snappy) var(--ease-standard);
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .primary {
-  background: var(--account-action);
-  color: var(--account-action-text);
+  background: var(--brand);
+  color: var(--text-on-accent);
 }
 
 .primary:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--account-action) 88%,
-    var(--account-surface)
-  );
+  background: var(--accent-hover, #059669);
 }
 
 .secondary {
-  background: var(--account-secondary);
-  color: var(--account-text-1);
+  background: var(--button-secondary-bg);
+  color: var(--text-primary);
 }
 
 .secondary:hover:not(:disabled) {
-  background: var(--account-pressed);
+  background: color-mix(
+    in srgb,
+    var(--button-secondary-bg) 85%,
+    var(--text-primary) 15%
+  );
 }
 
 .danger {
-  background: var(--account-danger);
-  color: var(--account-surface);
+  background: var(--color-error);
+  color: var(--text-on-accent);
 }
 
 .danger:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--account-danger) 88%,
-    var(--account-surface)
-  );
+  background: color-mix(in srgb, var(--color-error) 88%, #000000 12%);
 }
 
 .linkButton {
   background: transparent;
-  color: var(--account-text-2);
+  color: var(--text-secondary);
   font-weight: var(--fw-medium);
 }
 
 .linkButton:hover:not(:disabled) {
-  background: var(--account-hover);
-  color: var(--account-text-1);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .button:disabled {
-  background: var(--account-secondary);
-  color: var(--account-text-disabled);
-  opacity: 1;
+  background: var(--button-secondary-bg);
+  color: var(--text-disabled);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -142,18 +161,26 @@
   background: transparent;
 }
 
+/* 主按钮禁用：保留品牌色降透明，不套通用灰底，保证任何状态下都比次级按钮醒目 */
+.primary:disabled {
+  background: color-mix(in oklab, var(--brand) 45%, transparent);
+  color: color-mix(in oklab, var(--text-on-accent) 70%, transparent);
+  opacity: 1;
+}
+
 .block {
   width: 100%;
 }
 
-/* ── 文字按钮：13/20，无底色 ── */
+/* ── 文字按钮：对齐系统文字排版 ── */
 .textButton {
   padding: 0;
+  border: 0;
   background: transparent;
-  font-size: var(--account-font-size-label);
+  font-size: var(--font-size-sm);
   font-weight: var(--fw-medium);
   line-height: var(--account-line-body);
-  color: var(--account-text-1);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -162,21 +189,21 @@
 }
 
 .textButton:disabled {
-  color: var(--account-text-4);
+  color: var(--text-disabled);
   opacity: 1;
   cursor: default;
 }
 
 .textDanger {
-  color: var(--account-danger);
+  color: var(--color-error);
 }
 
 .textQuiet {
   font-weight: var(--fw-regular);
-  color: var(--account-text-4);
+  color: var(--text-tertiary);
 }
 
-/* ── 图标按钮：32 方块，t3 ── */
+/* ── 图标按钮：对齐系统图标按钮 ── */
 .iconButton {
   display: inline-flex;
   align-items: center;
@@ -184,49 +211,75 @@
   flex-shrink: 0;
   width: var(--control-height-md);
   height: var(--control-height-md);
-  border-radius: var(--account-radius);
-  color: var(--account-text-3);
+  border-radius: var(--button-radius);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
   transition:
     background-color var(--duration-snappy) var(--ease-standard),
     color var(--duration-snappy) var(--ease-standard);
 }
 
 .iconButton:hover {
-  background: var(--account-hover);
-  color: var(--account-text-1);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 /* ── 文本 ── */
 .label {
   margin: 0 0 var(--gap-group);
-  font-size: var(--account-font-size-label);
+  font-size: var(--font-size-sm);
   font-weight: var(--fw-medium);
   line-height: var(--account-line-body);
-  color: var(--account-text-3);
+  color: var(--text-tertiary);
 }
 
 .errorText {
   margin: 0;
-  font-size: var(--account-font-size-label);
+  font-size: var(--font-size-xs);
   line-height: var(--account-line-body);
-  color: var(--account-danger);
+  color: var(--color-error);
 }
 
 .hintText {
   margin: 0;
-  font-size: var(--account-font-size-label);
+  font-size: var(--font-size-xs);
   line-height: var(--account-line-body);
-  color: var(--account-text-3);
+  color: var(--text-tertiary);
 }
 
 .resend {
-  font-size: var(--account-font-size-label);
+  font-size: var(--font-size-xs);
   line-height: var(--account-line-body);
   font-variant-numeric: tabular-nums;
-  color: var(--account-text-4);
+  color: var(--text-tertiary);
 }
 
-/* ── 验证码格：空 = 次级底，已填 = 字段底，当前 = 聚焦底 + 品牌色光标 ── */
+/* ── 子页表单宽度：占满可用宽度，上限 400px ── */
+.formWidth {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* ── 重发验证码行：左静态提示 + 右倒计时灰字 / 品牌色重发按钮 ── */
+.resendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-group);
+  width: 100%;
+}
+
+.textBrand {
+  color: var(--brand);
+}
+
+/* ── 常驻规则提示（字段下方小字） ── */
+.ruleHint {
+  margin-top: var(--gap-group);
+}
+
+/* ── 验证码格：拒绝任何描边，底色与字段同源（所在表面 +5%），激活格叠品牌色 ── */
 .cells {
   position: relative;
   display: grid;
@@ -250,40 +303,71 @@
   align-items: center;
   justify-content: center;
   height: var(--account-row-height);
-  border-radius: var(--account-radius);
-  background: var(--account-secondary);
+  border-radius: var(--radius-option);
+  background: color-mix(
+    in oklab,
+    var(--surface-outer),
+    var(--surface-tint-target) 5%
+  );
+  border: none;
+  box-shadow: none;
   font-size: var(--font-size-title);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
-  color: var(--account-text-1);
+  color: var(--text-primary);
   pointer-events: none;
-  transition: background-color var(--duration-snappy) var(--ease-standard);
+  transition: background-color var(--transition-fast);
 }
 
+/* 已填格比空格亮一档：输入进度靠亮度回馈，不靠描边（格子状态独立于字段三档，聚焦指示看激活格） */
 .cell[data-state='filled'] {
-  background: var(--account-field);
+  background: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--surface-outer), var(--surface-tint-target) 5%),
+    var(--surface-tint-target) 4%
+  );
 }
 
 .cell[data-state='active'] {
-  background: var(--account-field-focus);
+  background: color-mix(
+    in oklab,
+    color-mix(
+      in oklab,
+      color-mix(in oklab, var(--surface-outer), var(--surface-tint-target) 5%),
+      var(--surface-tint-target) 4%
+    ),
+    var(--brand) 12%
+  );
 }
 
 .cells[data-invalid='true'] .cell {
-  background: var(--account-danger-fill);
+  background: var(--color-error-bg);
 }
 
 .caret {
   width: var(--account-caret-width);
   height: var(--icon-size);
   background: var(--brand);
+  animation: account-caret-blink var(--transition-pulse) infinite;
 }
 
-/* ── 弹窗外壳：无阴影无描边，20 圆角，缩放 .98→1 ── */
+@keyframes account-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ── 弹窗外壳：无描边，对齐系统 --radius-2xl 与 --bg-card ── */
 .dialogPanel {
   border: 0;
-  box-shadow: none;
-  border-radius: var(--account-radius-dialog);
-  background: var(--account-surface);
+  box-shadow: var(--shadow-2xl);
+  border-radius: var(--radius-2xl);
+  background: var(--bg-card);
   overflow: hidden;
   transition:
     opacity var(--duration-enter) var(--ease-emphasized),
@@ -305,23 +389,27 @@
     transform var(--duration-exit) var(--ease-accelerate);
 }
 
-/* 遮罩：不支持 backdrop-filter 时用更深的纯色兜底 */
+/* 遮罩：对齐系统全局 --modal-scrim ── */
 .scrim > [data-dialog-backdrop] {
-  background: var(--account-scrim-solid);
-  transition: opacity var(--account-duration-scrim) var(--ease-standard);
+  background: var(--modal-scrim);
+  transition: opacity var(--duration-normal) var(--ease-standard);
 }
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   .scrim > [data-dialog-backdrop] {
-    background: var(--account-scrim);
-    -webkit-backdrop-filter: var(--account-scrim-filter);
-    backdrop-filter: var(--account-scrim-filter);
+    background: var(--modal-scrim);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    backdrop-filter: blur(10px) saturate(120%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .scrim > [data-dialog-backdrop] {
     transition: none;
+  }
+
+  .caret {
+    animation: none;
   }
 }
 
@@ -341,7 +429,7 @@
 
 .strengthBars > span {
   flex: 1;
-  height: 3px;
+  height: 3px; /* 刻度外裸值：强度条厚度，无既有档，授权保留 */
   border-radius: var(--radius-s);
   background: var(--account-secondary);
   transition: background-color var(--duration-snappy) var(--ease-standard);
@@ -375,4 +463,120 @@
 
 .strength[data-strength='reject'] .strengthText {
   color: var(--account-danger);
+}
+
+/* ── 浅色主题专档（2026-11-01 S8 改版，推翻 S2 的向深口径）：字段 / 验证码格改「提亮」 ──
+ * 沿革：通用公式（所在表面向提亮目标混 5%）按暗色定版，浅色下 ≈249.3 与面板
+ * （--surface-outer #f9f9f9，249）只差 0.3 灰阶、字段不可见（S2 诊断）；S2 改向深 3%
+ * （≈239）先解决可见性，S6 补正作用域（本应用浅色是 data-theme='default'，
+ * 不存在 'light'，双选择器口径沿用至今）。S8 用户实机裁决：输入框应与暗色同理——
+ * 比所在表面「亮」一档（暗色字段 ≈40 坐在面板 28 上），239 的深灰框方向反了，
+ * 本块据此整体改写；暗色规则一字未动，本块仅在浅色作用域内覆盖。
+ *
+ * 主场景（设置二级页：编辑资料 / 修改密码，所在表面 = 面板 249）：
+ * · 静止 = 卡面色 --surface-main（#ffffff，255），比面板亮 6 灰阶——与设置页
+ *   「整卡白底坐在 249 面板上」完全同族的亮框，不是灰框；
+ * · 字段状态走全站输入框三档（2026-11-01 收口 Phase 2 用户裁决，推翻 S8 的
+ *   「聚焦向深 2% 作按压反馈」）：hover（未聚焦）叠 --state-hover 一层；
+ *   聚焦底色恰回基底（纯白）不变暗——原 S8 向深 2% 已废止；
+ * · 验证码格 filled/active 不在此列（焦点指示靠激活格品牌色，另行定版）：
+ *   已填 = 基底向深 2%（≈250)，激活格 = 已填基底 + 品牌 20%（沿 S2 在浅色
+ *   放大的比例，保证品牌绿在近白底上可辨）。
+ *
+ * 弹窗场景（登录 / 注册 / 重置 / 删除账号，字段坐在 .dialogPanel 的 --bg-card
+ * 纯白 255 上，提亮无路）：专属覆写为最浅灰——静止 = 卡面色向深 3.5%
+ * （≈246，与白面拉开约 9 灰阶、保证可辨，观感仍是全场最浅的「亮灰」而非深灰框），
+ * 字段 hover/聚焦同三档（hover 叠 --state-hover、聚焦回该 3.5% 基底）；格子的
+ * 已填在基底上再深 2%（≈241)，激活格同 +品牌 20%。 */
+:global(html[data-theme='light']) .field,
+:global(html[data-theme='default']) .field {
+  background: var(--surface-main);
+}
+
+:global(html[data-theme='light']) .field:where(:hover:not(:focus-within)),
+:global(html[data-theme='default']) .field:where(:hover:not(:focus-within)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)), var(--surface-main);
+}
+
+:global(html[data-theme='light']) .field:where(:focus-within),
+:global(html[data-theme='default']) .field:where(:focus-within) {
+  background: var(--surface-main);
+}
+
+:global(html[data-theme='light']) .cell,
+:global(html[data-theme='default']) .cell {
+  background: var(--surface-main);
+}
+
+:global(html[data-theme='light']) .cell[data-state='filled'],
+:global(html[data-theme='default']) .cell[data-state='filled'] {
+  background: color-mix(
+    in oklab,
+    var(--surface-main),
+    var(--surface-deep-target) 2%
+  );
+}
+
+:global(html[data-theme='light']) .cell[data-state='active'],
+:global(html[data-theme='default']) .cell[data-state='active'] {
+  background: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--surface-main), var(--surface-deep-target) 2%),
+    var(--brand) 20%
+  );
+}
+
+/* 弹窗上下文专属覆写（纯白面上提亮无路，见本块头注）：特异性高于上方主场景规则 */
+:global(html[data-theme='light']) .dialogPanel .field,
+:global(html[data-theme='default']) .dialogPanel .field,
+:global(html[data-theme='light']) .dialogPanel .cell,
+:global(html[data-theme='default']) .dialogPanel .cell {
+  background: color-mix(
+    in oklab,
+    var(--surface-main),
+    var(--surface-deep-target) 3.5%
+  );
+}
+
+:global(html[data-theme='light'])
+  .dialogPanel
+  .field:where(:hover:not(:focus-within)),
+:global(html[data-theme='default'])
+  .dialogPanel
+  .field:where(:hover:not(:focus-within)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)),
+    color-mix(in oklab, var(--surface-main), var(--surface-deep-target) 3.5%);
+}
+
+:global(html[data-theme='light']) .dialogPanel .field:where(:focus-within),
+:global(html[data-theme='default']) .dialogPanel .field:where(:focus-within) {
+  background: color-mix(
+    in oklab,
+    var(--surface-main),
+    var(--surface-deep-target) 3.5%
+  );
+}
+
+:global(html[data-theme='light']) .dialogPanel .cell[data-state='filled'],
+:global(html[data-theme='default']) .dialogPanel .cell[data-state='filled'] {
+  background: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--surface-main), var(--surface-deep-target) 3.5%),
+    var(--surface-deep-target) 2%
+  );
+}
+
+:global(html[data-theme='light']) .dialogPanel .cell[data-state='active'],
+:global(html[data-theme='default']) .dialogPanel .cell[data-state='active'] {
+  background: color-mix(
+    in oklab,
+    color-mix(
+      in oklab,
+      color-mix(in oklab, var(--surface-main), var(--surface-deep-target) 3.5%),
+      var(--surface-deep-target) 2%
+    ),
+    var(--brand) 20%
+  );
 }

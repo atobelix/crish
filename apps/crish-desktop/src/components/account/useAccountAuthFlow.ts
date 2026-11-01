@@ -68,7 +68,10 @@ export function useAccountAuthFlow(onSignedIn: () => void) {
           timer = setTimeout(
             () =>
               reject(
-                new AuthApiError('network', t('account.error.networkTimeout'))
+                new AuthApiError(
+                  'network',
+                  t('settings.account.error.networkTimeout')
+                )
               ),
             25000
           );
