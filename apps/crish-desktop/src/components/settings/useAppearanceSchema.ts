@@ -1,6 +1,10 @@
 /**
  * 设置 · 外观 · Schema 定义 hook（从 useAppearanceSettings 提取）。
- * 封装外观设置面板的 SchemaSection 结构（主题/密度/窗口/缩进、颜色与皮肤、高级）。
+ * 封装外观设置面板的 SchemaSection 结构（主题与外观、颜色与皮肤）。
+ * 分区口径（R2 整改）：原「高级」分区删除——智能时光温感过渡并入「主题与外观」、
+ * 氛围色彩融合并入「颜色与皮肤」；「代码缩进」移通用设置对话偏好、
+ * 「界面字号」移「字体与排版」手写区（FontSettingsSection）、
+ * 「启动时恢复上次工作台」移通用设置界面偏好。标题全部走 titleKey（settingsParts 补键）。
  */
 import React, { useMemo } from 'react';
 import type { SchemaSection } from './SettingsSchemaRenderer';
@@ -88,20 +92,24 @@ export function useAppearanceSchema({
     () => [
       {
         title: '主题与外观',
+        titleKey: 'settings.appearance.schemaSectionTheme',
         properties: [
           {
             key: 'theme',
             type: 'toggle-group' as const,
             title: '主题模式',
+            titleKey: 'settings.appearance.schemaThemeMode',
             toggleOptions: [
               {
                 value: 'default',
                 label: '浅色',
+                labelKey: 'settings.appearance.schemaThemeLight',
                 icon: React.createElement(SunIcon),
               },
               {
                 value: 'dark',
                 label: '深色',
+                labelKey: 'settings.appearance.schemaThemeDark',
                 icon: React.createElement(MoonIcon),
               },
             ],
@@ -120,40 +128,63 @@ export function useAppearanceSchema({
             key: 'uiSize',
             type: 'toggle-group' as const,
             title: 'UI 密度',
+            titleKey: 'settings.appearance.schemaUiSize',
             toggleOptions: [
-              { value: 'small', label: '紧凑' },
-              { value: 'medium', label: '默认' },
-              { value: 'large', label: '宽松' },
+              {
+                value: 'small',
+                label: '紧凑',
+                labelKey: 'settings.appearance.schemaUiSizeCompact',
+              },
+              {
+                value: 'medium',
+                label: '默认',
+                labelKey: 'settings.appearance.schemaUiSizeDefault',
+              },
+              {
+                value: 'large',
+                label: '宽松',
+                labelKey: 'settings.appearance.schemaUiSizeLoose',
+              },
             ],
           },
           {
             key: 'shellChrome',
             type: 'select' as const,
             title: '窗口风格',
+            titleKey: 'settings.appearance.schemaWindowStyle',
             options: [
-              { value: 'classic', label: '经典' },
-              { value: 'inset', label: '工作台' },
+              {
+                value: 'classic',
+                label: '经典',
+                labelKey: 'settings.appearance.schemaWindowClassic',
+              },
+              {
+                value: 'inset',
+                label: '工作台',
+                labelKey: 'settings.appearance.schemaWindowWorkbench',
+              },
             ],
           },
           {
-            key: 'codeIndent',
-            type: 'select' as const,
-            title: '代码缩进',
-            options: [
-              { value: '  ', label: '2 空格' },
-              { value: '    ', label: '4 空格' },
-              { value: '\t', label: 'Tab' },
-            ],
+            // 原「高级」分区的视觉效果项并入本区（主题自动化）
+            key: 'transitionEnabled',
+            type: 'boolean' as const,
+            title: '智能时光温感过渡',
+            titleKey: 'settings.appearance.schemaAutoTime',
+            desc: '根据当地日出日落时间，自动调节亮度与色温',
+            descKey: 'settings.appearance.schemaAutoTimeDesc',
           },
         ],
       },
       {
         title: '颜色与皮肤',
+        titleKey: 'settings.appearance.schemaSectionColorSkin',
         properties: [
           {
             key: 'skinPreset',
             type: 'select' as const,
             title: '皮肤预设',
+            titleKey: 'settings.appearance.schemaSkinPreset',
             options: skinOptions,
           },
           ...(skinPreset === 'custom'
@@ -162,11 +193,13 @@ export function useAppearanceSchema({
                   key: 'accentColor',
                   type: 'color' as const,
                   title: '自定义背景色',
+                  titleKey: 'settings.appearance.schemaCustomBg',
                 },
                 {
                   key: 'customFgColor',
                   type: 'color' as const,
                   title: '自定义文本色',
+                  titleKey: 'settings.appearance.schemaCustomFg',
                 },
               ]
             : []),
@@ -174,43 +207,20 @@ export function useAppearanceSchema({
             key: 'brightness',
             type: 'range' as const,
             title: '亮度微调',
+            titleKey: 'settings.appearance.schemaBrightness',
             min: -4,
             max: 4,
             step: 1,
             showValue: true,
           },
           {
-            key: 'fontSize',
-            type: 'range' as const,
-            title: '界面字号',
-            min: 12,
-            max: 18,
-            step: 1,
-            unit: 'px',
-            showValue: true,
-          },
-        ],
-      },
-      {
-        title: '高级',
-        properties: [
-          {
-            key: 'transitionEnabled',
-            type: 'boolean' as const,
-            title: '智能时光温感过渡',
-            desc: '根据当地日出日落时间，自动调节亮度与色温',
-          },
-          {
+            // 原「高级」分区的视觉效果项并入本区（色彩融合）
             key: 'vibrantMode',
             type: 'boolean' as const,
             title: '氛围色彩融合',
+            titleKey: 'settings.appearance.schemaVibrant',
             desc: '调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏',
-          },
-          {
-            key: 'restoreLastWorkspace',
-            type: 'boolean' as const,
-            title: '启动时恢复上次工作台',
-            desc: '开启后尝试恢复标签与多 unit 分屏',
+            descKey: 'settings.appearance.schemaVibrantDesc',
           },
         ],
       },

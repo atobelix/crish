@@ -1,8 +1,15 @@
 import { useToast } from '../../services/toast/ToastContext';
 /**
- * 设置 · 通用设置：系统选项、回答风格、消息快捷键与界面偏好；成功静默，仅失败提示。
+ * 设置 · 通用设置：对话偏好、界面偏好（含语言）、数据与备份、系统与遥测，
+ * 新手引导置于页面最末；成功静默，仅失败提示。
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -17,7 +24,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from './SettingsUI';
-import { Button, Switch } from '@/components/ui';
+import { Button, Input, Switch, Tooltip } from '@/components/ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import {
@@ -31,7 +38,12 @@ import {
   WIZARD_STEP_META,
   type WizardStep,
 } from '../firstRunWizardLib';
-import { useI18n } from '../../i18n';
+import {
+  readRestoreLastWorkspace,
+  setRestoreLastWorkspace,
+} from '../../app/hydrateWorkspaceShell';
+import { normalizeCodeIndent } from './useAppearanceSettings';
+import { useI18n, type SupportedLanguage } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -41,7 +53,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
   void _onBlockingOverlayChange;
-  const { t } = useI18n();
+  const { t, language, setLanguage } = useI18n();
 
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
@@ -54,6 +66,82 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   const [showOnboardingOnStartup, setShowOnboardingOnStartupState] = useState(
     () => shouldShowFirstRunWizard()
   );
+  // 「启动时恢复上次工作台」自外观页迁入：真源在 hydrateWorkspaceShell（本地存储 + settings.ui）
+  const [restoreLastWorkspace, setRestoreLastWorkspaceState] = useState(() =>
+    readRestoreLastWorkspace()
+  );
+
+  // ── 设置备份（自账号页「数据」分区迁入）：导出 / 导入全部设置 ──
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportSettings = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const allSettings = await clientApi.getSettings();
+      const blob = new Blob([JSON.stringify(allSettings ?? {}, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `crish-settings-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      // 成功静默（用户裁决：导出/导入成功提示不必每次说）
+    } catch (err) {
+      showToast(t('settings.personalize.exportFailed', { error: String(err) }));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  /** 选择 JSON 后合并写入本机设置；成功静默并重拉本页设置，失败 toast */
+  const handleImportSettings = () => {
+    if (importing) return;
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    void (async () => {
+      setImporting(true);
+      try {
+        const text = await file.text();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          showToast(t('settings.personalize.invalidJson'));
+          return;
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          showToast(t('settings.personalize.rootMustBeObject'));
+          return;
+        }
+        await clientApi.saveSettingsEx(
+          cwd === '__global__' ? '__global__' : cwd,
+          'global',
+          parsed as Parameters<typeof clientApi.saveSettingsEx>[2]
+        );
+        // 成功静默；重拉本页设置使导入值立即反映
+        setLoadTick((n) => n + 1);
+      } catch (err) {
+        showToast(
+          t('settings.personalize.importFailed', { error: String(err) })
+        );
+      } finally {
+        setImporting(false);
+      }
+    })();
+  };
 
   const handleToggleOnboardingOnStartup = useCallback((next: boolean) => {
     setShowOnboardingOnStartup(next);
@@ -181,11 +269,51 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             type: 'boolean',
             title: t('settings.personalize.hideThinkingTitle'),
           },
+          {
+            // 自「系统与遥测」移入：技能命令是对话输入框行为，归对话偏好
+            key: 'enableSkillCommands',
+            type: 'boolean',
+            title: t('settings.personalize.enableSkillCommandsTitle'),
+            desc: t('settings.personalize.enableSkillCommandsDesc'),
+          },
+          {
+            // 自外观页「主题与外观」移入：代码缩进是编辑行为偏好
+            key: 'codeIndent',
+            type: 'select',
+            title: t('settings.personalize.codeIndentTitle'),
+            options: [
+              {
+                value: '  ',
+                label: t('settings.personalize.codeIndentTwoSpaces'),
+              },
+              {
+                value: '    ',
+                label: t('settings.personalize.codeIndentFourSpaces'),
+              },
+              {
+                value: '\t',
+                label: t('settings.personalize.codeIndentTab'),
+              },
+            ],
+          },
         ],
       },
       {
         title: t('settings.personalize.uiPrefs'),
         properties: [
+          {
+            // 自外观页移入：语言是通用偏好，置于界面偏好首行
+            key: 'language',
+            type: 'select',
+            title: t('settings.general.language'),
+            options: [
+              {
+                value: 'zh-CN',
+                label: t('settings.personalize.languageZhHans'),
+              },
+              { value: 'en-US', label: 'English' },
+            ],
+          },
           {
             key: 'tabModeEnabled',
             type: 'boolean',
@@ -197,17 +325,18 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
             type: 'boolean',
             title: t('settings.personalize.collapseChangelogTitle'),
           },
+          {
+            // 自外观页「高级」移入：启动时恢复工作台属界面状态偏好
+            key: 'restoreLastWorkspace',
+            type: 'boolean',
+            title: t('settings.personalize.restoreWorkspaceTitle'),
+            desc: t('settings.personalize.restoreWorkspaceDesc'),
+          },
         ],
       },
       {
         title: t('settings.personalize.systemTelemetry'),
         properties: [
-          {
-            key: 'enableSkillCommands',
-            type: 'boolean',
-            title: t('settings.personalize.enableSkillCommandsTitle'),
-            desc: t('settings.personalize.enableSkillCommandsDesc'),
-          },
           {
             key: 'quietStartup',
             type: 'boolean',
@@ -239,11 +368,33 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
       ...settings,
       maxRetryAttempts: settings.maxRetryAttempts ?? 10,
       sendShortcut: normalizeSendShortcut(settings.sendShortcut),
+      language,
+      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
+      restoreLastWorkspace,
     };
-  }, [settings]);
+  }, [settings, language, restoreLastWorkspace]);
 
   const handleSave = useCallback(
     async (updates: Record<string, unknown>) => {
+      if ('language' in updates) {
+        setLanguage(updates.language as SupportedLanguage);
+        return;
+      }
+      if ('codeIndent' in updates) {
+        const next = normalizeCodeIndent(updates.codeIndent);
+        if (next !== normalizeCodeIndent(settings?.markdown?.codeBlockIndent)) {
+          await save({
+            markdown: { ...(settings?.markdown || {}), codeBlockIndent: next },
+          });
+        }
+        return;
+      }
+      if ('restoreLastWorkspace' in updates) {
+        const next = Boolean(updates.restoreLastWorkspace);
+        setRestoreLastWorkspaceState(next);
+        setRestoreLastWorkspace(next);
+        return;
+      }
       if ('sendShortcut' in updates) {
         const prev = normalizeSendShortcut(settings?.sendShortcut);
         const next = persistSendShortcut(updates.sendShortcut);
@@ -277,7 +428,13 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
         telemetry.setEnabled(Boolean(updates.enableCrashTelemetry));
       }
     },
-    [save, setTabModeEnabled, settings?.sendShortcut]
+    [
+      save,
+      setTabModeEnabled,
+      settings?.sendShortcut,
+      settings?.markdown,
+      setLanguage,
+    ]
   );
 
   if (loadError && !settings) {
@@ -309,6 +466,80 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
 
   return (
     <SettingsPage title={t('settings.personalize.title')}>
+      <SettingsSchemaRenderer
+        schema={personalizeSchema.slice(0, 2)}
+        values={schemaValues}
+        onSave={handleSave}
+        ready={ready}
+      />
+      {ready ? (
+        <SettingsSection title={t('settings.personalize.dataBackupSection')}>
+          <SettingsCard>
+            <SettingsRow
+              title={t('settings.personalize.exportImportAllSettings')}
+              desc={t('settings.personalize.exportImportDesc')}
+              control={
+                <>
+                  <Tooltip
+                    content={
+                      exporting
+                        ? t('settings.personalize.exporting')
+                        : t('settings.personalize.exportBackup')
+                    }
+                    delayShow={300}
+                  >
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={exporting}
+                      onClick={() => void handleExportSettings()}
+                    >
+                      {exporting
+                        ? t('settings.personalize.exportingShort')
+                        : t('settings.personalize.exportBtn')}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip
+                    content={
+                      importing
+                        ? t('settings.personalize.importing')
+                        : t('settings.personalize.importBackup')
+                    }
+                    delayShow={300}
+                  >
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={importing}
+                      onClick={handleImportSettings}
+                    >
+                      {importing
+                        ? t('settings.personalize.importingShort')
+                        : t('settings.personalize.importBtn')}
+                    </Button>
+                  </Tooltip>
+                  <Input
+                    bare
+                    ref={importFileInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    style={{ display: 'none' }}
+                    onChange={handleImportFileChange}
+                  />
+                </>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+      ) : null}
+      <SettingsSchemaRenderer
+        schema={personalizeSchema.slice(2)}
+        values={schemaValues}
+        onSave={handleSave}
+        ready={ready}
+      />
       <SettingsSection title={t('settings.personalize.onboardingSection')}>
         <SettingsCard>
           <SettingsRow
@@ -368,12 +599,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
           />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSchemaRenderer
-        schema={personalizeSchema}
-        values={schemaValues}
-        onSave={handleSave}
-        ready={ready}
-      />
     </SettingsPage>
   );
 };

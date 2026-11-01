@@ -1,6 +1,6 @@
 /**
  * 设置 · 外观：状态与副作用逻辑（从 SettingsAppearanceTab 提取）。
- * 封装 4 个 api（clientApi / themeStore / projectStore / hydrateWorkspaceShell）
+ * 封装 3 个 api（clientApi / themeStore / projectStore）
  * 与 2 个 store 模块（storeAccess.useSettingsField / useLayoutStore）访问，
  * 组件仅渲染。
  */
@@ -21,10 +21,6 @@ import {
   type PersonalizationSettings,
 } from '../../api/themeStore';
 import { useIsVisible } from '../../hooks/useIsVisible';
-import {
-  readRestoreLastWorkspace,
-  setRestoreLastWorkspace,
-} from '../../app/hydrateWorkspaceShell';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import { toast } from '../../services/toast/ToastContext';
 import { useSkinSettings } from './useSkinSettings';
@@ -162,9 +158,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
-  const [restoreLastWorkspace, setRestoreLastWorkspaceState] = useState(() =>
-    readRestoreLastWorkspace()
-  );
   const [isWin11, setIsWin11] = useState<boolean>(() => isWindows11Device());
 
   useEffect(() => {
@@ -326,7 +319,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       theme: activeTheme,
       uiSize: normalizeUiSize(uiSize),
       shellChrome: parseShellChromeMode(shellChromeMode),
-      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
       skinPreset: personalization.skin,
       accentColor: personalization.customBg,
       customFgColor: personalization.customFg,
@@ -334,17 +326,9 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
       transitionEnabled: personalization.themeAutoTimeTransition ?? false,
       vibrantMode: personalization.themeBrightnessVibrant ?? false,
-      restoreLastWorkspace,
       enableMicaEffect: Boolean(settings.enableMicaEffect),
     };
-  }, [
-    settings,
-    uiSize,
-    shellChromeMode,
-    personalization,
-    restoreLastWorkspace,
-    activeTheme,
-  ]);
+  }, [settings, uiSize, shellChromeMode, personalization, activeTheme]);
 
   const appearanceSchema = useAppearanceSchema({
     activeTheme,
@@ -364,14 +348,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
       if ('shellChrome' in updates)
         applyChrome(updates.shellChrome as ShellChromeMode);
-      if ('codeIndent' in updates && settings) {
-        const next = normalizeCodeIndent(updates.codeIndent);
-        if (next !== normalizeCodeIndent(settings.markdown?.codeBlockIndent)) {
-          void save({
-            markdown: { ...(settings.markdown || {}), codeBlockIndent: next },
-          });
-        }
-      }
       if ('skinPreset' in updates)
         updatePersonalization({ skin: updates.skinPreset as string });
       if ('accentColor' in updates)
@@ -394,11 +370,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         updatePersonalization({
           themeBrightnessVibrant: updates.vibrantMode as boolean,
         });
-      if ('restoreLastWorkspace' in updates) {
-        const next = Boolean(updates.restoreLastWorkspace);
-        setRestoreLastWorkspaceState(next);
-        setRestoreLastWorkspace(next);
-      }
       if ('enableMicaEffect' in updates) {
         const nextVal = Boolean(updates.enableMicaEffect);
         void save({ enableMicaEffect: nextVal });
@@ -409,7 +380,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       save,
       applyDensity,
       applyChrome,
-      settings,
       updatePersonalization,
       personalization.themeAutoTimeTransition,
       activeTheme,

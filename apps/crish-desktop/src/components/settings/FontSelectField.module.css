@@ -100,7 +100,7 @@
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
   padding: 2px var(--space-1) 4px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
   background: transparent;
   flex-shrink: 0;
   box-sizing: border-box;

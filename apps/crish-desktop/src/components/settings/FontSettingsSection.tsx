@@ -23,11 +23,16 @@ import { scanSystemFonts } from './internal/fontStoreScan';
 import { sanitizeFontFamilyNameStrict } from './internal/fontPinyinMatcher';
 import { FontSelectField, type FontSelectOption } from './FontSelectField';
 import { SettingsRow } from './SettingsUI';
-import { Input } from '@/components/ui';
+import { Input, Slider } from '@/components/ui';
+import { useI18n } from '../../i18n';
+import uiStyles from './SettingsUI.module.css';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {
   onPersistSettings?: (fonts: FontPreferences) => void | Promise<void>;
+  /** 界面字号（12–18，自外观 schema「颜色与皮肤」迁入本分区，与字体族同处） */
+  fontSize?: number;
+  onFontSizeChange?: (next: number) => void;
 }
 
 function prefsEqual(a: FontPreferences, b: Partial<FontPreferences>): boolean {
@@ -38,7 +43,12 @@ function prefsEqual(a: FontPreferences, b: Partial<FontPreferences>): boolean {
   return true;
 }
 
-export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
+export const FontSettingsSection: React.FC<Props> = ({
+  onPersistSettings,
+  fontSize,
+  onFontSizeChange,
+}) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const [prefs, setPrefs] = useState<FontPreferences>(() => {
     try {
@@ -80,12 +90,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
           }
         }
       } catch (e) {
-        showToast(`字体应用失败：${String(e)}`);
+        showToast(
+          t('settings.appearance.schemaFontApplyFailed', { error: String(e) })
+        );
       } finally {
         setBusy(false);
       }
     },
-    [onPersistSettings, prefs, showToast]
+    [onPersistSettings, prefs, showToast, t]
   );
 
   const handleScanLocal = useCallback(async () => {
@@ -94,13 +106,19 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
       const res = await scanSystemFonts(true);
       const names = res.fonts.map((f) => f.family);
       setLocalFonts(names);
-      showToast(`扫描成功，发现 ${res.totalCount} 款系统字体`);
+      showToast(
+        t('settings.appearance.schemaFontScanSuccess', {
+          count: res.totalCount,
+        })
+      );
     } catch (e) {
-      showToast(`扫描失败：${String(e)}`);
+      showToast(
+        t('settings.appearance.schemaFontScanFailed', { error: String(e) })
+      );
     } finally {
       setScanning(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   const handleApplyCustom = useCallback(
     (target: 'ui' | 'mono', customDraft: string) => {
@@ -123,10 +141,10 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
     const base: FontSelectOption[] = uiFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
-      group: '预设',
+      group: t('settings.appearance.schemaFontGroupPreset', '预设'),
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
       ...(o.kind === 'embedded'
-        ? { hint: '内嵌' }
+        ? { hint: t('settings.appearance.schemaFontEmbedded', '内嵌') }
         : o.kind === 'auto'
           ? { hint: platformLabel() }
           : {}),
@@ -135,7 +153,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
     const locals: FontSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
       label: f,
-      group: '本机',
+      group: t('settings.appearance.schemaFontGroupLocal', '本机'),
       previewFamily: f,
     }));
 
@@ -145,23 +163,23 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
         locals.unshift({
           value: prefs.uiFont,
           label: fam,
-          group: '本机',
+          group: t('settings.appearance.schemaFontGroupLocal', '本机'),
           previewFamily: fam,
         });
       }
     }
 
     return [...base, ...locals];
-  }, [localFonts, prefs.uiFont]);
+  }, [localFonts, prefs.uiFont, t]);
 
   const monoOptions: FontSelectOption[] = useMemo(() => {
     const base: FontSelectOption[] = monoFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
-      group: '预设',
+      group: t('settings.appearance.schemaFontGroupPreset', '预设'),
       ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
       ...(o.kind === 'embedded'
-        ? { hint: '内嵌' }
+        ? { hint: t('settings.appearance.schemaFontEmbedded', '内嵌') }
         : o.kind === 'auto'
           ? { hint: platformLabel() }
           : {}),
@@ -170,7 +188,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
     const locals: FontSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
       label: f,
-      group: '本机',
+      group: t('settings.appearance.schemaFontGroupLocal', '本机'),
       previewFamily: f,
     }));
 
@@ -180,14 +198,14 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
         locals.unshift({
           value: prefs.monoFont,
           label: fam,
-          group: '本机',
+          group: t('settings.appearance.schemaFontGroupLocal', '本机'),
           previewFamily: fam,
         });
       }
     }
 
     return [...base, ...locals];
-  }, [localFonts, prefs.monoFont]);
+  }, [localFonts, prefs.monoFont, t]);
 
   let uiPreviewFamily: string | undefined;
   let monoPreviewFamily: string | undefined;
@@ -205,8 +223,31 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
 
   return (
     <>
+      {fontSize !== undefined && onFontSizeChange ? (
+        <SettingsRow
+          title={t('settings.appearance.schemaFontSize', '界面字号')}
+          control={
+            <div className={uiStyles.controlRange}>
+              <Slider
+                aria-label={t('settings.appearance.schemaFontSize', '界面字号')}
+                min={12}
+                max={18}
+                step={1}
+                value={fontSize}
+                onChange={onFontSizeChange}
+                className={uiStyles.controlRangeSlider}
+              />
+              <span className={uiStyles.controlRangeValue}>
+                {fontSize}
+                px
+              </span>
+            </div>
+          }
+        />
+      ) : null}
+
       <SettingsRow
-        title="界面字体"
+        title={t('settings.appearance.schemaUiFont', '界面字体')}
         control={
           <FontSelectField
             value={prefs.uiFont || 'auto'}
@@ -229,12 +270,15 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
       />
 
       <SettingsRow
-        title="代码字体"
+        title={t('settings.appearance.schemaMonoFont', '代码字体')}
         control={
           <div className={styles.monoControlRow}>
             <label
               className={styles.settingsRowCheck}
-              aria-label="启用代码连字（liga / calt）"
+              aria-label={t(
+                'settings.appearance.schemaLigaturesAria',
+                '启用代码连字（liga / calt）'
+              )}
             >
               <Input
                 bare
@@ -245,7 +289,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
                   void apply({ monoLigatures: e.target.checked })
                 }
               />
-              <span>连字</span>
+              <span>{t('settings.appearance.schemaLigatures', '连字')}</span>
             </label>
             <FontSelectField
               value={prefs.monoFont || 'auto'}

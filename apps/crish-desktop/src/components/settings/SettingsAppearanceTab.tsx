@@ -3,7 +3,7 @@
  * 状态与副作用逻辑已提取到 useAppearanceSettings；本组件仅负责渲染。
  */
 import React from 'react';
-import { Button, Select } from '@/components/ui';
+import { Button } from '@/components/ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -13,7 +13,7 @@ import {
 import { FontSettingsSection } from './FontSettingsSection';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import { useAppearanceSettings } from './useAppearanceSettings';
-import { useI18n, type SupportedLanguage } from '../../i18n';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -23,7 +23,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
   void _onBlockingOverlayChange;
-  const { language, setLanguage, t } = useI18n();
+  const { t } = useI18n();
   const {
     visibilityRef,
     settings,
@@ -82,28 +82,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
   return (
     <div ref={visibilityRef}>
       <SettingsPage title={t('nav.appearance', '外观')}>
-        {/* 语言设置 / Language setting */}
-        <SettingsSection>
-          <SettingsCard>
-            <SettingsRow
-              title={t('settings.general.language')}
-              control={
-                <Select
-                  size="sm"
-                  value={language}
-                  options={[
-                    { id: 'zh-CN', label: '简体中文' },
-                    { id: 'en-US', label: 'English' },
-                  ]}
-                  onChange={(newLang) => {
-                    setLanguage(newLang as SupportedLanguage);
-                  }}
-                />
-              }
-            />
-          </SettingsCard>
-        </SettingsSection>
-
         <SettingsSchemaRenderer
           schema={appearanceSchema}
           values={allValues}
@@ -115,12 +93,19 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
           字体设置（FontSettingsSection）保留为手写控件，原因：
           - 包含字体加载状态、预览文本、异步字体加载等复杂交互
           - 与 fontStore 深度耦合，不适合 Schema 抽象
+          - 「界面字号」滑杆已自 schema「颜色与皮肤」迁入本分区（经 props 注入，
+            仍走 handleSave 的 fontSize 通道写 personalization.fontSizeAdjust）
+          语言切换已移至通用设置「界面偏好」（语言是通用偏好，不是外观）。
         */}
         <SettingsSection
           title={t('settings.appearance.groupTypography', '字体与排版')}
         >
           <SettingsCard>
             <FontSettingsSection
+              fontSize={allValues.fontSize as number}
+              onFontSizeChange={(next) => {
+                handleSave({ fontSize: next });
+              }}
               onPersistSettings={async (fonts) => {
                 const ok = await save({ fonts });
                 if (!ok) {
