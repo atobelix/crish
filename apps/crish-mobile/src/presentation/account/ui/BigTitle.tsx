@@ -1,4 +1,4 @@
-// 页面大标题（28/36 粗体）+ 可选说明；左右留 24，与输入区对齐。
+// 页面大标题（28/36 粗体）+ 可选说明；左右留 16，与输入区对齐。
 import { View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText } from '@/presentation/ui';
@@ -14,7 +14,7 @@ export function BigTitle({ title, subtitle }: BigTitleProps) {
     <View
       style={{
         paddingTop: theme.layout.fieldPadding,
-        paddingHorizontal: theme.layout.accountPageX,
+        paddingHorizontal: theme.space.lg,
       }}
     >
       <AppText

@@ -104,7 +104,13 @@ export function AccountSetPasswordScreen({
     <AuthPage testID="account-set-password-screen">
       <AuthBar onBack={onBack} />
       <BigTitle title={TITLES[mode]} subtitle={email || undefined} />
-      <View style={{ padding: theme.layout.accountPageX, gap: theme.space.md }}>
+      <View
+        style={{
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.lg,
+          gap: theme.space.lg,
+        }}
+      >
         {setupReady ? null : (
           <AppText variant="footnote" color="danger">
             请先返回完成邮箱验证
@@ -112,6 +118,7 @@ export function AccountSetPasswordScreen({
         )}
         <View style={{ gap: theme.space.sm }}>
           <AuthField
+            label={mode === 'register' ? '密码' : '新密码'}
             testID="set-password-input"
             value={password}
             onChangeText={(text) => {

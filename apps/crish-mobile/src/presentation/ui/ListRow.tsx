@@ -1,4 +1,5 @@
-// 列表行：leading + 标题/副标题 + trailing；整行 44+ 热区，分隔线从文字起点开始。
+// 列表行：leading + 标题/副标题 + trailing（原型 settings-row 口径：
+// 内衬 14/16、标题 14/500、值 13/400 #777、箭头 14、分隔线 dashed faint 从文字起点开始）。
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -47,11 +48,12 @@ export function ListRow({
             variant="body"
             color={destructive ? 'danger' : 'textPrimary'}
             numberOfLines={1}
+            style={styles.titleWeight}
           >
             {title}
           </AppText>
           {subtitle ? (
-            <AppText variant="footnote" color="textTertiary" numberOfLines={2}>
+            <AppText variant="caption" color="textTertiary" numberOfLines={2}>
               {subtitle}
             </AppText>
           ) : null}
@@ -60,7 +62,7 @@ export function ListRow({
         {showChevron ? (
           <Icon
             name="chevron-right"
-            size={theme.size.iconSmall}
+            size={theme.size.iconSmall - 2}
             color={theme.colors.textTertiary}
           />
         ) : null}
@@ -94,13 +96,12 @@ export function ListRow({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    minHeight: 56,
     alignItems: 'stretch',
     paddingLeft: 16,
   },
   leading: {
-    width: 30,
-    alignItems: 'flex-start',
+    width: 28,
+    alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
@@ -109,12 +110,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    minHeight: 56,
-    paddingVertical: 10,
+    paddingVertical: 14,
     paddingRight: 16,
   },
   divider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
+    borderStyle: 'dashed',
+  },
+  titleWeight: {
+    fontWeight: '500',
   },
   texts: {
     flex: 1,

@@ -42,11 +42,13 @@ export function AccountEmailScreen({
       <BigTitle title="登录或注册" subtitle="输入邮箱，我们会发送验证码" />
       <View
         style={{
-          padding: theme.layout.accountPageX,
-          gap: theme.space.md,
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.lg,
+          gap: theme.space.lg,
         }}
       >
         <AuthField
+          label="邮箱"
           testID="account-email-input"
           value={email}
           onChangeText={(text) => {

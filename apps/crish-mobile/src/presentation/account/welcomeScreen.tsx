@@ -24,7 +24,7 @@ export function WelcomeScreen({
       </View>
       <View
         style={{
-          paddingHorizontal: theme.layout.accountPageX,
+          paddingHorizontal: theme.space.lg,
           paddingBottom: theme.space.lg,
           gap: theme.space.sm,
         }}

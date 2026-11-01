@@ -2,8 +2,9 @@
 // 子面板 = 独立路由页（/settings-theme、/settings-notification），右侧滑入。
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
-import { useTheme } from '@/adapters/platform/theme';
+import { useTheme, THEME_MODE_LABELS } from '@/adapters/platform/theme';
 import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
 import {
   AppHeader,
@@ -43,6 +44,7 @@ export default function SettingsScreenView({
   onConfirmRemove,
 }: SettingsScreenViewProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const accountStatus = useAccountStore((s) => s.status);
   const accountUser = useAccountStore((s) => s.user);
   const profile = useAccountStore((s) => s.profile);
@@ -55,20 +57,17 @@ export default function SettingsScreenView({
     accountUser?.name?.trim() ||
     accountUser?.email ||
     '登录 Crish 账号';
-  const themeLabel =
-    vm.themeMode === 'light'
-      ? '浅色模式'
-      : vm.themeMode === 'dark'
-        ? '深色模式'
-        : '跟随系统';
+  // 主题行值文案走 THEME_MODE_LABELS 单一真源（四档全对，含纯净中性灰）
+  const themeLabel = THEME_MODE_LABELS[vm.themeMode];
 
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
-      <AppHeader title="设置" onBack={onBack} centered />
+      <AppHeader title="设置" onBack={onBack} floating />
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
-          paddingTop: theme.space.sm,
+          // 悬浮顶栏通透叠加：内容自顶栏下穿行（安全区 + 48 栏高 + 10 呼吸）
+          paddingTop: insets.top + theme.size.touchLarge + theme.space.sm + 2,
           paddingBottom: theme.space.section,
           gap: theme.space.lg,
         }}
@@ -84,10 +83,11 @@ export default function SettingsScreenView({
             {
               borderRadius: theme.radius.card,
               backgroundColor: theme.colors.surfaceGrouped,
-              padding: theme.space.lg,
+              paddingVertical: theme.space.lg,
+              paddingHorizontal: theme.space.lg + 2,
               gap: theme.space.md + 2,
+              transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
             },
-            pressed && { opacity: 0.85 },
           ]}
         >
           {loggedIn ? (
@@ -105,7 +105,7 @@ export default function SettingsScreenView({
                   width: theme.size.avatarSmall + 16,
                   height: theme.size.avatarSmall + 16,
                   borderRadius: theme.radius.pill,
-                  backgroundColor: theme.colors.fillSubtle,
+                  backgroundColor: theme.avatarTones[0]?.bg,
                 },
               ]}
             >
@@ -117,7 +117,11 @@ export default function SettingsScreenView({
             </View>
           )}
           <View style={styles.flex}>
-            <AppText variant="bodyStrong" numberOfLines={1}>
+            <AppText
+              variant="bodyStrong"
+              numberOfLines={1}
+              style={{ fontSize: (theme.type.bodyStrong.fontSize ?? 0) - 1 }}
+            >
               {loggedIn ? accountName : '登录 Crish 账号'}
             </AppText>
             {!loggedIn ? (
@@ -128,7 +132,7 @@ export default function SettingsScreenView({
           </View>
           <Icon
             name="chevron-right"
-            size={theme.size.iconSmall}
+            size={theme.size.iconSmall - 2}
             color={theme.colors.textTertiary}
           />
         </Pressable>
@@ -149,7 +153,6 @@ export default function SettingsScreenView({
             title="扫码连接桌面"
             leading={<RowIcon name="qr-code" />}
             onPress={onOpenScan}
-            divider={false}
           />
           <ListRow
             title="连接帮助"
@@ -223,10 +226,12 @@ export default function SettingsScreenView({
               {
                 height: theme.size.touchLarge,
                 borderRadius: theme.radius.pill,
-                backgroundColor: theme.colors.surfaceGrouped,
+                backgroundColor: pressed
+                  ? theme.colors.dangerSoft
+                  : theme.colors.surfaceGrouped,
                 gap: theme.space.sm,
+                transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
               },
-              pressed && { opacity: 0.8 },
             ]}
           >
             <Icon
@@ -234,7 +239,7 @@ export default function SettingsScreenView({
               size={theme.size.iconSmall + 1}
               color={theme.colors.danger}
             />
-            <AppText variant="body" color="danger">
+            <AppText variant="body" color="danger" style={styles.logoutText}>
               退出当前账号
             </AppText>
           </Pressable>
@@ -282,7 +287,7 @@ export default function SettingsScreenView({
   );
 }
 
-/** 分组：弱化标签 + 白色分组卡（行分隔线由 ListRow 自带） */
+/** 分组：弱化标签（原型 12/500 #777，与卡 gap 6）+ 白色分组卡（分隔线由 ListRow 自带） */
 function SettingsGroup({
   label,
   children,
@@ -292,12 +297,16 @@ function SettingsGroup({
 }) {
   const theme = useTheme();
   return (
-    <View style={{ gap: theme.space.xs }}>
+    <View style={{ gap: theme.space.xs + 2 }}>
       {label ? (
         <AppText
-          variant="footnote"
+          variant="sectionLabel"
           color="textTertiary"
-          style={{ paddingHorizontal: theme.space.xs + 2 }}
+          style={{
+            paddingHorizontal: theme.space.xs + 2,
+            fontWeight: '500',
+            letterSpacing: -(theme.type.sectionLabel.letterSpacing ?? 0),
+          }}
         >
           {label}
         </AppText>
@@ -315,20 +324,20 @@ function SettingsGroup({
   );
 }
 
-/** 行首图标（原型 settings-row-icon：28 盒内线性图标，text-2 色） */
+/** 行首图标（原型 settings-row-icon：28 盒居中、图标 18、text-2 色） */
 function RowIcon({ name }: { name: Parameters<typeof Icon>[0]['name'] }) {
   const theme = useTheme();
   return (
     <View
       style={{
         width: theme.size.avatarSmall - 4,
-        alignItems: 'flex-start',
+        alignItems: 'center',
         justifyContent: 'center',
       }}
     >
       <Icon
         name={name}
-        size={theme.size.icon}
+        size={theme.size.iconSmall + 2}
         color={theme.colors.textSecondary}
       />
     </View>
@@ -349,5 +358,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logoutText: {
+    fontWeight: '500',
   },
 });

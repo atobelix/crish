@@ -104,11 +104,9 @@ export function CodeCells({
                 {
                   height: theme.size.field,
                   borderRadius: theme.radius.codeCell,
-                  backgroundColor: digit
-                    ? theme.colors.field
-                    : active
-                      ? theme.colors.fieldFocus
-                      : theme.colors.fillSubtle,
+                  backgroundColor: active
+                    ? theme.colors.fieldFocus
+                    : theme.colors.field,
                 },
               ]}
             >

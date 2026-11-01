@@ -1,4 +1,6 @@
-// 账号页顶栏：左侧返回圆钮、居中 17/600 标题、右侧可选操作位（如「保存」）。
+// 账号页顶栏：左侧返回白圆钮、居中标题 15.5/600、右侧可选操作位（如「保存」）。
+// 视觉口径与设置族悬浮顶栏一致（白圆钮 + 纯文字标题）；账号页为短表单页，
+// 内容不滚动穿行，顶栏保留流内布局（高度 52），不做绝对悬浮。
 // 返回钮统一 IconButton floating（GlassBackButton 重复实现已删除，实现波总方案 G4）。
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -38,7 +40,10 @@ export function AuthBar({ title, onBack, right }: AuthBarProps) {
         numberOfLines={1}
         accessibilityRole="header"
         testID="auth-bar-title"
-        style={styles.title}
+        style={[
+          styles.title,
+          { fontSize: (theme.type.headline.fontSize ?? 0) - 0.5 },
+        ]}
       >
         {title ?? ''}
       </AppText>

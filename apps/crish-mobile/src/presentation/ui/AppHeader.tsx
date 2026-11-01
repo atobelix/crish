@@ -1,10 +1,14 @@
 // 统一头栏：根页大标题 / 二级页紧凑标题，无底部发丝线。
 // 返回只使用图标，不出现「← 返回」文字。
+// floating = 设置族悬浮口径（原型 settings-topbar）：绝对定位通透层，内容滚行其下；
+// 返回为 38 白圆钮，标题为纯文字 15.5/600 左置，无胶囊。仅设置族页面开启，
+// 其余页面（centered / 默认）行为不变。
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
+import Icon from './Icon';
 import IconButton from './IconButton';
 
 export interface AppHeaderProps {
@@ -21,6 +25,8 @@ export interface AppHeaderProps {
   leading?: ReactNode;
   /** 分组页样式：返回圆钮 + 居中标题（设置等二级页） */
   centered?: boolean;
+  /** 设置族悬浮顶栏：绝对定位通透层（返回白圆钮 38 + 纯文字标题 15.5/600 左置） */
+  floating?: boolean;
   testID?: string;
 }
 
@@ -32,10 +38,75 @@ export function AppHeader({
   status,
   leading,
   centered = false,
+  floating = false,
   testID,
 }: AppHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  if (floating) {
+    const backSize = theme.size.iconButton - 2;
+    return (
+      <View
+        testID={testID}
+        pointerEvents="box-none"
+        style={[
+          styles.floatingBar,
+          {
+            paddingTop: insets.top + theme.space.xs,
+            paddingLeft: insets.left + theme.space.lg,
+            paddingRight: insets.right + theme.space.lg,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.row,
+            { height: theme.size.touchLarge, gap: theme.space.md },
+          ]}
+        >
+          {onBack ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="返回"
+              testID="header-back"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.backCircle,
+                theme.shadow.sm,
+                {
+                  width: backSize,
+                  height: backSize,
+                  borderRadius: theme.radius.pill,
+                  backgroundColor: pressed
+                    ? theme.colors.fillSubtle
+                    : theme.colors.surface,
+                  transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
+                },
+              ]}
+            >
+              <Icon
+                name="chevron-left"
+                size={theme.size.icon}
+                color={theme.colors.textPrimary}
+              />
+            </Pressable>
+          ) : null}
+          <AppText
+            variant="headline"
+            numberOfLines={1}
+            accessibilityRole="header"
+            testID="header-title"
+            style={{ fontSize: (theme.type.headline.fontSize ?? 0) - 0.5 }}
+          >
+            {title}
+          </AppText>
+          <View style={[styles.floatingActions, { gap: theme.space.xxs }]}>
+            {actions}
+          </View>
+        </View>
+      </View>
+    );
+  }
   if (centered) {
     return (
       <View
@@ -131,6 +202,23 @@ export function AppHeader({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  floatingBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  backCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingActions: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   row: {
     flexDirection: 'row',

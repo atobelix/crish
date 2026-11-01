@@ -1,8 +1,11 @@
 // 通知与提醒子面板（原型 subNotification）：总控 + 分场景开关（真实 VM 与权限门禁）。
-import { Linking, ScrollView, Switch, View } from 'react-native';
+// 开关 = 自绘 SettingsSwitch（原型 crish-switch 口径），替代 RN 原生 Switch。
+import { Linking, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
 import { AppHeader, AppText, ListRow, Screen } from '@/presentation/ui';
+import { SettingsSwitch } from './SettingsSwitch';
 
 const NOTIFY_SCENES = [
   {
@@ -28,32 +31,30 @@ export function SettingsNotificationView({
   onBack,
 }: SettingsNotificationViewProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const sceneDisabled = !vm.notifySwitchGate.enabled;
   const permissionDenied = vm.notifyPermission === 'denied';
-  const switchStyle = {
-    trackColor: {
-      true: theme.colors.brand,
-      false: theme.colors.borderStrong,
-    },
-    thumbColor: theme.colors.surface,
-  } as const;
 
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
-      <AppHeader title="通知与提醒" onBack={onBack} centered />
+      <AppHeader title="通知与提醒" onBack={onBack} floating />
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
-          paddingTop: theme.space.sm,
+          paddingTop: insets.top + theme.size.touchLarge + theme.space.sm + 2,
           paddingBottom: theme.space.section,
           gap: theme.space.lg,
         }}
       >
-        <View style={{ gap: theme.space.xs }}>
+        <View style={{ gap: theme.space.xs + 2 }}>
           <AppText
-            variant="footnote"
+            variant="sectionLabel"
             color="textTertiary"
-            style={{ paddingHorizontal: theme.space.xs + 2 }}
+            style={{
+              paddingHorizontal: theme.space.xs + 2,
+              fontWeight: '500',
+              letterSpacing: -(theme.type.sectionLabel.letterSpacing ?? 0),
+            }}
           >
             提醒通道
           </AppText>
@@ -68,11 +69,11 @@ export function SettingsNotificationView({
               title="允许推送通知"
               subtitle="接收任务收尾与审批待办"
               trailing={
-                <Switch
+                <SettingsSwitch
                   testID="setting-notify-master"
+                  accessibilityLabel="允许推送通知"
                   value={vm.notifyMasterOn}
                   onValueChange={vm.setNotifyMasterOn}
-                  {...switchStyle}
                 />
               }
             />
@@ -83,14 +84,14 @@ export function SettingsNotificationView({
                 subtitle={item.subtitle}
                 divider={index < NOTIFY_SCENES.length - 1}
                 trailing={
-                  <Switch
+                  <SettingsSwitch
                     testID={`setting-notify-${item.scene}`}
+                    accessibilityLabel={item.label}
                     value={vm.notifyScenes[item.scene]}
                     disabled={!vm.notifyMasterOn || sceneDisabled}
                     onValueChange={(value) => {
                       void vm.setNotifyScene(item.scene, value);
                     }}
-                    {...switchStyle}
                   />
                 }
               />

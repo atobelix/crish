@@ -1,5 +1,6 @@
-// 账号输入框：无描边，圆角 18、高 56（多行 104）。
-// 聚焦/失焦 = 表面色一次状态切换（field ↔ fieldFocus），无逐帧插值
+// 账号输入框（原型表单体系）：标签外置 12/500 #777（盒上、内衬 4、与盒 gap 6），
+// 输入盒纯白、圆角 18、内衬 13/16（单行高 ≈46；多行最小高 104），字 14、占位 #aaaaaa。
+// 聚焦/失焦 = 表面色一次状态切换（field ↔ fieldFocus，浅色恒白），无逐帧插值
 // （实现波总方案 F4：删除旧 Animated useNativeDriver:false 的 JS 线程色值插值，
 // 与软键盘弹起不再争抢 JS 线程）；出错时底色换 dangerSoft + 下方一行红字。
 import { useState } from 'react';
@@ -17,15 +18,18 @@ export interface AuthFieldProps extends Omit<
   TextInputProps,
   'style' | 'multiline' | 'secureTextEntry'
 > {
+  /** 外置标签（原型表单体系：盒上方 12/500 #777） */
+  label?: string;
   /** 出错文案；为空字符串时只染底色不出字 */
   error?: string | null;
-  /** 多行（104 高） */
+  /** 多行（最小高 104） */
   tall?: boolean;
   /** 密码框：带显隐切换 */
   secure?: boolean;
 }
 
 export function AuthField({
+  label,
   error,
   tall = false,
   secure = false,
@@ -44,10 +48,22 @@ export function AuthField({
     : focused
       ? theme.colors.fieldFocus
       : theme.colors.field;
-  const height = tall ? theme.size.fieldTall : theme.size.field;
 
   return (
-    <View>
+    <View style={{ gap: label ? theme.space.xs + 2 : 0 }}>
+      {label ? (
+        <AppText
+          variant="sectionLabel"
+          color="textTertiary"
+          style={{
+            paddingHorizontal: theme.space.xs,
+            fontWeight: '500',
+            letterSpacing: -(theme.type.sectionLabel.letterSpacing ?? 0),
+          }}
+        >
+          {label}
+        </AppText>
+      ) : null}
       <View
         style={[
           styles.box,
@@ -55,8 +71,9 @@ export function AuthField({
           {
             backgroundColor,
             borderRadius: theme.radius.field,
-            minHeight: height,
-            paddingHorizontal: theme.layout.fieldPadding,
+            minHeight: tall ? theme.size.fieldTall : undefined,
+            paddingVertical: theme.space.md + 1,
+            paddingHorizontal: theme.space.lg,
             gap: theme.space.sm,
           },
         ]}
@@ -66,7 +83,7 @@ export function AuthField({
           testID={testID}
           multiline={tall}
           secureTextEntry={secure && hidden}
-          placeholderTextColor={theme.colors.textTertiary}
+          placeholderTextColor={theme.colors.textDisabled}
           selectionColor={theme.colors.textPrimary}
           onFocus={(event) => {
             setFocused(true);
@@ -81,11 +98,8 @@ export function AuthField({
             {
               color: theme.colors.textPrimary,
               fontSize: theme.type.body.fontSize,
-              minHeight: height,
             },
-            tall
-              ? { paddingVertical: theme.layout.fieldPadding }
-              : styles.singleLine,
+            tall ? styles.tallInput : styles.singleLine,
           ]}
         />
         {secure ? (
@@ -125,6 +139,7 @@ const styles = StyleSheet.create({
   boxTall: { alignItems: 'flex-start' },
   input: { flex: 1 },
   singleLine: { paddingVertical: 0 },
+  tallInput: { paddingVertical: 0, textAlignVertical: 'top' },
 });
 
 export default AuthField;

@@ -41,8 +41,15 @@ export function AccountDeleteScreen({
         title="注销账号"
         subtitle={`注销后账号数据将被永久删除且无法恢复。请输入 ${email} 以确认。`}
       />
-      <View style={{ padding: theme.layout.accountPageX, gap: theme.space.md }}>
+      <View
+        style={{
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.lg,
+          gap: theme.space.lg,
+        }}
+      >
         <AuthField
+          label="邮箱"
           testID="account-delete-input"
           value={typed}
           onChangeText={(text) => {

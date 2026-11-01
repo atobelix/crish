@@ -63,8 +63,15 @@ export function AccountPasswordScreen({
     <AuthPage testID="account-password-screen">
       <AuthBar onBack={onBack} />
       <BigTitle title="密码登录" />
-      <View style={{ padding: theme.layout.accountPageX, gap: theme.space.md }}>
+      <View
+        style={{
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.lg,
+          gap: theme.space.lg,
+        }}
+      >
         <AuthField
+          label="邮箱"
           testID="account-password-email"
           value={email}
           onChangeText={(text) => {
@@ -82,6 +89,7 @@ export function AccountPasswordScreen({
           textContentType="emailAddress"
         />
         <AuthField
+          label="密码"
           testID="account-password-input"
           value={password}
           onChangeText={(text) => {

@@ -145,19 +145,30 @@ export default function PairScanScreen({
         }
       />
       <View style={styles.overlay} pointerEvents="box-none">
-        <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
+        <View
+          style={[
+            styles.topBar,
+            {
+              paddingTop: insets.top + theme.space.xs,
+              paddingHorizontal: theme.space.md,
+            },
+          ]}
+        >
           <IconButton
             name="x"
             accessibilityLabel="关闭扫码"
             onPress={onClose}
           />
         </View>
-        <View style={styles.frameArea} pointerEvents="none">
+        <View
+          style={[styles.frameArea, { gap: theme.space.xl }]}
+          pointerEvents="none"
+        >
           <View
             style={[
               styles.frame,
               {
-                borderRadius: theme.radius.lg,
+                borderRadius: theme.radius.card,
                 borderColor: theme.colors.brand,
               },
             ]}
@@ -169,7 +180,7 @@ export default function PairScanScreen({
             <AppText
               variant="footnote"
               color="onMediaDanger"
-              style={styles.error}
+              style={[styles.error, { paddingHorizontal: theme.space.xxl }]}
             >
               {error}
             </AppText>
@@ -197,14 +208,13 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 12,
   },
   frameArea: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
   },
+  // 真机取景框边长为功能尺寸（原型 180 为静态稿卡内示意，无对应 token），保留 240
   frame: {
     width: 240,
     height: 240,
@@ -212,7 +222,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   error: {
-    paddingHorizontal: 24,
     textAlign: 'center',
   },
 });

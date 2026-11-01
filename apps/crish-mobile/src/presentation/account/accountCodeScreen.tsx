@@ -131,7 +131,13 @@ export function AccountCodeScreen({
     <AuthPage testID="account-code-screen">
       <AuthBar onBack={onBack} />
       <BigTitle title="输入验证码" subtitle={`已发送至 ${draft.email}`} />
-      <View style={{ padding: theme.layout.accountPageX, gap: theme.space.md }}>
+      <View
+        style={{
+          paddingHorizontal: theme.space.lg,
+          paddingTop: theme.space.lg,
+          gap: theme.space.lg,
+        }}
+      >
         <CodeCells
           value={code}
           onChange={setCode}
@@ -147,7 +153,8 @@ export function AccountCodeScreen({
           >
             <ActivityIndicator
               size="small"
-              color={theme.colors.actionPrimary}
+              // 中性加载转圈为墨色元素，不随主操作绿走（M1 改指墨档）
+              color={theme.colors.textPrimary}
             />
             <AppText variant="footnote" color="textSecondary">
               {verifyWaitText(elapsed)}

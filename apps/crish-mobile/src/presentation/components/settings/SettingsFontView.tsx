@@ -3,6 +3,7 @@
 // 切换选项后字阶/等宽族立即重投影，预览所见即所得（Q1 裁决）。
 import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import type { FontScale, MonoFont } from '@/domain/store/settingsReducers';
 import { AppHeader, AppText, Icon, ListRow, Screen } from '@/presentation/ui';
@@ -43,13 +44,14 @@ export interface SettingsFontViewProps {
 
 export function SettingsFontView({ vm, onBack }: SettingsFontViewProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
-      <AppHeader title="字体与字号" onBack={onBack} centered />
+      <AppHeader title="字体与字号" onBack={onBack} floating />
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
-          paddingTop: theme.space.sm,
+          paddingTop: insets.top + theme.size.touchLarge + theme.space.sm + 2,
           paddingBottom: theme.space.section,
           gap: theme.space.lg,
         }}
@@ -66,7 +68,7 @@ export function SettingsFontView({ vm, onBack }: SettingsFontViewProps) {
                 vm.fontScale === scale ? (
                   <Icon
                     name="check"
-                    size={theme.size.iconSmall}
+                    size={theme.size.iconSmall - 1}
                     color={theme.colors.brand}
                   />
                 ) : null
@@ -105,7 +107,7 @@ export function SettingsFontView({ vm, onBack }: SettingsFontViewProps) {
                 vm.monoFont === font ? (
                   <Icon
                     name="check"
-                    size={theme.size.iconSmall}
+                    size={theme.size.iconSmall - 1}
                     color={theme.colors.brand}
                   />
                 ) : null
@@ -145,11 +147,15 @@ function FontGroup({
 }) {
   const theme = useTheme();
   return (
-    <View style={{ gap: theme.space.xs }}>
+    <View style={{ gap: theme.space.xs + 2 }}>
       <AppText
-        variant="footnote"
+        variant="sectionLabel"
         color="textTertiary"
-        style={{ paddingHorizontal: theme.space.xs + 2 }}
+        style={{
+          paddingHorizontal: theme.space.xs + 2,
+          fontWeight: '500',
+          letterSpacing: -(theme.type.sectionLabel.letterSpacing ?? 0),
+        }}
       >
         {label}
       </AppText>

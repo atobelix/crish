@@ -1,4 +1,5 @@
-// 账号页导航行：高 56、左右 24、底部分隔线，右侧可选数值 + textTertiary 箭头。
+// 账号页导航行（原型 subAccount 行口径）：置于白色分组卡内，内衬 14/16、
+// 标签 14/500、值 13/400 #777、箭头 14、分隔线 dashed faint（末行不画），按压 alpha 底。
 import { Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, Icon } from '@/presentation/ui';
@@ -29,26 +30,30 @@ export function NavRow({
       style={({ pressed }) => [
         styles.row,
         {
-          height: theme.size.navRow,
-          marginHorizontal: theme.layout.accountPageX,
-          gap: theme.space.sm,
+          paddingVertical: theme.space.md + 2,
+          paddingHorizontal: theme.space.lg,
+          gap: theme.space.xs + 2,
           borderBottomColor: theme.colors.hairline,
-          borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
-          opacity: pressed ? theme.motion.pressOpacity : 1,
+          borderBottomWidth: last ? 0 : 1,
+          backgroundColor: pressed ? theme.colors.fillSelected : 'transparent',
         },
       ]}
     >
-      <AppText variant="body" color="textPrimary" style={styles.label}>
+      <AppText
+        variant="body"
+        color="textPrimary"
+        style={[styles.label, styles.labelWeight]}
+      >
         {label}
       </AppText>
       {value ? (
-        <AppText variant="callout" color="textTertiary">
+        <AppText variant="footnote" color="textTertiary">
           {value}
         </AppText>
       ) : null}
       <Icon
         name="chevron-right"
-        size={theme.size.iconSmall}
+        size={theme.size.iconSmall - 2}
         color={theme.colors.textTertiary}
       />
     </Pressable>
@@ -56,8 +61,13 @@ export function NavRow({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderStyle: 'dashed',
+  },
   label: { flex: 1 },
+  labelWeight: { fontWeight: '500' },
 });
 
 export default NavRow;

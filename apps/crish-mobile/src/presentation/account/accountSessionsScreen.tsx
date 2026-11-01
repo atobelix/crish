@@ -82,36 +82,32 @@ export function AccountSessionsScreen({ onBack }: AccountSessionsScreenProps) {
         style={[
           styles.row,
           {
-            height: theme.size.sessionRow,
-            marginHorizontal: theme.layout.accountPageX,
+            paddingVertical: theme.space.md + 2,
+            marginHorizontal: theme.space.lg,
             gap: theme.space.md,
             borderBottomColor: theme.colors.hairline,
           },
         ]}
       >
         <View style={styles.text}>
-          <AppText variant="body" color="textPrimary" numberOfLines={1}>
+          <AppText
+            variant="body"
+            color="textPrimary"
+            numberOfLines={1}
+            style={styles.nameWeight}
+          >
             {deviceLabelOf(item)}
           </AppText>
-          <AppText variant="footnote" color="textTertiary" numberOfLines={1}>
+          <AppText variant="caption" color="textTertiary" numberOfLines={1}>
             {[item.ip, formatRelativeTime(item.createdAt)]
               .filter(Boolean)
               .join(' · ')}
           </AppText>
         </View>
         {item.current ? (
-          <View
-            style={{
-              backgroundColor: theme.colors.fillPressed,
-              borderRadius: theme.radius.pill,
-              paddingHorizontal: theme.space.sm,
-              paddingVertical: theme.space.xxs,
-            }}
-          >
-            <AppText variant="caption" color="textSecondary">
-              本机
-            </AppText>
-          </View>
+          <AppText variant="footnote" color="success" style={styles.nameWeight}>
+            本机
+          </AppText>
         ) : (
           <Pressable
             accessibilityRole="button"
@@ -120,8 +116,9 @@ export function AccountSessionsScreen({ onBack }: AccountSessionsScreenProps) {
             onPress={() => void onRevoke(item.id)}
           >
             <AppText
-              variant="bodyStrong"
-              color={confirming ? 'danger' : 'textSecondary'}
+              variant="footnote"
+              color="danger"
+              style={styles.nameWeight}
             >
               {confirming ? '确认' : '退出'}
             </AppText>
@@ -147,7 +144,7 @@ export function AccountSessionsScreen({ onBack }: AccountSessionsScreenProps) {
                 color="danger"
                 testID="account-sessions-error"
                 style={{
-                  paddingHorizontal: theme.layout.accountPageX,
+                  paddingHorizontal: theme.space.lg,
                   paddingTop: theme.space.sm,
                 }}
               >
@@ -172,9 +169,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
+    borderStyle: 'dashed',
   },
   text: { flex: 1 },
+  nameWeight: { fontWeight: '500' },
 });
 
 export default AccountSessionsScreen;

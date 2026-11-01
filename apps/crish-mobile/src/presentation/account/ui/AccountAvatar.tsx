@@ -1,10 +1,10 @@
-// 账号头像：有图显示图片，无图显示名字首字；配色取头像色板中的蓝色一档（与 v3 稿一致）。
+// 账号头像：有图显示图片，无图显示名字首字；配色取头像色板（原型统一中性灰，各档同值）。
 import { Image, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { resolveAvatarUrl } from '@/adapters/account/accountApi';
 import { AppText } from '@/presentation/ui';
 
-/** v3 稿指定的头像色即 avatarTones 第 2 档（浅 #eef2fa/#3b5b92，深 #1d2433/#8faee0） */
+/** 头像色档下标（M1 起各档同为中性灰，下标仅作稳定取档） */
 const ACCOUNT_TONE_INDEX = 1;
 
 export interface AccountAvatarProps {

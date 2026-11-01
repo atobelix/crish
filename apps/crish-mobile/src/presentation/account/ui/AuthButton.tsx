@@ -1,5 +1,6 @@
-// 账号按钮：主（墨色胶囊）/ 次（fillSubtle，按下 fillPressed）/ 幽灵（textSecondary 文字）。
-// 统一高 52、16/600；禁用为 fillSubtle + 禁用字色；按下色阶反馈（U8 零描边零缩放动效）。
+// 账号按钮（原型口径）：主 = 绿色胶囊 + 绿影 / 次 = 白底 / 幽灵 = 文字。
+// 统一高 48、字 14/600（原型 14.5，字阶无此档就近落 14）；
+// 禁用为 fillSubtle + 禁用字色；按下色阶反馈（U8 零描边零缩放动效）。
 // loading 态保留操作动词：Spinner 与「正在发送/正在验证…」并列展示（实现波总方案 A4/F4），
 // 不再把按钮文字挖空只剩菊花——用户始终知道正在发生什么。
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
@@ -32,7 +33,7 @@ function backgroundOf(
   if (variant === 'primary') {
     return pressed ? colors.actionPrimaryPressed : colors.actionPrimary;
   }
-  return pressed ? colors.fillPressed : colors.fillSubtle;
+  return pressed ? colors.fillPressed : colors.surface;
 }
 
 function textColorOf(
@@ -71,7 +72,7 @@ export function AuthButton({
       style={({ pressed }) => [
         styles.base,
         {
-          height: theme.size.button,
+          height: theme.size.touchLarge,
           borderRadius: theme.radius.pill,
           paddingHorizontal: theme.space.xl,
           backgroundColor: backgroundOf(
@@ -81,6 +82,14 @@ export function AuthButton({
             disabled
           ),
         },
+        // 主按钮绿影（原型 0 4 14 rgba(16,185,129,0.22)；几何借 sm 档，色与透明度按原型）
+        variant === 'primary' && !disabled
+          ? {
+              ...theme.shadow.sm,
+              shadowColor: theme.colors.brand,
+              shadowOpacity: 0.22,
+            }
+          : null,
       ]}
     >
       {loading ? (
@@ -89,12 +98,12 @@ export function AuthButton({
             color={theme.colors[textColor]}
             style={styles.spinnerGap}
           />
-          <AppText variant="bodyStrong" color={textColor}>
+          <AppText variant="barAction" color={textColor}>
             {loadingLabel}
           </AppText>
         </>
       ) : (
-        <AppText variant="bodyStrong" color={textColor}>
+        <AppText variant="barAction" color={textColor}>
           {label}
         </AppText>
       )}

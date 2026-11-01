@@ -1,4 +1,6 @@
-// 账号 v3 账号页：头像 76 + 名字 + 邮箱；个人资料 / 登录设备 / 修改密码；退出登录与注销入口。
+// 账号页（原型 subAccount）：透明 hero（头像 68 + 名字 16/600）+ 白色分组卡行
+// （个人资料 / 登录设备 / 修改密码）；退出登录与注销入口。邮箱行保留为 App 侧
+// 账号标识展示（原型 hero 无邮箱行，邮箱见设置账号卡/登录流程）。
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -85,47 +87,63 @@ export function AccountHomeScreen({
         <View
           style={[
             styles.identity,
-            { paddingVertical: theme.space.xxl, gap: theme.space.xs },
+            {
+              paddingTop: theme.space.lg + 2,
+              paddingBottom: theme.space.sm + 2,
+              gap: theme.space.md,
+            },
           ]}
         >
           <AccountAvatar
             name={name}
             uri={profile?.avatarUrl}
-            size={theme.size.avatarProfile}
+            size={theme.size.avatarProfile - theme.space.sm}
             testID="account-avatar"
           />
           <AppText
             variant="accountName"
             color="textPrimary"
-            style={{ marginTop: theme.space.md }}
             testID="account-name"
           >
             {name}
           </AppText>
-          <AppText variant="footnote" color="textSecondary">
+          <AppText
+            variant="footnote"
+            color="textTertiary"
+            style={{ marginTop: -theme.space.sm }}
+          >
             {email}
           </AppText>
         </View>
-        <NavRow
-          label="个人资料"
-          testID="account-row-profile"
-          onPress={onOpenProfile}
-        />
-        <NavRow
-          label="登录设备"
-          value={sessionCount === null ? undefined : String(sessionCount)}
-          testID="account-row-sessions"
-          onPress={onOpenSessions}
-        />
-        <NavRow
-          label="修改密码"
-          last
-          testID="account-row-password"
-          onPress={() => onChangePassword(email)}
-        />
         <View
           style={{
-            paddingHorizontal: theme.layout.accountPageX,
+            marginHorizontal: theme.space.lg,
+            borderRadius: theme.radius.card,
+            backgroundColor: theme.colors.surfaceGrouped,
+            overflow: 'hidden',
+          }}
+        >
+          <NavRow
+            label="个人资料"
+            testID="account-row-profile"
+            onPress={onOpenProfile}
+          />
+          <NavRow
+            label="登录设备"
+            value={sessionCount === null ? undefined : String(sessionCount)}
+            testID="account-row-sessions"
+            onPress={onOpenSessions}
+          />
+          <NavRow
+            label="修改密码"
+            last
+            testID="account-row-password"
+            onPress={() => onChangePassword(email)}
+          />
+        </View>
+        <View
+          style={{
+            paddingHorizontal: theme.space.lg,
             paddingTop: theme.space.section,
             gap: theme.space.lg,
           }}

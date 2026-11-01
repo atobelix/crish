@@ -1,4 +1,5 @@
-// 账号 v3 个人资料：头像 96 + 相机钮（系统选图、裁成方形，超过 3 MB 报错）、昵称、简介。
+// 个人资料（原型 subProfileEdit）：头像 80（整头像 + 下方「点击更换头像」可点）
+// + 相机徽章 28；昵称 / 个性签名为外置标签字段（系统选图、裁成方形，超过 3 MB 报错）。
 // 有改动时顶栏右侧才出现「保存」；昵称为空时「保存」置灰并在昵称下提示。
 import { useEffect, useState } from 'react';
 import {
@@ -58,7 +59,7 @@ interface SaveActionProps {
   onPress: () => void;
 }
 
-/** 顶栏小号墨色胶囊「保存」 */
+/** 顶栏小号绿色胶囊「保存」 */
 function SaveAction({ disabled, loading, onPress }: SaveActionProps) {
   const theme = useTheme();
   const inactive = disabled || loading;
@@ -165,7 +166,8 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
     }
   };
 
-  const cameraSize = theme.size.cameraButton;
+  const cameraSize = theme.size.cameraButton - 6;
+  const avatarSize = theme.size.avatarEdit - theme.space.lg;
 
   return (
     <AuthPage testID="account-profile-screen">
@@ -185,56 +187,75 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingHorizontal: theme.layout.accountPageX,
+          paddingHorizontal: theme.space.lg,
           paddingBottom: theme.space.section,
-          gap: theme.space.sm,
+          gap: theme.space.lg,
         }}
       >
         <View
           style={[
             styles.avatarRow,
-            { paddingTop: theme.space.xl, paddingBottom: theme.space.xxl },
+            {
+              paddingTop: theme.space.sm,
+              paddingBottom: theme.space.lg,
+              gap: theme.space.sm,
+            },
           ]}
         >
-          <View>
-            <AccountAvatar
-              name={avatarName}
-              uri={profile?.avatarUrl}
-              size={theme.size.avatarEdit}
-              testID="profile-avatar"
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="更换头像"
-              accessibilityState={{ disabled: uploading, busy: uploading }}
-              disabled={uploading}
-              testID="profile-camera"
-              onPress={() => void changeAvatar()}
-              style={[
-                styles.camera,
-                {
-                  right: -theme.space.xs,
-                  bottom: -theme.space.xs,
-                  width: cameraSize,
-                  height: cameraSize,
-                  borderRadius: cameraSize / 2,
-                  backgroundColor: theme.colors.field,
-                },
-              ]}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="更换头像"
+            accessibilityState={{ disabled: uploading, busy: uploading }}
+            disabled={uploading}
+            testID="profile-camera"
+            onPress={() => void changeAvatar()}
+            style={styles.avatarPress}
+          >
+            <View>
+              <AccountAvatar
+                name={avatarName}
+                uri={profile?.avatarUrl}
+                size={avatarSize}
+                testID="profile-avatar"
+              />
+              <View
+                style={[
+                  styles.camera,
+                  theme.shadow.xs,
+                  {
+                    right: -theme.space.xxs,
+                    bottom: -theme.space.xxs,
+                    width: cameraSize,
+                    height: cameraSize,
+                    borderRadius: cameraSize / 2,
+                    backgroundColor: theme.colors.field,
+                    borderWidth: 2,
+                    borderColor: theme.colors.surface,
+                  },
+                ]}
+              >
+                {uploading ? (
+                  <ActivityIndicator color={theme.colors.textTertiary} />
+                ) : (
+                  <Icon
+                    name="camera"
+                    size={theme.size.iconSmall - 2}
+                    color={theme.colors.textTertiary}
+                  />
+                )}
+              </View>
+            </View>
+            <AppText
+              variant="caption"
+              color="textTertiary"
+              style={{ marginTop: theme.space.sm }}
             >
-              {uploading ? (
-                <ActivityIndicator color={theme.colors.textPrimary} />
-              ) : (
-                <Icon
-                  name="camera"
-                  size={theme.size.iconSmall}
-                  color={theme.colors.textPrimary}
-                />
-              )}
-            </Pressable>
-          </View>
+              点击更换头像
+            </AppText>
+          </Pressable>
         </View>
         <AuthField
+          label="用户昵称"
           value={displayName}
           onChangeText={setDisplayName}
           placeholder="昵称"
@@ -244,6 +265,7 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
           testID="profile-name"
         />
         <AuthField
+          label="个性签名"
           value={bio}
           onChangeText={setBio}
           placeholder="简介"
@@ -263,6 +285,7 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
 
 const styles = StyleSheet.create({
   avatarRow: { alignItems: 'center' },
+  avatarPress: { alignItems: 'center' },
   camera: {
     position: 'absolute',
     alignItems: 'center',
