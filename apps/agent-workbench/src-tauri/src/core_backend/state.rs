@@ -4,11 +4,12 @@ use conex_device_protocol::{
     ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, RunTaskParams, RunTaskResult,
     SearchFilesParams, SearchFilesResult,
 };
+use conex_device_protocol::version::{ATTACHMENT_DATA_URL_MAX_BYTES, RUN_CONTENT_MAX_BYTES};
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
 
 use crate::core_commands::SharedSearchState;
-use crate::server::backend::WorkspaceOps;
+use crate::server::backend::{ModelsOps, SessionsOps, SkillsOps, WorkspaceOps};
 use crate::server::ServerError;
 use conex_run::run::{
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, list_active_runs_impl,
@@ -42,6 +43,12 @@ pub struct CoreStateBackend {
     search_root: Option<String>,
     /// 工作区文件只读操作（main.rs 装配面注入；缺省 = 文件命令 internal）
     workspace_ops: Option<Arc<dyn WorkspaceOps>>,
+    /// 模型域操作（G2：main.rs 装配面注入；缺省 = 模型命令 internal）
+    models_ops: Option<Arc<dyn ModelsOps>>,
+    /// 会话操作域（G3：main.rs 装配面注入；缺省 = 会话操作命令 internal）
+    sessions_ops: Option<Arc<dyn SessionsOps>>,
+    /// 技能域操作（G7：main.rs 装配面注入；缺省 = 技能命令 internal）
+    skills_ops: Option<Arc<dyn SkillsOps>>,
 }
 
 impl CoreStateBackend {
@@ -56,6 +63,9 @@ impl CoreStateBackend {
             search_state: None,
             search_root: None,
             workspace_ops: None,
+            models_ops: None,
+            sessions_ops: None,
+            skills_ops: None,
         }
     }
 
@@ -100,6 +110,36 @@ impl CoreStateBackend {
 
     pub(super) fn workspace_ops(&self) -> Option<Arc<dyn WorkspaceOps>> {
         self.workspace_ops.clone()
+    }
+
+    /// 注入模型域操作（G2：main.rs 装配面消费）
+    pub fn with_models_ops(mut self, ops: Arc<dyn ModelsOps>) -> Self {
+        self.models_ops = Some(ops);
+        self
+    }
+
+    pub(super) fn models_ops(&self) -> Option<Arc<dyn ModelsOps>> {
+        self.models_ops.clone()
+    }
+
+    /// 注入会话操作域（G3：main.rs 装配面消费）
+    pub fn with_sessions_ops(mut self, ops: Arc<dyn SessionsOps>) -> Self {
+        self.sessions_ops = Some(ops);
+        self
+    }
+
+    pub(super) fn sessions_ops(&self) -> Option<Arc<dyn SessionsOps>> {
+        self.sessions_ops.clone()
+    }
+
+    /// 注入技能域操作（G7：main.rs 装配面消费）
+    pub fn with_skills_ops(mut self, ops: Arc<dyn SkillsOps>) -> Self {
+        self.skills_ops = Some(ops);
+        self
+    }
+
+    pub(super) fn skills_ops(&self) -> Option<Arc<dyn SkillsOps>> {
+        self.skills_ops.clone()
     }
 
     /// 全局事件桥（R1-11：remote-* 审计事件发射通道；main.rs 装配面经此
@@ -214,6 +254,12 @@ impl CoreStateBackend {
                 "prompt 超过 256 KiB 上限（超限走流上传 promptRef，M6 §8.1）",
             ));
         }
+        // 远程附件服务端钳制（plans/04 §4.2 远程面）：远程面不可信，
+        // 桌面钳制在前端不适用——content 透传引擎前在此复核总量与
+        // 单 dataUrl 上限，超限 cmd.invalid 明确拒绝（不静默截断/丢弃）
+        if let Some(content) = &params.content {
+            validate_remote_content(content)?;
+        }
         // 会话归属：显式 sessionId → 沿用；缺省 → 新建会话（标题 = prompt
         // 前缀，对齐桌面 commitDraftIfNeeded 语义）
         let session_id = match params.session_id.as_deref() {
@@ -275,9 +321,11 @@ impl CoreStateBackend {
             // I1-α②：远程 run 不携带 context-state（状态切换告知仅
             // 桌面前端用户提交边界下发）
             context_state: None,
-            // plans/04 §4.2：远程 run 不携带多模态 content（无桌面附件通道）
-            content: None,
-            has_images: None,
+            // plans/04 §4.2：远程附件面已接通——content/hasImages
+            // 透传引擎（上方 validate_remote_content 已做服务端钳制；
+            // 引擎仅在 hasImages == true 时写入 metadata.contentParts）
+            content: params.content,
+            has_images: params.has_images,
         };
         let response = run_task_impl(Arc::clone(&self.core), options)
             .await
@@ -360,6 +408,50 @@ impl CoreStateBackend {
             })
             .collect();
         Ok(SearchFilesResult { results })
+    }
+}
+
+/// 远程 run content 服务端钳制（plans/04 §4.2 远程附件面；远程面
+/// 不可信，桌面前端钳制不适用）：parts 序列化总量 ≤
+/// RUN_CONTENT_MAX_BYTES；任一 data: URL 字符串字节数 ≤
+/// ATTACHMENT_DATA_URL_MAX_BYTES。超限 → cmd.invalid 明确拒绝，
+/// 不静默截断、不静默丢弃。
+pub(super) fn validate_remote_content(content: &serde_json::Value) -> Result<(), ServerError> {
+    let total = serde_json::to_vec(content)
+        .map_err(|e| ServerError::internal(format!("content 序列化失败：{e}")))?
+        .len();
+    if total > RUN_CONTENT_MAX_BYTES {
+        return Err(ServerError::protocol(
+            DeviceErrorCode::CmdInvalid,
+            format!("content 超过 {RUN_CONTENT_MAX_BYTES} 字节上限（远程附件总量钳制）"),
+        ));
+    }
+    if let Some(url_len) = max_data_url_len(content) {
+        if url_len > ATTACHMENT_DATA_URL_MAX_BYTES {
+            return Err(ServerError::protocol(
+                DeviceErrorCode::CmdInvalid,
+                format!(
+                    "单个附件 dataUrl 超过 {ATTACHMENT_DATA_URL_MAX_BYTES} 字节上限（远程附件内联上限 700 KiB）"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 递归求 content 内最长 data: URL 字符串字节数（无则 None）
+fn max_data_url_len(value: &serde_json::Value) -> Option<usize> {
+    match value {
+        serde_json::Value::String(text) => {
+            if text.starts_with("data:") {
+                Some(text.len())
+            } else {
+                None
+            }
+        }
+        serde_json::Value::Array(items) => items.iter().filter_map(max_data_url_len).max(),
+        serde_json::Value::Object(map) => map.values().filter_map(max_data_url_len).max(),
+        _ => None,
     }
 }
 

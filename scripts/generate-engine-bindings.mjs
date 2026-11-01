@@ -7,7 +7,7 @@
  * - engine-events  → packages/shared-types/src/generated/engine/
  *   （41 事件注册表，真源 crates/conex-types/src/events.rs，行为与 R3 T6 一致）
  * - device-protocol → packages/shared-types/src/generated/device/
- *   （多端互通 103 kind 注册表，真源 crates/conex-device-protocol/src/**）
+ *   （多端互通 117 kind 注册表，真源 crates/conex-device-protocol/src/**）
  * - error-codes     → packages/shared-types/src/generated/errors/
  *   （错误码单一真源契约，真源 crates/conex-types/src/error/**）
  *
@@ -222,7 +222,7 @@ const DEVICE_DIRECTIONS = new Set([
 const DEVICE_AUTH_PHASES = new Set(["pairing", "handshake", "session", "both"]);
 const DEVICE_STRATEGIES = new Set(["transparent", "redacted", "tuple"]);
 const DEVICE_PUSH_LEVELS = new Set(["p0", "p1", "p2", "none"]);
-const DEVICE_FAMILY_COUNTS = { pair: 4, auth: 3, device: 4, events: 11, remote: 37, result: 37, stream: 4, heartbeat: 2, error: 1 };
+const DEVICE_FAMILY_COUNTS = { pair: 4, auth: 3, device: 4, events: 11, remote: 44, result: 44, stream: 4, heartbeat: 2, error: 1 };
 
 function validateDeviceRegistry(reg, engineReg) {
   if (reg.contract !== "device-protocol") {
@@ -234,8 +234,8 @@ function validateDeviceRegistry(reg, engineReg) {
   if (reg.protocolVersion !== 1) {
     fail(`unsupported device protocolVersion ${reg.protocolVersion}`);
   }
-  if (reg.messageCount !== 103) {
-    fail(`device registry messageCount must be 103 (M6 §1.1), got ${reg.messageCount}`);
+  if (reg.messageCount !== 117) {
+    fail(`device registry messageCount must be 117 (M6 §1.1), got ${reg.messageCount}`);
   }
   if (reg.messageCount !== reg.kinds.length || reg.messageCount !== reg.messages.length) {
     fail("device registry messageCount does not match kinds/messages length");
@@ -260,7 +260,7 @@ function validateDeviceRegistry(reg, engineReg) {
     }
   };
 
-  // kinds：103 条、编号连续、kind 唯一、字段域合法
+  // kinds：117 条、编号连续、kind 唯一、字段域合法
   const seenKinds = new Set();
   reg.kinds.forEach((k, idx) => {
     if (k.messageId !== idx + 1) {
@@ -273,7 +273,7 @@ function validateDeviceRegistry(reg, engineReg) {
     if (!DEVICE_AUTH_PHASES.has(k.authPhase)) fail(`device kind ${k.kind} unknown authPhase ${k.authPhase}`);
   });
 
-  // family 账目（M6 §1.1：37+37+11+4+4+3+4+2+1 = 103）
+  // family 账目（M6 §1.1：44+44+11+4+4+3+4+2+1 = 117）
   const familyCounts = {};
   for (const k of reg.kinds) {
     familyCounts[k.family] = (familyCounts[k.family] || 0) + 1;
@@ -326,9 +326,9 @@ function validateDeviceRegistry(reg, engineReg) {
     }
   }
 
-  // commands：37 条、编号 C01-C37、kind/tauriCommand 非空、引用类型/错误码存在
-  if (!Array.isArray(reg.commands) || reg.commands.length !== 37) {
-    fail(`device registry must declare 37 commands, got ${reg.commands.length}`);
+  // commands：44 条、编号 C01-C44、kind/tauriCommand 非空、引用类型/错误码存在
+  if (!Array.isArray(reg.commands) || reg.commands.length !== 44) {
+    fail(`device registry must declare 44 commands, got ${reg.commands.length}`);
   }
   const errorCodeSet = new Set(allDeviceErrorCodes(reg));
   reg.commands.forEach((c, idx) => {
@@ -895,7 +895,7 @@ function emitIndex(header, exportLines) {
 // types/parser/index 九件套）
 // ---------------------------------------------------------------------------
 
-/** kinds.ts：103 kind 字面量联合 + family 分组 + kind 元数据表 */
+/** kinds.ts：117 kind 字面量联合 + family 分组 + kind 元数据表 */
 function emitDeviceKinds(reg) {
   const lines = [DEVICE_HEADER, ""];
 

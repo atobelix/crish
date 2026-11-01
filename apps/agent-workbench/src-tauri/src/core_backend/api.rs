@@ -4,14 +4,17 @@ use conex_device_protocol::commands::{
 use conex_device_protocol::commands::{SwitchWorkspaceParams, SwitchWorkspaceResult};
 use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, CancelRunParams,
-    CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams, EventPageResult,
-    FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
-    ListCommandsResult, ListDirParams, ListDirResult, ListPendingApprovalsParams,
-    ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
-    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, PauseAutomationParams,
-    PauseAutomationResult, ReadFileParams, ReadFileResult, RunControlLevel, RunControlParams,
-    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
-    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexResult,
+    CancelRunResult, DeleteSessionParams, DenyParams, DeviceErrorCode, EventPageParams,
+    EventPageResult, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
+    ListCommandsResult, ListDirParams, ListDirResult, ListModelsParams, ListModelsResult,
+    ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult,
+    ListSkillsParams, ListSkillsResult, ListTasksParams, ListTasksResult, ListWorkspacesParams,
+    ListWorkspacesResult, OkResult,
+    PauseAutomationParams, PauseAutomationResult, ReadFileParams, ReadFileResult,
+    RenameSessionParams, RunControlLevel, RunControlParams, RunControlResult, RunEventsParams,
+    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
+    SearchFilesResult, SearchIndexResult, SetActiveModelParams, SetActiveModelResult,
+    SetSessionArchivedParams, SetSessionPinnedParams,
 };
 
 use crate::run_ipc::{settings_get_impl, settings_update_impl};
@@ -467,5 +470,103 @@ impl ApiBackend for CoreStateBackend {
             ok: true,
             active_root,
         })
+    }
+
+    // ── G2 模型域命令（移动端伴侣；阻塞 IO 下沉 spawn_blocking）──
+
+    async fn list_models(
+        &self,
+        _params: ListModelsParams,
+    ) -> Result<ListModelsResult, ServerError> {
+        let ops = self.models_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "模型操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || ops.list_models())
+            .await
+            .map_err(|error| ServerError::internal(format!("list_models 任务失败：{error}")))?
+    }
+
+    async fn set_active_model(
+        &self,
+        params: SetActiveModelParams,
+    ) -> Result<SetActiveModelResult, ServerError> {
+        let ops = self.models_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "模型操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || {
+            ops.set_active_model(&params.provider_id, &params.model_id)
+        })
+        .await
+        .map_err(|error| ServerError::internal(format!("set_active_model 任务失败：{error}")))?
+    }
+
+    // ── G3 会话操作域命令（移动端伴侣；阻塞 IO 下沉 spawn_blocking）──
+
+    async fn rename_session(
+        &self,
+        params: RenameSessionParams,
+    ) -> Result<OkResult, ServerError> {
+        let ops = self.sessions_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || ops.rename_session(&params.session_id, &params.title))
+            .await
+            .map_err(|error| ServerError::internal(format!("rename_session 任务失败：{error}")))?
+    }
+
+    async fn set_session_pinned(
+        &self,
+        params: SetSessionPinnedParams,
+    ) -> Result<OkResult, ServerError> {
+        let ops = self.sessions_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || ops.set_session_pinned(&params.session_id, params.pinned))
+            .await
+            .map_err(|error| {
+                ServerError::internal(format!("set_session_pinned 任务失败：{error}"))
+            })?
+    }
+
+    async fn set_session_archived(
+        &self,
+        params: SetSessionArchivedParams,
+    ) -> Result<OkResult, ServerError> {
+        let ops = self.sessions_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || {
+            ops.set_session_archived(&params.session_id, params.archived)
+        })
+        .await
+        .map_err(|error| {
+            ServerError::internal(format!("set_session_archived 任务失败：{error}"))
+        })?
+    }
+
+    async fn delete_session(
+        &self,
+        params: DeleteSessionParams,
+    ) -> Result<OkResult, ServerError> {
+        let ops = self.sessions_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || ops.delete_session(&params.session_id))
+            .await
+            .map_err(|error| ServerError::internal(format!("delete_session 任务失败：{error}")))?
+    }
+
+    // ── G7 技能域命令（移动端伴侣；发现扫描阻塞 IO 下沉 spawn_blocking）──
+
+    async fn list_skills(
+        &self,
+        _params: ListSkillsParams,
+    ) -> Result<ListSkillsResult, ServerError> {
+        let ops = self.skills_ops().ok_or_else(|| {
+            ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "技能操作未装配")
+        })?;
+        tokio::task::spawn_blocking(move || ops.list_skills())
+            .await
+            .map_err(|error| ServerError::internal(format!("list_skills 任务失败：{error}")))?
     }
 }

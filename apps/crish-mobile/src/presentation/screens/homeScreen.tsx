@@ -21,6 +21,8 @@ import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
 import { useDeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
 import { useComposerContextVm } from '@/adapters/viewmodels/useComposerContextVm';
+import { useSkillsVm } from '@/adapters/viewmodels/useSkillsVm';
+import { useComposerAttachments } from '@/adapters/viewmodels/useComposerAttachments';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
@@ -34,13 +36,17 @@ import {
   useToast,
 } from '@/presentation/ui';
 import { ConnectionBanner } from '@/presentation/components/status/ConnectionBanner';
+import { AttachmentSheet } from '@/presentation/components/chat/AttachmentSheet';
+import { AttachmentStrip } from '@/presentation/components/chat/AttachmentStrip';
 import { DevicePill } from '@/presentation/components/chat/DevicePill';
 import { DeviceSheet } from '@/presentation/components/chat/DeviceSheet';
 import { MenuButton } from '@/presentation/components/chat/MenuButton';
 import { ModelSheet } from '@/presentation/components/chat/ModelSheet';
 import { PermissionModeSheet } from '@/presentation/components/chat/PermissionModeSheet';
+import { SkillsSheet } from '@/presentation/components/chat/SkillsSheet';
 import { WorkspaceSheet } from '@/presentation/components/files/WorkspaceSheet';
 import { ChatFlatItem } from '@/presentation/components/sessions/ChatFlatItem';
+import { useSessionOpsController } from '@/presentation/components/sessions/useSessionOpsController';
 
 /** 问候语按本地时段切换 */
 export function greetingFor(hour: number): string {
@@ -68,20 +74,49 @@ export default function HomeScreen({
   const { showToast } = useToast();
   const { sessions, windows, connected } = useSessionsVm();
   const quickRun = useQuickRunVm();
-  // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交
+  // Composer 上下文（G1）：快捷条项目/权限 + 展开行模型钮的数据面
+  const composerCtx = useComposerContextVm();
+  // 技能目录（G7）：附件面板入口计数 + SkillsSheet 数据面（只读）
+  const skillsVm = useSkillsVm();
+  // 已选附件（G5b）：选取/移除在本屏管理；发送成功随 feedback 清空，
+  // 失败保留（VM 的 clear 只在成功路径调用）
+  const attachments = useComposerAttachments({ notify: showToast });
+  const clearAttachments = attachments.clear;
+  const hasAttachments = attachments.attachments.length > 0;
+  // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交；
+  // G5b：有已选附件时语音文本走富路径一并发出（附件不滞留）
   const voice = useVoiceInput({
     onFillText: quickRun.setPrompt,
-    onSubmitText: quickRun.submitText,
+    onSubmitText: (text) => {
+      if (attachments.attachments.length > 0) {
+        quickRun.submitWithAttachments(
+          text,
+          attachments.attachments,
+          composerCtx.activeModelVisionSupported
+        );
+      } else {
+        quickRun.submitText(text);
+      }
+    },
     notify: showToast,
   });
   const device = useDeviceStatusVm();
-  // Composer 上下文（G1）：快捷条项目/权限 + 展开行模型钮的数据面
-  const composerCtx = useComposerContextVm();
+  // 会话操作（G3）：行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）
+  const sessionOps = useSessionOpsController();
+  const openSessionActions = useCallback(
+    (sessionId: string) => {
+      const target = sessions.find((s) => s.id === sessionId);
+      if (target) sessionOps.openActions(target);
+    },
+    [sessions, sessionOps]
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [deviceOpen, setDeviceOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
   const { feedback } = quickRun;
 
@@ -108,9 +143,12 @@ export default function HomeScreen({
   }));
 
   useEffect(() => {
-    if (feedback.kind === 'success') onOpenSession(feedback.sessionId);
-    else if (feedback.kind === 'error') showToast(feedback.message, 'error');
-  }, [feedback, onOpenSession, showToast]);
+    if (feedback.kind === 'success') {
+      // 发送成功才清空已选附件（失败保留，用户可改后重发）
+      clearAttachments();
+      onOpenSession(feedback.sessionId);
+    } else if (feedback.kind === 'error') showToast(feedback.message, 'error');
+  }, [feedback, onOpenSession, showToast, clearAttachments]);
 
   // 平铺列表数据：未归档会话。排序即优先级口径——store 的 sortSessions 已保证
   // 置顶 → 活动中（activeRunIds 非空，含待审批会话）→ updatedAt 降序，本屏不再重排：
@@ -125,6 +163,24 @@ export default function HomeScreen({
     (sessionId: string) => lastPreviewOfWindow(windows[sessionId]),
     [windows]
   );
+
+  // 发送分发（G5b）：有已选附件走富路径（组装 + 预检在 VM），否则纯文本
+  const handleSubmit = useCallback(() => {
+    if (hasAttachments) {
+      quickRun.submitWithAttachments(
+        quickRun.prompt,
+        attachments.attachments,
+        composerCtx.activeModelVisionSupported
+      );
+    } else {
+      quickRun.submit();
+    }
+  }, [
+    hasAttachments,
+    quickRun,
+    attachments.attachments,
+    composerCtx.activeModelVisionSupported,
+  ]);
 
   return (
     <Screen avoidKeyboard>
@@ -220,6 +276,7 @@ export default function HomeScreen({
                 nowMs={nowMs}
                 isLast={index === visibleSessions.length - 1}
                 onPress={onOpenSession}
+                onLongPress={openSessionActions}
               />
             )}
             contentContainerStyle={[
@@ -250,16 +307,26 @@ export default function HomeScreen({
           },
         ]}
       >
+        <AttachmentStrip
+          attachments={attachments.attachments}
+          onRemove={attachments.remove}
+          testID="home-attachment-strip"
+        />
         <Composer
           testID="home-composer"
           placeholder={connected ? '发消息…' : '未连接'}
           value={quickRun.prompt}
           onChangeText={quickRun.setPrompt}
-          onSubmit={quickRun.submit}
-          canSubmit={quickRun.canSubmit}
+          onSubmit={handleSubmit}
+          canSubmit={
+            quickRun.canSubmit ||
+            (quickRun.connected && !quickRun.busy && hasAttachments)
+          }
           editable={connected && !quickRun.busy}
           maxLength={4096}
           voice={voice}
+          onAttachPress={() => setAttachOpen(true)}
+          hasAttachments={hasAttachments}
           contextBar={{
             workspaceLabel: composerCtx.workspaceLabel,
             permissionLabel: composerCtx.permissionLabel,
@@ -271,7 +338,10 @@ export default function HomeScreen({
           }}
           model={{
             label: composerCtx.modelLabel,
-            onPress: () => setModelOpen(true),
+            onPress: () => {
+              composerCtx.openModelList();
+              setModelOpen(true);
+            },
           }}
         />
       </View>
@@ -335,13 +405,54 @@ export default function HomeScreen({
         testID="home-permission-sheet"
       />
 
-      {/* 模型选择 Sheet（G1 壳：列表待 G2 端点，诚实空态） */}
+      {/* 模型选择 Sheet（G2：真实列表 + 全局默认切换，桌面同一真源） */}
       <ModelSheet
         visible={modelOpen}
         onClose={() => setModelOpen(false)}
-        currentLabel={composerCtx.modelLabel}
+        connected={composerCtx.connected}
+        models={composerCtx.models}
+        status={composerCtx.modelsStatus}
+        activeModelId={composerCtx.activeModelId}
+        switching={composerCtx.switchingModel}
+        errorCode={composerCtx.modelsError}
+        onSelectModel={(providerId, modelId) => {
+          void composerCtx.selectModel(providerId, modelId).then((ok) => {
+            if (ok) setModelOpen(false);
+          });
+        }}
+        onRetry={composerCtx.retryModels}
         testID="home-model-sheet"
       />
+
+      {/* 附件面板（G5b：拍照/相册/文件三入口，选取即处理） */}
+      <AttachmentSheet
+        visible={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        onTakePhoto={attachments.pickFromCamera}
+        onPickImage={attachments.pickFromLibrary}
+        onPickFile={attachments.pickFromFiles}
+        skillsCount={skillsVm.skillsCount}
+        onOpenSkills={() => {
+          skillsVm.openList();
+          setSkillsOpen(true);
+        }}
+        testID="home-attachment-sheet"
+      />
+
+      {/* 技能目录 Sheet（G7：宿主技能发现只读浏览，桌面同一真源） */}
+      <SkillsSheet
+        visible={skillsOpen}
+        onClose={() => setSkillsOpen(false)}
+        connected={skillsVm.connected}
+        skills={skillsVm.skills}
+        status={skillsVm.status}
+        errorCode={skillsVm.errorCode}
+        onRetry={skillsVm.retry}
+        testID="home-skills-sheet"
+      />
+
+      {/* 会话操作层（G3：操作 Sheet + 改名弹窗 + 删除确认） */}
+      {sessionOps.layer}
     </Screen>
   );
 }

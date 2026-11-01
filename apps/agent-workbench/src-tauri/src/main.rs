@@ -687,6 +687,15 @@ fn main() {
                         .with_search_state(Arc::clone(&search_state))
                         .with_workspace_ops(core_backend::workspace_ops::AppWorkspaceOps::create(
                             app_handle.clone(),
+                        ))
+                        .with_models_ops(core_backend::models_ops::AppModelsOps::create(
+                            app_handle.clone(),
+                        ))
+                        .with_sessions_ops(core_backend::sessions_ops::AppSessionsOps::create(
+                            app_handle.clone(),
+                        ))
+                        .with_skills_ops(core_backend::skills_ops::AppSkillsOps::create(
+                            app_handle.clone(),
                         ));
                 if let Ok(guard) = crate::workspace::resolve_guard(&app_handle, "") {
                     backend = backend.with_search_root(guard.root().to_string_lossy().into_owned());

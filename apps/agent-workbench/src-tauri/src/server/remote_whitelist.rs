@@ -6,7 +6,7 @@
 //! 放行；否则 403 cmd.denied + RemoteSourceAttempt 审计事件（router
 //! 命令执行端点守卫 + fallback 拒绝分支接线，见 router.rs）。
 //!
-//! 白名单真源 = M6 §4 命令总表 C01-C32（wire 名取命令 kind 去掉
+//! 白名单真源 = M6 §4 命令总表 C01-C32 + G2 增补 C38-C39 + G3 增补 C40-C43 + G7 增补 C44（wire 名取命令 kind 去掉
 //! `remote.` 前缀的 camelCase 后缀；D5 §4.5 三列映射表对齐口径）：
 //!
 //! | 功能域 | 条数 | M6 编号 | 命令 |
@@ -16,6 +16,9 @@
 //! | F4 文件 | 8 | C16-C23 | listDir / readFile / writeFile / listWorkspaces / switchWorkspace / searchFiles / assetUrl / fileStat |
 //! | F5 会话 | 4 | C24-C27 | runTask / runControl / cancelRun / searchSessions |
 //! | F6 设置 | 5 | C28-C32 | getSettings / setSettings / settingsConfirm / pauseAutomation / queryPresence |
+//! | F6 设置（G2 增补） | 2 | C38-C39 | listModels / setActiveModel（全局默认模型读写——桌面同一真源，用户裁决 Q3：切换含桌面端全局生效） |
+//! | F5 会话（G3 增补） | 4 | C40-C43 | renameSession / setSessionPinned / setSessionArchived / deleteSession（会话操作——与桌面侧栏同一存储层同一语义；删除守卫与桌面孤儿清理豁免同源） |
+//! | F6 设置（G7 增补） | 1 | C44 | listSkills（技能目录只读——与桌面「设置 → 扩展 → 技能」同一发现真源；启停生效值是桌面 webview 本地状态、宿主无数据面，故无启停写命令） |
 //!
 //! 显式不进白名单（无论何级能力，D5 §4.5）：
 //!
@@ -122,9 +125,11 @@ pub enum RemoteCommandCategory {
     /// F4 文件域（C16-C23：目录/文件/工作区浏览与受控写，observe 读 /
     /// operate 写）
     File,
-    /// F5 会话域（C24-C27：run 发起/控制/取消/搜索，operate 级）
+    /// F5 会话域（C24-C27：run 发起/控制/取消/搜索 + G3 增补 C40-C43
+    /// 会话操作，operate 级）
     Session,
-    /// F6 设置域（C28-C32：设置镜像/确认/暂停，approve 级）
+    /// F6 设置域（C28-C32：设置镜像/确认/暂停 + G2 增补 C38-C39 模型
+    /// + G7 增补 C44 技能目录只读，approve 级）
     Settings,
 }
 
@@ -138,7 +143,7 @@ pub struct RemoteCommandEntry {
     pub category: RemoteCommandCategory,
 }
 
-/// 远程命令白名单注册表（M6 §4 C01-C32 冻结 32 条；条目顺序即 M6
+/// 远程命令白名单注册表（M6 §4 C01-C32 冻结 32 条 + G2/G3/G7 增补 7 条；条目顺序即 M6
 /// 命令总表顺序——测试按序断言防漂移，注册表是命令面的唯一真源）
 pub const REMOTE_COMMAND_WHITELIST: &[RemoteCommandEntry] = &[
     // ── F1 监控域（C01-C10，10 条）──
@@ -274,9 +279,40 @@ pub const REMOTE_COMMAND_WHITELIST: &[RemoteCommandEntry] = &[
         name: "queryPresence",
         category: RemoteCommandCategory::Settings,
     },
+    // ── G2 增补（C38-C39，F6 设置域）──
+    RemoteCommandEntry {
+        name: "listModels",
+        category: RemoteCommandCategory::Settings,
+    },
+    RemoteCommandEntry {
+        name: "setActiveModel",
+        category: RemoteCommandCategory::Settings,
+    },
+    // ── G3 增补（C40-C43，F5 会话域）──
+    RemoteCommandEntry {
+        name: "renameSession",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "setSessionPinned",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "setSessionArchived",
+        category: RemoteCommandCategory::Session,
+    },
+    RemoteCommandEntry {
+        name: "deleteSession",
+        category: RemoteCommandCategory::Session,
+    },
+    // ── G7 增补（C44，F6 设置域）──
+    RemoteCommandEntry {
+        name: "listSkills",
+        category: RemoteCommandCategory::Settings,
+    },
 ];
 
-/// 白名单条目总数（M6 §4 C01-C32 冻结口径：32 条）
+/// 白名单条目总数（M6 §4 C01-C32 + G2 增补 C38-C39 + G3 增补 C40-C43 + G7 增补 C44：39 条）
 #[cfg(test)]
 pub const REMOTE_COMMAND_WHITELIST_LEN: usize = REMOTE_COMMAND_WHITELIST.len();
 
@@ -302,13 +338,13 @@ pub fn remote_command_category(command: &str) -> Option<RemoteCommandCategory> {
 mod tests {
     use super::*;
 
-    // ── M6 §4 总表对齐：32 条逐条锁定（防注册表漂移）──
+    // ── M6 §4 总表 + G2/G3/G7 增补对齐：39 条逐条锁定（防注册表漂移）──
 
     /// 白名单覆盖 M6 §4 C01-C32 全 32 条：按域断言数量（监控 10 /
     /// 审批 5 / 文件 8 / 会话 4 / 设置 5）+ 按 M6 表顺序逐条断言命令名
     /// 与类别——任何一条缺漏/错位即红（D5 §4.5 与 M6 §4 的双源对账）
     #[test]
-    fn whitelist_covers_m6_c01_to_c32_exactly() {
+    fn whitelist_covers_m6_c01_to_c32_plus_g2_g3_g7_exactly() {
         let expected = [
             // F1 监控域（C01-C10）
             ("getStatus", RemoteCommandCategory::Monitor),
@@ -347,12 +383,22 @@ mod tests {
             ("settingsConfirm", RemoteCommandCategory::Settings),
             ("pauseAutomation", RemoteCommandCategory::Settings),
             ("queryPresence", RemoteCommandCategory::Settings),
+            // G2 增补（C38-C39，F6 设置域）
+            ("listModels", RemoteCommandCategory::Settings),
+            ("setActiveModel", RemoteCommandCategory::Settings),
+            // G3 增补（C40-C43，F5 会话域）
+            ("renameSession", RemoteCommandCategory::Session),
+            ("setSessionPinned", RemoteCommandCategory::Session),
+            ("setSessionArchived", RemoteCommandCategory::Session),
+            ("deleteSession", RemoteCommandCategory::Session),
+            // G7 增补（C44，F6 设置域）
+            ("listSkills", RemoteCommandCategory::Settings),
         ];
         assert_eq!(
-            REMOTE_COMMAND_WHITELIST_LEN, 32,
-            "白名单必须恰好 32 条（M6 §4 C01-C32 冻结）"
+            REMOTE_COMMAND_WHITELIST_LEN, 39,
+            "白名单必须恰好 39 条（M6 §4 C01-C32 + G2 增补 C38-C39 + G3 增补 C40-C43 + G7 增补 C44）"
         );
-        assert_eq!(expected.len(), 32, "期望表必须恰好 32 条");
+        assert_eq!(expected.len(), 39, "期望表必须恰好 39 条");
         for (index, (name, category)) in expected.iter().enumerate() {
             let entry = &REMOTE_COMMAND_WHITELIST[index];
             assert_eq!(entry.name, *name, "第 {index} 条命令名与 M6 表不符（漂移）");
@@ -375,7 +421,7 @@ mod tests {
             .map(|entry| entry.name)
             .collect::<std::collections::HashSet<_>>()
             .len();
-        assert_eq!(unique_count, 32, "白名单不得有重复命令名");
+        assert_eq!(unique_count, 39, "白名单不得有重复命令名");
     }
 
     // ── 显式排除面（D5 §4.5「无论何级能力」）──

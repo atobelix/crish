@@ -129,8 +129,8 @@ import {
 import { parseDeviceFrame } from './parser';
 
 describe('R0-03 device 生成产物运行时冒烟', () => {
-  it('静态账目锁定：103 kind / 45 错误码 / 17 能力位 / 19 同步面（M6 §1.1/§5.0；R1 tool-update 事件契约删除后 20 → 19）', () => {
-    expect(DEVICE_KINDS.length).toBe(103);
+  it('静态账目锁定：117 kind / 45 错误码 / 17 能力位 / 19 同步面（M6 §1.1/§5.0；R1 tool-update 事件契约删除后 20 → 19；G2 增补 C38/C39 模型命令 +4 kind；G3 增补 C40-C43 会话操作命令 +8 kind；G7 增补 C44 技能命令 +2 kind）', () => {
+    expect(DEVICE_KINDS.length).toBe(117);
     expect(DEVICE_ERROR_CODES.length).toBe(45);
     expect(DEVICE_CAPABILITIES.length).toBe(17);
     expect(EVENT_SYNC_ELIGIBLE.length).toBe(19);

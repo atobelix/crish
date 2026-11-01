@@ -23,14 +23,17 @@ use conex_device_protocol::commands::{
 };
 use conex_device_protocol::{
     ApprovalHistoryParams, ApprovalHistoryResult, ApproveParams, ApproveResult, AssetUrlParams,
-    AssetUrlResult, CancelRunParams, CancelRunResult, DenyParams, DeviceErrorCode, EventPageParams,
-    EventPageResult, FlowSnapshotParams, FlowSnapshotResult, GetSettingsParams, GetSettingsResult,
-    ListCommandsResult, ListDirParams, ListDirResult, ListPendingApprovalsParams,
-    ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult, ListTasksParams,
-    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, PauseAutomationParams,
-    PauseAutomationResult, ReadFileParams, ReadFileResult, RunControlParams, RunControlResult,
-    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
-    SearchFilesParams, SearchFilesResult, SearchIndexResult,
+    AssetUrlResult, CancelRunParams, CancelRunResult, DeleteSessionParams, DenyParams,
+    DeviceErrorCode, EventPageParams, EventPageResult, FlowSnapshotParams, FlowSnapshotResult,
+    GetSettingsParams, GetSettingsResult, ListCommandsResult, ListDirParams, ListDirResult,
+    ListModelsParams, ListModelsResult, ListPendingApprovalsParams, ListPendingApprovalsResult,
+    ListSessionsParams, ListSessionsResult, ListSkillsParams, ListSkillsResult, ListTasksParams,
+    ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, OkResult, PauseAutomationParams,
+    PauseAutomationResult, ReadFileParams,
+    ReadFileResult, RenameSessionParams, RunControlParams, RunControlResult, RunEventsParams,
+    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
+    SearchFilesResult, SearchIndexResult, SetActiveModelParams, SetActiveModelResult,
+    SetSessionArchivedParams, SetSessionPinnedParams,
 };
 use serde_json::Value;
 
@@ -53,6 +56,44 @@ pub trait WorkspaceOps: Send + Sync {
         max_lines: Option<u32>,
         start_line: Option<u64>,
     ) -> Result<ReadFileResult, ServerError>;
+}
+
+/// 模型域操作（G2/W-B：全局默认模型读写；由装配面注入 Tauri AppHandle
+/// 实现——与桌面「设置 → 模型」页读写同一份统一模型树
+/// `UnifiedModelsConfig`，不另建移动端专用模型表；CoreStateBackend
+/// 只依赖本 trait，保持 server 层可测试、不直接依赖 tauri runtime）
+pub trait ModelsOps: Send + Sync {
+    fn list_models(&self) -> Result<ListModelsResult, ServerError>;
+    fn set_active_model(
+        &self,
+        provider_id: &str,
+        model_id: &str,
+    ) -> Result<SetActiveModelResult, ServerError>;
+}
+
+/// 会话操作域（G3：改名/置顶/归档/删除；由装配面注入 Tauri AppHandle
+/// 实现——作用于桌面宿主会话存储（SharedDb 的 LocalDb sessions 表），
+/// 与桌面侧栏同一存储层同一语义，不另建移动端专用会话表；
+/// CoreStateBackend 只依赖本 trait，保持 server 层可测试）
+pub trait SessionsOps: Send + Sync {
+    fn rename_session(&self, session_id: &str, title: &str) -> Result<OkResult, ServerError>;
+    fn set_session_pinned(&self, session_id: &str, pinned: bool) -> Result<OkResult, ServerError>;
+    fn set_session_archived(
+        &self,
+        session_id: &str,
+        archived: bool,
+    ) -> Result<OkResult, ServerError>;
+    fn delete_session(&self, session_id: &str) -> Result<OkResult, ServerError>;
+}
+
+/// 技能域操作（G7：技能目录只读浏览；由装配面注入 Tauri AppHandle
+/// 实现——读宿主技能发现 `workbench_discover_skills`，与桌面
+/// 「设置 → 扩展 → 技能」页同一发现真源，不另建移动端技能表；
+/// 技能启停生效值是桌面 webview 本地状态（localStorage），宿主无
+/// 数据面，故本域只有只读列表、无启停写面；CoreStateBackend 只
+/// 依赖本 trait，保持 server 层可测试）
+pub trait SkillsOps: Send + Sync {
+    fn list_skills(&self) -> Result<ListSkillsResult, ServerError>;
 }
 
 /// 非敏感配置更新载荷（PUT /v1/settings；R1-04 直调 config_update 的
@@ -336,6 +377,77 @@ pub trait ApiBackend: Send + Sync {
         ))
     }
 
+    /// C38 可选模型列表 + 当前全局默认（G2/W-B；桌面统一模型树投影）
+    async fn list_models(
+        &self,
+        _params: ListModelsParams,
+    ) -> Result<ListModelsResult, ServerError> {
+        Err(ServerError::internal(
+            "list_models 未接线（需要装配 ModelsOps）",
+        ))
+    }
+
+    /// C39 切换全局默认模型（G2/W-B；持久化到桌面同一真源并经同一
+    /// 发布链通知桌面 UI 与引擎后续 run）
+    async fn set_active_model(
+        &self,
+        _params: SetActiveModelParams,
+    ) -> Result<SetActiveModelResult, ServerError> {
+        Err(ServerError::internal(
+            "set_active_model 未接线（需要装配 ModelsOps）",
+        ))
+    }
+
+    /// C40 会话改名（G3；宿主按桌面标题规范化同口径清洗后落库）
+    async fn rename_session(
+        &self,
+        _params: RenameSessionParams,
+    ) -> Result<OkResult, ServerError> {
+        Err(ServerError::internal(
+            "rename_session 未接线（需要装配 SessionsOps）",
+        ))
+    }
+
+    /// C41 置顶/取消置顶（G3；is_pinned 定向写，幂等）
+    async fn set_session_pinned(
+        &self,
+        _params: SetSessionPinnedParams,
+    ) -> Result<OkResult, ServerError> {
+        Err(ServerError::internal(
+            "set_session_pinned 未接线（需要装配 SessionsOps）",
+        ))
+    }
+
+    /// C42 归档/取消归档（G3；is_archived 定向写，幂等）
+    async fn set_session_archived(
+        &self,
+        _params: SetSessionArchivedParams,
+    ) -> Result<OkResult, ServerError> {
+        Err(ServerError::internal(
+            "set_session_archived 未接线（需要装配 SessionsOps）",
+        ))
+    }
+
+    /// C43 删除会话（G3；真删 + 产出进回收站，守卫与桌面孤儿清理豁免同源）
+    async fn delete_session(
+        &self,
+        _params: DeleteSessionParams,
+    ) -> Result<OkResult, ServerError> {
+        Err(ServerError::internal(
+            "delete_session 未接线（需要装配 SessionsOps）",
+        ))
+    }
+
+    /// C44 技能目录列表（G7；宿主技能发现投影，只读——启停在桌面端管理）
+    async fn list_skills(
+        &self,
+        _params: ListSkillsParams,
+    ) -> Result<ListSkillsResult, ServerError> {
+        Err(ServerError::internal(
+            "list_skills 未接线（需要装配 SkillsOps）",
+        ))
+    }
+
     /// 跨端命令通用分发（WS `remote.<cmd>` / REST 共用；命令名 = 白名单后缀）。
     /// 默认实现覆盖全部已接线命令；未登记命令返回 `cmd.unknown`。
     async fn dispatch_remote_command(
@@ -447,6 +559,34 @@ pub trait ApiBackend: Send + Sync {
             }
             "switchWorkspace" => {
                 let result = self.switch_workspace(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listModels" => {
+                let result = self.list_models(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "setActiveModel" => {
+                let result = self.set_active_model(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "renameSession" => {
+                let result = self.rename_session(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "setSessionPinned" => {
+                let result = self.set_session_pinned(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "setSessionArchived" => {
+                let result = self.set_session_archived(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "deleteSession" => {
+                let result = self.delete_session(parse(params, cmd)?).await?;
+                encode(result, cmd)
+            }
+            "listSkills" => {
+                let result = self.list_skills(parse(params, cmd)?).await?;
                 encode(result, cmd)
             }
             "settingsConfirm" => {

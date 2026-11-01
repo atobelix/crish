@@ -619,6 +619,8 @@ export interface RunTaskParams {
   permissionMode?: PermissionMode;
   history?: JsonValue[];
   clientMessageId?: string;
+  content?: JsonValue;
+  hasImages?: boolean;
 }
 
 export interface RunTaskResult {
@@ -749,5 +751,72 @@ export type UnlinkParams = Record<string, never>;
 
 export interface UnlinkResult {
   ok: boolean;
+}
+
+export type ListModelsParams = Record<string, never>;
+
+export interface ModelEntry {
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  providerDisplayName?: string;
+  active: boolean;
+  vision?: boolean;
+}
+
+export interface ActiveModelInfo {
+  providerId: string;
+  modelId: string;
+  displayName: string;
+}
+
+export interface ListModelsResult {
+  models: ModelEntry[];
+  activeModel?: ActiveModelInfo;
+}
+
+export interface SetActiveModelParams {
+  providerId: string;
+  modelId: string;
+}
+
+export interface SetActiveModelResult {
+  ok: boolean;
+  activeModel: ActiveModelInfo;
+}
+
+export interface RenameSessionParams {
+  sessionId: string;
+  title: string;
+}
+
+export interface SetSessionPinnedParams {
+  sessionId: string;
+  pinned: boolean;
+}
+
+export interface SetSessionArchivedParams {
+  sessionId: string;
+  archived: boolean;
+}
+
+export interface DeleteSessionParams {
+  sessionId: string;
+}
+
+export type ListSkillsParams = Record<string, never>;
+
+export interface SkillEntry {
+  id: string;
+  name: string;
+  description: string;
+  scope: string;
+  system: boolean;
+  disableModelInvocation?: boolean;
+  fileActivation?: string;
+}
+
+export interface ListSkillsResult {
+  skills: SkillEntry[];
 }
 

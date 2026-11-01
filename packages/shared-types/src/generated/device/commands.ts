@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { StatusQuery, StatusResult, RunSnapshotParams, RunSnapshotResult, EventPageParams, EventPageResult, RunEventsParams, ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, TaskOutputParams, TaskOutputResult, FlowSnapshotParams, FlowSnapshotResult, ListCommandsParams, ListCommandsResult, SearchIndexParams, SearchIndexResult, ApproveParams, ApproveResult, DenyParams, ListPendingApprovalsParams, ListPendingApprovalsResult, ApprovalHistoryParams, ApprovalHistoryResult, CheckCommandParams, CheckCommandResult, ListDirParams, ListDirResult, ReadFileParams, ReadFileResult, WriteFileParams, WriteFileResult, ListWorkspacesParams, ListWorkspacesResult, SwitchWorkspaceParams, SwitchWorkspaceResult, SearchFilesParams, SearchFilesResult, AssetUrlParams, AssetUrlResult, FileStatParams, FileStatResult, RunTaskParams, RunTaskResult, RunControlParams, RunControlResult, CancelRunParams, CancelRunResult, SearchSessionsParams, SearchSessionsResult, GetSettingsParams, GetSettingsResult, SetSettingsParams, SetSettingsResult, SettingsConfirmParams, SettingsConfirmResult, PauseAutomationParams, PauseAutomationResult, PresenceParams, PresenceResult, ListDevicesParams, ListDevicesResult, RenameDeviceParams, GenericOkResult, RevokeDeviceParams, PairStateParams, PairStateResult, UnlinkParams, UnlinkResult } from "./types";
+import type { StatusQuery, StatusResult, RunSnapshotParams, RunSnapshotResult, EventPageParams, EventPageResult, RunEventsParams, ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, TaskOutputParams, TaskOutputResult, FlowSnapshotParams, FlowSnapshotResult, ListCommandsParams, ListCommandsResult, SearchIndexParams, SearchIndexResult, ApproveParams, ApproveResult, DenyParams, ListPendingApprovalsParams, ListPendingApprovalsResult, ApprovalHistoryParams, ApprovalHistoryResult, CheckCommandParams, CheckCommandResult, ListDirParams, ListDirResult, ReadFileParams, ReadFileResult, WriteFileParams, WriteFileResult, ListWorkspacesParams, ListWorkspacesResult, SwitchWorkspaceParams, SwitchWorkspaceResult, SearchFilesParams, SearchFilesResult, AssetUrlParams, AssetUrlResult, FileStatParams, FileStatResult, RunTaskParams, RunTaskResult, RunControlParams, RunControlResult, CancelRunParams, CancelRunResult, SearchSessionsParams, SearchSessionsResult, GetSettingsParams, GetSettingsResult, SetSettingsParams, SetSettingsResult, SettingsConfirmParams, SettingsConfirmResult, PauseAutomationParams, PauseAutomationResult, PresenceParams, PresenceResult, ListDevicesParams, ListDevicesResult, RenameDeviceParams, GenericOkResult, RevokeDeviceParams, PairStateParams, PairStateResult, UnlinkParams, UnlinkResult, ListModelsParams, ListModelsResult, SetActiveModelParams, SetActiveModelResult, RenameSessionParams, SetSessionPinnedParams, SetSessionArchivedParams, DeleteSessionParams, ListSkillsParams, ListSkillsResult } from "./types";
 
 export const DEVICE_COMMANDS = [
   {"number":"C01","name":"getStatus","kind":"remote.getStatus","tauriCommand":"core_get_status","surface":"engine","registered":true,"domain":"monitor","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"StatusQuery","resultType":"StatusResult","errorCodes":["cmd.engine_not_ready","internal"]},
@@ -45,7 +45,14 @@ export const DEVICE_COMMANDS = [
   {"number":"C34","name":"renameDevice","kind":"remote.renameDevice","tauriCommand":"device_registry_update","surface":"engine","registered":false,"domain":"devices","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"RenameDeviceParams","resultType":"GenericOkResult","errorCodes":["cmd.not_found"]},
   {"number":"C35","name":"revokeDevice","kind":"remote.revokeDevice","tauriCommand":"device_registry_delete","surface":"engine","registered":false,"domain":"devices","write":true,"outbox":false,"idempotencyKey":"natural","paramsType":"RevokeDeviceParams","resultType":"GenericOkResult","errorCodes":["cmd.not_found"]},
   {"number":"C36","name":"getPairState","kind":"remote.getPairState","tauriCommand":"pairing_service_query","surface":"engine","registered":false,"domain":"devices","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"PairStateParams","resultType":"PairStateResult","errorCodes":["internal"]},
-  {"number":"C37","name":"unlink","kind":"remote.unlink","tauriCommand":"device_registry_unlink","surface":"engine","registered":false,"domain":"devices","write":true,"outbox":false,"idempotencyKey":"natural","paramsType":"UnlinkParams","resultType":"UnlinkResult","errorCodes":["cmd.not_found"]}
+  {"number":"C37","name":"unlink","kind":"remote.unlink","tauriCommand":"device_registry_unlink","surface":"engine","registered":false,"domain":"devices","write":true,"outbox":false,"idempotencyKey":"natural","paramsType":"UnlinkParams","resultType":"UnlinkResult","errorCodes":["cmd.not_found"]},
+  {"number":"C38","name":"listModels","kind":"remote.listModels","tauriCommand":"workbench_read_models_yaml","surface":"gui","registered":false,"domain":"settings","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"ListModelsParams","resultType":"ListModelsResult","errorCodes":["internal"]},
+  {"number":"C39","name":"setActiveModel","kind":"remote.setActiveModel","tauriCommand":"workbench_apply_models_config","surface":"gui","registered":false,"domain":"settings","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"SetActiveModelParams","resultType":"SetActiveModelResult","errorCodes":["cmd.invalid","internal"]},
+  {"number":"C40","name":"renameSession","kind":"remote.renameSession","tauriCommand":"upsert_session_entry","surface":"gui","registered":false,"domain":"sessions","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"RenameSessionParams","resultType":"GenericOkResult","errorCodes":["cmd.invalid","cmd.not_found","internal"]},
+  {"number":"C41","name":"setSessionPinned","kind":"remote.setSessionPinned","tauriCommand":"upsert_session_entry","surface":"gui","registered":false,"domain":"sessions","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"SetSessionPinnedParams","resultType":"GenericOkResult","errorCodes":["cmd.not_found","internal"]},
+  {"number":"C42","name":"setSessionArchived","kind":"remote.setSessionArchived","tauriCommand":"upsert_session_entry","surface":"gui","registered":false,"domain":"sessions","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"SetSessionArchivedParams","resultType":"GenericOkResult","errorCodes":["cmd.not_found","internal"]},
+  {"number":"C43","name":"deleteSession","kind":"remote.deleteSession","tauriCommand":"cleanup_orphan_sessions","surface":"gui","registered":false,"domain":"sessions","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"DeleteSessionParams","resultType":"GenericOkResult","errorCodes":["cmd.not_found","cmd.session_busy","cmd.denied","internal"]},
+  {"number":"C44","name":"listSkills","kind":"remote.listSkills","tauriCommand":"workbench_discover_skills","surface":"gui","registered":false,"domain":"settings","write":false,"outbox":false,"idempotencyKey":"natural","paramsType":"ListSkillsParams","resultType":"ListSkillsResult","errorCodes":["internal"]}
 ] as const;
 export type DeviceCommand = (typeof DEVICE_COMMANDS)[number];
 export type DeviceCommandKind = DeviceCommand["kind"];
@@ -91,6 +98,13 @@ export interface CommandParamsTypeMap {
   RevokeDeviceParams: RevokeDeviceParams;
   PairStateParams: PairStateParams;
   UnlinkParams: UnlinkParams;
+  ListModelsParams: ListModelsParams;
+  SetActiveModelParams: SetActiveModelParams;
+  RenameSessionParams: RenameSessionParams;
+  SetSessionPinnedParams: SetSessionPinnedParams;
+  SetSessionArchivedParams: SetSessionArchivedParams;
+  DeleteSessionParams: DeleteSessionParams;
+  ListSkillsParams: ListSkillsParams;
 }
 
 export interface CommandResultTypeMap {
@@ -128,6 +142,9 @@ export interface CommandResultTypeMap {
   GenericOkResult: GenericOkResult;
   PairStateResult: PairStateResult;
   UnlinkResult: UnlinkResult;
+  ListModelsResult: ListModelsResult;
+  SetActiveModelResult: SetActiveModelResult;
+  ListSkillsResult: ListSkillsResult;
 }
 
 export type CommandParamsOf<C extends DeviceCommand> = CommandParamsTypeMap[C["paramsType"]];

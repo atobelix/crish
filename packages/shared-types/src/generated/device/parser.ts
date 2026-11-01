@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { PairHello, PairChallenge, PairVerify, PairOk, Hello, HelloOk, Refresh, DeviceReady, DeviceUnlink, PairAudit, Subscribe, SubscribeAll, SubscribeOk, EventsPush, EventAck, Resume, ResumePage, ResumeDone, SessionUpdated, SessionRemoved, SessionUpdatedAll, CommandRequest, CommandResult, StreamOpen, StreamChunk, StreamResume, StreamClose, Heartbeat, HeartbeatOk, ErrorBody, AuthHeader, GenericOkResult, ManifestEntry, Manifest, PendingApproval, SessionIndexEntry, SubscribeOkSession, Rotate, StatusQuery, StatusResult, RunSnapshotParams, RunSnapshotResult, EventPageParams, EventPageResult, RunEventsParams, ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, TaskOutputParams, TaskOutputResult, FlowSnapshotParams, FlowSnapshotResult, ListCommandsParams, ListCommandsResult, SearchIndexParams, SearchIndexResult, ApproveParams, DenyParams, ApproveResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ApprovalHistoryParams, ApprovalHistoryItem, ApprovalHistoryResult, CheckCommandParams, CheckCommandResult, ListDirParams, DirEntry, ListDirResult, ReadFileParams, ReadFileResult, WriteFileParams, WriteFileResult, WorkspaceEntry, ListWorkspacesParams, ListWorkspacesResult, SwitchWorkspaceParams, SwitchWorkspaceResult, SearchFilesParams, FileHit, SearchFilesResult, AssetUrlParams, AssetUrlResult, FileStatParams, FileStatResult, RunTaskParams, RunTaskResult, RunControlParams, RunControlResult, CancelRunParams, CancelRunResult, SearchSessionsParams, SearchSessionHit, SearchSessionsResult, GetSettingsParams, GetSettingsResult, SetSettingsParams, SetSettingsResult, SettingsConfirmParams, SettingsConfirmResult, PauseAutomationParams, PauseAutomationResult, PresenceParams, PresenceResult, DeviceEntry, ListDevicesParams, ListDevicesResult, RenameDeviceParams, RevokeDeviceParams, PairStateParams, PairStateResult, UnlinkParams, UnlinkResult, Endpoint, Platform, AuthPhase, MessageDirection, AckMode, Granularity, PageDirection, RunControlLevel, PermissionMode, ApprovalDecision, CheckCommandDecision, AssetKind, StreamKind, PairAuditEvent, PairState, SettingsKey, SettingsConfirmAction, ConfirmStatus, DeviceType, DeviceRole, ChannelType, CommandSurface, CommandFamily, BackpressureLevel, EventStrategy, PushLevel, StatusQueryInclude, ApprovalChannel, Arbiter } from "./types";
+import type { PairHello, PairChallenge, PairVerify, PairOk, Hello, HelloOk, Refresh, DeviceReady, DeviceUnlink, PairAudit, Subscribe, SubscribeAll, SubscribeOk, EventsPush, EventAck, Resume, ResumePage, ResumeDone, SessionUpdated, SessionRemoved, SessionUpdatedAll, CommandRequest, CommandResult, StreamOpen, StreamChunk, StreamResume, StreamClose, Heartbeat, HeartbeatOk, ErrorBody, AuthHeader, GenericOkResult, ManifestEntry, Manifest, PendingApproval, SessionIndexEntry, SubscribeOkSession, Rotate, StatusQuery, StatusResult, RunSnapshotParams, RunSnapshotResult, EventPageParams, EventPageResult, RunEventsParams, ListSessionsParams, ListSessionsResult, ListTasksParams, ListTasksResult, TaskOutputParams, TaskOutputResult, FlowSnapshotParams, FlowSnapshotResult, ListCommandsParams, ListCommandsResult, SearchIndexParams, SearchIndexResult, ApproveParams, DenyParams, ApproveResult, ListPendingApprovalsParams, ListPendingApprovalsResult, ApprovalHistoryParams, ApprovalHistoryItem, ApprovalHistoryResult, CheckCommandParams, CheckCommandResult, ListDirParams, DirEntry, ListDirResult, ReadFileParams, ReadFileResult, WriteFileParams, WriteFileResult, WorkspaceEntry, ListWorkspacesParams, ListWorkspacesResult, SwitchWorkspaceParams, SwitchWorkspaceResult, SearchFilesParams, FileHit, SearchFilesResult, AssetUrlParams, AssetUrlResult, FileStatParams, FileStatResult, RunTaskParams, RunTaskResult, RunControlParams, RunControlResult, CancelRunParams, CancelRunResult, SearchSessionsParams, SearchSessionHit, SearchSessionsResult, GetSettingsParams, GetSettingsResult, SetSettingsParams, SetSettingsResult, SettingsConfirmParams, SettingsConfirmResult, PauseAutomationParams, PauseAutomationResult, PresenceParams, PresenceResult, DeviceEntry, ListDevicesParams, ListDevicesResult, RenameDeviceParams, RevokeDeviceParams, PairStateParams, PairStateResult, UnlinkParams, UnlinkResult, ListModelsParams, ModelEntry, ActiveModelInfo, ListModelsResult, SetActiveModelParams, SetActiveModelResult, RenameSessionParams, SetSessionPinnedParams, SetSessionArchivedParams, DeleteSessionParams, ListSkillsParams, SkillEntry, ListSkillsResult, Endpoint, Platform, AuthPhase, MessageDirection, AckMode, Granularity, PageDirection, RunControlLevel, PermissionMode, ApprovalDecision, CheckCommandDecision, AssetKind, StreamKind, PairAuditEvent, PairState, SettingsKey, SettingsConfirmAction, ConfirmStatus, DeviceType, DeviceRole, ChannelType, CommandSurface, CommandFamily, BackpressureLevel, EventStrategy, PushLevel, StatusQueryInclude, ApprovalChannel, Arbiter } from "./types";
 import { ENDPOINT_VALUES, PLATFORM_VALUES, AUTH_PHASE_VALUES, MESSAGE_DIRECTION_VALUES, ACK_MODE_VALUES, GRANULARITY_VALUES, PAGE_DIRECTION_VALUES, RUN_CONTROL_LEVEL_VALUES, PERMISSION_MODE_VALUES, APPROVAL_DECISION_VALUES, CHECK_COMMAND_DECISION_VALUES, ASSET_KIND_VALUES, STREAM_KIND_VALUES, PAIR_AUDIT_EVENT_VALUES, PAIR_STATE_VALUES, SETTINGS_KEY_VALUES, SETTINGS_CONFIRM_ACTION_VALUES, CONFIRM_STATUS_VALUES, DEVICE_TYPE_VALUES, DEVICE_ROLE_VALUES, CHANNEL_TYPE_VALUES, COMMAND_SURFACE_VALUES, COMMAND_FAMILY_VALUES, BACKPRESSURE_LEVEL_VALUES, EVENT_STRATEGY_VALUES, PUSH_LEVEL_VALUES, STATUS_QUERY_INCLUDE_VALUES, APPROVAL_CHANNEL_VALUES, ARBITER_VALUES } from "./types";
 import { DEVICE_KINDS } from "./kinds";
 import type { DeviceKind } from "./kinds";
@@ -1664,6 +1664,10 @@ export function parseRunTaskParams(v: unknown): ParseResult<RunTaskParams> {
   if (!history.ok) return history;
   const clientMessageId = optField(v, "clientMessageId", checkString);
   if (!clientMessageId.ok) return clientMessageId;
+  const content = optField(v, "content", checkJsonValue);
+  if (!content.ok) return content;
+  const hasImages = optField(v, "hasImages", checkBoolean);
+  if (!hasImages.ok) return hasImages;
   return parseOk({
     ...(sessionId.data !== undefined ? { sessionId: sessionId.data } : {}),
     prompt: prompt.data,
@@ -1673,6 +1677,8 @@ export function parseRunTaskParams(v: unknown): ParseResult<RunTaskParams> {
     ...(permissionMode.data !== undefined ? { permissionMode: permissionMode.data } : {}),
     ...(history.data !== undefined ? { history: history.data } : {}),
     ...(clientMessageId.data !== undefined ? { clientMessageId: clientMessageId.data } : {}),
+    ...(content.data !== undefined ? { content: content.data } : {}),
+    ...(hasImages.data !== undefined ? { hasImages: hasImages.data } : {}),
   });
 }
 
@@ -1994,6 +2000,174 @@ export function parseUnlinkResult(v: unknown): ParseResult<UnlinkResult> {
   if (!ok.ok) return ok;
   return parseOk({
     ok: ok.data,
+  });
+}
+
+export function parseListModelsParams(v: unknown): ParseResult<ListModelsParams> {
+  if (!isRecord(v)) return parseErr("ListModelsParams: payload must be an object");
+  return parseOk({
+  });
+}
+
+export function parseModelEntry(v: unknown): ParseResult<ModelEntry> {
+  if (!isRecord(v)) return parseErr("ModelEntry: payload must be an object");
+  const providerId = reqField(v, "providerId", checkString);
+  if (!providerId.ok) return providerId;
+  const modelId = reqField(v, "modelId", checkString);
+  if (!modelId.ok) return modelId;
+  const displayName = reqField(v, "displayName", checkString);
+  if (!displayName.ok) return displayName;
+  const providerDisplayName = optField(v, "providerDisplayName", checkString);
+  if (!providerDisplayName.ok) return providerDisplayName;
+  const active = reqField(v, "active", checkBoolean);
+  if (!active.ok) return active;
+  const vision = optField(v, "vision", checkBoolean);
+  if (!vision.ok) return vision;
+  return parseOk({
+    providerId: providerId.data,
+    modelId: modelId.data,
+    displayName: displayName.data,
+    ...(providerDisplayName.data !== undefined ? { providerDisplayName: providerDisplayName.data } : {}),
+    active: active.data,
+    ...(vision.data !== undefined ? { vision: vision.data } : {}),
+  });
+}
+
+export function parseActiveModelInfo(v: unknown): ParseResult<ActiveModelInfo> {
+  if (!isRecord(v)) return parseErr("ActiveModelInfo: payload must be an object");
+  const providerId = reqField(v, "providerId", checkString);
+  if (!providerId.ok) return providerId;
+  const modelId = reqField(v, "modelId", checkString);
+  if (!modelId.ok) return modelId;
+  const displayName = reqField(v, "displayName", checkString);
+  if (!displayName.ok) return displayName;
+  return parseOk({
+    providerId: providerId.data,
+    modelId: modelId.data,
+    displayName: displayName.data,
+  });
+}
+
+export function parseListModelsResult(v: unknown): ParseResult<ListModelsResult> {
+  if (!isRecord(v)) return parseErr("ListModelsResult: payload must be an object");
+  const models = reqField(v, "models", (x) => parseArrayOf(x, parseModelEntry));
+  if (!models.ok) return models;
+  const activeModel = optField(v, "activeModel", parseActiveModelInfo);
+  if (!activeModel.ok) return activeModel;
+  return parseOk({
+    models: models.data,
+    ...(activeModel.data !== undefined ? { activeModel: activeModel.data } : {}),
+  });
+}
+
+export function parseSetActiveModelParams(v: unknown): ParseResult<SetActiveModelParams> {
+  if (!isRecord(v)) return parseErr("SetActiveModelParams: payload must be an object");
+  const providerId = reqField(v, "providerId", checkString);
+  if (!providerId.ok) return providerId;
+  const modelId = reqField(v, "modelId", checkString);
+  if (!modelId.ok) return modelId;
+  return parseOk({
+    providerId: providerId.data,
+    modelId: modelId.data,
+  });
+}
+
+export function parseSetActiveModelResult(v: unknown): ParseResult<SetActiveModelResult> {
+  if (!isRecord(v)) return parseErr("SetActiveModelResult: payload must be an object");
+  const ok = reqField(v, "ok", checkBoolean);
+  if (!ok.ok) return ok;
+  const activeModel = reqField(v, "activeModel", parseActiveModelInfo);
+  if (!activeModel.ok) return activeModel;
+  return parseOk({
+    ok: ok.data,
+    activeModel: activeModel.data,
+  });
+}
+
+export function parseRenameSessionParams(v: unknown): ParseResult<RenameSessionParams> {
+  if (!isRecord(v)) return parseErr("RenameSessionParams: payload must be an object");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const title = reqField(v, "title", checkString);
+  if (!title.ok) return title;
+  return parseOk({
+    sessionId: sessionId.data,
+    title: title.data,
+  });
+}
+
+export function parseSetSessionPinnedParams(v: unknown): ParseResult<SetSessionPinnedParams> {
+  if (!isRecord(v)) return parseErr("SetSessionPinnedParams: payload must be an object");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const pinned = reqField(v, "pinned", checkBoolean);
+  if (!pinned.ok) return pinned;
+  return parseOk({
+    sessionId: sessionId.data,
+    pinned: pinned.data,
+  });
+}
+
+export function parseSetSessionArchivedParams(v: unknown): ParseResult<SetSessionArchivedParams> {
+  if (!isRecord(v)) return parseErr("SetSessionArchivedParams: payload must be an object");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const archived = reqField(v, "archived", checkBoolean);
+  if (!archived.ok) return archived;
+  return parseOk({
+    sessionId: sessionId.data,
+    archived: archived.data,
+  });
+}
+
+export function parseDeleteSessionParams(v: unknown): ParseResult<DeleteSessionParams> {
+  if (!isRecord(v)) return parseErr("DeleteSessionParams: payload must be an object");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  return parseOk({
+    sessionId: sessionId.data,
+  });
+}
+
+export function parseListSkillsParams(v: unknown): ParseResult<ListSkillsParams> {
+  if (!isRecord(v)) return parseErr("ListSkillsParams: payload must be an object");
+  return parseOk({
+  });
+}
+
+export function parseSkillEntry(v: unknown): ParseResult<SkillEntry> {
+  if (!isRecord(v)) return parseErr("SkillEntry: payload must be an object");
+  const id = reqField(v, "id", checkString);
+  if (!id.ok) return id;
+  const name = reqField(v, "name", checkString);
+  if (!name.ok) return name;
+  const description = reqField(v, "description", checkString);
+  if (!description.ok) return description;
+  const scope = reqField(v, "scope", checkString);
+  if (!scope.ok) return scope;
+  const system = reqField(v, "system", checkBoolean);
+  if (!system.ok) return system;
+  const disableModelInvocation = optField(v, "disableModelInvocation", checkBoolean);
+  if (!disableModelInvocation.ok) return disableModelInvocation;
+  const fileActivation = optField(v, "fileActivation", checkString);
+  if (!fileActivation.ok) return fileActivation;
+  return parseOk({
+    id: id.data,
+    name: name.data,
+    description: description.data,
+    scope: scope.data,
+    system: system.data,
+    ...(disableModelInvocation.data !== undefined ? { disableModelInvocation: disableModelInvocation.data } : {}),
+    ...(fileActivation.data !== undefined ? { fileActivation: fileActivation.data } : {}),
+  });
+}
+
+export function parseListSkillsResult(v: unknown): ParseResult<ListSkillsResult> {
+  if (!isRecord(v)) return parseErr("ListSkillsResult: payload must be an object");
+  const skills = reqField(v, "skills", (x) => parseArrayOf(x, parseSkillEntry));
+  if (!skills.ok) return skills;
+  return parseOk({
+    skills: skills.data,
   });
 }
 
@@ -2395,6 +2569,69 @@ export function parseDeviceMessage(kind: DeviceKind, body: unknown): ParseResult
     case "heartbeat": return parseHeartbeat(body);
     case "heartbeat.ok": return parseHeartbeatOk(body);
     case "error": return parseErrorBody(body);
+    case "remote.listModels": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "listModels") {
+        return parseErr("remote.listModels: body.command mismatch");
+      }
+      return r;
+    }
+    case "remote.setActiveModel": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "setActiveModel") {
+        return parseErr("remote.setActiveModel: body.command mismatch");
+      }
+      return r;
+    }
+    case "result.listModels": return parseCommandResult(body);
+    case "result.setActiveModel": return parseCommandResult(body);
+    case "remote.renameSession": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "renameSession") {
+        return parseErr("remote.renameSession: body.command mismatch");
+      }
+      return r;
+    }
+    case "remote.setSessionPinned": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "setSessionPinned") {
+        return parseErr("remote.setSessionPinned: body.command mismatch");
+      }
+      return r;
+    }
+    case "remote.setSessionArchived": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "setSessionArchived") {
+        return parseErr("remote.setSessionArchived: body.command mismatch");
+      }
+      return r;
+    }
+    case "remote.deleteSession": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "deleteSession") {
+        return parseErr("remote.deleteSession: body.command mismatch");
+      }
+      return r;
+    }
+    case "result.renameSession": return parseCommandResult(body);
+    case "result.setSessionPinned": return parseCommandResult(body);
+    case "result.setSessionArchived": return parseCommandResult(body);
+    case "result.deleteSession": return parseCommandResult(body);
+    case "remote.listSkills": {
+      const r = parseCommandRequest(body);
+      if (!r.ok) return r;
+      if (r.data.command !== "listSkills") {
+        return parseErr("remote.listSkills: body.command mismatch");
+      }
+      return r;
+    }
+    case "result.listSkills": return parseCommandResult(body);
     default: return parseErr("unknown device kind '" + String(kind) + "'");
   }
 }

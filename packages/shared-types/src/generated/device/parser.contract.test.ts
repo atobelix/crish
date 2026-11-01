@@ -3,10 +3,10 @@
  *
  * drift.test.ts 锁的是「生成产物与注册表字节一致」；本文件锁的是生成出来的
  * 解析器在运行时的 fail-closed 行为：
- *   - 115 个 struct：全字段/仅必填字段合法样本被接受且保真；非对象被拒；
+ *   - 128 个 struct：全字段/仅必填字段合法样本被接受且保真；非对象被拒；
  *     逐字段缺失（必填）、类型错误、数组元素错误、integer 给小数均被拒；
  *   - 枚举解析器：注册表每个合法值都接受，大小写变体/非字符串被拒；
- *   - 103 个消息 kind：经 parseDeviceFrame 走「信封 → kind 分派 → body」全链路，
+ *   - 117 个消息 kind：经 parseDeviceFrame 走「信封 → kind 分派 → body」全链路，
  *     remote.* 的 body.command 必须等于 kind 后缀（否则 mismatch）；
  *   - 信封：v≠1、未知 kind、非整数 ts、非法 Endpoint、缺 auth 等全部拒绝。
  * 样本全部由注册表推导，注册表新增类型/消息时自动纳入。

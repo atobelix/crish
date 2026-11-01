@@ -19,7 +19,7 @@ export const CAPABILITY_METADATA = {
   "streams": {"owner":"desktop","commands":["stream.*"]},
   "eventReplay": {"owner":"desktop","commands":["events.resume","C03"]},
   "approval": {"owner":"desktop","commands":["C11","C12","C13","C14"]},
-  "settings": {"owner":"desktop","commands":["C28","C29","C30","C31"]},
+  "settings": {"owner":"desktop","commands":["C28","C29","C30","C31","C38","C39","C44"]},
   "devices": {"owner":"desktop","commands":["C33","C34","C35","C36","C37"]},
   "search": {"owner":"desktop","commands":["C21"]},
   "sessionSearch": {"owner":"desktop","commands":["C27"]},

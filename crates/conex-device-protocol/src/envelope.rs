@@ -1,6 +1,6 @@
 //! 跨端协议 L3 外层信封（D3 §5.3 / M6 §10.1 唯一形态）
 //!
-//! 所有跨端消息统一经 [DeviceEnvelope] 包装：`v`（协议版本）/ `kind`（103 种
+//! 所有跨端消息统一经 [DeviceEnvelope] 包装：`v`（协议版本）/ `kind`（117 种
 //! 消息类别）/ `msgId`（幂等键 + 请求-响应关联键）/ `ts`（发送方时钟）/ `from` /
 //! `to`（端字面量）/ `auth`（消息级 HMAC 签名域）/ `body`（业务载荷）。
 //!
@@ -63,15 +63,15 @@ impl AuthHeader {
     }
 }
 
-/// 消息类别（kind，103 种注册 kind = 静态 29 + remote.* 37 + result.* 37）
+/// 消息类别（kind，117 种注册 kind = 静态 29 + remote.* 44 + result.* 44）
 ///
 /// 静态类别（配对/认证/设备/事件会话面/流/保活/错误）为枚举变体，wire 名经
 /// serde rename 锁死；命令类 `remote.<name>` / `result.<name>` 为动态后缀，
 /// 以新类型变体承载（序列化为裸字符串，反序列化按内容还原）。
 ///
 /// 计数基线（M6 §1.1）：events 11 + stream 4 + pair 4 + auth 3（rotate 为
-/// 可选扩展，不在 103 内）+ device 4 + heartbeat 2 + error 1 = 29 静态；
-/// 命令 37 + 响应 37 = 74；合计 103。
+/// 可选扩展，不在 117 内）+ device 4 + heartbeat 2 + error 1 = 29 静态；
+/// 命令 44 + 响应 44 = 88；合计 117。
 ///
 /// 序列化实现：手动 [Serialize]（与 [Deserialize] / [MessageKind::as_str]
 /// 对称，wire 一律裸字符串）——derive 外部标签会对 `Remote/Result` 新类型
@@ -129,7 +129,7 @@ pub enum MessageKind {
     AuthHelloOk,
     /// 重连刷新
     AuthRefresh,
-    /// 签名上下文轮换（可选扩展，不在 103 注册数内）
+    /// 签名上下文轮换（可选扩展，不在 117 注册数内）
     AuthRotate,
 
     // ── 设备生命周期（4）──
@@ -152,7 +152,7 @@ pub enum MessageKind {
     /// 错误通知
     Error,
 
-    // ── 命令（37 动态后缀，M6 §4）──
+    // ── 命令（44 动态后缀，M6 §4）──
     /// 命令请求（wire 值 `remote.<name>`，name 为命令后缀如 getStatus）
     Remote(String),
     /// 命令响应（wire 值 `result.<name>`，与请求一一对应）
@@ -311,7 +311,7 @@ impl MessageKind {
 pub struct DeviceEnvelope {
     /// 协议主版本（握手协商后固定；现值 1）
     pub v: u32,
-    /// 消息类别（103 种 kind 之一）
+    /// 消息类别（117 种 kind 之一）
     pub kind: MessageKind,
     /// 发送方唯一消息 id（8-64 字符）
     pub msg_id: String,
@@ -500,12 +500,12 @@ mod tests {
     #[test]
     fn static_kinds_count_matches_registry_accounting() {
         // M6 §1.1：events 11 + stream 4 + pair 4 + auth 3 + device 4 +
-        // heartbeat 2 + error 1 = 29（rotate 为可选扩展不计入 103）
+        // heartbeat 2 + error 1 = 29（rotate 为可选扩展不计入 117）
         assert_eq!(STATIC_KINDS.len(), 29);
         let unique: std::collections::HashSet<&str> = STATIC_KINDS.iter().copied().collect();
         assert_eq!(unique.len(), STATIC_KINDS.len());
-        // 与 lib.rs 的 103 全量核对
-        assert_eq!(crate::all_kinds().len(), 103);
+        // 与 lib.rs 的 117 全量核对
+        assert_eq!(crate::all_kinds().len(), 117);
     }
 
     #[test]

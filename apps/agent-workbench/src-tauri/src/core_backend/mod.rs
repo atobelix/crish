@@ -13,6 +13,9 @@
 //!   装配面注入 [ServerState]，见 server/mod.rs router 装配）。
 
 mod api;
+pub(crate) mod models_ops;
+pub(crate) mod sessions_ops;
+pub(crate) mod skills_ops;
 pub(crate) mod state;
 #[cfg(test)]
 mod tests;

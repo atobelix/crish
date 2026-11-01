@@ -1,7 +1,7 @@
 use super::envelope::{CommandDomain, CommandSpec, MessageDirection};
 
-/// 37 条命令规格（C01-C37；M6 §4 各域总表 + §10.6.2 对照表）
-pub const COMMANDS: [CommandSpec; 37] = [
+/// 44 条命令规格（C01-C44；M6 §4 各域总表 + §10.6.2 对照表 + G2/G3/G7 增补）
+pub const COMMANDS: [CommandSpec; 44] = [
     // ── F1 监控域（10）──
     CommandSpec {
         name: "getStatus",
@@ -341,10 +341,83 @@ pub const COMMANDS: [CommandSpec; 37] = [
         params_type: "UnlinkParams",
         result_type: "UnlinkResult",
     },
+    // ── G2/W-B 增补（2；归 F6 设置域——全局默认模型是全局配置面，
+    // 读写与桌面「设置 → 模型」同一份统一模型树；write=false = 自然
+    // 幂等非 outbox 写命令，与 switchWorkspace 同口径）──
+    CommandSpec {
+        name: "listModels",
+        tauri_command: "workbench_read_models_yaml",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListModelsParams",
+        result_type: "ListModelsResult",
+    },
+    CommandSpec {
+        name: "setActiveModel",
+        tauri_command: "workbench_apply_models_config",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SetActiveModelParams",
+        result_type: "SetActiveModelResult",
+    },
+    // ── G3 增补（4；归 F5 会话域——作用于桌面宿主会话存储，与桌面
+    // 侧栏同一存储层同一语义；write=false = 自然幂等非 outbox 写命令，
+    // 与 switchWorkspace / setActiveModel 同口径）──
+    CommandSpec {
+        name: "renameSession",
+        tauri_command: "upsert_session_entry",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "RenameSessionParams",
+        result_type: "OkResult",
+    },
+    CommandSpec {
+        name: "setSessionPinned",
+        tauri_command: "upsert_session_entry",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SetSessionPinnedParams",
+        result_type: "OkResult",
+    },
+    CommandSpec {
+        name: "setSessionArchived",
+        tauri_command: "upsert_session_entry",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "SetSessionArchivedParams",
+        result_type: "OkResult",
+    },
+    CommandSpec {
+        name: "deleteSession",
+        tauri_command: "cleanup_orphan_sessions",
+        domain: CommandDomain::Sessions,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "DeleteSessionParams",
+        result_type: "OkResult",
+    },
+    // ── G7 增补（1；归 F6 设置域——技能与桌面「设置 → 扩展 → 技能」
+    // 同面；只读目录投影：技能启停生效值是桌面 webview 本地状态
+    // （localStorage），宿主无数据面，故本批不设启停命令、只读
+    // 浏览；write=false 只读命令）──
+    CommandSpec {
+        name: "listSkills",
+        tauri_command: "workbench_discover_skills",
+        domain: CommandDomain::Settings,
+        write: false,
+        direction: MessageDirection::MobileToDesktop,
+        params_type: "ListSkillsParams",
+        result_type: "ListSkillsResult",
+    },
 ];
 
-/// 37 条命令 kind（wire 全量 `remote.<name>`）
-pub const REMOTE_KINDS: [&str; 37] = [
+/// 44 条命令 kind（wire 全量 `remote.<name>`）
+pub const REMOTE_KINDS: [&str; 44] = [
     "remote.getStatus",
     "remote.getRunSnapshot",
     "remote.readSessionEvents",
@@ -382,10 +455,17 @@ pub const REMOTE_KINDS: [&str; 37] = [
     "remote.revokeDevice",
     "remote.getPairState",
     "remote.unlink",
+    "remote.listModels",
+    "remote.setActiveModel",
+    "remote.renameSession",
+    "remote.setSessionPinned",
+    "remote.setSessionArchived",
+    "remote.deleteSession",
+    "remote.listSkills",
 ];
 
-/// 37 条响应 kind（wire 全量 `result.<name>`）
-pub const RESULT_KINDS: [&str; 37] = [
+/// 44 条响应 kind（wire 全量 `result.<name>`）
+pub const RESULT_KINDS: [&str; 44] = [
     "result.getStatus",
     "result.getRunSnapshot",
     "result.readSessionEvents",
@@ -423,4 +503,11 @@ pub const RESULT_KINDS: [&str; 37] = [
     "result.revokeDevice",
     "result.getPairState",
     "result.unlink",
+    "result.listModels",
+    "result.setActiveModel",
+    "result.renameSession",
+    "result.setSessionPinned",
+    "result.setSessionArchived",
+    "result.deleteSession",
+    "result.listSkills",
 ];
