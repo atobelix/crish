@@ -366,6 +366,8 @@ async fn p7_status_includes_active_runs_and_pending_approvals_end_to_end() {
             permission_mode: Some(PermissionMode::Ask),
             history: None,
             client_message_id: None,
+            content: None,
+            has_images: None,
         })
         .await
         .expect("run 应发起（ask 权限模式）");

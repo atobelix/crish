@@ -234,6 +234,13 @@ pub const STREAM_MAX_BYTES: usize = 268_435_456;
 pub const STREAM_TTL_MS: u64 = 300_000;
 /// remote.runTask.prompt 跨端上限（256 KiB；超限走流上传）
 pub const PROMPT_MAX_BYTES: usize = 262_144;
+/// remote.runTask content（OpenAI 形 parts 序列化）总上限（帧安全
+/// 余量：MAX_FRAME_BYTES − PROMPT_MAX_BYTES − 64 KiB 信封/签名余量
+/// = 720896；网关服务端复核，超限 cmd.invalid）
+pub const RUN_CONTENT_MAX_BYTES: usize = 720_896;
+/// remote.runTask 单个附件 dataUrl 上限（700 KiB；内联路线口径，
+/// C24 说明同步；大图走流上传为后续增强，本期不实现）
+pub const ATTACHMENT_DATA_URL_MAX_BYTES: usize = 716_800;
 /// 分页默认页大小
 pub const PAGE_SIZE_DEFAULT: u32 = 200;
 /// 分页上限
@@ -279,6 +286,8 @@ mod tests {
         assert_eq!(STREAM_MAX_BYTES, 268_435_456);
         assert_eq!(STREAM_TTL_MS, 300_000);
         assert_eq!(PROMPT_MAX_BYTES, 262_144);
+        assert_eq!(RUN_CONTENT_MAX_BYTES, 720_896);
+        assert_eq!(ATTACHMENT_DATA_URL_MAX_BYTES, 716_800);
         assert_eq!(PAGE_SIZE_DEFAULT, 200);
         assert_eq!(PAGE_SIZE_MAX, 1000);
         assert_eq!(PAIR_CODE_TTL_MS, 600_000);

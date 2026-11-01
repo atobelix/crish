@@ -35,6 +35,16 @@ pub struct RunTaskParams {
     /// 用户消息本地乐观 id（幂等键：同 id 重发返回同一 runId）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
+    /// 多模态 content（plans/04 §4.2 远程附件面）：OpenAI 形 parts，
+    /// 与引擎 RunTaskOptions.content 逐名对齐；网关透传前做服务端
+    /// 钳制（总量 ≤ RUN_CONTENT_MAX_BYTES、单 dataUrl ≤
+    /// ATTACHMENT_DATA_URL_MAX_BYTES，超限 cmd.invalid）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<serde_json::Value>,
+    /// 是否带图（与引擎 RunTaskOptions.hasImages 对齐；content 仅在
+    /// true 时写入用户消息 metadata.contentParts）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_images: Option<bool>,
 }
 
 /// C24 响应

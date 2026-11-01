@@ -89,6 +89,8 @@ async fn remote_run_control_completed_run_returns_not_found() {
             permission_mode: Some(PermissionMode::Ask),
             history: None,
             client_message_id: None,
+            content: None,
+            has_images: None,
         })
         .await
         .expect("test run should start");
@@ -357,6 +359,8 @@ async fn t08_remote_run_full_mode_downgraded_to_ask_with_audit() {
             permission_mode: Some(PermissionMode::Full),
             history: None,
             client_message_id: None,
+            content: None,
+            has_images: None,
         })
         .await;
     assert!(result.is_ok(), "Full 模式远程 run 必须正常发起：{result:?}");

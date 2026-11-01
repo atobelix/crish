@@ -7,6 +7,7 @@ use conex_run::core_event_bridge::EventBridge;
 use conex_run::run::CoreRunState;
 
 mod feature_readiness;
+mod remote_content;
 mod session_ops;
 
 /// 记录型发射器（事件桥测试替身，对齐 core_run_commands 测试先例）

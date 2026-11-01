@@ -812,6 +812,8 @@ async fn t08_remote_run_ask_mode_dangerous_tool_gated() {
             permission_mode: Some(conex_types::permission::PermissionMode::Ask),
             history: None,
             client_message_id: None,
+            content: None,
+            has_images: None,
         })
         .await
         .expect("远程 run 发起");
