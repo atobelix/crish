@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const RUST_KIND_SRC_REL =
-  'crates/session-loop/src/loop/handlers/stream_error_fatal.rs';
+  'crates/session-loop/src/loop/handlers/stream_error/fatal.rs';
 
 function locateRepoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));

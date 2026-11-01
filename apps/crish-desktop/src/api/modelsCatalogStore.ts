@@ -3,7 +3,6 @@ import { emitUiEvent } from './uiEvents';
 import { logger, toErrMeta } from '../services/LoggerService';
 import { formatParseError } from './modelsCatalogTypes';
 import type {
-  IndexedModelEntry,
   ModelRef,
   ModelSpec,
   ModelsCatalogError,

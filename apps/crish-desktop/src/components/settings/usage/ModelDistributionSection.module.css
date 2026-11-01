@@ -16,10 +16,9 @@
 /* 列网格：模型 | 占比条 | tokens | 费用 | 缓存率 | 调用次数 */
 .distRow {
   display: grid;
-  grid-template-columns: minmax(150px, 1.5fr) minmax(
-      110px,
-      1fr
-    ) 84px 84px 72px 72px;
+  grid-template-columns:
+    minmax(150px, 1.5fr) minmax(110px, 1fr)
+    84px 84px 72px 72px;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2_5) var(--space-1);
