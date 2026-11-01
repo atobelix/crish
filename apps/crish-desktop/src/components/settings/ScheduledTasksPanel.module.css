@@ -182,8 +182,8 @@
 .schedFieldInput {
   width: 100%;
   box-sizing: border-box;
-  min-height: 28px;
-  height: 28px;
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
   padding: 0 var(--space-2_5);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -204,8 +204,8 @@
 }
 
 .schedFieldTextarea {
-  min-height: 120px;
-  height: 120px;
+  min-height: 120px; /* 刻度外裸值：多行输入固定行高，无既有档，授权保留 */
+  height: 120px; /* 刻度外裸值：同上 */
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-md);
   resize: none;
@@ -230,8 +230,8 @@
 .schedSelect :global(.settings-select-trigger),
 .schedField :global(.settings-select-trigger) {
   width: 100%;
-  min-height: 28px;
-  height: 28px;
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
   border: none;
   border-radius: var(--radius-md);
   background: var(--bg-primary);

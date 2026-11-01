@@ -15,10 +15,17 @@ import type {
   CatalogEntry,
   InstalledExtension,
 } from '../../api/extensionCatalog';
-import { Button, Input, SegmentedControl } from '@/components/ui';
+import {
+  Button,
+  ConfirmDialog,
+  Input,
+  SegmentedControl,
+  Tooltip,
+} from '@/components/ui';
 import type { KindFilter, MainView } from './types';
 import styles from './SettingsExtensionsTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 const SkillsSettingsTab = lazy(() =>
   import('../settings-skills/SkillsSettingsTab').then((m) => ({
@@ -38,6 +45,7 @@ type Props = {
 export const SettingsExtensionsTab: React.FC<Props> = ({
   onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast: _showToast } = useToast();
   const {
     view,
@@ -75,41 +83,80 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
   const [selectedDetailItem, setSelectedDetailItem] = useState<
     InstalledExtension | CatalogEntry | null
   >(null);
+  const [pendingRemove, setPendingRemove] = useState<InstalledExtension | null>(
+    null
+  );
 
   const kindFilters: { id: KindFilter; label: string }[] = [
-    { id: 'all', label: '全部' },
-    { id: 'plugin', label: '插件' },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'skill', label: '技能' },
+    { id: 'all', label: t('settings.extensions.kindAll', '全部') },
+    { id: 'plugin', label: t('settings.extensions.kindPlugin', '插件') },
+    { id: 'mcp', label: t('settings.extensions.kindMcp', 'MCP') },
+    { id: 'skill', label: t('settings.extensions.kindSkill', '技能') },
   ];
+
+  const uninstallConfirm = (
+    <ConfirmDialog
+      open={pendingRemove !== null}
+      danger
+      title={t('settings.extensions.uninstallConfirmTitle', '卸载扩展')}
+      description={
+        pendingRemove
+          ? t(
+              'settings.extensions.uninstallConfirm',
+              '确定要卸载扩展「{name}」吗？',
+              { name: pendingRemove.name }
+            )
+          : undefined
+      }
+      confirmLabel={t('settings.extensions.uninstallConfirmAction', '确认卸载')}
+      cancelLabel={t('common.cancel', '取消')}
+      onCancel={() => setPendingRemove(null)}
+      onConfirm={() => {
+        if (pendingRemove) void handleRemovePackage(pendingRemove);
+        setPendingRemove(null);
+      }}
+    />
+  );
 
   // —— 全页内嵌：技能/MCP 高级管理 ——
   if (manage === 'skill' || manage === 'mcp') {
-    const label = manage === 'skill' ? '技能' : 'MCP';
+    const label =
+      manage === 'skill'
+        ? t('settings.skills.pageTitle', '技能')
+        : t('settings.extensions.kindMcp', 'MCP');
+    const backLabel = t('settings.extensions.backToExtensions', '返回扩展');
     return (
       <div className={styles.manageWrapper}>
         <div className={styles.manageBackBar}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setManage(null);
-              void refresh();
-            }}
-            icon={<AppIcon name="arrow-left" size={14} aria-hidden />}
-          >
-            返回扩展
-          </Button>
+          <Tooltip content={backLabel}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={backLabel}
+              onClick={() => {
+                setManage(null);
+                void refresh();
+              }}
+              icon={<AppIcon name="arrow-left" size={16} aria-hidden />}
+            />
+          </Tooltip>
         </div>
         <Suspense
           fallback={
             <div className={styles.empty} role="status">
-              加载{label}…
+              {t('settings.extensions.loadingKind', '加载{label}…', {
+                label,
+              })}
             </div>
           }
         >
-          <AppErrorBoundary compact title={`${label}加载失败`}>
+          <AppErrorBoundary
+            compact
+            title={t('settings.extensions.loadFailedKind', '{label}加载失败', {
+              label,
+            })}
+          >
             {manage === 'skill' ? (
               <SkillsSettingsTab
                 onBlockingOverlayChange={onBlockingOverlayChange}
@@ -127,7 +174,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
 
   return (
     <SettingsPage
-      title="扩展"
+      title={t('settings.extensions.pageTitle', '扩展')}
       meta={
         <SettingsHeadTools>
           <Button
@@ -136,7 +183,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
             size="sm"
             onClick={() => void refresh()}
             disabled={loading}
-            aria-label="刷新"
+            aria-label={t('settings.extensions.refreshAria', '刷新')}
             icon={
               <AppIcon
                 name="refresh"
@@ -149,15 +196,25 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
         </SettingsHeadTools>
       }
     >
-      <div className={styles.toolbar} role="group" aria-label="筛选">
+      <div
+        className={styles.toolbar}
+        role="group"
+        aria-label={t('settings.extensions.filterAria', '筛选')}
+      >
         <SegmentedControl
-          aria-label="视图"
+          aria-label={t('settings.extensions.viewAria', '视图')}
           size="sm"
           className={styles.segment}
           value={view}
           options={[
-            { value: 'installed', label: '已安装' },
-            { value: 'discover', label: '发现' },
+            {
+              value: 'installed',
+              label: t('settings.extensions.viewInstalled', '已安装'),
+            },
+            {
+              value: 'discover',
+              label: t('settings.extensions.viewDiscover', '发现'),
+            },
           ]}
           onChange={(v) => {
             setView(v as MainView);
@@ -165,7 +222,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           }}
         />
         <SegmentedControl
-          aria-label="类型"
+          aria-label={t('settings.extensions.kindAria', '类型')}
           size="sm"
           className={styles.segment}
           value={kindFilter}
@@ -179,10 +236,10 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           <Input
             variant="search"
             size="sm"
-            placeholder="搜索…"
+            placeholder={t('settings.extensions.searchPlaceholder', '搜索…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="搜索扩展"
+            aria-label={t('settings.extensions.searchAria', '搜索扩展')}
           />
         </div>
       </div>
@@ -216,7 +273,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           toggleExpand,
           isExpanded,
           onInstallCatalog: handleInstallCatalog,
-          onRemovePackage: handleRemovePackage,
+          onRemovePackage: (item) => setPendingRemove(item),
           onToggleMcpServer: toggleMcpServer,
           onToggleMcpTool: toggleMcpTool,
           onToggleExpandMcpTools: toggleExpandMcpTools,
@@ -265,7 +322,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           mcpToolBusy,
         }}
         onInstallCatalog={handleInstallCatalog}
-        onRemovePackage={handleRemovePackage}
+        onRemovePackage={(item) => setPendingRemove(item)}
         onTogglePlugin={togglePlugin}
         onToggleMcpServer={toggleMcpServer}
         onToggleMcpTool={toggleMcpTool}
@@ -278,6 +335,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           emitUiEvent('open-external-import');
         }}
       />
+      {uninstallConfirm}
     </SettingsPage>
   );
 };

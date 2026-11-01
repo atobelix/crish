@@ -55,7 +55,9 @@ function resolveCronPreview(
   if (!validation.ok) {
     return {
       valid: false,
-      message: validation.error || t('schedule.cronInvalidFormat', '格式不符'),
+      message:
+        validation.error ||
+        t('settings.schedule.cronInvalidFormat', '格式不符'),
     };
   }
   const norm = validation.expression;
@@ -63,13 +65,13 @@ function resolveCronPreview(
   if (norm === '0 9 * * 1-5' && baseLabel === norm) {
     return {
       valid: true,
-      message: t('schedule.cronWeekdayMorning', '工作日 09:00'),
+      message: t('settings.schedule.cronWeekdayMorning', '工作日 09:00'),
     };
   }
   if (norm === '0 9,18 * * *' && baseLabel === norm) {
     return {
       valid: true,
-      message: t('schedule.cronDailyTwice', '每日 09:00 & 18:00'),
+      message: t('settings.schedule.cronDailyTwice', '每日 09:00 & 18:00'),
     };
   }
   return { valid: true, message: baseLabel };
@@ -101,11 +103,11 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
     () => [
       {
         value: 'isolated_session' as const,
-        label: t('schedule.isolatedSession', '后台独立执行'),
+        label: t('settings.schedule.isolatedSession', '后台独立执行'),
       },
       {
         value: 'current_session' as const,
-        label: t('schedule.currentSession', '绑定当前对话'),
+        label: t('settings.schedule.currentSession', '绑定当前对话'),
       },
     ],
     [t]
@@ -153,8 +155,8 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
     () => [
       {
         id: '',
-        label: t('schedule.globalWorkspace', '全局工作区'),
-        hint: t('schedule.defaultSandbox', '默认沙箱'),
+        label: t('settings.schedule.globalWorkspace', '全局工作区'),
+        hint: t('settings.schedule.defaultSandbox', '默认沙箱'),
       },
       ...projects.map((p) => ({
         id: p.path,
@@ -171,15 +173,18 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
         id: String(type.value),
         label:
           String(type.value) === 'cron'
-            ? t('schedule.cronCustom', '自定义 Cron')
+            ? t('settings.schedule.cronCustom', '自定义 Cron')
             : type.label,
         hint: type.hint,
       }));
     if (!opts.some((o) => o.id === 'cron')) {
       opts.push({
         id: 'cron',
-        label: t('schedule.cronCustom', '自定义 Cron'),
-        hint: t('schedule.cronHint', '标准 5 字段 cron（分 时 日 月 周）'),
+        label: t('settings.schedule.cronCustom', '自定义 Cron'),
+        hint: t(
+          'settings.schedule.cronHint',
+          '标准 5 字段 cron（分 时 日 月 周）'
+        ),
       });
     }
     return opts;
@@ -211,7 +216,8 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
     const schedGuard = validateWorkflowSchedule(schedule);
     if (schedGuard.ok === false) {
       setValidationError(
-        schedGuard.error || t('schedule.cronExprInvalid', '计划表达式无效')
+        schedGuard.error ||
+          t('settings.schedule.cronExprInvalid', '计划表达式无效')
       );
       return;
     }
@@ -230,7 +236,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
         disabled={busy}
         onClick={onClose}
       >
-        {t('schedule.cancel', '取消')}
+        {t('settings.schedule.cancel', '取消')}
       </Button>
       <Button
         type="button"
@@ -240,7 +246,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
         aria-busy={busy}
         onClick={() => void handleSave()}
       >
-        {busy ? '…' : t('schedule.save', '保存')}
+        {busy ? '…' : t('settings.schedule.save', '保存')}
       </Button>
     </>
   );
@@ -250,13 +256,13 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
       open={open}
       onClose={onClose}
       size="md"
-      title={t('schedule.modalTitle', '编辑定时任务')}
+      title={t('settings.schedule.modalTitle', '编辑定时任务')}
       footer={footer}
     >
       <div
         className={styles.modalBody}
         role="form"
-        aria-label={t('schedule.formAria', '编辑定时任务表单')}
+        aria-label={t('settings.schedule.formAria', '编辑定时任务表单')}
       >
         {validationError ? (
           <div
@@ -273,13 +279,13 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
 
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel} htmlFor="sched-edit-name">
-            {t('schedule.taskName', '任务名称')}
+            {t('settings.schedule.taskName', '任务名称')}
           </label>
           <Input
             id="sched-edit-name"
             size="sm"
             placeholder={t(
-              'schedule.taskNamePlaceholder',
+              'settings.schedule.taskNamePlaceholder',
               '例如：每日代码体检'
             )}
             value={draft.name}
@@ -291,12 +297,12 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
 
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel} htmlFor="sched-edit-prompt">
-            {t('schedule.taskInstruction', '任务指令')}
+            {t('settings.schedule.taskInstruction', '任务指令')}
           </label>
           <Textarea
             id="sched-edit-prompt"
             placeholder={t(
-              'schedule.taskInstructionPlaceholder',
+              'settings.schedule.taskInstructionPlaceholder',
               '描述按计划执行的内容…'
             )}
             value={draft.prompt}
@@ -308,20 +314,20 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
 
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel}>
-            {t('schedule.projectBelong', '所属项目')}
+            {t('settings.schedule.projectBelong', '所属项目')}
           </label>
           <Select
             value={draft.cwd ?? ''}
             disabled={busy}
             options={projectOptions}
             onChange={(v) => updateDraft({ cwd: v })}
-            aria-label={t('schedule.projectAria', '所属项目')}
+            aria-label={t('settings.schedule.projectAria', '所属项目')}
           />
         </div>
 
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel}>
-            {t('schedule.triggerType', '触发方式')}
+            {t('settings.schedule.triggerType', '触发方式')}
           </label>
           <div className={styles.fieldRow}>
             <div className={styles.fieldGrow}>
@@ -335,7 +341,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                       v as ExtendedWorkflowScheduleDraft['scheduleType'],
                   })
                 }
-                aria-label={t('schedule.triggerTypeAria', '触发方式')}
+                aria-label={t('settings.schedule.triggerTypeAria', '触发方式')}
               />
             </div>
             {draft.scheduleType === 'daily' ? (
@@ -345,7 +351,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                 value={draft.dailyTime}
                 disabled={busy}
                 onChange={(e) => updateDraft({ dailyTime: e.target.value })}
-                aria-label={t('schedule.dailyTimeAria', '每日时间')}
+                aria-label={t('settings.schedule.dailyTimeAria', '每日时间')}
               />
             ) : null}
             {draft.scheduleType === 'intervalMinutes' ? (
@@ -357,7 +363,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                 step={1}
                 inputMode="numeric"
                 placeholder={t(
-                  'schedule.intervalMinutesPlaceholder',
+                  'settings.schedule.intervalMinutesPlaceholder',
                   '{min}–{max} 分钟',
                   {
                     min: WORKFLOW_INTERVAL_MINUTES_MIN,
@@ -369,7 +375,10 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                 onChange={(e) =>
                   updateDraft({ intervalMinutes: e.target.value })
                 }
-                aria-label={t('schedule.intervalMinutesAria', '间隔分钟')}
+                aria-label={t(
+                  'settings.schedule.intervalMinutesAria',
+                  '间隔分钟'
+                )}
               />
             ) : null}
           </div>
@@ -382,7 +391,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
           >
             <div className={styles.fieldLabelRow}>
               <label className={styles.fieldLabel} htmlFor="sched-edit-cron">
-                {t('schedule.cronExpr', 'Cron 表达式')}
+                {t('settings.schedule.cronExpr', 'Cron 表达式')}
               </label>
               {draft.cronExpression?.trim() ? (
                 <span
@@ -411,10 +420,10 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
 
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel}>
-            {t('schedule.executionMode', '执行模式')}
+            {t('settings.schedule.executionMode', '执行模式')}
           </label>
           <SegmentedControl
-            aria-label={t('schedule.executionModeAria', '执行模式')}
+            aria-label={t('settings.schedule.executionModeAria', '执行模式')}
             size="sm"
             disabled={busy}
             value={currentExecutionTarget}
@@ -443,7 +452,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                 <Input
                   size="sm"
                   placeholder={t(
-                    'schedule.targetSessionPlaceholder',
+                    'settings.schedule.targetSessionPlaceholder',
                     '会话 ID'
                   )}
                   value={draft.targetSessionId ?? ''}
@@ -455,7 +464,10 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                       targetSessionId: e.target.value,
                     })
                   }
-                  aria-label={t('schedule.targetSessionAria', '目标会话 ID')}
+                  aria-label={t(
+                    'settings.schedule.targetSessionAria',
+                    '目标会话 ID'
+                  )}
                   autoComplete="off"
                 />
               </div>
@@ -475,7 +487,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                     })
                   }
                 >
-                  {t('schedule.currentSessionBadge', '当前会话')}
+                  {t('settings.schedule.currentSessionBadge', '当前会话')}
                 </Button>
               ) : null}
               {draft.targetSessionId ? (
@@ -492,7 +504,7 @@ export const WorkflowEditModal: React.FC<WorkflowEditModalProps> = ({
                     })
                   }
                 >
-                  {t('schedule.unbind', '解绑')}
+                  {t('settings.schedule.unbind', '解绑')}
                 </Button>
               ) : null}
             </div>

@@ -20,7 +20,7 @@
 
 /* 发现技能候选列表：消除虚高压抑，恢复适度内留白与项目间距 */
 .skillsDiscoverList {
-  max-height: 220px;
+  max-height: 220px; /* 刻度外裸值：候选列表滚动上限，无既有档，授权保留 */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -40,7 +40,7 @@
   background: var(--bg-card-subtle, var(--bg-secondary));
   cursor: pointer;
   font-size: var(--font-size-xs);
-  min-height: 32px;
+  min-height: var(--control-height-md);
   transition:
     background-color var(--transition-micro),
     border-color var(--transition-micro);
@@ -74,8 +74,8 @@
 }
 
 .skillsDiscoverActions button {
-  height: 34px;
-  min-height: 34px;
+  height: 34px; /* 刻度外裸值：本弹窗动作按钮固定档，无既有档，授权保留 */
+  min-height: 34px; /* 刻度外裸值：同上 */
   border-radius: var(--radius-md); /* 统一 8px 微圆，消除 7px 杂音 */
 }
 
@@ -111,7 +111,7 @@
 
 .skillsCreateField :global(.input-container),
 .skillsCreateField input {
-  height: 36px;
+  height: 36px; /* 刻度外裸值：技能页输入框本地档（36），无既有档，授权保留 */
   border-radius: var(--radius-md); /* 8px 微圆统一 */
 }
 
@@ -126,8 +126,8 @@
   appearance: none;
   -webkit-appearance: none;
   border-radius: var(--radius-md); /* 统一 8px 微圆，消除 7px 杂音 */
-  height: 34px;
-  min-height: 34px;
+  height: 34px; /* 刻度外裸值：与本弹窗动作按钮同档，无既有档，授权保留 */
+  min-height: 34px; /* 刻度外裸值：同上 */
 }
 
 .skillsDiscoverDialogBody {

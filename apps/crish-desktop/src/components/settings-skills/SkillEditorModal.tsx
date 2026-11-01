@@ -11,6 +11,7 @@ import React, { useId } from 'react';
 import type { DesktopSkill } from '../../api/skillsApi';
 import { Button, Dialog, Input, Switch, Tooltip } from '@/components/ui';
 import styles from './SkillEditorModal.module.css';
+import { useI18n } from '../../i18n';
 
 /** 发现导入域（T4-9c Props 收敛） */
 export type SkillDiscoverDomain = {
@@ -67,6 +68,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
     handleImportBrowse,
     handleAiCreateSkill,
   } = create;
+  const { t } = useI18n();
   const createBoxId = useId();
   const createNameId = useId();
   const createDescId = useId();
@@ -79,7 +81,9 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
       <Dialog
         open={showDiscover}
         onClose={() => void applyDiscoverImport('skip')}
-        title={`发现新技能 ${discoverCandidates?.length ?? 0}`}
+        title={t('settings.skills.discoverTitle', '发现新技能 {count}', {
+          count: discoverCandidates?.length ?? 0,
+        })}
         size="lg"
         classNames={{ overlay: styles.skillsDiscoverOverlay }}
         footer={
@@ -90,9 +94,9 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               size="sm"
               disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('skip')}
-              aria-label="跳过导入"
+              aria-label={t('settings.skills.skipImportAria', '跳过导入')}
             >
-              跳过
+              {t('settings.skills.skip', '跳过')}
             </Button>
             <Button
               type="button"
@@ -100,9 +104,13 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               size="sm"
               disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('all')}
-              aria-label={`全部启用 ${discoverCandidates?.length ?? 0} 个新技能`}
+              aria-label={t(
+                'settings.skills.enableAllAria',
+                '全部启用 {count} 个新技能',
+                { count: discoverCandidates?.length ?? 0 }
+              )}
             >
-              全启
+              {t('settings.skills.enableAllShort', '全启')}
             </Button>
             <Button
               type="button"
@@ -111,9 +119,14 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               disabled={discoverBusy}
               aria-busy={discoverBusy || undefined}
               onClick={() => void applyDiscoverImport('selected')}
-              aria-label="启用所选新技能"
+              aria-label={t(
+                'settings.skills.enableSelectedAria',
+                '启用所选新技能'
+              )}
             >
-              {discoverBusy ? '…' : '启用所选'}
+              {discoverBusy
+                ? '…'
+                : t('settings.skills.enableSelected', '启用所选')}
             </Button>
           </div>
         }
@@ -121,7 +134,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         <div
           className={`${styles.skillsDiscoverList} ${styles.skillsDiscoverDialogBody}`}
           role="group"
-          aria-label="待导入技能"
+          aria-label={t('settings.skills.discoverGroupAria', '待导入技能')}
         >
           {(discoverCandidates ?? []).map((s) => {
             const checked = discoverPick[s.id] !== false;
@@ -132,7 +145,15 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
                     size="sm"
                     checked={checked}
                     disabled={discoverBusy}
-                    aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
+                    aria-label={
+                      checked
+                        ? t('settings.skills.deselectAria', '取消选择 {name}', {
+                            name: s.name,
+                          })
+                        : t('settings.skills.selectAria', '选择 {name}', {
+                            name: s.name,
+                          })
+                    }
                     onCheckedChange={(next) =>
                       setDiscoverPick((p) => ({ ...p, [s.id]: next }))
                     }
@@ -149,9 +170,13 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         <section
           className={`${styles.skillsCreateBox} skills-create-box`}
           id={createBoxId}
-          aria-label="新建技能"
+          aria-label={t('settings.skills.createAria', '新建技能')}
         >
-          <div className={styles.createSeg} role="group" aria-label="新建方式">
+          <div
+            className={styles.createSeg}
+            role="group"
+            aria-label={t('settings.skills.createModeAria', '新建方式')}
+          >
             <Button
               type="button"
               variant="secondary"
@@ -159,7 +184,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               className={styles.createPath}
               onClick={() => void handleImportBrowse()}
             >
-              浏览导入
+              {t('settings.skills.browseImport', '浏览导入')}
             </Button>
             <Button
               type="button"
@@ -168,7 +193,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               className={styles.createPath}
               onClick={handleAiCreateSkill}
             >
-              AI 创建
+              {t('settings.skills.aiCreate', 'AI 创建')}
             </Button>
           </div>
           <Button
@@ -177,7 +202,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
             size="sm"
             onClick={() => setCreateMode('manual')}
           >
-            高级：手填空白技能…
+            {t('settings.skills.manualCreate', '高级：手填空白技能…')}
           </Button>
         </section>
       ) : null}
@@ -186,18 +211,23 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         <section
           className={`${styles.skillsCreateBox} skills-create-box`}
           id={createBoxId}
-          aria-label="手填项目技能"
+          aria-label={t('settings.skills.manualAria', '手填项目技能')}
         >
           <div className={styles.skillsCreateRow}>
-            <Tooltip content="写入 .conex/skills/<name>/SKILL.md">
+            <Tooltip
+              content={t(
+                'settings.skills.createNameTooltip',
+                '写入 .conex/skills/<name>/SKILL.md'
+              )}
+            >
               <div className={styles.skillsCreateField}>
                 <Input
                   id={createNameId}
                   size="sm"
-                  placeholder="名称"
+                  placeholder={t('settings.skills.namePlaceholder', '名称')}
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
-                  aria-label="技能名称"
+                  aria-label={t('settings.skills.nameAria', '技能名称')}
                   disabled={createBusy}
                   onEnter={() => {
                     if (createName.trim()) {
@@ -211,10 +241,13 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               <Input
                 id={createDescId}
                 size="sm"
-                placeholder="描述（可选）"
+                placeholder={t(
+                  'settings.skills.descPlaceholder',
+                  '描述（可选）'
+                )}
                 value={createDesc}
                 onChange={(e) => setCreateDesc(e.target.value)}
-                aria-label="技能描述（可选）"
+                aria-label={t('settings.skills.descAria', '技能描述（可选）')}
                 disabled={createBusy}
                 onEnter={() => {
                   if (createName.trim()) {
@@ -230,9 +263,13 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               disabled={!createName.trim() || createBusy}
               aria-busy={createBusy || undefined}
               onClick={() => void handleCreate()}
-              aria-label={createBusy ? '创建中' : '创建技能'}
+              aria-label={
+                createBusy
+                  ? t('settings.skills.creatingAria', '创建中')
+                  : t('settings.skills.createSkillAria', '创建技能')
+              }
             >
-              {createBusy ? '…' : '创建'}
+              {createBusy ? '…' : t('settings.skills.create', '创建')}
             </Button>
             <Button
               type="button"
@@ -240,7 +277,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               size="sm"
               onClick={() => setCreateMode('paths')}
             >
-              返回
+              {t('settings.skills.back', '返回')}
             </Button>
           </div>
         </section>

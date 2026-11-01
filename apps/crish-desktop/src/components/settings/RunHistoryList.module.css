@@ -165,13 +165,3 @@
 .runItem:hover .actionBtn {
   opacity: 1;
 }
-
-.emptyRuns {
-  padding: var(--space-3);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  text-align: center;
-  background: transparent;
-  border-radius: 0;
-  border: none;
-}

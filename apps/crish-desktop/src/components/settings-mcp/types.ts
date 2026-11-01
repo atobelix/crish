@@ -7,7 +7,9 @@ const DEMO_TRANSPORTS: ReadonlySet<DemoTransport> = new Set<DemoTransport>([
 ]);
 
 export function isDemoTransport(value: unknown): value is DemoTransport {
-  return typeof value === 'string' && DEMO_TRANSPORTS.has(value as DemoTransport);
+  return (
+    typeof value === 'string' && DEMO_TRANSPORTS.has(value as DemoTransport)
+  );
 }
 
 export const START_STOP_HINT =
@@ -36,13 +38,28 @@ export function transportLabel(raw?: string): string {
   return raw;
 }
 
-export function transportTitle(raw?: string): string | undefined {
+export function transportTitle(
+  raw?: string,
+  translate?: (key: string, fallback: string) => string
+): string | undefined {
   if (!raw) return undefined;
-  const t = raw.toLowerCase();
-  if (t === 'stdio') return '标准输入输出（stdio）';
-  if (t === 'sse') return '服务端推送（SSE）';
-  if (t === 'http') return 'HTTP';
-  if (t === 'streamable-http') return '可流式 HTTP';
+  const tr = raw.toLowerCase();
+  if (tr === 'stdio')
+    return translate
+      ? translate('settings.mcp.transportStdioTitle', '标准输入输出（stdio）')
+      : '标准输入输出（stdio）';
+  if (tr === 'sse')
+    return translate
+      ? translate('settings.mcp.transportSseTitle', '服务端推送（SSE）')
+      : '服务端推送（SSE）';
+  if (tr === 'http')
+    return translate
+      ? translate('settings.mcp.transportHttpTitle', 'HTTP')
+      : 'HTTP';
+  if (tr === 'streamable-http')
+    return translate
+      ? translate('settings.mcp.transportStreamableTitle', '可流式 HTTP')
+      : '可流式 HTTP';
   return raw;
 }
 

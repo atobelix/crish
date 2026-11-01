@@ -165,17 +165,12 @@ describe('McpServerList 实时模式', () => {
     expect(screen.getByRole('button', { name: '启动 Git' })).toBeEnabled();
   });
 
-  it('引擎不支持启停时显示禁用的「不可用」按钮', () => {
+  it('引擎不支持启停时不渲染启停按钮与「不可用」占位按钮', () => {
     const { props, actions } = makeProps({ servers: { canStartStop: false } });
     render(<McpServerList {...props} />);
     expect(screen.queryByRole('button', { name: /^停止 / })).toBeNull();
     expect(screen.queryByRole('button', { name: /^启动 / })).toBeNull();
-    expect(screen.getByRole('button', { name: '停止不可用' })).toBeDisabled();
-    const startUnavailable = screen.getAllByRole('button', {
-      name: '启动不可用',
-    });
-    expect(startUnavailable).toHaveLength(2);
-    startUnavailable.forEach((b) => expect(b).toBeDisabled());
+    expect(screen.queryByRole('button', { name: /不可用/ })).toBeNull();
     expect(actions.onToggleServer).not.toHaveBeenCalled();
   });
 
@@ -224,7 +219,7 @@ describe('McpServerList 实时模式', () => {
     ).toHaveTextContent('暂无工具');
   });
 
-  it('点击服务名复制其标识', () => {
+  it('点击复制图标按钮复制其标识', () => {
     const { props, actions } = makeProps();
     render(<McpServerList {...props} />);
     fireEvent.click(screen.getByRole('button', { name: '复制标识 Git' }));

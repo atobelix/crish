@@ -18,6 +18,7 @@ import { SkillDetailPreview as SkillDetailPanel } from './SkillDetailPreview';
 import { SkillEditorModal } from './SkillEditorModal';
 import { SkillsMoreMenu } from './SkillsMoreMenu';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -26,6 +27,7 @@ type Props = {
 export const SkillsSettingsTab: React.FC<Props> = ({
   onBlockingOverlayChange: _onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast: _showToast } = useToast();
   const {
     skills,
@@ -93,14 +95,16 @@ export const SkillsSettingsTab: React.FC<Props> = ({
 
   return (
     <SettingsPage
-      title="技能"
+      title={t('settings.skills.pageTitle', '技能')}
       meta={
         <div
           className={`${styles.skillsTabActions} skills-tab-actions`}
           role="toolbar"
-          aria-label="技能操作"
+          aria-label={t('settings.skills.actionsAria', '技能操作')}
         >
-          <Tooltip content="导入本机技能 or AI">
+          <Tooltip
+            content={t('settings.skills.importTooltip', '导入本机技能 or AI')}
+          >
             <Button
               type="button"
               variant="secondary"
@@ -108,12 +112,18 @@ export const SkillsSettingsTab: React.FC<Props> = ({
               onClick={() =>
                 setCreateMode((m) => (m === 'none' ? 'paths' : 'none'))
               }
-              aria-label={createMode !== 'none' ? '收起新建' : '新建技能'}
+              aria-label={
+                createMode !== 'none'
+                  ? t('settings.skills.collapseNew', '收起新建')
+                  : t('settings.skills.newSkill', '新建技能')
+              }
               aria-expanded={createMode !== 'none'}
               aria-controls={createBoxId}
               icon={<AppIcon name="plus" size={14} aria-hidden />}
             >
-              {createMode !== 'none' ? '收起' : '新建'}
+              {createMode !== 'none'
+                ? t('settings.skills.collapse', '收起')
+                : t('settings.skills.new', '新建')}
             </Button>
           </Tooltip>
           <SkillsMoreMenu
@@ -151,9 +161,9 @@ export const SkillsSettingsTab: React.FC<Props> = ({
             size="sm"
             onClick={() => void refresh()}
             disabled={loading}
-            aria-label="重试扫描技能"
+            aria-label={t('settings.skills.retryScanAria', '重试扫描技能')}
           >
-            重试
+            {t('settings.skills.retry', '重试')}
           </Button>
         </div>
       ) : null}
@@ -183,7 +193,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({
       <div
         className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`}
         role="group"
-        aria-label="筛选"
+        aria-label={t('settings.skills.filterAria', '筛选')}
       >
         <Select
           className={`${styles.skillsScopeSelect} skills-scope-select`}
@@ -195,28 +205,31 @@ export const SkillsSettingsTab: React.FC<Props> = ({
           }))}
           onChange={handleScopeFilterChange}
           disabled={loading}
-          placeholder="作用域…"
+          placeholder={t('settings.skills.scopePlaceholder', '作用域…')}
         />
         <div className={`${styles.skillsSearch} skills-search`}>
           <Input
             id={searchId}
             variant="search"
             size="sm"
-            placeholder="搜索技能…"
+            placeholder={t('settings.skills.searchPlaceholder', '搜索技能…')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            aria-label="搜索技能"
+            aria-label={t('settings.skills.searchAria', '搜索技能')}
           />
         </div>
       </div>
 
-      {!fsOk ? (
+      {!fsOk && !loadError ? (
         <div
           className={`${styles.skillsFsWarn} skills-fs-warn`}
           role="status"
-          aria-label="需桌面壳以扫描本机技能目录"
+          aria-label={t(
+            'settings.skills.fsUnavailableAria',
+            '需桌面壳以扫描本机技能目录'
+          )}
         >
-          当前环境无法读取本机技能目录
+          {t('settings.skills.fsUnavailable', '当前环境无法读取本机技能目录')}
         </div>
       ) : null}
 

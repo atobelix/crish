@@ -19,8 +19,8 @@
 }
 
 .iconBox {
-  width: 32px;
-  height: 32px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-m);
   background: var(--state-quiet);
   border: var(--hairline-width) solid var(--border-subtle);

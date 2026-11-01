@@ -5,10 +5,12 @@ import { Button, Input, Tooltip } from '@/components/ui';
 import styles from './SkillsSettingsTab.module.css';
 import {
   ACTIVATION_LABEL,
+  ACTIVATION_LABEL_KEY,
   EMPTY_FILTER_HINT,
   scopeGroupLabel,
 } from './useSkillsSettingsState';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 interface SkillCardListProps {
   skills: DesktopSkill[];
@@ -66,6 +68,12 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
   clearFilters,
   setCreateMode,
 }) => {
+  const { t } = useI18n();
+  const scopeLabels = {
+    global: t('settings.skills.scopeGlobal', '全局'),
+    workspace: t('settings.skills.scopeWorkspace', '工作区'),
+    project: t('settings.skills.scopeProject', '当前项目'),
+  };
   const listLabelId = useId();
   const extraDirId = useId();
 
@@ -78,7 +86,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
           aria-live="polite"
           aria-busy="true"
         >
-          加载中…
+          {t('settings.skills.loading', '加载中…')}
         </div>
       );
     }
@@ -91,17 +99,22 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
           role="status"
           aria-live="polite"
         >
-          <div>暂无技能</div>
-          <Tooltip content="导入本机技能或用 AI 创建">
+          <div>{t('settings.skills.noneYet', '暂无技能')}</div>
+          <Tooltip
+            content={t(
+              'settings.skills.importOrAiTooltip',
+              '导入本机技能或用 AI 创建'
+            )}
+          >
             <Button
               type="button"
               variant="secondary"
               size="sm"
               onClick={() => setCreateMode('paths')}
-              aria-label="新建技能"
+              aria-label={t('settings.skills.newSkill', '新建技能')}
               icon={<AppIcon name="plus" size={14} aria-hidden />}
             >
-              新建技能
+              {t('settings.skills.newSkill', '新建技能')}
             </Button>
           </Tooltip>
         </div>
@@ -114,19 +127,25 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         role="status"
         aria-live="polite"
       >
-        <div>无匹配 · 共 {skills.length} 个技能</div>
+        <div>
+          {t('settings.skills.noMatchCount', '无匹配 · 共 {count} 个技能', {
+            count: skills.length,
+          })}
+        </div>
         <div
           className={`${styles.skillsDiscoverActions} skills-discover-actions`}
         >
-          <Tooltip content={EMPTY_FILTER_HINT}>
+          <Tooltip
+            content={t('settings.skills.emptyFilterHint', EMPTY_FILTER_HINT)}
+          >
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={clearFilters}
-              aria-label="清除筛选"
+              aria-label={t('settings.skills.clearFilters', '清除筛选')}
             >
-              清除筛选
+              {t('settings.skills.clearFilters', '清除筛选')}
             </Button>
           </Tooltip>
         </div>
@@ -140,12 +159,12 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
       aria-labelledby={listLabelId}
     >
       <div id={listLabelId} className="sr-only">
-        技能列表
+        {t('settings.skills.listAria', '技能列表')}
       </div>
       <div
         className={`${styles.skillsRailList} ${styles.skillsRailNavScroll} skills-rail-list`}
         role="listbox"
-        aria-label="技能列表"
+        aria-label={t('settings.skills.listAria', '技能列表')}
         aria-busy={loading || undefined}
         aria-activedescendant={
           selectedId ? `skill-opt-${selectedId}` : undefined
@@ -153,7 +172,11 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
       >
         {renderListEmpty()}
         {grouped.map((g) => {
-          const groupLabel = scopeGroupLabel(g.scope, activeScopeProjectName);
+          const groupLabel = scopeGroupLabel(
+            g.scope,
+            activeScopeProjectName,
+            scopeLabels
+          );
           return (
             <div
               key={g.scope}
@@ -165,12 +188,21 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                 className={`${styles.skillsRailGroupLabel} skills-rail-group-label`}
               >
                 {groupLabel}
-                <span aria-label={`${g.items.length} 个`}>
+                <span
+                  aria-label={t('settings.skills.countAria', '{count} 个', {
+                    count: g.items.length,
+                  })}
+                >
                   {g.items.length}
                 </span>
               </div>
               {g.items.map((s) => {
-                const actLabel = ACTIVATION_LABEL[s.activation] || s.activation;
+                const actLabel =
+                  t(
+                    ACTIVATION_LABEL_KEY[s.activation] ??
+                      'settings.skills.activationEnabled',
+                    ACTIVATION_LABEL[s.activation] || s.activation
+                  ) || s.activation;
                 const isSel = selectedId === s.id;
                 return (
                   <Tooltip key={s.id} content={s.description || s.name}>
@@ -182,7 +214,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                       aria-selected={isSel}
                       className={`${styles.skillsRailItem} skills-rail-item ${styles.skillsRailItemDense} skills-rail-item--dense ${isSel ? styles.isActive + ' is-active' : ''} act-${s.activation}`}
                       onClick={() => setSelectedId(s.id)}
-                      aria-label={`${s.name}，${groupLabel}，${actLabel}${s.system ? '，系统' : ''}`}
+                      aria-label={`${t('settings.skills.itemAria', '{name}，{group}，{activation}', { name: s.name, group: groupLabel, activation: actLabel })}${s.system ? `，${t('settings.skills.system', '系统')}` : ''}`}
                     >
                       <span
                         className={`${styles.skillsRailIcon} skills-rail-icon`}
@@ -202,7 +234,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                           <em
                             className={`${styles.skillsSysBadge} skills-sys-badge`}
                           >
-                            系统
+                            {t('settings.skills.system', '系统')}
                           </em>
                         ) : null}
                       </span>
@@ -227,25 +259,38 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         <summary
           className={`${styles.skillsExtraSummary} skills-extra-summary`}
         >
-          高级 · 额外目录
-          {extraDirs.length > 0 ? `（${extraDirs.length}）` : ''}
+          {t('settings.skills.extraDirsTitle', '高级 · 额外目录')}
+          {extraDirs.length > 0
+            ? t('settings.skills.countSuffix', '（{count}）', {
+                count: extraDirs.length,
+              })
+            : ''}
         </summary>
         <div
           className={styles.skillsExtraList}
           role="list"
-          aria-label="已添加的额外技能目录"
+          aria-label={t(
+            'settings.skills.extraDirsAria',
+            '已添加的额外技能目录'
+          )}
         >
           {extraDirs.map((d) => (
             <div key={d} className={styles.skillsExtraRow} role="listitem">
               <Tooltip content={d}>
                 <span>{d}</span>
               </Tooltip>
-              <Tooltip content="移除此目录">
+              <Tooltip
+                content={t('settings.skills.removeDirTooltip', '移除此目录')}
+              >
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`移除目录 ${d}`}
+                  aria-label={t(
+                    'settings.skills.removeDirAria',
+                    '移除目录 {dir}',
+                    { dir: d }
+                  )}
                   onClick={() => handleRemoveExtra(d)}
                   icon={<AppIcon name="x" size={14} aria-hidden />}
                 />
@@ -253,15 +298,26 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
             </div>
           ))}
           <div className={`${styles.skillsExtraAddRow} skills-extra-add-row`}>
-            <Tooltip content="技能目录绝对路径 · 回车添加">
+            <Tooltip
+              content={t(
+                'settings.skills.extraDirTooltip',
+                '技能目录绝对路径 · 回车添加'
+              )}
+            >
               <div className={styles.skillsExtraField}>
                 <Input
                   id={extraDirId}
                   size="sm"
-                  placeholder="绝对路径"
+                  placeholder={t(
+                    'settings.skills.extraDirPlaceholder',
+                    '绝对路径'
+                  )}
                   value={extraDir}
                   onChange={(e) => setExtraDir(e.target.value)}
-                  aria-label="额外技能目录绝对路径"
+                  aria-label={t(
+                    'settings.skills.extraDirAria',
+                    '额外技能目录绝对路径'
+                  )}
                   onEnter={() => {
                     if (extraDir.trim()) {
                       commitExtraDir(extraDir);
@@ -270,12 +326,12 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                 />
               </div>
             </Tooltip>
-            <Tooltip content="浏览文件夹">
+            <Tooltip content={t('settings.skills.browseFolder', '浏览文件夹')}>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label="浏览文件夹"
+                aria-label={t('settings.skills.browseFolder', '浏览文件夹')}
                 onClick={() => void handlePickExtra()}
                 icon={<AppIcon name="folder-open" size={14} aria-hidden />}
               />
@@ -285,10 +341,10 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
               variant="secondary"
               size="sm"
               disabled={!extraDir.trim()}
-              aria-label="添加额外目录"
+              aria-label={t('settings.skills.addDirAria', '添加额外目录')}
               onClick={() => commitExtraDir(extraDir)}
             >
-              添加
+              {t('settings.skills.addDir', '添加')}
             </Button>
           </div>
         </div>

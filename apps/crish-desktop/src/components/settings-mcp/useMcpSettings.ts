@@ -1,4 +1,5 @@
 import { toast } from '../../services/toast/ToastContext';
+import { t } from '../../i18n';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   listMcpServers,
@@ -168,7 +169,11 @@ export function useMcpSettings({
       });
       onAvailabilityChange?.(list.length > 0);
     } catch (e) {
-      toast.show?.(`加载失败：${errText(e) || '未知错误'}`);
+      toast.show?.(
+        t('settings.mcp.loadFailed', {
+          detail: errText(e) || t('settings.mcp.unknownError'),
+        })
+      );
       onAvailabilityChange?.(false);
     } finally {
       setLoading(false);
@@ -196,7 +201,7 @@ export function useMcpSettings({
   const handleCopy = useCallback(
     async (text: string) => {
       const ok = await copyText(text);
-      if (!ok) toast.show?.('复制失败');
+      if (!ok) toast.show?.(t('settings.mcp.copyFailed'));
     },
     [toast.show]
   );
@@ -266,7 +271,10 @@ export function useMcpSettings({
       if (!canStartStop) return;
       setBusyId(id);
       const fn = action === 'start' ? startMcpServer : stopMcpServer;
-      const prefix = action === 'start' ? '启动' : '停止';
+      const prefix =
+        action === 'start'
+          ? t('settings.mcp.start', '启动')
+          : t('settings.mcp.stop', '停止');
       try {
         const r = await fn(id);
         if (!r.ok) {
@@ -275,7 +283,12 @@ export function useMcpSettings({
             setControlHint(r.error || START_STOP_HINT);
           } else {
             toast.show?.(
-              r.error ? `${prefix}失败：${r.error}` : `${prefix}失败`
+              r.error
+                ? t('settings.mcp.actionFailed', {
+                    action: prefix,
+                    detail: r.error,
+                  })
+                : t('settings.mcp.actionFailedBare', { action: prefix })
             );
           }
           await refreshLive();
@@ -283,7 +296,12 @@ export function useMcpSettings({
         }
         await refreshLive();
       } catch (e) {
-        toast.show?.(`${prefix}失败：${errText(e) || '未知错误'}`);
+        toast.show?.(
+          t('settings.mcp.actionFailed', {
+            action: prefix,
+            detail: errText(e) || t('settings.mcp.unknownError'),
+          })
+        );
       } finally {
         setBusyId(null);
       }
@@ -325,7 +343,11 @@ export function useMcpSettings({
       setNewArgs('');
       setNewUrl('');
     } catch (e) {
-      toast.show?.(`保存失败：${errText(e) || '未知错误'}`);
+      toast.show?.(
+        t('settings.mcp.saveFailed', {
+          detail: errText(e) || t('settings.mcp.unknownError'),
+        })
+      );
     }
   };
 
@@ -342,7 +364,11 @@ export function useMcpSettings({
       });
       onAvailabilityChange?.(list.length > 0);
     } catch (e) {
-      toast.show?.(`删除失败：${errText(e) || '未知错误'}`);
+      toast.show?.(
+        t('settings.mcp.deleteFailed', {
+          detail: errText(e) || t('settings.mcp.unknownError'),
+        })
+      );
     }
   };
 

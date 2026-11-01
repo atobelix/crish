@@ -9,10 +9,10 @@ import {
   EMPTY_DEMO_HINT,
   EMPTY_LIVE_HINT_CONFIGURED,
   EMPTY_LIVE_HINT_UNCONFIGURED,
-  START_STOP_HINT,
   transportLabel,
   transportTitle,
 } from './types';
+import { useI18n } from '../../i18n';
 import { McpServerTools } from './McpServerTools';
 import { McpServerToolbar } from './McpServerToolbar';
 import { McpServerFilterEmpty } from './McpServerFilterEmpty';
@@ -42,6 +42,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   ui,
   actions: ac,
 }) => {
+  const { t } = useI18n();
   const {
     demo,
     loading,
@@ -54,7 +55,6 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     expanded,
     busyId,
     canStartStop,
-    controlHint,
   } = sv;
   const { filter, sortMode, showAdd, listLabelId, toolsPanelPrefix } = ui;
   const {
@@ -71,11 +71,10 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     refreshDemo,
     refreshLive,
   } = ac;
-  const stopHint = controlHint || START_STOP_HINT;
   const filterActive = filter.trim().length > 0;
   const liveEmptyHint = status?.configured
-    ? EMPTY_LIVE_HINT_CONFIGURED
-    : EMPTY_LIVE_HINT_UNCONFIGURED;
+    ? t('settings.mcp.emptyHintConfigured', EMPTY_LIVE_HINT_CONFIGURED)
+    : t('settings.mcp.emptyHintUnconfigured', EMPTY_LIVE_HINT_UNCONFIGURED);
 
   const renderSharedToolbar = () => (
     <McpServerToolbar
@@ -111,7 +110,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
         className={`${styles.mcpList} mcp-list`}
         role="list"
         aria-labelledby={listLabelId}
-        aria-label="服务列表"
+        aria-label={t('settings.mcp.listAria', '服务列表')}
         aria-busy={isBusy || undefined}
       >
         {items.length > 0 ? items.map(renderItem) : null}
@@ -154,17 +153,19 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           loading,
           emptyContent: (
             <>
-              <span>{EMPTY_DEMO_HINT}</span>
-              <Tooltip content={EMPTY_DEMO_HINT}>
+              <span>{t('settings.mcp.emptyDemoHint', EMPTY_DEMO_HINT)}</span>
+              <Tooltip
+                content={t('settings.mcp.emptyDemoHint', EMPTY_DEMO_HINT)}
+              >
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => onSetShowAdd(true)}
-                  aria-label="添加演示服务"
+                  aria-label={t('settings.mcp.addDemo', '添加演示服务')}
                   icon={<AppIcon name="plus" size={14} aria-hidden />}
                 >
-                  添加
+                  {t('settings.mcp.add', '添加')}
                 </Button>
               </Tooltip>
               <Button
@@ -173,16 +174,16 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 size="sm"
                 onClick={() => void refreshDemo()}
                 disabled={loading}
-                aria-label="刷新列表"
+                aria-label={t('settings.mcp.refreshList', '刷新列表')}
                 icon={<AppIcon name="refresh" size={14} aria-hidden />}
               >
-                刷新
+                {t('settings.mcp.refresh', '刷新')}
               </Button>
             </>
           ),
           renderItem: (srv: McpServer) => {
             const on = demoEnabled[srv.id] !== false;
-            const typeTitle = transportTitle(srv.type);
+            const typeTitle = transportTitle(srv.type, t);
             return (
               <div
                 key={srv.id}
@@ -190,28 +191,45 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 role="listitem"
               >
                 <div className={`${styles.mcpRowMain} mcp-row-main`}>
-                  <Tooltip content={on ? '已启用' : '已禁用'}>
+                  <Tooltip
+                    content={
+                      on
+                        ? t('settings.mcp.enabledTooltip', '已启用')
+                        : t('settings.mcp.disabledTooltip', '已禁用')
+                    }
+                  >
                     <span
                       className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'} ${on ? styles.kindOk : styles.kindIdle}`}
                       aria-hidden
                     />
                   </Tooltip>
-                  <Tooltip content={`复制标识 ${srv.id}`}>
+                  <span className={`${styles.mcpRowName} mcp-row-name`}>
+                    {srv.name}
+                  </span>
+                  <Tooltip
+                    content={t('settings.mcp.copyIdTooltip', '复制标识 {id}', {
+                      id: srv.id,
+                    })}
+                  >
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
-                      aria-label={`复制标识 ${srv.name}`}
+                      aria-label={t(
+                        'settings.mcp.copyIdAria',
+                        '复制标识 {name}',
+                        { name: srv.name }
+                      )}
                       onClick={() => onCopy(srv.id)}
-                    >
-                      {srv.name}
-                    </Button>
+                      icon={<AppIcon name="copy" size={14} aria-hidden />}
+                    />
                   </Tooltip>
                   <span
                     className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'} ${on ? styles.kindOk : styles.kindIdle}`}
                   >
-                    {on ? '启用' : '禁用'}
+                    {on
+                      ? t('settings.mcp.enabledState', '启用')
+                      : t('settings.mcp.disabledState', '禁用')}
                   </span>
                   <Tooltip content={typeTitle}>
                     <span className={`${styles.mcpRowMeta} mcp-row-meta`}>
@@ -221,21 +239,39 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     </span>
                   </Tooltip>
                   <div className={`${styles.mcpRowActions} mcp-row-actions`}>
-                    <Tooltip content={on ? '禁用' : '启用'}>
+                    <Tooltip
+                      content={
+                        on
+                          ? t('settings.mcp.disabledState', '禁用')
+                          : t('settings.mcp.enabledState', '启用')
+                      }
+                    >
                       <Switch
                         checked={on}
                         aria-label={
-                          on ? `禁用 ${srv.name}` : `启用 ${srv.name}`
+                          on
+                            ? t('settings.mcp.disableAria', '禁用 {name}', {
+                                name: srv.name,
+                              })
+                            : t('settings.mcp.enableAria', '启用 {name}', {
+                                name: srv.name,
+                              })
                         }
                         onCheckedChange={() => onToggleDemoEnabled(srv.id)}
                       />
                     </Tooltip>
-                    <Tooltip content="删除">
+                    <Tooltip content={t('settings.mcp.delete', '删除')}>
                       <Button
                         type="button"
                         variant="danger"
                         size="sm"
-                        aria-label={`删除 ${srv.name}`}
+                        aria-label={t(
+                          'settings.mcp.deleteAria',
+                          '删除 {name}',
+                          {
+                            name: srv.name,
+                          }
+                        )}
                         onClick={() => void onDeleteDemo(srv.id)}
                         icon={<AppIcon name="trash" size={14} aria-hidden />}
                       />
@@ -261,20 +297,24 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           <>
             <Tooltip content={liveEmptyHint}>
               <span>
-                {status?.configured ? '暂无服务实例' : '暂无扩展服务'}
+                {status?.configured
+                  ? t('settings.mcp.noInstances', '暂无服务实例')
+                  : t('settings.mcp.noServers', '暂无扩展服务')}
               </span>
             </Tooltip>
-            <Tooltip content="重新向引擎查询列表">
+            <Tooltip
+              content={t('settings.mcp.requeryTooltip', '重新向引擎查询列表')}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => void refreshLive()}
                 disabled={loading}
-                aria-label="刷新列表"
+                aria-label={t('settings.mcp.refreshList', '刷新列表')}
                 icon={<AppIcon name="refresh" size={14} aria-hidden />}
               >
-                刷新
+                {t('settings.mcp.refresh', '刷新')}
               </Button>
             </Tooltip>
           </>
@@ -291,7 +331,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           const panelId = `${toolsPanelPrefix}-${srv.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
           const busy = busyId === srv.id;
           const tp = transportLabel(srv.transport);
-          const tpTitle = transportTitle(srv.transport);
+          const tpTitle = transportTitle(srv.transport, t);
 
           return (
             <div
@@ -306,17 +346,28 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     aria-hidden
                   />
                 </Tooltip>
-                <Tooltip content={`复制标识 ${srv.id}`}>
+                <span className={`${styles.mcpRowName} mcp-row-name`}>
+                  {srv.name}
+                </span>
+                <Tooltip
+                  content={t('settings.mcp.copyIdTooltip', '复制标识 {id}', {
+                    id: srv.id,
+                  })}
+                >
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={`${styles.mcpRowName} mcp-row-name ${styles.mcpInlineCopy} mcp-inline-copy`}
-                    aria-label={`复制标识 ${srv.name}`}
+                    aria-label={t(
+                      'settings.mcp.copyIdAria',
+                      '复制标识 {name}',
+                      {
+                        name: srv.name,
+                      }
+                    )}
                     onClick={() => onCopy(srv.id)}
-                  >
-                    {srv.name}
-                  </Button>
+                    icon={<AppIcon name="copy" size={14} aria-hidden />}
+                  />
                 </Tooltip>
                 <Tooltip content={mcpStateLabel(srv.state)}>
                   <span
@@ -328,12 +379,14 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 <Tooltip content={tpTitle}>
                   <span className={`${styles.mcpRowMeta} mcp-row-meta`}>
                     {tp ? `${tp} · ` : ''}
-                    工具 {toolN}
+                    {t('settings.mcp.toolCountMeta', '工具 {count}', {
+                      count: toolN,
+                    })}
                     {srv.lastError ? (
                       <Tooltip content={srv.lastError}>
                         <span className={`${styles.mcpRowErr} mcp-row-err`}>
                           {' '}
-                          · 错误
+                          · {t('settings.mcp.errorMark', '错误')}
                         </span>
                       </Tooltip>
                     ) : null}
@@ -341,7 +394,13 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 </Tooltip>
                 <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                   <Tooltip
-                    content={isOpen ? '收起工具' : `展开工具（${toolN}）`}
+                    content={
+                      isOpen
+                        ? t('settings.mcp.collapseTools', '收起工具')
+                        : t('settings.mcp.expandTools', '展开工具（{count}）', {
+                            count: toolN,
+                          })
+                    }
                   >
                     <Button
                       type="button"
@@ -349,8 +408,16 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                       size="sm"
                       aria-label={
                         isOpen
-                          ? `收起 ${srv.name} 的工具`
-                          : `展开 ${srv.name} 的工具 ${toolN}`
+                          ? t(
+                              'settings.mcp.collapseToolsAria',
+                              '收起 {name} 的工具',
+                              { name: srv.name }
+                            )
+                          : t(
+                              'settings.mcp.expandToolsAria',
+                              '展开 {name} 的工具 {count}',
+                              { name: srv.name, count: toolN }
+                            )
                       }
                       aria-expanded={isOpen}
                       aria-controls={panelId}
@@ -366,50 +433,55 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   </Tooltip>
                   {canStartStop ? (
                     running ? (
-                      <Tooltip content={busy ? '停止中…' : '停止'}>
+                      <Tooltip
+                        content={
+                          busy
+                            ? t('settings.mcp.stopping', '停止中…')
+                            : t('settings.mcp.stop', '停止')
+                        }
+                      >
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           disabled={busy}
-                          aria-label={`停止 ${srv.name}`}
+                          aria-label={t(
+                            'settings.mcp.stopAria',
+                            '停止 {name}',
+                            {
+                              name: srv.name,
+                            }
+                          )}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'stop')}
                           icon={<AppIcon name="square" size={14} aria-hidden />}
                         />
                       </Tooltip>
                     ) : (
-                      <Tooltip content={busy ? '启动中…' : '启动'}>
+                      <Tooltip
+                        content={
+                          busy
+                            ? t('settings.mcp.starting', '启动中…')
+                            : t('settings.mcp.start', '启动')
+                        }
+                      >
                         <Button
                           type="button"
                           variant="secondary"
                           size="sm"
                           disabled={busy}
-                          aria-label={`启动 ${srv.name}`}
+                          aria-label={t(
+                            'settings.mcp.startAria',
+                            '启动 {name}',
+                            { name: srv.name }
+                          )}
                           aria-busy={busy || undefined}
                           onClick={() => void onToggleServer(srv.id, 'start')}
                           icon={<AppIcon name="play" size={14} aria-hidden />}
                         />
                       </Tooltip>
                     )
-                  ) : (
-                    <Tooltip content={stopHint}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled
-                        aria-label={running ? '停止不可用' : '启动不可用'}
-                        icon={
-                          running ? (
-                            <AppIcon name="square" size={14} aria-hidden />
-                          ) : (
-                            <AppIcon name="play" size={14} aria-hidden />
-                          )
-                        }
-                      />
-                    </Tooltip>
-                  )}
+                  ) : null}
                 </div>
               </div>
               {isOpen ? (

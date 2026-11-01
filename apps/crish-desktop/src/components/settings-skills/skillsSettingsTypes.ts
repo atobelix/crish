@@ -1,15 +1,37 @@
 import type { DesktopSkill, SkillActivation } from '../../api/skillsApi';
 
-export const ACTIVATION_OPTIONS: { id: SkillActivation; label: string }[] = [
-  { id: 'enabled', label: '启用' },
-  { id: 'recommended', label: '推荐' },
-  { id: 'disabled', label: '禁用' },
+export const ACTIVATION_OPTIONS: {
+  id: SkillActivation;
+  labelKey: string;
+  label: string;
+}[] = [
+  {
+    id: 'enabled',
+    labelKey: 'settings.skills.activationEnabled',
+    label: '启用',
+  },
+  {
+    id: 'recommended',
+    labelKey: 'settings.skills.activationRecommended',
+    label: '推荐',
+  },
+  {
+    id: 'disabled',
+    labelKey: 'settings.skills.activationDisabled',
+    label: '禁用',
+  },
 ];
 
 export const ACTIVATION_LABEL: Record<SkillActivation, string> = {
   enabled: '启用',
   recommended: '推荐',
   disabled: '禁用',
+};
+
+export const ACTIVATION_LABEL_KEY: Record<SkillActivation, string> = {
+  enabled: 'settings.skills.activationEnabled',
+  recommended: 'settings.skills.activationRecommended',
+  disabled: 'settings.skills.activationDisabled',
 };
 
 export const EMPTY_INSTALL_HINT =
@@ -32,10 +54,21 @@ export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function scopeGroupLabel(scope: string, projectName: string): string {
-  if (scope === 'global') return '全局';
-  if (scope === 'workspace') return projectName || '工作区';
-  if (scope === 'project') return projectName || '当前项目';
+export interface ScopeGroupLabels {
+  global: string;
+  workspace: string;
+  project: string;
+}
+
+export function scopeGroupLabel(
+  scope: string,
+  projectName: string,
+  labels?: ScopeGroupLabels
+): string {
+  if (scope === 'global') return labels?.global ?? '全局';
+  if (scope === 'workspace')
+    return projectName || labels?.workspace || '工作区';
+  if (scope === 'project') return projectName || labels?.project || '当前项目';
   return scope;
 }
 
@@ -59,7 +92,10 @@ export interface SharedSkillApi {
   setDiscoverCandidates: Setter<DesktopSkill[] | null>;
   setDiscoverPick: Setter<Record<string, boolean>>;
   // useSkillList 产出，useSkillEditor 的 setActivation/handleCreate 消费
-  refresh: (opts?: { promptNew?: boolean; scope?: ScopeFilter }) => Promise<void>;
+  refresh: (opts?: {
+    promptNew?: boolean;
+    scope?: ScopeFilter;
+  }) => Promise<void>;
   setSkills: Setter<DesktopSkill[]>;
   setSelectedId: Setter<string | null>;
   setBusyId: Setter<string | null>;

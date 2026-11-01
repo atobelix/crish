@@ -42,6 +42,13 @@
   min-width: 0;
 }
 
+.formActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  padding-top: var(--space-0_5);
+}
+
 .toolbar .segment :global(button),
 .createSeg .segment :global(button) {
   appearance: none;
@@ -116,18 +123,4 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sectionTitleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.sectionCount {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-normal);
-  text-transform: none;
 }

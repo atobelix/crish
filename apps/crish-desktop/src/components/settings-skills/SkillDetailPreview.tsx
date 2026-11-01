@@ -79,7 +79,11 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                   className={`${styles.skillsDetailMeta} skills-detail-meta`}
                 >
                   <span className={`${styles.skillsScope} skills-scope`}>
-                    {scopeGroupLabel(selected.scope, activeScopeProjectName)}
+                    {scopeGroupLabel(selected.scope, activeScopeProjectName, {
+                      global: t('settings.skills.scopeGlobal', '全局'),
+                      workspace: t('settings.skills.scopeWorkspace', '工作区'),
+                      project: t('settings.skills.scopeProject', '当前项目'),
+                    })}
                   </span>
                   {selected.system ? (
                     <span className={`${styles.skillsTag} skills-tag`}>
@@ -164,10 +168,10 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                   disabled={busyId === selected.id || batchBusy}
                   options={ACTIVATION_OPTIONS.map((opt) => ({
                     value: opt.id,
-                    label: opt.label,
+                    label: t(opt.labelKey, opt.label),
                     'aria-label': t(
                       'extensions.skill.preview.setActivationAria',
-                      { label: opt.label }
+                      { label: t(opt.labelKey, opt.label) }
                     ),
                   }))}
                   onChange={(v) =>

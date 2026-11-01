@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
+import { t } from '../../i18n';
 import {
   addExtraSkillDir,
   getExtraSkillDirs,
@@ -54,7 +55,7 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       setExtraDirsInternal(getExtraSkillDirs());
       void api.refresh();
     } catch (e) {
-      toast.show(`添加目录失败：${errText(e)}`);
+      toast.show(t('settings.skills.addDirFailed', { detail: errText(e) }));
     }
   };
 
@@ -64,7 +65,7 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       if (!dir) return;
       commitExtraDir(dir);
     } catch (e) {
-      toast.show(`选择目录失败：${errText(e)}`);
+      toast.show(t('settings.skills.pickDirFailed', { detail: errText(e) }));
     }
   };
 
@@ -74,7 +75,7 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       setExtraDirsInternal(getExtraSkillDirs());
       void api.refresh();
     } catch (e) {
-      toast.show(`移除目录失败：${errText(e)}`);
+      toast.show(t('settings.skills.removeDirFailed', { detail: errText(e) }));
     }
   };
 
@@ -110,8 +111,11 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       if (fail > 0) {
         toast.show(
           fail === targets.length
-            ? `导入失败：全部 ${fail} 个未能启用`
-            : `导入部分失败：${fail}/${targets.length}`
+            ? t('settings.skills.importFailedAll', { count: fail })
+            : t('settings.skills.importFailedPartial', {
+                fail,
+                total: targets.length,
+              })
         );
       }
     } finally {
@@ -128,7 +132,7 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       api.setExtraOpen(true);
       await api.refresh();
     } catch (e) {
-      toast.show(`导入失败：${errText(e)}`);
+      toast.show(t('settings.skills.importFailed', { detail: errText(e) }));
     }
   };
 

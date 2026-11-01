@@ -1,4 +1,5 @@
 import { toast } from '../../services/toast/ToastContext';
+import { t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clientApi,
@@ -197,7 +198,7 @@ export function useExtensionMarket() {
     } catch (e) {
       const msg = errText(e);
       setLoadError(msg);
-      toast.show(`扩展刷新失败：${msg}`);
+      toast.show(t('settings.extensions.refreshFailed', { detail: msg }));
       hydratedRef.current = true;
     } finally {
       setLoading(false);
@@ -315,7 +316,7 @@ export function useExtensionMarket() {
             fallbackId: entry.id,
           });
           await refresh();
-          toast.show('仅登记包名（未连接引擎安装）');
+          toast.show(t('settings.extensions.registerOnlyToast'));
           return;
         }
         markCatalogInstalled(entry.id);
@@ -328,9 +329,11 @@ export function useExtensionMarket() {
           fallbackId: entry.id,
         });
         await refresh();
-        toast.show('仅标记本机已装，未连接引擎安装');
+        toast.show(t('settings.extensions.markInstalledToast'));
       } catch (e) {
-        toast.show(`安装失败：${errText(e)}`);
+        toast.show(
+          t('settings.extensions.installFailed', { detail: errText(e) })
+        );
       } finally {
         setBusyId(null);
       }
@@ -364,7 +367,9 @@ export function useExtensionMarket() {
         setExpand(null);
         await refresh();
       } catch (e) {
-        toast.show(`卸载失败：${errText(e)}`);
+        toast.show(
+          t('settings.extensions.uninstallFailed', { detail: errText(e) })
+        );
       }
     },
     [packages, cwd, refresh]
@@ -389,7 +394,9 @@ export function useExtensionMarket() {
         cacheMcpToolDisabled(merged.mcpDisabledTools || next);
         setToolTick((n) => n + 1);
       } catch (e) {
-        toast.show(`工具开关失败：${errText(e)}`);
+        toast.show(
+          t('settings.extensions.toolToggleFailed', { detail: errText(e) })
+        );
       } finally {
         setMcpToolBusy(false);
       }
@@ -438,8 +445,8 @@ export function useExtensionMarket() {
         } as unknown as Partial<Settings>);
         toast.show(
           start
-            ? `已启用 MCP 服务 ${serverName}`
-            : `已停用 MCP 服务 ${serverName}`
+            ? t('extensions.toast.mcpEnabled', { name: serverName })
+            : t('extensions.toast.mcpDisabled', { name: serverName })
         );
         await refresh();
       } catch (e) {
@@ -457,7 +464,11 @@ export function useExtensionMarket() {
     setPlugins((prev) =>
       prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p))
     );
-    toast.show(enabled ? '插件已启用' : '插件已停用');
+    toast.show(
+      enabled
+        ? t('settings.extensions.pluginEnabledToast')
+        : t('settings.extensions.pluginDisabledToast')
+    );
   }, []);
 
   return {

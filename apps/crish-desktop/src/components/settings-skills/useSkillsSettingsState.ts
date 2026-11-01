@@ -5,6 +5,7 @@ import type { SharedSkillApi } from './skillsSettingsTypes';
 export {
   ACTIVATION_OPTIONS,
   ACTIVATION_LABEL,
+  ACTIVATION_LABEL_KEY,
   EMPTY_INSTALL_HINT,
   EMPTY_FILTER_HINT,
   SCOPE_ALL,

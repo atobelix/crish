@@ -137,7 +137,8 @@ describe('SettingsScheduleTab I4 死皮拉回', () => {
     fireEvent.click(manual);
     expect(manual).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('form', { name: '新建定时任务' })).toBeTruthy();
-    expect(screen.getByPlaceholderText('名称')).toBeTruthy();
+    expect(screen.getByLabelText('任务名称')).toBeTruthy();
+    expect(screen.getByPlaceholderText('描述按计划执行的内容…')).toBeTruthy();
   });
 
   it('空态「暂无计划任务」走产品卡片，不是 fieldset', async () => {

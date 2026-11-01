@@ -93,6 +93,13 @@ describe('ScheduledTasksPanel', () => {
       fireEvent.click(deleteBtn);
     });
 
+    // 删除需二次确认：点删除只弹确认框，确认后才真正删除
+    expect(deleteWorkflow).not.toHaveBeenCalled();
+    const confirmBtn = screen.getByRole('button', { name: '确认删除' });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
     expect(deleteWorkflow).toHaveBeenCalledWith('wf-1');
   });
 

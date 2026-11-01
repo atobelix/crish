@@ -65,12 +65,33 @@ export function saveWorkflowRunsCache(list: WorkflowRunEntry[]) {
 
 export type ScheduleFilter = 'all' | 'enabled' | 'paused' | 'manual' | 'timed';
 
-export const FILTER_OPTIONS: { id: ScheduleFilter; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'enabled', label: '启用中' },
-  { id: 'paused', label: '暂停' },
-  { id: 'manual', label: '仅手动' },
-  { id: 'timed', label: '按时间' },
+/** 筛选项：labelKey 指向 settings.schedule.* 词条，fallback 为中文兜底。 */
+export const FILTER_OPTIONS: {
+  id: ScheduleFilter;
+  labelKey: string;
+  fallback: string;
+}[] = [
+  { id: 'all', labelKey: 'settings.schedule.filterAll', fallback: '全部' },
+  {
+    id: 'enabled',
+    labelKey: 'settings.schedule.filterEnabled',
+    fallback: '启用中',
+  },
+  {
+    id: 'paused',
+    labelKey: 'settings.schedule.filterPaused',
+    fallback: '暂停',
+  },
+  {
+    id: 'manual',
+    labelKey: 'settings.schedule.filterManual',
+    fallback: '仅手动',
+  },
+  {
+    id: 'timed',
+    labelKey: 'settings.schedule.filterTimed',
+    fallback: '按时间',
+  },
 ];
 
 function scheduleTypeOf(w: WorkflowDefinition): string {

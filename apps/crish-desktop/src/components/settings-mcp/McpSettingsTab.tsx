@@ -13,6 +13,7 @@ import { McpServerList } from './McpServerList';
 import { McpServerForm } from './McpServerForm';
 import { useMcpSettings } from './useMcpSettings';
 import { useMcpServerListState } from './useMcpServerListState';
+import { useI18n } from '../../i18n';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -29,6 +30,7 @@ const kindClassMap: Record<'ok' | 'warn' | 'err' | 'idle', string | undefined> =
 export const McpSettingsTab: React.FC<Props> = ({
   onBlockingOverlayChange: _onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast: _showToast } = useToast();
   const {
     demo,
@@ -108,7 +110,11 @@ export const McpSettingsTab: React.FC<Props> = ({
   });
 
   const stopHint =
-    controlHint || '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接';
+    controlHint ||
+    t(
+      'settings.mcp.startStopHint',
+      '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接'
+    );
   const filterActive = filter.trim().length > 0;
   const demoEnabledCount = demoServers.filter(
     (s) => demoEnabled[s.id] !== false
@@ -118,20 +124,23 @@ export const McpSettingsTab: React.FC<Props> = ({
   if (demo) {
     return (
       <SettingsPage
-        title="扩展服务"
+        title={t('settings.mcp.pageTitle', 'MCP 服务')}
         meta={
           <div className={`${styles.mcpHeadStats} mcp-head-stats`}>
             <span
               className={`${styles.mcpStatusPill} mcp-status-pill is-demo`}
               aria-live="polite"
             >
-              演示模式
+              {t('settings.mcp.demoMode', '演示模式')}
             </span>
             <span
               className={`${styles.mcpStatusPill} mcp-status-pill`}
               aria-live="polite"
             >
-              {demoEnabledCount} 个启用 / 共 {demoServers.length} 个
+              {t('settings.mcp.demoCount', '{enabled} 个启用 / 共 {total} 个', {
+                enabled: demoEnabledCount,
+                total: demoServers.length,
+              })}
             </span>
           </div>
         }
@@ -163,54 +172,51 @@ export const McpSettingsTab: React.FC<Props> = ({
   }
 
   /* ───────── 正式 / 引擎模式 ───────── */
+  const readinessKind = status?.readiness
+    ? mcpStateKind(status.readiness)
+    : null;
+  const statusParts = [
+    status?.configured
+      ? t('settings.mcp.configured', '已配置')
+      : t('settings.mcp.unconfigured', '未配置'),
+    ...(status?.readiness ? [mcpStateLabel(status.readiness)] : []),
+    t('settings.mcp.serverCount', '服务 {count}', {
+      count: servers.length,
+    }),
+  ];
+  const statusTooltip = status?.readiness
+    ? t('settings.mcp.readinessTooltip', '就绪：{state}', {
+        state: mcpStateLabel(status.readiness),
+      })
+    : status?.configured
+      ? t('settings.mcp.configuredTooltip', '引擎已配置扩展服务')
+      : t('settings.mcp.unconfiguredTooltip', '引擎侧未配置扩展服务');
   return (
     <SettingsPage
-      title="扩展服务"
+      title={t('settings.mcp.pageTitle', 'MCP 服务')}
       meta={
         <div className={`${styles.mcpHeadStats} mcp-head-stats`}>
-          <Tooltip
-            content={
-              status?.configured ? '引擎已配置扩展服务' : '引擎侧未配置扩展服务'
-            }
-          >
+          <Tooltip content={statusTooltip}>
             <span
-              className={`${styles.mcpStatusPill} mcp-status-pill ${status?.configured ? `${styles.isOn} is-on` : ''}`}
+              className={`${styles.mcpStatusPill} mcp-status-pill ${
+                readinessKind
+                  ? `kind-${readinessKind} ${kindClassMap[readinessKind] ?? ''}`
+                  : status?.configured
+                    ? `${styles.isOn} is-on`
+                    : ''
+              }`}
             >
-              {status?.configured ? '已配置' : '未配置'}
-            </span>
-          </Tooltip>
-          {status?.readiness ? (
-            <Tooltip content={`就绪：${mcpStateLabel(status.readiness)}`}>
-              {(() => {
-                const k = mcpStateKind(status.readiness);
-                return (
-                  <span
-                    className={`${styles.mcpStatusPill} mcp-status-pill kind-${k} ${kindClassMap[k] ?? ''}`}
-                  >
-                    {mcpStateLabel(status.readiness)}
-                  </span>
-                );
-              })()}
-            </Tooltip>
-          ) : null}
-          <Tooltip content={`共 ${servers.length} 个服务`}>
-            <span className={`${styles.mcpStatusPill} mcp-status-pill`}>
-              服务 {servers.length}
-            </span>
-          </Tooltip>
-          <Tooltip content={canStartStop ? '可从界面启动/停止' : stopHint}>
-            <span
-              className={`${styles.mcpStatusPill} mcp-status-pill ${canStartStop ? `${styles.isOn} is-on` : ''}`}
-            >
-              {canStartStop ? '启停可用' : '启停不可用'}
+              {statusParts.join(' · ')}
             </span>
           </Tooltip>
           {filterActive ? (
             <span
               className={`${styles.mcpStatusPill} mcp-status-pill`}
-              aria-label="当前筛选结果数"
+              aria-label={t('settings.mcp.filterResultAria', '当前筛选结果数')}
             >
-              显示 {filtered.length}
+              {t('settings.mcp.showingCount', '显示 {count}', {
+                count: filtered.length,
+              })}
             </span>
           ) : null}
           {loading ? (
@@ -218,12 +224,18 @@ export const McpSettingsTab: React.FC<Props> = ({
               className={`${styles.mcpStatusPill} mcp-status-pill`}
               aria-busy="true"
             >
-              刷新中…
+              {t('settings.mcp.refreshing', '刷新中…')}
             </span>
           ) : null}
         </div>
       }
     >
+      {!canStartStop ? (
+        <div className={styles.mcpHintLine} role="note">
+          {stopHint}
+        </div>
+      ) : null}
+
       {error ? (
         <Tooltip content={error}>
           <div className={`${styles.mcpErrorLine} mcp-error-line`} role="alert">

@@ -91,7 +91,7 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-2_5);
-  min-height: 36px;
+  min-height: 36px; /* 刻度外裸值：技能页工具栏本地档（与本页 36 输入档同高），无既有档，授权保留 */
 }
 
 .skillsToolbarFocus .skillsScopeSelect,
@@ -282,15 +282,15 @@
 }
 
 .skillsSearch input {
-  height: 36px;
-  min-height: 36px;
+  height: 36px; /* 刻度外裸值：技能页输入框本地档（36），无既有档，授权保留 */
+  min-height: 36px; /* 刻度外裸值：同上 */
   border-radius: var(--radius-md);
 }
 
 .skillsScopeSelect :global(button),
 .skillsScopeSelect :global(.trigger) {
-  height: 36px;
-  min-height: 36px;
+  height: 36px; /* 刻度外裸值：技能页输入框本地档（36），无既有档，授权保留 */
+  min-height: 36px; /* 刻度外裸值：同上 */
   border-radius: var(--radius-md);
 }
 
@@ -405,15 +405,15 @@
 
 .skillsRailItemDense {
   align-items: center;
-  min-height: 32px;
+  min-height: var(--control-height-md);
   padding: var(--space-1) var(--space-2);
   gap: var(--space-1_5);
   border-radius: var(--radius-md);
 }
 
 .skillsRailItemDense .skillsRailIcon {
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   border-radius: var(--radius-md);
   border: none;
 }
@@ -435,8 +435,8 @@
 .skillsRailItemDense .skillsActDot {
   position: static;
   flex-shrink: 0;
-  width: 6px;
-  height: 6px;
+  width: var(--space-1_5);
+  height: var(--space-1_5);
   margin-left: var(--space-0_5);
 }
 
@@ -456,8 +456,8 @@
 .skillsRailIcon,
 .cardCover,
 .cardCoverIcon {
-  width: 28px;
-  height: 28px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-md);
   background: transparent;
   border: var(--hairline-width) solid var(--border-subtle);
@@ -511,7 +511,7 @@
   right: var(--space-2_5);
   top: var(--space-3_5);
   width: 7px;
-  height: 7px;
+  height: 7px; /* 刻度外裸值：状态圆点固定几何，无既有档，授权保留 */
   border-radius: 50%;
   background: var(--text-tertiary);
 }
@@ -608,8 +608,8 @@
 }
 
 .skillsExtraField input {
-  height: 36px;
-  min-height: 36px;
+  height: 36px; /* 刻度外裸值：技能页输入框本地档（36），无既有档，授权保留 */
+  min-height: 36px; /* 刻度外裸值：同上 */
   border-radius: var(--radius-md);
 }
 
@@ -729,36 +729,10 @@
 }
 
 .skillsDetailPath,
-.skillsPathBtn {
-  margin-top: var(--space-1_5);
-  font-size: var(--font-size-xs);
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-  word-break: break-all;
-}
-
-.skillsPathBtn {
-  display: inline-flex;
-  align-items: flex-start;
-  gap: var(--space-1_5);
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-mono);
-}
-
-.skillsPathBtn:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 .skillsPreviewBody,
 .skillsPreview {
   flex: 1;
-  min-height: 140px;
+  min-height: 140px; /* 刻度外裸值：预览区内容下限，无既有档，授权保留 */
   padding: 0;
   border: none;
   border-radius: 0;
@@ -771,7 +745,7 @@
 
 .skillsRaw {
   flex: 1;
-  min-height: 140px;
+  min-height: 140px; /* 刻度外裸值：原文区内容下限，无既有档，授权保留 */
   margin: 0;
   padding: var(--space-2) 0;
   border: none;

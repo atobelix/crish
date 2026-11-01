@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
+import { t } from '../../i18n';
 import {
   discoverSkills,
   getExtraSkillDirs,
@@ -19,6 +20,7 @@ import { clientApi } from '../../api/clientApi';
 import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
 import {
   ACTIVATION_LABEL,
+  ACTIVATION_LABEL_KEY,
   SCOPE_ALL,
   SCOPE_GLOBAL,
   errText,
@@ -124,7 +126,7 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
           /* ignore */
         }
       } catch (e) {
-        const msg = `扫描技能失败：${errText(e)}`;
+        const msg = t('settings.skills.scanFailed', { detail: errText(e) });
         setLoadError(msg);
         toast.show(msg);
       } finally {
@@ -156,8 +158,8 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
 
   const scopeSelectOptions = useMemo(() => {
     const opts: { value: string; label: string; hint?: string }[] = [
-      { value: SCOPE_ALL, label: '全部' },
-      { value: SCOPE_GLOBAL, label: '全局' },
+      { value: SCOPE_ALL, label: t('settings.skills.scopeAll', '全部') },
+      { value: SCOPE_GLOBAL, label: t('settings.skills.scopeGlobal', '全局') },
     ];
     for (const p of scopeProjects) {
       opts.push({
@@ -234,7 +236,7 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
         toast.show(formatEngineDegradeToast(r.error));
       }
     } catch (e) {
-      toast.show(`更新失败：${errText(e)}`);
+      toast.show(t('settings.skills.updateFailed', { detail: errText(e) }));
     } finally {
       setBusyId(null);
     }
@@ -253,7 +255,10 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
     setBatchConfirm(null);
     setBatchBusy(true);
     let fail = 0;
-    const label = ACTIVATION_LABEL[activation];
+    const label = t(
+      ACTIVATION_LABEL_KEY[activation],
+      ACTIVATION_LABEL[activation]
+    );
     try {
       for (let i = 0; i < targets.length; i++) {
         const s = targets[i]!;
@@ -270,8 +275,12 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
       if (fail > 0) {
         toast.show(
           fail === targets.length
-            ? `${label}失败：全部 ${fail} 个`
-            : `${label}部分失败：${fail}/${targets.length}`
+            ? t('settings.skills.batchFailedAll', { label, count: fail })
+            : t('settings.skills.batchFailedPartial', {
+                label,
+                fail,
+                total: targets.length,
+              })
         );
       }
     } finally {
@@ -287,12 +296,15 @@ export function useSkillList(api: SharedSkillApi & UseSkillListApi) {
       if (r.fail > 0) {
         toast.show(
           r.ok === 0
-            ? `同步失败：全部 ${r.fail} 个`
-            : `同步部分失败：${r.fail}/${r.ok + r.fail}`
+            ? t('settings.skills.syncFailedAll', { count: r.fail })
+            : t('settings.skills.syncFailedPartial', {
+                fail: r.fail,
+                total: r.ok + r.fail,
+              })
         );
       }
     } catch (e) {
-      toast.show(`同步失败：${errText(e)}`);
+      toast.show(t('settings.skills.syncFailed', { detail: errText(e) }));
     } finally {
       setSyncBusy(false);
     }

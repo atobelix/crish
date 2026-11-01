@@ -8,6 +8,7 @@ import {
 import { mcpStateLabel } from '../../api/mcpApi';
 import type { ExpandMode } from './types';
 import { Button, Switch, Tooltip } from '@/components/ui';
+import { useI18n } from '../../i18n';
 
 /** MCP 工具区展示态（与 ExtensionCardMcpProps 同源，子组件按需消费）。 */
 export interface McpToolsSectionStateProps {
@@ -42,6 +43,7 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
   state,
   actions,
 }) => {
+  const { t } = useI18n();
   const { expandedMcpTools, toolTick, mcpServerBusy, mcpToolBusy } = state;
   const {
     onToggleMcpServer,
@@ -61,22 +63,35 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
           <div className={styles.detailMeta}>
             {[
               installedItem.mcpState
-                ? `状态 ${mcpStateLabel(installedItem.mcpState)}`
+                ? t('settings.extensions.mcpStateLabel', '状态 {state}', {
+                    state: mcpStateLabel(installedItem.mcpState),
+                  })
                 : null,
               installedItem.mcpTransport
-                ? `传输 ${installedItem.mcpTransport}`
+                ? t(
+                    'settings.extensions.mcpTransportLabel',
+                    '传输 {transport}',
+                    { transport: installedItem.mcpTransport }
+                  )
                 : null,
               installedItem.mcpTools?.length
-                ? `${installedItem.mcpTools.length} 个工具`
+                ? t('settings.extensions.mcpToolCount', '{count} 个工具', {
+                    count: installedItem.mcpTools.length,
+                  })
                 : null,
             ]
               .filter(Boolean)
-              .join(' · ') || '本机 MCP 服务'}
+              .join(' · ') ||
+              t('settings.extensions.mcpLocalService', '本机 MCP 服务')}
           </div>
         ) : (
           <p className={styles.detailDesc}>
             {entry?.description}
-            {entry?.installRef ? `\n引用：${entry.installRef}` : ''}
+            {entry?.installRef
+              ? `\n${t('settings.extensions.mcpInstallRef', '引用：{ref}', {
+                  ref: entry.installRef,
+                })}`
+              : ''}
           </p>
         )}
         {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
@@ -95,8 +110,14 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
                   onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}
                 >
                   {expandedMcpTools.has(installedItem.id)
-                    ? '收起'
-                    : `展开全部（${installedItem.mcpTools.length}）`}
+                    ? t('settings.extensions.collapse', '收起')
+                    : t(
+                        'settings.extensions.expandAll',
+                        '展开全部（{count}）',
+                        {
+                          count: installedItem.mcpTools.length,
+                        }
+                      )}
                 </Button>
               </li>
             ) : null}
@@ -117,7 +138,9 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
             disabled={mcpServerBusy}
             onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, true)}
           >
-            {mcpServerBusy ? '…' : '启动服务'}
+            {mcpServerBusy
+              ? '…'
+              : t('settings.extensions.startService', '启动服务')}
           </Button>
           <Button
             type="button"
@@ -128,7 +151,7 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
               void onToggleMcpServer?.(installedItem.mcpId!, false)
             }
           >
-            停止服务
+            {t('settings.extensions.stopService', '停止服务')}
           </Button>
           <Button
             type="button"
@@ -136,16 +159,23 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
             size="sm"
             onClick={() => onSetManage?.('mcp')}
           >
-            高级管理
+            {t('settings.extensions.advancedManage', '高级管理')}
           </Button>
         </div>
       ) : (
         <p className={styles.detailDesc}>
-          安装并连接后可在此启停服务与开关工具。
+          {t(
+            'settings.extensions.mcpConfigHint',
+            '安装并连接后可在此启停服务与开关工具。'
+          )}
         </p>
       )}
       {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
-        <div className={styles.toolList} role="list" aria-label="MCP 工具">
+        <div
+          className={styles.toolList}
+          role="list"
+          aria-label={t('settings.extensions.mcpToolsAria', 'MCP 工具')}
+        >
           {installedItem.mcpTools
             .slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12)
             .map((tool) => {
@@ -165,7 +195,19 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
                     <Switch
                       checked={!off}
                       disabled={mcpToolBusy}
-                      aria-label={`${off ? '启用' : '禁用'}工具 ${tool}`}
+                      aria-label={
+                        off
+                          ? t(
+                              'settings.extensions.toolEnableAria',
+                              '启用工具 {tool}',
+                              { tool }
+                            )
+                          : t(
+                              'settings.extensions.toolDisableAria',
+                              '禁用工具 {tool}',
+                              { tool }
+                            )
+                      }
                       onCheckedChange={(checked) => {
                         void onToggleMcpTool?.(serverId, tool, checked);
                       }}
@@ -183,15 +225,20 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
                 onClick={() => onToggleExpandMcpTools?.(installedItem!.id)}
               >
                 {expandedMcpTools.has(installedItem.id)
-                  ? '收起'
-                  : `展开全部（${installedItem.mcpTools.length}）`}
+                  ? t('settings.extensions.collapse', '收起')
+                  : t('settings.extensions.expandAll', '展开全部（{count}）', {
+                      count: installedItem.mcpTools.length,
+                    })}
               </Button>
             </div>
           ) : null}
         </div>
       ) : installedItem ? (
         <div className={styles.emptyCompact} role="status">
-          暂无上报工具 · 启动服务后刷新
+          {t(
+            'settings.extensions.noToolsReported',
+            '暂无上报工具 · 启动服务后刷新'
+          )}
         </div>
       ) : null}
     </div>

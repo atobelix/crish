@@ -15,6 +15,7 @@ import { Button, Menu, Tooltip } from '@/components/ui';
 import { errText } from './useSkillsSettingsState';
 import type { DesktopSkill } from '../../api/skillsApi';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 /** 批量启用/禁用域状态（T4-9c Props 收敛：6 字段 → 1 对象） */
 export type SkillsBatchState = {
@@ -56,6 +57,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   handleSyncAll,
   refresh,
 }) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const {
     batchConfirm,
@@ -67,7 +69,9 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   const options = [
     {
       id: 'sync',
-      label: syncBusy ? '同步中…' : '同步到引擎',
+      label: syncBusy
+        ? t('settings.skills.syncing', '同步中…')
+        : t('settings.skills.syncToEngine', '同步到引擎'),
       disabled: syncBusy || skills.length === 0,
       onClick: () => {
         setMoreOpen(false);
@@ -76,7 +80,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
     },
     {
       id: 'discover',
-      label: '发现新技能',
+      label: t('settings.skills.discoverNew', '发现新技能'),
       disabled: loading || discoverBusy,
       onClick: () => {
         setMoreOpen(false);
@@ -85,7 +89,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
     },
     {
       id: 'refresh',
-      label: '刷新列表',
+      label: t('settings.skills.refreshList', '刷新列表'),
       disabled: loading,
       onClick: () => {
         setMoreOpen(false);
@@ -94,7 +98,9 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
     },
     {
       id: 'toggle-commands',
-      label: enableCommands ? '关闭快捷命令' : '开启快捷命令',
+      label: enableCommands
+        ? t('settings.skills.commandsOff', '关闭快捷命令')
+        : t('settings.skills.commandsOn', '开启快捷命令'),
       onClick: () => {
         const next = !enableCommands;
         const prev = enableCommands;
@@ -109,7 +115,15 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
           })
           .catch((err) => {
             setEnableCommands(prev);
-            showToast(`快捷命令保存失败：${errText(err)}`);
+            showToast(
+              t(
+                'settings.skills.commandsSaveFailed',
+                '快捷命令保存失败：{detail}',
+                {
+                  detail: errText(err),
+                }
+              )
+            );
           })
           .finally(() => {
             window.dispatchEvent(new CustomEvent('crish-skills-changed'));
@@ -120,8 +134,10 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
       id: 'enable-all',
       label:
         batchConfirm === 'enabled'
-          ? `再点确认全启（${batchEnableCount}）`
-          : '全部启用',
+          ? t('settings.skills.confirmEnableAll', '再点确认全启（{count}）', {
+              count: batchEnableCount,
+            })
+          : t('settings.skills.enableAll', '全部启用'),
       disabled: batchBusy || filtered.length === 0,
       onClick: () => void runBatchActivation('enabled'),
     },
@@ -129,8 +145,10 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
       id: 'disable-all',
       label:
         batchConfirm === 'disabled'
-          ? `再点确认全禁（${batchDisableCount}）`
-          : '全部禁用',
+          ? t('settings.skills.confirmDisableAll', '再点确认全禁（{count}）', {
+              count: batchDisableCount,
+            })
+          : t('settings.skills.disableAll', '全部禁用'),
       disabled: batchBusy || filtered.length === 0,
       onClick: () => void runBatchActivation('disabled'),
     },
@@ -141,7 +159,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
       <Menu
         openState={{ open: moreOpen, onOpenChange: setMoreOpen }}
         trigger={
-          <Tooltip content="更多操作">
+          <Tooltip content={t('settings.skills.moreActions', '更多操作')}>
             <Button
               type="button"
               variant="ghost"
@@ -149,7 +167,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
               aria-expanded={moreOpen}
               aria-controls={moreMenuId}
               aria-haspopup="menu"
-              aria-label="更多操作"
+              aria-label={t('settings.skills.moreActions', '更多操作')}
               icon={<AppIcon name="more-horizontal" size={16} aria-hidden />}
             />
           </Tooltip>
@@ -157,7 +175,10 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
         options={options}
         panel={{ contentClassName: styles.skillsMoreMenuBase }}
       >
-        <div id={moreMenuId} aria-label="更多技能操作">
+        <div
+          id={moreMenuId}
+          aria-label={t('settings.skills.moreMenuAria', '更多技能操作')}
+        >
           {options.map((opt) => {
             const isConfirmEnabled =
               opt.id === 'enable-all' && batchConfirm === 'enabled';

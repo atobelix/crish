@@ -220,7 +220,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             value={filter}
             options={FILTER_OPTIONS.map((opt) => ({
               value: opt.id,
-              label: opt.label,
+              label: t(opt.labelKey, opt.fallback),
             }))}
             onChange={(v) => setFilter(v as ScheduleFilter)}
           />
@@ -282,7 +282,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             draft={wfDraft}
             busy={busy}
             isEditing={false}
-            workspacePath={workspacePath}
             onDraftChange={setWfDraft}
             onApplyPreset={applyPreset}
             onNameBlur={onNameBlur}
@@ -324,20 +323,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({
         </SettingsSection>
 
         <SettingsSection
-          title={
-            <div className={styles.sectionTitleRow}>
-              <span>
-                {t('settings.schedule.runHistorySection', '运行历史记录')}
-              </span>
-              {runs.length > 0 && (
-                <span className={styles.sectionCount}>
-                  {t('settings.schedule.runCount', '共 {count} 次运行', {
-                    count: runs.length,
-                  })}
-                </span>
-              )}
-            </div>
-          }
+          title={t('settings.schedule.runHistorySection', '运行历史记录')}
         >
           <SettingsCard>
             <RunHistoryList

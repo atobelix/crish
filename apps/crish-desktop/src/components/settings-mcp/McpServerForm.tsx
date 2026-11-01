@@ -3,6 +3,7 @@ import React from 'react';
 import styles from './McpSettingsTab.module.css';
 import { Button, Input, Select, Tooltip } from '@/components/ui';
 import { isDemoTransport, type DemoTransport } from './types';
+import { useI18n } from '../../i18n';
 
 export type McpServerFormProps = {
   newName: string;
@@ -33,12 +34,13 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
   setShowAdd,
   onAddDemo,
 }) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   return (
     <div
       className={`${styles.mcpAddBox} mcp-add-box`}
       role="form"
-      aria-label="注册演示服务"
+      aria-label={t('settings.mcp.addFormAria', '注册演示服务')}
     >
       <div
         className={`${styles.mcpAddRow} ${styles.mcpAddRowCoverContent} mcp-add-row`}
@@ -48,8 +50,8 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
             size="sm"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="名称"
-            aria-label="名称"
+            placeholder={t('settings.mcp.formName', '名称')}
+            aria-label={t('settings.mcp.formName', '名称')}
             aria-required
             autoFocus
           />
@@ -65,44 +67,46 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
             if (isDemoTransport(v)) {
               setNewType(v);
             } else {
-              showToast('未知的传输类型');
+              showToast(t('settings.mcp.unknownTransport', '未知的传输类型'));
             }
           }}
         />
         {newType === 'stdio' ? (
           <>
-            <Tooltip content="stdio 启动命令">
+            <Tooltip
+              content={t('settings.mcp.formCommandTooltip', 'stdio 启动命令')}
+            >
               <div className={styles.mcpAddField}>
                 <Input
                   size="sm"
                   value={newCmd}
                   onChange={(e) => setNewCmd(e.target.value)}
-                  placeholder="命令"
-                  aria-label="启动命令"
+                  placeholder={t('settings.mcp.formCommand', '命令')}
+                  aria-label={t('settings.mcp.formCommandAria', '启动命令')}
                 />
               </div>
             </Tooltip>
-            <Tooltip content="参数（逗号分隔）">
+            <Tooltip content={t('settings.mcp.formArgs', '参数（逗号分隔）')}>
               <div className={styles.mcpAddField}>
                 <Input
                   size="sm"
                   value={newArgs}
                   onChange={(e) => setNewArgs(e.target.value)}
-                  placeholder="参数（逗号分隔）"
-                  aria-label="参数，逗号分隔"
+                  placeholder={t('settings.mcp.formArgs', '参数（逗号分隔）')}
+                  aria-label={t('settings.mcp.formArgsAria', '参数，逗号分隔')}
                 />
               </div>
             </Tooltip>
           </>
         ) : (
-          <Tooltip content="SSE 端点地址">
+          <Tooltip content={t('settings.mcp.formUrlTooltip', 'SSE 端点地址')}>
             <div className={`${styles.mcpAddField} ${styles.mcpAddUrl}`}>
               <Input
                 size="sm"
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
-                placeholder="端点 URL"
-                aria-label="端点 URL"
+                placeholder={t('settings.mcp.formUrl', '端点 URL')}
+                aria-label={t('settings.mcp.formUrl', '端点 URL')}
               />
             </div>
           </Tooltip>
@@ -112,12 +116,16 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
           variant="ghost"
           size="sm"
           onClick={() => setShowAdd(false)}
-          aria-label="取消添加"
+          aria-label={t('settings.mcp.formCancelAria', '取消添加')}
         >
-          取消
+          {t('settings.mcp.formCancel', '取消')}
         </Button>
         <Tooltip
-          content={!newName.trim() ? '请先填写名称' : '保存到本地演示列表'}
+          content={
+            !newName.trim()
+              ? t('settings.mcp.formNameRequiredTooltip', '请先填写名称')
+              : t('settings.mcp.formSaveTooltip', '保存到本地演示列表')
+          }
         >
           <Button
             type="button"
@@ -125,9 +133,9 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
             size="sm"
             disabled={!newName.trim()}
             onClick={() => void onAddDemo()}
-            aria-label="保存演示服务"
+            aria-label={t('settings.mcp.formSaveAria', '保存演示服务')}
           >
-            保存
+            {t('settings.mcp.formSave', '保存')}
           </Button>
         </Tooltip>
       </div>

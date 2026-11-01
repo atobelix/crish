@@ -5,7 +5,7 @@ import {
   type InstalledExtension,
   kindLabel,
 } from '../../api/extensionCatalog';
-import { Badge, Button, Dialog, Tooltip } from '@/components/ui';
+import { Badge, Button, Dialog, Switch, Tooltip } from '@/components/ui';
 import { AppIcon, type IconName } from '@/components/ui/icons';
 import { isPluginCardItem } from './ExtensionCardIdentity';
 import {
@@ -55,9 +55,9 @@ export function getExtensionIcon(
 }
 
 function sourceLabel(source: string): string {
-  if (source === 'official') return t('badge.official');
-  if (source === 'community') return t('badge.thirdParty');
-  return t('badge.machine');
+  if (source === 'official') return t('extensions.badge.official');
+  if (source === 'community') return t('extensions.badge.thirdParty');
+  return t('extensions.badge.machine');
 }
 
 export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
@@ -99,7 +99,7 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
       size={dialogSize}
       open={open}
       onClose={onClose}
-      ariaLabel={`${item.name} 详情`}
+      ariaLabel={t('settings.extensions.detailAria', { name: item.name })}
       role="dialog"
       showCloseButton={false}
     >
@@ -122,21 +122,25 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
               </Badge>
               <div className={styles.headerActions}>
                 {scope === 'installed' && pluginCard ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    active={pluginCard.pluginEnabled}
-                    aria-pressed={pluginCard.pluginEnabled}
-                    onClick={() =>
-                      onTogglePlugin?.(
-                        pluginCard.pluginId!,
-                        !pluginCard.pluginEnabled
-                      )
+                  <Switch
+                    checked={pluginCard.pluginEnabled}
+                    aria-label={
+                      pluginCard.pluginEnabled
+                        ? t(
+                            'settings.extensions.pluginDisableAria',
+                            '停用插件 {name}',
+                            { name: pluginCard.name }
+                          )
+                        : t(
+                            'settings.extensions.pluginEnableAria',
+                            '启用插件 {name}',
+                            { name: pluginCard.name }
+                          )
                     }
-                  >
-                    {pluginCard.pluginEnabled ? '已启用' : '已停用'}
-                  </Button>
+                    onCheckedChange={(checked) =>
+                      onTogglePlugin?.(pluginCard.pluginId!, checked)
+                    }
+                  />
                 ) : null}
 
                 {scope === 'catalog' && catalogEntry ? (
@@ -147,7 +151,9 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                     disabled={busyId === catalogEntry.id}
                     onClick={() => void onInstallCatalog?.(catalogEntry)}
                   >
-                    {busyId === catalogEntry.id ? '安装中…' : '安装'}
+                    {busyId === catalogEntry.id
+                      ? t('settings.extensions.installing', '安装中…')
+                      : t('settings.extensions.install', '安装')}
                   </Button>
                 ) : null}
 
@@ -161,7 +167,7 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                       onClose();
                     }}
                   >
-                    卸载
+                    {t('settings.extensions.uninstall', '卸载')}
                   </Button>
                 ) : null}
               </div>
@@ -173,16 +179,17 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
               ) : null}
             </div>
             <p className={styles.description}>
-              {item.description || '暂无描述信息'}
+              {item.description ||
+                t('settings.extensions.noDescription', '暂无描述信息')}
             </p>
           </div>
-          <Tooltip content="关闭">
+          <Tooltip content={t('settings.extensions.close', '关闭')}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={onClose}
-              aria-label="关闭弹窗"
+              aria-label={t('settings.extensions.closeDialogAria', '关闭弹窗')}
             >
               <AppIcon name="x" size={14} />
             </Button>
@@ -201,14 +208,16 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                   onOpenExternalSync?.();
                 }}
               >
-                进入导入与管理
+                {t('settings.extensions.enterImport', '进入导入与管理')}
               </Button>
             </div>
           ) : null}
 
           {item.kind === 'mcp' ? (
             <div className={styles.descriptionSection}>
-              <span className={styles.sectionTitle}>MCP 服务与工具</span>
+              <span className={styles.sectionTitle}>
+                {t('settings.extensions.mcpToolsTitle', 'MCP 服务与工具')}
+              </span>
               <McpToolsSection
                 item={item}
                 mode="config"
@@ -226,7 +235,12 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
           {item.kind === 'skill' ? (
             <div className={styles.descriptionSection}>
               <div className={styles.featureCardHeader}>
-                <span className={styles.sectionTitle}>技能指令 (SKILL.md)</span>
+                <span className={styles.sectionTitle}>
+                  {t(
+                    'settings.extensions.skillDocTitle',
+                    '技能指令 (SKILL.md)'
+                  )}
+                </span>
                 {onSetManage ? (
                   <Button
                     type="button"
@@ -237,13 +251,20 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                       onSetManage('skill');
                     }}
                   >
-                    在技能中心编辑
+                    {t(
+                      'settings.extensions.editInSkillCenter',
+                      '在技能中心编辑'
+                    )}
                   </Button>
                 ) : null}
               </div>
               {'skillPath' in item && item.skillPath ? (
                 <Tooltip content={item.skillPath}>
-                  <div className={styles.infoLabel}>路径: {item.skillPath}</div>
+                  <div className={styles.infoLabel}>
+                    {t('settings.extensions.pathLabel', '路径: {path}', {
+                      path: item.skillPath,
+                    })}
+                  </div>
                 </Tooltip>
               ) : null}
               <pre className={`${styles.detailMdCoverContent} coverContent`}>
@@ -252,37 +273,62 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                   : 'skillContent' in item && item.skillContent
                     ? item.skillContent
                     : catalogEntry
-                      ? `# ${catalogEntry.name}\n\n${catalogEntry.description}\n\n安装后可在本地技能目录中查看完整 SKILL.md。`
-                      : '暂无指令内容'}
+                      ? t(
+                          'settings.extensions.catalogSkillPlaceholder',
+                          '# {name}\n\n{description}\n\n安装后可在本地技能目录中查看完整 SKILL.md。',
+                          {
+                            name: catalogEntry.name,
+                            description: catalogEntry.description,
+                          }
+                        )
+                      : t('settings.extensions.noSkillContent', '暂无指令内容')}
               </pre>
             </div>
           ) : null}
 
           {pluginCard ? (
             <div className={styles.descriptionSection}>
-              <span className={styles.sectionTitle}>插件元数据清单</span>
+              <span className={styles.sectionTitle}>
+                {t('settings.extensions.pluginMetaTitle', '插件元数据清单')}
+              </span>
               <div className={styles.infoGrid}>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>声明工具数</span>
+                  <span className={styles.infoLabel}>
+                    {t('settings.extensions.metaToolCount', '声明工具数')}
+                  </span>
                   <span className={styles.infoValue}>
-                    {pluginCard.pluginTools?.length ?? 0} 个
+                    {t('settings.extensions.metaCountUnit', '{count} 个', {
+                      count: pluginCard.pluginTools?.length ?? 0,
+                    })}
                   </span>
                 </div>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>监听生命周期</span>
+                  <span className={styles.infoLabel}>
+                    {t('settings.extensions.metaHooks', '监听生命周期')}
+                  </span>
                   <span className={styles.infoValue}>
-                    {pluginCard.pluginHooks?.join(', ') || '无'}
+                    {pluginCard.pluginHooks?.join(', ') ||
+                      t('settings.extensions.metaNone', '无')}
                   </span>
                 </div>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>信任级别</span>
+                  <span className={styles.infoLabel}>
+                    {t('settings.extensions.metaTrust', '信任级别')}
+                  </span>
                   <span className={styles.infoValue}>
                     {pluginCard.pluginTrustLevel || 'normal'}
                   </span>
                 </div>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>安装类型</span>
-                  <span className={styles.infoValue}>内置官方分发</span>
+                  <span className={styles.infoLabel}>
+                    {t('settings.extensions.metaInstallType', '安装类型')}
+                  </span>
+                  <span className={styles.infoValue}>
+                    {t(
+                      'settings.extensions.metaInstallTypeValue',
+                      '内置官方分发'
+                    )}
+                  </span>
                 </div>
               </div>
             </div>

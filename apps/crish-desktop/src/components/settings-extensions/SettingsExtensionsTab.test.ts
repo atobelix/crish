@@ -14,7 +14,8 @@ function walkTsx(dir: string): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) out.push(...walkTsx(p));
-    else if (/\.(tsx|ts|css)$/.test(name) && !/\.test\./.test(name)) out.push(p);
+    else if (/\.(tsx|ts|css)$/.test(name) && !/\.test\./.test(name))
+      out.push(p);
   }
   return out;
 }
@@ -46,16 +47,17 @@ describe('扩展设置页控件皮契约', () => {
     const src = readSrc('SettingsExtensionsTab.tsx');
     expect(src).toContain('SegmentedControl');
     expect(src).toContain('variant="search"');
-    expect(src).toContain('aria-label="视图"');
-    expect(src).toContain('aria-label="类型"');
+    expect(src).toContain('settings.extensions.viewAria');
+    expect(src).toContain('settings.extensions.kindAria');
     expect(src).not.toMatch(/<input[^>]*type=["']search["']/);
   });
 
-  it('详情/配置/启用/安装走 ui/Button，启用钮带 active 选中态', () => {
+  it('详情/配置/安装走 ui/Button，插件启停走 Switch，卸载走 danger', () => {
     const src = readSrc('ExtensionCard.tsx');
-    expect(src).toContain('active={pluginCard.pluginEnabled}');
+    expect(src).toContain('Switch');
+    expect(src).toContain('checked={pluginCard.pluginEnabled}');
     expect(src).toContain('active={detailOpen}');
-    expect(src).toContain("variant=\"danger\"");
+    expect(src).toContain('variant="danger"');
     expect(src).toContain('安装');
     expect(src).not.toContain('settings-btn-rect');
   });

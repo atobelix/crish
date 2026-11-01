@@ -154,7 +154,7 @@
   border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 140px;
+  max-height: 140px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
   overflow-y: auto;
 }
 
@@ -168,7 +168,7 @@
   border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 180px;
+  max-height: 180px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
   overflow-y: auto;
 }
 
@@ -192,7 +192,7 @@
   border-radius: var(--radius-md);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 180px;
+  max-height: 180px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
   overflow-y: auto;
   border: none;
 }

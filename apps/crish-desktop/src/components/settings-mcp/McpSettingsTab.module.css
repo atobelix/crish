@@ -21,7 +21,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
-  min-height: 20px;
+  min-height: var(--space-5);
   min-width: 0;
 }
 
@@ -34,7 +34,7 @@
   background: var(--state-subtle);
   line-height: 1.5;
   white-space: nowrap;
-  height: 20px;
+  height: var(--space-5);
   display: inline-flex;
   align-items: center;
 }
@@ -95,6 +95,13 @@
   white-space: nowrap;
 }
 
+.mcpHintLine {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-compact);
+  margin-bottom: var(--space-2);
+}
+
 .mcpList {
   display: flex;
   flex-direction: column;
@@ -119,13 +126,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-1_5);
-  min-height: 24px;
+  min-height: var(--control-height-xs);
   min-width: 0;
 }
 
 .mcpDot {
   width: 7px;
-  height: 7px;
+  height: 7px; /* 刻度外裸值：状态圆点固定几何，无既有档，授权保留 */
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--text-tertiary);

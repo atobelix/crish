@@ -72,7 +72,7 @@
 
 .cardIconBox {
   width: 38px;
-  height: 38px;
+  height: 38px; /* 刻度外裸值：与 width 成对的卡片图标盒固定尺寸，无既有档，授权保留 */
   border-radius: var(--radius-lg);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -116,6 +116,18 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.pluginToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.pluginState {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .actions {

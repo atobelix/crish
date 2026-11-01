@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
+import { t } from '../../i18n';
 import { createProjectSkill, type DesktopSkill } from '../../api/skillsApi';
 import { skillStableId } from '../../api/skillId';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -42,7 +43,7 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
         workspacePath: getWorkspacePath(),
       });
       if (r.ok === false) {
-        toast.show(r.error || '创建技能失败');
+        toast.show(r.error || t('settings.skills.createFailed'));
         return;
       }
       const slug = createName
@@ -57,7 +58,9 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
       await api.refresh();
       api.setSelectedId(selectId);
     } catch (e) {
-      toast.show(`创建技能失败：${errText(e)}`);
+      toast.show(
+        t('settings.skills.createFailedDetail', { detail: errText(e) })
+      );
     } finally {
       setCreateBusy(false);
     }
@@ -90,7 +93,7 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
     try {
       await navigator.clipboard.writeText(cmd);
     } catch {
-      toast.show('复制失败');
+      toast.show(t('settings.skills.copyFailed'));
     }
   };
 

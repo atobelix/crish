@@ -18,6 +18,8 @@ import {
 import { Button, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { RunDetailDialog } from './RunDetailDialog';
+import { SettingsEmpty } from './SettingsUI';
+import { useI18n } from '../../i18n';
 
 export type RunHistoryEntryItem = WorkflowRunEntry & {
   /** 扩展输出内容（用于悬停查看完整输出详情） */
@@ -41,8 +43,11 @@ export type RunHistoryListProps = {
   hideHeading?: boolean;
 };
 
-function formatRunWhen(when?: string): { formatted: string; full: string } {
-  if (!when) return { formatted: '—', full: '无时间戳' };
+function formatRunWhen(
+  when: string | undefined,
+  noTimestampLabel: string
+): { formatted: string; full: string } {
+  if (!when) return { formatted: '—', full: noTimestampLabel };
   const ms = Date.parse(when);
   if (!Number.isFinite(ms)) return { formatted: when, full: when };
   const d = new Date(ms);
@@ -75,6 +80,7 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
   title,
   hideHeading = false,
 }) => {
+  const { t } = useI18n();
   const [selectedRun, setSelectedRun] = useState<WorkflowRunEntry | null>(null);
 
   const displayLimit = limit ?? (variant === 'settings' ? 30 : 10);
@@ -82,7 +88,11 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
 
   if (displayRuns.length === 0) {
     if (variant === 'settings') {
-      return <div className={styles.emptyRuns}>暂无历史运行记录</div>;
+      return (
+        <SettingsEmpty
+          title={t('settings.schedule.noRuns', '暂无历史运行记录')}
+        />
+      );
     }
     return null;
   }
@@ -99,9 +109,13 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
     >
       {!hideHeading && (
         <div className={styles.runsHeading} id="sched-runs-heading">
-          <span>{title ?? '最近运行记录'}</span>
+          <span>
+            {title ?? t('settings.schedule.runsHeading', '最近运行记录')}
+          </span>
           <span className={styles.runsHeadingCount}>
-            共 {runs.length} 次运行
+            {t('settings.schedule.runCount', '共 {count} 次运行', {
+              count: runs.length,
+            })}
           </span>
         </div>
       )}
@@ -114,7 +128,10 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
         {displayRuns.map((r) => {
           const wf = workflows.find((w) => w.id === r.workflowId);
           const wfName = wf?.name || r.workflowId;
-          const whenInfo = formatRunWhen(r.startedAt || r.scheduledFor);
+          const whenInfo = formatRunWhen(
+            r.startedAt || r.scheduledFor,
+            t('settings.schedule.noTimestamp', '无时间戳')
+          );
           const durationStr = formatDurationMini(r.durationMs);
           const statusNorm = (r.status || '').trim().toLowerCase();
 
@@ -168,7 +185,13 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
               role="button"
               tabIndex={0}
               data-testid={`run-item-${r.runId}`}
-              aria-label={`查看 ${wfName} 运行详情`}
+              aria-label={t(
+                'settings.schedule.viewRunAria',
+                '查看 {name} 运行详情',
+                {
+                  name: wfName,
+                }
+              )}
             >
               <div className={styles.runItemMain}>
                 <div className={styles.runItemTitleRow}>
@@ -193,7 +216,12 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                   {durationStr ? (
                     <>
                       <span>·</span>
-                      <Tooltip content="执行耗时">
+                      <Tooltip
+                        content={t(
+                          'settings.schedule.durationTooltip',
+                          '执行耗时'
+                        )}
+                      >
                         <span className={styles.metaChip}>{durationStr}</span>
                       </Tooltip>
                     </>
@@ -204,10 +232,10 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                       <span>·</span>
                       <span className={styles.metaChip}>
                         {r.triggerKind === 'manual'
-                          ? '手动'
+                          ? t('settings.schedule.triggerManual', '手动')
                           : r.triggerKind === 'cron'
-                            ? '计划'
-                            : '定时'}
+                            ? t('settings.schedule.triggerCron', '计划')
+                            : t('settings.schedule.triggerTimed', '定时')}
                       </span>
                     </>
                   ) : null}
@@ -229,31 +257,30 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                 className={styles.runItemActions}
                 onClick={(e) => e.stopPropagation()}
               >
-                <Tooltip content="查看运行详情与诊断">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={styles.actionBtn}
-                    aria-label={`查看 ${wfName} 运行详情`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedRun(r);
-                    }}
-                    icon={<AppIcon name="info" size={15} aria-hidden />}
-                  />
-                </Tooltip>
-
                 {onOpenRun ? (
                   <Tooltip
-                    content={r.sessionId ? '打开关联会话' : '前往专属定时会话'}
+                    content={
+                      r.sessionId
+                        ? t(
+                            'settings.schedule.openSessionTooltip',
+                            '打开关联会话'
+                          )
+                        : t(
+                            'settings.schedule.gotoSessionTooltip',
+                            '前往专属定时会话'
+                          )
+                    }
                   >
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className={styles.actionBtn}
-                      aria-label={`打开 ${wfName} 会话`}
+                      aria-label={t(
+                        'settings.schedule.openSessionAria',
+                        '打开 {name} 会话',
+                        { name: wfName }
+                      )}
                       onClick={(e) => {
                         e.stopPropagation();
                         onOpenRun(r);

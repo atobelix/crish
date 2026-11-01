@@ -2,7 +2,7 @@
  * 定时任务共享列表：settings（SettingsRow）与 chat（schedList li）双变体。
  * 行操作（启停/立即执行/删除/编辑）由 useWorkflowsState 提供回调。
  */
-import React from 'react';
+import React, { useState } from 'react';
 
 import {
   scheduleLabel,
@@ -10,7 +10,8 @@ import {
   type WorkflowDefinition,
 } from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
-import { Button, Switch, Tooltip } from '@/components/ui';
+import { Button, ConfirmDialog, Switch, Tooltip } from '@/components/ui';
+import { useI18n } from '../../i18n';
 import styles from './ScheduledTasksPanel.module.css';
 import settingsStyles from './SettingsScheduleTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
@@ -53,11 +54,40 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
   onOpenSession,
   listTitleId,
 }) => {
+  const { t } = useI18n();
+  const [pendingDelete, setPendingDelete] = useState<WorkflowDefinition | null>(
+    null
+  );
   const settingsVariant = variant === 'settings';
+
+  const deleteConfirm = (
+    <ConfirmDialog
+      open={pendingDelete !== null}
+      danger
+      title={t('settings.schedule.deleteConfirmTitle', '删除定时任务')}
+      description={
+        pendingDelete
+          ? t(
+              'settings.schedule.deleteConfirmDesc',
+              '确定要删除「{name}」吗？删除后将停止后续计划执行，此操作不可撤销。',
+              { name: pendingDelete.name }
+            )
+          : undefined
+      }
+      confirmLabel={t('settings.schedule.deleteConfirmAction', '确认删除')}
+      cancelLabel={t('common.cancel', '取消')}
+      onCancel={() => setPendingDelete(null)}
+      onConfirm={() => {
+        if (pendingDelete) onDelete(pendingDelete);
+        setPendingDelete(null);
+      }}
+    />
+  );
 
   if (settingsVariant) {
     return (
       <div>
+        {deleteConfirm}
         {emptyCopy ? (
           <SettingsRow
             title={
@@ -97,8 +127,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
               const cwdText =
                 typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
               const projectLabel = cwdText
-                ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
-                : '全局工作区';
+                ? t('settings.schedule.projectLabel', '项目: {name}', {
+                    name:
+                      cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText,
+                  })
+                : t('settings.schedule.globalWorkspace', '全局工作区');
 
               return (
                 <SettingsRow
@@ -121,7 +154,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       </Tooltip>
                       {targetSessionId ? (
                         <Tooltip
-                          content={`点击跳转至绑定会话: ${targetSessionId}`}
+                          content={t(
+                            'settings.schedule.boundSessionTooltip',
+                            '点击跳转至绑定会话: {id}',
+                            { id: targetSessionId }
+                          )}
                         >
                           {onOpenSession ? (
                             <Button
@@ -129,14 +166,18 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                               variant="ghost"
                               size="xs"
                               className={settingsStyles.sessionBadge}
-                              aria-label={`跳转至绑定会话 ${targetSessionId}`}
+                              aria-label={t(
+                                'settings.schedule.boundSessionAria',
+                                '跳转至绑定会话 {id}',
+                                { id: targetSessionId }
+                              )}
                               onClick={() => onOpenSession(targetSessionId, w)}
                             >
-                              绑定会话
+                              {t('settings.schedule.boundSession', '绑定会话')}
                             </Button>
                           ) : (
                             <span className={settingsStyles.sessionBadge}>
-                              绑定会话
+                              {t('settings.schedule.boundSession', '绑定会话')}
                             </span>
                           )}
                         </Tooltip>
@@ -145,46 +186,76 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                   }
                   control={
                     <div className={settingsStyles.controlGroup}>
-                      <Tooltip content={enabled ? '暂停' : '启用'}>
+                      <Tooltip
+                        content={
+                          enabled
+                            ? t('settings.schedule.pause', '暂停')
+                            : t('settings.schedule.enable', '启用')
+                        }
+                      >
                         <Switch
                           checked={enabled}
                           disabled={isToggling}
                           aria-label={
-                            enabled ? `暂停 ${w.name}` : `启用 ${w.name}`
+                            enabled
+                              ? t(
+                                  'settings.schedule.pauseTaskAria',
+                                  '暂停 {name}',
+                                  { name: w.name }
+                                )
+                              : t(
+                                  'settings.schedule.enableTaskAria',
+                                  '启用 {name}',
+                                  { name: w.name }
+                                )
                           }
                           onCheckedChange={() => onToggle(w)}
                         />
                       </Tooltip>
-                      <Tooltip content="编辑">
+                      <Tooltip content={t('settings.schedule.edit', '编辑')}>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label={`编辑 ${w.name}`}
+                          aria-label={t(
+                            'settings.schedule.editTaskAria',
+                            '编辑 {name}',
+                            { name: w.name }
+                          )}
                           disabled={isRowBusy}
                           onClick={() => onEdit?.(w)}
                           icon={<AppIcon name="pencil" size={16} aria-hidden />}
                         />
                       </Tooltip>
-                      <Tooltip content="立即运行">
+                      <Tooltip
+                        content={t('settings.schedule.runNow', '立即运行')}
+                      >
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label={`立即运行 · 立即执行 ${w.name}`}
+                          aria-label={t(
+                            'settings.schedule.runNowAriaExecute',
+                            '立即运行 · 立即执行 {name}',
+                            { name: w.name }
+                          )}
                           disabled={isTriggering}
                           onClick={() => onTrigger(w)}
                           icon={<AppIcon name="zap" size={16} aria-hidden />}
                         />
                       </Tooltip>
-                      <Tooltip content="删除">
+                      <Tooltip content={t('settings.schedule.delete', '删除')}>
                         <Button
                           type="button"
                           variant="danger"
                           size="sm"
-                          aria-label={`删除 ${w.name}`}
+                          aria-label={t(
+                            'settings.schedule.deleteTaskAria',
+                            '删除 {name}',
+                            { name: w.name }
+                          )}
                           disabled={isRowBusy}
-                          onClick={() => onDelete(w)}
+                          onClick={() => setPendingDelete(w)}
                           icon={<AppIcon name="trash" size={16} aria-hidden />}
                         />
                       </Tooltip>
@@ -201,6 +272,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
 
   return (
     <div>
+      {deleteConfirm}
       {emptyCopy ? (
         <div
           className={`${styles.schedEmpty}${loading ? '' : ` ${styles.schedEmptyDense}`}`}
@@ -216,7 +288,13 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
         <ul className={styles.schedList} aria-labelledby={listTitleId}>
           {workflows.map((w) => {
             const paused = w.enabled === false;
-            const toggleLabel = paused ? `启用 ${w.name}` : `暂停 ${w.name}`;
+            const toggleLabel = paused
+              ? t('settings.schedule.enableTaskAria', '启用 {name}', {
+                  name: w.name,
+                })
+              : t('settings.schedule.pauseTaskAria', '暂停 {name}', {
+                  name: w.name,
+                });
             const isToggling = togglingIds ? togglingIds.has(w.id) : busy;
             const isTriggering = triggeringIds ? triggeringIds.has(w.id) : busy;
             const isRowBusy =
@@ -230,8 +308,10 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
             const cwdText =
               typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
             const projectLabel = cwdText
-              ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
-              : '全局工作区';
+              ? t('settings.schedule.projectLabel', '项目: {name}', {
+                  name: cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText,
+                })
+              : t('settings.schedule.globalWorkspace', '全局工作区');
 
             return (
               <li
@@ -250,7 +330,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                     </span>
                     {targetSessionId ? (
                       <Tooltip
-                        content={`点击跳转至绑定会话: ${targetSessionId}`}
+                        content={t(
+                          'settings.schedule.boundSessionTooltip',
+                          '点击跳转至绑定会话: {id}',
+                          { id: targetSessionId }
+                        )}
                       >
                         {onOpenSession ? (
                           <Button
@@ -258,13 +342,19 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                             variant="ghost"
                             size="xs"
                             className={styles.sessionBadge}
-                            aria-label={`跳转至绑定会话 ${targetSessionId}`}
+                            aria-label={t(
+                              'settings.schedule.boundSessionAria',
+                              '跳转至绑定会话 {id}',
+                              { id: targetSessionId }
+                            )}
                             onClick={() => onOpenSession(targetSessionId, w)}
                           >
-                            绑定会话
+                            {t('settings.schedule.boundSession', '绑定会话')}
                           </Button>
                         ) : (
-                          <span className={styles.sessionBadge}>绑定会话</span>
+                          <span className={styles.sessionBadge}>
+                            {t('settings.schedule.boundSession', '绑定会话')}
+                          </span>
                         )}
                       </Tooltip>
                     ) : null}
@@ -273,20 +363,34 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                 <div
                   className={styles.schedItemActions}
                   role="group"
-                  aria-label={`${w.name} 操作`}
+                  aria-label={t(
+                    'settings.schedule.taskActionsAria',
+                    '{name} 操作',
+                    { name: w.name }
+                  )}
                 >
-                  <Tooltip content="立即运行">
+                  <Tooltip content={t('settings.schedule.runNow', '立即运行')}>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={`立即运行 · 立即触发 ${w.name}`}
+                      aria-label={t(
+                        'settings.schedule.runNowAriaTrigger',
+                        '立即运行 · 立即触发 {name}',
+                        { name: w.name }
+                      )}
                       disabled={isTriggering}
                       onClick={() => onTrigger(w)}
                       icon={<AppIcon name="play" size={16} aria-hidden />}
                     />
                   </Tooltip>
-                  <Tooltip content={paused ? '启用' : '暂停'}>
+                  <Tooltip
+                    content={
+                      paused
+                        ? t('settings.schedule.enable', '启用')
+                        : t('settings.schedule.pause', '暂停')
+                    }
+                  >
                     <Button
                       type="button"
                       variant="ghost"
@@ -304,25 +408,33 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       }
                     />
                   </Tooltip>
-                  <Tooltip content="编辑">
+                  <Tooltip content={t('settings.schedule.edit', '编辑')}>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={`编辑 ${w.name}`}
+                      aria-label={t(
+                        'settings.schedule.editTaskAria',
+                        '编辑 {name}',
+                        { name: w.name }
+                      )}
                       disabled={isRowBusy}
                       onClick={() => onEdit?.(w)}
                       icon={<AppIcon name="pencil" size={16} aria-hidden />}
                     />
                   </Tooltip>
-                  <Tooltip content="删除">
+                  <Tooltip content={t('settings.schedule.delete', '删除')}>
                     <Button
                       type="button"
                       variant="danger"
                       size="sm"
-                      aria-label={`删除 ${w.name}`}
+                      aria-label={t(
+                        'settings.schedule.deleteTaskAria',
+                        '删除 {name}',
+                        { name: w.name }
+                      )}
                       disabled={isRowBusy}
-                      onClick={() => onDelete(w)}
+                      onClick={() => setPendingDelete(w)}
                       icon={<AppIcon name="trash" size={16} aria-hidden />}
                     />
                   </Tooltip>

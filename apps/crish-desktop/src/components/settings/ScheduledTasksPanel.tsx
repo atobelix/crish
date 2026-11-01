@@ -292,7 +292,6 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
           draft={draft}
           busy={busy}
           isEditing={Boolean(editingWorkflow)}
-          workspacePath={currentWorkspacePath}
           onDraftChange={setDraft}
           onApplyPreset={applyPreset}
           onNameBlur={() => maybeWatchHint(draft.name)}

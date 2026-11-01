@@ -5,6 +5,8 @@ import type {
 } from '../../api/extensionCatalog';
 import { ExtensionCard } from './ExtensionCard';
 import { Button } from '@/components/ui';
+import { SettingsEmpty } from '../settings/SettingsUI';
+import { useI18n } from '../../i18n';
 import type {
   ExpandMode,
   ExpandTarget,
@@ -73,6 +75,7 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
   filters: flt,
   actions: ac,
 }) => {
+  const { t } = useI18n();
   const {
     view,
     loading,
@@ -103,29 +106,36 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
     onSelect,
     onManage,
   } = ac;
+  const filtering = Boolean(query) || kindFilter !== 'all';
   if (view === 'installed') {
     return (
-      <div className={styles.list} role="list" aria-label="已安装">
+      <div
+        className={styles.list}
+        role="list"
+        aria-label={t('settings.extensions.listInstalledAria', '已安装')}
+      >
         {loading && installedFiltered.length === 0 ? (
           <div className={styles.empty} role="status">
-            加载中…
+            {t('settings.extensions.loading', '加载中…')}
           </div>
         ) : installedFiltered.length === 0 ? (
-          <div className={styles.empty} role="status">
-            {query || kindFilter !== 'all'
-              ? '没有匹配的扩展'
-              : '还没有安装扩展'}
-            {!(query || kindFilter !== 'all') ? (
+          filtering ? (
+            <SettingsEmpty
+              title={t('settings.extensions.noMatch', '没有匹配的扩展')}
+            />
+          ) : (
+            <div className={styles.empty} role="status">
+              {t('settings.extensions.noneInstalled', '还没有安装扩展')}
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 onClick={() => onSetView('discover')}
               >
-                去发现
+                {t('settings.extensions.goDiscover', '去发现')}
               </Button>
-            ) : null}
-          </div>
+            </div>
+          )
         ) : (
           installedFiltered.map((item) => {
             const canUninstall =
@@ -170,11 +180,15 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
   }
 
   return (
-    <div className={styles.list} role="list" aria-label="发现">
+    <div
+      className={styles.list}
+      role="list"
+      aria-label={t('settings.extensions.listDiscoverAria', '发现')}
+    >
       {catalogFiltered.length === 0 ? (
-        <div className={styles.empty} role="status">
-          没有匹配的扩展
-        </div>
+        <SettingsEmpty
+          title={t('settings.extensions.noMatch', '没有匹配的扩展')}
+        />
       ) : (
         catalogFiltered.map((entry) => {
           const installedMark =

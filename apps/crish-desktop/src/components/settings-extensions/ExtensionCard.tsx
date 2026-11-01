@@ -4,7 +4,8 @@ import {
   type InstalledExtension,
 } from '../../api/extensionCatalog';
 import type { ExpandMode, ManageKind } from './types';
-import { Button } from '@/components/ui';
+import { Button, Switch, Tooltip } from '@/components/ui';
+import { useI18n } from '../../i18n';
 import { isPluginCardItem } from './ExtensionCardIdentity';
 import styles from './SettingsExtensionsTab.module.css';
 
@@ -66,6 +67,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
   mcp: _mcp,
   actions,
 }) => {
+  const { t } = useI18n();
   const { scope, item, installedMark, canUninstall, detailOpen, busyId } =
     extension;
   const {
@@ -121,21 +123,48 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
           </div>
           <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
             {pluginCard ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                active={pluginCard.pluginEnabled}
-                aria-pressed={pluginCard.pluginEnabled}
-                onClick={() =>
-                  onTogglePlugin?.(
-                    pluginCard.pluginId!,
-                    !pluginCard.pluginEnabled
-                  )
-                }
-              >
-                {pluginCard.pluginEnabled ? '已启用' : '已停用'}
-              </Button>
+              <span className={styles.pluginToggle}>
+                <Tooltip
+                  content={
+                    pluginCard.pluginEnabled
+                      ? t(
+                          'settings.extensions.pluginDisableAria',
+                          '停用插件 {name}',
+                          { name: pluginCard.name }
+                        )
+                      : t(
+                          'settings.extensions.pluginEnableAria',
+                          '启用插件 {name}',
+                          { name: pluginCard.name }
+                        )
+                  }
+                >
+                  <Switch
+                    checked={pluginCard.pluginEnabled}
+                    aria-label={
+                      pluginCard.pluginEnabled
+                        ? t(
+                            'settings.extensions.pluginDisableAria',
+                            '停用插件 {name}',
+                            { name: pluginCard.name }
+                          )
+                        : t(
+                            'settings.extensions.pluginEnableAria',
+                            '启用插件 {name}',
+                            { name: pluginCard.name }
+                          )
+                    }
+                    onCheckedChange={(checked) =>
+                      onTogglePlugin?.(pluginCard.pluginId!, checked)
+                    }
+                  />
+                </Tooltip>
+                <span className={styles.pluginState}>
+                  {pluginCard.pluginEnabled
+                    ? t('settings.extensions.enabled', '已启用')
+                    : t('settings.extensions.disabled', '已停用')}
+                </span>
+              </span>
             ) : null}
             <Button
               type="button"
@@ -150,7 +179,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 }
               }}
             >
-              管理
+              {t('settings.extensions.manage', '管理')}
             </Button>
             {canUninstall ? (
               <Button
@@ -159,7 +188,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 size="sm"
                 onClick={() => void onRemovePackage?.(installedItem)}
               >
-                卸载
+                {t('settings.extensions.uninstall', '卸载')}
               </Button>
             ) : null}
           </div>
@@ -202,7 +231,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
               active={detailOpen}
               onClick={() => onGoToConfig?.(entry.id)}
             >
-              已安装
+              {t('settings.extensions.goToConfig', '去配置')}
             </Button>
           ) : (
             <Button
@@ -212,7 +241,9 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
               disabled={busyId === entry.id}
               onClick={() => void onInstallCatalog?.(entry)}
             >
-              {busyId === entry.id ? '安装中…' : '安装'}
+              {busyId === entry.id
+                ? t('settings.extensions.installing', '安装中…')
+                : t('settings.extensions.install', '安装')}
             </Button>
           )}
         </div>

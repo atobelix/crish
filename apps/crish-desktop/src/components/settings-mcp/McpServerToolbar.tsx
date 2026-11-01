@@ -8,6 +8,7 @@ import styles from './McpSettingsTab.module.css';
 import { Button, Input, SegmentedControl, Tooltip } from '@/components/ui';
 import type { SortMode } from './types';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 export type McpServerToolbarProps = {
   demo: boolean;
@@ -33,76 +34,106 @@ export const McpServerToolbar: React.FC<McpServerToolbarProps> = ({
   onSetFilter,
   onClearFilter,
   onSetShowAdd,
-}) => (
-  <div
-    className={`${styles.mcpToolbar} mcp-toolbar`}
-    role="toolbar"
-    aria-label="扩展服务工具栏"
-  >
-    <Tooltip content={loading ? '刷新中…' : '刷新列表'}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={onRefresh}
-        disabled={loading}
-        aria-label={loading ? '刷新中' : '刷新列表'}
-        aria-busy={loading || undefined}
-        icon={
-          <AppIcon
-            name="refresh"
-            size={14}
-            className={loading ? 'spin' : undefined}
-            aria-hidden
-          />
+}) => {
+  const { t } = useI18n();
+  return (
+    <div
+      className={`${styles.mcpToolbar} mcp-toolbar`}
+      role="toolbar"
+      aria-label={t('settings.mcp.toolbarAria', '扩展服务工具栏')}
+    >
+      <Tooltip
+        content={
+          loading
+            ? t('settings.mcp.refreshing', '刷新中…')
+            : t('settings.mcp.refreshList', '刷新列表')
         }
-      />
-    </Tooltip>
-    <SegmentedControl
-      aria-label="排序方式"
-      size="sm"
-      className={styles.segment}
-      value={sortMode}
-      options={[
-        { value: 'name', label: '名称' },
-        { value: 'state', label: '状态' },
-      ]}
-      onChange={(v) => onSetSort(v as SortMode)}
-    />
-    <Tooltip content="搜索名称、标识或工具；Esc 清除">
-      <div className={styles.mcpSearch}>
-        <Input
-          variant="search"
-          size="sm"
-          placeholder="搜索名称、标识…"
-          value={filter}
-          onChange={(e) => onSetFilter(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && filter) {
-              e.preventDefault();
-              onClearFilter();
-            }
-          }}
-          clearable
-          onClear={onClearFilter}
-          aria-label="搜索扩展服务"
-        />
-      </div>
-    </Tooltip>
-    {demo ? (
-      <Tooltip content={showAdd ? '收起添加表单' : '添加演示服务'}>
+      >
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          onClick={() => onSetShowAdd((v) => !v)}
-          aria-label={showAdd ? '收起添加表单' : '添加演示服务'}
-          aria-expanded={showAdd}
-          icon={<AppIcon name="plus" size={14} aria-hidden />}
-        >
-          {showAdd ? '收起' : '添加'}
-        </Button>
+          onClick={onRefresh}
+          disabled={loading}
+          aria-label={
+            loading
+              ? t('settings.mcp.refreshingShort', '刷新中')
+              : t('settings.mcp.refreshList', '刷新列表')
+          }
+          aria-busy={loading || undefined}
+          icon={
+            <AppIcon
+              name="refresh"
+              size={14}
+              className={loading ? 'spin' : undefined}
+              aria-hidden
+            />
+          }
+        />
       </Tooltip>
-    ) : null}
-  </div>
-);
+      <SegmentedControl
+        aria-label={t('settings.mcp.sortAria', '排序方式')}
+        size="sm"
+        className={styles.segment}
+        value={sortMode}
+        options={[
+          { value: 'name', label: t('settings.mcp.sortName', '名称') },
+          { value: 'state', label: t('settings.mcp.sortState', '状态') },
+        ]}
+        onChange={(v) => onSetSort(v as SortMode)}
+      />
+      <Tooltip
+        content={t(
+          'settings.mcp.searchTooltip',
+          '搜索名称、标识或工具；Esc 清除'
+        )}
+      >
+        <div className={styles.mcpSearch}>
+          <Input
+            variant="search"
+            size="sm"
+            placeholder={t('settings.mcp.searchPlaceholder', '搜索名称、标识…')}
+            value={filter}
+            onChange={(e) => onSetFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && filter) {
+                e.preventDefault();
+                onClearFilter();
+              }
+            }}
+            clearable
+            onClear={onClearFilter}
+            aria-label={t('settings.mcp.searchAria', '搜索扩展服务')}
+          />
+        </div>
+      </Tooltip>
+      {demo ? (
+        <Tooltip
+          content={
+            showAdd
+              ? t('settings.mcp.collapseAddForm', '收起添加表单')
+              : t('settings.mcp.addDemo', '添加演示服务')
+          }
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onSetShowAdd((v) => !v)}
+            aria-label={
+              showAdd
+                ? t('settings.mcp.collapseAddForm', '收起添加表单')
+                : t('settings.mcp.addDemo', '添加演示服务')
+            }
+            aria-expanded={showAdd}
+            icon={<AppIcon name="plus" size={14} aria-hidden />}
+          >
+            {showAdd
+              ? t('settings.mcp.collapse', '收起')
+              : t('settings.mcp.add', '添加')}
+          </Button>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+};
