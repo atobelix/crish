@@ -743,7 +743,12 @@ export default defineConfig({
             n.includes('/src/store/sessionMessage') ||
             n.includes('/src/store/sessionCrud') ||
             n.includes('/src/store/layout-helpers/') ||
-            n.includes('/src/store/middleware/')
+            n.includes('/src/store/middleware/') ||
+            // SS-P6 删除 api/storeAccess 门面后，其锚点曾钉住的布局树/工作区壳
+            // 状态被 Rollup 再分配进 chat-runtime-core 并顶破 600 kB 单 chunk
+            // 门禁；此处显式锚定回核心会话状态块，恢复门面合一前的分块归属。
+            n.includes('/src/store/layout-tree/') ||
+            n.includes('/src/store/workspace-shell/')
           ) {
             return 'store-session-core';
           }
