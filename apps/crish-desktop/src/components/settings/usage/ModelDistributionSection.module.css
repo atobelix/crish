@@ -1,211 +1,75 @@
-.splitSection {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-card);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-}
+/* ModelDistributionSection.module.css - 分布卡：设置行式模型列表（R3 一期分离）
+   卡面背景由外层 SettingsCard 承担；行间以发丝线分隔（与 settingsUiRow 同口径），
+   hover 走底色台阶 + 过渡，不用描边表达状态。 */
 
-.splitHeader {
-  padding: var(--space-5) var(--space-5) var(--space-1);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.blockTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  letter-spacing: -0.015em;
-}
-
-.splitBody {
-  display: flex;
-  align-items: center;
-  padding: var(--space-2_5) var(--space-5) var(--space-5);
-  gap: var(--space-6);
-}
-
-/* 左侧圆饼图面板 */
-.donutPanel {
-  width: 236px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3_5);
-}
-
-.donutBox {
-  width: 176px;
-  height: 176px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.donutSvg {
-  width: 176px;
-  height: 176px;
-  overflow: visible;
-}
-
-.donutTrack {
-  fill: none;
-  stroke: var(--border-color);
-  stroke-width: 24;
-}
-
-.donutSlice {
-  fill: none;
-  stroke-width: 24;
-  cursor: pointer;
-  transition:
-    stroke-width var(--transition-normal),
-    filter var(--transition-normal);
-}
-
-.donutCenterContent {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.donutCenterLbl {
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-tertiary);
-  margin-bottom: 1px;
-}
-
-.donutCenterVal {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-heavy);
-  color: var(--text-primary);
-  letter-spacing: -0.025em;
-  font-family: var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-dense);
-}
-
-.donutCenterUnit {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-}
-
-.donutLegendMini {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2_5);
-  flex-wrap: wrap;
-  max-width: 210px;
-}
-
-.legendMiniItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-xxs);
-  color: var(--text-secondary);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.legendMiniItem span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.legendMiniDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* 中间非贯穿分割线 */
-.splitDivider {
-  width: var(--hairline-width);
-  align-self: stretch;
-  background: var(--border-subtle);
-  margin: var(--space-1_5) 0;
-}
-
-/* 右侧模型用量胶囊进度列表 */
-.modelsPanel {
-  flex: 1;
-  min-width: 0;
-}
-
-.capsuleList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow-y: auto;
-  max-height: 228px;
-  padding-right: var(--space-1_5);
-}
-
-.modelCapsuleRow {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-3_5);
-  border-radius: var(--usage-capsule-outer-radius);
-  background: var(--bg-card-subtle);
-  cursor: pointer;
-  overflow: hidden;
-  transition: background var(--transition-fast);
-  height: 38px;
-  flex-shrink: 0;
+.distSection {
+  padding: var(--space-2) var(--space-5) var(--space-3);
+  width: 100%;
   box-sizing: border-box;
 }
 
-.modelCapsuleRow:hover,
-.modelCapsuleRowHovered {
+.distTable {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 列网格：模型 | 占比条 | tokens | 费用 | 缓存率 | 调用次数 */
+.distRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) minmax(
+      110px,
+      1fr
+    ) 84px 84px 72px 72px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2_5) var(--space-1);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.distRow:last-child {
+  border-bottom: none;
+}
+
+.distRow:not(.distHeaderRow):hover {
   background: var(--state-hover);
 }
 
-.capsuleBarBg {
-  position: absolute;
-  left: var(--usage-capsule-pad);
-  top: var(--usage-capsule-pad);
-  bottom: var(--usage-capsule-pad);
-  max-width: calc(100% - (var(--usage-capsule-pad) * 2));
-  border-radius: var(--usage-capsule-inner-radius);
-  transition: width var(--transition-normal);
-  pointer-events: none;
-  z-index: 1;
+.distHeaderRow {
+  padding-top: var(--space-1_5);
+  padding-bottom: var(--space-1_5);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  letter-spacing: -0.01em;
 }
 
-.capsuleLeft {
-  position: relative;
-  z-index: 2;
+/* 模型列：色点 + 名称（+ provider 小字） */
+.colModel {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 1;
   min-width: 0;
 }
 
 .modelDotIcon {
   width: 7px;
-  height: 7px;
+  height: 7px; /* 刻度外裸值：状态圆点固定几何，无既有档，授权保留 */
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.capsuleModelName {
+.modelNameBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  line-height: var(--line-height-tight);
+}
+
+.modelName {
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -213,34 +77,62 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.modelProvider {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 占比列：细进度条 + 百分比 */
+.colShare {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
 }
 
-.capsuleRight {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2_5);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  margin-left: var(--space-2);
+.shareTrack {
+  flex: 1;
+  min-width: 24px;
+  height: 5px; /* 刻度外裸值：占比轨道厚度，无既有档，授权保留 */
+  border-radius: var(--radius-xs);
+  background: var(--bg-card-subtle);
+  overflow: hidden;
 }
 
-.capsuleTokenVal {
-  font-family: var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
+.shareBar {
+  height: 100%;
+  border-radius: inherit;
+  transition: width var(--transition-normal);
 }
 
-.capsulePctTag {
+.sharePct {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
   min-width: 38px;
   text-align: right;
+  flex-shrink: 0;
+}
+
+/* 数值列：右对齐等宽数字 */
+.colNum {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.numStrong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
 }
 
 .emptyModels {
@@ -251,15 +143,11 @@
 }
 
 @media (max-width: 720px) {
-  .splitBody {
-    flex-direction: column;
-    align-items: stretch;
+  .distRow {
+    grid-template-columns: minmax(120px, 1.4fr) minmax(80px, 1fr) 76px 76px;
   }
-  .splitDivider {
-    width: 100%;
-    height: var(--hairline-width);
-  }
-  .donutPanel {
-    width: 100%;
+  .colCache,
+  .colCalls {
+    display: none;
   }
 }

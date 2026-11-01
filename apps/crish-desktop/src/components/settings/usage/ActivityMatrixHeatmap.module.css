@@ -3,28 +3,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3_5);
-  background: var(--cover-card-bg, var(--bg-card));
   position: relative;
 }
 
 .activityHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   min-height: var(--control-height-sm);
-  gap: var(--space-3);
-}
-
-.blockTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  letter-spacing: -0.015em;
-}
-
-.activityHeaderControls {
-  display: flex;
-  align-items: center;
   gap: var(--space-3);
 }
 
@@ -39,7 +25,7 @@
 
 .activityLegendCell {
   width: 9px;
-  height: 9px;
+  height: 9px; /* 刻度外裸值：与 width 成对的热力格固定尺寸，无既有档，授权保留 */
   border-radius: var(--radius-xs);
 }
 
@@ -182,59 +168,4 @@
 
 .actLvl4 {
   background: var(--usage-heat-4, var(--brand));
-}
-
-/* 活动下属统计指标网格：纯净纯文字排版，零卡片无边框无 hover */
-.activityStatsGrid {
-  margin-top: var(--space-3_5);
-  padding-top: var(--space-3_5);
-  border-top: var(--hairline-width) solid var(--border-subtle);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3_5) var(--space-5);
-}
-
-.actStatItem {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.actStatLabel {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  letter-spacing: -0.01em;
-}
-
-.actStatVal {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1);
-  letter-spacing: -0.02em;
-}
-
-.actStatValCode {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.actStatUnit {
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-tertiary);
-}
-
-@media (max-width: 640px) {
-  .activityStatsGrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }

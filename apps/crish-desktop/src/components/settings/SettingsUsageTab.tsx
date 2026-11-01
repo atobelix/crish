@@ -11,7 +11,12 @@ import {
   Tooltip,
 } from '@/components/ui';
 import { PriceConfigModal } from './PriceConfigModal';
-import { SettingsHeadTools, SettingsPage } from './SettingsUI';
+import {
+  SettingsCard,
+  SettingsHeadTools,
+  SettingsPage,
+  SettingsSection,
+} from './SettingsUI';
 import { ActivityMatrixHeatmap } from './usage/ActivityMatrixHeatmap';
 import { ModelDistributionSection } from './usage/ModelDistributionSection';
 import { UsageSummaryHero } from './usage/UsageSummaryHero';
@@ -24,10 +29,13 @@ interface Props {
   _onBlockingOverlayChange?: (open: boolean) => void;
 }
 
+type UsageRange = '24h' | '7d' | '30d';
+
 export const SettingsUsageTab: React.FC<Props> = () => {
   const { t } = useI18n();
   const { showToast } = useToast();
-  const [globalRange, setGlobalRange] = useState<'24h' | '7d' | '30d'>('24h');
+  // 全页唯一时间口径（页头全局范围）；默认近 7 日（R3/D10，原默认 24h 数据易显空）
+  const [globalRange, setGlobalRange] = useState<UsageRange>('7d');
   const [dashboardData, setDashboardData] = useState<UsageDashboardDto | null>(
     null
   );
@@ -76,7 +84,7 @@ export const SettingsUsageTab: React.FC<Props> = () => {
   const [refreshTick, setRefreshTick] = useState(0);
 
   const loadData = useCallback(
-    async (range: '24h' | '7d' | '30d') => {
+    async (range: UsageRange) => {
       setLoading(true);
       try {
         const data = await getUsageDashboardData(range);
@@ -127,7 +135,7 @@ export const SettingsUsageTab: React.FC<Props> = () => {
       <SegmentedControl
         size="sm"
         value={globalRange}
-        onChange={(val) => setGlobalRange(val as '24h' | '7d' | '30d')}
+        onChange={(val) => setGlobalRange(val as UsageRange)}
         options={rangeOptions}
       />
 
@@ -153,93 +161,130 @@ export const SettingsUsageTab: React.FC<Props> = () => {
 
   return (
     <SettingsPage title={t('settings.usage.title', '用量')} meta={headerMeta}>
-      <div className={styles.usageDashboardCard}>
-        {loading && !dashboardData ? (
-          <div className={styles.skeletonContainer}>
-            <div className={styles.skeletonHeader} />
-            <div className={styles.skeletonChart} />
-            <div className={styles.skeletonSection} />
+      {loading && !dashboardData ? (
+        /* 骨架按新分区结构：四段「标题 + 卡面」占位，与加载后版式同构 */
+        <div className={styles.skeletonContainer} aria-hidden="true">
+          <div className={styles.skeletonGroup}>
+            <div className={styles.skeletonTitle} />
+            <div
+              className={`${styles.skeletonCard} ${styles.skeletonOverview}`}
+            />
           </div>
-        ) : (
-          dashboardData && (
-            <>
-              {/* 1. 顶部核心指标：对齐真机截图 2 极简单行仪表盘 */}
-              <UsageSummaryHero
-                totalTokens={
-                  dashboardData.totalInput + dashboardData.totalOutput
-                }
-                totalCost={dashboardData.totalCost}
-              />
+          <div className={styles.skeletonGroup}>
+            <div className={styles.skeletonTitle} />
+            <div className={`${styles.skeletonCard} ${styles.skeletonChart}`} />
+          </div>
+          <div className={styles.skeletonGroup}>
+            <div className={styles.skeletonTitle} />
+            <div className={`${styles.skeletonCard} ${styles.skeletonBlock}`} />
+          </div>
+          <div className={styles.skeletonGroup}>
+            <div className={styles.skeletonTitle} />
+            <div className={`${styles.skeletonCard} ${styles.skeletonBlock}`} />
+          </div>
+        </div>
+      ) : (
+        dashboardData && (
+          <>
+            {/* 1. 概览：4 格 KPI + 一行洞察 */}
+            <SettingsSection
+              title={t('settings.usage.sectionOverview', '概览')}
+            >
+              <SettingsCard>
+                <UsageSummaryHero
+                  totalTokens={
+                    dashboardData.totalInput + dashboardData.totalOutput
+                  }
+                  totalCost={dashboardData.totalCost}
+                  heroStats={dashboardData.hero}
+                />
+              </SettingsCard>
+            </SettingsSection>
 
-              {/* 2. 连续时钟吞吐趋势折线图：显式 range 契约，清退均线 */}
-              <UsageTrendChart
-                points={dashboardData.points}
-                maxTokens={dashboardData.maxTokens}
-                maxCost={dashboardData.maxCost}
-                models={dashboardData.models}
-                range={globalRange}
-              />
+            {/* 2. 趋势：原图表整块移入独立卡，逻辑零改动 */}
+            <SettingsSection title={t('settings.usage.sectionTrend', '趋势')}>
+              <SettingsCard>
+                <UsageTrendChart
+                  points={dashboardData.points}
+                  maxTokens={dashboardData.maxTokens}
+                  maxCost={dashboardData.maxCost}
+                  models={dashboardData.models}
+                  range={globalRange}
+                />
+              </SettingsCard>
+            </SettingsSection>
 
-              {/* 3. 模型用量占比圆环与同心圆角进度条 */}
-              <ModelDistributionSection
-                models={dashboardData.models}
-                totalTokens={
-                  dashboardData.totalInput + dashboardData.totalOutput
-                }
-              />
+            {/* 3. 分布：模型行式列表（费用 / 缓存率 / 调用次数三列） */}
+            <SettingsSection
+              title={t('settings.usage.sectionDistribution', '分布')}
+            >
+              <SettingsCard>
+                <ModelDistributionSection
+                  models={dashboardData.models}
+                  totalTokens={
+                    dashboardData.totalInput + dashboardData.totalOutput
+                  }
+                />
+              </SettingsCard>
+            </SettingsSection>
 
-              {/* 4. 独立周期切换的热力图矩阵与偏好网格：接入 refreshKey 保证严格同步 */}
-              <ActivityMatrixHeatmap
-                heroStats={dashboardData.hero}
-                refreshKey={refreshTick}
-              />
+            {/* 4. 活动：热力图跟随全局范围，无自有切换器 */}
+            <SettingsSection
+              title={t('settings.usage.sectionActivity', '活动')}
+            >
+              <SettingsCard>
+                <ActivityMatrixHeatmap
+                  range={globalRange}
+                  refreshKey={refreshTick}
+                />
+              </SettingsCard>
+            </SettingsSection>
 
-              {/* 5. 底栏操作区 */}
-              <div className={styles.actionsBar}>
+            {/* 5. 页尾操作行（卡外，与其他设置页一致） */}
+            <div className={styles.actionsBar}>
+              <Tooltip
+                content={t(
+                  'settings.usage.refreshTooltip',
+                  '重新拉取用量吞吐与成本统计'
+                )}
+              >
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={<AppIcon name="refresh" size={14} />}
+                  onClick={() => {
+                    setRefreshTick((t) => t + 1);
+                    void loadData(globalRange);
+                  }}
+                  aria-label={t('settings.usage.refreshData', '刷新数据')}
+                >
+                  {t('settings.usage.refreshData', '刷新数据')}
+                </Button>
+              </Tooltip>
+              {hasUsageData && (
                 <Tooltip
                   content={t(
-                    'settings.usage.refreshTooltip',
-                    '重新拉取用量吞吐与成本统计'
+                    'settings.usage.clearHistoryTooltip',
+                    '清空本地存储的所有历史用量指标'
                   )}
                 >
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="danger"
                     size="sm"
-                    icon={<AppIcon name="refresh" size={14} />}
-                    onClick={() => {
-                      setRefreshTick((t) => t + 1);
-                      void loadData(globalRange);
-                    }}
-                    aria-label={t('settings.usage.refreshData', '刷新数据')}
+                    icon={<AppIcon name="trash" size={14} />}
+                    onClick={() => void handleClearHistory()}
+                    aria-label={t('settings.usage.clearHistory', '清空历史')}
                   >
-                    {t('settings.usage.refreshData', '刷新数据')}
+                    {t('settings.usage.clearHistory', '清空历史')}
                   </Button>
                 </Tooltip>
-                {hasUsageData && (
-                  <Tooltip
-                    content={t(
-                      'settings.usage.clearHistoryTooltip',
-                      '清空本地存储的所有历史用量指标'
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      icon={<AppIcon name="trash" size={14} />}
-                      onClick={() => void handleClearHistory()}
-                      aria-label={t('settings.usage.clearHistory', '清空历史')}
-                    >
-                      {t('settings.usage.clearHistory', '清空历史')}
-                    </Button>
-                  </Tooltip>
-                )}
-              </div>
-            </>
-          )
-        )}
-      </div>
+              )}
+            </div>
+          </>
+        )
+      )}
 
       <PriceConfigModal
         open={pricesModalOpen}

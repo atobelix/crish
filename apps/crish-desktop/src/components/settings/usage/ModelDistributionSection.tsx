@@ -1,10 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { UsageModelBreakdownItem } from '../../../api/usageContracts';
+import { useI18n } from '../../../i18n';
 import {
+  formatCost,
   formatPercentValue,
   formatTokens,
   getModelColor,
   normalizeModelRatio,
+  type ModelColorTheme,
 } from './usageSpline';
 import styles from './ModelDistributionSection.module.css';
 
@@ -13,111 +16,39 @@ export interface ModelDistributionSectionProps {
   totalTokens: number;
 }
 
-const CIRCUMFERENCE = 2 * Math.PI * 70; // 439.82
+interface DistributionRow {
+  key: string;
+  displayName: string;
+  provider?: string;
+  tokens: number;
+  /** 占比（0~100 百分数） */
+  rawRatio: number;
+  cost: number;
+  /** 缓存率（0~1 比例，DTO 原始口径） */
+  cacheRatio: number;
+  callCount: number;
+  color: ModelColorTheme;
+}
 
+/**
+ * 分布卡内容（R3 一期分离）：退役圆环 + 胶囊条，改设置行式列表，
+ * 用活 DTO 现成的费用 / 缓存率 / 调用次数三列。聚合规则沿用旧版：
+ * 模型数 > 5 时展示 Top 4 + 「其他」（其余模型汇总一行，三列同样汇总，
+ * 缓存率按 tokens 加权平均）。
+ */
 export const ModelDistributionSection: React.FC<
   ModelDistributionSectionProps
 > = ({ models, totalTokens }) => {
-  const [hoveredModel, setHoveredModel] = useState<string | null>(null);
+  const { t } = useI18n();
 
-  // 计算饼图切片与微型图例（顶格对齐 4 项 + 聚合“其他”，确保切片与图例 100% 封闭对齐）
-  const { donutSlices, topLegends } = useMemo(() => {
-    let accumulated = 0;
-    const slicesList: {
-      model: string;
-      name: string;
-      dash: string;
-      offset: string;
-      stroke: string;
-      bg: string;
-    }[] = [];
-    const legendsList: { name: string; model: string; color: string }[] = [];
-
-    const hasOthers = models.length > 5;
-    const displayModels = hasOthers ? models.slice(0, 4) : models.slice(0, 5);
-
-    displayModels.forEach((m, idx) => {
-      const rawRatio =
-        m.percentage > 0
-          ? m.percentage
-          : totalTokens > 0
-            ? (m.tokens / totalTokens) * 100
-            : 0;
-      const normRatio = normalizeModelRatio(rawRatio);
-      let dash = normRatio * CIRCUMFERENCE;
-      const remaining = Math.max(0, CIRCUMFERENCE - accumulated);
-      dash = Math.min(dash, remaining);
-      const offset = -accumulated;
-      accumulated += dash;
-      const color = getModelColor(m.model, idx);
-
-      slicesList.push({
-        model: m.model,
-        name: m.model,
-        dash: `${dash.toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`,
-        offset: offset.toFixed(2),
-        stroke: color.stroke,
-        bg: color.bg,
-      });
-      legendsList.push({
-        name: m.model,
-        model: m.model,
-        color: color.stroke,
-      });
-    });
-
-    if (hasOthers) {
-      const othersTokens = models
-        .slice(4)
-        .reduce((acc, cur) => acc + cur.tokens, 0);
-      const rawRatio = totalTokens > 0 ? (othersTokens / totalTokens) * 100 : 0;
-      const normRatio = normalizeModelRatio(rawRatio);
-      let dash = normRatio * CIRCUMFERENCE;
-      const remaining = Math.max(0, CIRCUMFERENCE - accumulated);
-      dash = Math.min(dash, remaining);
-      const offset = -accumulated;
-      accumulated += dash;
-      const color = getModelColor('other', 4);
-
-      slicesList.push({
-        model: '__others__',
-        name: '其他',
-        dash: `${dash.toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`,
-        offset: offset.toFixed(2),
-        stroke: color.stroke,
-        bg: color.bg,
-      });
-      legendsList.push({
-        name: '其他',
-        model: '__others__',
-        color: color.stroke,
-      });
-    }
-
-    return { donutSlices: slicesList, topLegends: legendsList };
-  }, [models, totalTokens]);
-
-  const capsuleItems = useMemo(() => {
-    if (models.length <= 5) {
-      return models.map((m, idx) => ({
-        key: m.model,
-        modelId: m.model,
-        displayName: m.model,
-        tokens: m.tokens,
-        rawRatio:
-          m.percentage > 0
-            ? m.percentage
-            : totalTokens > 0
-              ? (m.tokens / totalTokens) * 100
-              : 0,
-        color: getModelColor(m.model, idx),
-        isOthers: false,
-      }));
-    }
-    const top4 = models.slice(0, 4).map((m, idx) => ({
+  const rows = useMemo<DistributionRow[]>(() => {
+    const toRow = (
+      m: UsageModelBreakdownItem,
+      idx: number
+    ): DistributionRow => ({
       key: m.model,
-      modelId: m.model,
       displayName: m.model,
+      provider: m.provider || undefined,
       tokens: m.tokens,
       rawRatio:
         m.percentage > 0
@@ -125,154 +56,126 @@ export const ModelDistributionSection: React.FC<
           : totalTokens > 0
             ? (m.tokens / totalTokens) * 100
             : 0,
+      cost: m.cost,
+      cacheRatio: m.cacheRatio,
+      callCount: m.callCount,
       color: getModelColor(m.model, idx),
-      isOthers: false,
-    }));
-    const othersTokens = models
-      .slice(4)
-      .reduce((acc, cur) => acc + cur.tokens, 0);
-    const othersRawRatio =
-      totalTokens > 0 ? (othersTokens / totalTokens) * 100 : 0;
+    });
+
+    if (models.length <= 5) {
+      return models.map((m, idx) => toRow(m, idx));
+    }
+
+    const top4 = models.slice(0, 4).map((m, idx) => toRow(m, idx));
+    const rest = models.slice(4);
+    const othersTokens = rest.reduce((acc, cur) => acc + cur.tokens, 0);
+    const othersCost = rest.reduce((acc, cur) => acc + cur.cost, 0);
+    const othersCalls = rest.reduce((acc, cur) => acc + cur.callCount, 0);
+    const othersCacheRatio =
+      othersTokens > 0
+        ? rest.reduce((acc, cur) => acc + cur.cacheRatio * cur.tokens, 0) /
+          othersTokens
+        : 0;
+
     top4.push({
       key: '__others__',
-      modelId: '__others__',
-      displayName: `其他 (${models.length - 4} 个模型)`,
+      displayName: t(
+        'settings.usage.distOthersCount',
+        `其他（${rest.length} 个模型）`,
+        { count: rest.length }
+      ),
       tokens: othersTokens,
-      rawRatio: othersRawRatio,
+      rawRatio: totalTokens > 0 ? (othersTokens / totalTokens) * 100 : 0,
+      cost: othersCost,
+      cacheRatio: othersCacheRatio,
+      callCount: othersCalls,
       color: getModelColor('other', 4),
-      isOthers: true,
     });
     return top4;
-  }, [models, totalTokens]);
+  }, [models, totalTokens, t]);
 
   return (
-    <div className={styles.splitSection}>
-      <div className={styles.splitHeader}>
-        <span className={styles.blockTitle}>模型用量</span>
-      </div>
-
-      <div className={styles.splitBody}>
-        {/* 左侧：圆饼图面板 */}
-        <div className={styles.donutPanel}>
-          <div className={styles.donutBox}>
-            <svg className={styles.donutSvg} viewBox="0 0 200 200">
-              <circle className={styles.donutTrack} cx="100" cy="100" r="70" />
-              <g transform="rotate(-90 100 100)">
-                {donutSlices.map((slice) => {
-                  const isMatch =
-                    hoveredModel === null || hoveredModel === slice.model;
-                  return (
-                    <circle
-                      key={slice.model}
-                      className={styles.donutSlice}
-                      cx="100"
-                      cy="100"
-                      r="70"
-                      stroke={slice.stroke}
-                      strokeDasharray={slice.dash}
-                      strokeDashoffset={slice.offset}
-                      style={{
-                        strokeWidth: isMatch && hoveredModel !== null ? 26 : 24,
-                        filter:
-                          isMatch && hoveredModel !== null
-                            ? 'brightness(1.08)'
-                            : 'none',
-                        transition:
-                          'stroke-width 180ms ease, filter 180ms ease',
-                      }}
-                      onMouseEnter={() => setHoveredModel(slice.model)}
-                      onMouseLeave={() => setHoveredModel(null)}
-                    />
-                  );
-                })}
-              </g>
-            </svg>
-
-            <div className={styles.donutCenterContent}>
-              <span className={styles.donutCenterLbl}>总用量</span>
-              <span className={styles.donutCenterVal}>
-                {formatTokens(totalTokens)}
-              </span>
-              <span className={styles.donutCenterUnit}>tokens</span>
-            </div>
+    <div className={styles.distSection}>
+      {models.length === 0 ? (
+        <div className={styles.emptyModels}>
+          {t('settings.usage.distEmpty', '暂无模型使用记录')}
+        </div>
+      ) : (
+        <div className={styles.distTable}>
+          {/* 列头：与数据行同一网格口径 */}
+          <div className={`${styles.distRow} ${styles.distHeaderRow}`}>
+            <span className={styles.colModel}>
+              {t('settings.usage.distColModel', '模型')}
+            </span>
+            <span className={styles.colShare}>
+              {t('settings.usage.distColShare', '占比')}
+            </span>
+            <span className={styles.colNum}>
+              {t('settings.usage.distColTokens', 'Tokens')}
+            </span>
+            <span className={styles.colNum}>
+              {t('settings.usage.distColCost', '费用')}
+            </span>
+            <span className={`${styles.colNum} ${styles.colCache}`}>
+              {t('settings.usage.distColCacheRatio', '缓存率')}
+            </span>
+            <span className={`${styles.colNum} ${styles.colCalls}`}>
+              {t('settings.usage.distColCalls', '调用次数')}
+            </span>
           </div>
 
-          {topLegends.length > 0 && (
-            <div className={styles.donutLegendMini}>
-              {topLegends.map((leg) => (
-                <div
-                  key={leg.name}
-                  className={styles.legendMiniItem}
-                  onMouseEnter={() => setHoveredModel(leg.model)}
-                  onMouseLeave={() => setHoveredModel(null)}
-                >
+          {rows.map((row) => {
+            const normRatio = normalizeModelRatio(row.rawRatio);
+            const barWidth =
+              normRatio > 0 ? Math.max(2, Math.min(100, normRatio * 100)) : 0;
+
+            return (
+              <div key={row.key} className={styles.distRow}>
+                <div className={styles.colModel}>
                   <div
-                    className={styles.legendMiniDot}
-                    style={{ background: leg.color }}
+                    className={styles.modelDotIcon}
+                    style={{ background: row.color.stroke }}
                   />
-                  <span>{leg.name}</span>
+                  <div className={styles.modelNameBody}>
+                    <span className={styles.modelName}>{row.displayName}</span>
+                    {row.provider && (
+                      <span className={styles.modelProvider}>
+                        {row.provider}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* 中间非贯穿分割线 */}
-        <div className={styles.splitDivider} />
-
-        {/* 右侧：模型用量胶囊进度列表（对齐图二右侧高质感规范） */}
-        <div className={styles.modelsPanel}>
-          {models.length === 0 ? (
-            <div className={styles.emptyModels}>暂无模型使用记录</div>
-          ) : (
-            <div className={styles.capsuleList}>
-              {capsuleItems.map((item) => {
-                const normRatio = normalizeModelRatio(item.rawRatio);
-                const barWidth =
-                  normRatio > 0
-                    ? Math.max(2, Math.min(100, normRatio * 100))
-                    : 0;
-                const isHovered = hoveredModel === item.modelId;
-
-                return (
-                  <div
-                    key={item.key}
-                    className={`${styles.modelCapsuleRow} ${isHovered ? styles.modelCapsuleRowHovered : ''}`}
-                    onMouseEnter={() => setHoveredModel(item.modelId)}
-                    onMouseLeave={() => setHoveredModel(null)}
-                  >
-                    {/* 背景同心几何进度条 */}
+                <div className={styles.colShare}>
+                  <div className={styles.shareTrack}>
                     <div
-                      className={styles.capsuleBarBg}
+                      className={styles.shareBar}
                       style={{
                         width: `${barWidth.toFixed(1)}%`,
-                        background: item.color.bg,
+                        background: row.color.stroke,
                       }}
                     />
-                    <div className={styles.capsuleLeft}>
-                      <div
-                        className={styles.modelDotIcon}
-                        style={{ background: item.color.stroke }}
-                      />
-                      <span className={styles.capsuleModelName}>
-                        {item.displayName}
-                      </span>
-                    </div>
-                    <div className={styles.capsuleRight}>
-                      <span className={styles.capsuleTokenVal}>
-                        {formatTokens(item.tokens)}
-                      </span>
-                      <span className={styles.capsulePctTag}>
-                        {formatPercentValue(item.rawRatio)}
-                      </span>
-                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <span className={styles.sharePct}>
+                    {formatPercentValue(row.rawRatio)}
+                  </span>
+                </div>
+
+                <span className={`${styles.colNum} ${styles.numStrong}`}>
+                  {formatTokens(row.tokens)}
+                </span>
+                <span className={styles.colNum}>{formatCost(row.cost)}</span>
+                <span className={`${styles.colNum} ${styles.colCache}`}>
+                  {formatPercentValue(row.cacheRatio * 100)}
+                </span>
+                <span className={`${styles.colNum} ${styles.colCalls}`}>
+                  {row.callCount.toLocaleString('zh-CN')}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 };

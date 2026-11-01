@@ -1,34 +1,41 @@
-/* UsageSummaryHero.module.css - 纯净对齐系统 Design Tokens 与极简规范 */
+/* UsageSummaryHero.module.css - 概览卡：4 格 KPI + 一行洞察（R3 一期分离）
+   卡面背景由外层 SettingsCard 承担，本组件只负责卡内排版，无边框无自有底色。 */
 
-.heroContainer {
+.overviewContainer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
   width: 100%;
   box-sizing: border-box;
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  background: var(--cover-card-bg, var(--bg-card));
 }
 
-.heroColumn {
-  flex: 1;
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.kpiItem {
   display: flex;
   flex-direction: column;
   gap: var(--space-1_5);
+  min-width: 0;
 }
 
-.columnTitle {
+.kpiLabel {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   letter-spacing: -0.01em;
 }
 
-.metricRow {
+.kpiValueRow {
   display: flex;
   align-items: baseline;
   gap: var(--space-1_5);
   line-height: var(--line-height-dense);
+  min-width: 0;
 }
 
 .currencySymbol {
@@ -37,35 +44,77 @@
   color: var(--text-primary);
 }
 
-.metricNumber {
+.kpiNumber {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
   font-family: var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.metricUnit {
+.kpiUnit {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   color: var(--text-tertiary);
 }
 
-.divider {
-  width: var(--hairline-width);
-  height: 38px;
-  background: var(--border-subtle);
-  margin: 0 var(--space-6);
+/* 洞察行：标签 + 若干「标签 值」结论项，中点分隔，靠留白与 KPI 区分（不加分隔线） */
+.insightsRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1_5) var(--space-2_5);
+  min-width: 0;
+}
+
+.insightsLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+
+.insightItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1_5);
+  min-width: 0;
+}
+
+.insightItemLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.insightItemValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.insightItemValueCode {
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.insightSep {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  user-select: none;
 }
 
 @media (max-width: 640px) {
-  .heroContainer {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-4);
-  }
-  .divider {
-    display: none;
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

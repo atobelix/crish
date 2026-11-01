@@ -134,31 +134,58 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
     vi.clearAllMocks();
   });
 
-  it('UsageSummaryHero: 渲染核心指标与格式化文本', () => {
-    render(<UsageSummaryHero totalTokens={100000} totalCost={4.7} />);
+  it('UsageSummaryHero: 渲染 4 格 KPI 与洞察行', () => {
+    render(
+      <UsageSummaryHero
+        totalTokens={100000}
+        totalCost={4.7}
+        heroStats={mockDashboard.hero}
+      />
+    );
 
-    expect(screen.getByText('总用量')).toBeDefined();
+    // 4 格 KPI
+    expect(screen.getByText('总 Tokens')).toBeDefined();
     expect(screen.getByText('10.0 万')).toBeDefined();
-    expect(screen.getByText('tokens')).toBeDefined();
-    expect(screen.getByText('预估金额')).toBeDefined();
+    expect(screen.getByText('预估费用')).toBeDefined();
     expect(screen.getByText('4.70')).toBeDefined();
     expect(screen.getByText('CNY')).toBeDefined();
+    expect(screen.getByText('发送消息总数')).toBeDefined();
+    expect(screen.getByText('23')).toBeDefined();
+    expect(screen.getByText('日均 Tokens')).toBeDefined();
+    expect(screen.getByText('5.00 万')).toBeDefined();
+
+    // 洞察行：日均花费 + 结论 3 项
+    expect(screen.getByText('洞察')).toBeDefined();
+    expect(screen.getByText('日均花费')).toBeDefined();
+    expect(screen.getByText('¥ 2.35')).toBeDefined();
+    expect(screen.getByText('最常用模型')).toBeDefined();
+    expect(screen.getByText('最活跃时段')).toBeDefined();
+    expect(screen.getByText('14:00 - 18:00')).toBeDefined();
+    expect(screen.getByText('最常项目')).toBeDefined();
+    expect(screen.getByText('conex')).toBeDefined();
   });
 
-  it('ModelDistributionSection: 渲染饼图与同心圆角胶囊模型列表', () => {
+  it('ModelDistributionSection: 渲染行式模型列表与费用/缓存率/调用次数三列', () => {
     render(
       <ModelDistributionSection models={mockModels} totalTokens={100000} />
     );
 
-    expect(screen.getByText('模型用量')).toBeDefined();
-    expect(screen.getAllByText('deepseek-chat').length).toBeGreaterThanOrEqual(
-      1
-    );
-    expect(
-      screen.getAllByText('claude-3-5-sonnet').length
-    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('deepseek-chat')).toBeDefined();
+    expect(screen.getByText('claude-3-5-sonnet')).toBeDefined();
+    expect(screen.getByText('deepseek')).toBeDefined();
+    expect(screen.getByText('anthropic')).toBeDefined();
     expect(screen.getByText('60.0%')).toBeDefined();
     expect(screen.getByText('40.0%')).toBeDefined();
+    // DTO 现成三列：费用 / 缓存率 / 调用次数
+    expect(screen.getByText('费用')).toBeDefined();
+    expect(screen.getByText('¥ 1.20')).toBeDefined();
+    expect(screen.getByText('¥ 3.50')).toBeDefined();
+    expect(screen.getByText('缓存率')).toBeDefined();
+    expect(screen.getByText('80.0%')).toBeDefined();
+    expect(screen.getByText('50.0%')).toBeDefined();
+    expect(screen.getByText('调用次数')).toBeDefined();
+    expect(screen.getByText('15')).toBeDefined();
+    expect(screen.getByText('8')).toBeDefined();
   });
 
   it('UsageTrendChart: 维度切换与折线图渲染', () => {
@@ -171,7 +198,6 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
       />
     );
 
-    expect(screen.getByText('吞吐趋势')).toBeDefined();
     expect(screen.getByText('吞吐总览')).toBeDefined();
     expect(screen.getByText('模型对比')).toBeDefined();
     expect(screen.getByText('费用走势')).toBeDefined();
@@ -187,26 +213,24 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
     expect(screen.getByText('deepseek-chat')).toBeDefined();
   });
 
-  it('ActivityMatrixHeatmap: 渲染热力图与习惯偏好指标', async () => {
-    render(<ActivityMatrixHeatmap heroStats={mockDashboard.hero} />);
+  it('ActivityMatrixHeatmap: 只渲染热力图与图例（无自有范围切换、统计已移至概览）', async () => {
+    render(<ActivityMatrixHeatmap range="7d" />);
 
-    expect(screen.getByText('活动')).toBeDefined();
-    expect(screen.getByText('24 小时')).toBeDefined();
-    expect(screen.getByText('7 天')).toBeDefined();
-    expect(screen.getByText('30 天')).toBeDefined();
+    // 图例保留
+    expect(screen.getByText('少')).toBeDefined();
+    expect(screen.getByText('多')).toBeDefined();
 
-    // 6 项宏观指标
-    expect(screen.getByText('每天平均用量')).toBeDefined();
-    expect(screen.getByText('每天平均花费')).toBeDefined();
-    expect(screen.getByText('发送消息总数')).toBeDefined();
-    expect(screen.getByText('最常用的模型')).toBeDefined();
-    expect(screen.getByText('最活跃的时间')).toBeDefined();
-    expect(screen.getByText('最常工作的项目')).toBeDefined();
-    expect(screen.getByText('14:00 - 18:00')).toBeDefined();
-    expect(screen.getByText('conex')).toBeDefined();
+    // 自有范围切换器已删除（全页只剩页头全局范围一个控件）
+    expect(screen.queryByText('24 小时')).toBeNull();
+    expect(screen.queryByText('30 天')).toBeNull();
+
+    // 习惯统计已移至概览卡，本组件不再渲染
+    expect(screen.queryByText('每天平均用量')).toBeNull();
+    expect(screen.queryByText('最常用的模型')).toBeNull();
+    expect(screen.queryByText('最常工作的项目')).toBeNull();
   });
 
-  it('SettingsUsageTab: 完整集成渲染', async () => {
+  it('SettingsUsageTab: 完整集成渲染（四张分组卡 + 页尾操作）', async () => {
     render(
       <ToastProvider>
         <SettingsUsageTab />
@@ -217,5 +241,12 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
     expect(screen.getByText('近 7 日')).toBeDefined();
     expect(screen.getByText('近 30 日')).toBeDefined();
     expect(screen.getByText('配置单价')).toBeDefined();
+
+    // 数据加载后四张分组卡分区标题齐备
+    expect(await screen.findByText('概览')).toBeDefined();
+    expect(screen.getByText('趋势')).toBeDefined();
+    expect(screen.getByText('分布')).toBeDefined();
+    expect(screen.getByText('活动')).toBeDefined();
+    expect(screen.getByText('刷新数据')).toBeDefined();
   });
 });

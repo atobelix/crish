@@ -34,6 +34,28 @@ export interface ComputedChartSeries extends ChartSeriesConfig {
   areaD: string;
 }
 
+/**
+ * 系列名文案注入（R3 i18n）：纯函数不依赖 i18n 运行时，
+ * 由组件层传入已本地化的标签；缺省值与历史硬编码中文完全一致。
+ */
+export interface ChartSeriesLabels {
+  totalUsage: string;
+  promptInput: string;
+  generatedOutput: string;
+  cacheHit: string;
+  estimatedTotalCost: string;
+  modelCost: (model: string) => string;
+}
+
+export const DEFAULT_CHART_SERIES_LABELS: ChartSeriesLabels = {
+  totalUsage: '总用量',
+  promptInput: '提示输入',
+  generatedOutput: '生成输出',
+  cacheHit: '缓存命中',
+  estimatedTotalCost: '预估总费用',
+  modelCost: (model: string) => `${model} 费用`,
+};
+
 export interface ChartModelOutput {
   seriesList: ChartSeriesConfig[];
   yTicks: [string, string, string, string];
@@ -46,7 +68,8 @@ export function buildChartSeriesConfig(
   points: UsageTimeseriesPoint[],
   maxTokens: number,
   maxCost: number,
-  models: UsageModelBreakdownItem[]
+  models: UsageModelBreakdownItem[],
+  labels: ChartSeriesLabels = DEFAULT_CHART_SERIES_LABELS
 ): ChartModelOutput {
   if (points.length === 0) {
     return {
@@ -64,7 +87,7 @@ export function buildChartSeriesConfig(
     const series: ChartSeriesConfig[] = [
       {
         id: 'totalCost',
-        name: '预估总费用',
+        name: labels.estimatedTotalCost,
         color: 'var(--usage-color-cost-total)',
         width: 1.8,
         style: 'solid',
@@ -80,7 +103,7 @@ export function buildChartSeriesConfig(
     topModels.forEach((m, idx) => {
       series.push({
         id: `modelCost_${m.model}`,
-        name: `${m.model} 费用`,
+        name: labels.modelCost(m.model),
         color: getModelColor(m.model, idx).stroke,
         width: 1.4,
         style: 'solid',
@@ -151,7 +174,7 @@ export function buildChartSeriesConfig(
   const series: ChartSeriesConfig[] = [
     {
       id: 'total',
-      name: '总用量',
+      name: labels.totalUsage,
       color: 'var(--usage-color-brand)',
       width: 1.8,
       style: 'solid',
@@ -160,7 +183,7 @@ export function buildChartSeriesConfig(
     },
     {
       id: 'input',
-      name: '提示输入',
+      name: labels.promptInput,
       color: 'var(--usage-color-input)',
       width: 1.4,
       style: 'solid',
@@ -168,7 +191,7 @@ export function buildChartSeriesConfig(
     },
     {
       id: 'output',
-      name: '生成输出',
+      name: labels.generatedOutput,
       color: 'var(--usage-color-claude)',
       width: 1.4,
       style: 'solid',
@@ -176,7 +199,7 @@ export function buildChartSeriesConfig(
     },
     {
       id: 'cache',
-      name: '缓存命中',
+      name: labels.cacheHit,
       color: 'var(--usage-color-cache)',
       width: 1.3,
       style: 'dashed',

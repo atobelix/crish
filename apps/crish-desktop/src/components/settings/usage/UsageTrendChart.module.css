@@ -3,28 +3,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  background: var(--cover-card-bg, var(--bg-card));
 }
 
 .blockHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   min-height: var(--control-height-sm);
-}
-
-.blockTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  letter-spacing: -0.015em;
 }
 
 .svgChartViewport {
   position: relative;
   width: 100%;
-  height: 175px;
+  height: 175px; /* 刻度外裸值：图表绘图区几何，无既有档，授权保留 */
   margin-top: var(--space-1);
 }
 
@@ -152,7 +143,7 @@
 /* 纯净 HTML X 轴时间刻度，绝对百分比锚点定位，彻底根除 24 小时叠字 */
 .chartXAxis {
   position: relative;
-  height: 18px;
+  height: 18px; /* 刻度外裸值：轴标签带固定几何，无既有档，授权保留 */
   margin-top: var(--space-1);
   color: var(--text-tertiary);
   font-size: var(--font-size-xxs);
@@ -210,7 +201,7 @@
 
 .legendSvg {
   width: 16px;
-  height: 8px;
+  height: var(--space-2);
   flex-shrink: 0;
   display: block;
   transition: transform var(--transition-fast);
@@ -221,7 +212,7 @@
 }
 
 .emptyChart {
-  height: 175px;
+  height: 175px; /* 刻度外裸值：与绘图区（.svgChartViewport）同高，无既有档，授权保留 */
   display: flex;
   align-items: center;
   justify-content: center;

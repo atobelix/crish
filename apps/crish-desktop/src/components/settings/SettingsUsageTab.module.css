@@ -1,4 +1,6 @@
-/* SettingsUsageTab.module.css - Conex / Crish 用量监控控制台主布局样式 (100% 依赖系统原子组件与 Tokens) */
+/* SettingsUsageTab.module.css - 用量页主布局（R3 一期分离）
+   原 .usageDashboardCard（边框+阴影巨卡）已退役：内容拆为四张标准分组卡
+   （SettingsSection + SettingsCard），本文件只剩页头工具、页尾操作行与骨架。 */
 
 .headerTools {
   display: flex;
@@ -6,59 +8,56 @@
   gap: var(--space-3);
 }
 
-.usageDashboardCard {
-  background: var(--cover-card-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 底栏操作区 */
+/* 页尾操作行：卡外呈现，与其他设置页的操作行口径一致（无卡底、无分隔线） */
 .actionsBar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  border-top: var(--hairline-width) solid var(--border-subtle);
-  background: var(--cover-card-bg, var(--bg-card));
+  padding: 0 var(--space-0_5);
 }
 
-/* 骨架屏驱动状态 */
+/* 骨架屏：按新分区结构排布（标题条 + 卡面块 × 4），与加载后版式同构 */
 .skeletonContainer {
-  padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
-.skeletonHeader {
-  height: 60px;
+.skeletonGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonTitle {
+  width: 48px;
+  height: var(--space-3_5);
   background: var(--bg-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   animation: shimmer var(--transition-skeleton) infinite;
+}
+
+.skeletonCard {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-xl);
+  animation: shimmer var(--transition-skeleton) infinite;
+}
+
+.skeletonOverview {
+  height: 118px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
 }
 
 .skeletonChart {
-  height: 180px;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-md);
-  animation: shimmer var(--transition-skeleton) infinite;
+  height: 264px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
 }
 
-.skeletonSection {
-  height: 140px;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-md);
-  animation: shimmer var(--transition-skeleton) infinite;
+.skeletonBlock {
+  height: 190px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeletonHeader,
-  .skeletonChart,
-  .skeletonSection {
+  .skeletonTitle,
+  .skeletonCard {
     animation: none;
   }
 }

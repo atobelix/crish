@@ -3,9 +3,11 @@ import type {
   UsageModelBreakdownItem,
   UsageTimeseriesPoint,
 } from '../../../api/usageContracts';
+import { useI18n } from '../../../i18n';
 import {
   buildChartSeriesConfig,
   computeSeriesGeometry,
+  type ChartSeriesLabels,
 } from './usageChartModel';
 import { clampViewportX, computeDecimatedTicks } from './usageSpline';
 import { SegmentedControl } from '@/components/ui';
@@ -33,6 +35,7 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   models,
   range = '24h',
 }) => {
+  const { t } = useI18n();
   const [dimension, setDimension] = useState<'overview' | 'models' | 'cost'>(
     'overview'
   );
@@ -45,6 +48,23 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
+  // 系列名文案（i18n）：仅标签注入，图表构建逻辑零改动
+  const seriesLabels = useMemo<ChartSeriesLabels>(
+    () => ({
+      totalUsage: t('settings.usage.seriesTotalUsage', '总用量'),
+      promptInput: t('settings.usage.seriesPromptInput', '提示输入'),
+      generatedOutput: t('settings.usage.seriesGeneratedOutput', '生成输出'),
+      cacheHit: t('settings.usage.seriesCacheHit', '缓存命中'),
+      estimatedTotalCost: t(
+        'settings.usage.seriesEstimatedTotalCost',
+        '预估总费用'
+      ),
+      modelCost: (model: string) =>
+        t('settings.usage.seriesModelCost', `${model} 费用`, { model }),
+    }),
+    [t]
+  );
+
   // 1. 构建图表配置模型
   const chartModel = useMemo(() => {
     return buildChartSeriesConfig(
@@ -52,9 +72,10 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
       points,
       maxTokens,
       maxCost,
-      models
+      models,
+      seriesLabels
     );
-  }, [dimension, points, maxTokens, maxCost, models]);
+  }, [dimension, points, maxTokens, maxCost, models, seriesLabels]);
 
   const { seriesList, yTicks, yMax, formatVal } = chartModel;
 
@@ -160,8 +181,6 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   return (
     <div className={styles.chartContainer}>
       <div className={styles.blockHeader}>
-        <span className={styles.blockTitle}>吞吐趋势</span>
-
         <SegmentedControl
           size="xs"
           value={dimension}
@@ -169,16 +188,27 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
             setDimension(val as 'overview' | 'models' | 'cost')
           }
           options={[
-            { value: 'overview', label: '吞吐总览' },
-            { value: 'models', label: '模型对比' },
-            { value: 'cost', label: '费用走势' },
+            {
+              value: 'overview',
+              label: t('settings.usage.trendDimOverview', '吞吐总览'),
+            },
+            {
+              value: 'models',
+              label: t('settings.usage.trendDimModels', '模型对比'),
+            },
+            {
+              value: 'cost',
+              label: t('settings.usage.trendDimCost', '费用走势'),
+            },
           ]}
         />
       </div>
 
       {points.length <= 1 ||
       (maxTokens === 0 && maxCost === 0 && models.length === 0) ? (
-        <div className={styles.emptyChart}>暂无充足时序采样数据</div>
+        <div className={styles.emptyChart}>
+          {t('settings.usage.trendEmpty', '暂无充足时序采样数据')}
+        </div>
       ) : (
         <>
           <div
@@ -347,10 +377,10 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                   <div className={styles.tooltipHeader}>
                     {activePoint.label} ·{' '}
                     {dimension === 'overview'
-                      ? '吞吐总览'
+                      ? t('settings.usage.trendTooltipOverview', '吞吐总览')
                       : dimension === 'models'
-                        ? '各模型用量'
-                        : '费用明细'}
+                        ? t('settings.usage.trendTooltipModels', '各模型用量')
+                        : t('settings.usage.trendTooltipCost', '费用明细')}
                   </div>
                   {computedSeries.map((ser) => {
                     if (disabledSeries.has(ser.id)) return null;

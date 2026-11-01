@@ -3,14 +3,15 @@ import { getActivityMatrix } from '../../../api/usageApi';
 import type {
   ActivityMatrixCell,
   ActivityMatrixDto,
-  UsageHeroStats,
 } from '../../../api/usageContracts';
-import { formatCost, formatTokens } from './usageSpline';
-import { SegmentedControl, Tooltip } from '@/components/ui';
+import { useI18n } from '../../../i18n';
+import { formatTokens } from './usageSpline';
+import { Tooltip } from '@/components/ui';
 import styles from './ActivityMatrixHeatmap.module.css';
 
 export interface ActivityMatrixHeatmapProps {
-  heroStats: UsageHeroStats;
+  /** 跟随页头全局时间范围（R3 起热力图不再有自有切换器，全页单一口径） */
+  range: '24h' | '7d' | '30d';
   refreshKey?: number;
 }
 
@@ -22,29 +23,23 @@ function parseRowLabel(label: string): { title: string; sub?: string } {
   return { title: label };
 }
 
-const RANGE_OPTIONS = [
-  { value: '24h', label: '24 小时' },
-  { value: '7d', label: '7 天' },
-  { value: '30d', label: '30 天' },
-];
-
 export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
-  heroStats,
+  range,
   refreshKey,
 }) => {
-  const [matrixRange, setMatrixRange] = useState<'24h' | '7d' | '30d'>('30d');
+  const { t } = useI18n();
   const [matrixData, setMatrixData] = useState<ActivityMatrixDto | null>(null);
 
-  // 独立获取热力图时序数据（接入 refreshKey，与父级刷新/清空保持严格同步）
+  // 热力图数据跟随全局范围（接入 refreshKey，与父级刷新/清空保持严格同步）
   useEffect(() => {
     let cancelled = false;
-    void getActivityMatrix(matrixRange).then((data) => {
+    void getActivityMatrix(range).then((data) => {
       if (!cancelled) setMatrixData(data);
     });
     return () => {
       cancelled = true;
     };
-  }, [matrixRange, refreshKey]);
+  }, [range, refreshKey]);
 
   const rows = matrixData?.rows ?? [
     '00-03',
@@ -86,26 +81,15 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
   return (
     <div className={styles.activitySection}>
       <div className={styles.activityHeader}>
-        <span className={styles.blockTitle}>活动</span>
-        <div className={styles.activityHeaderControls}>
-          {/* 独立活动时间跨度选择器：换装系统 SegmentedControl */}
-          <SegmentedControl
-            size="xs"
-            value={matrixRange}
-            onChange={(val) => setMatrixRange(val as '24h' | '7d' | '30d')}
-            options={RANGE_OPTIONS}
-          />
-
-          {/* 活跃度图例 */}
-          <div className={styles.activityLegend}>
-            <span>少</span>
-            <div className={`${styles.activityLegendCell} ${styles.actLvl0}`} />
-            <div className={`${styles.activityLegendCell} ${styles.actLvl1}`} />
-            <div className={`${styles.activityLegendCell} ${styles.actLvl2}`} />
-            <div className={`${styles.activityLegendCell} ${styles.actLvl3}`} />
-            <div className={`${styles.activityLegendCell} ${styles.actLvl4}`} />
-            <span>多</span>
-          </div>
+        {/* 活跃度图例（范围切换已删除：全页只剩页头一个全局范围控件） */}
+        <div className={styles.activityLegend}>
+          <span>{t('settings.usage.activityLegendLess', '少')}</span>
+          <div className={`${styles.activityLegendCell} ${styles.actLvl0}`} />
+          <div className={`${styles.activityLegendCell} ${styles.actLvl1}`} />
+          <div className={`${styles.activityLegendCell} ${styles.actLvl2}`} />
+          <div className={`${styles.activityLegendCell} ${styles.actLvl3}`} />
+          <div className={`${styles.activityLegendCell} ${styles.actLvl4}`} />
+          <span>{t('settings.usage.activityLegendMore', '多')}</span>
         </div>
       </div>
 
@@ -144,8 +128,18 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
 
                     const tooltipText =
                       cell.tokens > 0
-                        ? `${cell.colLabel} ${cell.rowLabel} · ${formatTokens(cell.tokens)} tokens (${cell.calls} 次调用)`
-                        : `${cell.colLabel} ${cell.rowLabel} · 无使用记录`;
+                        ? `${cell.colLabel} ${cell.rowLabel} · ${t(
+                            'settings.usage.activityTooltipDetail',
+                            `${formatTokens(cell.tokens)} tokens（${cell.calls} 次调用）`,
+                            {
+                              tokens: formatTokens(cell.tokens),
+                              calls: cell.calls,
+                            }
+                          )}`
+                        : `${cell.colLabel} ${cell.rowLabel} · ${t(
+                            'settings.usage.activityTooltipEmpty',
+                            '无使用记录'
+                          )}`;
 
                     return (
                       <Tooltip
@@ -207,49 +201,6 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
               <span className={styles.xAxisColLabel}>—</span>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* 习惯与偏好统计网格 (通俗直白纯文字排版，零卡片无边框无 hover) */}
-      <div className={styles.activityStatsGrid}>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>每天平均用量</span>
-          <span className={styles.actStatVal}>
-            {formatTokens(heroStats.dailyAverageTokens)}{' '}
-            <span className={styles.actStatUnit}>tokens</span>
-          </span>
-        </div>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>每天平均花费</span>
-          <span className={styles.actStatVal}>
-            {formatCost(heroStats.dailyAverageCost, '')}{' '}
-            <span className={styles.actStatUnit}>CNY</span>
-          </span>
-        </div>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>发送消息总数</span>
-          <span className={styles.actStatVal}>
-            {heroStats.totalMessages.toLocaleString('zh-CN')}{' '}
-            <span className={styles.actStatUnit}>条</span>
-          </span>
-        </div>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>最常用的模型</span>
-          <span className={`${styles.actStatVal} ${styles.actStatValCode}`}>
-            {heroStats.topModel || '—'}
-          </span>
-        </div>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>最活跃的时间</span>
-          <span className={styles.actStatVal}>
-            {heroStats.peakActiveHourRange || '—'}
-          </span>
-        </div>
-        <div className={styles.actStatItem}>
-          <span className={styles.actStatLabel}>最常工作的项目</span>
-          <span className={`${styles.actStatVal} ${styles.actStatValCode}`}>
-            {heroStats.topProject || '—'}
-          </span>
         </div>
       </div>
     </div>
