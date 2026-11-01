@@ -5,10 +5,10 @@
 :root,
 html[data-theme='default'],
 html[data-theme='light'] {
-  /* 3 档状态透明叠加阶梯（SSOT · 浅色 2.5% / 3% / 7% 纯净轻中性微光，封顶 7% 严禁脏灰） */
+  /* 3 档状态透明叠加阶梯（SSOT · 浅色 2.5% / 3% / 6% 纯净轻中性微光，封顶 6% 严禁脏灰） */
   --state-hover-pct: 2.5%;
   --state-active-pct: 3%;
-  --state-selected-pct: 7%;
+  --state-selected-pct: 6%;
   --state-hover: color-mix(
     in srgb,
     var(--text-primary) var(--state-hover-pct),
