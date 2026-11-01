@@ -104,6 +104,17 @@ jobs:
       - run: npm run check:model-config-ssot
       # 自动化 npm 许可证扫描门禁（P1-LIC-01）：扫描生产依赖，阻断强 Copyleft
       - run: node scripts/check-npm-licenses.mjs
+      # i18n 词条门禁补接（P1-1）：对称 / 未用 / 硬编码 / 引用四脚本聚合；
+      # 此前仅本地 pre-commit 与 check:desktop 聚合接线，服务端无防线。
+      # 与 check:desktop 同口径，CI 单独接线确保 PR 级拦截。
+      - run: npm run check:i18n
+      # UI 生成物漂移门禁补接（P1-1）：llms.txt 组件契约
+      # （generate-ui-contracts --check）与 ui/index.ts 桶文件
+      # （sync-ui-exports --check）此前既不在任何 workflow、也不在
+      # pre-commit，无任何自动运行点。与 check:desktop 同口径，
+      # CI 单独接线确保 PR 级拦截。
+      - run: npm run check:ui-contracts
+      - run: npm run check:ui-exports
 
   vitest-fast:
     runs-on: ubuntu-24.04
