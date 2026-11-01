@@ -30,8 +30,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const LOCALES_DIR = resolve(REPO_ROOT, 'apps/crish-desktop/src/i18n/locales');
 const BASE_LOCALE = 'zh-CN';
-const ERROR_REGISTRY_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/errors/info.ts');
-const ERROR_CODES_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/errors/codes.ts');
+const ERROR_REGISTRY_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/info.ts');
+const ERROR_CODES_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/codes.ts');
 
 const SCAN_DIRS = [
   'apps/crish-desktop/src',
@@ -198,17 +198,17 @@ function getDynamicContractWhitelist() {
 
   if (existsSync(ERROR_REGISTRY_PATH)) {
     const content = readFileSync(ERROR_REGISTRY_PATH, 'utf8');
-    // 匹配形如 'provider.network': {
-    const codeMatches = content.match(/'([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+)':\s*\{/g) || [];
+    // 匹配形如 "provider.network": {（生成注册表为双引号写法，兼容单引号）
+    const codeMatches = content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']\s*:\s*\{/g) || [];
     for (const m of codeMatches) {
-      const code = m.replace(/[':\s{]/g, '');
+      const code = m.replace(/["':\s{]/g, '');
       allowed.add(`error.${code}.title`);
       allowed.add(code);
     }
-    // 匹配形如 action: 'action.provider.check_network' 或 action: 'action.common.report_bug'
-    const actionMatches = content.match(/action:\s*'([^']+)'/g) || [];
+    // 匹配形如 action: "action.provider.check_network"（生成注册表为双引号写法，兼容单引号）
+    const actionMatches = content.match(/action:\s*["']([^"']+)["']/g) || [];
     for (const m of actionMatches) {
-      const act = m.replace(/action:\s*'|'/g, '');
+      const act = m.replace(/action:\s*["']|["']/g, '');
       allowed.add(act);
       allowed.add(act.replace(/^action\./, ''));
     }
@@ -216,9 +216,9 @@ function getDynamicContractWhitelist() {
 
   if (existsSync(ERROR_CODES_PATH)) {
     const content = readFileSync(ERROR_CODES_PATH, 'utf8');
-    const codes = content.match(/'([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+)'/g) || [];
+    const codes = content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']/g) || [];
     for (const c of codes) {
-      const code = c.replace(/'/g, '');
+      const code = c.replace(/["']/g, '');
       allowed.add(`error.${code}.title`);
       allowed.add(code);
     }

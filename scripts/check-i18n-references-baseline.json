@@ -1,0 +1,279 @@
+{
+  "description": "check-i18n-references.mjs 豁免基线。每项须经人工评审：真错键必须修引用或补词典，不得以登记代替修复；非 i18n 标识按「文件+模式」登记，禁止整文件放行真实键（测试夹具文件按方案 §七.4 按文件登记）。keyPattern 特殊值 @registry-code 表示键属于注册表错误码集合。另注：处于 t()/translate() 第一实参位置的字面量由脚本强制不适用任何基线条目。",
+  "entries": [
+    {
+      "file": "packages/shared-types/src/generated/errors/info.ts",
+      "id": "silent-action-none",
+      "keyPattern": "^action\\.(browser|computer|runtime|telemetry)\\.none$",
+      "reason": "静默动作键：正确文案为空串（无操作建议），而 symmetry 门禁禁止空值词条，故不入词典。runtime/telemetry/computer 三键在 error-translation.ts 有硬编码静默短路；browser.none 现行走通用兜底文案，行为保持现状（是否统一为静默待产品裁决）。",
+      "source": "registry"
+    },
+    {
+      "file": "apps/crish-desktop/src/utils/*.ts",
+      "id": "silent-action-none-literal",
+      "keyPattern": "^action\\.(browser|computer|runtime|telemetry)\\.none$",
+      "reason": "静默动作键在 BUILTIN 兜底表（errorDisplayTables.ts）与静默短路表（error-translation.ts）中的字面量出现，与注册表源同一处置。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/utils/errorDisplayTables.ts",
+      "id": "builtin-probe-error-tool-exec-failed",
+      "key": "tool.exec_failed",
+      "reason": "BUILTIN_ERROR_DISPLAY 保留条目：注册表已退役此码，但 error-translation.test.ts 的兜底链夹具以此码断言 BUILTIN 回退原文（批 4b 登记），删之即打红测试且无干净接缝可迁移。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/utils/errorDisplayTables.ts",
+      "id": "builtin-probe-action-tool-exec-failed",
+      "key": "action.tool.exec_failed",
+      "reason": "BUILTIN_ACTION_DISPLAY 保留条目：注册表已退役此键，但 error-translation.test.ts 夹具以 mock 翻译返回此裸键、断言 resolveActionKeyFallback 经 BUILTIN 表展开原文（批 4b 登记），是 BUILTIN 命中分支的唯一精确文案探针。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/**",
+      "id": "errcode-literal-registry-codes",
+      "keyPattern": "@registry-code",
+      "reason": "方案 §四类 1：注册表错误码字面量（BUILTIN 表码键、错误码比较/分发分支、shared-types 解析器同源用法）。其 i18n 入口是模板键 error.<code>.title（已由注册表源全集校验），裸码本身从不直接喂给 t()。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/note*.ts",
+      "id": "note-ipc-codes-api",
+      "keyPattern": "^note\\.[a-z_]+$",
+      "reason": "笔记子系统 IPC 线协议错误码（noteApi/note*Ipc 各通道的 code 字段），由协议层自有处理，不经全局词典翻译。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/mirrorDetectSchedule.ts",
+      "id": "note-ipc-codes-mirror-schedule",
+      "keyPattern": "^note\\.[a-z_]+$",
+      "reason": "笔记镜像检测调度中透传的 IPC 协议错误码，同 note-ipc-codes-api。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/note-paper/useNoteHydrate.ts",
+      "id": "note-ipc-codes-hydrate-hook",
+      "keyPattern": "^note\\.[a-z_]+$",
+      "reason": "笔记 hydrate 流程中透传的 IPC 协议错误码，同 note-ipc-codes-api。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/**",
+      "id": "view-slot-workspace",
+      "keyPattern": "^workspace\\.(leaf\\.(panel|header)|layout|chat\\.(stream|composerAbove))$",
+      "reason": "方案 §四类 3：view-registry 视图 slot 标识全集（定义于 services/view-registry/SlotTypes.ts 与各 *.slot.ts，含其在布局持久化中的引用），为槽位 id 而非文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/services/view-registry/SlotTypes.ts",
+      "id": "view-slot-workbench",
+      "keyPattern": "^workbench\\.[a-z.]+$",
+      "reason": "方案 §四类 3：工作台顶层视图 slot 标识定义（workbench.root/topbar/topbar.actions），为槽位 id 而非文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/**",
+      "id": "config-path-shortcuts-overrides",
+      "key": "shortcuts.overrides",
+      "reason": "配置存储键路径：ConfigService get/set 的持久化路径（快捷键覆盖表），非 i18n 键。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/store/layout-tree/layoutRestorePolicy.ts",
+      "id": "config-key-restore-last-workspace",
+      "key": "ui.restoreLastWorkspace",
+      "reason": "设置键常量 RESTORE_LAST_WORKSPACE_SETTING_KEY 的取值（配置存储键名），非 i18n 键。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/capabilitiesStore.ts",
+      "id": "log-tag-refresh-capabilities",
+      "keyPattern": "^refreshProductCapabilities\\.[a-z]+$",
+      "reason": "logInternalError 的内部日志标签（refreshProductCapabilities.probe/.caps），非用户文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/chat-composer/useComposerFileHandlers.ts",
+      "id": "dom-selector-composer-textarea",
+      "key": "textarea.composer-textarea",
+      "reason": "querySelector 的 CSS 选择器（textarea 元素 + composer-textarea 类名），非键。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/appMode.ts",
+      "id": "url-host-tauri-localhost",
+      "key": "tauri.localhost",
+      "reason": "Tauri 本地服务 URL 的主机名字面量，非键。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/markdown/MarkdownSurface.tsx",
+      "id": "markdown-tooltip-key-map",
+      "keyPattern": "^markdown\\.code\\.[a-z]+$",
+      "reason": "TOOLTIP_KEY_MAP 的源侧标识：经映射表转到真实词典键（common.markdownCopy/markdownCopied/markdownWrap/markdownFold）后才消费，本身不直接喂给 t()。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/workers/render-worker.ts",
+      "id": "worker-op-highlight",
+      "keyPattern": "^highlight\\.[a-z.]+$",
+      "reason": "Worker 消息协议操作名（onmessage 按 type 的 switch 分发标签，与方案 §四 hook/协议事件名同族），非文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/codeHighlightBatch.ts",
+      "id": "worker-op-highlight-batch",
+      "keyPattern": "^highlight\\.[a-z.]+$",
+      "reason": "高亮批处理请求的操作名（与 render-worker 协议对端），同 worker-op-highlight。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/workers/compute-worker.ts",
+      "id": "worker-op-compute",
+      "keyPattern": "^(json\\.(parse|stringify)|budget\\.text)$",
+      "reason": "Worker 消息协议操作名（switch(type) 分发标签），非文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/workers/io-worker.ts",
+      "id": "worker-op-io",
+      "keyPattern": "^json\\.parse$",
+      "reason": "Worker 消息协议操作名（switch(type) 分发标签），非文案。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/assets/icons/modelVendors.*.ts",
+      "id": "data-model-vendor-ids",
+      "keyPattern": "^[a-z0-9][a-z0-9.-]*$",
+      "reason": "模型/厂商数据表中的模型 id（如 gemini-1.5-pro、llama-3.3）与厂商域名（如 fireworks.ai、hf.co），纯数据值，本组文件无 i18n 调用。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/provider-profiles/profileCatalog.ts",
+      "id": "data-model-catalog-ids",
+      "keyPattern": "^[a-z0-9][a-z0-9.-]*$",
+      "reason": "模型目录数据中的模型 id（如 mimo-v2.5），纯数据值。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/settings/aboutTabData.ts",
+      "id": "data-about-licenses-domains",
+      "keyPattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$",
+      "reason": "关于页数据表中的许可证标识（Apache-2.0、Unicode-3.0）与站点域名（crates.io），纯数据值。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/**",
+      "id": "filename-literals",
+      "keyPattern": "^[^./]+\\.(md|MD|json|txt|js|exe|ts|tsx|png)$",
+      "reason": "文件名字面量（SKILL.md、package.json、manifest.json、entry-core.tsx、node_repl.exe 等，用于存在性检查/文件识别/默认名），单点分文件名形态与 i18n 键 disjoint，非键。",
+      "source": "literal"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/chat-tool-call/ToolCallOutputPane.tsx",
+      "id": "filename-template-tool-output",
+      "key": "tool-output-${}.log",
+      "reason": "工具输出落盘的文件名模板，非 i18n 键。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/services/TelemetryService.ts",
+      "id": "filename-template-telemetry",
+      "key": "crish-telemetry-${}.json",
+      "reason": "遥测数据导出的文件名模板，非 i18n 键。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx",
+      "id": "filename-template-settings-backup",
+      "key": "crish-settings-${}.json",
+      "reason": "设置备份导出的文件名模板，非 i18n 键。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/api/browserImportLib.ts",
+      "id": "filename-template-browser-storage",
+      "key": "browser-storage-state-${}.json",
+      "reason": "浏览器存储状态导入的文件名模板，非 i18n 键。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/settings/SettingsSidebar.tsx",
+      "id": "settings-dynamic-tabs-groups",
+      "keyPattern": "^settings\\.(tabs|groups)\\.",
+      "reason": "方案 §七.3 机制例外：动态键 settings.tabs.${tab.id} 与 settings.groups.${groupKey}，调用时传入数据自带 label 作为 fallback，缺键亦显示正确文案；值域为设置页元数据，无法逐键静态枚举（Phase 1 已登记口径）。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx",
+      "id": "settings-wizard-step",
+      "keyPattern": "^settings\\.personalize\\.wizardStep",
+      "reason": "机制例外：模板 settings.personalize.wizardStep${stepMeta.id} 的值域为 WizardStep id（0–3），词典键 settings.personalize.wizardStep0..3 双语齐备（收口实测），按序号拼键无法静态枚举。",
+      "source": "template"
+    },
+    {
+      "file": "apps/crish-desktop/src/i18n/__tests__/I18nContext.test.tsx",
+      "id": "fixture-i18n-context-test",
+      "keyPattern": ".*",
+      "reason": "测试夹具（方案 §七.4 按文件登记）：故意引用不存在的键（settings.unknown.item、action.retry-once、nav.user_profile 等）以验证缺键降级与 humanize 行为，断言行为不得因整改改变。字面源扫描范围为非测试源码，本条为登记性例外。",
+      "source": "literal"
+    },
+    {
+      "file": "packages/shared-types/src/errors/errors-runtime.test.ts",
+      "id": "fixture-errors-runtime-test",
+      "keyPattern": ".*",
+      "reason": "测试夹具（方案 §七.4 按文件登记）：故意使用非法错误码（如 tool.browser.nav_timeout）验证注册表解析器拒绝行为。该文件不在桌面字面源扫描范围内，本条为登记性例外。",
+      "source": "literal"
+    },
+    {
+      "id": "module-specifier-qrcode-react",
+      "source": "literal",
+      "file": "apps/crish-desktop/src/components/settings/SettingsDevicesTab.tsx",
+      "key": "qrcode.react",
+      "reason": "npm 依赖包名（import 模块说明符 import { QRCodeSVG } from 'qrcode.react'），非 i18n 键。"
+    },
+    {
+      "id": "numeric-format-zero",
+      "source": "template",
+      "file": "apps/crish-desktop/src/components/settings/usage/usageSpline.ts",
+      "key": "${}0.00",
+      "reason": "数值零值格式化模板（`${prefix}0.00` 固定小数位补齐），非 i18n 键。"
+    },
+    {
+      "id": "filename-template-session-export",
+      "source": "template",
+      "file": "apps/crish-desktop/src/api/sessionExportSanitize.ts",
+      "key": "${}-${}-${}-${}.${}",
+      "reason": "会话导出文件名拼接模板（`${base}-${y}-${m}-${d}.${ext}`），非 i18n 键。"
+    },
+    {
+      "id": "selector-template-hierarchy-audit",
+      "source": "template",
+      "file": "apps/crish-desktop/src/dev/hierarchyAudit.ts",
+      "key": "${}.${}",
+      "reason": "开发期层级审计工具的 CSS 选择器拼接（标签名.类名），非 i18n 键。"
+    },
+    {
+      "id": "filename-template-note-download",
+      "source": "template",
+      "file": "apps/crish-desktop/src/components/note-paper/NotePaperStrictHeader.tsx",
+      "key": "${}.md",
+      "reason": "笔记导出下载文件名模板（`${safeTitle}.md`），非 i18n 键。"
+    },
+    {
+      "id": "filename-template-plugin-share",
+      "source": "template",
+      "file": "apps/crish-desktop/src/components/extensions-surface/PluginShareModal.tsx",
+      "key": "${}.json",
+      "reason": "插件分享下载文件名模板（`${plugin.id}.json`），非 i18n 键。"
+    },
+    {
+      "id": "filename-template-mcp-entry",
+      "source": "template",
+      "file": "apps/crish-desktop/src/components/extensions-surface/detectExternalMcpServers.ts",
+      "key": "${}.js",
+      "reason": "外部 MCP 服务入口文件名参数模板（`${item.name}.js`），非 i18n 键。"
+    }
+  ],
+  "version": 1
+}
