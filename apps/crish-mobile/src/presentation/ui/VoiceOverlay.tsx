@@ -1,9 +1,12 @@
 // 语音浮层与模型下载门（01 文档 W-D）：
-// - 浮层：5 柱波形（电平驱动）+ partial 实时文本 + 手势提示；
-//   cancelling 态提示变红「松开取消」，finishing 态显示「正在识别…」。
+// - 浮层（原型 voice-recording-card）：170 宽悬浮小卡、无遮罩（透明层不压暗内容）、
+//   5 柱波形（电平驱动，尺寸按原型 3.5 宽 / 6→26px）+ partial 实时文本（W-D 功能件，
+//   原型年代早于流式识别，按 J3 保留并置于小卡内）+ 手势提示；
+//   cancelling 态波形与提示变红「松开取消」，finishing 态显示「正在识别…」。
 // - 下载门：模型未就绪时以 Dialog 诚实说明体积与进度，可收起后台续传，
 //   失败可重试；绝不假装已就绪。
-import { Modal, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Modal, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { AsrModelState } from '@/adapters/asr/modelManager';
 import type { VoicePhase } from '@/domain/asr/voiceInputMachine';
@@ -12,8 +15,11 @@ import Dialog from './Dialog';
 
 /** 波形各柱权重（中间高、两侧低的对称包络） */
 const BAR_WEIGHTS = [0.55, 0.85, 1, 0.85, 0.55] as const;
+/** 原型 voice-wave-anim：柱宽 3.5、高 6→26px、容器高 28 */
+const BAR_WIDTH = 3.5;
 const BAR_MIN_HEIGHT = 6;
-const BAR_MAX_HEIGHT = 34;
+const BAR_MAX_HEIGHT = 26;
+const BAR_AREA_HEIGHT = 28;
 
 export interface VoiceOverlayProps {
   phase: VoicePhase;
@@ -40,29 +46,52 @@ export function VoiceOverlay({
         ? '松开取消'
         : '松开发送，上滑取消';
 
+  // 进场（原型：opacity 0.2s + 卡片 translateY 6→0 0.22s emphasized）
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(6)).current;
+  useEffect(() => {
+    if (!visible) return;
+    opacity.setValue(0);
+    translateY.setValue(6);
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.bezier(...theme.motion.easing.emphasized),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [visible, opacity, translateY, theme.motion.easing.emphasized]);
+
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
     >
-      <View
-        style={[styles.backdrop, { backgroundColor: theme.colors.scrim }]}
-        pointerEvents="none"
-      >
-        <View
+      <View style={styles.backdrop} pointerEvents="none">
+        <Animated.View
           style={[
             styles.panel,
             {
-              borderRadius: theme.radius.dialog,
+              // 原型 voice-recording-card：宽 170、radius 20、padding 20/16、gap 14
+              width: 170,
+              borderRadius: theme.radius.lg,
               backgroundColor: theme.colors.surface,
-              paddingHorizontal: theme.space.xl,
-              paddingVertical: theme.space.lg,
-              gap: theme.space.md,
-              marginHorizontal: theme.space.xl,
+              paddingVertical: theme.space.xl,
+              paddingHorizontal: theme.space.lg,
+              gap: 14,
+              opacity,
+              transform: [{ translateY }],
             },
-            theme.shadow.md,
+            // 原型阴影 0 12px 32px rgba(0,0,0,0.08) = shadow.lg 同值
+            theme.shadow.lg,
           ]}
         >
           <View style={styles.bars}>
@@ -70,7 +99,7 @@ export function VoiceOverlay({
               <View
                 key={index}
                 style={{
-                  width: 4,
+                  width: BAR_WIDTH,
                   borderRadius: theme.radius.pill,
                   height:
                     BAR_MIN_HEIGHT +
@@ -78,26 +107,28 @@ export function VoiceOverlay({
                       (BAR_MAX_HEIGHT - BAR_MIN_HEIGHT),
                   backgroundColor: cancelling
                     ? theme.colors.danger
-                    : theme.colors.actionPrimary,
+                    : // 波形柱为墨色元素，不随主操作绿走（M1 改指墨档）
+                      theme.colors.textPrimary,
                 }}
               />
             ))}
           </View>
           <AppText
-            variant="body"
+            variant="footnote"
             color={displayText ? 'textPrimary' : 'textTertiary'}
+            numberOfLines={3}
             style={styles.text}
           >
             {displayText || (starting ? '正在准备…' : '正在聆听…')}
           </AppText>
           <AppText
-            variant="footnote"
+            variant="caption"
             color={cancelling ? 'danger' : 'textSecondary'}
             style={styles.hint}
           >
             {hint}
           </AppText>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -167,23 +198,23 @@ export function VoiceModelGate({
 }
 
 const styles = StyleSheet.create({
+  // 无遮罩：透明全屏层只承载居中小卡，不压暗内容（原型 overlay 无 scrim）
   backdrop: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   panel: {
-    alignSelf: 'stretch',
     alignItems: 'center',
   },
   bars: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    height: BAR_MAX_HEIGHT,
+    height: BAR_AREA_HEIGHT,
   },
   text: {
-    minHeight: 24,
+    minHeight: 18,
     textAlign: 'center',
   },
   hint: {

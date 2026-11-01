@@ -1,4 +1,6 @@
-// 会话时间线渲染：用户气泡 / 助手无框正文 / 工具摘要行 / 审批一行状态 / 系统提示。
+// 会话时间线渲染：用户气泡 / 助手无框正文 / 工具摘要行 / 系统提示。
+// 审批不在流内呈现（原型对话流无审批行）：待审批统一由全局 ApprovalFloat
+// 悬浮卡承载（含收起胶囊与队列），已决状态在审批记录里可查。
 // 渲染前先经 groupToolRuns 把相邻工具折叠成摘要，详情交给工具抽屉。
 import { memo, useEffect, useMemo, useRef } from 'react';
 import {
@@ -13,7 +15,6 @@ import { useTheme } from '@/adapters/platform/theme';
 import { AppText, EmptyState, type TextColor } from '@/presentation/ui';
 import { StreamingText } from '@/presentation/components/blocks/StreamingText';
 import type {
-  ApprovalBlock,
   AssistantMessageBlock,
   NoticeBlock,
   TimelineBlock,
@@ -80,10 +81,11 @@ export function TimelineView({
       keyboardDismissMode="on-drag"
       contentContainerStyle={[
         {
-          paddingHorizontal: theme.space.screenX,
+          // 原型 conv-message-list：左右 18、消息 gap 16（token 无 18 档，定值落位）
+          paddingHorizontal: 18,
           paddingTop: headerClearance ?? theme.space.lg,
           paddingBottom: theme.space.xxl,
-          gap: theme.space.messageGap,
+          gap: theme.space.lg,
         },
         blocks.length === 0 && styles.emptyContent,
       ]}
@@ -110,7 +112,8 @@ const TimelineBlockView = memo(function TimelineBlockView({
     case 'toolRun':
       return <ToolSummaryRow run={block} onOpen={onOpenTools} />;
     case 'approval':
-      return <ApprovalView block={block} />;
+      // 流内不渲染审批行：待审批由全局悬浮卡承载（见文件头注）
+      return null;
     case 'notice':
       return <NoticeView block={block} />;
   }
@@ -131,12 +134,16 @@ function MessageView({ block }: { block: AssistantMessageBlock }) {
               borderTopRightRadius: theme.radius.bubble,
               borderBottomRightRadius: theme.radius.bubbleTail,
               borderBottomLeftRadius: theme.radius.bubble,
-              paddingHorizontal: theme.space.lg,
-              paddingVertical: theme.space.md,
+              // 原型 msg-user-bubble：padding 10/14 + 0 2px 8px rgba(0,0,0,0.06) 微阴影（shadow.md）
+              paddingHorizontal: 14,
+              paddingVertical: 10,
             },
+            theme.shadow.md,
           ]}
         >
-          <AppText variant="chat">{block.text}</AppText>
+          <AppText variant="chat" color="bubbleUserText">
+            {block.text}
+          </AppText>
         </View>
       </View>
     );
@@ -150,40 +157,6 @@ function MessageView({ block }: { block: AssistantMessageBlock }) {
       style={[theme.type.chat, { color: theme.colors.textPrimary }]}
     />
   );
-}
-
-/** 审批在对话里只留一行状态；决策统一交给全局 ApprovalFloat */
-function ApprovalView({ block }: { block: ApprovalBlock }) {
-  const theme = useTheme();
-  const { label, color } = approvalLine(block.status);
-  return (
-    <View
-      testID={`timeline-approval-${block.id}`}
-      accessibilityLabel={`审批：${block.toolName}，${label}`}
-      style={[styles.inlineRow, { gap: theme.space.xs }]}
-    >
-      {/* N05 裁定：文字已含语义与色彩层级，前置盾牌属装饰，不显示 */}
-      <AppText variant="footnote" color={color} numberOfLines={1}>
-        {label} · {block.toolName}
-      </AppText>
-    </View>
-  );
-}
-
-function approvalLine(status: ApprovalBlock['status']): {
-  label: string;
-  color: TextColor;
-} {
-  switch (status) {
-    case 'pending':
-      return { label: '等待你审批', color: 'warning' };
-    case 'approved':
-      return { label: '已允许', color: 'success' };
-    case 'denied':
-      return { label: '已拒绝', color: 'danger' };
-    case 'expired':
-      return { label: '已过期', color: 'textTertiary' };
-  }
 }
 
 function noticeColor(tone: NoticeBlock['tone']): TextColor {
