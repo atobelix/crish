@@ -17,10 +17,10 @@ export function useChatExportMarkdown(activeSessionId: string | null) {
           sessionsById: byId,
         });
         if (result.ok === false) {
-          toast.show(result.error || t('history.exportFailed'));
+          toast.show(result.error || t('chat.history.exportFailed'));
         }
       } catch {
-        toast.show(t('history.exportFailed'));
+        toast.show(t('chat.history.exportFailed'));
       }
     })();
   }, [activeSessionId, t]);

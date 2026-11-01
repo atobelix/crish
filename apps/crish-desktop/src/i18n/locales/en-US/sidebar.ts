@@ -35,6 +35,7 @@ export const sidebar: Record<string, string> = {
   exportMarkdown: 'Export as Markdown',
   clearAll: 'Clear All',
   sessionActions: 'Session Actions',
+  moreActions: 'More Actions',
 
   // Header and toggle controls
   expandSidebar: 'Expand sidebar',

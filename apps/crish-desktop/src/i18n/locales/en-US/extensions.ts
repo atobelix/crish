@@ -8,6 +8,13 @@ const extensions = {
   'tab.skills': 'Skills',
   'tab.mcp': 'MCP Servers',
 
+  'header.createPlugin': 'Create Plugin',
+  'header.importPlugin': 'Import Plugin',
+  'header.addSkill': 'Add Skill',
+  'header.connectMcp': 'Connect MCP',
+  'header.searchPlaceholder': 'Search extensions, skills and tools…',
+  'header.searchLabel': 'Search Extensions',
+
   'card.installing': 'Working…',
   'verb.install': 'Install',
   'verb.import': 'Import',

@@ -216,14 +216,14 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
 
     // 未配置密钥态或未选模型态：自适应三级阶梯文案（直出行动按钮「去配置模型供应商」）
     const standardText = isUnconfigured
-      ? t('models.goToConfigProvider', '去配置模型供应商')
-      : t('models.selectModel', '选择模型');
+      ? t('chat.models.goToConfigProvider', '去配置模型供应商')
+      : t('chat.models.selectModel', '选择模型');
     const compactText = isUnconfigured
-      ? t('models.goToConfigProvider', '去配置模型供应商')
-      : t('models.selectModel', '选择模型');
+      ? t('chat.models.goToConfigProvider', '去配置模型供应商')
+      : t('chat.models.selectModel', '选择模型');
     const microText = isUnconfigured
-      ? t('models.goToConfig', '去配置')
-      : t('models.modelLabel', '模型');
+      ? t('chat.models.goToConfig', '去配置')
+      : t('chat.models.modelLabel', '模型');
 
     return (
       <span className={styles.modelAdaptiveWrapper}>
@@ -250,19 +250,22 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     }
     if (isUnconfigured) {
       return t(
-        'models.unconfiguredTooltip',
+        'chat.models.unconfiguredTooltip',
         '尚未配置模型服务商 · 点击打开配置'
       );
     }
     if (needsModelSetup) {
       return t(
-        'models.configuredChooseTooltip',
+        'chat.models.configuredChooseTooltip',
         '已配置服务商，请选择具体模型'
       );
     }
     return choiceCount > 0
-      ? t('models.chooseModelTooltip', '在此选择模型 · 点击切换')
-      : t('models.unconfiguredTooltip', '尚未配置模型服务商 · 点击打开配置');
+      ? t('chat.models.chooseModelTooltip', '在此选择模型 · 点击切换')
+      : t(
+          'chat.models.unconfiguredTooltip',
+          '尚未配置模型服务商 · 点击打开配置'
+        );
   }, [
     engineModel,
     needsKeySetup,
@@ -290,8 +293,8 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
           aria-expanded={isUnconfigured ? undefined : showModelDropdown}
           aria-label={
             isUnconfigured
-              ? t('models.goToConfigProvider', '去配置模型供应商')
-              : t('models.selectModel', '选择模型')
+              ? t('chat.models.goToConfigProvider', '去配置模型供应商')
+              : t('chat.models.selectModel', '选择模型')
           }
           style={{ cursor: 'pointer', position: 'relative' }}
           onClick={handleBadgeClick}

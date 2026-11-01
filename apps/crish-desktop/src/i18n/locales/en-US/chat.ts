@@ -3,6 +3,7 @@ import type { ChatTranslations } from '../../types';
 export const chat: ChatTranslations = {
   // ── Baseline 14 keys (Strict backward compatibility) ──
   newSession: 'New Session',
+  newConversation: 'New Conversation',
   emptyStateTitle: 'Start a new conversation',
   emptyStateSubtitle: 'Select a model or enter a message to begin',
   placeholder: 'Type a message...',
@@ -229,6 +230,22 @@ export const chat: ChatTranslations = {
     'Select a model or enter a message to begin',
   'emptyState.createSessionBtn': 'New Session',
   'emptyState.clearFilterBtn': 'Clear Filter',
+
+  // ── 7. Chat header model picker & model badge menu (models.*) ──
+  'models.selectModel': 'Select Model',
+  'models.goToConfigProvider': 'Configure Model Provider',
+  'models.goToConfig': 'Configure',
+  'models.modelLabel': 'Model',
+  'models.unconfiguredTitle': 'No Model Provider Configured',
+  'models.unconfiguredDesc':
+    'Crish needs at least one AI model provider configured to start chatting and coding',
+  'models.unconfiguredTooltip':
+    'No model provider configured yet · Click to open configuration',
+  'models.configuredChooseTooltip':
+    'Provider configured, please select a model',
+  'models.chooseModelTooltip': 'Select a model here · Click to switch',
+  'models.notFound': 'No matching models or providers found',
+  'models.openSettings': 'Go to Model Settings',
   // ── Subagent browse / detail (AgentBrowsePad / AgentCardHeader) ──
   'agentBrowse.modeValue': 'Mode {mode}',
   'agentBrowse.readOnly': 'Read-only',

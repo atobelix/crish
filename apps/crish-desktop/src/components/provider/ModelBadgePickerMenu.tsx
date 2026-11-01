@@ -282,7 +282,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {t('models.unconfiguredTitle', '尚未配置模型服务商')}
+                  {t('chat.models.unconfiguredTitle', '尚未配置模型服务商')}
                 </div>
                 <div
                   className={styles.emptySubtitle}
@@ -294,7 +294,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                   }}
                 >
                   {t(
-                    'models.unconfiguredDesc',
+                    'chat.models.unconfiguredDesc',
                     'Crish 需要配置至少一个 AI 模型服务商才能开始对话与编码'
                   )}
                 </div>
@@ -306,7 +306,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     color: 'var(--text-tertiary)',
                   }}
                 >
-                  {t('models.notFound', '未找到匹配的模型或厂商')}
+                  {t('chat.models.notFound', '未找到匹配的模型或厂商')}
                 </div>
                 <Button
                   type="button"
@@ -325,13 +325,15 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     gap: '6px',
                   }}
                 >
-                  <span>{t('models.openSettings', '前往模型设置配置')}</span>
+                  <span>
+                    {t('chat.models.openSettings', '前往模型设置配置')}
+                  </span>
                   <AppIcon name="arrow-right" size={13} />
                 </Button>
               </div>
             ) : (
               <div className={styles.emptyState}>
-                {t('models.notFound', '未找到匹配的模型或厂商')}
+                {t('chat.models.notFound', '未找到匹配的模型或厂商')}
               </div>
             )
           ) : (

@@ -40,23 +40,23 @@ export const McpDetailHeader: React.FC<McpDetailHeaderProps> = ({
           <Tooltip
             content={
               isOnline
-                ? t('tools.mcp.statusRunning', '已连接并在后台运行')
-                : t('tools.mcp.statusStopped', '未连接/已停止')
+                ? t('tool.mcp.statusRunning', '已连接并在后台运行')
+                : t('tool.mcp.statusStopped', '未连接/已停止')
             }
           >
             <span
               className={`${styles.statusDot} ${isOnline ? styles.statusOnline : styles.statusOffline}`}
               aria-label={
                 isOnline
-                  ? t('tools.mcp.connected', '已连接')
-                  : t('tools.mcp.disconnected', '未连接')
+                  ? t('tool.mcp.connected', '已连接')
+                  : t('tool.mcp.disconnected', '未连接')
               }
             />
           </Tooltip>
           {probeResult.status === 'success' && (
             <Tooltip
               content={t(
-                'tools.mcp.latencyNormal',
+                'tool.mcp.latencyNormal',
                 '连通正常，延迟 {latency}ms',
                 {
                   latency: probeResult.latencyMs,
@@ -72,12 +72,12 @@ export const McpDetailHeader: React.FC<McpDetailHeaderProps> = ({
             <Tooltip
               content={
                 probeResult.message ||
-                t('tools.mcp.serviceDisabled', '服务未启用')
+                t('tool.mcp.serviceDisabled', '服务未启用')
               }
             >
               <span className={styles.probeOfflineText}>
                 {probeResult.message ||
-                  t('tools.mcp.serviceDisabled', '服务未启用')}
+                  t('tool.mcp.serviceDisabled', '服务未启用')}
               </span>
             </Tooltip>
           )}
@@ -96,14 +96,14 @@ export const McpDetailHeader: React.FC<McpDetailHeaderProps> = ({
             size="sm"
             className={styles.connProbeBtn}
             onClick={onTestConnectivity}
-            aria-label={t('tools.mcp.testConnectivity', '连通性测试')}
+            aria-label={t('tool.mcp.testConnectivity', '连通性测试')}
           >
             <AppIcon
               name="activity"
               size={13}
               className={testingConn ? styles.spinning : ''}
             />
-            <span>{t('tools.mcp.testConnectivity', '连通性测试')}</span>
+            <span>{t('tool.mcp.testConnectivity', '连通性测试')}</span>
           </Button>
         </Tooltip>
         <Tooltip content={isOnline ? '停用 MCP 服务' : '启用 MCP 服务'}>
@@ -200,13 +200,13 @@ export const McpOfflineEmptyState: React.FC<McpOfflineEmptyStateProps> = ({
     <div className={styles.emptyWorkbenchState}>
       <AppIcon name="power" size={22} />
       <div className={styles.emptyTitle}>
-        {t('tools.mcp.unconnectedReflectTitle', '未连接，启动后动态反射')}
+        {t('tool.mcp.unconnectedReflectTitle', '未连接，启动后动态反射')}
       </div>
       <div className={styles.emptyDesc}>
         {server.lastError
           ? server.lastError
           : t(
-              'tools.mcp.unconnectedReflectDesc',
+              'tool.mcp.unconnectedReflectDesc',
               '服务未连接。请开启上方运行状态开关，启动后将自动动态反射真实的 tools/list 与入参 Schema'
             )}
       </div>
@@ -228,12 +228,12 @@ export const McpNoToolsEmptyState: React.FC<McpNoToolsEmptyStateProps> = ({
     <div className={styles.emptyWorkbenchState}>
       <AppIcon name="package" size={22} />
       <div className={styles.emptyTitle}>
-        {t('tools.mcp.noExportedTools', '暂未发现导出的工具')}
+        {t('tool.mcp.noExportedTools', '暂未发现导出的工具')}
       </div>
       <div className={styles.emptyDesc}>
         {server.lastError
           ? server.lastError
-          : t('tools.mcp.noToolsDeclared', '服务已连接，但远端未声明任何工具')}
+          : t('tool.mcp.noToolsDeclared', '服务已连接，但远端未声明任何工具')}
       </div>
     </div>
   );
@@ -255,12 +255,12 @@ export const McpEmptySearchState: React.FC<McpEmptySearchStateProps> = ({
     <div className={styles.emptySearchState}>
       <AppIcon name="search" size={20} />
       <span className={styles.emptyTitle}>
-        {t('tools.mcp.noMatchingTools', '未找到匹配「{query}」的工具', {
+        {t('tool.mcp.noMatchingTools', '未找到匹配「{query}」的工具', {
           query,
         })}
       </span>
       <Button variant="secondary" size="sm" onClick={onClearSearch}>
-        {t('tools.mcp.clearSearch', '清空搜索')}
+        {t('tool.mcp.clearSearch', '清空搜索')}
       </Button>
     </div>
   );
@@ -302,7 +302,7 @@ export const McpToolCard: React.FC<McpToolCardProps> = ({
         <Switch
           checked={isEnabled}
           onCheckedChange={(checked) => onToggle(name, checked)}
-          aria-label={t('tools.mcp.toggleTool', '切换工具 {name}', {
+          aria-label={t('tool.mcp.toggleTool', '切换工具 {name}', {
             name,
           })}
         />

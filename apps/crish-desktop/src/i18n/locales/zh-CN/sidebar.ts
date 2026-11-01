@@ -34,6 +34,7 @@ export const sidebar: Record<string, string> = {
   exportMarkdown: '导出为 Markdown',
   clearAll: '清空全部',
   sessionActions: '会话操作',
+  moreActions: '更多操作',
 
   // 顶栏与折叠控制
   expandSidebar: '展开侧栏',

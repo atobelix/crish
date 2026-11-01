@@ -3,6 +3,7 @@ import type { ChatTranslations } from '../../types';
 export const chat: ChatTranslations = {
   // ── 基础既有 14 键（严格保持向后兼容）──
   newSession: '新建会话',
+  newConversation: '新建对话',
   emptyStateTitle: '开始新的对话',
   emptyStateSubtitle: '选择模型或直接输入消息开始',
   placeholder: '输入消息...',
@@ -208,6 +209,20 @@ export const chat: ChatTranslations = {
   'emptyState.sessionEmptySubtitle': '选择模型或直接输入消息开始',
   'emptyState.createSessionBtn': '新建对话',
   'emptyState.clearFilterBtn': '清除过滤',
+
+  // ── 7. 对话头模型选择器与模型徽章菜单 (models.*) ──
+  'models.selectModel': '选择模型',
+  'models.goToConfigProvider': '去配置模型供应商',
+  'models.goToConfig': '去配置',
+  'models.modelLabel': '模型',
+  'models.unconfiguredTitle': '尚未配置模型服务商',
+  'models.unconfiguredDesc':
+    'Crish 需要配置至少一个 AI 模型服务商才能开始对话与编码',
+  'models.unconfiguredTooltip': '尚未配置模型服务商 · 点击打开配置',
+  'models.configuredChooseTooltip': '已配置服务商，请选择具体模型',
+  'models.chooseModelTooltip': '在此选择模型 · 点击切换',
+  'models.notFound': '未找到匹配的模型或厂商',
+  'models.openSettings': '前往模型设置配置',
   // ── 子代理浏览 / 详情（AgentBrowsePad / AgentCardHeader）──
   'agentBrowse.modeValue': '模式 {mode}',
   'agentBrowse.readOnly': '只读',

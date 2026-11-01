@@ -273,10 +273,10 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const titleHint = (titleHintProp ?? '').trim();
   const { t } = useI18n();
   const pinLabel = s.isPinned
-    ? t('session.action.unpin', '取消置顶')
-    : t('session.action.pin', '置顶');
-  const archiveLabel = t('session.action.archive', '归档');
-  const moreLabel = t('session.action.more', '更多操作');
+    ? t('sidebar.unpin', '取消置顶')
+    : t('sidebar.pin', '置顶');
+  const archiveLabel = t('sidebar.archive', '归档');
+  const moreLabel = t('sidebar.moreActions', '更多操作');
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
   void searchHit;

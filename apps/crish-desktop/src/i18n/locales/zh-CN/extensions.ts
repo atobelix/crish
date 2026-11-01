@@ -8,6 +8,13 @@ const extensions = {
   'tab.skills': '技能',
   'tab.mcp': 'MCP 服务',
 
+  'header.createPlugin': '制作插件',
+  'header.importPlugin': '导入插件',
+  'header.addSkill': '添加技能',
+  'header.connectMcp': '接入 MCP',
+  'header.searchPlaceholder': '搜索扩展、技能与工具…',
+  'header.searchLabel': '搜索扩展',
+
   'card.installing': '处理中',
   'verb.install': '安装',
   'verb.import': '导入',
