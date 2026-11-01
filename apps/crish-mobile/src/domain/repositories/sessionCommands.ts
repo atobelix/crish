@@ -21,12 +21,16 @@
 //   body 仅 {reason?}，runId 走路径）、searchSessions ↔ v1 无端点
 //   （mobile_search_sessions registered=false，P2 预留 → cmd.unknown）；
 //   差异清单与判定见映射表（D-08 ~ D-11），移动端解析器一律以注册表字段为准；
-// - permissionMode 降级语义（R1-10 T-08 / D5 §4.6.1）：桌面
-//   apply_remote_mode（core_backend.rs:107-112）对 full-access 恒降级 ask
-//   （远程不存在 full-access，TH-12 直接缓解），并发射 remote-mode-downgrade
-//   审计（core_backend.rs:527-539）。构造层允许全值域（注册表 PermissionMode
-//   三值）——若移动端申报 full-access，桌面仍以 ask 执行——故移动端**默认
-//   申报 ask**，UI 不得提供 full-access 选项（可提供 ask/plan 选择）。
+// - permissionMode 值域与远程降级语义（G1 查实，2026-11-01）：注册表
+//   PermissionMode 枚举 = ask/smart/full（device-protocol.json，与桌面
+//   PERMISSION_MODES 同名同义同序，移动端映射收口于
+//   domain/pure/permissionMode.ts)。桌面网关对远程发起的 run 施加
+//   apply_remote_mode（agent-workbench core_backend/mod.rs):full → ask
+//   降级（并发射 remote-mode-downgrade 审计），smart/ask 原样。移动端如实
+//   申报所选档位、不在本地预降级——降级是桌面执行侧的安全规则，与桌面
+//   处理任何远程申报一致；本机（桌面本地）发起的 run 不受此规则影响。
+//   （本注旧稿所称 ask/plan/full-access 值域与「UI 不提供 full-access」
+//   均已作废，以本段为准。）
 
 import type {
   RunTaskParams,
@@ -85,9 +89,10 @@ export interface SessionCommandRequest {
 /** C24 发起 run（P2 能力位 runTask 默认关闭，协议预留；clientMessageId 幂等）：
  * - prompt 必填（1-262144；超 256 KiB 走流上传 promptRef，本轮仅透传不实现上传）；
  * - sessionId 缺省 = 桌面新建会话（commitDraftIfNeeded 语义）；
- * - permissionMode 缺省 ask；构造层允许全值域（ask/plan/full-access），但
- *   full-access 会被桌面恒降级 ask（apply_remote_mode，D5 §4.6.1）——
- *   移动端默认申报 ask 或按 UI 选择（ask/plan），UI 不提供 full-access 选项 */
+ * - permissionMode 值域 ask/smart/full（与桌面三档恒等映射，收口于
+ *   domain/pure/permissionMode.ts：调用方经 runPermissionMode 规范化，
+ *   缺省 smart 与桌面 DEFAULT_PERMISSION_MODE 一致）；远程 full 在桌面
+ *   执行侧被 apply_remote_mode 降级为 ask，移动端如实申报、不预降级 */
 export function buildRunTaskRequest(
   params: RunTaskParams
 ): SessionCommandRequest {

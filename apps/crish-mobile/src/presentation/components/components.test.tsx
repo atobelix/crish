@@ -286,7 +286,7 @@ describe('ConnectionBanner / TimelineView', () => {
     expect(onRetry).toHaveBeenCalled();
   });
 
-  it('时间线渲染消息 / 工具 / 审批 / 提示，并支持展开与跳转', async () => {
+  it('时间线渲染消息 / 工具 / 提示（审批行已按裁决移出流内），并支持展开与跳转', async () => {
     const frames: FeedEntry[] = [
       {
         type: 'message-end',
@@ -347,8 +347,9 @@ describe('ConnectionBanner / TimelineView', () => {
     expect(view.queryByText('done')).toBeNull();
     await fireEvent.press(view.getByTestId('tool-run-t-1'));
     expect(onOpenTools).toHaveBeenCalledWith('t-1');
-    // 审批在对话里只剩一行状态，不再可点
-    expect(view.getByText('等待你审批 · write_file')).toBeTruthy();
+    // 审批不入对话流（M3 裁决删流内行：pending 由全局悬浮卡承载，
+    // 已决状态查审批记录页），流内不得再出现审批状态行
+    expect(view.queryByText('等待你审批 · write_file')).toBeNull();
     expect(view.getByText('运行完成')).toBeTruthy();
   });
 });

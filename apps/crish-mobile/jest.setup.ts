@@ -111,6 +111,9 @@ jest.mock('react-native-gesture-handler', () => {
 
 // Reanimated 4 jest 桩：jest 无 UI 线程 worklet 运行时——共享值为普通对象、
 // 动画助手恒等返回目标值、Animated.View 透传为 View（entering/exiting 丢弃）。
+// Easing 桩（M8 收口补）：bezier 恒等返回线性函数——动画助手本就恒等返回
+// 目标值，曲线形状在单测中无语义，补桩只为让组件的 Easing.bezier 调用点
+// 在测试环境走与真机同一代码路径（此前缺桩逼出多处 Easing?. 可选链）。
 // 手势/动画语义的真机验收走集中验收清单；单测只覆盖回调逻辑与渲染结构。
 jest.mock('react-native-reanimated', () => {
   const React = jest.requireActual<typeof ReactModule>('react');
@@ -174,6 +177,16 @@ jest.mock('react-native-reanimated', () => {
     withRepeat: (v: unknown) => v,
     withSequence: (...values: unknown[]) => values[values.length - 1],
     cancelAnimation: () => {},
+    Easing: {
+      bezier: () => (t: number) => t,
+      linear: (t: number) => t,
+      ease: (t: number) => t,
+      quad: (t: number) => t,
+      cubic: (t: number) => t,
+      in: (fn: (t: number) => number) => fn,
+      out: (fn: (t: number) => number) => fn,
+      inOut: (fn: (t: number) => number) => fn,
+    },
     Extrapolation: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
     FadeIn: chainable(),
     FadeOut: chainable(),

@@ -94,8 +94,8 @@ describe('ApprovalFloat', () => {
   it('L1：卡内直接允许，条目进入待发送', async () => {
     seed([makeItem('tc-1')]);
     const view = await renderFloat();
-    // 工具名以大写标签呈现（原型 conv-floating-tag）
-    expect(view.getByText('WRITE_FILE')).toBeTruthy();
+    // 工具名标签保持原始大小写（M3 裁决：标签不大写、字距 0.02em）
+    expect(view.getByText('write_file')).toBeTruthy();
     expect(view.queryByTestId('approval-float-review')).toBeNull();
     await fireEvent.press(view.getByTestId('approval-float-allow'));
     expect(approvalStore.getState().pending[0]?.status).toBe('queued');

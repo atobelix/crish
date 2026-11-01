@@ -33,8 +33,8 @@ export function SessionHeader({
         styles.anchor,
         {
           top: insets.top,
-          paddingLeft: theme.space.sm + insets.left,
-          paddingRight: theme.space.sm + insets.right,
+          paddingLeft: theme.space.lg + insets.left,
+          paddingRight: theme.space.lg + insets.right,
         },
       ]}
     >
@@ -62,7 +62,7 @@ export function SessionHeader({
             theme.shadow.sm,
           ]}
         >
-          <AppText variant="footnote" numberOfLines={1}>
+          <AppText variant="barAction" numberOfLines={1}>
             {title}
           </AppText>
           {trailing ?? null}
@@ -89,7 +89,9 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   row: {
-    height: 52,
+    // 原型 conv-top-bar 栏高 48（本组件专值；通用顶栏档 size.header=52 归
+    // AppHeader/AuthBar 等消费方，本组件不随之，M8 收口核定）
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
   },
