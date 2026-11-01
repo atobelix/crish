@@ -17,7 +17,7 @@ import {
   BROWSER_IMPORT_MAX_BYTES,
   isUsableJsonText,
 } from '../../../../api/browserImportLib';
-import type { } from '../../../../hooks/useToastQueue';
+import type {} from '../../../../hooks/useToastQueue';
 import {
   readFileAsText,
   resultMessage,
@@ -25,6 +25,7 @@ import {
 } from './browserImportShared';
 
 import { useToast } from '../../../../services/toast/ToastContext';
+import { useI18n } from '../../../../i18n';
 
 export interface UseBookmarksImportOptions {
   busy: BusyKind;
@@ -36,6 +37,7 @@ export function useBookmarksImport({
   setBusy,
 }: UseBookmarksImportOptions) {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [bookmarksJson, setBookmarksJson] = useState('');
   const [bookmarksFileName, setBookmarksFileName] = useState('');
   const [bookmarksResult, setBookmarksResult] =
@@ -44,10 +46,9 @@ export function useBookmarksImport({
   const [bookmarksPath, setBookmarksPath] = useState('');
   const bookmarksFileRef = useRef<HTMLInputElement>(null);
 
-  /** 书签域错误出口：行内 role=alert + toast。 */
+  /** 书签域错误出口：行内 role=alert + toast（入参为已本地化的完整消息）。 */
   const reportBookmarksError = useCallback(
-    (prefix: string, msg: string) => {
-      const full = `${prefix}${msg}`;
+    (full: string) => {
       setBookmarksError(full);
       showToast(full);
     },
@@ -59,8 +60,19 @@ export function useBookmarksImport({
     async (file: File) => {
       if (file.size > BROWSER_IMPORT_MAX_BYTES) {
         reportBookmarksError(
-          '书签导入失败：',
-          `文件超过 ${BROWSER_IMPORT_MAX_BYTES / 1024 / 1024}MB 上限`
+          t(
+            'settings.browserImport.bookmarksImportFailed',
+            '书签导入失败：{error}',
+            {
+              error: t(
+                'settings.browserImport.fileTooLarge',
+                '文件超过 {maxMb}MB 上限',
+                {
+                  maxMb: BROWSER_IMPORT_MAX_BYTES / 1024 / 1024,
+                }
+              ),
+            }
+          )
         );
         return;
       }
@@ -71,10 +83,18 @@ export function useBookmarksImport({
         setBookmarksResult(null);
         setBookmarksError('');
       } catch (err) {
-        reportBookmarksError('读取书签文件失败：', String(err ?? ''));
+        reportBookmarksError(
+          t(
+            'settings.browserImport.readBookmarksFileFailed',
+            '读取书签文件失败：{error}',
+            {
+              error: String(err ?? ''),
+            }
+          )
+        );
       }
     },
-    [reportBookmarksError]
+    [reportBookmarksError, t]
   );
 
   const onBookmarksFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -97,8 +117,16 @@ export function useBookmarksImport({
       const text = await readTextFileAtPath(bookmarksPath.trim());
       if (text === null) {
         reportBookmarksError(
-          '路径读取不可用：',
-          '非 Tauri 环境不支持按路径读取，请用文件选择或拖入'
+          t(
+            'settings.browserImport.pathReadUnavailable',
+            '路径读取不可用：{error}',
+            {
+              error: t(
+                'settings.browserImport.pathReadUnsupported',
+                '非 Tauri 环境不支持按路径读取，请用文件选择或拖入'
+              ),
+            }
+          )
         );
       } else {
         setBookmarksJson(text);
@@ -117,10 +145,22 @@ export function useBookmarksImport({
     const res = await importBookmarks(bookmarksJson);
     if (res.status === 'ok') {
       setBookmarksResult(res.data);
-      const msg = `书签导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
+      const msg = t(
+        'settings.browserImport.bookmarksImportSuccess',
+        '书签导入成功：新增 {inserted} 条，跳过 {skipped} 条',
+        { inserted: res.data.inserted, skipped: res.data.skippedDupes }
+      );
       showToast(msg);
     } else {
-      reportBookmarksError('书签导入失败：', resultMessage(res, ''));
+      reportBookmarksError(
+        t(
+          'settings.browserImport.bookmarksImportFailed',
+          '书签导入失败：{error}',
+          {
+            error: resultMessage(res, ''),
+          }
+        )
+      );
     }
     setBusy(null);
   };
@@ -128,8 +168,19 @@ export function useBookmarksImport({
   const importBookmarksFile = async (file: File) => {
     if (file.size > BROWSER_IMPORT_MAX_BYTES) {
       reportBookmarksError(
-        '书签导入失败：',
-        `文件超过 ${BROWSER_IMPORT_MAX_BYTES / 1024 / 1024}MB 上限`
+        t(
+          'settings.browserImport.bookmarksImportFailed',
+          '书签导入失败：{error}',
+          {
+            error: t(
+              'settings.browserImport.fileTooLarge',
+              '文件超过 {maxMb}MB 上限',
+              {
+                maxMb: BROWSER_IMPORT_MAX_BYTES / 1024 / 1024,
+              }
+            ),
+          }
+        )
       );
       return;
     }
@@ -142,13 +193,33 @@ export function useBookmarksImport({
       const res = await importBookmarks(text);
       if (res.status === 'ok') {
         setBookmarksResult(res.data);
-        const msg = `书签导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
+        const msg = t(
+          'settings.browserImport.bookmarksImportSuccess',
+          '书签导入成功：新增 {inserted} 条，跳过 {skipped} 条',
+          { inserted: res.data.inserted, skipped: res.data.skippedDupes }
+        );
         showToast(msg);
       } else {
-        reportBookmarksError('书签导入失败：', resultMessage(res, ''));
+        reportBookmarksError(
+          t(
+            'settings.browserImport.bookmarksImportFailed',
+            '书签导入失败：{error}',
+            {
+              error: resultMessage(res, ''),
+            }
+          )
+        );
       }
     } catch (err) {
-      reportBookmarksError('读取书签文件失败：', String(err ?? ''));
+      reportBookmarksError(
+        t(
+          'settings.browserImport.readBookmarksFileFailed',
+          '读取书签文件失败：{error}',
+          {
+            error: String(err ?? ''),
+          }
+        )
+      );
     } finally {
       setBusy(null);
     }

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /**
  * 设置 · 状态诊断面板渲染测试（PE-04 T04.5-2）。
- * mock fetchEngineStatus 数据源，断言四区（子系统就绪 / 日志配置 /
+ * mock fetchEngineStatus 数据源，断言三区（子系统就绪（含日志目录）/
  * 最近错误 / 最近诊断）与错误醒目提示。
  * T-F 06 T2.5：搜索索引未就绪 → 「重建索引」按钮（core_rebuild_search_index）。
+ * R7：整页 i18n（settings.diagnostics.*）；删「当前日志级别」行；诊断条目
+ * 改统一 SettingsRow 口径；空态换 SettingsEmpty。
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -47,7 +49,7 @@ beforeEach(() => {
 });
 
 describe('StatusDiagnosticsPanel', () => {
-  it('渲染四区：子系统就绪 / 日志配置 / 最近错误 / 最近诊断', async () => {
+  it('渲染三区：子系统就绪（含日志目录）/ 最近错误 / 最近诊断', async () => {
     fetchEngineStatus.mockResolvedValue(OK_STATUS);
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
@@ -58,10 +60,8 @@ describe('StatusDiagnosticsPanel', () => {
     expect(screen.getByTestId('diag-dbReady')).toHaveTextContent('异常');
     expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('OK');
 
-    // 日志配置
-    const logLevel = screen.getByTestId('diag-log-level');
-    expect(logLevel).toHaveTextContent('info');
-    expect(logLevel).toHaveClass(styles.monoBadge);
+    // 日志目录行（已并入子系统就绪分区；「当前日志级别」行 R7 已删）
+    expect(screen.queryByTestId('diag-log-level')).toBeNull();
     expect(screen.getByTestId('diag-log-dir')).toHaveTextContent(
       'C:\\logs\\crish'
     );
@@ -72,15 +72,16 @@ describe('StatusDiagnosticsPanel', () => {
     expect(lastError).toHaveTextContent('引擎失败（未就绪占位生产者）');
     expect(screen.getByRole('button', { name: '复制错误信息' })).toBeTruthy();
 
-    // 最近诊断（最新在前：第一条为 error 级 run 失败）
-    const items = screen.getAllByRole('listitem');
+    // 最近诊断（统一行口径：最新在前，第一条为 error 级 run 失败）
+    const list = screen.getByTestId('diag-list');
+    const items = Array.from(list.children);
     expect(items).toHaveLength(2);
-    expect(items[0]).toHaveClass(styles.diagItem);
     expect(items[0]).toHaveTextContent('ERROR');
     expect(items[0]).toHaveTextContent('run 失败: 引擎失败');
-    expect(items[1]).toHaveClass(styles.diagItem);
+    expect(items[0].querySelector(`.${styles.diagLevel_error}`)).toBeTruthy();
     expect(items[1]).toHaveTextContent('INFO');
     expect(items[1]).toHaveTextContent('engine init complete');
+    expect(items[1].querySelector(`.${styles.diagLevel_info}`)).toBeTruthy();
 
     // 在线状态（无连接异常横幅）
     expect(screen.getByTestId('diag-connection')).toHaveTextContent('在线');
@@ -104,15 +105,11 @@ describe('StatusDiagnosticsPanel', () => {
         '无错误记录'
       );
     });
-    expect(screen.getByTestId('diag-no-error')).toHaveClass(styles.noError);
     expect(screen.getByTestId('diag-no-diagnostics')).toHaveTextContent(
       '暂无诊断记录'
     );
-    expect(screen.getByTestId('diag-no-diagnostics')).toHaveClass(
-      styles.noError
-    );
     expect(screen.queryByTestId('diag-last-error')).toBeNull();
-    expect(screen.getByTestId('diag-log-level')).toHaveTextContent('debug');
+    expect(screen.queryByTestId('diag-log-level')).toBeNull();
   });
 
   it('获取失败时醒目提示（错误横幅 + 连接异常），仍保留面板骨架', async () => {

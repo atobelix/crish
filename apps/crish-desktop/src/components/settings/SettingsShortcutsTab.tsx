@@ -65,25 +65,25 @@ export const SettingsShortcutsTab: React.FC = () => {
     return SHORTCUT_ITEMS.filter((sh) => {
       const keyRaw = customShortcuts[sh.id] || '';
       const keyZh = formatShortcutLabel(keyRaw);
+      const categoryConfig =
+        CATEGORY_I18N_KEYS[sh.category] ?? CATEGORY_I18N_KEYS.other;
+      const categoryTitle = t(categoryConfig.key, categoryConfig.fallback);
       return (
         sh.label.toLowerCase().includes(q) ||
-        (sh.desc ? sh.desc.toLowerCase().includes(q) : false) ||
-        sh.group.toLowerCase().includes(q) ||
+        categoryTitle.toLowerCase().includes(q) ||
         sh.id.toLowerCase().includes(q) ||
         keyRaw.toLowerCase().includes(q) ||
         keyZh.toLowerCase().includes(q)
       );
     });
-  }, [query, customShortcuts]);
+  }, [query, customShortcuts, t]);
 
   const grouped = useMemo(() => {
     const map = new Map<ShortcutCategoryKey, ShortcutItem[]>();
     for (const item of filtered) {
-      const category: ShortcutCategoryKey =
-        SHORTCUT_CATEGORY_MAP[item.id] ?? 'other';
-      const list = map.get(category) || [];
+      const list = map.get(item.category) || [];
       list.push(item);
-      map.set(category, list);
+      map.set(item.category, list);
     }
     return Array.from(map.entries());
   }, [filtered]);
@@ -321,7 +321,7 @@ export const SettingsShortcutsTab: React.FC = () => {
       {headMetaText ? (
         <span
           id={headMetaId}
-          className="settings-head-meta"
+          className={uiStyles.headMeta}
           role="status"
           aria-live="polite"
           aria-atomic="true"
@@ -335,7 +335,10 @@ export const SettingsShortcutsTab: React.FC = () => {
   );
 
   return (
-    <SettingsPage title={t('nav.shortcuts', '快捷键')} meta={headerMeta}>
+    <SettingsPage
+      title={t('settings.tabs.shortcuts', '快捷键')}
+      meta={headerMeta}
+    >
       {grouped.length === 0 ? (
         <SettingsSection>
           <SettingsCard>
@@ -408,9 +411,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                         key={sh.id}
                         title={sh.label}
                         control={
-                          <div
-                            className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}
-                          >
+                          <div className={styles.controlGroup}>
                             {customized && !isRecording ? (
                               <Tooltip
                                 content={t(

@@ -7,6 +7,7 @@
  * - `resultMessage`：invokeTyped 三态 → 展示消息（缺省前缀空串，
  *   由各 hook 的错误出口拼「区域前缀 + 消息」）。
  */
+import { t } from '../../../../i18n';
 
 /** 忙碌编排类型（主体 useState<BusyKind>，各 hook 读写同一 busy）。 */
 export type BusyKind =
@@ -29,7 +30,10 @@ export function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.onerror = () =>
+      reject(
+        new Error(t('settings.browserImport.fileReadFailed', '文件读取失败'))
+      );
     reader.readAsText(file);
   });
 }
@@ -40,6 +44,7 @@ export function readFileAsText(file: File): Promise<string> {
  */
 export function resultMessage(res: ImportInvokeResult, prefix: string): string {
   if (res.status === 'ok') return '';
-  if (res.status === 'missing') return `${prefix}引擎未接线（命令不可用）`;
+  if (res.status === 'missing')
+    return `${prefix}${t('settings.browserImport.engineNotWired', '引擎未接线（命令不可用）')}`;
   return `${prefix}${res.message}`;
 }

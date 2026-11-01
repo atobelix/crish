@@ -1,5 +1,5 @@
 /**
- * 设置 · 安全：权限模式卡片组配置
+ * 设置 · 执行权限：权限模式卡片组配置
  *
  * 架构铁律：
  * 1. 严格收敛为三选项：ask (每次询问) | smart (智能放行) | full (完全允许)；
@@ -29,16 +29,10 @@ export const SettingsSecurityTab: React.FC = () => {
   }, [permissionModeRaw]);
 
   return (
-    <SettingsPage title={t('nav.security', '安全')}>
+    <SettingsPage title={t('settings.tabs.security', '执行权限')}>
       <SettingsSection
         title={t('settings.security.permissionSection', '权限模式')}
       >
-        <p className={styles.sectionDesc}>
-          {t(
-            'settings.security.permissionSectionDesc',
-            '配置 AI 执行文件读写、修改及终端命令时的安全拦截策略'
-          )}
-        </p>
         <div
           className={styles.modeCardGroup}
           role="radiogroup"
@@ -64,7 +58,7 @@ export const SettingsSecurityTab: React.FC = () => {
                     <AppIcon name={meta.iconName} size={18} />
                   </div>
                   <div className={styles.cardTitleRow}>
-                    <span className={styles.cardTitle}>{meta.label}</span>
+                    <span className={styles.cardTitle}>{t(meta.labelKey)}</span>
                     {meta.isRecommended && (
                       <span className={styles.recommendTag}>
                         {t('common.recommended', '推荐')}
@@ -75,7 +69,7 @@ export const SettingsSecurityTab: React.FC = () => {
                     {isSelected && <div className={styles.radioDot} />}
                   </div>
                 </div>
-                <p className={styles.cardDesc}>{meta.description}</p>
+                <p className={styles.cardDesc}>{t(meta.descriptionKey)}</p>
               </Button>
             );
           })}

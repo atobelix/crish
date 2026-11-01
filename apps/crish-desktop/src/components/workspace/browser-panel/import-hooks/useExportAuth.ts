@@ -18,6 +18,7 @@ import {
 } from '../../../../api/browserImportLib';
 import { downloadTextFile } from '../../../../api/sessionExport';
 import { useToast } from '../../../../services/toast/ToastContext';
+import { useI18n } from '../../../../i18n';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseExportAuthOptions {
@@ -34,16 +35,16 @@ export function useExportAuth({
   saveExport,
 }: UseExportAuthOptions) {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [exportAuthOpen, setExportAuthOpen] = useState(false);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportPreview, setExportPreview] =
     useState<StorageStatePreview | null>(null);
   const [exportedJson, setExportedJson] = useState('');
 
-  /** 登录态域错误出口（导出/保存失败共用）：行内 role=alert + toast。 */
+  /** 登录态域错误出口（导出/保存失败共用）：行内 role=alert + toast（入参为已本地化的完整消息）。 */
   const reportStorageError = useCallback(
-    (prefix: string, msg: string) => {
-      const full = `${prefix}${msg}`;
+    (full: string) => {
       setStorageError(full);
       showToast(full);
     },
@@ -61,7 +62,15 @@ export function useExportAuth({
       setExportPreview(parseStorageStatePreview(res.data));
       setExportPreviewOpen(true);
     } else {
-      reportStorageError('登录态导出失败：', resultMessage(res, ''));
+      reportStorageError(
+        t(
+          'settings.browserImport.storageExportFailed',
+          '登录态导出失败：{error}',
+          {
+            error: resultMessage(res, ''),
+          }
+        )
+      );
     }
     setBusy(null);
   };
@@ -78,10 +87,17 @@ export function useExportAuth({
       setExportPreviewOpen(false);
       setExportedJson('');
       setExportPreview(null);
-      const msg = '登录态凭据已导出';
-      showToast(msg);
+      showToast(t('settings.browserImport.exportedOk', '登录态凭据已导出'));
     } catch (err) {
-      reportStorageError('登录态保存失败：', String(err ?? ''));
+      reportStorageError(
+        t(
+          'settings.browserImport.storageSaveFailed',
+          '登录态保存失败：{error}',
+          {
+            error: String(err ?? ''),
+          }
+        )
+      );
     }
   };
 

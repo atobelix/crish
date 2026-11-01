@@ -1,10 +1,3 @@
-.sectionDesc {
-  margin: 0 0 var(--space-3) 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  line-height: var(--line-height-normal);
-}
-
 .modeCardGroup {
   display: flex;
   flex-direction: column;
@@ -12,105 +5,104 @@
   width: 100%;
 }
 
+/* 模式卡：无边框，靠底色灰度台阶区分状态（默认卡面 → hover 微抬 → 选中再抬一级） */
 .modeCard {
   width: 100%;
-  padding: 14px 16px;
+  padding: var(--space-3_5) var(--space-4);
+  border: none;
   border-radius: var(--radius-lg);
   background: var(--surface-card);
-  border: 1px solid var(--border-color);
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color var(--transition-micro),
-    background-color var(--transition-micro);
+  transition: background-color var(--transition-micro);
   outline: none;
   box-sizing: border-box;
 }
 
 .modeCard:hover {
-  background: var(--state-hover);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 92%,
-    var(--text-primary) 8%
-  );
+  background: color-mix(in srgb, var(--surface-card), var(--text-primary) 4%);
 }
 
 .modeCard:focus-visible {
-  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 var(--hairline-width) var(--focus-ring-color);
 }
 
 .modeCard.isSelected {
-  border-color: var(--accent-primary);
-  background: var(--surface-card);
+  background: color-mix(in srgb, var(--surface-card), var(--text-primary) 8%);
 }
 
 .cardHeader {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1_5);
 }
 
 .iconBox {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   flex-shrink: 0;
 }
 
 .cardTitleRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
 }
 
 .cardTitle {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 
 .recommendTag {
-  font-size: 11px;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: var(--font-size-xxs);
+  line-height: var(--line-height-none);
+  padding: var(--space-0_5) var(--space-1_5);
+  border-radius: var(--radius-xs);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
+/* 单选圆圈：无边框，底色台阶成盘；选中时染 accent 底 + accent 圆点 */
 .radioCircle {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border-radius: 50%;
-  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--surface-card), var(--text-primary) 10%);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-left: auto;
   flex-shrink: 0;
+  transition: background-color var(--transition-micro);
 }
 
 .modeCard.isSelected .radioCircle {
-  border-color: var(--accent-primary);
+  background: color-mix(
+    in srgb,
+    var(--accent-primary) 18%,
+    var(--surface-card)
+  );
 }
 
 .radioDot {
-  width: 8px;
-  height: 8px;
+  width: var(--space-2);
+  height: var(--space-2);
   border-radius: 50%;
   background: var(--accent-primary);
 }
 
 .cardDesc {
   margin: 0;
-  padding-left: 36px;
+  padding-left: calc(var(--space-6) + var(--space-3));
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: var(--line-height-normal);
 }

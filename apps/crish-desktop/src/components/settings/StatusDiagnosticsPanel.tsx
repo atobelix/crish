@@ -3,15 +3,17 @@
  *
  * 只读面板（T-F 06 T2.5 例外：搜索索引行在未就绪时提供「重建索引」按钮，
  * 经 rustCore.rebuildSearchIndex 调 core_rebuild_search_index，M7 入口）：
- * - 子系统就绪：engineReady / dbReady / searchIndexReady
- * - 日志配置：logLevel / logDir
+ * - 子系统就绪：engineReady / dbReady / searchIndexReady / 日志目录，
+ *   开发者模式下另有「核心连接」测试行（R2 自账号页迁入，文案归
+ *   settings.diagnostics.* 命名空间，R7 收编）
  * - 最近错误：lastError（{kind, detail, ts}，醒目提示 + 复制）
- * - 最近诊断：diagnostics（{ts, level, message}，最新在前）
+ * - 最近诊断：diagnostics（{ts, level, message}，最新在前，统一 SettingsRow 口径）
  *
  * 获取失败 / 状态异常时醒目提示。自动轮询（pollIntervalMs，默认 5s）。
  * 不写 store、不重构设置面板整体（P3 分层前沿用 SettingsUI 现有样式）。
+ * 全页文案走 settings.diagnostics.*（R7 整页 i18n）。
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { useToast } from '../../services/toast/ToastContext';
 import {
@@ -21,8 +23,14 @@ import {
   type EngineStatus,
 } from '../../api/engineConfig';
 import { rebuildSearchIndex } from '../../api/rustCore';
+import { ensureEngineConnected } from '../../api/chatBridge';
+import { getTransport } from '../../api/transport';
+import { isDeveloperEngineUiEnabled } from '../../api/productMode';
+import { networkUserMessage } from '../../api/userFacingErrors';
+import { useI18n } from '../../i18n';
 import {
   SettingsCard,
+  SettingsEmpty,
   SettingsPage,
   SettingsRow,
   SettingsSection,
@@ -38,11 +46,11 @@ type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-/** 时间戳 → 本地时间短串（epoch ms；非法值回退 '—'） */
-function formatTs(ts: number | undefined): string {
+/** 时间戳 → 本地时间短串（epoch ms；非法值回退 '—'，locale 随界面语言） */
+function formatTs(ts: number | undefined, locale: string): string {
   if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0) return '—';
   try {
-    return new Date(ts).toLocaleString('zh-CN', { hour12: false });
+    return new Date(ts).toLocaleString(locale, { hour12: false });
   } catch {
     return String(ts);
   }
@@ -68,6 +76,7 @@ function SubsystemRow({
   ready: boolean | undefined;
   readyLabel: string;
 }) {
+  const { t } = useI18n();
   const known = typeof ready === 'boolean';
   return (
     <SettingsRow
@@ -78,7 +87,11 @@ function SubsystemRow({
           role="status"
           data-testid={`diag-${readyLabel}`}
         >
-          {known && ready ? 'OK' : known ? '异常' : '未知'}
+          {known && ready
+            ? t('settings.diagnostics.badgeOk', 'OK')
+            : known
+              ? t('settings.diagnostics.badgeAbnormal', '异常')
+              : t('settings.diagnostics.badgeUnknown', '未知')}
         </span>
       }
     />
@@ -86,18 +99,51 @@ function SubsystemRow({
 }
 
 /**
- * 状态诊断面板：四区（子系统就绪 / 日志配置 / 最近错误 / 最近诊断）。
+ * 状态诊断面板：三区（子系统就绪 / 最近错误 / 最近诊断）。
  * 错误时醒目提示；面板自身不写任何状态。
  */
 export const StatusDiagnosticsPanel: React.FC<Props> = ({
   pollIntervalMs = 5_000,
 }) => {
   const { showToast } = useToast();
+  const { t, language } = useI18n();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const mountedRef = useRef(true);
+
+  // 核心服务连接（自账号页迁入）：测试核心初始化连通性，结果行内展示，失败另 toast
+  const showDeveloper = isDeveloperEngineUiEnabled();
+  const engineStatusId = useId();
+  const [connBusy, setConnBusy] = useState(false);
+  const [connHint, setConnHint] = useState('');
+  const coreConnStatus =
+    connHint ||
+    (getTransport().isReady() ? t('common.online') : t('common.offline'));
+
+  const handleTestCoreConn = useCallback(() => {
+    if (connBusy) return;
+    setConnBusy(true);
+    setConnHint(t('settings.diagnostics.connecting'));
+    void ensureEngineConnected()
+      .then((r) => {
+        setConnHint(
+          r.ok
+            ? t('settings.diagnostics.connected')
+            : networkUserMessage(r.error) ||
+                t('settings.diagnostics.notConnected')
+        );
+        // 失败结果行内展示；成功也行内，均不 toast
+      })
+      .catch((err) => {
+        const msg =
+          networkUserMessage(err) || t('settings.diagnostics.notConnected');
+        setConnHint(msg);
+        showToast(t('settings.diagnostics.connectionFailed', { error: msg }));
+      })
+      .finally(() => setConnBusy(false));
+  }, [connBusy, showToast, t]);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -105,14 +151,19 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       const next = await fetchEngineStatus();
       if (!mountedRef.current) return;
       setStatus(next);
-      setFetchError(next.ok ? null : (next.error ?? '核心状态获取失败'));
+      setFetchError(
+        next.ok
+          ? null
+          : (next.error ??
+              t('settings.diagnostics.fetchFailedFallback', '核心状态获取失败'))
+      );
     } catch (e) {
       if (!mountedRef.current) return;
       setFetchError(e instanceof Error ? e.message : String(e));
     } finally {
       if (mountedRef.current) setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -130,19 +181,20 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     async (err: EngineLastErrorEntry) => {
       const text = `[${err.kind}] ${err.detail}`;
       const ok = await copyTextToClipboard(text);
-      if (ok) showToast('已复制错误信息');
-      else showToast('复制失败');
+      if (ok)
+        showToast(t('settings.diagnostics.copiedErrorInfo', '已复制错误信息'));
+      else showToast(t('settings.diagnostics.copyFailed', '复制失败'));
     },
-    [showToast]
+    [showToast, t]
   );
 
   const handleCopyPath = useCallback(
     async (pathStr: string) => {
       const ok = await copyTextToClipboard(pathStr);
-      if (ok) showToast('已复制路径');
-      else showToast('复制失败');
+      if (ok) showToast(t('settings.diagnostics.copiedPath', '已复制路径'));
+      else showToast(t('settings.diagnostics.copyFailed', '复制失败'));
     },
-    [showToast]
+    [showToast, t]
   );
 
   /**
@@ -158,17 +210,25 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       const ok = await rebuildSearchIndex();
       if (!mountedRef.current) return;
       if (ok) {
-        showToast('已触发搜索索引重建');
+        showToast(
+          t('settings.diagnostics.rebuildTriggered', '已触发搜索索引重建')
+        );
         await load();
       } else {
-        showToast('重建失败：索引命令不可用或报错');
+        showToast(
+          t(
+            'settings.diagnostics.rebuildFailedDetail',
+            '重建失败：索引命令不可用或报错'
+          )
+        );
       }
     } catch {
-      if (mountedRef.current) showToast('重建失败');
+      if (mountedRef.current)
+        showToast(t('settings.diagnostics.rebuildFailed', '重建失败'));
     } finally {
       if (mountedRef.current) setRebuilding(false);
     }
-  }, [rebuilding, showToast, load]);
+  }, [rebuilding, showToast, load, t]);
 
   // 微内核健康态判定：仅针对微内核崩溃（lastCrash）、致命运行异常（FatalPanic）、初始化失败或断连
   // 模型供应商未配置在对话主界面已有提示，此处仅反映微内核 session-loop 真实运行时健康态
@@ -189,16 +249,24 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
 
   return (
     <SettingsPage
-      title="状态诊断"
+      title={t('settings.tabs.diagnostics', '状态诊断')}
       meta={
-        <Tooltip content={fetchError ? '获取核心状态失败' : '自动轮询中'}>
+        <Tooltip
+          content={
+            fetchError
+              ? t('settings.diagnostics.fetchFailed', '获取核心状态失败')
+              : t('settings.diagnostics.polling', '自动轮询中')
+          }
+        >
           <span className={styles.pageMeta}>
             <span
               className={fetchError ? styles.connBad : styles.connOk}
               role="status"
               data-testid="diag-connection"
             >
-              {fetchError ? '连接异常' : '在线'}
+              {fetchError
+                ? t('settings.diagnostics.connectionError', '连接异常')
+                : t('settings.diagnostics.online', '在线')}
             </span>
             <Button
               type="button"
@@ -206,7 +274,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               size="sm"
               disabled={refreshing}
               onClick={() => void load()}
-              aria-label="刷新状态诊断"
+              aria-label={t('settings.diagnostics.refreshAria', '刷新状态诊断')}
               icon={
                 <AppIcon
                   name="refresh"
@@ -215,7 +283,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                 />
               }
             >
-              刷新
+              {t('settings.diagnostics.refresh', '刷新')}
             </Button>
           </span>
         </Tooltip>
@@ -229,7 +297,9 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
         >
           <AppIcon name="alert-triangle" size={16} aria-hidden />
           <div className={styles.errorBannerBody}>
-            <strong>无法获取核心状态</strong>
+            <strong>
+              {t('settings.diagnostics.fetchErrorTitle', '无法获取核心状态')}
+            </strong>
             <span>{fetchError}</span>
           </div>
           <Button
@@ -238,31 +308,36 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             size="sm"
             onClick={() => void load()}
           >
-            重试
+            {t('settings.diagnostics.retry', '重试')}
           </Button>
         </div>
       ) : null}
 
-      <SettingsSection title="子系统就绪">
+      <SettingsSection
+        title={t('settings.diagnostics.subsystemsSection', '子系统就绪')}
+      >
         <SettingsCard>
           <SubsystemRow
-            label="引擎（session-loop）"
+            label={t('settings.diagnostics.engineRow', '引擎（session-loop）')}
             ready={isEngineHealthy}
             readyLabel="engineReady"
           />
           <SubsystemRow
-            label="会话数据库"
+            label={t('settings.diagnostics.dbRow', '会话数据库')}
             ready={status?.dbReady}
             readyLabel="dbReady"
           />
           <SettingsRow
-            title="搜索索引"
+            title={t('settings.diagnostics.searchIndexRow', '搜索索引')}
             desc={
               status?.searchIndexReady
-                ? '已就绪'
+                ? t('settings.diagnostics.searchIndexReady', '已就绪')
                 : typeof status?.searchIndexReady === 'boolean'
-                  ? '未就绪（可能影响功能）'
-                  : '状态未知'
+                  ? t(
+                      'settings.diagnostics.searchIndexNotReady',
+                      '未就绪（可能影响功能）'
+                    )
+                  : t('settings.diagnostics.statusUnknown', '状态未知')
             }
             control={
               <span
@@ -273,16 +348,16 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                 data-testid="diag-searchIndexReady"
               >
                 {status?.searchIndexReady
-                  ? 'OK'
+                  ? t('settings.diagnostics.badgeOk', 'OK')
                   : typeof status?.searchIndexReady === 'boolean'
-                    ? '异常'
-                    : '未知'}
+                    ? t('settings.diagnostics.badgeAbnormal', '异常')
+                    : t('settings.diagnostics.badgeUnknown', '未知')}
               </span>
             }
           />
           {status?.searchIndexReady === false ? (
             <SettingsRow
-              title="重建索引"
+              title={t('settings.diagnostics.rebuildRow', '重建索引')}
               control={
                 <Button
                   type="button"
@@ -293,34 +368,23 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                   data-testid="diag-rebuild-search-index"
                   icon={<AppIcon name="search-check" size={14} />}
                 >
-                  {rebuilding ? '重建中…' : '重建索引'}
+                  {rebuilding
+                    ? t('settings.diagnostics.rebuilding', '重建中…')
+                    : t('settings.diagnostics.rebuildRow', '重建索引')}
                 </Button>
               }
             />
           ) : null}
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection title="日志配置">
-        <SettingsCard>
           <SettingsRow
-            icon={<AppIcon name="activity" size={18} />}
-            title="当前日志级别"
-            control={
-              <span
-                className={styles.monoBadge}
-                role="status"
-                data-testid="diag-log-level"
-              >
-                {status?.logLevel ?? '—'}
-              </span>
-            }
-          />
-          <SettingsRow
-            title="日志目录"
+            title={t('settings.diagnostics.logDirRow', '日志目录')}
             control={
               <div className={styles.logDirControl}>
-                <Tooltip content={status?.logDir ?? '未知'}>
+                <Tooltip
+                  content={
+                    status?.logDir ??
+                    t('settings.diagnostics.badgeUnknown', '未知')
+                  }
+                >
                   <span
                     className={styles.monoEllipsis}
                     data-testid="diag-log-dir"
@@ -329,12 +393,20 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
                   </span>
                 </Tooltip>
                 {status?.logDir ? (
-                  <Tooltip content="复制日志目录路径">
+                  <Tooltip
+                    content={t(
+                      'settings.diagnostics.copyLogDirPath',
+                      '复制日志目录路径'
+                    )}
+                  >
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label="复制日志目录路径"
+                      aria-label={t(
+                        'settings.diagnostics.copyLogDirPath',
+                        '复制日志目录路径'
+                      )}
                       onClick={() => void handleCopyPath(status.logDir!)}
                       icon={<AppIcon name="clipboard-copy" size={13} />}
                     />
@@ -343,10 +415,40 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               </div>
             }
           />
+          {showDeveloper ? (
+            <SettingsRow
+              title={
+                <label htmlFor={engineStatusId}>
+                  {t('settings.diagnostics.coreConn')}
+                </label>
+              }
+              desc={t('settings.diagnostics.coreConnDesc')}
+              control={
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={connBusy}
+                    onClick={handleTestCoreConn}
+                  >
+                    {connBusy
+                      ? t('settings.diagnostics.testing')
+                      : t('settings.diagnostics.testBtn')}
+                  </Button>
+                  <span id={engineStatusId} role="status" aria-live="polite">
+                    {coreConnStatus}
+                  </span>
+                </>
+              }
+            />
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="最近错误">
+      <SettingsSection
+        title={t('settings.diagnostics.recentErrorSection', '最近错误')}
+      >
         <SettingsCard>
           {lastError ? (
             <div
@@ -357,65 +459,73 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               <div className={styles.lastErrorHead}>
                 <span className={styles.lastErrorKind}>{lastError.kind}</span>
                 <span className={styles.lastErrorTs}>
-                  {formatTs(lastError.ts)}
+                  {formatTs(lastError.ts, language)}
                 </span>
-                <Tooltip content="复制错误信息">
+                <Tooltip
+                  content={t(
+                    'settings.diagnostics.copyErrorInfo',
+                    '复制错误信息'
+                  )}
+                >
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label="复制错误信息"
+                    aria-label={t(
+                      'settings.diagnostics.copyErrorInfo',
+                      '复制错误信息'
+                    )}
                     onClick={() => void handleCopy(lastError)}
                     icon={<AppIcon name="clipboard-copy" size={14} />}
                   >
-                    复制
+                    {t('settings.diagnostics.copy', '复制')}
                   </Button>
                 </Tooltip>
               </div>
               <pre className={styles.lastErrorDetail}>{lastError.detail}</pre>
             </div>
           ) : (
-            <div
-              className={styles.noError}
-              role="status"
-              data-testid="diag-no-error"
-            >
-              <AppIcon name="check-circle" size={16} aria-hidden />
-              无错误记录
+            <div data-testid="diag-no-error" role="status">
+              <SettingsEmpty
+                icon={<AppIcon name="check-circle" size={16} aria-hidden />}
+                title={t('settings.diagnostics.noErrorRecord', '无错误记录')}
+              />
             </div>
           )}
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="最近诊断">
+      <SettingsSection
+        title={t('settings.diagnostics.recentListSection', '最近诊断')}
+      >
         <SettingsCard>
           {recentDiags.length === 0 ? (
-            <div
-              className={styles.noError}
-              role="status"
-              data-testid="diag-no-diagnostics"
-            >
-              暂无诊断记录
+            <div data-testid="diag-no-diagnostics" role="status">
+              <SettingsEmpty
+                title={t('settings.diagnostics.noDiagnostics', '暂无诊断记录')}
+              />
             </div>
           ) : (
-            <ul
-              className={styles.diagList}
-              aria-label="最近诊断条目"
+            <div
+              aria-label={t('settings.diagnostics.listAria', '最近诊断条目')}
               data-testid="diag-list"
             >
               {recentDiags.map((d, i) => (
-                <li key={`${d.ts}-${i}`} className={styles.diagItem}>
-                  <span
-                    className={`${styles.diagLevel} ${styles[`diagLevel_${(d.level || '').toLowerCase()}`] ?? ''}`}
-                    role="status"
-                  >
-                    {levelLabel(d.level)}
-                  </span>
-                  <span className={styles.diagTs}>{formatTs(d.ts)}</span>
-                  <span className={styles.diagMsg}>{d.message}</span>
-                </li>
+                <SettingsRow
+                  key={`${d.ts}-${i}`}
+                  title={d.message}
+                  desc={formatTs(d.ts, language)}
+                  control={
+                    <span
+                      className={`${styles.diagLevel} ${styles[`diagLevel_${(d.level || '').toLowerCase()}`] ?? ''}`}
+                      role="status"
+                    >
+                      {levelLabel(d.level)}
+                    </span>
+                  }
+                />
               ))}
-            </ul>
+            </div>
           )}
         </SettingsCard>
       </SettingsSection>

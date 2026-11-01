@@ -17,6 +17,7 @@ import {
 } from '../../settings/SettingsUI';
 import type { BusyKind } from './import-hooks/browserImportShared';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../../i18n';
 
 export interface BrowserImportSectionProps {
   /** 浏览器是否运行中：登录态导出/导入需运行中会话。 */
@@ -29,6 +30,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   browserRunning = false,
   saveExport,
 }) => {
+  const { t } = useI18n();
   const [busy, setBusy] = useState<BusyKind>(null);
 
   const bookmarks = useBookmarksImport({ busy, setBusy });
@@ -63,12 +65,17 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   };
 
   return (
-    <div className={styles.container} aria-label="浏览器数据管理">
-      <SettingsSection title="数据导入">
+    <div
+      className={styles.container}
+      aria-label={t('settings.browserImport.containerAria', '浏览器数据管理')}
+    >
+      <SettingsSection
+        title={t('settings.browserImport.importSection', '数据导入')}
+      >
         <SettingsCard>
           <SettingsRow
             icon={<AppIcon name="bookmark" size={16} />}
-            title="书签"
+            title={t('settings.browserImport.bookmarksRow', '导入书签')}
             control={
               <>
                 <Input
@@ -84,12 +91,15 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  aria-label="导入书签"
+                  aria-label={t(
+                    'settings.browserImport.importBookmarksAria',
+                    '导入书签'
+                  )}
                   disabled={busy !== null}
                   loading={busy === 'bookmarks'}
                   onClick={() => bookmarks.bookmarksFileRef.current?.click()}
                 >
-                  导入
+                  {t('settings.browserImport.importBtn', '导入')}
                 </Button>
               </>
             }
@@ -97,27 +107,30 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
 
           <SettingsRow
             icon={<AppIcon name="history" size={16} />}
-            title="浏览历史"
+            title={t('settings.browserImport.historyRow', '导入浏览历史')}
             control={
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                aria-label="导入历史"
+                aria-label={t(
+                  'settings.browserImport.importHistoryAria',
+                  '导入历史'
+                )}
                 disabled={busy !== null}
                 loading={busy === 'history'}
                 onClick={() => {
                   void history.runHistoryImport();
                 }}
               >
-                导入
+                {t('settings.browserImport.importBtn', '导入')}
               </Button>
             }
           />
 
           <SettingsRow
             icon={<AppIcon name="key" size={16} />}
-            title="登录态"
+            title={t('settings.browserImport.storageRow', '登录态')}
             control={
               <>
                 <Input
@@ -132,20 +145,29 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
                 <Tooltip
                   content={
                     browserRunning
-                      ? '导入会话 Cookies 与 Storage 凭据'
-                      : '需先启动浏览器会话'
+                      ? t(
+                          'settings.browserImport.storageImportTooltip',
+                          '导入会话 Cookies 与 Storage 凭据'
+                        )
+                      : t(
+                          'settings.browserImport.needBrowserRunning',
+                          '需先启动浏览器会话'
+                        )
                   }
                 >
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    aria-label="导入登录态"
+                    aria-label={t(
+                      'settings.browserImport.importStorageAria',
+                      '导入登录态'
+                    )}
                     disabled={busy !== null || !browserRunning}
                     loading={busy === 'storageImport'}
                     onClick={() => storage.storageFileRef.current?.click()}
                   >
-                    导入
+                    {t('settings.browserImport.importBtn', '导入')}
                   </Button>
                 </Tooltip>
               </>
@@ -154,29 +176,40 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="凭据备份">
+      <SettingsSection
+        title={t('settings.browserImport.credentialsSection', '凭据备份')}
+      >
         <SettingsCard>
           <SettingsRow
             icon={<AppIcon name="download" size={16} />}
-            title="导出登录态"
+            title={t('settings.browserImport.exportStorageRow', '导出登录态')}
             control={
               <Tooltip
                 content={
                   browserRunning
-                    ? '导出当前会话 Cookies 与 Storage 凭据'
-                    : '需先启动浏览器会话'
+                    ? t(
+                        'settings.browserImport.storageExportTooltip',
+                        '导出当前会话 Cookies 与 Storage 凭据'
+                      )
+                    : t(
+                        'settings.browserImport.needBrowserRunning',
+                        '需先启动浏览器会话'
+                      )
                 }
               >
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
-                  aria-label="导出登录态"
+                  aria-label={t(
+                    'settings.browserImport.exportStorageAria',
+                    '导出登录态'
+                  )}
                   disabled={!exportReady}
                   loading={busy === 'storageExport'}
                   onClick={() => exportAuth.setExportAuthOpen(true)}
                 >
-                  导出
+                  {t('settings.browserImport.exportBtn', '导出')}
                 </Button>
               </Tooltip>
             }

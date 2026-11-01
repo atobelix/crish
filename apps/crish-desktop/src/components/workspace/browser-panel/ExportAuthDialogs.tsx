@@ -8,6 +8,7 @@ import React from 'react';
 import { ConfirmDialog } from '@/components/ui';
 import type { StorageStatePreview } from '../../../api/browserImportLib';
 import type { BusyKind } from './import-hooks/browserImportShared';
+import { useI18n } from '../../../i18n';
 
 export interface ExportAuthDialogsProps {
   /** 忙碌编排（导出中两对话框禁用）。 */
@@ -34,58 +35,93 @@ export const ExportAuthDialogs: React.FC<ExportAuthDialogsProps> = ({
   setExportedJson,
   runExportAuth,
   runExportSave,
-}) => (
-  <>
-    <ConfirmDialog
-      open={exportAuthOpen}
-      title="授权读取登录态"
-      description={
-        <>
-          将读取浏览器会话的 cookie（<strong>仅内存传递，不写盘</strong>
-          ；含 cookie value 明文，请勿泄露至日志）。确认后先展示域名清单预览，
-          由你再次确认后才导出文件。未授权不会执行读取（零副作用）。
-        </>
-      }
-      confirmLabel="继续读取"
-      cancelLabel="取消"
-      disabled={busy === 'storageExport'}
-      onConfirm={() => {
-        void runExportAuth();
-      }}
-      onCancel={() => setExportAuthOpen(false)}
-    />
-    <ConfirmDialog
-      open={exportPreviewOpen}
-      title="确认导出登录态"
-      description={
-        exportPreview ? (
+}) => {
+  const { t, language } = useI18n();
+  return (
+    <>
+      <ConfirmDialog
+        open={exportAuthOpen}
+        title={t('settings.browserImport.exportAuthTitle', '授权读取登录态')}
+        description={
           <>
-            将导出 {exportPreview.cookieCount} 条 cookie
-            {exportPreview.origins > 0
-              ? `、${exportPreview.origins} 个 origin`
-              : ''}
-            ，涉及域名：
-            <code>
-              {exportPreview.domains.length > 0
-                ? exportPreview.domains.join('、')
-                : '（无）'}
-            </code>
-            。导出文件含 cookie value 明文，请谨慎保管；保存位置由「另存为」
-            对话框决定（不自动写盘）。
+            {t(
+              'settings.browserImport.exportAuthDescPre',
+              '将读取浏览器会话的 cookie（'
+            )}
+            <strong>
+              {t(
+                'settings.browserImport.exportAuthDescStrong',
+                '仅内存传递，不写盘'
+              )}
+            </strong>
+            {t(
+              'settings.browserImport.exportAuthDescPost',
+              '；含 cookie value 明文，请勿泄露至日志）。确认后先展示域名清单预览，由你再次确认后才导出文件。未授权不会执行读取（零副作用）。'
+            )}
           </>
-        ) : (
-          '导出内容为空（未读取到 cookie）。'
-        )
-      }
-      confirmLabel="确认导出"
-      cancelLabel="取消"
-      disabled={busy === 'storageExport'}
-      onConfirm={runExportSave}
-      onCancel={() => {
-        setExportPreviewOpen(false);
-        setExportPreview(null);
-        setExportedJson('');
-      }}
-    />
-  </>
-);
+        }
+        confirmLabel={t('settings.browserImport.continueRead', '继续读取')}
+        cancelLabel={t('common.cancel', '取消')}
+        disabled={busy === 'storageExport'}
+        onConfirm={() => {
+          void runExportAuth();
+        }}
+        onCancel={() => setExportAuthOpen(false)}
+      />
+      <ConfirmDialog
+        open={exportPreviewOpen}
+        title={t('settings.browserImport.exportConfirmTitle', '确认导出登录态')}
+        description={
+          exportPreview ? (
+            <>
+              {t(
+                'settings.browserImport.exportPreviewLead',
+                '将导出 {count} 条 cookie',
+                { count: exportPreview.cookieCount }
+              )}
+              {exportPreview.origins > 0
+                ? t(
+                    'settings.browserImport.exportPreviewOrigins',
+                    '、{count} 个 origin',
+                    { count: exportPreview.origins }
+                  )
+                : ''}
+              {t(
+                'settings.browserImport.exportPreviewDomainsLead',
+                '，涉及域名：'
+              )}
+              <code>
+                {exportPreview.domains.length > 0
+                  ? exportPreview.domains.join(
+                      language === 'en-US' ? ', ' : '、'
+                    )
+                  : t(
+                      'settings.browserImport.exportPreviewNoDomains',
+                      '（无）'
+                    )}
+              </code>
+              {t(
+                'settings.browserImport.exportPreviewTail',
+                '。导出文件含 cookie value 明文，请谨慎保管；保存位置由「另存为」对话框决定（不自动写盘）。'
+              )}
+            </>
+          ) : (
+            t(
+              'settings.browserImport.exportEmpty',
+              '导出内容为空（未读取到 cookie）。'
+            )
+          )
+        }
+        confirmLabel={t('settings.browserImport.confirmExport', '确认导出')}
+        cancelLabel={t('common.cancel', '取消')}
+        disabled={busy === 'storageExport'}
+        onConfirm={runExportSave}
+        onCancel={() => {
+          setExportPreviewOpen(false);
+          setExportPreview(null);
+          setExportedJson('');
+        }}
+      />
+    </>
+  );
+};

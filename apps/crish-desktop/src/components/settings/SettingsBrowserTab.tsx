@@ -14,7 +14,7 @@ import {
 import { BrowserImportSection } from '../workspace/browser-panel/BrowserImportSection';
 import { useBrowserSession } from '../workspace/useBrowserSession';
 import { useI18n } from '../../i18n';
-import { Select, Input, Button, Switch } from '@/components/ui';
+import { Select, Input, Button, Switch, ConfirmDialog } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { toast } from '../../services/toast/ToastContext';
 import {
@@ -53,6 +53,10 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
   const [defaultMuted, setDefaultMutedState] = useState<boolean>(() =>
     getBrowserDefaultMuted()
   );
+  // 破坏性操作（清除历史/书签）统一走二次确认，与全站口径一致
+  const [pendingClear, setPendingClear] = useState<
+    'history' | 'bookmarks' | null
+  >(null);
 
   const handleSearchEngineChange = (val: string) => {
     const id = val as SearchEngineId;
@@ -84,7 +88,13 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
 
   const handleClearBookmarks = () => {
     clearAllBookmarks();
-    toast.show(t('settings.browser.bookmarksCleared', '书签已清空'));
+    toast.show(t('settings.browser.bookmarksCleared', '书签已清除'));
+  };
+
+  const handleConfirmClear = () => {
+    if (pendingClear === 'history') handleClearHistory();
+    else if (pendingClear === 'bookmarks') handleClearBookmarks();
+    setPendingClear(null);
   };
 
   return (
@@ -108,7 +118,7 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
             title={t('settings.browser.homepage', '主页')}
             control={
               <Input
-                size="xs"
+                size="sm"
                 value={homepage}
                 placeholder="about:blank"
                 onChange={handleHomepageChange}
@@ -152,7 +162,7 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={handleClearHistory}
+                onClick={() => setPendingClear('history')}
               >
                 {t('settings.browser.clearHistory', '清除')}
               </Button>
@@ -166,9 +176,9 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={handleClearBookmarks}
+                onClick={() => setPendingClear('bookmarks')}
               >
-                {t('settings.browser.emptyBookmarks', '清空')}
+                {t('settings.browser.clearBookmarks', '清除')}
               </Button>
             }
           />
@@ -178,6 +188,30 @@ export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
       <BrowserImportSection
         browserRunning={browserRunning}
         saveExport={saveExport}
+      />
+
+      <ConfirmDialog
+        open={pendingClear !== null}
+        danger
+        title={
+          pendingClear === 'bookmarks'
+            ? t('settings.browser.clearBookmarksConfirmTitle', '清除书签')
+            : t('settings.browser.clearHistoryConfirmTitle', '清除浏览历史')
+        }
+        description={
+          pendingClear === 'bookmarks'
+            ? t(
+                'settings.browser.clearBookmarksConfirmDesc',
+                '将删除全部书签，此操作不可撤销。'
+              )
+            : t(
+                'settings.browser.clearHistoryConfirmDesc',
+                '将删除全部浏览历史记录，此操作不可撤销。'
+              )
+        }
+        confirmLabel={t('settings.browser.clearHistory', '清除')}
+        onConfirm={handleConfirmClear}
+        onCancel={() => setPendingClear(null)}
       />
     </SettingsPage>
   );

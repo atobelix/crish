@@ -2,52 +2,60 @@
  * 设置 · 快捷键：纯展示/校验辅助函数与常量（从 SettingsShortcutsTab 拆出，
  * 供组件与测试共用）。无 React 依赖，便于单测与 tree-shake。
  *
- * 展示元表 id → { group, desc }：仅承载设置页独有的展示维度（分组/说明），
- * label 与 defaultBinding 一律取自 ShortcutRegistry（单一真源）——本表不参与
- * 执行，防止绑定/文案双源漂移。
+ * 单一真源约定：label 与 defaultBinding 取自 ShortcutRegistry；展示分组
+ * （category）取自 SHORTCUT_CATEGORY_MAP，分组标题文案取自 CATEGORY_I18N_KEYS
+ * ——本文件不平行维护第二套分组命名，防止双源漂移。
  */
 import { BUILTIN_SHORTCUTS } from '../../services/ShortcutRegistry';
 import { configService } from '../../services/ConfigService';
 
-export const SHORTCUT_DISPLAY: Record<
-  string,
-  { group: string; desc?: string }
+/** 快捷键分组键：设置页展示分组（tab 侧 re-export 保持对外导出面） */
+export type ShortcutCategoryKey = 'system' | 'session' | 'workspace' | 'other';
+
+export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
+  toggle_settings: 'system',
+  open_models: 'system',
+  open_usage: 'system',
+  open_security: 'system',
+  open_shortcuts: 'system',
+  open_extensions: 'system',
+  open_schedule: 'system',
+  export_logs: 'system',
+  new_session: 'session',
+  focus_composer: 'session',
+  branch_session: 'session',
+  stop_generation: 'session',
+  toggle_sidebar: 'workspace',
+};
+
+export const CATEGORY_I18N_KEYS: Record<
+  ShortcutCategoryKey,
+  { key: string; fallback: string }
 > = {
-  toggle_settings: { group: '系统' },
-  open_models: { group: '系统' },
-  open_usage: { group: '系统' },
-  open_security: { group: '系统' },
-  open_shortcuts: { group: '系统' },
-  open_extensions: { group: '系统' },
-  open_schedule: { group: '系统' },
-  export_logs: { group: '系统' },
-  new_session: { group: '会话' },
-  focus_composer: { group: '会话' },
-  branch_session: { group: '会话' },
-  stop_generation: { group: '会话' },
-  toggle_sidebar: { group: '工作区' },
+  system: { key: 'settings.shortcuts.groupGlobal', fallback: '全局快捷键' },
+  session: { key: 'settings.shortcuts.groupChat', fallback: '对话与编辑' },
+  workspace: {
+    key: 'settings.shortcuts.groupNavigation',
+    fallback: '界面导航',
+  },
+  other: { key: 'common.more', fallback: '其他' },
 };
 
 export type ShortcutItem = {
   id: string;
   label: string;
-  desc?: string;
-  group: string;
+  category: ShortcutCategoryKey;
   binding: string;
 };
 
-/** 从注册表派生展示行：行顺序 = 注册表顺序，label/binding 单一真源（T2-3） */
+/** 从注册表派生展示行：行顺序 = 注册表顺序，label/binding/分组各有单一真源 */
 export function buildShortcutItems(): ShortcutItem[] {
-  return BUILTIN_SHORTCUTS.map((meta) => {
-    const display = SHORTCUT_DISPLAY[meta.id] ?? { group: '其他' };
-    return {
-      id: meta.id,
-      label: meta.label,
-      desc: display.desc,
-      group: display.group,
-      binding: meta.defaultBinding,
-    };
-  });
+  return BUILTIN_SHORTCUTS.map((meta) => ({
+    id: meta.id,
+    label: meta.label,
+    category: SHORTCUT_CATEGORY_MAP[meta.id] ?? 'other',
+    binding: meta.defaultBinding,
+  }));
 }
 
 export const SHORTCUT_ITEMS = buildShortcutItems();
@@ -158,38 +166,6 @@ export function isCustomized(map: Record<string, string>, id: string): boolean {
   const def = defaultBindingOf(id).trim();
   return Boolean(cur) && cur !== def;
 }
-
-/** 快捷键分组键：设置页展示分组（从 SettingsShortcutsTab 拆出，tab 侧 re-export 保持兼容） */
-export type ShortcutCategoryKey = 'system' | 'session' | 'workspace' | 'other';
-
-export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
-  toggle_settings: 'system',
-  open_models: 'system',
-  open_usage: 'system',
-  open_security: 'system',
-  open_shortcuts: 'system',
-  open_extensions: 'system',
-  open_schedule: 'system',
-  export_logs: 'system',
-  new_session: 'session',
-  focus_composer: 'session',
-  branch_session: 'session',
-  stop_generation: 'session',
-  toggle_sidebar: 'workspace',
-};
-
-export const CATEGORY_I18N_KEYS: Record<
-  ShortcutCategoryKey,
-  { key: string; fallback: string }
-> = {
-  system: { key: 'settings.shortcuts.groupGlobal', fallback: '全局快捷键' },
-  session: { key: 'settings.shortcuts.groupChat', fallback: '对话与编辑' },
-  workspace: {
-    key: 'settings.shortcuts.groupNavigation',
-    fallback: '界面导航',
-  },
-  other: { key: 'common.more', fallback: '其他' },
-};
 
 /** 键盘事件 → 快捷键组合 token（与原 SettingsShortcutsTab 录制逻辑一致）；仅修饰键未成完整组合时返回 null */
 export function eventToShortcutKeys(e: KeyboardEvent): string[] | null {

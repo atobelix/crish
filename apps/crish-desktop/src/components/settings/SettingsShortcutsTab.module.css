@@ -19,48 +19,38 @@
   box-shadow: none;
 }
 
-/* 纯白实体卡片键帽 */
+/* 键帽按钮：无边框，底色/圆角由 ui Button secondary 表面承载（浅底大圆角 +
+   等宽字体保留按键隐喻）；高度走 --control-height-md（32 档）。 */
 .shortcutKeyBtn {
   appearance: none;
   -webkit-appearance: none;
   outline: none;
   min-width: 92px;
-  height: 28px;
-  padding: 0 10px;
+  height: var(--control-height-md);
+  padding: 0 var(--space-2_5);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
+  border: none;
   border-radius: var(--button-radius);
-  background-color: var(--cover-card-bg, var(--bg-card));
-  color: var(--text-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
   cursor: pointer;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.shortcutKeyBtn:hover:not(:disabled) {
-  background-color: var(--state-hover);
-  border-color: var(--border-color);
+  transition: background-color var(--transition-fast);
 }
 
 .shortcutKeyBtn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 var(--hairline-width) var(--focus-ring-color);
-  border-color: var(--focus-border-color);
 }
 
 /* 录制态：Emerald 活态焦点环与无障碍对比度 */
 .shortcutKeyBtn.recording {
   outline: none;
-  border-color: var(--brand);
   box-shadow: 0 0 0 var(--hairline-width) var(--brand);
   background-color: color-mix(
     in srgb,

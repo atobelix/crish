@@ -17,6 +17,7 @@ import {
   type ImportedHistoryRow,
 } from '../../../../api/browserImportApi';
 import { useToast } from '../../../../services/toast/ToastContext';
+import { useI18n } from '../../../../i18n';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseHistoryImportOptions {
@@ -24,21 +25,18 @@ export interface UseHistoryImportOptions {
   setBusy: Dispatch<SetStateAction<BusyKind>>;
 }
 
-export function useHistoryImport({
-  busy,
-  setBusy,
-}: UseHistoryImportOptions) {
+export function useHistoryImport({ busy, setBusy }: UseHistoryImportOptions) {
   const { showToast } = useToast();
+  const { t } = useI18n();
   // ── 历史导入 ──
   const [historyPath, setHistoryPath] = useState('');
   const [historyResult, setHistoryResult] =
     useState<HistoryImportPayload | null>(null);
   const [historyError, setHistoryError] = useState('');
 
-  /** 历史域错误出口：行内 role=alert + toast。 */
+  /** 历史域错误出口：行内 role=alert + toast（入参为已本地化的完整消息）。 */
   const reportHistoryError = useCallback(
-    (prefix: string, msg: string) => {
-      const full = `${prefix}${msg}`;
+    (full: string) => {
       setHistoryError(full);
       showToast(full);
     },
@@ -53,10 +51,22 @@ export function useHistoryImport({
     const res = await importHistory(target);
     if (res.status === 'ok') {
       setHistoryResult(res.data);
-      const msg = `历史记录导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
+      const msg = t(
+        'settings.browserImport.historyImportSuccess',
+        '历史记录导入成功：新增 {inserted} 条，跳过 {skipped} 条',
+        { inserted: res.data.inserted, skipped: res.data.skippedDupes }
+      );
       showToast(msg);
     } else {
-      reportHistoryError('历史导入失败：', resultMessage(res, ''));
+      reportHistoryError(
+        t(
+          'settings.browserImport.historyImportFailed',
+          '历史导入失败：{error}',
+          {
+            error: resultMessage(res, ''),
+          }
+        )
+      );
     }
     setBusy(null);
   };
@@ -73,10 +83,9 @@ export function useHistoryImport({
   const [listError, setListError] = useState('');
   const reqSeqRef = useRef(0);
 
-  /** 列表域错误出口：行内 role=alert + toast。 */
+  /** 列表域错误出口：行内 role=alert + toast（入参为已本地化的完整消息）。 */
   const reportListError = useCallback(
-    (prefix: string, msg: string) => {
-      const full = `${prefix}${msg}`;
+    (full: string) => {
       setListError(full);
       showToast(full);
     },
@@ -91,13 +100,31 @@ export function useHistoryImport({
         const res = await listBookmarks();
         if (currentSeq !== reqSeqRef.current) return;
         if (res.status === 'ok') setBookmarkRows(res.data);
-        else reportListError('书签列表加载失败：', resultMessage(res, ''));
+        else
+          reportListError(
+            t(
+              'settings.browserImport.bookmarksListFailed',
+              '书签列表加载失败：{error}',
+              {
+                error: resultMessage(res, ''),
+              }
+            )
+          );
       } else {
         const limit = Math.max(1, Math.floor(Number(historyLimit)) || 50);
         const res = await listHistory(undefined, limit);
         if (currentSeq !== reqSeqRef.current) return;
         if (res.status === 'ok') setHistoryRows(res.data);
-        else reportListError('历史列表加载失败：', resultMessage(res, ''));
+        else
+          reportListError(
+            t(
+              'settings.browserImport.historyListFailed',
+              '历史列表加载失败：{error}',
+              {
+                error: resultMessage(res, ''),
+              }
+            )
+          );
       }
     } finally {
       if (currentSeq === reqSeqRef.current) {
