@@ -152,7 +152,7 @@ function buildClusterFromRun(
   const actionLabel = formatClusterActionLabel(clusterKind, run.length);
   const durStr = formatClusterDuration(totalDurationMs);
   const durText = durStr
-    ? t('cluster.action.duration', '耗时 {duration}', { duration: durStr })
+    ? t('cluster.action.duration', '耗时 {text}', { text: durStr })
     : '';
   const summaryLabel = durText
     ? t('cluster.action.withDuration', '{action} · 耗时 {duration}', {
