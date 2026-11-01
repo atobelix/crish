@@ -36,7 +36,7 @@ export interface SettingsPersist {
 }
 
 export interface SettingsState {
-  /** 四组设置（通用/通知/文件/外观；缺省值见 defaultSettingsGroups） */
+  /** 设置分组（通知/外观/输入；缺省值见 defaultSettingsGroups） */
   groups: SettingsGroups;
   /** 水合完成标志（kv 回填完成前组件显示默认值即可，不阻塞启动） */
   hydrated: boolean;

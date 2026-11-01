@@ -24,14 +24,13 @@ import {
   type QuickRunContext,
 } from '@/adapters/quickRunWiring';
 import type { RunTaskParams, PermissionMode } from '@crish/shared-types';
+import { settingsStore } from '@/domain/store/settingsStore';
+import { runPermissionMode } from '@/domain/pure/permissionMode';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────
 
 /** 最近会话快速选择上限（前 N 个最近活跃；store 已排序，直接切片） */
 export const RECENT_SESSION_LIMIT = 5;
-
-/** 发起 run 默认权限模式（R2-07 B4：permissionMode 缺省 ask；UI 不提供 full-access，D5 §4.6.1） */
-export const QUICK_RUN_PERMISSION_MODE: PermissionMode = 'ask';
 
 /**
  * 最近会话切片（F1 §4.4 / F5 §2.1 排序不变量由 sessionStore 保证）：
@@ -48,16 +47,21 @@ export function recentSessionsOf(
 /**
  * runTask 参数构造（C24 契约，M6 §4.4.1）：
  * - prompt 必填；sessionId 缺省 = 桌面新建会话（commitDraftIfNeeded 语义）；
- * - permissionMode 恒 ask（R2-07 B4 默认；full-access 被桌面恒降级 ask）。
+ * - permissionMode 由调用方经 domain/pure/permissionMode 映射后传入（G1 起
+ *   读 settingsStore 的 composer 偏好，不再写死 ask）。映射与桌面现行代码
+ *   一致：桌面 UI 三档 id 本身即协议值 ask/smart/full（恒等映射，证据见
+ *   permissionMode.ts 文件头）；远程生效口径由桌面执行侧 apply_remote_mode
+ *   决定（full → ask），移动端只如实申报所选档位。
  */
 export function runTaskParamsOf(
   prompt: string,
-  sessionId: string | null
+  sessionId: string | null,
+  permissionMode: PermissionMode
 ): RunTaskParams {
   return {
     prompt,
     ...(sessionId !== null ? { sessionId } : {}),
-    permissionMode: QUICK_RUN_PERMISSION_MODE,
+    permissionMode,
   };
 }
 
@@ -142,8 +146,12 @@ export function useQuickRunVm(
       busyRef.current = true;
       setBusy(true);
       setFeedback({ kind: 'sending' });
+      // 权限档提交时刻读取持久化偏好并经单点映射（domain/pure/permissionMode）
+      const permissionMode = runPermissionMode(
+        settingsStore.getState().get('composer').permissionMode
+      );
       void ctx.repository
-        .runTask(runTaskParamsOf(text, selectedSessionId))
+        .runTask(runTaskParamsOf(text, selectedSessionId, permissionMode))
         .then((res) => {
           setFeedback({
             kind: 'success',

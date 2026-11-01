@@ -169,7 +169,8 @@ describe('HomeScreen 提交', () => {
     await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('s-9'));
     expect(mockRunTask).toHaveBeenCalledWith({
       prompt: '整理一下登录页',
-      permissionMode: 'ask',
+      // G1：权限改读持久化偏好，默认 smart（与桌面 DEFAULT_PERMISSION_MODE 一致）
+      permissionMode: 'smart',
     });
   });
 });

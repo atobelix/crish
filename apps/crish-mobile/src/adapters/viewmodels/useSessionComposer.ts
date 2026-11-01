@@ -1,6 +1,10 @@
 // 会话内继续对话：发送 runTask（固定 sessionId），维护输入 / busy / 错误。
+// 权限档（G1）：提交时刻读 settingsStore 的 composer 偏好，经
+// domain/pure/permissionMode 单点映射申报（与桌面三档口径一致，不写死 ask）。
 import { useCallback, useRef, useState } from 'react';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
+import { settingsStore } from '@/domain/store/settingsStore';
+import { runPermissionMode } from '@/domain/pure/permissionMode';
 import {
   getQuickRunContext,
   RUN_TASK_ERROR_INTERNAL,
@@ -64,7 +68,9 @@ export function useSessionComposer(
         const result = await context.repository.runTask({
           prompt: text,
           sessionId,
-          permissionMode: 'ask',
+          permissionMode: runPermissionMode(
+            settingsStore.getState().get('composer').permissionMode
+          ),
         });
         setPromptState('');
         setFeedback({ kind: 'success', message: null });

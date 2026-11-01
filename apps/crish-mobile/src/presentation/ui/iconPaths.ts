@@ -49,6 +49,10 @@ export const ICON_PATHS = {
   palette:
     'M12 22a10 10 0 110-20c5.5 0 10 4 10 9a5 5 0 01-5 5h-2.1a2 2 0 00-1.7 3.05A2 2 0 0112 22zM7.5 10.5h.01M12 7.5h.01M16.5 10.5h.01',
   logout: 'M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9',
+  // G1 追加：原型快捷条 Shield01 / 模型钮 Flash，与桌面 permissionModes 的
+  // shield/zap 图标语义同名（原型 composer.css + 桌面 api/permissionModes 元数据）
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  zap: 'M13 2L3 14h9l-1 8L21 10h-9l1-8z',
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
@@ -61,4 +65,4 @@ export const SHARP_ICONS: ReadonlySet<IconName> = new Set([
   'check',
 ] as IconName[]);
 
-export const ICON_NAME_LIMIT = 28;
+export const ICON_NAME_LIMIT = 30;

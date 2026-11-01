@@ -58,6 +58,61 @@ describe('Composer', () => {
     expect(view.queryByTestId('composer-mic')).toBeNull();
   });
 
+  it('G1 快捷条：注入 contextBar 时渲染项目/权限胶囊并回调，未注入则不渲染', async () => {
+    const onWorkspacePress = jest.fn();
+    const onPermissionPress = jest.fn();
+    const view = await render(
+      <Composer
+        testID="composer"
+        value=""
+        placeholder="给电脑发一条指令"
+        onChangeText={jest.fn()}
+        onSubmit={jest.fn()}
+        canSubmit={false}
+        editable
+        contextBar={{
+          workspaceLabel: 'conex',
+          permissionLabel: '智能放行',
+          onWorkspacePress,
+          onPermissionPress,
+        }}
+      />
+    );
+    expect(view.getByText('conex')).toBeTruthy();
+    expect(view.getByText('智能放行')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('composer-workspace'));
+    await fireEvent.press(view.getByTestId('composer-permission'));
+    expect(onWorkspacePress).toHaveBeenCalledTimes(1);
+    expect(onPermissionPress).toHaveBeenCalledTimes(1);
+
+    const { element } = renderComposer(false);
+    const plain = await render(element);
+    expect(plain.queryByTestId('composer-workspace')).toBeNull();
+    expect(plain.queryByTestId('composer-permission')).toBeNull();
+    expect(plain.queryByTestId('composer-model')).toBeNull();
+  });
+
+  it('G1 展开行模型钮：注入 model 时存在（标签 + 点击回调）', async () => {
+    const onPress = jest.fn();
+    const view = await render(
+      <Composer
+        testID="composer"
+        value=""
+        placeholder="给电脑发一条指令"
+        onChangeText={jest.fn()}
+        onSubmit={jest.fn()}
+        canSubmit={false}
+        editable
+        model={{ label: '默认模型', onPress }}
+      />
+    );
+    expect(view.getByText('默认模型')).toBeTruthy();
+    // 展开行收起时 pointerEvents 关闭（不可点）；聚焦输入进入展开形态后可点
+    await fireEvent(view.getByTestId('composer'), 'focus');
+    await fireEvent.press(view.getByTestId('composer-model'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the hold-to-talk microphone when voice is wired', async () => {
     const view = await render(
       <Composer

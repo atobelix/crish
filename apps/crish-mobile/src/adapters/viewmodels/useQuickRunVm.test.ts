@@ -1,6 +1,8 @@
 // useQuickRunVm 单测（R2-05 部分 5 快速操作 VM）：
 // - 派生纯函数：recentSessionsOf（归档过滤 + 前 N 切片）、runTaskParamsOf（sessionId
-//   缺省/带选、permissionMode 恒 ask）、isChipSelected 等价判定；
+//   缺省/带选、permissionMode 入参透传）、isChipSelected 等价判定；
+// - 权限（G1）：提交读 settingsStore composer 偏好（默认 smart 与桌面一致），
+//   经 domain/pure/permissionMode 映射后申报（ask/full 设置值原样透传）。
 // - 钩子渲染面：连接相位投影（未连接禁用）、prompt 输入、会话选择切换、提交成功
 //   （回执 runId → success + 清空输入）、失败（错误码映射文案）、busy 防双点
 //   （pending 期间二次提交被拒）、上下文缺省走单例（未接线 → 未连接反馈）。
@@ -8,17 +10,14 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { connectionStore } from '@/domain/store/connectionStore';
+import { settingsStore } from '@/domain/store/settingsStore';
 import {
   resetQuickRunContextForTest,
   RunTaskCommandError,
   type QuickRunContext,
 } from '@/adapters/quickRunWiring';
-import type {
-  RunTaskParams,
-  RunTaskResult,
-} from '@crish/shared-types';
+import type { RunTaskParams, RunTaskResult } from '@crish/shared-types';
 import {
-  QUICK_RUN_PERMISSION_MODE,
   recentSessionsOf,
   runTaskParamsOf,
   useQuickRunVm,
@@ -27,6 +26,9 @@ import {
 function resetStores(): void {
   sessionStore.setState({ sessions: [], selectedSessionId: null });
   connectionStore.setState({ phase: 'disconnected' });
+  settingsStore.setState((s) => ({
+    groups: { ...s.groups, composer: { permissionMode: 'smart' as const } },
+  }));
 }
 
 beforeEach(() => {
@@ -87,15 +89,19 @@ describe('派生纯函数', () => {
     expect(recentSessionsOf([])).toEqual([]);
   });
 
-  it('runTaskParamsOf：sessionId 缺省不携带；带选携带；permissionMode 恒 ask', () => {
-    expect(runTaskParamsOf('hi', null)).toEqual({
+  it('runTaskParamsOf：sessionId 缺省不携带；带选携带；permissionMode 入参透传（三档）', () => {
+    expect(runTaskParamsOf('hi', null, 'smart')).toEqual({
       prompt: 'hi',
-      permissionMode: QUICK_RUN_PERMISSION_MODE,
+      permissionMode: 'smart',
     });
-    expect(runTaskParamsOf('hi', 's-9')).toEqual({
+    expect(runTaskParamsOf('hi', 's-9', 'ask')).toEqual({
       prompt: 'hi',
       sessionId: 's-9',
       permissionMode: 'ask',
+    });
+    expect(runTaskParamsOf('hi', null, 'full')).toEqual({
+      prompt: 'hi',
+      permissionMode: 'full',
     });
   });
 });
@@ -155,7 +161,8 @@ describe('useQuickRunVm 钩子渲染面', () => {
     expect(runTask).toHaveBeenCalledWith({
       prompt: '写个测试',
       sessionId: 's-9',
-      permissionMode: 'ask',
+      // G1：默认偏好 smart（与桌面 DEFAULT_PERMISSION_MODE 一致）
+      permissionMode: 'smart',
     });
     expect(result.current.feedback).toEqual({
       kind: 'success',
@@ -178,7 +185,35 @@ describe('useQuickRunVm 钩子渲染面', () => {
     });
     expect(runTask).toHaveBeenCalledWith({
       prompt: '新任务',
+      permissionMode: 'smart',
+    });
+  });
+
+  it('权限偏好透传：settingsStore 设为 ask / full 时提交原样申报', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    settingsStore.getState().update('composer', { permissionMode: 'ask' });
+    await act(async () => {
+      result.current.setPrompt('询问档任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    expect(runTask).toHaveBeenLastCalledWith({
+      prompt: '询问档任务',
       permissionMode: 'ask',
+    });
+    settingsStore.getState().update('composer', { permissionMode: 'full' });
+    await act(async () => {
+      result.current.setPrompt('完全允许档任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    expect(runTask).toHaveBeenLastCalledWith({
+      prompt: '完全允许档任务',
+      permissionMode: 'full',
     });
   });
 

@@ -1,10 +1,15 @@
 // 主屏（原型 main-screen 移植）：头栏左组【汉堡 · 设备胶囊】+ 右侧更多下拉；
 // 离线白色横幅；平铺会话列表（标题/状态/时间/摘要，虚线分隔，少条目垂直居中）；
-// 底部 Composer。无会话时显示时段问候空态（视觉焦点归一到底部输入框）。
+// 底部 Composer。
+// 会话优先级（产品口径）：正在运行的对话（含待审批）置顶、按最近活动排序，其后为
+// 已完成对话按最近更新排序——由 store 的 sortSessions 保证（置顶 → 活动 → updatedAt
+// 降序），本屏只过滤归档、不再二次排序。空态分连接态：连接后无会话 = 时段问候；
+// 未连接 = 明确的未连接空态（与问候区分，其上另有离线横幅）。
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
+  Easing,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
@@ -15,6 +20,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
 import { useDeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
+import { useComposerContextVm } from '@/adapters/viewmodels/useComposerContextVm';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
@@ -31,6 +37,9 @@ import { ConnectionBanner } from '@/presentation/components/status/ConnectionBan
 import { DevicePill } from '@/presentation/components/chat/DevicePill';
 import { DeviceSheet } from '@/presentation/components/chat/DeviceSheet';
 import { MenuButton } from '@/presentation/components/chat/MenuButton';
+import { ModelSheet } from '@/presentation/components/chat/ModelSheet';
+import { PermissionModeSheet } from '@/presentation/components/chat/PermissionModeSheet';
+import { WorkspaceSheet } from '@/presentation/components/files/WorkspaceSheet';
 import { ChatFlatItem } from '@/presentation/components/sessions/ChatFlatItem';
 
 /** 问候语按本地时段切换 */
@@ -66,20 +75,33 @@ export default function HomeScreen({
     notify: showToast,
   });
   const device = useDeviceStatusVm();
+  // Composer 上下文（G1）：快捷条项目/权限 + 展开行模型钮的数据面
+  const composerCtx = useComposerContextVm();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deviceOpen, setDeviceOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [permissionOpen, setPermissionOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
   const { feedback } = quickRun;
 
-  // 键盘弹起 = 输入态：列表与横幅联动淡出上移（原型 composer-expanded-state）
+  // 键盘弹起 = 输入态：列表与横幅联动淡出上移（原型 composer-expanded-state，
+  // 0.28s emphasized——§3.3 #25 全局动效口径）。jest 环境由 jest.setup 的
+  // reanimated 桩提供 Easing.bezier（M8 补桩），测试与真机同走 token 曲线。
   const keyboardHeight = useKeyboardHeight();
   const composing = keyboardHeight > 0;
   const fade = useSharedValue(0);
   useEffect(() => {
     fade.value = withTiming(composing ? 1 : 0, {
-      duration: theme.motion.duration.normal,
+      duration: theme.motion.duration.expand,
+      easing: Easing.bezier(...theme.motion.easing.emphasized),
     });
-  }, [composing, fade, theme.motion.duration.normal]);
+  }, [
+    composing,
+    fade,
+    theme.motion.duration.expand,
+    theme.motion.easing.emphasized,
+  ]);
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(fade.value, [0, 1], [1, 0]),
     transform: [{ translateY: interpolate(fade.value, [0, 1], [0, -6]) }],
@@ -90,7 +112,9 @@ export default function HomeScreen({
     else if (feedback.kind === 'error') showToast(feedback.message, 'error');
   }, [feedback, onOpenSession, showToast]);
 
-  // 平铺列表数据：未归档会话（store 已排序：置顶 → 活动 → updatedAt 降序）
+  // 平铺列表数据：未归档会话。排序即优先级口径——store 的 sortSessions 已保证
+  // 置顶 → 活动中（activeRunIds 非空，含待审批会话）→ updatedAt 降序，本屏不再重排：
+  // 运行中（含待审批）按最近活动在前，已完成按最近更新在后。
   const visibleSessions = useMemo(
     () => sessions.filter((s: SessionSummary) => s.isArchived !== true),
     [sessions]
@@ -110,11 +134,13 @@ export default function HomeScreen({
           styles.header,
           {
             paddingTop: insets.top + theme.space.xs,
-            paddingHorizontal: theme.space.sm,
+            // 原型 main-header 横向 padding 16
+            paddingHorizontal: theme.space.lg,
           },
         ]}
       >
-        <View style={[styles.headerGroup, { gap: theme.space.sm - 2 }]}>
+        {/* 原型 header-left-group gap 10 */}
+        <View style={[styles.headerGroup, { gap: theme.space.sm + 2 }]}>
           <MenuButton onPress={onOpenDrawer} />
           <DevicePill onPress={() => setDeviceOpen(true)} />
         </View>
@@ -134,26 +160,54 @@ export default function HomeScreen({
             phaseLabel={device.phaseLabel}
             lastError={device.lastError}
             onRetry={device.reconnect}
+            onSwitch={() => setDeviceOpen(true)}
           />
         ) : null}
         {visibleSessions.length === 0 ? (
-          <View
-            style={[
-              styles.hero,
-              { gap: theme.space.md, paddingHorizontal: theme.space.screenX },
-            ]}
-          >
-            <AppText variant="title2" style={styles.centerText}>
-              {greeting}
-            </AppText>
-            <AppText
-              variant="callout"
-              color="textSecondary"
-              style={styles.centerText}
+          !connected ? (
+            // 未连接空态：与连接后的问候空态明确区分（上方另有离线横幅）
+            <View
+              style={[
+                styles.hero,
+                {
+                  gap: theme.space.md,
+                  paddingHorizontal: theme.space.screenX,
+                },
+              ]}
             >
-              今天想让它做点什么？
-            </AppText>
-          </View>
+              <AppText variant="title2" style={styles.centerText}>
+                尚未连接桌面
+              </AppText>
+              <AppText
+                variant="callout"
+                color="textSecondary"
+                style={styles.centerText}
+              >
+                连接后，这里会优先显示正在运行的对话
+              </AppText>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.hero,
+                {
+                  gap: theme.space.md,
+                  paddingHorizontal: theme.space.screenX,
+                },
+              ]}
+            >
+              <AppText variant="title2" style={styles.centerText}>
+                {greeting}
+              </AppText>
+              <AppText
+                variant="callout"
+                color="textSecondary"
+                style={styles.centerText}
+              >
+                今天想让它做点什么？
+              </AppText>
+            </View>
+          )
         ) : (
           <FlatList
             testID="home-chat-list"
@@ -171,12 +225,14 @@ export default function HomeScreen({
             contentContainerStyle={[
               styles.listContent,
               {
-                paddingHorizontal: theme.space.screenX,
+                // 原型 chat-list 横向 padding 22
+                paddingHorizontal: theme.space.screenX + 2,
                 paddingTop: theme.space.lg,
                 gap: theme.space.messageGap,
               },
-              // 少条目垂直居中（原型视距）；超出后自然顶部滚动
-              visibleSessions.length <= 3 && styles.listCentered,
+              // 少条目垂直居中（原型视距）：listContent 的 flexGrow 让容器随内容
+              // 增长，内容超出视口后居中自然失效、回到顶部滚动，故恒定应用。
+              styles.listCentered,
             ]}
             onScrollBeginDrag={() => setNowMs(Date.now())}
           />
@@ -204,6 +260,19 @@ export default function HomeScreen({
           editable={connected && !quickRun.busy}
           maxLength={4096}
           voice={voice}
+          contextBar={{
+            workspaceLabel: composerCtx.workspaceLabel,
+            permissionLabel: composerCtx.permissionLabel,
+            onWorkspacePress: () => {
+              composerCtx.openWorkspaceList();
+              setWorkspaceOpen(true);
+            },
+            onPermissionPress: () => setPermissionOpen(true),
+          }}
+          model={{
+            label: composerCtx.modelLabel,
+            onPress: () => setModelOpen(true),
+          }}
         />
       </View>
 
@@ -237,6 +306,41 @@ export default function HomeScreen({
         device={device}
         onOpenScan={() => router.push('/pair/scan')}
         testID="home-device-sheet"
+      />
+
+      {/* 项目选择 Sheet（G1：复用文件页 WorkspaceSheet 数据面） */}
+      <WorkspaceSheet
+        visible={workspaceOpen}
+        onClose={() => setWorkspaceOpen(false)}
+        workspaces={composerCtx.workspaces ?? []}
+        status={composerCtx.workspacesStatus}
+        activeRoot={composerCtx.activeWorkspaceRoot ?? ''}
+        switching={composerCtx.switchingWorkspace}
+        onSelect={(root) => {
+          composerCtx.selectWorkspace(root);
+          setWorkspaceOpen(false);
+        }}
+        onRetry={composerCtx.retryWorkspaces}
+      />
+
+      {/* 权限模式 Sheet（G1：桌面三档对齐，选择即持久化） */}
+      <PermissionModeSheet
+        visible={permissionOpen}
+        onClose={() => setPermissionOpen(false)}
+        value={composerCtx.permissionMode}
+        onSelect={(mode) => {
+          composerCtx.setPermissionMode(mode);
+          setPermissionOpen(false);
+        }}
+        testID="home-permission-sheet"
+      />
+
+      {/* 模型选择 Sheet（G1 壳：列表待 G2 端点，诚实空态） */}
+      <ModelSheet
+        visible={modelOpen}
+        onClose={() => setModelOpen(false)}
+        currentLabel={composerCtx.modelLabel}
+        testID="home-model-sheet"
       />
     </Screen>
   );

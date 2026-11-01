@@ -2,7 +2,8 @@
 // - 消息流全屏滚动，上下边缘羽化（EdgeFade），头栏/输入框通透悬浮其上；
 // - 悬浮头栏 = 返回白圆钮 + 标题胶囊 + 更多（下拉菜单：运行详情/终端输出/工具调用）；
 // - 审批统一交给全局 ApprovalFloat（悬浮于输入框上方）；
-//   本会话有待审批时 Composer 锁定（原型 approval-locked：输入禁用 + 引导文案）。
+//   本会话有待审批时 Composer 锁定（原型 approval-locked：输入禁用、占位不换文，
+//   锁定以容器实心 + 工具图标变淡的形态表达）。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useSessionStore } from '@/adapters/hooks/useAppStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { useSessionComposer } from '@/adapters/viewmodels/useSessionComposer';
+import { useComposerContextVm } from '@/adapters/viewmodels/useComposerContextVm';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { ensureSessionHistory } from '@/adapters/runtime/appRuntime';
 import {
@@ -23,6 +25,9 @@ import {
   useSessionWindow,
 } from '@/presentation/timeline/useSessionWindow';
 import { SessionHeader } from '@/presentation/components/chat/SessionHeader';
+import { ModelSheet } from '@/presentation/components/chat/ModelSheet';
+import { PermissionModeSheet } from '@/presentation/components/chat/PermissionModeSheet';
+import { WorkspaceSheet } from '@/presentation/components/files/WorkspaceSheet';
 import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 import {
   AppText,
@@ -57,6 +62,11 @@ export default function SessionDetailScreen({
   );
   const [follow, setFollow] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Composer 上下文（G1）：快捷条项目/权限 + 展开行模型钮（与主屏同一数据面）
+  const composerCtx = useComposerContextVm();
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [permissionOpen, setPermissionOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const listRef = useRef<FlatList<DisplayBlock> | null>(null);
   const [localPrompts, setLocalPrompts] = useState<
     { id: string; text: string; atMs: number }[]
@@ -117,13 +127,15 @@ export default function SessionDetailScreen({
     if (composer.feedback.kind === 'success') handleSent();
   }, [composer.feedback.kind, handleSent]);
 
-  // 原型 approval-locked：本会话待审批未决时锁定输入，引导先处理审批
+  // 原型 approval-locked：本会话待审批未决时锁定输入（占位文案保持不变）
   const approvalLocked = (summary?.pendingApprovalCount ?? 0) > 0;
   const editable = composer.connected && !composer.busy && !approvalLocked;
 
-  // 悬浮 Composer 区高度估算（羽化与回到底部按钮的偏移基准）
+  // 悬浮 Composer 区高度估算（羽化与回到底部按钮的偏移基准）；
+  // G1 起含快捷条高度（胶囊 22 + 下距 5，随 Composer 一体悬浮）
   const composerBlockHeight =
     theme.size.composerMin +
+    27 +
     theme.space.xl +
     Math.max(insets.bottom, theme.space.sm);
 
@@ -222,20 +234,28 @@ export default function SessionDetailScreen({
         ) : null}
         <Composer
           testID="session-composer"
-          placeholder={
-            approvalLocked
-              ? '请先处理上方权限审批…'
-              : composer.connected
-                ? '回复助手或发送指令…'
-                : '未连接'
-          }
+          placeholder={composer.connected ? '回复助手或发送指令…' : '未连接'}
           value={composer.prompt}
           onChangeText={composer.setPrompt}
           onSubmit={() => void composer.submit()}
           canSubmit={composer.canSubmit && !approvalLocked}
           editable={editable}
+          locked={approvalLocked}
           maxLength={4096}
           voice={voice}
+          contextBar={{
+            workspaceLabel: composerCtx.workspaceLabel,
+            permissionLabel: composerCtx.permissionLabel,
+            onWorkspacePress: () => {
+              composerCtx.openWorkspaceList();
+              setWorkspaceOpen(true);
+            },
+            onPermissionPress: () => setPermissionOpen(true),
+          }}
+          model={{
+            label: composerCtx.modelLabel,
+            onPress: () => setModelOpen(true),
+          }}
         />
       </View>
 
@@ -247,6 +267,41 @@ export default function SessionDetailScreen({
         right={theme.space.md}
         testID="session-menu"
         entries={menuEntries}
+      />
+
+      {/* 项目选择 Sheet（G1：复用文件页 WorkspaceSheet 数据面） */}
+      <WorkspaceSheet
+        visible={workspaceOpen}
+        onClose={() => setWorkspaceOpen(false)}
+        workspaces={composerCtx.workspaces ?? []}
+        status={composerCtx.workspacesStatus}
+        activeRoot={composerCtx.activeWorkspaceRoot ?? ''}
+        switching={composerCtx.switchingWorkspace}
+        onSelect={(root) => {
+          composerCtx.selectWorkspace(root);
+          setWorkspaceOpen(false);
+        }}
+        onRetry={composerCtx.retryWorkspaces}
+      />
+
+      {/* 权限模式 Sheet（G1：桌面三档对齐，选择即持久化） */}
+      <PermissionModeSheet
+        visible={permissionOpen}
+        onClose={() => setPermissionOpen(false)}
+        value={composerCtx.permissionMode}
+        onSelect={(mode) => {
+          composerCtx.setPermissionMode(mode);
+          setPermissionOpen(false);
+        }}
+        testID="session-permission-sheet"
+      />
+
+      {/* 模型选择 Sheet（G1 壳：列表待 G2 端点，诚实空态） */}
+      <ModelSheet
+        visible={modelOpen}
+        onClose={() => setModelOpen(false)}
+        currentLabel={composerCtx.modelLabel}
+        testID="session-model-sheet"
       />
     </Screen>
   );
