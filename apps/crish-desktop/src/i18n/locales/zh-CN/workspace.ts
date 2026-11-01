@@ -145,6 +145,7 @@ export const workspace: WorkspaceTranslations = {
   'pane.maximizePanelTooltip': '最大化面板 (Alt+M)',
   'pane.tablistAria': '工具窗格标签栏',
   'pane.closeTabWithLabel': '关闭 {label}',
+  newTab: '新建标签页 (⌘N)',
   'pane.splitRight': '向右分屏',
   'pane.splitRightTooltip': '向右分屏 (Ctrl+Shift+\\)',
   'pane.splitRightDisabledTooltip':
@@ -154,6 +155,13 @@ export const workspace: WorkspaceTranslations = {
   'pane.splitDownDisabledTooltip':
     '窗格高度过矮（<160px），无法继续向下分屏。建议拉高窗口或向右分屏',
   'pane.closePane': '关闭分屏窗格',
+
+  // ── 新建标签启动器 (NewTabLauncherPopover) ───────────────────────────────
+  'launcher.coreActions': '核心操作',
+  'launcher.newTerminal': '新建常规终端',
+  'launcher.running': '运行中',
+  'launcher.waitingApproval': '等待审批: {tool}',
+  'launcher.projects': '项目',
 };
 
 export default workspace;

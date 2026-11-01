@@ -291,7 +291,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
           <div
             className={styles.section}
             role="menu"
-            aria-label={t('launcher.coreActions', '核心操作')}
+            aria-label={t('workspace.launcher.coreActions', '核心操作')}
           >
             <Button
               bare
@@ -322,7 +322,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
                 <AppIcon name="terminal" size={15} />
               </div>
               <span className={styles.actionLabel}>
-                {t('launcher.newTerminal', '新建常规终端')}
+                {t('workspace.launcher.newTerminal', '新建常规终端')}
               </span>
               <span className={styles.shortcutHint}>⌃`</span>
             </Button>
@@ -339,7 +339,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
                 <AppIcon name="globe" size={15} />
               </div>
               <span className={styles.actionLabel}>
-                {t('launcher.newBrowser', '新建浏览器')}
+                {t('workspace.launcher.newBrowser', '新建浏览器')}
               </span>
               <span className={styles.shortcutHint}>⌥B</span>
             </Button>
@@ -354,7 +354,8 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
               <div className={styles.divider} />
               <div className={styles.sectionHeader}>
                 <span>
-                  {t('launcher.running', '运行中')} ({runningSessions.length})
+                  {t('workspace.launcher.running', '运行中')} (
+                  {runningSessions.length})
                 </span>
               </div>
               <div className={styles.runningList}>
@@ -363,12 +364,17 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
                   const isUrgent = session.stage === 'waiting_approval';
                   const isDone = session.stage === 'just_completed';
                   const stageText = isUrgent
-                    ? t('launcher.waitingApproval', '等待审批: {tool}', {
-                        tool:
-                          session.approvalMeta?.toolName ||
-                          t('common.tool', '工具'),
-                      })
-                    : session.stageDetail || t('launcher.running', '运行中');
+                    ? t(
+                        'workspace.launcher.waitingApproval',
+                        '等待审批: {tool}',
+                        {
+                          tool:
+                            session.approvalMeta?.toolName ||
+                            t('common.tool', '工具'),
+                        }
+                      )
+                    : session.stageDetail ||
+                      t('workspace.launcher.running', '运行中');
 
                   return (
                     <Button
@@ -422,7 +428,8 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
               <div className={styles.divider} />
               <div className={styles.sectionHeader}>
                 <span>
-                  {t('launcher.projects', '项目')} ({userProjects.length})
+                  {t('workspace.launcher.projects', '项目')} (
+                  {userProjects.length})
                 </span>
               </div>
               <div className={styles.projectList}>

@@ -45,6 +45,7 @@ export const common: CommonTranslations = {
   view: '查看',
   more: '更多',
   actions: '操作',
+  tool: '工具',
   enabled: '已启用',
   disabled: '已禁用',
   default: '默认',
@@ -73,6 +74,8 @@ export const common: CommonTranslations = {
   confirmDelete: '确认删除',
   feedback: '反馈',
   closeNotice: '关闭提示',
+  configure: '去配置',
+  details: '详情',
   copyDetail: '复制详情',
   copiedDetail: '已复制详情',
 };

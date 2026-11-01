@@ -120,7 +120,7 @@ export function useAppearanceSchema({
                   key: 'enableMicaEffect',
                   type: 'boolean' as const,
                   title: 'Mica Effect (Windows 11)',
-                  titleKey: 'appearance.micaTitle',
+                  titleKey: 'settings.appearance.micaTitle',
                 },
               ]
             : []),

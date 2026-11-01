@@ -169,6 +169,7 @@ export const workspace: WorkspaceTranslations = {
   'pane.maximizePanelTooltip': 'Maximize panel (Alt+M)',
   'pane.tablistAria': 'Tool pane tab strip',
   'pane.closeTabWithLabel': 'Close {label}',
+  newTab: 'New Tab (⌘N)',
   'pane.splitRight': 'Split Right',
   'pane.splitRightTooltip': 'Split Right (Ctrl+Shift+\\)',
   'pane.splitRightDisabledTooltip':
@@ -178,6 +179,13 @@ export const workspace: WorkspaceTranslations = {
   'pane.splitDownDisabledTooltip':
     'Pane height is too small (<160px) to split down. Expand the window or split right instead',
   'pane.closePane': 'Close Split Pane',
+
+  // ── New Tab Launcher (NewTabLauncherPopover) ─────────────────────────────
+  'launcher.coreActions': 'Core Actions',
+  'launcher.newTerminal': 'New Terminal',
+  'launcher.running': 'Running',
+  'launcher.waitingApproval': 'Waiting for approval: {tool}',
+  'launcher.projects': 'Projects',
 };
 
 export default workspace;

@@ -46,6 +46,7 @@ export const common: CommonTranslations = {
   view: 'View',
   more: 'More',
   actions: 'Actions',
+  tool: 'Tool',
   enabled: 'Enabled',
   disabled: 'Disabled',
   default: 'Default',
@@ -74,6 +75,8 @@ export const common: CommonTranslations = {
   confirmDelete: 'Confirm Delete',
   feedback: 'Feedback',
   closeNotice: 'Dismiss Notice',
+  configure: 'Configure',
+  details: 'Details',
   copyDetail: 'Copy Details',
   copiedDetail: 'Details Copied',
 };
