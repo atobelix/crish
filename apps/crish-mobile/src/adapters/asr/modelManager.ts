@@ -84,7 +84,6 @@ export type AsrModelState =
 export interface ModelStoreDeps {
   dir: string;
   ensureDir(): Promise<void>;
-  exists(path: string): Promise<boolean>;
   fileSize(path: string): Promise<number | null>;
   readChunk(
     path: string,
@@ -292,10 +291,6 @@ export function createExpoModelStoreDeps(): ModelStoreDeps {
       if (!info.exists) {
         await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
       }
-    },
-    async exists(path) {
-      const info = await FileSystem.getInfoAsync(path);
-      return info.exists;
     },
     async fileSize(path) {
       const info = await FileSystem.getInfoAsync(path);

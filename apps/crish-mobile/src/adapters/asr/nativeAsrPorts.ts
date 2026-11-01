@@ -1,6 +1,6 @@
 // 管线端口的原生实现：把 VadPort / RecognizerPort 落到 crish-asr 本地
 // 模块的低层原语上（采样以 Float32 base64 过桥）。
-import { getCrishAsrNative, type CrishAsrNativeModule } from 'crish-asr';
+import type { CrishAsrNativeModule } from 'crish-asr';
 import type {
   RecognizerPort,
   SpeechSegmentLike,
@@ -60,18 +60,3 @@ export class NativeRecognizerPort implements RecognizerPort {
     return this.native.decode(float32ToBase64(samples));
   }
 }
-
-/** 原生端口组装（原生模块缺失时返回 null，上层据此诚实降级） */
-export function createNativePorts(): {
-  vad: VadPort;
-  recognizer: RecognizerPort;
-} | null {
-  const native = getCrishAsrNative();
-  if (!native) return null;
-  return {
-    vad: new NativeVadPort(native),
-    recognizer: new NativeRecognizerPort(native),
-  };
-}
-
-export default createNativePorts;

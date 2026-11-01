@@ -37,9 +37,6 @@ class FakeStore implements ModelStoreDeps {
   behavior = new Map<string, 'ok' | 'error'>();
 
   async ensureDir(): Promise<void> {}
-  async exists(path: string): Promise<boolean> {
-    return this.files.has(path);
-  }
   async fileSize(path: string): Promise<number | null> {
     const data = this.files.get(path);
     return data ? data.length : null;
