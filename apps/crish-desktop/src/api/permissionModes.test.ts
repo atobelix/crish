@@ -7,12 +7,14 @@ import {
   isPermissionMode,
   loadStoredPermissionMode,
   nextPermissionMode,
-  permissionModeLabel,
   permissionModeMeta,
-  permissionModeShortLabel,
   persistPermissionMode,
   previousPermissionMode,
 } from './permissionModes';
+import {
+  permissionModeLabel,
+  permissionModeShortLabel,
+} from '../i18n/permissionModeText';
 
 describe('permissionModes — 纯三态单一真理单测', () => {
   it('默认模式必须严格为 smart (推荐默认)', () => {
@@ -69,19 +71,21 @@ describe('permissionModes — 纯三态单一真理单测', () => {
     expect(previousPermissionMode('smart')).toBe('ask');
   });
 
-  it('元数据获取与文案正确', () => {
+  it('元数据只持有 i18n 键，文案经渲染层解析正确', () => {
     const askMeta = permissionModeMeta('ask');
-    expect(askMeta.label).toBe('每次询问');
+    expect(askMeta.labelKey).toBe('settings.security.modeAskLabel');
     expect(permissionModeLabel('ask')).toBe('每次询问');
     expect(permissionModeShortLabel('ask')).toBe('每次询问');
 
     const smartMeta = permissionModeMeta('smart');
-    expect(smartMeta.label).toBe('智能放行');
+    expect(smartMeta.labelKey).toBe('settings.security.modeSmartLabel');
     expect(smartMeta.isRecommended).toBe(true);
 
     const fullMeta = permissionModeMeta('full');
-    expect(fullMeta.label).toBe('完全允许');
-    expect(fullMeta.shortLabel).toBe('完全放行');
+    expect(fullMeta.labelKey).toBe('settings.security.modeFullLabel');
+    expect(fullMeta.shortLabelKey).toBe('settings.security.modeFullShortLabel');
+    expect(permissionModeLabel('full')).toBe('完全允许');
+    expect(permissionModeShortLabel('full')).toBe('完全放行');
   });
 
   it('持久化读写与自动清理旧白名单脏数据', () => {

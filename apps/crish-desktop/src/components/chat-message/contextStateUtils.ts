@@ -1,4 +1,4 @@
-import { permissionModeLabel } from '../../api/permissionModes';
+import { permissionModeLabel } from '../../i18n/permissionModeText';
 import { isContextStateCarrierMessage } from '../../store/storeAccess';
 import type {
   ContextStateMetadata,

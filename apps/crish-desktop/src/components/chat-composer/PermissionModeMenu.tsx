@@ -19,17 +19,18 @@ export interface PermissionModeMenuProps {
 interface ModeConfig {
   id: PermissionMode;
   iconName: 'shield' | 'shield-check' | 'zap';
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   isRecommended?: boolean;
 }
 
-// 三态文案唯一真理源 = api/permissionModes；本组件只做渲染，禁止本地再抄一份
+// 三态文案唯一真理源 = i18n 字典（settings.security.mode*）；api/permissionModes
+// 只持有以模式 id 索引的键，本组件在渲染层经 t() 解析，禁止本地再抄一份文案
 const MODE_CONFIGS: readonly ModeConfig[] = PERMISSION_MODES.map((m) => ({
   id: m.id,
   iconName: m.iconName,
-  label: m.label,
-  description: m.description,
+  labelKey: m.labelKey,
+  descriptionKey: m.descriptionKey,
   ...(m.isRecommended ? { isRecommended: true } : {}),
 }));
 
@@ -70,18 +71,18 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
 
   const options = MODE_CONFIGS.map((item) => ({
     id: item.id,
-    label: item.label,
+    label: t(item.labelKey),
     onClick: () => selectMode(item.id),
   }));
 
   const tooltipContent = t('chat.permission.tooltip', {
-    mode: currentMeta.label,
-    hint: currentMeta.description,
-    desc: currentMeta.description,
+    mode: t(currentMeta.labelKey),
+    hint: t(currentMeta.descriptionKey),
+    desc: t(currentMeta.descriptionKey),
   });
 
   const pillAriaLabel = t('chat.permission.ariaLabel', {
-    mode: currentMeta.label,
+    mode: t(currentMeta.labelKey),
   });
 
   return (
@@ -101,7 +102,7 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
           <span className={styles.permIcon} aria-hidden="true">
             <AppIcon name={currentMeta.iconName} size={14} />
           </span>
-          <span className={styles.permLabel}>{currentMeta.label}</span>
+          <span className={styles.permLabel}>{t(currentMeta.labelKey)}</span>
           <AppIcon
             name="chevron-down"
             size={11}
@@ -142,13 +143,15 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
                 </span>
                 <div className={styles.labelCol}>
                   <div className={styles.titleRow}>
-                    <span className={styles.title}>{itemMeta.label}</span>
+                    <span className={styles.title}>{t(itemMeta.labelKey)}</span>
                     {itemMeta.isRecommended && (
-                      <span className={styles.recommendBadge}>推荐</span>
+                      <span className={styles.recommendBadge}>
+                        {t('common.recommended')}
+                      </span>
                     )}
                   </div>
                   <span className={styles.itemDesc}>
-                    {itemMeta.description}
+                    {t(itemMeta.descriptionKey)}
                   </span>
                 </div>
                 {isSelected && (

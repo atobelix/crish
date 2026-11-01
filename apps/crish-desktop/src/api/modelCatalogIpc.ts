@@ -101,7 +101,9 @@ async function mergeScannedContextWindows(
   const result = await modelsCatalogStore.updateTree(tree);
   if (!result.ok) {
     logger.warn(
-      t('models.probe.contextWindowWriteFailed', { error: result.error }),
+      t('settings.models.probe.contextWindowWriteFailed', {
+        error: result.error,
+      }),
       {
         module: 'modelCatalogIpc',
       }

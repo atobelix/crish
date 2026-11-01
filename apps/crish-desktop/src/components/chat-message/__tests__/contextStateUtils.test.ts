@@ -8,7 +8,7 @@ import type {
   MessageContextInjection,
   SessionMessage,
 } from '../../../store/types';
-import { permissionModeLabel } from '../../../api/permissionModes';
+import { permissionModeLabel } from '../../../i18n/permissionModeText';
 
 describe('contextStateUtils', () => {
   it('isContextStateInjection correctly identifies state injections', () => {

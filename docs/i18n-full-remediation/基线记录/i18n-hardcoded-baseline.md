@@ -3,6 +3,13 @@
 > 由 `node scripts/check-i18n-hardcoded.mjs --update-baseline` 自动生成/收紧。
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → PASS。存量按战役波次单调递减收敛。
 
+> 例外登记（2026-11-01，设置整改收口 Phase 1 审计裁决）：`apps/crish-desktop/src/components/settingsTabsMeta.ts`
+> 的计数 139 全部为数据而非展示文案——搜索 keywords 匹配集（中英同义词，按设计多语言混合）、
+> 分组标识（展示经 TAB_GROUP_I18N_KEY → `settings.groups.*` 字典解析）、侧栏标签的 t() 回退值
+> （展示经 `settings.tabs.*` 字典解析）。其增量（117 → 139）来自 R1 归类整改新增的「系统」分组、
+> 执行权限改名与 keywords 校对补词。按数据豁免登记于此：该文件计数只许随上述数据增减同步调整，
+> 禁止借此引入任何展示文案硬编码；展示文案一律进双语字典。
+
 <!-- BASELINE_START -->
 apps/crish-desktop/src/App.tsx 8
 apps/crish-desktop/src/api/StreamRenderBuffer.ts 1
@@ -435,7 +442,7 @@ apps/crish-desktop/src/components/settings/useRulesState.ts 17
 apps/crish-desktop/src/components/settings/useSkinSettings.ts 17
 apps/crish-desktop/src/components/settings/useWorkflowsState.ts 17
 apps/crish-desktop/src/components/settings/workflowsSharedLib.ts 10
-apps/crish-desktop/src/components/settingsTabsMeta.ts 117
+apps/crish-desktop/src/components/settingsTabsMeta.ts 139
 apps/crish-desktop/src/components/shell/WindowControls.tsx 12
 apps/crish-desktop/src/components/shell/sessionTabDragDom.ts 2
 apps/crish-desktop/src/components/shell/windowSnapOverlay.ts 5

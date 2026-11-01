@@ -6,6 +6,9 @@
  * 2. 彻底断代：消灭 20+ 历史别名、消灭中文逆向解析、消灭 toEnginePermissionMode('full-access') 胶水；
  * 3. 极简持久化：单 Key (crish_permission_mode)，旧值按安全语义迁移
  *    （只读/计划类 → ask，完全访问类 → full，auto → smart，未知 → smart）。
+ * 4. 显示文案不进 API 层：元数据只持有以模式 id 索引的 i18n 键
+ *    （settings.security.mode<Id>Label/ShortLabel/Desc），翻译统一在渲染层
+ *    经 i18n/permissionModeText 解析，字典为唯一文案真源。
  */
 
 import type { PermissionMode } from '@crish/shared-types';
@@ -15,9 +18,10 @@ export type { PermissionMode };
 
 export interface PermissionModeMeta {
   id: PermissionMode;
-  label: string;
-  shortLabel: string;
-  description: string;
+  /** 显示文案的 i18n 键（以模式 id 索引）：API 层只持有键，不持有任何显示字符串 */
+  labelKey: string;
+  shortLabelKey: string;
+  descriptionKey: string;
   iconName: 'shield' | 'shield-check' | 'zap';
   accent: string;
   isRecommended?: boolean;
@@ -35,26 +39,26 @@ export const DESKTOP_PERMISSION_MODE_IDS = PERMISSION_MODE_IDS;
 export const PERMISSION_MODES: readonly PermissionModeMeta[] = [
   {
     id: 'ask',
-    label: '每次询问',
-    shortLabel: '每次询问',
-    description: '改文件、写操作与命令执行前均需确认',
+    labelKey: 'settings.security.modeAskLabel',
+    shortLabelKey: 'settings.security.modeAskShortLabel',
+    descriptionKey: 'settings.security.modeAskDesc',
     iconName: 'shield',
     accent: 'var(--text-secondary)',
   },
   {
     id: 'smart',
-    label: '智能放行',
-    shortLabel: '智能放行',
-    description: '安全只读命令直接运行，写操作与危险命令需确认',
+    labelKey: 'settings.security.modeSmartLabel',
+    shortLabelKey: 'settings.security.modeSmartShortLabel',
+    descriptionKey: 'settings.security.modeSmartDesc',
     iconName: 'shield-check',
     accent: 'var(--accent-primary)',
     isRecommended: true,
   },
   {
     id: 'full',
-    label: '完全允许',
-    shortLabel: '完全放行',
-    description: '除物理毁灭级命令外全部放行，不再逐条确认',
+    labelKey: 'settings.security.modeFullLabel',
+    shortLabelKey: 'settings.security.modeFullShortLabel',
+    descriptionKey: 'settings.security.modeFullDesc',
     iconName: 'zap',
     accent: 'var(--color-warning)',
   },
@@ -114,16 +118,6 @@ export function permissionModeMeta(
 ): PermissionModeMeta {
   const id = coercePermissionMode(mode);
   return META_BY_ID.get(id) ?? META_BY_ID.get(DEFAULT_PERMISSION_MODE)!;
-}
-
-export function permissionModeLabel(mode: PermissionMode | unknown): string {
-  return permissionModeMeta(mode).label;
-}
-
-export function permissionModeShortLabel(
-  mode: PermissionMode | unknown
-): string {
-  return permissionModeMeta(mode).shortLabel;
 }
 
 export function nextPermissionMode(

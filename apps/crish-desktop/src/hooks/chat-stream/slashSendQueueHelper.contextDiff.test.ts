@@ -19,7 +19,7 @@ import { buildSessionIndex, getSessionById } from '../../store/sessionIndex';
 import type { SessionState } from '../../store/types';
 import { usePermissionStore } from '../../store/permissionStore';
 import { formatContextStateDisplayText } from '../../components/chat-message/contextStateUtils';
-import { permissionModeLabel } from '../../api/permissionModes';
+import { permissionModeLabel } from '../../i18n/permissionModeText';
 
 const SID = 'sess-diff';
 
