@@ -59,9 +59,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::{
     body::Bytes,
-    extract::{
-        connect_info::ConnectInfo, FromRequestParts, Request, State, WebSocketUpgrade,
-    },
+    extract::{connect_info::ConnectInfo, FromRequestParts, Request, State, WebSocketUpgrade},
     http::{header, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
     Json,

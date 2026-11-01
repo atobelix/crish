@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use conex_device_protocol::version::{ATTACHMENT_DATA_URL_MAX_BYTES, RUN_CONTENT_MAX_BYTES};
 use conex_device_protocol::{
     ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, RunTaskParams, RunTaskResult,
     SearchFilesParams, SearchFilesResult,
 };
-use conex_device_protocol::version::{ATTACHMENT_DATA_URL_MAX_BYTES, RUN_CONTENT_MAX_BYTES};
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
 

@@ -33,13 +33,13 @@ use crate::stream::{
     ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
 };
 
-use super::super::LoopError;
 use super::super::end::EndDecision;
 use super::super::handlers::{
     check_control, clamp_max_tokens, dispatch, emit_missing_turn_end, estimate_context,
     last_assistant_with_tool_calls, synthesize_and_record_interrupted_calls, HandlerOutcome,
     LoopState,
 };
+use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
 /// BC02-2 防火墙拦截码（X04 P4：改用生成常量，禁止模块内自建字面量镜像）
 use conex_types::error::codes::TOOL_STREAM_ERROR_BEFORE_DISPATCH;

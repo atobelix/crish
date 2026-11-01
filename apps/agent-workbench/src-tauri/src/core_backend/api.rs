@@ -9,12 +9,11 @@ use conex_device_protocol::{
     ListCommandsResult, ListDirParams, ListDirResult, ListModelsParams, ListModelsResult,
     ListPendingApprovalsParams, ListPendingApprovalsResult, ListSessionsParams, ListSessionsResult,
     ListSkillsParams, ListSkillsResult, ListTasksParams, ListTasksResult, ListWorkspacesParams,
-    ListWorkspacesResult, OkResult,
-    PauseAutomationParams, PauseAutomationResult, ReadFileParams, ReadFileResult,
-    RenameSessionParams, RunControlLevel, RunControlParams, RunControlResult, RunEventsParams,
-    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
-    SearchFilesResult, SearchIndexResult, SetActiveModelParams, SetActiveModelResult,
-    SetSessionArchivedParams, SetSessionPinnedParams,
+    ListWorkspacesResult, OkResult, PauseAutomationParams, PauseAutomationResult, ReadFileParams,
+    ReadFileResult, RenameSessionParams, RunControlLevel, RunControlParams, RunControlResult,
+    RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult,
+    SearchFilesParams, SearchFilesResult, SearchIndexResult, SetActiveModelParams,
+    SetActiveModelResult, SetSessionArchivedParams, SetSessionPinnedParams,
 };
 
 use crate::run_ipc::{settings_get_impl, settings_update_impl};
@@ -502,10 +501,7 @@ impl ApiBackend for CoreStateBackend {
 
     // ── G3 会话操作域命令（移动端伴侣；阻塞 IO 下沉 spawn_blocking）──
 
-    async fn rename_session(
-        &self,
-        params: RenameSessionParams,
-    ) -> Result<OkResult, ServerError> {
+    async fn rename_session(&self, params: RenameSessionParams) -> Result<OkResult, ServerError> {
         let ops = self.sessions_ops().ok_or_else(|| {
             ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
         })?;
@@ -521,11 +517,11 @@ impl ApiBackend for CoreStateBackend {
         let ops = self.sessions_ops().ok_or_else(|| {
             ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
         })?;
-        tokio::task::spawn_blocking(move || ops.set_session_pinned(&params.session_id, params.pinned))
-            .await
-            .map_err(|error| {
-                ServerError::internal(format!("set_session_pinned 任务失败：{error}"))
-            })?
+        tokio::task::spawn_blocking(move || {
+            ops.set_session_pinned(&params.session_id, params.pinned)
+        })
+        .await
+        .map_err(|error| ServerError::internal(format!("set_session_pinned 任务失败：{error}")))?
     }
 
     async fn set_session_archived(
@@ -539,15 +535,10 @@ impl ApiBackend for CoreStateBackend {
             ops.set_session_archived(&params.session_id, params.archived)
         })
         .await
-        .map_err(|error| {
-            ServerError::internal(format!("set_session_archived 任务失败：{error}"))
-        })?
+        .map_err(|error| ServerError::internal(format!("set_session_archived 任务失败：{error}")))?
     }
 
-    async fn delete_session(
-        &self,
-        params: DeleteSessionParams,
-    ) -> Result<OkResult, ServerError> {
+    async fn delete_session(&self, params: DeleteSessionParams) -> Result<OkResult, ServerError> {
         let ops = self.sessions_ops().ok_or_else(|| {
             ServerError::protocol(DeviceErrorCode::CmdEngineNotReady, "会话操作未装配")
         })?;

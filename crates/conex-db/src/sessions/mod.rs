@@ -8,8 +8,8 @@ use rusqlite::OptionalExtension;
 mod lease;
 mod orphan;
 
-pub use orphan::{OrphanCleanupOutcome, SessionDeleteBlocker};
 pub(crate) use orphan::{cleanup_orphan_sessions_conn, delete_session_meta_prefix_conn};
+pub use orphan::{OrphanCleanupOutcome, SessionDeleteBlocker};
 
 /// 守卫删除结果（G3/C43：单写事务内「判定守卫 → 捕获产出 meta → 删除」
 /// 原子完成；壳层据 Deleted 携带的 meta 值做产出目录回收站清理，
@@ -237,11 +237,7 @@ impl LocalDb {
     }
 
     /// 定向改名（仅 title 列）。返回是否命中行（false = 会话不存在）。
-    pub fn update_session_title(
-        &self,
-        session_id: &str,
-        title: &str,
-    ) -> Result<bool, DbFailure> {
+    pub fn update_session_title(&self, session_id: &str, title: &str) -> Result<bool, DbFailure> {
         let session_id = session_id.to_string();
         let title = title.to_string();
         self.write_blocking(move |conn| {
@@ -259,11 +255,7 @@ impl LocalDb {
     }
 
     /// 定向置顶标记（仅 is_pinned 列）。返回是否命中行。
-    pub fn update_session_pinned(
-        &self,
-        session_id: &str,
-        pinned: bool,
-    ) -> Result<bool, DbFailure> {
+    pub fn update_session_pinned(&self, session_id: &str, pinned: bool) -> Result<bool, DbFailure> {
         let session_id = session_id.to_string();
         self.write_blocking(move |conn| {
             let affected = conn

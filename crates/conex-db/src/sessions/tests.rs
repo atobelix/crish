@@ -189,7 +189,8 @@ fn g3_guarded_delete_removes_row_meta_and_captures_outputs() {
 fn g3_guarded_delete_blocks_active_run_pending_and_hydrated() {
     let db = LocalDb::open_in_memory().unwrap();
 
-    db.upsert_session_entry(&sample_entry("s-run", 500)).unwrap();
+    db.upsert_session_entry(&sample_entry("s-run", 500))
+        .unwrap();
     insert_run_row(&db, "r-1", "s-run", "running");
     assert_eq!(
         db.delete_session_guarded("s-run").unwrap(),
@@ -198,14 +199,16 @@ fn g3_guarded_delete_blocks_active_run_pending_and_hydrated() {
     assert!(db.get_session_entry("s-run").unwrap().is_some());
 
     // 终态 run 不阻断
-    db.upsert_session_entry(&sample_entry("s-done", 500)).unwrap();
+    db.upsert_session_entry(&sample_entry("s-done", 500))
+        .unwrap();
     insert_run_row(&db, "r-2", "s-done", "completed");
     assert!(matches!(
         db.delete_session_guarded("s-done").unwrap(),
         SessionDeleteOutcome::Deleted { .. }
     ));
 
-    db.upsert_session_entry(&sample_entry("s-pending", 500)).unwrap();
+    db.upsert_session_entry(&sample_entry("s-pending", 500))
+        .unwrap();
     insert_pending_row(&db, "p-1", "s-pending");
     assert_eq!(
         db.delete_session_guarded("s-pending").unwrap(),

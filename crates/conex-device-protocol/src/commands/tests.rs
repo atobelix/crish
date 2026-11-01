@@ -108,9 +108,10 @@ fn run_task_params_content_roundtrip() {
     assert_eq!(back["hasImages"], serde_json::json!(true));
     assert_eq!(back["content"], content);
     // hasImages=false 显式下发（非视觉降级 parts）同样保真
-    let text_only: RunTaskParams =
-        serde_json::from_str(r#"{"prompt":"x","content":[{"type":"text","text":"- f.txt"}],"hasImages":false}"#)
-            .unwrap();
+    let text_only: RunTaskParams = serde_json::from_str(
+        r#"{"prompt":"x","content":[{"type":"text","text":"- f.txt"}],"hasImages":false}"#,
+    )
+    .unwrap();
     assert_eq!(text_only.has_images, Some(false));
     assert!(text_only.content.is_some());
 }
@@ -330,8 +331,7 @@ fn session_ops_commands_wire_shape() {
     assert!(!archived.archived);
 
     // C43 参数：仅 sessionId
-    let delete: DeleteSessionParams =
-        serde_json::from_str(r#"{"sessionId":"s-1"}"#).unwrap();
+    let delete: DeleteSessionParams = serde_json::from_str(r#"{"sessionId":"s-1"}"#).unwrap();
     assert_eq!(delete.session_id, "s-1");
 
     // 四条结果统一 OkResult（契约 GenericOkResult）：{ok:true}

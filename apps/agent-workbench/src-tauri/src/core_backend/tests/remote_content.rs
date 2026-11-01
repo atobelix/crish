@@ -139,10 +139,11 @@ async fn g5a_remote_run_content_without_has_images_not_in_metadata() {
     // 非视觉降级形态：content 为纯文本 parts、hasImages=false——
     // 引擎语义下不进 contentParts，网关透传不改写
     let parts = serde_json::json!([{ "type": "text", "text": "- notes.txt" }]);
-    let result = backend
-        .run_task(run_params(Some(parts), Some(false)))
-        .await;
-    assert!(result.is_ok(), "纯文本 parts 远程 run 必须正常发起：{result:?}");
+    let result = backend.run_task(run_params(Some(parts), Some(false))).await;
+    assert!(
+        result.is_ok(),
+        "纯文本 parts 远程 run 必须正常发起：{result:?}"
+    );
     wait_agent_end(&db).await;
     assert_eq!(
         first_user_metadata(&provider),

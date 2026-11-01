@@ -294,13 +294,17 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
     // 10 次/分钟口径——此前 WS 消息链完全绕过限速，攻击者可毫秒级并发试探
     // 打满 5 次错误码，恶意锁定销毁合法用户的配对会话。
     if let Some(ip) = ctx.peer_ip {
-        if let crate::server::limiter::PairRateOutcome::Rejected { limit, current } =
-            ctx.state.pair_limiter().check_and_count(ip, conex_shared::time::now_millis())
+        if let crate::server::limiter::PairRateOutcome::Rejected { limit, current } = ctx
+            .state
+            .pair_limiter()
+            .check_and_count(ip, conex_shared::time::now_millis())
         {
             let frame = error_frame(
                 ctx.conn_id,
                 DeviceErrorCode::CmdTooManyRequests,
-                format!("配对请求过于频繁：每源 IP 每分钟最多 {limit} 次（当前窗口已 {current} 次）"),
+                format!(
+                    "配对请求过于频繁：每源 IP 每分钟最多 {limit} 次（当前窗口已 {current} 次）"
+                ),
                 Some(msg_id),
             );
             return send_frame(ctx, frame).await;

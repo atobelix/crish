@@ -29,10 +29,7 @@ impl AppSessionsOps {
 }
 
 fn map_db_error(error: DbFailure) -> ServerError {
-    ServerError::internal(format!(
-        "会话存储错误（{}）：{}",
-        error.kind, error.message
-    ))
+    ServerError::internal(format!("会话存储错误（{}）：{}", error.kind, error.message))
 }
 
 fn not_found(session_id: &str) -> ServerError {
@@ -113,7 +110,9 @@ fn strip_title_prefixes(input: &str) -> String {
     let mut s = input.to_string();
     // 连续 slash 命令：`/help` `/cmd 正文` → 正文（`/` 后必须紧跟非空白）
     loop {
-        let Some(rest) = s.strip_prefix('/') else { break };
+        let Some(rest) = s.strip_prefix('/') else {
+            break;
+        };
         match rest.chars().next() {
             Some(c) if !c.is_whitespace() => {
                 let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
@@ -124,9 +123,7 @@ fn strip_title_prefixes(input: &str) -> String {
     }
     // markdown ATX 标题（1-6 个 # + 空白）
     let hashes = s.chars().take_while(|c| *c == '#').count();
-    if (1..=6).contains(&hashes)
-        && s.chars().nth(hashes).is_some_and(|c| c.is_whitespace())
-    {
+    if (1..=6).contains(&hashes) && s.chars().nth(hashes).is_some_and(|c| c.is_whitespace()) {
         s = s[hashes..].trim_start().to_string();
     }
     // 有序/无序列表前缀（中文「1、」后常无空格）
@@ -168,7 +165,9 @@ pub(crate) fn normalize_session_title(raw: &str) -> Option<String> {
     for _ in 0..4 {
         let before = s.clone();
         s = s.trim_matches(|c| TITLE_QUOTES.contains(&c)).to_string();
-        s = s.trim_end_matches(|c| TITLE_TRAILING_PUNCT.contains(&c)).to_string();
+        s = s
+            .trim_end_matches(|c| TITLE_TRAILING_PUNCT.contains(&c))
+            .to_string();
         s = strip_boundary_zwj(s.trim());
         s = strip_title_prefixes(s.trim());
         if s == before {
@@ -199,7 +198,12 @@ struct SessionOutputsCleanupEvent {
     notice: String,
 }
 
-fn emit_outputs_cleanup(app: &tauri::AppHandle, session_id: &str, output_dir: Option<&str>, output_root: Option<&str>) {
+fn emit_outputs_cleanup(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    output_dir: Option<&str>,
+    output_root: Option<&str>,
+) {
     use tauri::Emitter;
     let event = match crate::outputs_config::cleanup_session_outputs(
         app,

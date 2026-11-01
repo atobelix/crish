@@ -179,10 +179,7 @@ mod tests {
         assert!(entry.disable_model_invocation);
         assert_eq!(entry.file_activation.as_deref(), Some("recommended"));
         assert_eq!(entry.description, "系统技能");
-        assert_eq!(
-            entry.id,
-            skill_stable_id("sys", "/g/.system/sys/SKILL.md")
-        );
+        assert_eq!(entry.id, skill_stable_id("sys", "/g/.system/sys/SKILL.md"));
     }
 
     #[test]

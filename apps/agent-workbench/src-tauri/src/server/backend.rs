@@ -29,11 +29,10 @@ use conex_device_protocol::{
     ListModelsParams, ListModelsResult, ListPendingApprovalsParams, ListPendingApprovalsResult,
     ListSessionsParams, ListSessionsResult, ListSkillsParams, ListSkillsResult, ListTasksParams,
     ListTasksResult, ListWorkspacesParams, ListWorkspacesResult, OkResult, PauseAutomationParams,
-    PauseAutomationResult, ReadFileParams,
-    ReadFileResult, RenameSessionParams, RunControlParams, RunControlResult, RunEventsParams,
-    RunSnapshotParams, RunSnapshotResult, RunTaskParams, RunTaskResult, SearchFilesParams,
-    SearchFilesResult, SearchIndexResult, SetActiveModelParams, SetActiveModelResult,
-    SetSessionArchivedParams, SetSessionPinnedParams,
+    PauseAutomationResult, ReadFileParams, ReadFileResult, RenameSessionParams, RunControlParams,
+    RunControlResult, RunEventsParams, RunSnapshotParams, RunSnapshotResult, RunTaskParams,
+    RunTaskResult, SearchFilesParams, SearchFilesResult, SearchIndexResult, SetActiveModelParams,
+    SetActiveModelResult, SetSessionArchivedParams, SetSessionPinnedParams,
 };
 use serde_json::Value;
 
@@ -399,10 +398,7 @@ pub trait ApiBackend: Send + Sync {
     }
 
     /// C40 会话改名（G3；宿主按桌面标题规范化同口径清洗后落库）
-    async fn rename_session(
-        &self,
-        _params: RenameSessionParams,
-    ) -> Result<OkResult, ServerError> {
+    async fn rename_session(&self, _params: RenameSessionParams) -> Result<OkResult, ServerError> {
         Err(ServerError::internal(
             "rename_session 未接线（需要装配 SessionsOps）",
         ))
@@ -429,10 +425,7 @@ pub trait ApiBackend: Send + Sync {
     }
 
     /// C43 删除会话（G3；真删 + 产出进回收站，守卫与桌面孤儿清理豁免同源）
-    async fn delete_session(
-        &self,
-        _params: DeleteSessionParams,
-    ) -> Result<OkResult, ServerError> {
+    async fn delete_session(&self, _params: DeleteSessionParams) -> Result<OkResult, ServerError> {
         Err(ServerError::internal(
             "delete_session 未接线（需要装配 SessionsOps）",
         ))

@@ -477,8 +477,7 @@ impl ServerState {
             .tls_cert_dir
             .clone()
             .unwrap_or_else(crate::multi_device::tls::cert_dir);
-        crate::multi_device::tls::TlsMaterial::ca_fingerprint_in(&dir)
-            .ok()
+        crate::multi_device::tls::TlsMaterial::ca_fingerprint_in(&dir).ok()
     }
 
     /// 多端服务开关（D5 D-01 红线 1 的路由层镜像：false 时 REST /v1/pair

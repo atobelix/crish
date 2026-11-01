@@ -416,11 +416,7 @@ fn pair_ok_and_device_ready_body_shapes() {
     assert_eq!(ok["ttl"], PAIR_TTL_SECONDS);
     assert_eq!(ok["token"], "t".repeat(64));
     assert!(ok["tlsFingerprint"].is_null());
-    let ok_pinned = pair_ok_body(
-        DESKTOP_ID,
-        "t".repeat(64).as_str(),
-        Some(&"a".repeat(64)),
-    );
+    let ok_pinned = pair_ok_body(DESKTOP_ID, "t".repeat(64).as_str(), Some(&"a".repeat(64)));
     assert_eq!(ok_pinned["tlsFingerprint"], "a".repeat(64));
     let ready = device_ready_body("dev-9");
     assert_eq!(ready["deviceId"], "dev-9");
