@@ -43,10 +43,11 @@ function RunRing() {
       style={[
         styles.ring,
         {
-          width: theme.size.iconSmall,
-          height: theme.size.iconSmall,
+          // 原型 spinner-ring-gray：12px、线 1.8、轨道 #e5e5e5（borderStrong）
+          width: theme.size.iconSmall - 4,
+          height: theme.size.iconSmall - 4,
           borderRadius: theme.radius.pill,
-          borderWidth: theme.layout.iconStroke / 2 + 1,
+          borderWidth: theme.layout.iconStroke,
           borderColor: theme.colors.borderStrong,
           borderTopColor: theme.colors.textTertiary,
         },
@@ -113,20 +114,37 @@ export const ChatFlatItem = memo(function ChatFlatItem({
               testID="chat-item-pending"
               style={[styles.badge, { gap: theme.space.xs + 1 }]}
             >
-              <Badge dot tone="warning" />
-              <AppText variant="caption" color="textTertiary">
+              <Badge dot tone="warning" dotSize={6.5} />
+              <AppText
+                variant="caption"
+                color="textTertiary"
+                style={{
+                  // 原型徽标文字 10.5/400（自 caption 派生，同抽屉会话行口径）
+                  fontSize: theme.type.caption.fontSize - 2,
+                  lineHeight: theme.type.caption.lineHeight - 2,
+                }}
+              >
                 待审批
               </AppText>
             </View>
           ) : null}
-          {status === 'done' ? <Badge dot tone="accent" /> : null}
+          {status === 'done' ? <Badge dot tone="accent" dotSize={7} /> : null}
         </View>
         <AppText variant="caption" color="textTertiary">
           {time}
         </AppText>
       </View>
       {snippet ? (
-        <AppText variant="footnote" color="textSecondary" numberOfLines={1}>
+        <AppText
+          variant="footnote"
+          color="textSecondary"
+          numberOfLines={1}
+          style={{
+            // 原型摘要 13.5/400、行高 1.45（≈20），自 footnote 派生
+            fontSize: theme.type.footnote.fontSize + 0.5,
+            lineHeight: theme.type.footnote.lineHeight + 2,
+          }}
+        >
           {snippet}
         </AppText>
       ) : null}

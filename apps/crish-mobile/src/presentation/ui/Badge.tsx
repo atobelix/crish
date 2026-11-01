@@ -12,6 +12,8 @@ export interface BadgeProps {
   tone?: BadgeTone;
   /** 无数字的状态点 */
   dot?: boolean;
+  /** 状态点尺寸覆盖（默认 size.dot）：原型分档——完成/运行绿点 7、待审批琥珀点 6.5 */
+  dotSize?: number;
   testID?: string;
   accessibilityLabel?: string;
 }
@@ -36,6 +38,7 @@ export function Badge({
   cap = 99,
   tone = 'danger',
   dot = false,
+  dotSize,
   testID,
   accessibilityLabel,
 }: BadgeProps) {
@@ -43,13 +46,14 @@ export function Badge({
   const color = toneColor(theme, tone);
 
   if (dot) {
+    const size = dotSize ?? theme.size.dot;
     return (
       <View
         testID={testID}
         accessibilityLabel={accessibilityLabel}
         style={{
-          width: theme.size.dot,
-          height: theme.size.dot,
+          width: size,
+          height: size,
           borderRadius: theme.radius.pill,
           backgroundColor: color,
         }}

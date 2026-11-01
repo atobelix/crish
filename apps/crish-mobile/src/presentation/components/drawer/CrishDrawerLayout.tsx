@@ -1,6 +1,10 @@
 // 层叠卡片抽屉容器（实现波总方案 D8 / N03 落地；抽屉改版对齐原型）：
-// - 主界面在上（顶层圆角卡片），抽屉在下（底层面板），无 scrim 遮罩；
+// - 主界面在上（顶层圆角卡片），抽屉在下（底层面板），无 scrim 遮罩——原型抽屉
+//   本就没有遮罩层（其 scrim 只属底部 Sheet / 弹窗）；层叠靠面板与主卡的位移+圆角
+//   呈现，不存在随进度平移的灰色矩形层（J10 口径已核：问题形态在 Sheet 侧）；
 //   立体感 = 色阶差 + 大圆角 + 轻投影，零描边、零缩放（原型口径：纯位移推开）；
+// - 开合动效：0.35s emphasized 定时曲线（motion.duration.drawer，替代原弹簧口径）；
+//   手势拖动跟手（progress 直接跟随位移），仅释放 / 程序化开合走定时动画；
 // - 手势：manualActivation 精确仲裁——关闭态仅左侧 75% 范围、横向意图
 //   （|dx| > 14 且 |dx| > 0.7|dy|，容纳拇指自然弧线）才激活；纵向滚动永不误触；
 // - 全部动效运行在 Reanimated UI 线程（拖动 0 次 React 渲染）；
@@ -17,13 +21,14 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { CrishDrawerContent } from './CrishDrawerContent';
@@ -55,6 +60,10 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       ),
     [width, theme.layout.drawerWidthRatio, theme.layout.drawerMaxWidth]
   );
+  // 开合定时口径：0.35s emphasized。各动画调用点内联构造配置对象——
+  // easing 函数不跨 worklet 捕获（手势 onEnd 在 UI 线程执行），与原弹簧参数同为 theme 派生；
+  // jest 环境由 jest.setup 的 reanimated 桩提供 Easing.bezier（M8 收口补桩），
+  // 测试与真机同走 token 曲线。
 
   const progress = useSharedValue(0);
   const startProgress = useSharedValue(0);
@@ -125,10 +134,10 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
     .onEnd((event) => {
       const shouldOpen =
         event.velocityX > FLING_VELOCITY || progress.value > OPEN_THRESHOLD;
-      progress.value = withSpring(
-        shouldOpen ? 1 : 0,
-        theme.motion.spring.drawer
-      );
+      progress.value = withTiming(shouldOpen ? 1 : 0, {
+        duration: theme.motion.duration.drawer,
+        easing: Easing.bezier(...theme.motion.easing.emphasized),
+      });
     });
 
   const cardStyle = useAnimatedStyle(() => {
@@ -169,17 +178,28 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
   const controller: DrawerController = useMemo(
     () => ({
       open: () => {
-        progress.value = withSpring(1, theme.motion.spring.drawer);
+        progress.value = withTiming(1, {
+          duration: theme.motion.duration.drawer,
+          easing: Easing.bezier(...theme.motion.easing.emphasized),
+        });
       },
       close: () => {
-        progress.value = withSpring(0, theme.motion.spring.drawer);
+        progress.value = withTiming(0, {
+          duration: theme.motion.duration.drawer,
+          easing: Easing.bezier(...theme.motion.easing.emphasized),
+        });
       },
       closeImmediate: () => {
         progress.value = 0;
       },
       isOpen,
     }),
-    [progress, isOpen, theme.motion.spring.drawer]
+    [
+      progress,
+      isOpen,
+      theme.motion.duration.drawer,
+      theme.motion.easing.emphasized,
+    ]
   );
 
   // Android 返回键：抽屉打开时优先收起
@@ -188,12 +208,20 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        progress.value = withSpring(0, theme.motion.spring.drawer);
+        progress.value = withTiming(0, {
+          duration: theme.motion.duration.drawer,
+          easing: Easing.bezier(...theme.motion.easing.emphasized),
+        });
         return true;
       }
     );
     return () => subscription.remove();
-  }, [isOpen, progress, theme.motion.spring.drawer]);
+  }, [
+    isOpen,
+    progress,
+    theme.motion.duration.drawer,
+    theme.motion.easing.emphasized,
+  ]);
 
   return (
     <DrawerControllerContext.Provider value={controller}>

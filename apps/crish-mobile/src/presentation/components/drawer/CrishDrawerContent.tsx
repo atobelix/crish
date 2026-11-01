@@ -12,10 +12,11 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  Easing,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { usePathname, router } from 'expo-router';
@@ -73,19 +74,26 @@ export function CrishDrawerContent() {
   const toggleSearch = useCallback(
     (next: boolean) => {
       setSearching(next);
-      searchProgress.value = withSpring(
-        next ? 1 : 0,
-        theme.motion.spring.snappy
-      );
+      // 原型搜索展开动画：0.28s emphasized 定时（不用弹簧）。
+      // jest 环境由 jest.setup 的 reanimated 桩提供 Easing.bezier（M8 补桩）。
+      searchProgress.value = withTiming(next ? 1 : 0, {
+        duration: theme.motion.duration.expand,
+        easing: Easing.bezier(...theme.motion.easing.emphasized),
+      });
       if (!next) vm.setQuery('');
     },
-    [searchProgress, theme.motion.spring.snappy, vm]
+    [
+      searchProgress,
+      theme.motion.duration.expand,
+      theme.motion.easing.emphasized,
+      vm,
+    ]
   );
   useEffect(() => {
     if (!controller.isOpen && searching) toggleSearch(false);
   }, [controller.isOpen, searching, toggleSearch]);
 
-  // N04 单入口编排：会话切换在 (main) 内完成（无栈动画）→ 弹簧收起即转场；
+  // N04 单入口编排：会话切换在 (main) 内完成（无栈动画）→ 定时收起即转场；
   // 根栈页面 → 先 push，抽屉无动画静默重置，杜绝双动画竞争。
   const openSession = (sessionId: string) => {
     controller.close();
@@ -126,7 +134,8 @@ export function CrishDrawerContent() {
       style={[
         styles.root,
         {
-          backgroundColor: theme.colors.canvas,
+          // 原型 drawer 底 #f5f5f5（canvasDrawer，与主界面 #f9f9f9 分层）
+          backgroundColor: theme.colors.canvasDrawer,
           paddingTop: insets.top + theme.space.sm,
           paddingBottom: insets.bottom + theme.space.sm,
         },
@@ -137,7 +146,9 @@ export function CrishDrawerContent() {
         style={[
           styles.topBar,
           {
-            paddingHorizontal: theme.space.md,
+            // 原型面板横向 padding：左 16 / 右 14
+            paddingLeft: theme.space.lg,
+            paddingRight: theme.space.md + 2,
             paddingBottom: theme.space.sm,
           },
         ]}
@@ -161,9 +172,11 @@ export function CrishDrawerContent() {
             ),
           ]}
         >
+          {/* 原型顶部动作钮专档 40（通用白圆钮 38）；簇宽动画按 40 计算 */}
           <IconButton
             name="qr-code"
             variant="floating"
+            diameter={theme.size.iconButton}
             accessibilityLabel="扫码连接桌面"
             onPress={() => openRootPage('/pair/scan')}
             testID="drawer-scan"
@@ -171,6 +184,7 @@ export function CrishDrawerContent() {
           <IconButton
             name="bell"
             variant="floating"
+            diameter={theme.size.iconButton}
             accessibilityLabel="通知中心"
             onPress={() => openRootPage('/notifications')}
             testID="drawer-notifications"
@@ -191,6 +205,7 @@ export function CrishDrawerContent() {
           <IconButton
             name="x"
             variant="floating"
+            diameter={theme.size.iconButton}
             accessibilityLabel="取消搜索"
             onPress={() => toggleSearch(false)}
             testID="drawer-search-cancel"
@@ -219,7 +234,8 @@ export function CrishDrawerContent() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
-          paddingHorizontal: theme.space.sm,
+          paddingLeft: theme.space.lg,
+          paddingRight: theme.space.md + 2,
           paddingBottom: theme.space.lg,
         }}
       >
@@ -234,13 +250,15 @@ export function CrishDrawerContent() {
         ) : null}
         {sections.map((section) =>
           section.data.length === 0 ? null : (
-            <View key={section.key} style={{ marginTop: theme.space.lg }}>
+            <View key={section.key} style={{ marginTop: theme.space.sm }}>
               <AppText
                 variant="sectionLabel"
                 color="textTertiary"
                 style={{
+                  // 原型 group-label：padding 8/12/6
                   paddingHorizontal: theme.space.md,
-                  paddingBottom: theme.space.xs,
+                  paddingTop: theme.space.sm,
+                  paddingBottom: theme.space.xs + 2,
                 }}
               >
                 {section.label}
@@ -258,24 +276,27 @@ export function CrishDrawerContent() {
         )}
       </ScrollView>
 
-      {/* 底部单行通栏：头像昵称（进账号页）→ 设置 / 新对话白圆钮 */}
+      {/* 底部单行通栏：头像昵称 → 设置 / 新对话白圆钮（裁决 J9：点头像与点设置同落设置界面） */}
       <View
         style={[
           styles.bottomBar,
           {
-            paddingHorizontal: theme.space.md,
-            paddingTop: theme.space.sm,
+            // 原型底部通栏：横向 16/14、padding-top 14
+            paddingLeft: theme.space.lg,
+            paddingRight: theme.space.md + 2,
+            paddingTop: theme.space.md + 2,
             gap: theme.space.sm,
           },
         ]}
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="账号中心"
-          onPress={() => openRootPage('/account')}
+          accessibilityLabel="设置"
+          onPress={() => openRootPage('/settings')}
           style={({ pressed }) => [
             styles.identity,
-            { gap: theme.space.sm },
+            // 原型 user-profile gap 10
+            { gap: theme.space.sm + 2 },
             pressed && { opacity: 0.7 },
           ]}
           testID="drawer-identity"
@@ -291,11 +312,20 @@ export function CrishDrawerContent() {
               },
             ]}
           >
-            <AppText variant="callout" style={{ color: tone.fg }}>
+            {/* 原型头像首字 15px（自 body 字号派生，同 Composer 先例） */}
+            <AppText
+              variant="callout"
+              style={{ color: tone.fg, fontSize: theme.type.body.fontSize + 1 }}
+            >
               {identity.initial}
             </AppText>
           </View>
-          <AppText variant="bodyStrong" numberOfLines={1} style={styles.flex}>
+          {/* 原型 user-name 14/600 */}
+          <AppText
+            variant="body"
+            numberOfLines={1}
+            style={[styles.flex, styles.identityName]}
+          >
             {identity.name}
           </AppText>
         </Pressable>
@@ -341,7 +371,8 @@ function SearchPill({
         {
           borderRadius: theme.radius.pill,
           backgroundColor: theme.colors.surface,
-          paddingHorizontal: theme.space.md,
+          // 原型 search-pill padding 0 14、高 40
+          paddingHorizontal: theme.space.md + 2,
           height: theme.size.iconButton,
           gap: theme.space.xs + 2,
         },
@@ -399,14 +430,26 @@ function QuietNavRow({
       style={({ pressed }) => [
         styles.navRow,
         {
-          minHeight: theme.size.touch,
-          paddingHorizontal: theme.space.md + 4,
+          // 与会话行同盒模型（原型 menu-item：padding 9/12、行区随面板 16/14 内缩）
+          marginLeft: theme.space.lg,
+          marginRight: theme.space.md + 2,
+          paddingHorizontal: theme.space.md,
+          paddingVertical: theme.space.sm + 1,
           borderRadius: theme.radius.control,
         },
         pressed && { backgroundColor: theme.colors.fillPressed },
       ]}
     >
-      <AppText variant="callout" color="textSecondary" style={styles.flex}>
+      {/* 原型 menu-item 字 14.5/500（字号自 body 派生） */}
+      <AppText
+        variant="callout"
+        color="textSecondary"
+        style={[
+          styles.flex,
+          styles.navLabel,
+          { fontSize: theme.type.body.fontSize + 0.5 },
+        ]}
+      >
         {label}
       </AppText>
       {count > 0 ? (
@@ -483,6 +526,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  navLabel: { fontWeight: '500' },
+  identityName: { fontWeight: '600' },
   list: { flex: 1 },
   bottomBar: {
     flexDirection: 'row',
