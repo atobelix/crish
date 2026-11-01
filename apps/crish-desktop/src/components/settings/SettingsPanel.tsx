@@ -63,6 +63,11 @@ const SettingsDevicesTab = lazy(() =>
     default: m.SettingsDevicesTab,
   }))
 );
+const SettingsLoginDevicesTab = lazy(() =>
+  import('./SettingsLoginDevicesTab').then((m) => ({
+    default: m.SettingsLoginDevicesTab,
+  }))
+);
 const SettingsShortcutsTab = lazy(() =>
   import('./SettingsShortcutsTab').then((m) => ({
     default: m.SettingsShortcutsTab,
@@ -130,6 +135,10 @@ const TAB_COMPONENTS: Record<
   mcp: { labelKey: 'settings.tabs.plugins', Component: SettingsExtensionsTab },
   usage: { labelKey: 'settings.tabs.usage', Component: SettingsUsageTab },
   devices: { labelKey: 'settings.tabs.devices', Component: SettingsDevicesTab },
+  loginDevices: {
+    labelKey: 'settings.tabs.loginDevices',
+    Component: SettingsLoginDevicesTab,
+  },
   schedule: {
     labelKey: 'settings.tabs.schedule',
     Component: SettingsScheduleTab,
@@ -269,14 +278,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const activeLabel = t(currentTabDef.labelKey);
   const panelId = `${baseId}-panel-${safeActiveTab}`;
   const activeTabBtnId = `${baseId}-tab-${safeActiveTab}`;
-  // 「账户」分区的修改密码子页：面包屑多一级，Esc 先回到账户概览
+  // 「账号与安全」分区的子页（修改密码 / 编辑资料）：面包屑多一级，Esc 先回到账号概览
   const accountView = useAccountUiStore((state) => state.view);
   const setAccountView = useAccountUiStore((state) => state.setView);
   const isLoggedIn = useAuthField((state) => state.isLoggedIn);
   const inAccountSubView =
     safeActiveTab === 'profile' &&
-    accountView === 'changePassword' &&
+    (accountView === 'changePassword' || accountView === 'editProfile') &&
     isLoggedIn;
+  const accountSubViewTitle =
+    accountView === 'editProfile'
+      ? t('settings.account.profile.editEntry')
+      : t('settings.account.changePassword');
 
   useEffect(() => {
     void refreshProductCapabilities().then(() => {
@@ -363,6 +376,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         >
           {/* 顶栏标题与同心圆角关闭按钮：样式见 SettingsPanel.module.css (.settingsHeader / .settingsClose) */}
           <header className={styles.settingsHeader}>
+            {/* 账户子页时面包屑前多一颗返回：与 Esc / 子页内返回同行为，回到账户概览；
+                样式借 .settingsClose（与右侧关闭钮同族的幽灵图标钮），一级视图不出现 */}
+            {inAccountSubView ? (
+              <Tooltip content={t('settings.account.back')} delayShow={300}>
+                <Button
+                  bare
+                  type="button"
+                  className={styles.settingsClose}
+                  aria-label={t('settings.account.back')}
+                  onClick={() => setAccountView('overview')}
+                >
+                  <AppIcon name="arrow-left" size={16} aria-hidden />
+                </Button>
+              </Tooltip>
+            ) : null}
             <h2 className={styles.settingsTitle} data-testid="settings-title">
               <span>{t('settings.title')}</span>
               <span className={styles.settingsTitleSep} aria-hidden="true">
@@ -375,7 +403,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     /
                   </span>
                   <span className={styles.settingsTitleCurrent}>
-                    {t('settings.account.changePassword')}
+                    {accountSubViewTitle}
                   </span>
                 </>
               ) : (

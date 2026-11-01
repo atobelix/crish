@@ -336,7 +336,7 @@
 }
 
 /* 5. 导航项：与主侧栏 SidebarNav .navItem 同规格（字号 base、高 control-height、
- * 选中态 = --state-strong 叠加，无白底 / 边框 / 阴影） */
+ * 选中态 = --sidebar-item-active-bg / -text 语义变量，无白底 / 边框 / 阴影） */
 .sidebarTab {
   display: flex;
   align-items: center;
@@ -364,14 +364,14 @@
 }
 
 .sidebarTab:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
+  background: var(--sidebar-item-hover-bg);
+  color: var(--sidebar-item-hover-text);
 }
 
 .sidebarTab.active,
 .sidebarTab.active:hover {
-  background: var(--state-strong);
-  color: var(--text-primary);
+  background: var(--sidebar-item-active-bg);
+  color: var(--sidebar-item-active-text);
 }
 
 .sidebarTab:focus-visible {

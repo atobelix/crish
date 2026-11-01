@@ -2,7 +2,11 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 import styles from './SettingsPanel.module.css';
 import { Button, Input, Tooltip } from '@/components/ui';
-import type { TabMeta, TabType } from '../settingsTabsMeta';
+import {
+  TAB_GROUP_I18N_KEY,
+  type TabMeta,
+  type TabType,
+} from '../settingsTabsMeta';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
@@ -55,13 +59,13 @@ export function getTabLabel(
 
 export function getGroupLabel(
   group: string,
-  tabId: string,
   tOrLegacy?: boolean | ((key: string, fallback?: string) => string),
   maybeT?: (key: string, fallback?: string) => string
 ): string {
   const translateFn = typeof tOrLegacy === 'function' ? tOrLegacy : maybeT;
-  if (translateFn) {
-    return translateFn(`settings.groups.${tabId}`, group);
+  const groupKey = TAB_GROUP_I18N_KEY[group];
+  if (translateFn && groupKey) {
+    return translateFn(`settings.groups.${groupKey}`, group);
   }
   return group;
 }
@@ -184,7 +188,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
               id={searchId}
               type="search"
               className={styles.search}
-              placeholder={t('settings.frame.searchPlaceholder', '搜索设置…')}
+              placeholder={t('settings.frame.searchPlaceholder', '搜索分类…')}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={onSearchKeyDown}
@@ -230,7 +234,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
             const showGroup = idx === 0 || arr[idx - 1]?.group !== tab.group;
             const tabBtnId = `${baseId}-tab-${tab.id}`;
             const tabLabel = getTabLabel(tab, t);
-            const groupLabel = getGroupLabel(tab.group, tab.id, t);
+            const groupLabel = getGroupLabel(tab.group, t);
 
             return (
               <React.Fragment key={tab.id}>

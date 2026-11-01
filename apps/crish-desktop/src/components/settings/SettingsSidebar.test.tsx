@@ -118,6 +118,23 @@ describe('SettingsSidebar 分类导航', () => {
   });
 });
 
+describe('SettingsSidebar 分组标题', () => {
+  it('全量分类下组标题恰好 4 个，按 个人→智能→工作→系统 各出现一次且同组连续', () => {
+    const { container } = renderSidebar({ items: TAB_META });
+    const groupNames = ['个人', '智能', '工作', '系统'];
+    const groupNamesEn = ['Personal', 'Intelligence', 'Workspace', 'System'];
+    const headers = Array.from(container.querySelectorAll('div'))
+      .filter(
+        (d) =>
+          d.children.length === 0 &&
+          (groupNames.includes(d.textContent ?? '') ||
+            groupNamesEn.includes(d.textContent ?? ''))
+      )
+      .map((d) => d.textContent);
+    expect([groupNames, groupNamesEn]).toContainEqual(headers);
+  });
+});
+
 describe('SettingsSidebar 搜索', () => {
   it('输入把新值交给 onSearchChange；无查询时不显示清空按钮', () => {
     const { onSearchChange } = renderSidebar();

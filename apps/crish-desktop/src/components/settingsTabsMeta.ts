@@ -1,6 +1,11 @@
 /**
- * 设置 tab 元数据数据文件：10 个侧栏 tab 的中文标签 / 图标 / 分组 / 搜索别名。
+ * 设置 tab 元数据数据文件：16 个侧栏 tab 的中文标签 / 图标 / 分组 / 搜索别名。
  * 纯数据 + 搜索匹配纯函数；从 SettingsPanel.tsx TAB_META（L115-217）抽出。
+ *
+ * 本文件的中文字符串均为「数据」而非展示文案，硬编码门禁基线已按此登记：
+ * - keywords：搜索匹配集（中英同义词），按设计为多语言混合数据；
+ * - group：分组标识，展示时经 TAB_GROUP_I18N_KEY → settings.groups.* 字典解析；
+ * - label：侧栏 t('settings.tabs.<id>') 的回退值，展示以字典为准。
  */
 
 import type { SettingsTabType } from '../store/types';
@@ -38,6 +43,7 @@ const FORMAL_TAB_IDS: TabType[] = [
   'models',
   'usage',
   'devices',
+  'loginDevices',
   'rules',
   'schedule',
   'plugins',
@@ -65,19 +71,39 @@ export function normalizeSettingsTabId(
   return null;
 }
 
+/**
+ * 侧栏分组固定顺序（个人 → 智能 → 工作 → 系统）。
+ * TAB_META 应按此序排列；useSettingsNav 亦按此序稳定归并，防过滤后同组交错、
+ * 侧栏重复印组标题（防复发）。
+ */
+export const TAB_GROUP_ORDER: readonly string[] = [
+  '个人',
+  '智能',
+  '工作',
+  '系统',
+];
+
+/** 分组中文名 → i18n 键后缀（settings.groups.<后缀>），组标题按组查键用。 */
+export const TAB_GROUP_I18N_KEY: Readonly<Record<string, string>> = {
+  个人: 'personal',
+  智能: 'intelligence',
+  工作: 'workspace',
+  系统: 'system',
+};
+
 export const TAB_META: TabMeta[] = [
   {
     id: 'profile',
-    label: '账户',
+    label: '账号与安全',
     icon: 'user',
     group: '个人',
     keywords: [
       '账户',
       '账号',
+      '账号与安全',
       '个人资料',
       '工作区',
       '导出',
-      '导入',
       '外部对话',
       'Claude',
       'Codex',
@@ -169,6 +195,13 @@ export const TAB_META: TabMeta[] = [
     keywords: ['用量', '用量统计', 'token', '费用', 'usage', 'quota'],
   },
   {
+    id: 'rules',
+    label: '规则',
+    icon: 'file-text',
+    group: '智能',
+    keywords: ['规则', '指令', '系统提示', 'rules', 'prompt', 'agent'],
+  },
+  {
     id: 'devices',
     label: '多端互通',
     icon: 'smartphone',
@@ -187,14 +220,26 @@ export const TAB_META: TabMeta[] = [
       'pairing',
       'qr',
       '局域网',
+      '证书',
+      '导出证书',
+      '配对码',
     ],
   },
   {
-    id: 'rules',
-    label: '规则',
-    icon: 'file-text',
-    group: '智能',
-    keywords: ['规则', '指令', '系统提示', 'rules', 'prompt', 'agent'],
+    id: 'loginDevices',
+    label: '登录设备',
+    icon: 'monitor',
+    group: '工作',
+    keywords: [
+      '登录设备',
+      '设备',
+      '登录记录',
+      '会话',
+      '退出设备',
+      'signed-in',
+      'session',
+      'sessions',
+    ],
   },
   {
     id: 'schedule',
@@ -238,6 +283,9 @@ export const TAB_META: TabMeta[] = [
       'Cookies',
       '登录态',
       '数据导入',
+      '搜索引擎',
+      '主页',
+      '静音',
       'Chrome',
       'browser',
       'bookmark',
@@ -253,24 +301,27 @@ export const TAB_META: TabMeta[] = [
   },
   {
     id: 'security',
-    label: '安全',
+    label: '执行权限',
     icon: 'shield',
-    group: '安全',
+    group: '系统',
     keywords: [
-      '安全',
+      '执行权限',
       '权限',
-      '白名单',
-      '信任',
+      '权限模式',
+      '每次询问',
+      '完全允许',
+      '终端命令',
+      '拦截',
       'security',
       'permission',
-      'allowlist',
+      'execution',
     ],
   },
   {
     id: 'diagnostics',
     label: '状态诊断',
     icon: 'activity',
-    group: '工作',
+    group: '系统',
     keywords: [
       '状态诊断',
       '诊断',
@@ -286,13 +337,15 @@ export const TAB_META: TabMeta[] = [
       'diag',
       'log',
       'health',
+      '重建索引',
+      '搜索索引',
     ],
   },
   {
     id: 'about',
     label: '关于',
     icon: 'info',
-    group: '关于',
+    group: '系统',
     keywords: [
       '关于',
       '版本',
@@ -310,7 +363,7 @@ export const TAB_META: TabMeta[] = [
 
 export const FALLBACK_TAB_META: TabMeta = {
   id: 'profile',
-  label: '账户',
+  label: '账号与安全',
   icon: 'user',
   group: '个人',
   keywords: ['账户'],

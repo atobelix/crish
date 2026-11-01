@@ -8,6 +8,7 @@ import { isDemoMode } from '../api/appMode';
 import {
   allowedTabIds,
   tabMatchesQuery,
+  TAB_GROUP_ORDER,
   TAB_META,
   type TabType,
 } from './settingsTabsMeta';
@@ -40,7 +41,7 @@ export type UseSettingsNavResult = {
   onTablistKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   /** 搜索框 ↓ 首项 / Enter 聚焦面板 */
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  /** 读屏播报文案：无匹配 / 找到 N 项 / 当前页 */
+  /** 读屏播报文案：无匹配 / 找到 N 个分类 / 当前页 */
   filterStatusText: string;
   /**
    * 交给 Dialog/LayerStack 的 Esc：仅在本层成为栈顶时调用。
@@ -118,12 +119,20 @@ export function useSettingsNav(
 
   const visibleTabs = useMemo(() => {
     const q = navQuery.trim().toLowerCase();
-    return TAB_META.filter((t) => {
+    const filtered = TAB_META.filter((t) => {
       if (t.demoOnly && !isDemoMode()) return false;
       if (!(allowedTabIds(mcpAvailable) as string[]).includes(t.id))
         return false;
       return tabMatchesQuery(t, q);
     });
+    // 按固定组序稳定归并：保证任何过滤/搜索结果下同组相邻，
+    // 侧栏不会再重复印出同一组标题；未知组保持原相对顺序垫底。
+    const groupRank = new Map(TAB_GROUP_ORDER.map((g, i) => [g, i] as const));
+    return filtered.sort(
+      (a, b) =>
+        (groupRank.get(a.group) ?? TAB_GROUP_ORDER.length) -
+        (groupRank.get(b.group) ?? TAB_GROUP_ORDER.length)
+    );
   }, [navQuery, mcpAvailable]);
 
   // 过滤后若当前页不可见：仍保留内容，但 roving 焦点落到首项
@@ -203,8 +212,8 @@ export function useSettingsNav(
   const filterStatusText =
     navQuery.trim().length > 0
       ? visibleTabs.length === 0
-        ? '无匹配设置项'
-        : `找到 ${visibleTabs.length} 个设置项，当前「${activeLabel}」`
+        ? '无匹配分类'
+        : `找到 ${visibleTabs.length} 个分类，当前「${activeLabel}」`
       : `设置 · ${activeLabel}`;
 
   return {
