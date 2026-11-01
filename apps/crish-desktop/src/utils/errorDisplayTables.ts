@@ -158,6 +158,7 @@ export const BUILTIN_ERROR_DISPLAY: Readonly<
     title: 'Tool not found',
     action: 'Please check the tool name and availability.',
   },
+  // 保留登记：注册表已退役此码，但 error-translation.test.ts 的兜底链夹具以此码断言 BUILTIN 回退原文，勿删（i18n 批 6 基线登记）
   'tool.exec_failed': {
     title: 'Tool execution failed',
     action: 'Please check tool parameters and try again.',
@@ -283,6 +284,7 @@ export const BUILTIN_ACTION_DISPLAY: Readonly<Record<string, string>> = {
   'action.tool.cancelled': 'Tool execution was cancelled.',
   'action.tool.outcome_unknown':
     'Tool outcome is unknown. Please verify manually.',
+  // 保留登记：注册表已退役此键，但 error-translation.test.ts 的兜底链夹具以此裸键断言 BUILTIN 展开原文，勿删（i18n 批 6 基线登记）
   'action.tool.exec_failed': 'Please check tool parameters and try again.',
   // X04 P4：ToolErrorKind 双向映射登记的 4 个新动作键
   'action.tool.check_permission':
