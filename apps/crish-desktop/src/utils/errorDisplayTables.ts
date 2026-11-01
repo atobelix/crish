@@ -166,10 +166,6 @@ export const BUILTIN_ERROR_DISPLAY: Readonly<
     title: 'Path access violation',
     action: 'Operation outside allowed workspace is forbidden.',
   },
-  'tool.permission_denied': {
-    title: 'Tool permission denied',
-    action: 'Please grant the required tool permissions.',
-  },
   'tool.timeout': {
     title: 'Tool timeout',
     action: 'The tool execution timed out. Please retry.',
@@ -200,10 +196,6 @@ export const BUILTIN_ERROR_DISPLAY: Readonly<
     title: 'Invalid session state',
     action: 'Please restart the session.',
   },
-  'session.save_failed': {
-    title: 'Session save failed',
-    action: 'Retrying automatically.',
-  },
   // ── plugin 域 ──
   'plugin.not_found': {
     title: 'Plugin not found',
@@ -212,11 +204,6 @@ export const BUILTIN_ERROR_DISPLAY: Readonly<
   'plugin.permission_denied': {
     title: 'Plugin permission denied',
     action: 'Please check plugin permissions in Settings.',
-  },
-  // ── security 域 ──
-  'security.violation': {
-    title: 'Security violation',
-    action: 'Operation blocked for security reasons.',
   },
 };
 
@@ -264,7 +251,6 @@ export const BUILTIN_ACTION_DISPLAY: Readonly<Record<string, string>> = {
   'action.provider.disable_proxy': 'Please check network proxy settings.',
   'action.provider.wait_retry': 'Too many requests. Please wait and retry.',
   'action.provider.check_api_key': 'Please check the API key in Settings.',
-  'action.provider.check_key': 'Please check the API key in Settings.',
   'action.provider.top_up': 'Please top up or switch providers.',
   'action.provider.check_endpoint':
     'Please check the provider endpoint in Settings.',
@@ -309,16 +295,9 @@ export const BUILTIN_ACTION_DISPLAY: Readonly<Record<string, string>> = {
     'The response stream failed. Please check the connection and retry.',
 
   // browser
-  'action.browser.wait_ready': 'Please wait for the browser to become ready.',
-  'action.browser.check_target':
-    'Please check the target browser tab or window.',
   'action.browser.enable_capability':
     'Please enable browser automation capability.',
-  'action.browser.resnapshot': 'Please refresh the page snapshot.',
-  'action.browser.check_whitelist': 'Please verify domain whitelist settings.',
   'action.browser.close_tabs': 'Please close unnecessary browser tabs.',
-  'action.browser.check_version':
-    'Please update your browser to a compatible version.',
 
   // computer
   'action.computer.fix_input':
