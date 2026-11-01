@@ -38,7 +38,7 @@ export type GroupState = {
 // prettier-ignore
 export type SettingsTabType =
   | 'profile' | 'appearance' | 'personalize' | 'models' | 'usage'
-  | 'devices' | 'schedule' | 'rules' | 'shortcuts' | 'skills'
+  | 'devices' | 'loginDevices' | 'schedule' | 'rules' | 'shortcuts' | 'skills'
   | 'mcp' | 'plugins' | 'browser' | 'security' | 'diagnostics'
   | 'archive' | 'about';
 
