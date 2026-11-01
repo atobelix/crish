@@ -305,6 +305,10 @@ describe('Files / Settings / Pairing', () => {
       port: 8765,
       themeMode: 'system',
       setThemeMode: jest.fn(),
+      fontScale: 'standard',
+      setFontScale: jest.fn(),
+      monoFont: 'system',
+      setMonoFont: jest.fn(),
       notifyMasterOn: true,
       notifyScenes: {
         message: true,
@@ -326,15 +330,18 @@ describe('Files / Settings / Pairing', () => {
         onOpenAccount={jest.fn()}
         onOpenSessions={jest.fn()}
         onOpenTheme={jest.fn()}
+        onOpenFont={jest.fn()}
         onOpenNotification={jest.fn()}
         onOpenScan={jest.fn()}
         onConfirmRemove={jest.fn()}
       />
     );
     expect(view.getByText('设置')).toBeTruthy();
-    // 个性偏好分组：外观与主题 / 通知与提醒入口（值联动真实偏好）
+    // 个性偏好分组：外观与主题 / 字体与字号 / 通知与提醒入口（值联动真实偏好）
     expect(view.getByText('外观与主题')).toBeTruthy();
     expect(view.getByText('跟随系统')).toBeTruthy();
+    expect(view.getByText('字体与字号')).toBeTruthy();
+    expect(view.getByText('标准')).toBeTruthy();
     expect(view.getByText('通知与提醒')).toBeTruthy();
     expect(view.getByText('已开启')).toBeTruthy();
     expect(view.getByText('解除配对')).toBeTruthy();

@@ -8,6 +8,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import {
+  FiraCode_400Regular,
+  FiraCode_600SemiBold,
+} from '@expo-google-fonts/fira-code';
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_600SemiBold,
+} from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
@@ -34,19 +43,36 @@ function RootShell() {
   const theme = useTheme();
   const hydrated = useAuthStore((s) => s.hydrated);
   const accountHydrated = useAccountStore((s) => s.hydrated);
+  // 等宽字体预载（设置·字体真源；加载期原生 Splash 仍在屏，无字体切换闪帧）
+  const [fontsLoaded, fontError] = useFonts({
+    JetBrainsMono_400Regular,
+    JetBrainsMono_600SemiBold,
+    FiraCode_400Regular,
+    FiraCode_600SemiBold,
+  });
+  // 字体就绪 = 加载成功或已失败：失败时必须放行（回落系统等宽），否则闸门
+  // 永远等不到 fontsLoaded，应用会无报错地卡死在开屏（W-A 风险 2 修法）
+  const fontsReady = fontsLoaded || fontError != null;
+  useEffect(() => {
+    if (fontError) {
+      console.warn(
+        `[startup] 等宽字体加载失败，已回落系统字体：${fontError.message}`
+      );
+    }
+  }, [fontError]);
   const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
   const splashHiddenRef = useRef(false);
   // Android 深链冷启动单屏：物理返回键兜底回首页，不直接退出应用
   useAndroidBackGuard();
 
-  // 首帧布局完成即淡出原生开屏：此后闸门放行前后均无中间帧
+  // 字体就绪 + 首帧布局完成才淡出原生开屏：此后闸门放行前后均无中间帧
   useLayoutEffect(() => {
-    if (splashHiddenRef.current) return;
+    if (!fontsReady || splashHiddenRef.current) return;
     splashHiddenRef.current = true;
     void SplashScreen.hideAsync().catch(() => {
       /* swallow-ok: 已隐藏或非原生环境静默忽略 */
     });
-  }, []);
+  }, [fontsReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,8 +125,8 @@ function RootShell() {
     };
   }, [hydrated]);
 
-  // 闸门仅依赖本地水合（SecureStore 读取，≤50ms）；期间原生 Splash 仍在屏
-  if (!hydrated || !accountHydrated) {
+  // 闸门 = 字体就绪（含失败放行）+ 本地水合（SecureStore 读取，≤50ms）；期间原生 Splash 仍在屏
+  if (!fontsReady || !hydrated || !accountHydrated) {
     return (
       <View style={[styles.flex, { backgroundColor: theme.colors.canvas }]} />
     );

@@ -6,7 +6,12 @@ import { Platform, useColorScheme } from 'react-native';
 import type { TextStyle, ViewStyle } from 'react-native';
 import { useStore } from 'zustand';
 import { settingsStore } from '@/domain/store/settingsStore';
-import type { ThemeMode } from '@/domain/store/settingsReducers';
+import type {
+  FontScale,
+  MonoFont,
+  ThemeMode,
+} from '@/domain/store/settingsReducers';
+import { FONT_SCALE_FACTOR } from '@/domain/store/settingsReducers';
 
 export interface ThemeColors {
   // 背景层
@@ -393,70 +398,173 @@ const radius: ThemeRadius = {
   overlay: 30,
 };
 
-const monoFont = Platform.select({
+const systemMonoFont = Platform.select({
   ios: 'Menlo',
   android: 'monospace',
   default: 'monospace',
 });
 
-// 不写 fontFamily：iOS 自动落到 SF / PingFang SC，Android 落到 Roboto / 思源黑体。
-const largeTitle: TextStyle = {
-  fontSize: 30,
-  lineHeight: 36,
-  fontWeight: '700',
-  letterSpacing: -0.3,
-};
-const title2: TextStyle = { fontSize: 20, lineHeight: 26, fontWeight: '600' };
-const headline: TextStyle = { fontSize: 17, lineHeight: 22, fontWeight: '600' };
-const footnote: TextStyle = {
-  fontSize: 13,
-  lineHeight: 18,
-  fontWeight: '400',
-  fontVariant: ['tabular-nums'],
+/** 等宽字体族注册（W-A 字体设置真源；family 名 = expo-font 加载名，未加载时平台回落） */
+export const MONO_FONT_FAMILY: Record<MonoFont, string> = {
+  system: systemMonoFont,
+  jetbrains: 'JetBrainsMono_400Regular',
+  fira: 'FiraCode_400Regular',
 };
 
-const type: ThemeType = {
-  largeTitle,
-  title: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  title2,
-  headline,
-  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' },
-  bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
-  chat: { fontSize: 17, lineHeight: 27, fontWeight: '400' },
-  callout: { fontSize: 15, lineHeight: 21, fontWeight: '400' },
-  footnote,
-  caption: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
-    fontVariant: ['tabular-nums'],
-  },
-  sectionLabel: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  mono: {
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: '400',
-    fontFamily: monoFont,
-  },
-  bigTitle: {
-    fontSize: 28,
+/** 等宽 600 字重族（codeDigit 等加粗等宽场景专用：RN 里 family+fontWeight 不会自动选
+ * 到随包的 600 字体文件，必须按族名显式指向 *_600SemiBold，否则只是合成假粗。
+ * 注：@expo-google-fonts 的 600 字重导出名是 SemiBold，不存在 *_600Regular） */
+export const MONO_FONT_FAMILY_600: Record<MonoFont, string> = {
+  system: systemMonoFont,
+  jetbrains: 'JetBrainsMono_600SemiBold',
+  fira: 'FiraCode_600SemiBold',
+};
+
+/** 随包等宽字体加载清单（根布局 expo-font 预载；400/600 双字重覆盖 mono 与加粗场景） */
+export const BUNDLED_MONO_FONT_FAMILIES = [
+  'JetBrainsMono_400Regular',
+  'JetBrainsMono_600SemiBold',
+  'FiraCode_400Regular',
+  'FiraCode_600SemiBold',
+] as const;
+
+/** 字阶生成：所有档位统一乘 fontScale（同层级同乘，保持节奏；字号与行高同步取整） */
+function scaled(
+  style: TextStyle,
+  scale: number,
+  monoFamily: string
+): TextStyle {
+  const out: TextStyle = { ...style };
+  if (typeof style.fontSize === 'number') {
+    out.fontSize = Math.round(style.fontSize * scale * 10) / 10;
+  }
+  if (typeof style.lineHeight === 'number') {
+    out.lineHeight = Math.round(style.lineHeight * scale * 10) / 10;
+  }
+  if (style.fontFamily === systemMonoFont) {
+    out.fontFamily = monoFamily;
+  }
+  return out;
+}
+
+function buildType(
+  scale: number,
+  monoFamily: string,
+  monoFamily600: string = monoFamily
+): ThemeType {
+  const largeTitle: TextStyle = {
+    fontSize: 30,
     lineHeight: 36,
     fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  accountName: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
-  codeDigit: {
-    fontSize: 24,
-    lineHeight: 30,
+    letterSpacing: -0.3,
+  };
+  const title2: TextStyle = { fontSize: 20, lineHeight: 26, fontWeight: '600' };
+  const headline: TextStyle = {
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '600',
+  };
+  const footnote: TextStyle = {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
     fontVariant: ['tabular-nums'],
-  },
-  barAction: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  display: largeTitle,
-  heading: title2,
-  subhead: headline,
-  meta: footnote,
-};
+  };
+  const type: ThemeType = {
+    largeTitle: scaled(largeTitle, scale, monoFamily),
+    title: scaled(
+      { fontSize: 22, lineHeight: 28, fontWeight: '700' },
+      scale,
+      monoFamily
+    ),
+    title2: scaled(title2, scale, monoFamily),
+    headline: scaled(headline, scale, monoFamily),
+    body: scaled(
+      { fontSize: 16, lineHeight: 24, fontWeight: '400' },
+      scale,
+      monoFamily
+    ),
+    bodyStrong: scaled(
+      { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+      scale,
+      monoFamily
+    ),
+    chat: scaled(
+      { fontSize: 17, lineHeight: 27, fontWeight: '400' },
+      scale,
+      monoFamily
+    ),
+    callout: scaled(
+      { fontSize: 15, lineHeight: 21, fontWeight: '400' },
+      scale,
+      monoFamily
+    ),
+    footnote: scaled(footnote, scale, monoFamily),
+    caption: scaled(
+      {
+        fontSize: 12,
+        lineHeight: 16,
+        fontWeight: '500',
+        fontVariant: ['tabular-nums'],
+      },
+      scale,
+      monoFamily
+    ),
+    sectionLabel: scaled(
+      { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+      scale,
+      monoFamily
+    ),
+    mono: scaled(
+      {
+        fontSize: 13,
+        lineHeight: 20,
+        fontWeight: '400',
+        fontFamily: systemMonoFont,
+      },
+      scale,
+      monoFamily
+    ),
+    bigTitle: scaled(
+      {
+        fontSize: 28,
+        lineHeight: 36,
+        fontWeight: '700',
+        letterSpacing: -0.4,
+      },
+      scale,
+      monoFamily
+    ),
+    accountName: scaled(
+      { fontSize: 20, lineHeight: 26, fontWeight: '700' },
+      scale,
+      monoFamily
+    ),
+    codeDigit: scaled(
+      {
+        fontSize: 24,
+        lineHeight: 30,
+        fontWeight: '600',
+        fontVariant: ['tabular-nums'],
+        // 配对码大数字同样走所选等宽字体（Q2 裁决）：以 systemMonoFont 为锚点被
+        // scaled() 换成目标族，且指向 600 字重族（与自身 fontWeight 600 对齐）
+        fontFamily: systemMonoFont,
+      },
+      scale,
+      monoFamily600
+    ),
+    barAction: scaled(
+      { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+      scale,
+      monoFamily
+    ),
+    display: scaled(largeTitle, scale, monoFamily),
+    heading: scaled(title2, scale, monoFamily),
+    subhead: scaled(headline, scale, monoFamily),
+    meta: scaled(footnote, scale, monoFamily),
+  };
+  return type;
+}
 
 const size: ThemeSize = {
   touch: 44,
@@ -606,7 +714,8 @@ function buildTheme(
   base: BaseColors,
   dark: boolean,
   shadow: ThemeShadow,
-  avatarTones: readonly AvatarTone[]
+  avatarTones: readonly AvatarTone[],
+  type: ThemeType
 ): Theme {
   return {
     dark,
@@ -626,14 +735,16 @@ export const lightTheme: Theme = buildTheme(
   lightBase,
   false,
   lightShadow,
-  lightAvatarTones
+  lightAvatarTones,
+  buildType(1, systemMonoFont)
 );
 
 export const darkTheme: Theme = buildTheme(
   darkBase,
   true,
   darkShadow,
-  darkAvatarTones
+  darkAvatarTones,
+  buildType(1, systemMonoFont)
 );
 
 /** 按 id 稳定取头像色（字符串哈希取模，同一会话恒定同色） */
@@ -654,17 +765,61 @@ export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
   dark: '深色',
 };
 
-export function projectTheme(mode: ThemeMode, systemTheme: Theme): Theme {
-  if (mode === 'light') return lightTheme;
-  if (mode === 'dark') return darkTheme;
-  return systemTheme;
+/** 外观偏好快照（主题 + 字号 + 等宽字体；useTheme 唯一消费） */
+export interface ThemePrefs {
+  fontScale: FontScale;
+  monoFont: MonoFont;
 }
 
-/** 主题唯一消费入口（外观三选来自 settingsStore.appearance.theme） */
+const DEFAULT_PREFS: ThemePrefs = { fontScale: 'standard', monoFont: 'system' };
+
+/** 变体主题缓存：键 = base 主题 + 偏好；standard/system 命中基座单例（身份稳定） */
+const variantThemeCache = new Map<string, Theme>();
+
+function cachedVariant(
+  base: Theme,
+  prefs: ThemePrefs,
+  build: () => Theme
+): Theme {
+  if (prefs.fontScale === 'standard' && prefs.monoFont === 'system') {
+    return base;
+  }
+  const key = `${base.dark ? 'd' : 'l'}|${prefs.fontScale}|${prefs.monoFont}`;
+  const hit = variantThemeCache.get(key);
+  if (hit) return hit;
+  const built = build();
+  variantThemeCache.set(key, built);
+  return built;
+}
+
+/** 字号/等宽字体变体构建：色板与几何不动，仅 type 阶梯按乘数重建 */
+function buildVariant(base: Theme, prefs: ThemePrefs): Theme {
+  const type = buildType(
+    FONT_SCALE_FACTOR[prefs.fontScale],
+    MONO_FONT_FAMILY[prefs.monoFont],
+    MONO_FONT_FAMILY_600[prefs.monoFont]
+  );
+  return { ...base, type };
+}
+
+export function projectTheme(
+  mode: ThemeMode,
+  systemTheme: Theme,
+  prefs: ThemePrefs = DEFAULT_PREFS
+): Theme {
+  const base =
+    mode === 'light' ? lightTheme : mode === 'dark' ? darkTheme : systemTheme;
+  return cachedVariant(base, prefs, () => buildVariant(base, prefs));
+}
+
+/** 主题唯一消费入口（外观三选 + 字号/等宽来自 settingsStore.appearance） */
 export function useTheme(): Theme {
-  const mode = useStore(settingsStore, (s) => s.groups.appearance.theme);
+  const appearance = useStore(settingsStore, (s) => s.groups.appearance);
   const systemTheme = useColorScheme() === 'dark' ? darkTheme : lightTheme;
-  return projectTheme(mode, systemTheme);
+  return projectTheme(appearance.theme, systemTheme, {
+    fontScale: appearance.fontScale,
+    monoFont: appearance.monoFont,
+  });
 }
 
 /** 外观三选写入（唯一写入口） */
@@ -672,10 +827,17 @@ export function setThemeMode(mode: ThemeMode): void {
   settingsStore.getState().update('appearance', { theme: mode });
 }
 
-/** 测试隔离：主题偏好复位 */
+/** 测试隔离：主题偏好复位（含字号/等宽，保持缺省身份） */
 export function resetThemeModeForTest(): void {
   settingsStore.setState((state) => ({
-    groups: { ...state.groups, appearance: { theme: 'system' } },
+    groups: {
+      ...state.groups,
+      appearance: {
+        theme: 'system',
+        fontScale: 'standard',
+        monoFont: 'system',
+      },
+    },
     hydrated: false,
   }));
 }

@@ -170,7 +170,11 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
         deviceOffline: false,
       },
     });
-    settingsStore.getState().set('appearance', { theme: 'dark' });
+    settingsStore.getState().set('appearance', {
+      theme: 'dark',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
     await flush();
     expect(calls).toContain('write');
 
@@ -258,7 +262,11 @@ describe('ensureDatabaseForApp（失败降级内存态）', () => {
     });
     await ensureDatabaseForApp({ open });
 
-    settingsStore.getState().set('appearance', { theme: 'dark' });
+    settingsStore.getState().set('appearance', {
+      theme: 'dark',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
     // 无默认注入 → 不落库（silent no-op，且不抛错）
     await expect(flush()).resolves.toBeUndefined();
   });

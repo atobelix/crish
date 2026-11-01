@@ -88,7 +88,11 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
 
     const dao = new SqlSettingsDao(driver);
     const raw = await dao.get(settingsGroupKey('appearance'));
-    expect(JSON.parse(raw!)).toEqual({ theme: 'dark' });
+    expect(JSON.parse(raw!)).toEqual({
+      theme: 'dark',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
   });
 
   it('hydrate 从 settings 表回填（真实 DAO 读出 → 深合并默认值 + hydrated）', async () => {
@@ -148,7 +152,11 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
   it('configureSqlitePersistence(null) 复位两 store 默认注入（回退无持久化）', () => {
     configureSqlitePersistence(driver);
     configureSqlitePersistence(null);
-    settingsStore.getState().set('appearance', { theme: 'light' });
+    settingsStore.getState().set('appearance', {
+      theme: 'light',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
     // 无默认注入 → 不落库（silent no-op，且不抛错）
     return expect(flush()).resolves.toBeUndefined();
   });

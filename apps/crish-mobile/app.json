@@ -13,6 +13,8 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "用于扫描桌面端配对二维码。",
+        "NSMicrophoneUsageDescription": "用于语音输入，按住说话时会使用麦克风录制你的语音。",
+        "NSSpeechRecognitionUsageDescription": "用于语音输入，将录制的语音识别为文字。",
         "NSLocalNetworkUsageDescription": "用于连接同一网络中的桌面端 Crish。",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
@@ -26,7 +28,8 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "POST_NOTIFICATIONS",
-        "CAMERA"
+        "CAMERA",
+        "RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#0b0b0b",
@@ -65,6 +68,13 @@
         "expo-image-picker",
         {
           "photosPermission": "用于选择账号头像。"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "用于语音输入，按住说话时会使用麦克风录制你的语音。",
+          "speechRecognitionPermission": "用于语音输入，将录制的语音识别为文字。"
         }
       ],
       "./plugins/withUserCaTrust"

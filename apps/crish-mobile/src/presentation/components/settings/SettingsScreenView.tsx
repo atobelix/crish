@@ -13,6 +13,7 @@ import {
   ListRow,
   Screen,
 } from '@/presentation/ui';
+import { FONT_SCALE_LABELS } from './SettingsFontView';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { logoutAccount } from '@/adapters/account/accountService';
 import { AccountAvatar } from '@/presentation/account/ui';
@@ -24,6 +25,7 @@ export interface SettingsScreenViewProps {
   onOpenAccount: () => void;
   onOpenSessions: () => void;
   onOpenTheme: () => void;
+  onOpenFont: () => void;
   onOpenNotification: () => void;
   onOpenScan: () => void;
   onConfirmRemove: () => void | Promise<void>;
@@ -35,6 +37,7 @@ export default function SettingsScreenView({
   onOpenAccount,
   onOpenSessions,
   onOpenTheme,
+  onOpenFont,
   onOpenNotification,
   onOpenScan,
   onConfirmRemove,
@@ -167,6 +170,17 @@ export default function SettingsScreenView({
             }
             showChevron
             onPress={onOpenTheme}
+          />
+          <ListRow
+            title="字体与字号"
+            leading={<RowIcon name="sort" />}
+            trailing={
+              <AppText variant="footnote" color="textTertiary">
+                {FONT_SCALE_LABELS[vm.fontScale]}
+              </AppText>
+            }
+            showChevron
+            onPress={onOpenFont}
           />
           <ListRow
             title="通知与提醒"

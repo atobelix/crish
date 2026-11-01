@@ -71,6 +71,68 @@ describe('useTheme 订阅', () => {
   });
 });
 
+describe('projectTheme 字号 / 等宽变体（W-A）', () => {
+  it('large：字阶同乘 1.125（body 16→18 / 行高 24→27）', () => {
+    const variant = projectTheme('light', darkTheme, {
+      fontScale: 'large',
+      monoFont: 'system',
+    });
+    expect(variant).not.toBe(lightTheme);
+    expect(variant.type.body.fontSize).toBe(18);
+    expect(variant.type.body.lineHeight).toBe(27);
+    // 色板与几何不随字号变体改变（同一引用）
+    expect(variant.colors).toBe(lightTheme.colors);
+  });
+
+  it('xlarge：字阶同乘 1.25（body 16→20 / 行高 24→30）', () => {
+    const variant = projectTheme('dark', lightTheme, {
+      fontScale: 'xlarge',
+      monoFont: 'system',
+    });
+    expect(variant.type.body.fontSize).toBe(20);
+    expect(variant.type.body.lineHeight).toBe(30);
+  });
+
+  it('monoFont=jetbrains：mono 走 400 族、codeDigit 走 600 族（Q2）', () => {
+    const variant = projectTheme('light', darkTheme, {
+      fontScale: 'standard',
+      monoFont: 'jetbrains',
+    });
+    expect(variant.type.mono.fontFamily).toBe('JetBrainsMono_400Regular');
+    expect(variant.type.codeDigit.fontFamily).toBe('JetBrainsMono_600SemiBold');
+  });
+
+  it('monoFont=fira：mono 走 400 族、codeDigit 走 600 族（Q2）', () => {
+    const variant = projectTheme('light', darkTheme, {
+      fontScale: 'standard',
+      monoFont: 'fira',
+    });
+    expect(variant.type.mono.fontFamily).toBe('FiraCode_400Regular');
+    expect(variant.type.codeDigit.fontFamily).toBe('FiraCode_600SemiBold');
+  });
+
+  it('变体缓存：同偏好同引用、异偏好异引用', () => {
+    const prefs = { fontScale: 'large', monoFont: 'fira' } as const;
+    const a = projectTheme('light', darkTheme, prefs);
+    const b = projectTheme('light', darkTheme, prefs);
+    expect(a).toBe(b);
+    const c = projectTheme('light', darkTheme, {
+      fontScale: 'xlarge',
+      monoFont: 'fira',
+    });
+    expect(c).not.toBe(a);
+  });
+
+  it('standard + system 偏好 → 基座单例（身份稳定）', () => {
+    expect(
+      projectTheme('light', darkTheme, {
+        fontScale: 'standard',
+        monoFont: 'system',
+      })
+    ).toBe(lightTheme);
+  });
+});
+
 describe('主题持久化往返', () => {
   it('setThemeMode 写 kv → 模拟重启 hydrate → useTheme 恢复所选档', async () => {
     const persist = makeKvPersist();

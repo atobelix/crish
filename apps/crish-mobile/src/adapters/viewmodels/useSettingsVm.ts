@@ -8,7 +8,12 @@ import {
 } from '@/adapters/hooks/useAppStore';
 import { authStore } from '@/domain/store/authStore';
 import { settingsStore } from '@/domain/store/settingsStore';
-import type { ThemeMode, NotifyScene } from '@/domain/store/settingsReducers';
+import type {
+  FontScale,
+  MonoFont,
+  ThemeMode,
+  NotifyScene,
+} from '@/domain/store/settingsReducers';
 import { setThemeMode } from '@/adapters/platform/theme';
 import { getPairingWiring } from '@/adapters/wiring/pairing';
 import {
@@ -27,6 +32,12 @@ export interface SettingsVm {
   port: number | null;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
+  /** 正文字号（W-A 字体设置） */
+  fontScale: FontScale;
+  setFontScale: (scale: FontScale) => void;
+  /** 等宽字体（W-A 字体设置） */
+  monoFont: MonoFont;
+  setMonoFont: (font: MonoFont) => void;
   notifyMasterOn: boolean;
   notifyScenes: Readonly<Record<NotifyScene, boolean>>;
   notifyPermission: NotificationPermissionStatus;
@@ -54,6 +65,8 @@ export function useSettingsVm(
 ): SettingsVm {
   const phase = useConnectionStore((s) => s.phase);
   const themeMode = useSettingsStore((s) => s.groups.appearance.theme);
+  const fontScale = useSettingsStore((s) => s.groups.appearance.fontScale);
+  const monoFont = useSettingsStore((s) => s.groups.appearance.monoFont);
   const notifyPrefs = useSettingsStore((s) => s.groups.notification);
   const permissionStatus = useNotificationPermission();
   const host = useAuthStore((s) => s.host);
@@ -61,6 +74,14 @@ export function useSettingsVm(
 
   const changeThemeMode = useCallback((mode: ThemeMode) => {
     setThemeMode(mode);
+  }, []);
+
+  const changeFontScale = useCallback((scale: FontScale) => {
+    settingsStore.getState().update('appearance', { fontScale: scale });
+  }, []);
+
+  const changeMonoFont = useCallback((font: MonoFont) => {
+    settingsStore.getState().update('appearance', { monoFont: font });
   }, []);
 
   const setNotifyMasterOn = useCallback((value: boolean) => {
@@ -91,6 +112,10 @@ export function useSettingsVm(
     port,
     themeMode,
     setThemeMode: changeThemeMode,
+    fontScale,
+    setFontScale: changeFontScale,
+    monoFont,
+    setMonoFont: changeMonoFont,
     notifyMasterOn: notifyPrefs.masterOn,
     notifyScenes: notifyPrefs.sceneFlags,
     notifyPermission: permissionStatus,

@@ -9,6 +9,19 @@
 /** 主题模式三选（F6 §9：跟随系统/浅色/深色，默认跟随系统；useTheme 消费） */
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+/** 正文字号三选（原型 subFont：标准 / 适度放大 / 大号无障碍；theme type 阶梯乘数消费） */
+export type FontScale = 'standard' | 'large' | 'xlarge';
+
+/** 正文字号 → 字阶乘数（同层级同乘，保持层级节奏不散） */
+export const FONT_SCALE_FACTOR: Record<FontScale, number> = {
+  standard: 1,
+  large: 1.125,
+  xlarge: 1.25,
+};
+
+/** 等宽字体三选（原型 subFont 代码字体；system = 平台等宽，其余为随包 Google 等宽） */
+export type MonoFont = 'system' | 'jetbrains' | 'fira';
+
 /** 通知场景键（F6 §10.1 场景级开关 5 项） */
 export type NotifyScene =
   'message' | 'taskDone' | 'approval' | 'error' | 'deviceOffline';
@@ -25,6 +38,10 @@ export interface NotifyPrefs {
 export interface AppearancePrefs {
   /** 主题三选（默认跟随系统） */
   theme: ThemeMode;
+  /** 正文字号（默认标准） */
+  fontScale: FontScale;
+  /** 等宽字体（默认系统等宽） */
+  monoFont: MonoFont;
 }
 
 /** 分组 → 类型映射（组合纪律：类型安全唯一真源，store 动作泛型 K 走此映射） */
@@ -50,6 +67,8 @@ export function defaultSettingsGroups(): SettingsGroups {
     },
     appearance: {
       theme: 'system',
+      fontScale: 'standard',
+      monoFont: 'system',
     },
   };
 }

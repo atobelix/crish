@@ -54,7 +54,11 @@ describe('默认值装配（F6 §9 / §10.2）', () => {
       error: true,
       deviceOffline: false,
     });
-    expect(groups.appearance).toEqual({ theme: 'system' });
+    expect(groups.appearance).toEqual({
+      theme: 'system',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
   });
 });
 
@@ -67,9 +71,15 @@ describe('get / set / update（读写与合并）', () => {
 
   it('set 整组替换，其它分组不受影响', () => {
     const st = settingsStore.getState();
-    st.set('appearance', { theme: 'dark' });
+    st.set('appearance', {
+      theme: 'dark',
+      fontScale: 'standard',
+      monoFont: 'system',
+    });
     expect(settingsStore.getState().get('appearance')).toEqual({
       theme: 'dark',
+      fontScale: 'standard',
+      monoFont: 'system',
     });
     expect(settingsStore.getState().get('notification').masterOn).toBe(true);
   });
@@ -167,15 +177,70 @@ describe('hydrate（启动回填 + 缺字段合并 + 失败降级）', () => {
   });
 });
 
+describe('W-A 字体偏好（fontScale / monoFont 往返）', () => {
+  it('update → get 往返：两字段独立更新、互不影响', () => {
+    const st = settingsStore.getState();
+    st.update('appearance', { fontScale: 'xlarge' });
+    expect(settingsStore.getState().get('appearance').fontScale).toBe('xlarge');
+    expect(settingsStore.getState().get('appearance').monoFont).toBe('system');
+    st.update('appearance', { monoFont: 'fira' });
+    const appearance = settingsStore.getState().get('appearance');
+    expect(appearance.monoFont).toBe('fira');
+    expect(appearance.fontScale).toBe('xlarge');
+    expect(appearance.theme).toBe('system'); // 未提及保留
+  });
+
+  it('持久化往返：update 落盘 → 重置 → hydrate 恢复字体偏好', async () => {
+    const persist = makePersist();
+    settingsStore
+      .getState()
+      .update(
+        'appearance',
+        { fontScale: 'large', monoFont: 'jetbrains' },
+        persist
+      );
+    await Promise.resolve();
+    resetStore();
+    expect(settingsStore.getState().get('appearance').fontScale).toBe(
+      'standard'
+    );
+    await settingsStore.getState().hydrate(persist);
+    const appearance = settingsStore.getState().get('appearance');
+    expect(appearance.fontScale).toBe('large');
+    expect(appearance.monoFont).toBe('jetbrains');
+  });
+
+  it('旧存档回归：W-A 前的存档只有 {theme}，水合后字体字段补默认', async () => {
+    const persist = makePersist({
+      [settingsGroupKey('appearance')]: JSON.stringify({ theme: 'dark' }),
+    });
+    await settingsStore.getState().hydrate(persist);
+    const appearance = settingsStore.getState().get('appearance');
+    expect(appearance.theme).toBe('dark');
+    expect(appearance.fontScale).toBe('standard');
+    expect(appearance.monoFont).toBe('system');
+  });
+});
+
 describe('持久化接口注入（写 kv 键与 JSON 编码）', () => {
   it('set 写 kv：键 = settings.<group>，值 = JSON 编码', async () => {
     const persist = makePersist();
-    settingsStore.getState().set('appearance', { theme: 'light' }, persist);
+    settingsStore
+      .getState()
+      .set(
+        'appearance',
+        { theme: 'light', fontScale: 'standard', monoFont: 'system' },
+        persist
+      );
     await Promise.resolve(); // 让异步写 settle（调用面在同步段已断言）
     expect(persist.set).toHaveBeenCalledTimes(1);
     expect(persist.set).toHaveBeenCalledWith(
       'settings.appearance',
-      JSON.stringify({ theme: 'light' })
+      JSON.stringify({
+        theme: 'light',
+        fontScale: 'standard',
+        monoFont: 'system',
+      })
     );
   });
 
@@ -201,7 +266,11 @@ describe('持久化接口注入（写 kv 键与 JSON 编码）', () => {
     await Promise.resolve();
     expect(persist.set).toHaveBeenCalledWith(
       'settings.appearance',
-      JSON.stringify({ theme: 'dark' })
+      JSON.stringify({
+        theme: 'dark',
+        fontScale: 'standard',
+        monoFont: 'system',
+      })
     );
   });
 
