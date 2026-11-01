@@ -3,6 +3,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, Icon } from '@/presentation/ui';
+import type { IconName } from '@/presentation/ui/iconPaths';
 
 export interface NavRowProps {
   label: string;
@@ -11,6 +12,8 @@ export interface NavRowProps {
   /** 分组最后一行不画分隔线 */
   last?: boolean;
   testID?: string;
+  /** 尾部图标（缺省 chevron-right 导航箭头；非导航行如 UID 复制行传 'copy'） */
+  trailingIcon?: IconName;
 }
 
 export function NavRow({
@@ -19,6 +22,7 @@ export function NavRow({
   onPress,
   last = false,
   testID,
+  trailingIcon,
 }: NavRowProps) {
   const theme = useTheme();
   return (
@@ -52,7 +56,7 @@ export function NavRow({
         </AppText>
       ) : null}
       <Icon
-        name="chevron-right"
+        name={trailingIcon ?? 'chevron-right'}
         size={theme.size.iconSmall - 2}
         color={theme.colors.textTertiary}
       />

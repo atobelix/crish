@@ -1,6 +1,7 @@
 // 账号页（原型 subAccount）：透明 hero（头像 68 + 名字 16/600）+ 白色分组卡行
-// （个人资料 / 登录设备 / 修改密码）；退出登录与注销入口。邮箱行保留为 App 侧
-// 账号标识展示（原型 hero 无邮箱行，邮箱见设置账号卡/登录流程）。
+// （个人资料 / 用户 UID（点击复制，资料就绪才显示）/ 登录设备 / 修改密码）；
+// 退出登录与注销入口。邮箱行保留为 App 侧账号标识展示（原型 hero 无邮箱行，
+// 邮箱见设置账号卡/登录流程）。
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -9,7 +10,8 @@ import {
   listAccountSessions,
   logoutAccount,
 } from '@/adapters/account/accountService';
-import { AppText } from '@/presentation/ui';
+import { copyTextToClipboard } from '@/adapters/platform/clipboard';
+import { AppText, useToast } from '@/presentation/ui';
 import {
   AccountAvatar,
   AuthBar,
@@ -47,6 +49,7 @@ export function AccountHomeScreen({
   onSignedOut,
 }: AccountHomeScreenProps) {
   const theme = useTheme();
+  const { showToast } = useToast();
   const user = useAccountStore((s) => s.user);
   const profile = useAccountStore((s) => s.profile);
   const [sessionCount, setSessionCount] = useState<number | null>(null);
@@ -69,6 +72,16 @@ export function AccountHomeScreen({
 
   const email = profile?.email ?? user?.email ?? '';
   const name = displayNameOf(profile?.displayName, user?.name, email);
+  /** 账号 UID（资料真源 AccountProfile.accountId；无资料时不渲染该行） */
+  const uid = profile?.accountId ?? '';
+
+  const copyUid = async () => {
+    const ok = await copyTextToClipboard(uid);
+    showToast(
+      ok ? '已复制 UID' : '复制失败，请稍后重试',
+      ok ? 'success' : 'error'
+    );
+  };
 
   const confirmSignOut = async () => {
     setSigningOut(true);
@@ -128,6 +141,15 @@ export function AccountHomeScreen({
             testID="account-row-profile"
             onPress={onOpenProfile}
           />
+          {uid ? (
+            <NavRow
+              label="用户 UID"
+              value={uid}
+              trailingIcon="copy"
+              testID="account-row-uid"
+              onPress={() => void copyUid()}
+            />
+          ) : null}
           <NavRow
             label="登录设备"
             value={sessionCount === null ? undefined : String(sessionCount)}

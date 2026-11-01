@@ -24,6 +24,8 @@ import {
 } from '@/adapters/account/accountFlow';
 import { accountStore } from '@/domain/store/accountStore';
 import type { AccountSessionInfo } from '@/domain/types/account';
+import { copyTextToClipboard } from '@/adapters/platform/clipboard';
+import { ToastProvider } from '@/presentation/ui';
 import { WelcomeScreen } from './welcomeScreen';
 import { AccountEmailScreen } from './accountEmailScreen';
 import { AccountCodeScreen, formatCountdown } from './accountCodeScreen';
@@ -53,6 +55,10 @@ jest.mock('@/adapters/account/accountService', () => ({
   deleteAccountByConfirmEmail: jest.fn(),
 }));
 
+jest.mock('@/adapters/platform/clipboard', () => ({
+  copyTextToClipboard: jest.fn(),
+}));
+
 const metrics: Metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
@@ -60,7 +66,9 @@ const metrics: Metrics = {
 
 function Providers({ children }: { children: ReactNode }) {
   return (
-    <SafeAreaProvider initialMetrics={metrics}>{children}</SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={metrics}>
+      <ToastProvider>{children}</ToastProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -458,6 +466,66 @@ describe('AccountHomeScreen', () => {
     await fireEvent.press(view.getByTestId('sign-out-confirm'));
     await waitFor(() => expect(onSignedOut).toHaveBeenCalled());
     expect(logoutAccount).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AccountHomeScreen UID 行（G6）', () => {
+  const seedProfile = () => {
+    accountStore.getState().setProfile({
+      accountId: 'acc_6f3k9d2x',
+      email: 'a@b.co',
+      displayName: '小明',
+      avatarUrl: null,
+      avatarFileId: null,
+      bio: '',
+      profileUpdatedAt: null,
+    });
+    jest.mocked(listAccountSessions).mockResolvedValue([]);
+  };
+
+  const renderHome = () =>
+    renderScreen(
+      <AccountHomeScreen
+        onBack={noop}
+        onOpenProfile={noop}
+        onOpenSessions={noop}
+        onChangePassword={noop}
+        onOpenDelete={noop}
+        onSignedOut={noop}
+      />
+    );
+
+  it('资料就绪时展示真实 accountId', async () => {
+    seedProfile();
+    const view = await renderHome();
+    expect(view.getByTestId('account-row-uid')).toBeTruthy();
+    expect(view.getByText('用户 UID')).toBeTruthy();
+    expect(view.getByText('acc_6f3k9d2x')).toBeTruthy();
+  });
+
+  it('点击复制 accountId 并给出 toast 反馈', async () => {
+    seedProfile();
+    jest.mocked(copyTextToClipboard).mockResolvedValue(true);
+    const view = await renderHome();
+    await fireEvent.press(view.getByTestId('account-row-uid'));
+    await waitFor(() =>
+      expect(copyTextToClipboard).toHaveBeenCalledWith('acc_6f3k9d2x')
+    );
+    expect(await view.findByText('已复制 UID')).toBeTruthy();
+  });
+
+  it('复制失败时 toast 报错而非成功', async () => {
+    seedProfile();
+    jest.mocked(copyTextToClipboard).mockResolvedValue(false);
+    const view = await renderHome();
+    await fireEvent.press(view.getByTestId('account-row-uid'));
+    expect(await view.findByText('复制失败，请稍后重试')).toBeTruthy();
+  });
+
+  it('无资料时不展示 UID 行', async () => {
+    jest.mocked(listAccountSessions).mockResolvedValue([]);
+    const view = await renderHome();
+    expect(view.queryByTestId('account-row-uid')).toBeNull();
   });
 });
 
