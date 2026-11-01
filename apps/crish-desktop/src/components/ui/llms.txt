@@ -1,6 +1,6 @@
 # Conex UI Primitives — Machine-Readable Contract (llms.txt)
 # Generated automatically by scripts/generate-ui-contracts.mjs. DO NOT EDIT DIRECTLY.
-# Last Updated: 2026-10-27
+# Last Updated: 2026-11-01
 
 ## Quick Index
 - Button: import { Button, type ButtonProps } from '@/components/ui'
@@ -175,13 +175,6 @@
 - TabsList: import { TabsList, type TabsListProps } from '@/components/ui'
 - TabsTrigger: import { TabsTrigger, type TabsTriggerProps } from '@/components/ui'
 - TabStrip: import { TabStrip, type TabStripProps } from '@/components/ui'
-- TooltipArrow: import { TooltipArrow } from '@/components/ui'
-- TooltipPopup: import { TooltipPopup } from '@/components/ui'
-- TooltipPortal: import { TooltipPortal } from '@/components/ui'
-- TooltipPositioner: import { TooltipPositioner } from '@/components/ui'
-- TooltipProvider: import { TooltipProvider } from '@/components/ui'
-- TooltipRoot: import { TooltipRoot } from '@/components/ui'
-- TooltipTrigger: import { TooltipTrigger } from '@/components/ui'
 
 ---
 
@@ -193,7 +186,7 @@ Description: 原子按钮（React 19 纯函数实现） 彻底废除 bare 临时
 | Prop | Type | Default | Required | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | ref | `React.Ref<HTMLButtonElement>` | - | No | - |
-| variant | `\| NonNullable<VariantProps<typeof buttonVariants>['variant']> \| 'unstyled'` | 'secondary' | No | 视觉变体：default \| primary \| secondary \| danger \| ghost \| outline \| plain \| unstyled |
+| variant | `NonNullable<VariantProps<typeof buttonVariants>['variant']> \| 'unstyled'` | 'secondary' | No | 视觉变体：default \| primary \| secondary \| danger \| ghost \| outline \| plain \| unstyled |
 | size | `ButtonSize` | 'md' | No | 尺寸：xs(24px) \| sm(28px) \| md(32px) \| lg(40px) \| icon |
 | icon | `React.ReactNode` | - | No | 图标位（置于文字前/后，aria-hidden 由组件内部保证） |
 | iconPosition | `'left' \| 'right'` | 'left' | No | 图标位置：left（默认）或 right |
@@ -378,7 +371,7 @@ export function Example() {
 
 ## Component: Tooltip
 Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+Description: ui/Tooltip 原子提示（I2：全局单槽 + delayShow + 滚/菜单即灭） 必须保留：props/ref 透传给子元素，避免截断外部 onClick/onPointerDown； 子元素 ref 与 forwardRef 合并。
 
 ### Props
 | Prop | Type | Default | Required | Description |
@@ -387,23 +380,14 @@ Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs
 | children | `React.ReactElement` | - | Yes | - |
 | shortcut | `string \| string[]` | - | No | 快捷键组合：单个字符串（如 'Ctrl+N'）或按键数组（如 ['Ctrl', 'N']） |
 | side | `'top' \| 'bottom' \| 'left' \| 'right'` | 'top' | No | - |
-| align | `'start' \| 'center' \| 'end'` | 'center' | No | - |
 | disabled | `boolean` | false | No | - |
 | delayShow | `number` | DEFAULT_DELAY_SHOW_MS | No | 意图停留；未满此时长离开则从未显示。默认 350ms |
-| delayHide | `number` | - | No | - |
+| delayHide | `number` | 0 | No | - |
 | contentClassName | `string` | - | No | - |
 | portalClassName | `string` | - | No | - |
 | contentStyle | `React.CSSProperties` | - | No | - |
 | portalStyle | `React.CSSProperties` | - | No | - |
 | interactive | `boolean` | false | No | - |
-| arrow | `boolean` | true | No | - |
-| sideOffset | `number` | 6 | No | - |
-| alignOffset | `number` | 0 | No | - |
-| portalContainer | `HTMLElement \| null` | - | No | - |
-| collisionBoundary | `Element \| Element[] \| null` | - | No | - |
-| collisionPadding | `number \| Record<string, number>` | - | No | - |
-| collisionAvoidance | `any` | - | No | - |
-| positionMethod | `'absolute' \| 'fixed'` | - | No | - |
 
 ### Verified Code Example
 ```tsx
@@ -604,8 +588,8 @@ Description: ui/Badge 原子徽标组件（CVA 架构升级版 / React 19 纯函
 | Prop | Type | Default | Required | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | ref | `React.Ref<HTMLSpanElement>` | - | No | - |
-| tone | `\| StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 严格受限的语义 tone：neutral / accent / warning / danger / success（兼容旧 brand/info/error 别名） |
-| variant | `\| StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 兼容 variant 别名 |
+| tone | `StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 严格受限的语义 tone：neutral / accent / warning / danger / success（兼容旧 brand/info/error 别名） |
+| variant | `StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 兼容 variant 别名 |
 | size | `BadgeSize` | 'sm' | No | 尺寸：xs(18px) / sm(20px) / md(24px)，默认 'sm' |
 | dot | `boolean` | false | No | 是否展示前置微圆点状态指示 |
 | icon | `React.ReactNode` | - | No | 图标位 |
@@ -2012,7 +1996,7 @@ Description: DialogClose UI 原子交互基元。
 ### Props
 | Prop | Type | Default | Required | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| 'aria-label' | `string` | '关闭弹窗' | No | - |
+| 'aria-label' | `string` | - | No | - |
 | ref | `React.Ref<HTMLButtonElement>` | - | No | - |
 
 ### Verified Code Example
@@ -2036,7 +2020,6 @@ Description: DialogContent UI 原子交互基元。
 | size | `'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl' \| 'auto'` | - | No | - |
 | role | `'dialog' \| 'alertdialog'` | - | No | - |
 | ariaLabel | `string` | - | No | - |
-| initialFocus | `React.RefObject<HTMLElement \| null>` | - | No | - |
 | ref | `React.Ref<HTMLDivElement>` | - | No | - |
 
 ### Verified Code Example
@@ -2491,7 +2474,7 @@ Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.
 ### Props
 | Prop | Type | Default | Required | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| container | `HTMLElement \| ShadowRoot \| React.RefObject<HTMLElement \| ShadowRoot \| null> \| null` | - | No | - |
+| container | `\| HTMLElement \| ShadowRoot \| React.RefObject<HTMLElement \| ShadowRoot \| null> \| null` | - | No | - |
 | children | `React.ReactNode` | - | No | - |
 
 ### Verified Code Example
@@ -3498,7 +3481,7 @@ Description: ui/Popover 浮层弹出原语（现代化 Headless 基座） 方案
 | :--- | :--- | :--- | :--- | :--- |
 | open | `boolean` | - | No | 受控开关 |
 | defaultOpen | `boolean` | false | No | 默认非受控开关 |
-| onOpenChange | `(open: boolean, eventDetails?: { reason?: string; event?: Event }) => void` | - | No | 开关状态变化回调 |
+| onOpenChange | `( open: boolean, eventDetails?: { reason?: string; event?: Event } ) => void` | - | No | 开关状态变化回调 |
 | trigger | `React.ReactNode` | - | No | 触发器元素 |
 | anchor | `React.RefObject<Element \| null> \| Element \| null` | - | No | 显式锚点（RefObject 或 Element） |
 | content | `React.ReactNode` | - | No | 弹出内容区（content 或 children 任一即可） |
@@ -4458,146 +4441,6 @@ export function Example({ activeId, onSelect }: { activeId: string; onSelect: (i
       onSelect={onSelect}
     />
   );
-}
-```
-
----
-
-## Component: TooltipArrow
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipArrow } from '@/components/ui';
-
-export function Example() {
-  return <TooltipArrow />;
-}
-```
-
----
-
-## Component: TooltipPopup
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipPopup } from '@/components/ui';
-
-export function Example() {
-  return <TooltipPopup />;
-}
-```
-
----
-
-## Component: TooltipPortal
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipPortal } from '@/components/ui';
-
-export function Example() {
-  return <TooltipPortal />;
-}
-```
-
----
-
-## Component: TooltipPositioner
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipPositioner } from '@/components/ui';
-
-export function Example() {
-  return <TooltipPositioner />;
-}
-```
-
----
-
-## Component: TooltipProvider
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipProvider } from '@/components/ui';
-
-export function Example() {
-  return <TooltipProvider />;
-}
-```
-
----
-
-## Component: TooltipRoot
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipRoot } from '@/components/ui';
-
-export function Example() {
-  return <TooltipRoot />;
-}
-```
-
----
-
-## Component: TooltipTrigger
-Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
-Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
-
-### Props
-| Prop | Type | Default | Required | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
-
-### Verified Code Example
-```tsx
-import { TooltipTrigger } from '@/components/ui';
-
-export function Example() {
-  return <TooltipTrigger />;
 }
 ```
 
