@@ -192,7 +192,7 @@ export const SettingsArchiveTab: React.FC<Props> = ({
       {headMetaText ? (
         <span
           id={headMetaId}
-          className="settings-head-meta"
+          className={uiStyles.headMeta}
           role="status"
           aria-live="polite"
           aria-atomic="true"
@@ -207,7 +207,7 @@ export const SettingsArchiveTab: React.FC<Props> = ({
           <Button
             type="button"
             variant="secondary"
-            size="xs"
+            size="sm"
             onClick={handleRestoreAll}
             data-testid="archive-restore-all"
           >
@@ -216,7 +216,7 @@ export const SettingsArchiveTab: React.FC<Props> = ({
           <Button
             type="button"
             variant="ghost"
-            size="xs"
+            size="sm"
             onClick={() =>
               setPendingDelete({
                 mode: 'all',
@@ -284,6 +284,7 @@ export const SettingsArchiveTab: React.FC<Props> = ({
               return (
                 <SettingsRow
                   key={session.id}
+                  onClick={() => handleOpenSession(session)}
                   icon={<AppIcon name="message-square" size={16} aria-hidden />}
                   title={
                     <span className={styles.rowTitle}>{displayTitle}</span>
@@ -317,22 +318,6 @@ export const SettingsArchiveTab: React.FC<Props> = ({
                   }
                   control={
                     <div className={styles.controlGroup}>
-                      <Tooltip
-                        content={t(
-                          'settings.archive.restoreAndOpen',
-                          '还原并打开对话'
-                        )}
-                      >
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => handleOpenSession(session)}
-                          data-testid={`archive-open-${session.id}`}
-                        >
-                          {t('common.open', '打开')}
-                        </Button>
-                      </Tooltip>
                       <Tooltip
                         content={t(
                           'settings.archive.restoreToSidebar',

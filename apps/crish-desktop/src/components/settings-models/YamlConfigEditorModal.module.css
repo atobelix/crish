@@ -200,7 +200,7 @@
   align-items: center;
   justify-content: center;
   width: 18px;
-  height: 18px;
+  height: 18px; /* 刻度外裸值：与 width 成对的微型图标按钮，无既有档，授权保留 */
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -245,7 +245,7 @@
   --editor-line-height: 22px;
   display: flex;
   height: 60vh;
-  min-height: 380px;
+  min-height: 380px; /* 刻度外裸值：编辑器视口几何下限，无既有档，授权保留 */
   position: relative;
   background: var(--bg-card);
   overflow: hidden;

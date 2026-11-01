@@ -28,8 +28,9 @@ vi.mock('../../store/storeAccess', async () => {
     deleteSessionCascade: (id: string) => mockDeleteSessionCascade(id),
     listProjects: () => [{ id: 'proj-1', name: 'Work Project' }],
     selectSessionList,
-    useSessionStore: (selector: (state: typeof mockSessionStoreState) => unknown) =>
-      selector(mockSessionStoreState),
+    useSessionStore: (
+      selector: (state: typeof mockSessionStoreState) => unknown
+    ) => selector(mockSessionStoreState),
   };
 });
 
@@ -129,7 +130,7 @@ describe('SettingsArchiveTab', () => {
     expect(screen.getByText(/无匹配「不存在的会话」/)).toBeInTheDocument();
   });
 
-  it('点击“打开”：解归档并打开会话且关闭设置', () => {
+  it('点击整行：解归档并打开会话且关闭设置（无独立“打开”按钮）', () => {
     setArchiveSessions([
       {
         id: 'sess-1',
@@ -140,8 +141,8 @@ describe('SettingsArchiveTab', () => {
     ]);
 
     render(<SettingsArchiveTab />);
-    const openBtn = screen.getByTestId('archive-open-sess-1');
-    fireEvent.click(openBtn);
+    expect(screen.queryByTestId('archive-open-sess-1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('测试归档'));
 
     expect(mockUnarchiveSession).toHaveBeenCalledWith('sess-1');
     expect(mockOpenSession).toHaveBeenCalledWith('sess-1', {

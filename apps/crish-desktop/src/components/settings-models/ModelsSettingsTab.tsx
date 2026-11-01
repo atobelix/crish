@@ -160,6 +160,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({
           <SettingsCard>
             <SettingsRow
               title={t('settings.models.globalDefaultModel')}
+              desc={t('settings.models.globalDefaultModelSharedNote')}
               control={
                 <ModelsCascadeSelect
                   activeProfileId={activeProfileId || ''}
