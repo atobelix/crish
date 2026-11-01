@@ -1,30 +1,33 @@
 [package]
 name = "conex-relay"
-version = "0.1.1"
-edition = "2021"
-license = "MIT"
-authors = ["atobelix"]
-description = "Crish remote relay: account-scoped tickets, blind frame forwarding, no business storage"
-repository = "https://github.com/atobelix/crish"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
-anyhow = "1"
-async-trait = "0.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 axum = { version = "0.8", default-features = false, features = ["ws", "json", "http1", "tokio", "query"] }
 base64 = "0.22"
-futures-util = "0.3"
-hex = "0.4"
+futures-util = { workspace = true }
+hex = { workspace = true }
 hmac = "0.12"
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util", "signal"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v4"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid = { workspace = true, features = ["v4"] }
 # X-03：时间戳唯一真源（票据 exp / ping ts 统一走 conex_shared::time）
 conex-shared = { path = "../conex-shared" }
 
