@@ -1,7 +1,7 @@
-// 层叠卡片抽屉容器（实现波总方案 D8 / N03 落地）：
+// 层叠卡片抽屉容器（实现波总方案 D8 / N03 落地；抽屉改版对齐原型）：
 // - 主界面在上（顶层圆角卡片），抽屉在下（底层面板），无 scrim 遮罩；
-//   立体感 = 色阶差（canvas vs surface）+ 大圆角 + 微缩放 + 轻投影，零描边；
-// - 手势：manualActivation 精确仲裁——关闭态仅屏幕左缘 64dp 内、横向意图
+//   立体感 = 色阶差 + 大圆角 + 轻投影，零描边、零缩放（原型口径：纯位移推开）；
+// - 手势：manualActivation 精确仲裁——关闭态仅左侧 75% 范围、横向意图
 //   （|dx| > 14 且 |dx| > 0.7|dy|，容纳拇指自然弧线）才激活；纵向滚动永不误触；
 // - 全部动效运行在 Reanimated UI 线程（拖动 0 次 React 渲染）；
 // - Android 返回键：抽屉打开时优先收起；点击主卡片任意处收起；
@@ -133,12 +133,6 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
 
   const cardStyle = useAnimatedStyle(() => {
     const p = progress.value;
-    const r = interpolate(
-      p,
-      [0, 1],
-      [0, theme.radius.sheet],
-      Extrapolation.CLAMP
-    );
     return {
       transform: [
         {
@@ -149,29 +143,13 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
             Extrapolation.CLAMP
           ),
         },
-        {
-          scale: interpolate(
-            p,
-            [0, 1],
-            [1, theme.layout.drawerCardScale],
-            Extrapolation.CLAMP
-          ),
-        },
       ],
-      borderRadius: r,
-    };
-  });
-
-  const cardInnerStyle = useAnimatedStyle(() => {
-    const p = progress.value;
-    const r = interpolate(
-      p,
-      [0, 1],
-      [0, theme.radius.sheet],
-      Extrapolation.CLAMP
-    );
-    return {
-      borderRadius: r,
+      borderRadius: interpolate(
+        p,
+        [0, 1],
+        [0, theme.radius.sheet],
+        Extrapolation.CLAMP
+      ),
     };
   });
 
@@ -227,7 +205,7 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           >
             {contentMounted ? <CrishDrawerContent /> : null}
           </Animated.View>
-          {/* 顶层：主界面卡片（位移 + 缩放 + 圆角渐变 + 强立体投影容器） */}
+          {/* 顶层：主界面卡片（位移 + 圆角渐变 + 强立体投影容器） */}
           <Animated.View
             style={[
               styles.cardContainer,
@@ -236,22 +214,14 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
               cardStyle,
             ]}
           >
-            <Animated.View
-              style={[
-                styles.cardInner,
-                { backgroundColor: theme.colors.surface },
-                cardInnerStyle,
-              ]}
-            >
-              {children}
-              {/* 打开期点击主卡片任意处收起（关闭期不拦截任何交互） */}
-              <Pressable
-                accessibilityLabel="收起菜单"
-                onPress={() => controller.close()}
-                style={styles.tapDismiss}
-                pointerEvents={isOpen ? 'auto' : 'none'}
-              />
-            </Animated.View>
+            {children}
+            {/* 打开期点击主卡片任意处收起（关闭期不拦截任何交互） */}
+            <Pressable
+              accessibilityLabel="收起菜单"
+              onPress={() => controller.close()}
+              style={styles.tapDismiss}
+              pointerEvents={isOpen ? 'auto' : 'none'}
+            />
           </Animated.View>
         </View>
       </GestureDetector>
@@ -268,9 +238,6 @@ const styles = StyleSheet.create({
     left: 0,
   },
   cardContainer: {
-    flex: 1,
-  },
-  cardInner: {
     flex: 1,
     overflow: 'hidden',
   },

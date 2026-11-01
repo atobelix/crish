@@ -1,4 +1,5 @@
-// 汉堡按钮：打开抽屉；有需要用户处理的审批时右上角带警示点。
+// 汉堡按钮（原型 hamburger-white-btn）：纯白圆钮 + 微柔阴影，打开抽屉；
+// 有需要用户处理的审批时右上角带警示点。
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useApprovalStore } from '@/adapters/hooks/useAppStore';
@@ -18,6 +19,7 @@ export function MenuButton({ onPress }: MenuButtonProps) {
     <View>
       <IconButton
         name="menu"
+        variant="floating"
         accessibilityLabel={
           count > 0 ? `打开菜单，${count} 项待审批` : '打开菜单'
         }

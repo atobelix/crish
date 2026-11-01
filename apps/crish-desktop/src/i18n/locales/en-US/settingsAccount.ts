@@ -18,6 +18,8 @@ export const settingsPartAccount = {
   'account.code.title': 'Enter code',
   'account.code.ariaLabel': '6-digit code',
   'account.code.resendIn': 'Resend · {time}',
+  'account.code.notReceived': "Didn't get the code?",
+  'account.code.countdown': 'Resend in {time}',
   'account.code.resend': 'Resend',
   'account.code.send': 'Send code',
   'account.code.sentTo': 'Code sent to {email}',
@@ -28,6 +30,8 @@ export const settingsPartAccount = {
     'Your session has expired. Please sign in again.',
   'account.error.network':
     'Network error. Check your connection and try again.',
+  'account.error.networkTimeout':
+    'Request timed out. Check your network and try again.',
   'account.error.unavailable': 'This feature is not available yet',
 
   // ── 登录弹窗 ──
@@ -51,6 +55,7 @@ export const settingsPartAccount = {
   'account.password.forgot': 'Forgot password',
   'account.password.submit': 'Sign in',
   'account.password.newLabel': 'New password',
+  'account.password.ruleHint': 'At least 8 characters',
   'account.set.registerTitle': 'Set a password',
   'account.set.resetTitle': 'Reset password',
   'account.set.placeholder': 'At least 8 characters',

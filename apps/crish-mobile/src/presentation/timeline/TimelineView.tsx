@@ -31,6 +31,8 @@ export interface TimelineViewProps {
   /** 打开工具抽屉并定位到某组（focusId = 该组首个工具 id）；不传则摘要行只读 */
   onOpenTools?: (focusId: string) => void;
   emptyTitle?: string;
+  /** 顶部避让高度（悬浮头栏时 = 安全区 + 头栏高度；缺省 = 常规内衬） */
+  headerClearance?: number;
 }
 
 export function TimelineView({
@@ -40,6 +42,7 @@ export function TimelineView({
   listRef,
   onOpenTools,
   emptyTitle = '暂无消息',
+  headerClearance,
 }: TimelineViewProps) {
   const theme = useTheme();
   const internalRef = useRef<FlatList<DisplayBlock> | null>(null);
@@ -78,7 +81,7 @@ export function TimelineView({
       contentContainerStyle={[
         {
           paddingHorizontal: theme.space.screenX,
-          paddingTop: theme.space.lg,
+          paddingTop: headerClearance ?? theme.space.lg,
           paddingBottom: theme.space.xxl,
           gap: theme.space.messageGap,
         },
@@ -122,8 +125,12 @@ function MessageView({ block }: { block: AssistantMessageBlock }) {
           style={[
             styles.userBubble,
             {
+              // 用户气泡（原型 18/18/4/18）：尾角朝发言侧收窄
               backgroundColor: theme.colors.bubbleUser,
-              borderRadius: theme.radius.bubble,
+              borderTopLeftRadius: theme.radius.bubble,
+              borderTopRightRadius: theme.radius.bubble,
+              borderBottomRightRadius: theme.radius.bubbleTail,
+              borderBottomLeftRadius: theme.radius.bubble,
               paddingHorizontal: theme.space.lg,
               paddingVertical: theme.space.md,
             },

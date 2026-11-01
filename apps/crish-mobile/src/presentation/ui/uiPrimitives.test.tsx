@@ -1,4 +1,4 @@
-// 设计系统原子测试：文本 / 图标 / 按钮 / 徽标 / 输入 / 列表行。
+// 设计系统原子测试：文本 / 图标 / 按钮 / 徽标 / 输入 / 列表行 / Sheet 选项行。
 import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import {
@@ -10,7 +10,7 @@ import {
   Input,
   ListRow,
   SectionHeader,
-  SegmentedControl,
+  SheetOptionRow,
   Spinner,
   ToastProvider,
 } from '@/presentation/ui';
@@ -98,10 +98,9 @@ describe('IconButton / Badge', () => {
   });
 });
 
-describe('Input / ListRow / SegmentedControl', () => {
+describe('Input / ListRow / SheetOptionRow', () => {
   it('renders input states and interactions', async () => {
     const onPress = jest.fn();
-    const onChange = jest.fn();
     const view = await renderWithProviders(
       <>
         <Input testID="input" label="主机" error="必填" />
@@ -113,13 +112,12 @@ describe('Input / ListRow / SegmentedControl', () => {
           trailing={<Badge dot />}
         />
         <ListRow title="静态" divider={false} />
-        <SegmentedControl
-          options={[
-            { value: 'system', label: '跟随系统' },
-            { value: 'dark', label: '深色' },
-          ]}
-          value="system"
-          onChange={onChange}
+        <SheetOptionRow testID="option-a" label="标准审批" onPress={onPress} />
+        <SheetOptionRow
+          testID="option-b"
+          label="快速放行"
+          selected
+          onPress={onPress}
         />
         <SectionHeader title="连接" trailing="2" />
       </>
@@ -127,9 +125,10 @@ describe('Input / ListRow / SegmentedControl', () => {
     fireEvent(view.getByTestId('input'), 'focus');
     fireEvent(view.getByTestId('input'), 'blur');
     fireEvent.press(view.getByText('桌面连接'));
-    fireEvent.press(view.getByText('深色'));
+    fireEvent.press(view.getByTestId('option-a'));
     expect(onPress).toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledWith('dark');
+    // 选中行以对号表达，不渲染第二行的对号
+    expect(view.getByTestId('option-b')).toBeTruthy();
     expect(view.getByText('必填')).toBeTruthy();
     expect(view.getByText('静态')).toBeTruthy();
     expect(view.getByText('连接')).toBeTruthy();

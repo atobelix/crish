@@ -90,16 +90,26 @@ export interface ThemeRadius {
   pill: number;
   /** 按钮以外的小控件：输入框、行内块、工具输出块 */
   control: number;
-  /** 卡片、设置分组、悬浮审批卡 */
+  /** 卡片、设置分组 */
   card: number;
   /** 用户消息气泡 */
   bubble: number;
+  /** 用户气泡尾角（朝向发言侧的收窄角） */
+  bubbleTail: number;
   /** 账号 v3 输入框 */
   field: number;
   /** 账号 v3 验证码格 */
   codeCell: number;
   /** Sheet / 工具抽屉顶部圆角 */
   sheet: number;
+  /** Composer 输入胶囊（单行/多行恒定，与高度解耦） */
+  composer: number;
+  /** 下拉菜单 / 通知横幅等浅浮层容器 */
+  menu: number;
+  /** 居中确认弹窗卡片 */
+  dialog: number;
+  /** 悬浮审批卡等强调浮层 */
+  overlay: number;
 }
 
 export interface ThemeType {
@@ -180,8 +190,6 @@ export interface ThemeLayout {
   drawerMaxWidth: number;
   /** 抽屉边缘滑出手势热区宽度（64dp：避开 Android 全面屏返回手势 0~32dp 感应带） */
   drawerSwipeEdgeWidth: number;
-  /** 抽屉完全展开时主界面卡片微缩放（景深） */
-  drawerCardScale: number;
   /** 底层抽屉内容视差位移（负值 = 向左退让） */
   drawerParallaxOffset: number;
   /** Composer 输入区最大高度（超出后内部滚动） */
@@ -374,10 +382,15 @@ const radius: ThemeRadius = {
   pill: 9999,
   control: 12,
   card: 20,
-  bubble: 22,
+  bubble: 18,
+  bubbleTail: 4,
   sheet: 28,
   field: 18,
   codeCell: 16,
+  composer: 26,
+  menu: 18,
+  dialog: 36,
+  overlay: 30,
 };
 
 const monoFont = Platform.select({
@@ -481,10 +494,8 @@ const layout: ThemeLayout = {
   drawerMaxWidth: 340,
   // 64dp：避开 Android 全面屏系统返回手势的 0~32dp 感应带（实现波总方案 D8）
   drawerSwipeEdgeWidth: 64,
-  /** 抽屉完全展开时主界面卡片的微缩放景深比例 */
-  drawerCardScale: 0.94,
   /** 底层抽屉内容随开合的视差位移（负值 = 向左退让） */
-  drawerParallaxOffset: -36,
+  drawerParallaxOffset: -60,
   composerInputMaxHeight: 120,
   toolSheetDetents: [0.45, 0.92],
   approvalSheetDetents: [0.6, 0.92],

@@ -95,20 +95,34 @@ const approvalItem: ApprovalItem = {
 };
 
 describe('SessionListItem', () => {
-  it('纯标题 + 运行 / 待审批状态点，选中态可读', async () => {
+  it('待审批 = 橙点 + 文案徽标（优先于运行点），选中态可读', async () => {
     const onPress = jest.fn();
     const view = await wrap(
       <SessionListItem selected session={session} onPress={onPress} />
     );
     expect(view.getByText('修复登录页样式')).toBeTruthy();
-    expect(view.getByTestId('session-running')).toBeTruthy();
+    // 待审批优先：只渲染文字徽标，不再叠加运行点
     expect(view.getByTestId('session-approval-badge')).toBeTruthy();
+    expect(view.getByText('待审批')).toBeTruthy();
+    expect(view.queryByTestId('session-running')).toBeNull();
     expect(view.queryByTestId('session-unread-badge')).toBeNull();
     expect(
       view.getByTestId('session-row-s-1').props.accessibilityState
     ).toEqual({ selected: true });
     fireEvent.press(view.getByTestId('session-row-s-1'));
     expect(onPress).toHaveBeenCalledWith('s-1');
+  });
+
+  it('仅运行中（无待审批）渲染品牌色运行点', async () => {
+    const onPress = jest.fn();
+    const view = await wrap(
+      <SessionListItem
+        session={{ ...session, pendingApprovalCount: 0 }}
+        onPress={onPress}
+      />
+    );
+    expect(view.getByTestId('session-running')).toBeTruthy();
+    expect(view.queryByTestId('session-approval-badge')).toBeNull();
   });
 });
 

@@ -58,7 +58,7 @@ const TestContextConsumer: React.FC<{ testId?: string }> = ({
       </button>
       <button
         data-testid="scoped-close-title-btn"
-        title="关闭面板"
+        data-pane-close="true"
         type="button"
       >
         关闭
@@ -280,7 +280,7 @@ describe('TreeLeafPanel 天然隔离与焦点激活（Dimension 01）', () => {
       expect(setActiveLeafSpy).not.toHaveBeenCalled();
     });
 
-    it('点击 title="关闭面板" 按钮时跳过激活', async () => {
+    it('点击 data-pane-close 标记按钮时跳过激活（结构标记，不嗅探文案）', async () => {
       const leaf2 = createMockLeaf(
         'leaf-2',
         [{ tabId: 'tab-2', sessionId: 'sess-2' }],

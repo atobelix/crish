@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
-import IconButton from './IconButton';
+import Icon from './Icon';
 
 export interface SheetProps {
   visible: boolean;
@@ -98,18 +98,36 @@ export function Sheet({
                 ]}
               >
                 <AppText
-                  variant="title2"
+                  variant="headline"
                   style={styles.title}
                   numberOfLines={1}
                 >
                   {title}
                 </AppText>
-                <IconButton
-                  name="x"
+                <Pressable
+                  testID="sheet-close"
+                  accessibilityRole="button"
                   accessibilityLabel="关闭"
                   onPress={onClose}
-                  testID="sheet-close"
-                />
+                  hitSlop={theme.space.sm}
+                  style={({ pressed }) => [
+                    styles.close,
+                    {
+                      width: theme.size.barAction,
+                      height: theme.size.barAction,
+                      borderRadius: theme.radius.pill,
+                      backgroundColor: pressed
+                        ? theme.colors.fillPressed
+                        : theme.colors.fillSubtle,
+                    },
+                  ]}
+                >
+                  <Icon
+                    name="x"
+                    size={theme.size.iconSmall}
+                    color={theme.colors.textSecondary}
+                  />
+                </Pressable>
               </View>
             ) : null}
             <ScrollView
@@ -149,6 +167,10 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+  },
+  close: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: {
     flexGrow: 0,

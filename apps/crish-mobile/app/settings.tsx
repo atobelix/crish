@@ -15,8 +15,11 @@ export default function SettingsScreen() {
     <SettingsScreenView
       vm={vm}
       onBack={goBack}
-      onOpenAccount={() => router.push('/account/login')}
-      onOpenProfile={() => router.push('/account')}
+      onOpenAccount={() => router.push('/account')}
+      onOpenSessions={() => router.push('/account/sessions')}
+      onOpenTheme={() => router.push('/settings-theme')}
+      onOpenNotification={() => router.push('/settings-notification')}
+      onOpenScan={() => router.push('/pair/scan')}
       onConfirmRemove={onConfirmRemove}
     />
   );

@@ -126,6 +126,13 @@ export const workspace: WorkspaceTranslations = {
   'dock.adjustVerticalRatio': '调整上下分屏比例（当前 {ratio}%）',
   'dock.workspaceEmptyTitle': '暂无打开的工具窗格',
   'dock.workspaceEmptyDesc': '在左侧会话或工具栏中打开工具以在此处分屏协同',
+  'dock.collapseSidePanel': '收起右侧工具栏',
+  'dock.expandSidePanel': '展开右侧工具栏',
+
+  // ── 叶子面板容器 (TreeLeafPanel) ─────────────────────────────────────────
+  'leaf.panelRegionLabel': '{title} 面板',
+  'leaf.panelRenderError': '面板 [{viewId}] 渲染异常',
+  'leaf.unknownPanelType': '未知面板类型：{viewId}',
 
   // ── 窗格标签栏 (LeafToolTabStrip) ─────────────────────────────────────────
   'pane.restorePane': '还原窗格',

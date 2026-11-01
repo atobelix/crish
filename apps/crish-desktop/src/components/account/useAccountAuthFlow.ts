@@ -55,19 +55,30 @@ export function useAccountAuthFlow(onSignedIn: () => void) {
     setStep(next);
   }, []);
 
-  /** 串行执行一次请求：忙碌中忽略重复提交，失败转为界面文案 */
+  /** 串行执行一次请求：忙碌中忽略重复提交，超时熔断与失败转为界面文案 */
   const run = useCallback(
     async (task: () => Promise<void>, onError?: (err: unknown) => void) => {
       if (busyRef.current) return;
       busyRef.current = true;
       setBusy(true);
       setError(null);
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await task();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new AuthApiError('network', t('account.error.networkTimeout'))
+              ),
+            25000
+          );
+        });
+        await Promise.race([task(), timeoutPromise]);
       } catch (err: unknown) {
         setError(authErrorText(err, t));
         onError?.(err);
       } finally {
+        if (timer) clearTimeout(timer);
         busyRef.current = false;
         setBusy(false);
       }

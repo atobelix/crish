@@ -55,7 +55,7 @@ export function Dialog({
             styles.card,
             {
               maxWidth: theme.layout.dialogMaxWidth,
-              borderRadius: theme.radius.xl,
+              borderRadius: theme.radius.dialog,
               padding: theme.space.xl,
               gap: theme.space.md,
               backgroundColor: theme.colors.surfaceRaised,
@@ -69,7 +69,12 @@ export function Dialog({
               {description}
             </AppText>
           ) : null}
-          <View style={{ gap: theme.space.sm, marginTop: theme.space.sm }}>
+          <View
+            style={[
+              styles.actions,
+              { gap: theme.space.sm, marginTop: theme.space.xs },
+            ]}
+          >
             {actions.map((action) => (
               <Button
                 key={action.label}
@@ -77,6 +82,7 @@ export function Dialog({
                 variant={action.variant}
                 onPress={action.onPress}
                 testID={action.testID}
+                style={styles.action}
               />
             ))}
           </View>
@@ -94,6 +100,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
+  },
+  actions: {
+    flexDirection: 'row',
+  },
+  action: {
+    flex: 1,
   },
 });
 

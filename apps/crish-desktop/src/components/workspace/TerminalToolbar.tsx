@@ -156,6 +156,7 @@ export const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             aria-label="关闭当前分屏"
             tooltip="关闭副分屏"
             onClick={onCloseSplit}
+            data-pane-close="true"
             icon={<AppIcon name="x" size={13} />}
           />
         )}

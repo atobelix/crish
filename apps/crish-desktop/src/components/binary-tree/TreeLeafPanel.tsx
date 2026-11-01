@@ -1,5 +1,5 @@
 import { AppIcon } from '@/components/ui/icons';
-import { Button } from '@/components/ui';
+import { Button, Tooltip } from '@/components/ui';
 /**
  * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
@@ -60,18 +60,27 @@ import {
   SlotOutlet,
   type ViewRenderContext,
 } from '../../services/view-registry';
+import { useI18n } from '../../i18n';
+
+/**
+ * 叶子内「关闭类」控件识别：仅消费稳定的 data-* 结构标记。
+ * 严禁回退到 aria-label/title 文本嗅探——文案会随 i18n 翻译漂移，
+ * 结构标记才是单一真源（data-tab-close / data-pane-close /
+ * data-prevent-leaf-activate 分别由各自组件声明）。
+ */
+const CLOSE_TARGET_SELECTOR =
+  '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"]';
 
 const isCloseTarget = (e?: React.SyntheticEvent) =>
   Boolean(
     e?.target &&
     'closest' in (e.target as HTMLElement) &&
-    (e.target as HTMLElement).closest(
-      '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"], button[aria-label*="关闭"], button[title*="关闭"]'
-    )
+    (e.target as HTMLElement).closest(CLOSE_TARGET_SELECTOR)
   );
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
   ({ leaf, rect, isActive, isDragSource }) => {
+    const { t } = useI18n();
     const leafElRef = useRef<HTMLDivElement>(null);
     const leafBodyRef = useRef<HTMLDivElement>(null);
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
@@ -305,7 +314,9 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         onFocusCapture={handleCaptureActivate}
         onPointerDown={handleActivate}
         role="region"
-        aria-label={`${viewRegistry.getTitle(mainViewId, mainCtx)} 面板`}
+        aria-label={t('workspace.leaf.panelRegionLabel', {
+          title: viewRegistry.getTitle(mainViewId, mainCtx),
+        })}
       >
         <LeafScopeProvider
           leafId={leaf.id}
@@ -338,9 +349,18 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                     onOpenFiles={() => handleOpenTool('files')}
                   />
                 )}
-              <AppErrorBoundary compact title={`面板 [${mainViewId}] 渲染异常`}>
+              <AppErrorBoundary
+                compact
+                title={t('workspace.leaf.panelRenderError', {
+                  viewId: mainViewId,
+                })}
+              >
                 <Suspense
-                  fallback={<div className={styles.emptyState}>加载中…</div>}
+                  fallback={
+                    <div className={styles.emptyState}>
+                      {t('workspace.dock.loading')}
+                    </div>
+                  }
                 >
                   {mainResolved.definition ? (
                     <SlotOutlet
@@ -349,13 +369,17 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                       entryKey={mainResolved.definition.id}
                       fallback={
                         <div className={styles.emptyState}>
-                          未知面板类型：{mainViewId}
+                          {t('workspace.leaf.unknownPanelType', {
+                            viewId: mainViewId,
+                          })}
                         </div>
                       }
                     />
                   ) : (
                     <div className={styles.emptyState}>
-                      未知面板类型：{mainViewId}
+                      {t('workspace.leaf.unknownPanelType', {
+                        viewId: mainViewId,
+                      })}
                     </div>
                   )}
                 </Suspense>
@@ -390,17 +414,30 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             ) : null}
           </div>
           {isChatSurface && !isLeafDraft && !isStandaloneTab && (
-            <Button
-              type="button"
-              variant="ghost"
-              className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
-              data-testid="top-quick-dock-btn"
-              data-active={dockOpen ? 'true' : 'false'}
-              aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
-              onClick={handleToggleDock}
+            <Tooltip
+              content={t(
+                dockOpen
+                  ? 'workspace.dock.collapseSidePanel'
+                  : 'workspace.dock.expandSidePanel'
+              )}
+              side="bottom"
             >
-              <AppIcon name="sidebar-right" size={16} aria-hidden />
-            </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
+                data-testid="top-quick-dock-btn"
+                data-active={dockOpen ? 'true' : 'false'}
+                aria-label={t(
+                  dockOpen
+                    ? 'workspace.dock.collapseSidePanel'
+                    : 'workspace.dock.expandSidePanel'
+                )}
+                onClick={handleToggleDock}
+              >
+                <AppIcon name="sidebar-right" size={16} aria-hidden />
+              </Button>
+            </Tooltip>
           )}
         </LeafScopeProvider>
       </div>

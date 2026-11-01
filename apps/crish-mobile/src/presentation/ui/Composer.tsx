@@ -1,5 +1,6 @@
-// 悬浮胶囊输入条（新对话空态与会话页共用）。
-// 底部功能区只有输入框 + 发送；附件等能力接入前不预留入口。
+// 悬浮胶囊输入条（主屏平铺列表页与会话页共用）。
+// 原型规范：圆角恒定 26（与高度解耦）、纯白底零描边、微柔浮雕阴影；
+// 多行自适应增高，底部只有输入框 + 发送（无附件/语音——协议无对应能力，诚实化）。
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import Icon from './Icon';
@@ -34,15 +35,14 @@ export function Composer({
         styles.shell,
         {
           minHeight: size.composerMin,
-          borderRadius: radius.pill,
-          backgroundColor: colors.surfaceRaised,
-          borderColor: colors.hairline,
+          borderRadius: radius.composer,
+          backgroundColor: colors.surface,
           paddingLeft: space.lg,
           paddingRight: space.sm,
           paddingVertical: space.sm,
           gap: space.sm,
         },
-        theme.shadow.md,
+        theme.shadow.sm,
       ]}
     >
       <TextInput
@@ -97,7 +97,6 @@ const styles = StyleSheet.create({
   shell: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   input: {
     flex: 1,

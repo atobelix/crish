@@ -11,8 +11,6 @@ const SCAN_DIRS = ['app', join('src', 'presentation')];
 const ALLOWLIST: Record<string, string> = {
   // 文件相关页面与组件在本次改版中冻结（交接 §7 第 9 步）
   'src/presentation/components/files/FilePreview.tsx': '文件模块冻结',
-  // 待清理：新代码已不再引用（用户决定先保留）
-  'src/presentation/components/dashboard/NewTaskSheet.tsx': '待清理',
 };
 
 const RULES: { name: string; pattern: RegExp }[] = [

@@ -3,7 +3,7 @@
 // 业务只写语义 IconName（iconPaths.ts 单一真源），禁止直接 import 图标库。
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/adapters/platform/theme';
-import { ICON_PATHS, type IconName } from './iconPaths';
+import { ICON_PATHS, SHARP_ICONS, type IconName } from './iconPaths';
 
 export type { IconName };
 
@@ -20,6 +20,8 @@ export interface IconProps {
 export function Icon({ name, size, color, strokeWidth }: IconProps) {
   const theme = useTheme();
   const iconSize = size ?? theme.size.icon;
+  // 几何直线折角图标（chevron/check）：miter 锐角 + butt 平端点，杜绝圆弧感
+  const sharp = SHARP_ICONS.has(name);
   return (
     <Svg
       width={iconSize}
@@ -33,8 +35,8 @@ export function Icon({ name, size, color, strokeWidth }: IconProps) {
         d={ICON_PATHS[name]}
         stroke={color ?? theme.colors.textSecondary}
         strokeWidth={strokeWidth ?? theme.layout.iconStroke}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        strokeLinecap={sharp ? 'butt' : 'round'}
+        strokeLinejoin={sharp ? 'miter' : 'round'}
       />
     </Svg>
   );

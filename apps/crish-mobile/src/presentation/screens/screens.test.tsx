@@ -147,22 +147,18 @@ describe('SessionDetailScreen', () => {
     for (const entry of entries) {
       eventStore.getState().ingest('s-1', entry as never, false, NOW);
     }
-    const onOpenDrawer = jest.fn();
     const onOpenTools = jest.fn();
     const view = await renderScreen(
-      <SessionDetailScreen
-        sessionId="s-1"
-        onOpenDrawer={onOpenDrawer}
-        onOpenTools={onOpenTools}
-      />
+      <SessionDetailScreen sessionId="s-1" onOpenTools={onOpenTools} />
     );
     expect(view.getByText('登录页的主要问题')).toBeTruthy();
     // 工具调用折叠成一行摘要，点按打开工具抽屉并定位到该组
     expect(view.getByText('正在执行 · src/a.ts')).toBeTruthy();
     await fireEvent.press(view.getByTestId('tool-run-t-1'));
     expect(onOpenTools).toHaveBeenCalledWith('t-1');
-    await fireEvent.press(view.getByTestId('header-menu'));
-    expect(onOpenDrawer).toHaveBeenCalledTimes(1);
+    // 悬浮头栏：返回与会话选项入口
+    expect(view.getByTestId('session-back')).toBeTruthy();
+    expect(view.getByTestId('session-more')).toBeTruthy();
     expect(view.getByTestId('session-composer')).toBeTruthy();
   });
 });
@@ -328,14 +324,19 @@ describe('Files / Settings / Pairing', () => {
         vm={vm}
         onBack={jest.fn()}
         onOpenAccount={jest.fn()}
-        onOpenProfile={jest.fn()}
+        onOpenSessions={jest.fn()}
+        onOpenTheme={jest.fn()}
+        onOpenNotification={jest.fn()}
+        onOpenScan={jest.fn()}
         onConfirmRemove={jest.fn()}
       />
     );
     expect(view.getByText('设置')).toBeTruthy();
-    expect(view.getByText('192.168.1.2:8765')).toBeTruthy();
-    fireEvent.press(view.getByText('深色'));
-    expect(vm.setThemeMode).toHaveBeenCalledWith('dark');
+    // 个性偏好分组：外观与主题 / 通知与提醒入口（值联动真实偏好）
+    expect(view.getByText('外观与主题')).toBeTruthy();
+    expect(view.getByText('跟随系统')).toBeTruthy();
+    expect(view.getByText('通知与提醒')).toBeTruthy();
+    expect(view.getByText('已开启')).toBeTruthy();
     expect(view.getByText('解除配对')).toBeTruthy();
   });
 

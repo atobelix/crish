@@ -18,6 +18,8 @@ export const settingsPartAccount = {
   'account.code.title': '输入验证码',
   'account.code.ariaLabel': '6 位验证码',
   'account.code.resendIn': '重新发送 · {time}',
+  'account.code.notReceived': '没收到验证码？',
+  'account.code.countdown': '{time} 后可重新发送',
   'account.code.resend': '重新发送',
   'account.code.send': '发送验证码',
   'account.code.sentTo': '发送到 {email} 的验证码',
@@ -26,6 +28,7 @@ export const settingsPartAccount = {
   'account.error.failed': '操作失败，请稍后重试',
   'account.error.sessionExpired': '登录已失效，请重新登录',
   'account.error.network': '网络连接失败，请检查网络后重试',
+  'account.error.networkTimeout': '请求超时，请检查网络后重试',
   'account.error.unavailable': '该功能暂未开放',
 
   // ── 登录弹窗 ──
@@ -49,6 +52,7 @@ export const settingsPartAccount = {
   'account.password.forgot': '忘记密码',
   'account.password.submit': '登录',
   'account.password.newLabel': '新密码',
+  'account.password.ruleHint': '至少 8 位',
   'account.set.registerTitle': '设置密码',
   'account.set.resetTitle': '重设密码',
   'account.set.placeholder': '至少 8 位',

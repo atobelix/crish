@@ -1,6 +1,6 @@
-// 轻量 Toast：操作结果反馈；墨色胶囊悬浮在输入条上方、2.5s 自动消失。
+// 轻量 Toast：操作结果反馈；墨色胶囊悬浮在顶部（原型 toast-pill），2.5s 自动消失。
 // 墨色底上统一用反色前景；语气由「成功/警示」圆点符号区分（info 无符号）。
-// Reanimated 进出场（FadeInDown/FadeOutDown，实现波总方案 F5）；
+// Reanimated 进出场（顶部下滑入 / 上滑出，实现波总方案 F5）；
 // displayMs 走 theme.motion.toast 单一真源。
 import {
   createContext,
@@ -14,7 +14,7 @@ import {
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import AppText from './AppText';
 import Icon from './Icon';
 
@@ -70,12 +70,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <Animated.View
           pointerEvents="none"
           entering={FadeInDown.springify().damping(20)}
-          exiting={FadeOutDown.duration(theme.motion.duration.fast)}
+          exiting={FadeOutUp.duration(theme.motion.duration.fast)}
           style={[
             styles.host,
             {
-              // 让出底部 Composer 的高度，避免遮住输入条
-              bottom: insets.bottom + theme.size.composerMin + theme.space.xl,
+              // 顶部安全区下方，下滑入；不与头栏白圆钮争位
+              top: insets.top + theme.space.xl,
               minHeight: theme.size.summaryRow,
               borderRadius: theme.radius.pill,
               paddingHorizontal: theme.space.lg,

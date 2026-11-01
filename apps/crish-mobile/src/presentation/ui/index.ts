@@ -13,6 +13,14 @@ export { default as Composer } from './Composer';
 export type { ComposerProps } from './Composer';
 export { default as Dialog } from './Dialog';
 export type { DialogAction, DialogProps } from './Dialog';
+export { default as DropdownMenu } from './DropdownMenu';
+export type {
+  DropdownMenuProps,
+  DropdownMenuItem,
+  DropdownMenuEntry,
+} from './DropdownMenu';
+export { default as EdgeFade } from './EdgeFade';
+export type { EdgeFadeProps } from './EdgeFade';
 export { default as EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 export { Icon } from './Icon';
@@ -29,13 +37,10 @@ export { default as ScrollToBottomButton } from './ScrollToBottomButton';
 export type { ScrollToBottomButtonProps } from './ScrollToBottomButton';
 export { default as SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
-export { default as SegmentedControl } from './SegmentedControl';
-export type {
-  SegmentedControlProps,
-  SegmentedOption,
-} from './SegmentedControl';
 export { default as Sheet } from './Sheet';
 export type { SheetProps } from './Sheet';
+export { default as SheetOptionRow } from './SheetOptionRow';
+export type { SheetOptionRowProps } from './SheetOptionRow';
 export { default as Spinner } from './Spinner';
 export type { SpinnerProps } from './Spinner';
 export { default as ToastProvider, useToast } from './Toast';

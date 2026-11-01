@@ -150,6 +150,13 @@ export const workspace: WorkspaceTranslations = {
   'dock.workspaceEmptyTitle': 'No tool panes open',
   'dock.workspaceEmptyDesc':
     'Open tools from the left chat or toolbar to split and collaborate here',
+  'dock.collapseSidePanel': 'Collapse right dock',
+  'dock.expandSidePanel': 'Expand right dock',
+
+  // ── Leaf panel container (TreeLeafPanel) ─────────────────────────────────
+  'leaf.panelRegionLabel': '{title} panel',
+  'leaf.panelRenderError': 'Panel [{viewId}] crashed',
+  'leaf.unknownPanelType': 'Unknown panel type: {viewId}',
 
   // ── Pane Tab Strip (LeafToolTabStrip) ─────────────────────────────────────
   'pane.restorePane': 'Restore Pane',

@@ -34,6 +34,7 @@ export function ApprovalFloatPill({
             ? theme.colors.fillPressed
             : theme.colors.surfaceRaised,
         },
+        theme.shadow.sm,
       ]}
     >
       <Badge dot tone="warning" />

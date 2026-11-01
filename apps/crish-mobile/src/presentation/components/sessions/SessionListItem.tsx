@@ -1,6 +1,7 @@
-// 会话行（抽屉）：纯标题；选中行浅灰底，运行中品牌色点，待审批警示色点。
+// 会话行（抽屉）：纯标题 + 状态徽标；选中行浅灰底。
+// 待审批 = 橙点 + 「待审批」弱文字（原型 session-item-badge）；运行中 = 品牌色点。
 import { memo } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { AppText, Badge } from '@/presentation/ui';
@@ -33,6 +34,7 @@ export const SessionListItem = memo(function SessionListItem({
   selected = false,
 }: SessionListItemProps) {
   const theme = useTheme();
+  const pending = session.pendingApprovalCount > 0;
   return (
     <Pressable
       testID={`session-row-${session.id}`}
@@ -55,10 +57,18 @@ export const SessionListItem = memo(function SessionListItem({
       <AppText variant="body" numberOfLines={1} style={styles.flex}>
         {sessionTitle(session)}
       </AppText>
-      {session.pendingApprovalCount > 0 ? (
-        <Badge dot tone="warning" testID="session-approval-badge" />
+      {pending ? (
+        <View
+          testID="session-approval-badge"
+          style={[styles.badge, { gap: theme.space.xs + 1 }]}
+        >
+          <Badge dot tone="warning" />
+          <AppText variant="caption" color="textTertiary">
+            待审批
+          </AppText>
+        </View>
       ) : null}
-      {session.activeRunIds.length > 0 ? (
+      {!pending && session.activeRunIds.length > 0 ? (
         <Badge dot tone="accent" testID="session-running" />
       ) : null}
     </Pressable>
@@ -68,6 +78,7 @@ export const SessionListItem = memo(function SessionListItem({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
+  badge: { flexDirection: 'row', alignItems: 'center' },
 });
 
 export default SessionListItem;

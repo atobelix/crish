@@ -1,15 +1,15 @@
 /**
  * 侧栏左下角账号卡片：
- * - 头像（点缀 + 账户入口）：已登录有图显示头像（加载失败回落首字母），无图显示首字母圆，未登录显示中性占位；
- *   未登录点击直接弹出登录弹窗（openLogin，应用级单实例）；已登录点击打开设置并切到「账户」分区概览。
- * - 名字：点击打开 SettingsQuickMenu 快捷设置菜单。
+ * 头像与用户名合并封装为单个统一按钮：
+ * - 未登录：点击直接打开应用级登录弹窗（openLogin，强制直登）；
+ * - 已登录：作为 SettingsQuickMenu 的触发器，点击展开快捷设置菜单（顶部含账户管理入口）。
  */
 import React, { useEffect, useState } from 'react';
 
 import styles from './Sidebar.module.css';
 import { Button, Tooltip } from '@/components/ui';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
-import { openSettings, useAuthField } from '../../store/storeAccess';
+import { useAuthField } from '../../store/storeAccess';
 import { useAccountUiStore } from '../../store/accountUiStore';
 import {
   accountDisplayName,
@@ -28,7 +28,6 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
   ({ username, workspaceName: _workspaceName = 'Conex Workspace' }) => {
     const { isLoggedIn, user, profile, initialized, initSession } =
       useAuthField((state) => state);
-    const setAccountView = useAccountUiStore((state) => state.setView);
     const openLogin = useAccountUiStore((state) => state.openLogin);
     const { t } = useI18n();
     /** 加载失败的头像地址：失败后回落首字母，换图后自动重试 */
@@ -45,27 +44,23 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
 
     const accountName = isLoggedIn ? accountDisplayName(user, profile) : '';
     const activeUser =
-      accountName || username || t('settings.account.signedOut');
+      (isLoggedIn ? accountName : '') ||
+      username ||
+      (isLoggedIn ? '' : t('settings.account.signedOut', '未登录'));
     const initial = accountInitial(accountName);
     const avatarUrl = isLoggedIn ? resolveAvatarUrl(profile?.avatarUrl) : null;
-    const avatarTip = isLoggedIn
-      ? t('settings.account.quick.manageTip')
-      : t('settings.account.quick.signInTip');
+    const signInTip = t(
+      'settings.account.quick.signInTip',
+      '登录或注册 Crish 账号'
+    );
 
-    const cardAriaLabel = `${t(
-      'sidebar.userCardPrefix',
-      '用户卡片：'
-    )}${activeUser} (${roleLabel})${t('sidebar.clickToOpen', '，点击打开')}${tooltip}`;
-
-    /** 头像入口：未登录直登；已登录打开设置「账户」分区并回到概览 */
-    const openAccount = () => {
-      if (!isLoggedIn) {
-        openLogin();
-        return;
-      }
-      setAccountView('overview');
-      openSettings('profile');
-    };
+    const cardAriaLabel =
+      isLoggedIn || username
+        ? `${t(
+            'sidebar.userCardPrefix',
+            '用户卡片：'
+          )}${activeUser} (${roleLabel})${t('sidebar.clickToOpen', '，点击打开')}${tooltip}`
+        : `${t('settings.account.signedOut', '未登录')}，${signInTip}`;
 
     let avatar: React.ReactNode;
     if (avatarUrl !== null && avatarUrl !== failedAvatar) {
@@ -82,26 +77,50 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
     } else {
       avatar = (
         <span className={styles.userAvatar}>
-          <AppIcon name="user" size={16} aria-hidden />
+          <AppIcon name="user" size={15} aria-hidden />
         </span>
       );
     }
 
+    const avatarNode = (
+      <div
+        className={styles.userAvatarWrapper}
+        data-avatar={isLoggedIn ? 'account' : 'placeholder'}
+        data-testid="user-avatar-node"
+      >
+        {avatar}
+      </div>
+    );
+
+    // 未登录：整个卡片为单个按钮，点击直接强制直登
+    if (!isLoggedIn) {
+      return (
+        <div className={styles.userCardRow}>
+          <Tooltip content={signInTip}>
+            <Button
+              bare
+              type="button"
+              className={styles.userProfileCard}
+              data-testid="user-profile-card"
+              data-avatar="placeholder"
+              data-role={roleLabel}
+              data-tooltip={tooltip}
+              aria-label={cardAriaLabel}
+              onClick={openLogin}
+            >
+              {avatarNode}
+              <div className={styles.userTextStack}>
+                <span className={styles.userName}>{activeUser}</span>
+              </div>
+            </Button>
+          </Tooltip>
+        </div>
+      );
+    }
+
+    // 已登录：整个卡片为单个按钮，点击呼出快捷菜单
     return (
       <div className={styles.userCardRow}>
-        <Tooltip content={avatarTip}>
-          <Button
-            bare
-            type="button"
-            className={styles.userAvatarButton}
-            data-testid="user-avatar-button"
-            data-avatar={isLoggedIn ? 'account' : 'placeholder'}
-            aria-label={avatarTip}
-            onClick={openAccount}
-          >
-            {avatar}
-          </Button>
-        </Tooltip>
         <SettingsQuickMenu
           renderTrigger={({ open, triggerProps }) => (
             <Tooltip content={tooltip} disabled={open}>
@@ -110,11 +129,13 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
                 type="button"
                 className={`${styles.userProfileCard}${open ? ` ${styles.isOpen}` : ''}`}
                 data-testid="user-profile-card"
+                data-avatar="account"
                 data-role={roleLabel}
                 data-tooltip={tooltip}
                 aria-label={cardAriaLabel}
                 {...triggerProps}
               >
+                {avatarNode}
                 <div className={styles.userTextStack}>
                   <span className={styles.userName}>{activeUser}</span>
                 </div>

@@ -10,6 +10,7 @@ import type { LeafSessionTab } from './paneHeaderGeometry';
 import styles from './PaneHeader.module.css';
 import { Button } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 
 export interface PaneTabItemProps {
   tab: LeafSessionTab;
@@ -38,6 +39,7 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
     onDragStart,
     onLeaveTransitionEnd,
   }) => {
+    const { t } = useI18n();
     const wasActiveRef = React.useRef(isSelected);
     if (!isLeaving) {
       wasActiveRef.current = isSelected;
@@ -105,7 +107,8 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
             variant="ghost"
             className={styles.tabCloseBtn}
             onClick={(e) => onClose(e, tab)}
-            aria-label={`关闭 ${title}`}
+            data-tab-close="true"
+            aria-label={t('workspace.pane.closeTabWithLabel', { label: title })}
           >
             <AppIcon name="x" size={10} />
           </Button>
