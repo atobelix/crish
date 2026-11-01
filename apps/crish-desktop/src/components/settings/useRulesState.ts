@@ -1,7 +1,8 @@
 /**
- * 设置 · 规则状态 hook：作用域加载 / 本机持久化 / 引擎同步链路 /
- * 增删规则与全文保存。渲染层（列表 / 快速添加 / 全文编辑 Dialog）不持有这些逻辑。
- * 成功静默（仅失败提示）；引擎同步降级 toast 见 syncEngineQuiet。
+ * 设置 · 规则状态 hook：作用域加载 / 本机持久化 / 引擎同步链路 / 全文保存。
+ * 渲染层是常驻全文编辑器（进页即可编辑、显式保存），不持有这些逻辑。
+ * 成功静默（仅失败提示）；保存链路与原全文编辑弹层完全一致：
+ * 解析行 → 本机写入 → 引擎同步，失败/降级才 toast。
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -18,7 +19,6 @@ import {
   syncRulesToDaemon,
   textToRuleLines,
 } from '../../api/rulesApi';
-import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
 import { getSettingsState } from '../../store/storeAccess';
 import { toast } from '../../services/toast/ToastContext';
 import {
@@ -27,45 +27,30 @@ import {
   SCOPE_GLOBAL,
   buildScopeOptions,
   dedupeRuleLines,
-  normalizeRuleLine,
   resolveScopeLabel,
   type ScopeKey,
 } from './settingsRulesLib';
 
-export type UseRulesStateOptions = {
-  /** 二级弹层打开时通知父级，避免 Esc 直接关掉整个设置页 */
-  onBlockingOverlayChange?: (blocking: boolean) => void;
-};
-
 export type UseRulesStateResult = {
-  scopeProjects: { path: string; name?: string }[];
   scopeKey: ScopeKey;
   setScopeKey: (v: ScopeKey) => void;
-  customRules: string[];
   editorText: string;
   setEditorText: (v: string) => void;
-  editingOpen: boolean;
-  setEditingOpen: (v: boolean) => void;
+  /** 编辑器内容与上次加载/保存的基线不一致（保存按钮可用性） */
+  dirty: boolean;
   saving: boolean;
   loadError: string | null;
   loaded: boolean;
-  isGlobal: boolean;
   scopeLabel: string;
   storagePath: string;
   scopeOptions: { value: string; label: string; hint?: string }[];
-  ruleCount: number;
   /** 重新加载（错误重试入口） */
   retryLoad: () => void;
-  /** 全文保存：本机写入 + 引擎同步；成功关弹层 */
+  /** 全文保存：本机写入 + 引擎同步；成功静默 */
   handleSaveRules: () => Promise<void>;
-  /** 短规则新增：重复/空提示；成功清输入由调用方处理 */
-  addRuleIfNew: (text: string) => Promise<boolean>;
-  /** 删除单条规则（含引擎同步） */
-  handleDeleteCustomRule: (index: number) => void;
 };
 
-export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
-  const { onBlockingOverlayChange } = opts;
+export function useRulesState(): UseRulesStateResult {
   /** 已打开过的项目 + 当前 cwd（文件夹名） */
   const [scopeProjects, setScopeProjects] = useState(() =>
     listSettingsScopeProjects()
@@ -84,9 +69,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     }
     return SCOPE_GLOBAL;
   });
-  const [customRules, setCustomRules] = useState<string[]>([]);
   const [editorText, setEditorText] = useState(EMPTY_GLOBAL_TEMPLATE);
-  const [editingOpen, setEditingOpen] = useState(false);
+  /** 已落盘基线文本：加载与每次保存成功后同步更新，dirty 与之比对 */
+  const [savedText, setSavedText] = useState(EMPTY_GLOBAL_TEMPLATE);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadTick, setLoadTick] = useState(0);
@@ -112,7 +97,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     [scopeProjects]
   );
 
-  const ruleCount = customRules.length;
+  const dirty = editorText !== savedText;
 
   // 项目列表随打开/关闭变化
   useEffect(() => {
@@ -122,7 +107,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     return () => window.removeEventListener('crish-project-changed', sync);
   }, []);
 
-  /** 按作用域加载规则（全局 or 具体项目路径） */
+  /** 按作用域加载规则（全局 or 具体项目路径）；切换作用域即换载该作用域全文 */
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -137,8 +122,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
           if (cancelled) return;
           lines = dedupeRuleLines(normalizeCustomRules(partial.customRules));
         }
-        setCustomRules(lines);
-        setEditorText(
+        const text =
           lines.length > 0
             ? rulesLinesToText(
                 lines,
@@ -146,8 +130,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
               )
             : isGlobal
               ? EMPTY_GLOBAL_TEMPLATE
-              : EMPTY_PROJECT_TEMPLATE
-        );
+              : EMPTY_PROJECT_TEMPLATE;
+        setEditorText(text);
+        setSavedText(text);
         setLoadError(null);
         setLoaded(true);
       } catch (err) {
@@ -164,13 +149,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     };
   }, [scopeKey, isGlobal, scopeLabel, loadTick]);
 
-  useEffect(() => {
-    onBlockingOverlayChange?.(editingOpen);
-    return () => onBlockingOverlayChange?.(false);
-  }, [editingOpen, onBlockingOverlayChange]);
-
   /**
-   * 本机写入当前作用域 customRules；成功静默。
+   * 本机写入当前作用域 customRules；成功静默，并把编辑器文本规范化为
+   * 落盘形态（行重组）且同步 dirty 基线。
    * @returns 合并后的行；失败已 toast 并返回 null
    */
   const persistCustomRules = async (
@@ -185,43 +166,28 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
         const next = dedupeRuleLines(
           normalizeCustomRules(merged.customRules ?? safe)
         );
-        setCustomRules(next);
         getSettingsState().setAppSettings(merged);
-        setEditorText(
+        const text =
           next.length > 0
             ? rulesLinesToText(next, '# 全局规则')
-            : EMPTY_GLOBAL_TEMPLATE
-        );
+            : EMPTY_GLOBAL_TEMPLATE;
+        setEditorText(text);
+        setSavedText(text);
         return next;
       }
       await clientApi.saveSettingsEx(scopeKey, 'project', {
         customRules: safe,
       } as Partial<Settings>);
-      setCustomRules(safe);
-      setEditorText(
+      const text =
         safe.length > 0
           ? rulesLinesToText(safe, `# ${scopeLabel} 规则`)
-          : EMPTY_PROJECT_TEMPLATE
-      );
+          : EMPTY_PROJECT_TEMPLATE;
+      setEditorText(text);
+      setSavedText(text);
       return safe;
     } catch (err) {
       toast.show('更新设置失败：' + String(err));
       return null;
-    }
-  };
-
-  /**
-   * 引擎同步：全成功静默；未连接/失败用降级 toast；截断单独警告。
-   */
-  const syncEngineQuiet = async (opts2: {
-    globalText: string;
-    projectText?: string;
-  }) => {
-    const sync = await syncRulesToDaemon(opts2);
-    if (!sync.engineSynced) {
-      toast.show(formatEngineDegradeToast(sync.error));
-    } else if (sync.truncated) {
-      toast.show('规则较长，引擎侧已截断');
     }
   };
 
@@ -232,7 +198,6 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
       const lines = dedupeRuleLines(textToRuleLines(editorText));
       const saved = await persistCustomRules(lines);
       if (!saved) return;
-      setEditingOpen(false);
       // 异步同步到引擎（独立步骤，不阻塞 UI）
       const syncResult = isGlobal
         ? await syncRulesToDaemon({
@@ -268,93 +233,24 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     }
   };
 
-  const addRuleIfNew = async (text: string): Promise<boolean> => {
-    if (saving) return false;
-    const trimmed = normalizeRuleLine(text);
-    if (!trimmed) {
-      toast.show('请输入规则内容');
-      return false;
-    }
-    if (customRules.some((r) => normalizeRuleLine(r) === trimmed)) {
-      toast.show('该规则已存在');
-      return false;
-    }
-    setSaving(true);
-    try {
-      const next = await persistCustomRules([...customRules, trimmed]);
-      if (!next) return false;
-      // 与 /learn 同路径：本机成功后推引擎；成功静默
-      if (isGlobal) {
-        void syncEngineQuiet({
-          globalText: rulesLinesToText(next, '# 全局规则'),
-        });
-      } else {
-        void syncEngineQuiet({
-          globalText: EMPTY_GLOBAL_TEMPLATE,
-          projectText: rulesLinesToText(next, `# ${scopeLabel} 规则`),
-        });
-      }
-      return true;
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteCustomRule = (index: number) => {
-    if (saving) return;
-    void (async () => {
-      setSaving(true);
-      try {
-        const updated = customRules.filter((_, i) => i !== index);
-        const next = await persistCustomRules(updated);
-        if (!next) return;
-        if (isGlobal) {
-          void syncEngineQuiet({
-            globalText:
-              next.length > 0
-                ? rulesLinesToText(next, '# 全局规则')
-                : EMPTY_GLOBAL_TEMPLATE,
-          });
-        } else {
-          void syncEngineQuiet({
-            globalText: EMPTY_GLOBAL_TEMPLATE,
-            projectText:
-              next.length > 0
-                ? rulesLinesToText(next, `# ${scopeLabel} 规则`)
-                : EMPTY_PROJECT_TEMPLATE,
-          });
-        }
-      } finally {
-        setSaving(false);
-      }
-    })();
-  };
-
   const retryLoad = () => {
     setLoadError(null);
     setLoadTick((n) => n + 1);
   };
 
   return {
-    scopeProjects,
     scopeKey,
     setScopeKey,
-    customRules,
     editorText,
     setEditorText,
-    editingOpen,
-    setEditingOpen,
+    dirty,
     saving,
     loadError,
     loaded,
-    isGlobal,
     scopeLabel,
     storagePath,
     scopeOptions,
-    ruleCount,
     retryLoad,
     handleSaveRules,
-    addRuleIfNew,
-    handleDeleteCustomRule,
   };
 }

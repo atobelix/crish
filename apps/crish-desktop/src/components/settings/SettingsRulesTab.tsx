@@ -1,14 +1,15 @@
-import { useToast } from '../../services/toast/ToastContext';
 /**
- * 设置 · 规则：短规则、预设与全文编辑；成功静默，仅失败提示。
- * 壳组件：作用域选择 + 规则列表 + 快速添加 + 全文编辑弹层装配；
- * 状态/持久化/引擎同步见 useRulesState，纯函数见 settingsRulesLib，
- * 全文弹层见 RulesEditorDialog。
+ * 设置 · 规则：作用域选择 + 常驻全文编辑器；成功静默，仅失败提示。
+ * 壳组件：作用域 Select（「当前规则」卡首行）+ 全文 Textarea（页面主体，
+ * 进页即可编辑）+ 页尾保存行（写入位置提示 + 保存按钮）；
+ * 状态/持久化/引擎同步见 useRulesState，纯函数见 settingsRulesLib。
+ * 保存语义与原全文编辑弹层一致：显式保存——解析行 → 本机写入 → 引擎同步。
+ * 切换作用域即换载该作用域的全文（未保存草稿不跨作用域保留）。
  */
-import React, { useId, useRef, useState } from 'react';
+import React, { useId } from 'react';
 
 import styles from './SettingsRulesTab.module.css';
-import { Button, Input, Select, Tooltip } from '@/components/ui';
+import { Button, Select, Textarea } from '@/components/ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -16,9 +17,6 @@ import {
   SettingsRow,
 } from './SettingsUI';
 import { useRulesState } from './useRulesState';
-import { RULE_PRESETS, normalizeRuleLine } from './settingsRulesLib';
-import { RulesEditorDialog } from './RulesEditorDialog';
-import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 type Props = {
@@ -28,90 +26,37 @@ type Props = {
 export const SettingsRulesTab: React.FC<Props> = ({
   onBlockingOverlayChange,
 }) => {
+  // 本页已无二级弹层（原全文编辑 Dialog 已并入常驻编辑器），此回调不再触发；
+  // 仍接收以保持 SettingsPanel 的页签装配契约不变（同 SettingsProfileTab 口径）。
+  void onBlockingOverlayChange;
   const { t } = useI18n();
-  const { showToast } = useToast();
-  const state = useRulesState({
-    onBlockingOverlayChange,
-  });
   const {
     scopeKey,
     setScopeKey,
-    customRules,
     editorText,
     setEditorText,
-    editingOpen,
-    setEditingOpen,
+    dirty,
     saving,
     loadError,
     loaded,
     scopeLabel,
     storagePath,
     scopeOptions,
-    ruleCount,
     retryLoad,
     handleSaveRules,
-    addRuleIfNew,
-    handleDeleteCustomRule,
-  } = state;
+  } = useRulesState();
 
-  const [newRuleText, setNewRuleText] = useState('');
-
-  const fullEditorBtnRef = useRef<HTMLButtonElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const addInputRef = useRef<HTMLInputElement>(null);
-
-  const addInputId = useId();
   const scopeSelectId = useId();
-
-  const busy = saving;
-
-  const handleAddCustomRule = () => {
-    void addRuleIfNew(newRuleText).then((ok) => {
-      if (ok) {
-        setNewRuleText('');
-        // 成功静默：输入清空 + 列表增长
-        addInputRef.current?.focus();
-      }
-    });
-  };
-
-  const handleAddPreset = (preset: string) => {
-    void addRuleIfNew(preset);
-  };
-
-  const openFullEditor = () => {
-    if (!state.isGlobal && !scopeKey) {
-      showToast(t('settings.rules.selectProjectFirst', '请先选择项目'));
-      return;
-    }
-    setEditingOpen(true);
-  };
+  const editorId = useId();
 
   if (!loaded && loadError) {
     return (
-      <div className="settings-pane settings-pane--modern settings-pane--rules">
-        <header className="settings-page-head">
-          <div className="settings-head-inline">
-            <h2 className="settings-page-title">
-              {t('settings.rules.pageTitle', '规则')}
-            </h2>
-          </div>
-        </header>
-        <section
-          className="settings-group"
-          aria-label={t('common.error', '错误')}
-        >
-          <div className="settings-list">
-            <div className="settings-list-row settings-list-row--rule">
-              <div className="settings-list-copy">
-                <div
-                  className="settings-list-title settings-list-empty"
-                  role="alert"
-                >
-                  {loadError}
-                </div>
-              </div>
-              <div className="settings-list-control">
+      <SettingsPage title={t('settings.rules.pageTitle', '规则')}>
+        <SettingsSection>
+          <SettingsCard>
+            <SettingsRow
+              title={<span role="alert">{loadError}</span>}
+              control={
                 <Button
                   type="button"
                   variant="secondary"
@@ -124,11 +69,11 @@ export const SettingsRulesTab: React.FC<Props> = ({
                 >
                   {t('common.retry', '重试')}
                 </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
     );
   }
 
@@ -144,225 +89,91 @@ export const SettingsRulesTab: React.FC<Props> = ({
     );
   }
 
-  const headerMeta = (
-    <div className={styles.headerMetaRow}>
-      <label htmlFor={scopeSelectId} className="sr-only">
-        {t('settings.rules.scopeLabel', '规则作用域')}
-      </label>
-      <Select
-        id={scopeSelectId}
-        value={scopeKey}
-        options={scopeOptions.map((o) => ({
-          id: o.value,
-          label: o.label,
-          ...(o.hint !== undefined ? { hint: o.hint } : {}),
-        }))}
-        onChange={setScopeKey}
-        disabled={busy}
-        size="sm"
-      />
-      <Tooltip
-        content={t('settings.rules.editFullTextTooltip', '编辑{scope}全文', {
-          scope: scopeLabel,
-        })}
-      >
-        <Button
-          ref={fullEditorBtnRef}
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={openFullEditor}
-          aria-label={t('settings.rules.editFullTextAria', '编辑{scope}全文', {
-            scope: scopeLabel,
-          })}
-          disabled={busy}
-        >
-          {t('settings.rules.editFullText', '编辑全文')}
-        </Button>
-      </Tooltip>
-    </div>
-  );
-
   return (
-    <SettingsPage
-      title={t('settings.rules.pageTitle', '规则')}
-      meta={headerMeta}
-    >
+    <SettingsPage title={t('settings.rules.pageTitle', '规则')}>
       <SettingsSection
         title={t('settings.rules.currentRulesSection', '当前规则 ({scope})', {
           scope: scopeLabel,
         })}
       >
         <SettingsCard>
-          {ruleCount === 0 ? (
-            <SettingsRow
-              title={
-                <span className="settings-list-empty">
-                  {t('settings.rules.noRulesYet', '还没有规则')}
-                </span>
-              }
-              desc={t(
-                'settings.rules.noRulesDesc',
-                '可点下方常用项，或自己输入'
-              )}
-            />
-          ) : (
-            customRules.map((rule, idx) => (
-              <SettingsRow
-                key={`${idx}-${rule.slice(0, 24)}`}
-                title={
-                  <Tooltip content={rule}>
-                    <span className="settings-rule-item-text">{rule}</span>
-                  </Tooltip>
-                }
-                control={
-                  <Tooltip
-                    content={t(
-                      'settings.rules.deleteRuleTooltip',
-                      '删除此规则'
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      onClick={() => handleDeleteCustomRule(idx)}
-                      variant="danger"
-                      size="sm"
-                      aria-label={t(
-                        'settings.rules.deleteRuleAria',
-                        '删除规则：{rule}',
-                        { rule }
-                      )}
-                      disabled={busy}
-                      icon={<AppIcon name="trash" size={14} aria-hidden />}
-                    />
-                  </Tooltip>
-                }
-              />
-            ))
-          )}
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection title={t('settings.rules.quickAddSection', '快速添加')}>
-        <SettingsCard>
-          {/* 自定义添加规则行：作为首要输入区置于卡片上方 */}
-          <div className={styles.sectionRow}>
-            <div className={styles.labelCol}>
-              <label htmlFor={addInputId} className={styles.labelTitle}>
-                {t('settings.rules.customTitle', '自定义')}
-              </label>
-            </div>
-            <div className={styles.inputGroup}>
-              <Input
-                ref={addInputRef}
-                id={addInputId}
-                size="sm"
-                placeholder={t(
-                  'settings.rules.customRulePlaceholder',
-                  '写一条规则…'
-                )}
-                value={newRuleText}
-                onChange={(e) => setNewRuleText(e.target.value)}
-                className={styles.inputGrow}
-                disabled={busy}
-                aria-label={t('settings.rules.customRuleAria', '自定义规则')}
-                autoComplete="off"
-                spellCheck={false}
-                onEnter={handleAddCustomRule}
-              />
-              <Tooltip
-                content={t(
-                  'settings.rules.addShortRuleTooltip',
-                  '加入{scope}短规则',
-                  { scope: scopeLabel }
-                )}
-              >
-                <Button
-                  type="button"
-                  onClick={handleAddCustomRule}
-                  variant="secondary"
+          {/* 作用域选择留在卡内首行（页面右上）：核心操作控件与其作用的
+              编辑面同处一卡，切换即换载下方全文 */}
+          <SettingsRow
+            title={t('settings.rules.scopeLabel', '规则作用域')}
+            control={
+              <>
+                <label htmlFor={scopeSelectId} className="sr-only">
+                  {t('settings.rules.scopeLabel', '规则作用域')}
+                </label>
+                <Select
+                  id={scopeSelectId}
+                  value={scopeKey}
+                  options={scopeOptions.map((o) => ({
+                    id: o.value,
+                    label: o.label,
+                    ...(o.hint !== undefined ? { hint: o.hint } : {}),
+                  }))}
+                  onChange={setScopeKey}
+                  disabled={saving}
                   size="sm"
-                  className={styles.actionBtn}
-                  disabled={busy || !normalizeRuleLine(newRuleText)}
-                  aria-label={t('settings.rules.addRuleAria', '添加规则')}
-                >
-                  {t('common.add', '添加')}
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* 常用预设规则行：后置于底部，作为探索性引导与动态推荐区域 */}
-          <div className={styles.sectionRowNoBorder}>
-            <div className={styles.labelCol}>
-              <span className={styles.labelTitle}>
-                {t('settings.rules.presetsTitle', '常用')}
-              </span>
-            </div>
-            <div className={styles.presetGroup}>
-              {RULE_PRESETS.map((preset) => {
-                const exists = customRules.some(
-                  (r) => normalizeRuleLine(r) === normalizeRuleLine(preset)
-                );
-                return (
-                  <Tooltip
-                    key={preset}
-                    content={
-                      exists
-                        ? t('settings.rules.presetAlreadyAdded', '已添加')
-                        : t(
-                            'settings.rules.addPresetTooltip',
-                            '添加：{preset}',
-                            {
-                              preset,
-                            }
-                          )
-                    }
-                  >
-                    <Button
-                      bare
-                      type="button"
-                      className={styles.presetChip}
-                      onClick={() => handleAddPreset(preset)}
-                      disabled={exists || busy}
-                      aria-label={
-                        exists
-                          ? t(
-                              'settings.rules.presetAlreadyAddedAria',
-                              '已添加：{preset}',
-                              { preset }
-                            )
-                          : t(
-                              'settings.rules.addPresetAria',
-                              '添加预设：{preset}',
-                              { preset }
-                            )
-                      }
-                    >
-                      {preset}
-                    </Button>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          </div>
+                />
+              </>
+            }
+          />
+          {/* 常驻全文编辑器：进页即为可编辑状态，不再经弹层中转 */}
+          <SettingsRow
+            vertical
+            title={
+              <label htmlFor={editorId}>
+                {t('settings.rules.editorTitle', '规则全文')}
+              </label>
+            }
+            control={
+              <Textarea
+                bare
+                id={editorId}
+                className={styles.editorTextarea}
+                value={editorText}
+                onChange={(e) => setEditorText(e.target.value)}
+                spellCheck={false}
+                disabled={saving}
+                aria-label={t('settings.rules.editorAria', '{scope}规则正文', {
+                  scope: scopeLabel,
+                })}
+                placeholder={t(
+                  'settings.rules.editorPlaceholder',
+                  '每行一条规则；# 开头为标题'
+                )}
+              />
+            }
+          />
         </SettingsCard>
-      </SettingsSection>
 
-      {/* 全文编辑器：ui/Dialog 基座装配（T05.2 #7 已收敛） */}
-      <RulesEditorDialog
-        open={editingOpen}
-        scopeLabel={scopeLabel}
-        storagePath={storagePath}
-        saving={saving}
-        editorText={editorText}
-        onEditorTextChange={setEditorText}
-        initialFocusRef={textareaRef}
-        onClose={() => setEditingOpen(false)}
-        onSave={() => {
-          void handleSaveRules();
-        }}
-      />
+        {/* 页尾操作行：卡外呈现，与其他设置页操作行同口径；左侧为写入位置
+            提示（区分当前项目文件与全局设置），右侧为显式保存 */}
+        <div className={styles.actionsBar}>
+          <span className={styles.storageHint}>
+            {t('settings.rules.storageHint', '保存后写入 {path}', {
+              path: storagePath,
+            })}
+          </span>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              void handleSaveRules();
+            }}
+            disabled={!dirty || saving}
+            aria-busy={saving || undefined}
+          >
+            {saving
+              ? t('settings.rules.saving', '保存中…')
+              : t('common.save', '保存')}
+          </Button>
+        </div>
+      </SettingsSection>
     </SettingsPage>
   );
 };

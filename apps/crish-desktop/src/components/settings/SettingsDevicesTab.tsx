@@ -224,10 +224,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({
   const showPairCard = pairing.pairResult !== null && pairing.serviceEnabled;
 
   return (
-    <SettingsPage
-      title={t('settings.devices.pageTitle', '多端互通')}
-      meta={<AppIcon name="smartphone" size={16} aria-hidden />}
-    >
+    <SettingsPage title={t('settings.devices.pageTitle', '多端互通')}>
       <SettingsSection
         title={t('settings.devices.pairingModeSection', '配对模式')}
       >
@@ -235,7 +232,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({
           {pairing.serviceEnabled ? (
             <>
               <SettingsRow
-                icon={<AppIcon name="radio" size={18} aria-hidden />}
+                icon={<AppIcon name="radio" size={16} aria-hidden />}
                 title={t('settings.devices.serviceTitle', '多端互通服务')}
                 desc={
                   <span
@@ -261,7 +258,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({
                 }
               />
               <SettingsRow
-                icon={<AppIcon name="qr-code" size={18} aria-hidden />}
+                icon={<AppIcon name="qr-code" size={16} aria-hidden />}
                 title={t('settings.devices.enableLanPairing', '开启局域网配对')}
                 desc={t(
                   'settings.devices.enableLanPairingDesc',
@@ -306,7 +303,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({
           ) : (
             <div data-testid="service-off">
               <SettingsRow
-                icon={<AppIcon name="radio" size={18} aria-hidden />}
+                icon={<AppIcon name="radio" size={16} aria-hidden />}
                 title={t(
                   'settings.devices.serviceOffTitle',
                   '多端互通服务未开启'
@@ -325,15 +322,9 @@ export const SettingsDevicesTab: React.FC<Props> = ({
               />
             </div>
           )}
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection
-        title={t('settings.devices.securitySection', '安全连接')}
-      >
-        <SettingsCard>
+          {/* 桌面证书是配对的前置步骤，并入「配对模式」同一张卡（原「安全连接」单行分区取消） */}
           <SettingsRow
-            icon={<AppIcon name="shield-check" size={18} aria-hidden />}
+            icon={<AppIcon name="shield-check" size={16} aria-hidden />}
             title={t('settings.devices.exportCertTitle', '桌面证书')}
             desc={t(
               'settings.devices.exportCertDesc',
@@ -388,34 +379,17 @@ export const SettingsDevicesTab: React.FC<Props> = ({
                   {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
                 </span>
               </div>
-              <div className={styles.qrCardFooter}>
-                {pairing.pairResult!.firewall_hint ? (
-                  <div
-                    className={styles.firewallHint}
-                    data-testid="firewall-hint"
-                  >
-                    <AppIcon name="shield-alert" size={14} aria-hidden />
-                    <span>{pairing.pairResult!.firewall_hint}</span>
-                  </div>
-                ) : (
-                  <div />
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    dispatchPairing({
-                      type: 'setConfirmClosePairing',
-                      open: true,
-                    })
-                  }
-                  disabled={pairing.busy}
-                  className={styles.closePairBtn}
+              {/* 关闭配对只保留上方 Switch 一处入口（触发同一个确认弹窗），
+                  此处不再放重复的「关闭配对」按钮 */}
+              {pairing.pairResult!.firewall_hint ? (
+                <div
+                  className={styles.firewallHint}
+                  data-testid="firewall-hint"
                 >
-                  <AppIcon name="x" size={14} aria-hidden />{' '}
-                  {t('settings.devices.closePairing', '关闭配对')}
-                </Button>
-              </div>
+                  <AppIcon name="shield-alert" size={14} aria-hidden />
+                  <span>{pairing.pairResult!.firewall_hint}</span>
+                </div>
+              ) : null}
             </div>
           </SettingsCard>
         </SettingsSection>

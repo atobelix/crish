@@ -7,7 +7,13 @@
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { SettingsDevicesTab } from './SettingsDevicesTab';
 
 const pairStart = vi.fn();
@@ -208,7 +214,7 @@ describe('SettingsDevicesTab', () => {
     );
   });
 
-  it('关闭配对（G-4 语义变更）：QR 卡按钮弹确认，取消不调用 pairCancel', async () => {
+  it('关闭配对（G-4 语义变更）：QR 卡已无关闭按钮，关闭只走开关；取消不调用 pairCancel', async () => {
     pairStart.mockImplementation(async () => {
       pairStatus.mockResolvedValue(ACTIVE_STATUS);
       return PAIR_RESULT;
@@ -217,9 +223,14 @@ describe('SettingsDevicesTab', () => {
     await enableService();
     const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
     fireEvent.click(toggle);
-    expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
-    // 点 QR 卡内「关闭配对」按钮 → 确认弹窗出现
-    fireEvent.click(screen.getByRole('button', { name: '关闭配对' }));
+    const card = await screen.findByTestId('pair-qr-card');
+    // 二维码卡底部的「关闭配对」按钮已删除（与 Switch 重复入口），卡内不应再出现
+    expect(within(card).queryByRole('button', { name: '关闭配对' })).toBeNull();
+    await waitFor(() =>
+      expect(toggle.getAttribute('aria-checked')).toBe('true')
+    );
+    // 关闭入口只剩开关：拨下开关 → 确认弹窗出现
+    fireEvent.click(toggle);
     expect(await screen.findByRole('alertdialog')).toBeTruthy();
     expect(
       screen.getByText(/关闭配对将撤销全部已配对设备并断开连接/)

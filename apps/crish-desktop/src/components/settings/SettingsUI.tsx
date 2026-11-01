@@ -111,3 +111,46 @@ export const SettingsRow: React.FC<{
     </Component>
   );
 };
+
+/**
+ * 共享空态（设置各页统一口径）：图标 + 标题 + 副文案 + 可选动作，居中成块。
+ * 签名定死为 icon/title/description/action，后续批次只消费不改。
+ */
+export interface SettingsEmptyProps {
+  /** 空态图标（如 AppIcon 节点） */
+  icon?: React.ReactNode;
+  /** 空态标题 */
+  title: React.ReactNode;
+  /** 空态副文案 */
+  description?: React.ReactNode;
+  /** 可选动作（如引导按钮） */
+  action?: React.ReactNode;
+}
+
+export const SettingsEmpty: React.FC<SettingsEmptyProps> = ({
+  icon,
+  title,
+  description,
+  action,
+}) => (
+  <div className={`${styles.settingsEmpty} settings-empty`}>
+    {icon && (
+      <div className={`${styles.settingsEmptyIcon} settings-empty-icon`}>
+        {icon}
+      </div>
+    )}
+    <div className={`${styles.settingsEmptyTitle} settings-empty-title`}>
+      {title}
+    </div>
+    {description && (
+      <div className={`${styles.settingsEmptyDesc} settings-empty-desc`}>
+        {description}
+      </div>
+    )}
+    {action && (
+      <div className={`${styles.settingsEmptyAction} settings-empty-action`}>
+        {action}
+      </div>
+    )}
+  </div>
+);

@@ -80,7 +80,8 @@
   /* 原为 0.1px —— 在 1x/1.5x 屏上会被舍入为 0，边框等于消失；且裸 hex 偏离主题体系。
      改为契约发丝线，随主题翻转且在任何 DPR 下都真实可见。 */
   border: var(--hairline-width) solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  /* 去掉卡片阴影：靠表面明度与发丝线分层，避免与卡内提亮元素叠出双层轮廓（2026-11-01） */
+  box-shadow: none;
   border-radius: var(--radius-xl);
   overflow: hidden;
   display: flex;
@@ -104,6 +105,16 @@
 
 .settingsUiRow:last-child {
   border-bottom: none;
+}
+
+/* 无副标题的行（如账号页的入口行）与标准「标题 + 副标题」行等高：
+   min-height 按同一口径由 token 推导——上下 padding + 标题行高 + 行间距 + 副标题行高，
+   随密度 / 字号 token 自动缩放，不写死像素。纵向变体行内容自成高度，不参与对齐。 */
+.settingsUiRow:not(.settingsUiRowVertical):not(:has(.settingsUiRowDesc)) {
+  min-height: calc(
+    var(--space-2_5) * 2 + var(--font-size-base) * var(--line-height-ui) +
+      var(--space-1) + var(--font-size-sm) * var(--line-height-body)
+  );
 }
 
 .settingsUiRowVertical {
@@ -130,6 +141,13 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* 页头右侧状态文案（结果数/已改计数/录制中提示）：原全局死类 settings-head-meta 的正式归宿 */
+.headMeta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .filterInput {
@@ -347,4 +365,168 @@
   cursor: pointer;
   display: block;
   width: 100%;
+}
+
+/* ── 暗色设置行亮度阶梯（2026-11-01 用户定版，仅暗色） ──────────────────────
+   背景：.settingsUiRow 原为 transparent，透出所在卡面；而运行时皮肤（dark-cozy）
+   把卡面（composerBg #18181a）压得比面板底（bgSecondary #1c1c1e）还暗，
+   于是每行看起来「比背景黑」。第一阶段给行一块实色派生底：
+   以卡面（设置语境 --cover-card-bg，回落 --bg-card / --surface-outer）为基，
+   用 color-mix 向 --surface-tint-target 混 6.5%（dark-cozy 下等效 rgb 36）；
+   同时设置页内含行卡片透明化，行像直接排在面板上。
+   第二阶段（同日，用户实机反馈）：多行分组看起来是几块分离的深色块漂在
+   近黑面板上——病根是行与行之间的间隙（margin）露出面板色（浅色下整组
+   同为一白面则无此问题）。改为「整组一个表面」：
+   · 多行分组卡（卡内有 ≥2 行互为兄弟）恢复整体底 = 卡面 +8.5%
+     （在第一阶段行底 6.5% 之上，按用户原话「再提亮 2%」再 +2pt；
+     dark-cozy 下 ≈rgb 40，面板 28 之上明确成块）；卡底铺满整卡，
+     行间间隙与卡边缘留白一律呈现卡底色，不再露出面板色；
+   · 分组卡内行静止透明，与卡同为一个表面，仅靠内边距区分；
+     hover / active / selected 以卡底为基准、沿原相对步长（3.5% / 6% / 7%）
+     提亮，行内输入以卡底 +4% 保持高一档（dark-cozy 下 ≈rgb 47）；
+   · 裸行与单行卡维持第一阶段口径：行底 +6.5% 自成一块、单行卡仍透明。
+   全部规则收在 html[data-theme='dark'] 作用域内，亮色渲染零变化；
+   状态走 background-color + 过渡（--transition-fast），不做瞬时跳变。 */
+:global(html[data-theme='dark']) .settingsUiRow {
+  --settings-row-bg: color-mix(
+    in oklab,
+    var(--cover-card-bg, var(--bg-card, var(--surface-outer))),
+    var(--surface-tint-target) 6.5%
+  );
+  /* 状态提亮与行内输入的派生基准面：默认 = 行底自身；多行分组卡内被覆写为
+     分组卡整体底（见下方分组规则）。--settings-row-fill 是行静止底：
+     分组卡内被覆写为 transparent，使行与卡面同为一个表面——走变量间接，
+     不在分组规则里直接写 background，以免高优先级压掉 hover 等状态色。 */
+  --settings-state-base: var(--settings-row-bg);
+  --settings-row-fill: var(--settings-row-bg);
+  --settings-input-bg: color-mix(
+    in oklab,
+    var(--settings-state-base),
+    var(--surface-tint-target) 4%
+  );
+  background: var(--settings-row-fill);
+  border-bottom: none;
+  border-radius: var(--radius-option);
+  transition: background-color var(--transition-fast);
+}
+
+/* 卡内行排布：统一行距（--gap-group）替代发丝线分隔（裸行不受影响）。
+   间隙呈现什么颜色取决于卡底：单行卡透明时间隙透出面板色；
+   多行分组卡恢复整体底后，间隙即卡底色——这是第二阶段的关键点。 */
+:global(html[data-theme='dark']) .settingsUiCard .settingsUiRow {
+  margin: var(--gap-group) var(--gap-group) 0;
+}
+
+:global(html[data-theme='dark']) .settingsUiCard .settingsUiRow:last-child {
+  margin-bottom: var(--gap-group);
+}
+
+/* 设置页内含行卡片先统一透明化（第一阶段口径，单行卡维持此现状）：
+   作用域限定 .settingsUiPage（设置页根）内含 .settingsUiRow 的卡片——
+   设置页之外的 SettingsCard 用法不受影响，无行卡片也保留原卡面底色。 */
+:global(html[data-theme='dark'])
+  .settingsUiPage
+  .settingsUiCard:has(.settingsUiRow) {
+  background: transparent;
+}
+
+/* 多行分组卡恢复整体底：卡面 +8.5%（= 原行底 6.5% 再提亮 2pt）。
+   本规则特异性高于上一条透明规则，命中卡内 ≥2 行互为兄弟的分组卡；
+   --settings-group-bg 同时供卡内行的状态/输入派生引用。 */
+:global(html[data-theme='dark'])
+  .settingsUiPage
+  .settingsUiCard:has(.settingsUiRow ~ .settingsUiRow) {
+  --settings-group-bg: color-mix(
+    in oklab,
+    var(--cover-card-bg, var(--bg-card, var(--surface-outer))),
+    var(--surface-tint-target) 8.5%
+  );
+  background: var(--settings-group-bg);
+}
+
+/* 分组卡内行回到「卡的成员」：静止底透明（与卡同色，成为整体的一部分），
+   状态提亮与行内输入改以分组卡整体底为基准派生。 */
+:global(html[data-theme='dark'])
+  .settingsUiPage
+  .settingsUiCard:has(.settingsUiRow ~ .settingsUiRow)
+  .settingsUiRow {
+  --settings-state-base: var(--settings-group-bg);
+  --settings-row-fill: transparent;
+}
+
+:global(html[data-theme='dark']) .settingsUiRowClickable:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--settings-state-base),
+    var(--surface-tint-target) 3.5%
+  );
+}
+
+:global(html[data-theme='dark']) .settingsUiRowClickable:active,
+:global(html[data-theme='dark']) .settingsUiRowClickable[aria-pressed='true'] {
+  background-color: color-mix(
+    in oklab,
+    var(--settings-state-base),
+    var(--surface-tint-target) 6%
+  );
+}
+
+:global(html[data-theme='dark']) .settingsUiRowClickable[aria-selected='true'],
+:global(html[data-theme='dark']) .settingsUiRowClickable[data-active='true'] {
+  background-color: color-mix(
+    in oklab,
+    var(--settings-state-base),
+    var(--surface-tint-target) 7%
+  );
+}
+
+/* 设置行内输入框跟随提亮一档（作用域覆写，不动全局 --surface-input；
+   排除勾选/单选/滑杆/取色/文件等非文本类控件）。本文件无 @layer，
+   未分层样式压过 ui/Input 的 @layer components 背景色声明。 */
+:global(html[data-theme='dark'])
+  .settingsUiRow
+  :global(
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+        [type='color']
+      ):not([type='file']):not([type='hidden']),
+    textarea
+  ) {
+  background-color: var(--settings-input-bg);
+}
+
+/* ── 共享空态（SettingsEmpty）：图标 + 标题 + 副文案 + 可选动作 ──
+   设置各页空态统一走此口径，不再各页自创（审计 B H7）。 */
+.settingsEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+}
+
+.settingsEmptyIcon {
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settingsEmptyTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.settingsEmptyDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-body);
+}
+
+.settingsEmptyAction {
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }

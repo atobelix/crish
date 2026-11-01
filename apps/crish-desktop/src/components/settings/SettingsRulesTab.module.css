@@ -1,175 +1,60 @@
-.headerMetaRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 /* 方案 A 标尺：规则卡片外壳统一为 14px */
 :global([data-settings-tab='rules']) {
   --radius-xl: 14px;
 }
 
-:global([data-settings-tab='rules']) :global(.settings-ui-card),
-:global(.settings-pane--rules) :global(.settings-ui-card),
-:global(.settings-pane--rules) :global(.settings-list),
-:global(.settings-ui-card):has(.sectionRow),
-:global(.settings-ui-card):has(.sectionRowNoBorder),
-:global(.settings-ui-card):has(:global(.settings-rule-item-text)) {
+/* 方案 A 标尺：规则页卡片圆角统一走 sep 外圆角 */
+:global([data-settings-tab='rules']) :global(.settings-ui-card) {
   border-radius: var(--sep-radius-outer);
 }
 
-.sectionRow {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2_5) var(--space-3_5);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  align-items: center;
-}
-
-.sectionRowNoBorder {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2_5) var(--space-3_5);
-  align-items: center;
-}
-
-.labelCol {
-  width: 120px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.labelTitle {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-}
-
-.labelDesc {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.inputGroup {
-  flex: 1;
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.inputGroup :global(.inputWrap),
-.inputGroup :global(.inputShell) {
-  flex: 1;
-}
-
-.inputGrow {
-  flex: 1;
-  height: 30px;
-  min-height: 30px;
-  border-radius: var(--radius-md);
-}
-
-.actionBtn {
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  height: 30px;
-  min-height: 30px;
-  --btn-h: 30px;
-}
-
-.presetGroup {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-/* 方案 A 标尺：规则条目/预设条目统一为 8px */
-:global(.settings-rule-item-text) {
-  border-radius: var(--radius-md);
-}
-
-:global(.settings-list-row--rule) {
-  border-radius: var(--radius-md);
-}
-
-.presetChip,
-.presetChip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  padding: 0 var(--space-2_5);
-  border-radius: var(--radius-md);
-  border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--cover-card-bg, var(--bg-card));
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.presetChip:hover:not(:disabled) {
-  background: var(--state-hover);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.presetChip:disabled {
-  opacity: var(--opacity-disabled);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* PE-05 T05.2 #7
- * settings-dialog ui/Dialog
- * tokens */
-
-.rulesEditorOverlay {
-}
-
-.rulesEditorDialog {
-  --dialog-width: min(680px, calc(100vw - var(--space-8)));
-}
-
-.rulesEditorFoot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-1_5);
-}
-
-/* 方案 A 标尺：内部代码编辑块统一为 8px */
-.rulesEditorTextarea {
+/* 全文编辑器（页面主体）：ui/Textarea bare + 本地 token 口径——无边框、
+ * 输入档底色 --surface-input、等宽字体（行式规则文本）；状态走全站输入框
+ * 三档（hover 叠 --state-hover、聚焦回基底），过渡 150ms 级 */
+textarea.editorTextarea {
   width: 100%;
-  min-height: 320px;
-  height: 380px;
+  min-height: 380px; /* 刻度外裸值：编辑器主体高度，无既有档，授权保留 */
   padding: var(--space-3) var(--space-3_5);
   font-size: var(--font-size-sm);
   font-family: var(--font-mono);
   line-height: var(--line-height-body);
   resize: none;
+  border: none;
   border-radius: var(--radius-md);
-  border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-primary);
+  background: var(--surface-input);
   color: var(--text-primary);
   box-sizing: border-box;
   box-shadow: none;
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
-.rulesEditorTextarea:focus,
-.rulesEditorTextarea:focus-visible {
+.editorTextarea:where(:hover:not(:focus):not(:disabled)) {
+  background:
+    linear-gradient(var(--state-hover), var(--state-hover)),
+    var(--surface-input);
+}
+
+.editorTextarea:where(:focus, :focus:hover) {
   outline: none;
-  border-color: var(--focus-border-color);
-  background: var(--cover-card-bg, var(--bg-card));
-  box-shadow: none;
+  background: var(--surface-input);
+}
+
+.editorTextarea:where(:disabled) {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+/* 页尾操作行：卡外呈现，与其他设置页的操作行口径一致（无卡底、无分隔线）；
+ * 左侧写入位置提示（区分当前项目文件与全局设置），右侧显式保存 */
+.actionsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-0_5);
+}
+
+.storageHint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
 }

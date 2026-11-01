@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-3_5);
-  padding: var(--space-6) var(--space-4) 0;
+  padding: var(--space-6) var(--space-4);
 }
 
 .qrBox {
@@ -44,18 +44,6 @@
   font-size: var(--font-size-xs);
 }
 
-.qrCardFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-2_5);
-  padding: var(--space-2_5) var(--space-4);
-  border-top: var(--hairline-width) solid var(--border-subtle);
-  box-sizing: border-box;
-}
-
 .firewallHint {
   display: flex;
   align-items: center;
@@ -77,72 +65,17 @@
   line-height: var(--line-height-base);
 }
 
-.closePairBtn {
-  color: var(--text-tertiary);
-  margin-left: auto;
-}
-
 .serviceDesc {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
-.emptyState {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1_5);
-  padding: var(--space-7) 0;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
-
-.emptyTitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-}
-
-.emptySub {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.deviceList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.deviceRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2_5) var(--space-4);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-}
-
-.deviceRow:last-child {
-  border-bottom: none;
-}
-
-.deviceIcon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.deviceBody {
-  flex: 1;
-  min-width: 0;
-}
-
+/* 已配对设备行（SettingsRow 内的标题/副文案/动作排布） */
 .deviceTitle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .deviceLabel {
@@ -159,18 +92,18 @@
   border-radius: var(--radius-sm);
   background: var(--color-error-bg);
   color: var(--color-error);
+  flex-shrink: 0;
 }
 
 .deviceDesc {
-  display: flex;
+  display: inline-flex;
   gap: var(--space-3);
   color: var(--text-tertiary);
   font-size: var(--font-size-xxs);
-  margin-top: var(--space-0_5);
 }
 
 .deviceActions {
-  display: flex;
+  display: inline-flex;
   gap: var(--space-1_5);
   flex-shrink: 0;
 }
@@ -179,6 +112,12 @@
   display: flex;
   gap: var(--space-1_5);
   align-items: center;
+  width: 100%;
+}
+
+.renameRow :global(.inputWrap),
+.renameRow :global(.inputShell) {
+  flex: 1;
 }
 
 /* 网络环境卡片 */
@@ -187,6 +126,7 @@
   flex-direction: column;
 }
 
+/* 状态徽标：三态只靠底色台阶 + 语义色文字区分，不描边（无边框口径） */
 .profileBadge {
   display: inline-flex;
   align-items: center;
@@ -194,7 +134,7 @@
   padding: 2px var(--space-2_5);
   border-radius: var(--radius-md);
   background: var(--bg-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -208,7 +148,7 @@
   padding: 2px var(--space-2_5);
   border-radius: var(--radius-md);
   background: var(--color-success-bg);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   color: var(--color-success);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -222,7 +162,7 @@
   padding: 2px var(--space-2_5);
   border-radius: var(--radius-md);
   background: var(--color-warning-bg);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   color: var(--text-warning);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
