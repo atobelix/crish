@@ -1,5 +1,6 @@
 // 主按钮：48 高胶囊、四变体；加载态宽度不跳动（Spinner 与动词并列）。
-// primary 为墨色主操作；secondary 为浅灰填充，无描边。
+// primary 为绿色主操作（J4）；secondary 为浅灰填充，无描边。
+// compact 档（原型弹窗口径）：44 高、字 14，主/危险 600、次/幽灵 500。
 // N05/G4 裁定：按钮内不嵌图标（文字已足够），icon prop 删除。
 import {
   ActivityIndicator,
@@ -14,10 +15,14 @@ import AppText from './AppText';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
+export type ButtonSize = 'default' | 'compact';
+
 export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  /** default = 48 高；compact = 44 高（弹窗/浮卡动作口径） */
+  size?: ButtonSize;
   disabled?: boolean;
   loading?: boolean;
   testID?: string;
@@ -59,6 +64,7 @@ export function Button({
   label,
   onPress,
   variant = 'primary',
+  size = 'default',
   disabled = false,
   loading = false,
   testID,
@@ -68,6 +74,7 @@ export function Button({
   const theme = useTheme();
   const isDisabled = disabled || loading;
   const { background, foreground } = paletteFor(theme, variant);
+  const compact = size === 'compact';
 
   return (
     <Pressable
@@ -80,7 +87,7 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         {
-          minHeight: theme.size.touchLarge,
+          minHeight: compact ? theme.size.touch : theme.size.touchLarge,
           borderRadius: theme.radius.pill,
           paddingHorizontal: theme.space.xl,
           backgroundColor: background,
@@ -93,8 +100,13 @@ export function Button({
       <View style={[styles.content, { gap: theme.space.sm }]}>
         {loading ? <ActivityIndicator size="small" color={foreground} /> : null}
         <AppText
-          variant="bodyStrong"
-          style={{ color: foreground }}
+          variant={compact ? 'barAction' : 'bodyStrong'}
+          style={{
+            color: foreground,
+            ...(compact && variant !== 'primary' && variant !== 'danger'
+              ? { fontWeight: '500' as const }
+              : null),
+          }}
           numberOfLines={1}
         >
           {label}
