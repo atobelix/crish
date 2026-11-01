@@ -7,13 +7,23 @@ import { ICON_PATHS, SHARP_ICONS, type IconName } from './iconPaths';
 
 export type { IconName };
 
+/**
+ * 按名线宽覆盖（原型口径：主档 1.8 之外，对号 2.2、加号/汉堡 2.0)。
+ * 解析顺序：显式 strokeWidth prop > 本表 > theme.layout.iconStroke。
+ */
+const STROKE_WIDTH_BY_NAME: Partial<Record<IconName, number>> = {
+  check: 2.2,
+  add: 2,
+  menu: 2,
+};
+
 export interface IconProps {
   name: IconName;
   /** 只允许 theme.size.icon* 阶梯（16/20/24），禁止裸数字 */
   size?: number;
   /** 语义 token 色值（缺省 textSecondary） */
   color?: string;
-  /** 线宽覆盖（缺省 theme.layout.iconStroke = 2） */
+  /** 线宽覆盖（缺省按 STROKE_WIDTH_BY_NAME，再缺省 theme.layout.iconStroke = 1.8) */
   strokeWidth?: number;
 }
 
@@ -34,7 +44,9 @@ export function Icon({ name, size, color, strokeWidth }: IconProps) {
       <Path
         d={ICON_PATHS[name]}
         stroke={color ?? theme.colors.textSecondary}
-        strokeWidth={strokeWidth ?? theme.layout.iconStroke}
+        strokeWidth={
+          strokeWidth ?? STROKE_WIDTH_BY_NAME[name] ?? theme.layout.iconStroke
+        }
         strokeLinecap={sharp ? 'butt' : 'round'}
         strokeLinejoin={sharp ? 'miter' : 'round'}
       />
