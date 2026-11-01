@@ -26,6 +26,11 @@ import {
 import type { RunTaskParams, PermissionMode } from '@crish/shared-types';
 import { settingsStore } from '@/domain/store/settingsStore';
 import { runPermissionMode } from '@/domain/pure/permissionMode';
+import {
+  buildRunPayload,
+  checkRunPayloadSizes,
+  type ComposerAttachment,
+} from '@/domain/pure/attachments';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────
 
@@ -95,6 +100,17 @@ export interface QuickRunVm {
   submit: () => void;
   /** 以显式文本发起 run（语音输入松开直发：回填与提交同刻，不依赖 prompt 状态时序） */
   submitText: (text: string) => void;
+  /**
+   * 带附件发起 run（G5b）：domain 组装 content + prompt 附件块（桌面
+   * multimodal 同构口径），发送前做总量预检——超限以 cmd.invalid 口径
+   * 反馈并阻止发送（不调仓储、不送网关）。附件为空时等价 submitText。
+   * 成功清空由宿主在 feedback success 时处理（失败保留已选区）。
+   */
+  submitWithAttachments: (
+    rawText: string,
+    attachments: readonly ComposerAttachment[],
+    visionSupported: boolean
+  ) => void;
 }
 
 export function useQuickRunVm(
@@ -128,11 +144,11 @@ export function useQuickRunVm(
     setFeedback({ kind: 'idle' });
   }, []);
 
-  const submitWithText = useCallback(
-    (rawText: string) => {
+  /** 发送管线（文本/附件共用）：busy 防重入 + 反馈状态机 + 成功清输入 */
+  const dispatch = useCallback(
+    (params: RunTaskParams) => {
       if (busyRef.current) return;
-      const text = rawText.trim();
-      if (!connected || text.length === 0) return;
+      if (!connected) return;
       const ctx = ctxOf();
       if (!ctx) {
         // 接线未启动（未配对/未装配）：按未连接口径反馈（诚实化，不静默）
@@ -146,12 +162,8 @@ export function useQuickRunVm(
       busyRef.current = true;
       setBusy(true);
       setFeedback({ kind: 'sending' });
-      // 权限档提交时刻读取持久化偏好并经单点映射（domain/pure/permissionMode）
-      const permissionMode = runPermissionMode(
-        settingsStore.getState().get('composer').permissionMode
-      );
       void ctx.repository
-        .runTask(runTaskParamsOf(text, selectedSessionId, permissionMode))
+        .runTask(params)
         .then((res) => {
           setFeedback({
             kind: 'success',
@@ -174,7 +186,60 @@ export function useQuickRunVm(
           setBusy(false);
         });
     },
-    [connected, selectedSessionId, ctxOf]
+    [connected, ctxOf]
+  );
+
+  const submitWithText = useCallback(
+    (rawText: string) => {
+      const text = rawText.trim();
+      if (text.length === 0) return;
+      // 权限档提交时刻读取持久化偏好并经单点映射（domain/pure/permissionMode）
+      const permissionMode = runPermissionMode(
+        settingsStore.getState().get('composer').permissionMode
+      );
+      dispatch(runTaskParamsOf(text, selectedSessionId, permissionMode));
+    },
+    [dispatch, selectedSessionId]
+  );
+
+  const submitWithAttachments = useCallback(
+    (
+      rawText: string,
+      attachments: readonly ComposerAttachment[],
+      visionSupported: boolean
+    ) => {
+      if (attachments.length === 0) {
+        submitWithText(rawText);
+        return;
+      }
+      if (busyRef.current || !connected) return;
+      const payload = buildRunPayload(rawText, attachments, visionSupported);
+      if (!payload) {
+        submitWithText(rawText);
+        return;
+      }
+      // 发送前预检（与网关钳制同口径）：超限直接拦截，不送达网关才失败
+      const sizeCheck = checkRunPayloadSizes(payload);
+      if (!sizeCheck.ok) {
+        setFeedback({
+          kind: 'error',
+          code: 'cmd.invalid',
+          message: sizeCheck.message,
+        });
+        return;
+      }
+      const permissionMode = runPermissionMode(
+        settingsStore.getState().get('composer').permissionMode
+      );
+      dispatch({
+        ...runTaskParamsOf(payload.prompt, selectedSessionId, permissionMode),
+        content: payload.content as unknown as NonNullable<
+          RunTaskParams['content']
+        >,
+        hasImages: payload.hasImages,
+      });
+    },
+    [connected, dispatch, selectedSessionId, submitWithText]
   );
 
   const submit = useCallback(() => {
@@ -193,5 +258,6 @@ export function useQuickRunVm(
     selectSession,
     submit,
     submitText: submitWithText,
+    submitWithAttachments,
   };
 }

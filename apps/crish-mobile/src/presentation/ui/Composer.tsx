@@ -3,6 +3,9 @@
 // （用户裁决：发送钮保留且为绿），无内容且注入 voice 时为麦克风透明图标钮 32
 // （长按说话；取消原型以来的灰圆底）。附件 ＋ 仅在注入 onAttachPress 时出现：
 // 附件面板属 W-C，未注入即诚实缺省，不画假按钮（与麦克风同一纪律）。
+// G5b 续建：宿主注入 hasAttachments（已选附件非空）时右槽同「有内容」口径
+// 出发送圆盘——纯附件（无文字）必须可发（简报条目 3）；未注入/无附件时
+// 形态与既有纪律完全一致，展开行麦克风口径不变（仍只看文字内容）。
 // 容器：圆角 26（与高度解耦）、内边距横 10、元素间距 6、minHeight 52；
 // 输入字号 15（body 14 + 1，原型 composer-input），占位色单行走 textSecondary、
 // 展开/锁定走 textTertiary；多行增高以实测内容高驱动、0.32s emphasized 曲线动画。
@@ -72,6 +75,8 @@ export interface ComposerProps {
   voice?: VoiceInputApi;
   /** 附件入口（W-C 附件面板接线；缺省 = 不渲染 ＋ 钮） */
   onAttachPress?: () => void;
+  /** 已选附件非空（G5b）：无文字时右槽仍出发送圆盘（纯附件可发） */
+  hasAttachments?: boolean;
   /** 审批锁定态：容器实心、工具图标变淡、占位不换文（原型口径） */
   locked?: boolean;
   /** 快捷条（G1）：项目 + 权限胶囊（标签由宿主实时注入当前选择） */
@@ -201,6 +206,7 @@ export function Composer({
   maxLength,
   voice,
   onAttachPress,
+  hasAttachments = false,
   locked = false,
   contextBar,
   model,
@@ -474,7 +480,11 @@ export function Composer({
               ]}
             />
           </Animated.View>
-          {hasText ? sendButton : !layoutExpanded ? micButton : null}
+          {hasText || hasAttachments
+            ? sendButton
+            : !layoutExpanded
+              ? micButton
+              : null}
         </View>
         {model ? (
           <Animated.View

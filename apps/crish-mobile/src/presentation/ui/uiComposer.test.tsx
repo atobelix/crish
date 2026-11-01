@@ -113,6 +113,37 @@ describe('Composer', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('G5b 纯附件可发：无文字 + hasAttachments 时右槽出发送盘并可提交；未注入则不出', async () => {
+    const onSubmit = jest.fn();
+    const withAttachments = await render(
+      <Composer
+        testID="composer"
+        value=""
+        placeholder="给电脑发一条指令"
+        onChangeText={jest.fn()}
+        onSubmit={onSubmit}
+        canSubmit
+        editable
+        hasAttachments
+      />
+    );
+    await fireEvent.press(withAttachments.getByTestId('composer-send'));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    const without = await render(
+      <Composer
+        testID="composer"
+        value=""
+        placeholder="给电脑发一条指令"
+        onChangeText={jest.fn()}
+        onSubmit={jest.fn()}
+        canSubmit
+        editable
+      />
+    );
+    expect(without.queryByTestId('composer-send')).toBeNull();
+  });
+
   it('renders the hold-to-talk microphone when voice is wired', async () => {
     const view = await render(
       <Composer

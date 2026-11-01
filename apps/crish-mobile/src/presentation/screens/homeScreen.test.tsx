@@ -154,6 +154,21 @@ describe('HomeScreen 更多下拉', () => {
   });
 });
 
+describe('HomeScreen 附件入口（G5b）', () => {
+  it('Composer 渲染 ＋ 附件钮，点开附件面板呈现拍照/相册/文件三入口', async () => {
+    const view = await renderHome();
+    const attachButton = view.getByLabelText('添加附件');
+    expect(attachButton).toBeTruthy();
+    await fireEvent.press(attachButton);
+    expect(view.getByTestId('home-attachment-sheet-camera')).toBeTruthy();
+    expect(view.getByTestId('home-attachment-sheet-library')).toBeTruthy();
+    expect(view.getByTestId('home-attachment-sheet-files')).toBeTruthy();
+    expect(view.getByText('拍照')).toBeTruthy();
+    expect(view.getByText('相册')).toBeTruthy();
+    expect(view.getByText('文件')).toBeTruthy();
+  });
+});
+
 describe('HomeScreen 提交', () => {
   it('提交后新建会话（不带 sessionId），成功回执跳转到该会话', async () => {
     mockRunTask.mockResolvedValue({ runId: 'r-9', sessionId: 's-9' });

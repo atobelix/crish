@@ -22,6 +22,10 @@ import {
   runTaskParamsOf,
   useQuickRunVm,
 } from './useQuickRunVm';
+import {
+  ATTACHMENT_DATA_URL_MAX_BYTES,
+  type ComposerAttachment,
+} from '@/domain/pure/attachments';
 
 function resetStores(): void {
   sessionStore.setState({ sessions: [], selectedSessionId: null });
@@ -352,5 +356,112 @@ describe('useQuickRunVm 钩子渲染面', () => {
       result.current.setPrompt('任务B');
     });
     expect(result.current.feedback).toEqual({ kind: 'idle' });
+  });
+});
+
+// ── G5b 带附件提交 ─────────────────────────────────────────────────────────
+
+const IMAGE_ATT: ComposerAttachment = {
+  id: 'a-1',
+  name: '截图.png',
+  kind: 'image',
+  dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+  sizeBytes: 1024,
+  mime: 'image/png',
+};
+
+describe('useQuickRunVm 带附件提交（G5b）', () => {
+  it('视觉模型：content/hasImages 透传，prompt 同步拼附件块', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.submitWithAttachments('看这张图', [IMAGE_ATT], true);
+    });
+    expect(runTask).toHaveBeenCalledTimes(1);
+    const params = runTask.mock.calls[0][0] as RunTaskParams;
+    expect(params.hasImages).toBe(true);
+    expect(params.prompt).toContain('看这张图\n\n[附件]\n[图片附件: 截图.png]');
+    expect(params.content).toEqual([
+      { type: 'text', text: '看这张图' },
+      {
+        type: 'image_url',
+        image_url: { url: IMAGE_ATT.dataUrl, detail: 'auto' },
+        name: '截图.png',
+        mime: 'image/png',
+      },
+    ]);
+    expect(result.current.feedback.kind).toBe('success');
+  });
+
+  it('非视觉模型：降级组装（hasImages=false，content 不含 dataUrl）', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.submitWithAttachments('看这张图', [IMAGE_ATT], false);
+    });
+    const params = runTask.mock.calls[0][0] as RunTaskParams;
+    expect(params.hasImages).toBe(false);
+    expect(JSON.stringify(params.content)).not.toContain('data:image');
+    expect(params.prompt).toContain('[图片附件元数据: 截图.png]');
+  });
+
+  it('纯附件（空文本）可发：prompt 为附件块正文', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.submitWithAttachments('', [IMAGE_ATT], true);
+    });
+    const params = runTask.mock.calls[0][0] as RunTaskParams;
+    expect(params.prompt.startsWith('[附件]\n[图片附件: 截图.png]')).toBe(true);
+    expect(result.current.feedback.kind).toBe('success');
+  });
+
+  it('超限预检：单图 dataUrl 越限 → 仓库不被调用 + cmd.invalid 反馈', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    const big: ComposerAttachment = {
+      ...IMAGE_ATT,
+      dataUrl: `data:image/jpeg;base64,${'A'.repeat(ATTACHMENT_DATA_URL_MAX_BYTES)}`,
+    };
+    await act(async () => {
+      result.current.submitWithAttachments('看图', [big], true);
+    });
+    expect(runTask).not.toHaveBeenCalled();
+    expect(result.current.feedback).toMatchObject({
+      kind: 'error',
+      code: 'cmd.invalid',
+    });
+    if (result.current.feedback.kind === 'error') {
+      expect(result.current.feedback.message).toContain('截图.png');
+    }
+    expect(result.current.busy).toBe(false);
+  });
+
+  it('附件为空 → 等价纯文本提交（参数不带 content/hasImages）', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.submitWithAttachments('纯文本', [], true);
+    });
+    expect(runTask).toHaveBeenCalledWith({
+      prompt: '纯文本',
+      permissionMode: 'smart',
+    });
+  });
+
+  it('发送失败 → error 反馈（宿主据此保留已选区，不清空）', async () => {
+    connectionStore.getState().setPhase('ready');
+    const { ctx } = makeContext({ reject: () => new Error('x') });
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.submitWithAttachments('看图', [IMAGE_ATT], true);
+    });
+    expect(result.current.feedback.kind).toBe('error');
+    expect(result.current.busy).toBe(false);
   });
 });

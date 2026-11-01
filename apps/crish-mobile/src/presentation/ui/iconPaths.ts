@@ -53,6 +53,18 @@ export const ICON_PATHS = {
   // shield/zap 图标语义同名（原型 composer.css + 桌面 api/permissionModes 元数据）
   shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
   zap: 'M13 2L3 14h9l-1 8L21 10h-9l1-8z',
+  // G5b 追加：附件面板「相册」入口（Feather image：圆角矩形 + 圆点 + 山形折线）
+  image:
+    'M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5z' +
+    'M8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM21 15l-5-5L5 21',
+  // G6 追加：账号页 UID 行的复制标记（Feather copy：双层纸面错位叠放）
+  copy:
+    'M11 9h9a2 2 0 012 2v9a2 2 0 01-2 2h-9a2 2 0 01-2-2v-9a2 2 0 012-2z' +
+    'M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1',
+  // G7 追加：附件面板「技能」行标记（Lucide sparkles：四角星 + 两枚小星）
+  sparkles:
+    'M9.937 15.5A2 2 0 008.5 14.063l-6.135-1.582a.5.5 0 010-.962L8.5 9.936A2 2 0 009.937 8.5l1.582-6.135a.5.5 0 01.963 0L14.063 8.5A2 2 0 0015.5 9.937l6.135 1.581a.5.5 0 010 .964L15.5 14.063a2 2 0 00-1.437 1.437l-1.582 6.135a.5.5 0 01-.963 0z' +
+    'M20 3v4M22 5h-4M4 17v2M5 18H3',
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
@@ -65,4 +77,4 @@ export const SHARP_ICONS: ReadonlySet<IconName> = new Set([
   'check',
 ] as IconName[]);
 
-export const ICON_NAME_LIMIT = 30;
+export const ICON_NAME_LIMIT = 33;
