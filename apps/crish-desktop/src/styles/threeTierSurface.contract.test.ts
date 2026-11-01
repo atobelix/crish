@@ -68,7 +68,7 @@ describe('三档底色契约', () => {
         'var(' + '--user-' + name.slice(2) + ', ' + hex + ')';
       const fb =
         theme === 'light'
-          ? { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' }
+          ? { outer: '#f9f9f9', main: '#ffffff', input: '#ffffff' }
           : { outer: '#1e1e1e', main: '#141414', input: '#232323' };
       expect(decl(b, '--surface-outer')).toBe(
         fallback('--surface-outer', fb.outer)
@@ -138,7 +138,7 @@ describe('三档底色契约', () => {
 
   it('浅色三档 = heson 实测值；激活态正典接线', () => {
     // T-BLK-07b：字面实测值现在钉在 --user-surface-* 参数声明上
-    expect(decl(light, '--user-surface-outer')).toBe('#f7f6f5');
+    expect(decl(light, '--user-surface-outer')).toBe('#f9f9f9');
     expect(decl(light, '--user-bubble-bg')).toBe(
       'color-mix(in srgb, var(--text-primary) 5.5%, transparent)'
     );
@@ -165,18 +165,26 @@ describe('三档底色契约', () => {
     }
 
     // 深色激活态正典接线：收敛至 --state-selected 与 --state-active
+    // 例外（2026-11-01 用户定版）：--button-secondary-bg 不再是透明叠加，
+    // 改为由基色派生的实色灰度台阶（暗色向提亮目标混 8.5%，浅色卡面色向深混 4%），
+    // 作为次级按钮底色 SSOT 单独钉死其派生式。
     for (const [n, expected] of [
       ['--tab-active-bg', 'var(--state-selected)'],
       ['--seg-slider-bg', 'var(--state-selected)'],
       ['--sidebar-active', 'var(--state-selected)'],
-      ['--button-secondary-bg', 'var(--state-active)'],
+      [
+        '--button-secondary-bg',
+        'color-mix(in oklab, var(--surface-base), var(--surface-tint-target) 8.5%)',
+      ],
     ] as const) {
       expect(decl(dark, n), n).toBe(expected);
     }
 
     // 浅色激活态正典接线
     expect(decl(light, '--seg-slider-bg')).toBe('var(--surface-input)');
-    expect(decl(light, '--button-secondary-bg')).toBe('var(--bg-card)');
+    expect(decl(light, '--button-secondary-bg')).toBe(
+      'color-mix(in oklab, var(--surface-main), var(--surface-deep-target) 4%)'
+    );
 
     // 动态层底色严禁硬编码字面颜色
     for (const n of [
@@ -199,7 +207,7 @@ describe('三档底色契约', () => {
   });
 
   it('内容矩形框线：token 独立，只画左/顶 1px，右/底无边', () => {
-    expect(decl(light, '--content-frame-border')).toBe('#ebeae9'); // 外层 K5 + 3 = K8
+    expect(decl(light, '--content-frame-border')).toBe('#ececec'); // 7% 纯中性边框
     expect(decl(dark, '--content-frame-border')).toBe('#222121'); // 外层 L10.2% + 3 → 13.2%
     const ws = readFileSync(
       resolve(
@@ -223,7 +231,7 @@ describe('三档底色契约', () => {
     expect(active).toMatch(/border-color:\s*var\(--content-frame-border/);
   });
 
-  it('圆角：完备偶数阶梯 + 按钮用户锁 7px', () => {
+  it('圆角：完备偶数阶梯 + 按钮用户锁 10px（2026-11-01 由 7px 调整）', () => {
     expect(decl(css, '--radius-xs')).toBe('4px');
     expect(decl(css, '--radius-sm')).toBe('6px');
     expect(decl(css, '--radius-md')).toBe('8px');
@@ -233,7 +241,7 @@ describe('三档底色契约', () => {
     expect(decl(css, '--radius-2xl')).toBe('20px');
     expect(decl(css, '--radius-3xl')).toBe('24px');
     expect(decl(css, '--radius-pill')).toBe('9999px');
-    expect(decl(css, '--radius-btn')).toBe('7px');
+    expect(decl(css, '--radius-btn')).toBe('10px');
     for (const n of [
       '--chat-bubble-radius',
       '--composer-radius-single',

@@ -9,7 +9,7 @@
  * - 同心公理：R_outer = R_inner + Padding <=> R_inner = max(0, R_outer - Padding)
  * - 双形态：
  *     圆角形态（Rounded Mode）：20px 顶级枢纽（Dialog / Settings / ProjectManageModal / ChatComposer）
- *     微圆形态（Compact Mode）：14px 浮层 / 16px 卡片 / 8px 控件 / 6px 小项 / 7px 独立按钮
+ *     微圆形态（Compact Mode）：14px 浮层 / 16px 卡片 / 8px 控件 / 6px 小项 / 10px 独立按钮（2026-11-01 由 7px 调整）
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
@@ -109,7 +109,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
   });
 
   // 3. 模型凭据卡防倒挂断言
-  it('契约 3：模型凭据卡防倒挂断言（.credentialsContainer 严禁消费 7px 按钮圆角，必须为 14px 或以上）', () => {
+  it('契约 3：模型凭据卡防倒挂断言（.credentialsContainer 严禁消费按钮圆角，必须为 14px 或以上）', () => {
     const modelsCss = readDesktopFile(
       'components',
       'settings-models',
@@ -123,7 +123,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     const block = match![0];
 
-    // 断言严禁消费 --button-radius（7px）
+    // 断言严禁消费 --button-radius（按钮圆角，2026-11-01 起为 10px）
     expect(
       block,
       '.credentialsContainer 严禁消费 var(--button-radius)'

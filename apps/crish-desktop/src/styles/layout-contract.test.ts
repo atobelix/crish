@@ -5,7 +5,7 @@
  * 与门禁脚本 check-layout-tokens.mjs 互补：
  * - 本文件钉死密度矩阵关键 token 的存在性与偶数性（default/small/large 三档）；
  * - 钉死 ChatMessageList .listInner 纵向 padding 归零（几何 SSOT 归 chatScrollGeometry）；
- * - 钉死 Button 圆角 7px 用户锁（U1）。
+ * - 钉死 Button 圆角 10px 用户锁（U1；2026-11-01 由 7px 调整）。
  * - 【G-CASCADE】钉死密度档在层叠中**真实生效**（亮/暗 × 中/小/大 全组合）。
  *   背景：曾出现「[data-ui-size=…]（0,1,0）被基础块 html[data-theme='light']（0,1,1）
  *   压制 → 亮色下密度档静默失效、暗色下正常」的主题相关不一致；
@@ -437,14 +437,14 @@ describe('ChatMessageList .listInner 几何 SSOT 契约', () => {
   });
 });
 
-describe('Button 圆角 7px 用户锁契约（U1 · 2026-09-11 起经 --radius-btn 单一权威定义）', () => {
+describe('Button 圆角 10px 用户锁契约（U1 · 2026-09-11 起经 --radius-btn 单一权威定义；2026-11-01 锁值由 7px 调整为 10px）', () => {
   const tokensCss = readFile(TOKENS_CSS);
   const buttonCss = readFile(BUTTON_CSS);
 
-  it('tokens.css 单一权威定义：--radius-btn: 7px 且 --button-radius: var(--radius-btn)', () => {
+  it('tokens.css 单一权威定义：--radius-btn: 10px 且 --button-radius: var(--radius-btn)', () => {
     // 机制变更：旧形态为消费点逐处 `var(--button-radius, 7px)` 兜底；
     // 现收敛为 tokens.css 单点权威定义（注释明写「密度档/主题块禁止覆写」）。
-    expect(tokensCss).toMatch(/--radius-btn:\s*7px\s*;/);
+    expect(tokensCss).toMatch(/--radius-btn:\s*10px\s*;/);
     expect(tokensCss).toMatch(/--button-radius:\s*var\(--radius-btn\)\s*;/);
   });
 

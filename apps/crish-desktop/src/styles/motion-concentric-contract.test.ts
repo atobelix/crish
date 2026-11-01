@@ -187,9 +187,10 @@ describe('契约测试：同心几何圆角与物理动效防回潮门禁 (DIM-0
         new RegExp(`${refName.replace(/[-]/g, '\\-')}:\\s*(\\d+px);`)
       );
       expect(refDef, `${refName} 须有字面定义（引用链不得悬空）`).toBeTruthy();
-      expect(['7px', '8px']).toContain(refDef?.[1]);
+      // 按钮圆角用户锁 2026-11-01 起由 7px 调整为 10px
+      expect(['10px', '8px']).toContain(refDef?.[1]);
     } else {
-      expect(['7px', '8px']).toContain(buttonRadiusLiteral?.[1]);
+      expect(['10px', '8px']).toContain(buttonRadiusLiteral?.[1]);
     }
 
     // 必备动效时长与曲线 Token 校验

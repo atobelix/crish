@@ -50,6 +50,32 @@ html[data-theme='light'] {
   --notice-border-stop: #ffcfcf;
   --notice-text-stop: #ff686c;
 
+  /* =========================================================================
+     顶部标签体系（Top Tabs System）与侧边栏项体系（Sidebar Items System）
+     遵循规范：顶部 hover 是提亮，激活为纯白浮凸卡片；侧边栏 hover 是加深，激活为微透灰(#EBEBEB)
+     ========================================================================= */
+
+  /* 1. 顶部标签体系 (Light) */
+  --tab-top-bg: transparent;
+  --tab-top-text: var(--text-secondary);
+  --tab-top-hover-bg: hsl(0 0% 100% / 0.72);
+  --tab-top-hover-text: var(--text-primary);
+  --tab-top-active-bg: var(--tab-active-surface, #ffffff);
+  --tab-top-active-text: var(--text-primary);
+  --tab-top-active-shadow: var(--shadow-lift-card);
+
+  /* 2. 侧边栏项目体系 (Light) */
+  --sidebar-item-bg: transparent;
+  --sidebar-item-text: var(--text-secondary);
+  --sidebar-item-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4.5%,
+    transparent
+  );
+  --sidebar-item-hover-text: var(--text-primary);
+  --sidebar-item-active-bg: color-mix(in srgb, #ebebeb 75%, transparent);
+  --sidebar-item-active-text: var(--text-primary);
+
   --notice-bg-warn: #fff7e6;
   --notice-border-warn: #ffe7ba;
   --notice-text-warn: #c25e00;
@@ -291,6 +317,31 @@ html[data-theme='dark'] {
   --notice-bg-stop: #241517;
   --notice-border-stop: hsl(359 100% 70% / 0.22);
   --notice-text-stop: #ff8487;
+
+  /* =========================================================================
+     顶部标签体系（Top Tabs System）与侧边栏项体系（Sidebar Items System）(Dark)
+     ========================================================================= */
+
+  /* 1. 顶部标签体系 (Dark) */
+  --tab-top-bg: transparent;
+  --tab-top-text: var(--text-secondary);
+  --tab-top-hover-bg: hsl(0 0% 100% / 0.08);
+  --tab-top-hover-text: var(--text-primary);
+  --tab-top-active-bg: var(--surface-raised);
+  --tab-top-active-text: var(--text-primary);
+  --tab-top-active-shadow: var(--shadow-lift-card);
+
+  /* 2. 侧边栏项目体系 (Dark) */
+  --sidebar-item-bg: transparent;
+  --sidebar-item-text: var(--text-secondary);
+  --sidebar-item-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
+    transparent
+  );
+  --sidebar-item-hover-text: var(--text-primary);
+  --sidebar-item-active-bg: color-mix(in srgb, #2e2e2e 75%, transparent);
+  --sidebar-item-active-text: var(--text-primary);
 
   --notice-bg-warn: #221c13;
   --notice-border-warn: hsl(32 95% 44% / 0.22);
@@ -627,41 +678,43 @@ html[data-ui-size='large'] {
 }
 
 /* --------------------------------------------------------------------------
-   账号界面（登录弹窗 / 设置「账户」分区）组件 token — 设计稿「账号界面 v2」
-   暖灰阶只在账号界面内生效，不改全局 --surface-* / --text-* 灰阶（冲突见评审记录）
+   账号界面兼容别名：100% 对齐当前软件总体 Token 体系（tokens-surface / tokens-palette / tokens-text）
    -------------------------------------------------------------------------- */
 :root,
 html[data-theme='default'],
-html[data-theme='light'] {
-  /* 表面与控件底色（浅色） */
-  --account-surface: #ffffff;
-  --account-panel: #f3f3f2;
-  --account-hover: #f7f7f6;
-  --account-field: #f3f3f2;
-  --account-field-focus: #eeeeed;
-  --account-secondary: #ececeb;
-  --account-pressed: #e7e7e6;
-  /* 文字四阶与禁用（浅色） */
-  --account-text-1: #121212;
-  --account-text-2: #4d4d4d;
-  --account-text-3: #6b6b6b;
-  --account-text-4: #939393;
-  --account-text-disabled: #b3b2b1;
-  /* 主操作 / 危险 / 头像（浅色） */
-  --account-action: #121212;
-  --account-action-text: #ffffff;
-  --account-danger: #dc2626;
-  --account-danger-fill: #faeded;
-  --account-avatar-bg: #eef2fa;
-  --account-avatar-fg: #3b5b92;
-  /* 遮罩：支持 backdrop-filter 时轻压暗 + 模糊；不支持时退化为更深的纯色 */
-  --account-scrim: hsl(0 0% 7% / 0.08);
-  --account-scrim-solid: hsl(0 0% 0% / 0.16);
+html[data-theme='light'],
+html[data-theme='dark'] {
+  --account-surface: var(--bg-card);
+  --account-panel: var(--bg-secondary);
+  --account-hover: var(--state-hover);
+  --account-pressed: var(--state-active);
+  --account-secondary: var(--button-secondary-bg);
+  --account-field: var(--surface-input);
+  --account-field-focus: color-mix(
+    in oklab,
+    var(--surface-input),
+    var(--surface-tint-target) 4%
+  );
+  --account-text-1: var(--text-primary);
+  --account-text-2: var(--text-secondary);
+  --account-text-3: var(--text-tertiary);
+  --account-text-4: var(--text-decor);
+  --account-text-disabled: var(--text-disabled);
+  --account-action: var(--brand);
+  --account-action-text: var(--text-on-accent);
+  --account-danger: var(--color-error);
+  --account-danger-fill: var(--color-error-bg);
+  --account-avatar-bg: var(--bg-secondary);
+  --account-avatar-fg: var(--brand);
+  --account-scrim: var(--modal-scrim);
+  --account-scrim-solid: color-mix(
+    in srgb,
+    var(--shadow-color, #000) 25%,
+    transparent
+  );
   --account-scrim-filter: blur(10px) saturate(120%);
-
-  /* 尺寸（与主题无关） */
-  --account-radius: 10px;
-  --account-radius-dialog: 20px;
+  --account-radius: var(--button-radius);
+  --account-radius-dialog: var(--radius-2xl);
   --account-auth-width: 760px;
   --account-auth-height: 480px;
   --account-auth-brand-width: 280px;
@@ -675,8 +728,6 @@ html[data-theme='light'] {
   --account-dot-size: 6px;
   --account-ring-width: 2px;
   --account-caret-width: 1.5px;
-
-  /* 字号与行高（13/15 号无全局 token，随字号档位 --font-size-adjust 缩放） */
   --account-font-size-label: calc(13px + var(--font-size-adjust, 0px));
   --account-font-size-brand: calc(15px + var(--font-size-adjust, 0px));
   --account-line-caption: 16px;
@@ -685,34 +736,22 @@ html[data-theme='light'] {
   --account-line-title: 28px;
   --account-tracking-title: -0.3px;
   --account-tracking-brand: -0.2px;
-
-  /* 动效：遮罩 160ms（无对应全局时长档） */
   --account-duration-scrim: 160ms;
 }
 
 html[data-theme='dark'] {
-  /* 表面与控件底色（深色） */
-  --account-surface: #1b1b1b;
-  --account-panel: #222222;
-  --account-hover: #202020;
-  --account-field: #232323;
-  --account-field-focus: #282828;
-  --account-secondary: #2a2a2a;
-  --account-pressed: #2f2f2f;
-  /* 文字四阶与禁用（深色） */
-  --account-text-1: #f5f5f5;
-  --account-text-2: #bdbdbd;
-  --account-text-3: #979797;
-  --account-text-4: #6e6e6e;
-  --account-text-disabled: #5e5e5e;
-  /* 主操作 / 危险 / 头像（深色） */
-  --account-action: #f5f5f5;
-  --account-action-text: #121212;
-  --account-danger: #f87171;
-  --account-danger-fill: #251919;
-  --account-avatar-bg: #1d2433;
-  --account-avatar-fg: #8faee0;
+  --account-avatar-bg: color-mix(
+    in srgb,
+    var(--brand) 18%,
+    var(--surface-base, #141414)
+  );
+  --account-avatar-fg: var(--brand);
+
   /* 遮罩（深色） */
-  --account-scrim: hsl(0 0% 0% / 0.4);
-  --account-scrim-solid: hsl(0 0% 0% / 0.55);
+  --account-scrim: var(--modal-scrim);
+  --account-scrim-solid: color-mix(
+    in srgb,
+    var(--shadow-color, #000) 55%,
+    transparent
+  );
 }

@@ -42,6 +42,7 @@
     cursor: pointer;
     outline: none;
     transition:
+      background-color var(--transition-fast),
       border-color var(--transition-micro),
       box-shadow var(--transition-micro);
   }
@@ -56,7 +57,7 @@
     background-color: var(--btn-hover-overlay);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--transition-micro);
+    transition: opacity var(--transition-fast);
   }
 
   .button:where(:hover:not(:disabled):not([aria-disabled='true']))::before {
@@ -101,7 +102,8 @@
     --btn-h: 24px;
     --btn-px: 6px;
     --btn-fs: var(--font-size-xs);
-    --btn-radius: var(--radius-sm);
+    /* xs 按钮圆角单独取控件档 8px，不跟随通用小项档 --radius-sm(6px)，保持按钮梯度（2026-11-01） */
+    --btn-radius: var(--radius-control);
     --btn-icon-size: 14px;
     --btn-gap: var(--space-1);
   }
@@ -157,17 +159,16 @@
     );
   }
 
-  /* Secondary：纯白实体卡片 + 精致发丝边框 + 低空微阴影
-   * 边框降调：旧值 var(--border-color) 属"强描边"档，在白卡上存在感过重。
-   * 改用 --hairline（--border-subtle），与全应用分隔线同档，视觉更轻盈。 */
+  /* Secondary：实色灰度台阶底、无描边、无阴影（2026-11-01 用户定版）
+   * 底色走主题 token --button-secondary-bg：只比所在表面亮/暗几个百分点，
+   * 靠明度台阶分层，不再靠描边与阴影勾轮廓；亮度变化由基座 background-color
+   * 过渡与 ::before 叠加层共同平滑（var(--transition-fast)，约 150ms）。 */
   .button:where(.buttonSecondary, [data-variant='secondary']),
   .button:where(.buttonDefault, [data-variant='default']) {
-    --btn-bg: var(--cover-card-bg, var(--bg-card));
+    --btn-bg: var(--button-secondary-bg);
     --btn-fg: var(--text-primary);
-    --btn-border: var(--hairline, var(--border-subtle));
-    --btn-shadow:
-      0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
-      0 1px 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    --btn-border: transparent;
+    --btn-shadow: none;
     --btn-hover-overlay: var(--state-hover);
     --btn-active-overlay: var(--state-active);
   }
@@ -180,11 +181,11 @@
   :global(.theme-dark)
     .button:where(.buttonSecondary, [data-variant='secondary']),
   :global(.theme-dark) .button:where(.buttonDefault, [data-variant='default']) {
-    /* 次级按钮底色走主题 token（深色稍亮于所在层，heson 2026-10-11；浅色 = bg-card 不变） */
-    --btn-bg: var(--bg-card, var(--cover-card-bg, var(--bg-card)));
+    /* 次级按钮底色走主题 token（暗色实色台阶：比卡面亮几个百分点，2026-11-01 用户定版）；与浅色同口径：无描边、无阴影 */
+    --btn-bg: var(--button-secondary-bg);
     --btn-fg: var(--text-primary);
-    --btn-border: var(--border-color);
-    --btn-shadow: var(--shadow-sm);
+    --btn-border: transparent;
+    --btn-shadow: none;
     --btn-hover-overlay: var(--state-hover);
     --btn-active-overlay: var(--state-active);
   }
@@ -194,7 +195,7 @@
   .button:where(.buttonDefault, [data-variant='default']):disabled {
     opacity: var(--opacity-disabled);
     box-shadow: none;
-    border-color: var(--border-subtle);
+    border-color: transparent;
     background-color: transparent;
   }
 

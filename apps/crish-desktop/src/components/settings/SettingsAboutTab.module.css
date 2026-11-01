@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: center;
   width: 44px;
-  height: 44px;
+  height: 44px; /* 刻度外裸值：与 width 成对的品牌标志固定尺寸，无既有档，授权保留 */
   border-radius: var(--radius-l);
   background: var(--state-hover);
   color: var(--text-primary);

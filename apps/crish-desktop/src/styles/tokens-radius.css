@@ -16,6 +16,9 @@ html[data-theme='light'] {
   --radius-row: 6px;
   --radius-control: 8px;
   --radius-card: 12px;
+  --radius-option: var(
+    --radius-card
+  ); /* 卡内选项型元素大圆角（选项行/卡内控件），与卡片同族（2026-11-01 新增） */
   --radius-menu-inner: 12px;
   --radius-menu-outer: 18px;
   --radius-dock: 20px;
@@ -23,11 +26,11 @@ html[data-theme='light'] {
   --radius-pill: 9999px;
   --radius-circle: 50%;
 
-  /* 基础边框与发丝线（浅色基线） */
-  --user-border-color: #e2e1e0;
-  --user-border-subtle: #f0efee;
-  --border-color: var(--user-border-color, #e2e1e0);
-  --border-subtle: var(--user-border-subtle, #f0efee);
+  /* 基础边框与发丝线（浅色基线，7%~7.5% 纯中性中灰） */
+  --user-border-color: #ececec;
+  --user-border-subtle: #f2f2f2;
+  --border-color: var(--user-border-color, #ececec);
+  --border-subtle: var(--user-border-subtle, #f2f2f2);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
@@ -47,7 +50,7 @@ html[data-theme='light'] {
   --radius-sm: 6px; /* [WAVE2-DEPRECATED-ALIAS] 偶数闭包契约 */
   --radius-md: 8px; /* [WAVE2-DEPRECATED-ALIAS] 恢复 8px 标准控件语义 */
   --radius-m: 8px; /* [WAVE2-DEPRECATED-ALIAS] 8px */
-  --radius-btn: 7px; /* 契约：Button 圆角 7px 用户锁单一权威定义 (layout-contract.test.ts) */
+  --radius-btn: 10px; /* 契约：Button 圆角 10px 用户锁单一权威定义 (layout-contract.test.ts；2026-11-01 由 7px 调整，与 --radius-lg 同档) */
   --btn-radius: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] 8px */
   --button-radius: var(--radius-btn);
   --radius-lg: 10px; /* [WAVE2-DEPRECATED-ALIAS] 过渡衔接次级卡片 */

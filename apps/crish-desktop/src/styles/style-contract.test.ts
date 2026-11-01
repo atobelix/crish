@@ -573,7 +573,7 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     // 浅色按下收到 3%。深色悬停仍走提亮阶梯。
     expect(compactLightBlock).toContain('--state-hover-pct:2.5%');
     expect(compactLightBlock).toContain('--state-active-pct:3%');
-    expect(compactLightBlock).toContain('--state-selected-pct:7%');
+    expect(compactLightBlock).toContain('--state-selected-pct:6%');
     expect(compactLightBlock).toContain(
       '--state-hover:color-mix(insrgb,var(--text-primary)var(--state-hover-pct),transparent)'
     );
@@ -638,11 +638,11 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
   });
 });
 
-describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
+describe('设置按钮圆角 10px 契约（用户锁，survey 04；2026-11-01 锁值由 7px 调整为 10px）', () => {
   it('tokens.css 默认档 --button-radius 锁 var(--radius-btn)，密度档不得改写', () => {
     const css = readTokenCss();
     const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
-    expect(lightBlock).toMatch(/--radius-btn:\s*7px;/);
+    expect(lightBlock).toMatch(/--radius-btn:\s*10px;/);
     expect(lightBlock).toMatch(/--button-radius:\s*var\(--radius-btn\);/);
     const sizeBlockRe = (size: string): RegExp =>
       new RegExp(`\\[data-ui-size=['"]${size}['"]\\]\\s*\\{[\\s\\S]*?\\n\\}`);
@@ -659,7 +659,7 @@ describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
     const seg = readFile(
       'src/components/ui/SegmentedControl/SegmentedControl.module.css'
     );
-    // 2026-09-12 适配 T8 兜底清退：7px 用户锁由 tokens.css 的 --radius-btn: 7px 单点守护
+    // 2026-09-12 适配 T8 兜底清退：按钮圆角用户锁由 tokens.css 的 --radius-btn 单点守护（锁值 2026-11-01 起为 10px）
     // （见上方 it），消费点一律无兜底直连 var(--button-radius) / var(--seg-outer-radius)。
     expect(button).toContain('--btn-radius: var(--button-radius)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius)');
@@ -851,7 +851,6 @@ describe('Tokens SSOT 收敛契约（清退 WAVE2 别名）', () => {
       '--bg-active:',
       '--bg-card-hover:',
       '--bg-card-active:',
-      '--button-secondary-bg:',
       '--control-soft-bg:',
       '--sidebar-hover:',
       '--sidebar-active:',
@@ -886,7 +885,7 @@ describe('Tokens SSOT 收敛契约（清退 WAVE2 别名）', () => {
       /var\(--bg-card-active\b/,
       /var\(--composer-control-hover-bg\b/,
       /var\(--filetree-node-hover-bg\b/,
-      /var\(--button-secondary-bg\b/,
+      // --button-secondary-bg 已于 2026-11-01 经用户决策复活为次级按钮底色 SSOT（实色灰度台阶），移出废弃别名清单
       /var\(--elevate-1\b/,
       /var\(--elevate-1-active\b/,
       /var\(--elevate-2\b/,

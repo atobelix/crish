@@ -11,24 +11,20 @@
 :root,
 html[data-theme='default'],
 html[data-theme='light'] {
-  --surface-base-default: #fcfcfb;
+  --surface-base-default: #f9f9f9;
   --surface-base: var(--user-surface-base, var(--surface-base-default));
   --surface-tint-target: var(--user-surface-tint, #ffffff);
   --surface-deep-target: var(--user-surface-deep, #000000);
   --elev-direction: var(--user-elev-direction, -1);
 
-  /* e0 下凹：向深混合 3.5% 形成清爽浅下凹槽 */
+  /* e0 下凹：向深收敛形成清爽浅下凹槽 */
   --surface-sunken: var(--surface-outer);
 
-  /* e1 画布：柔和高明度清爽基准地平面（灰度下调 2~3 点） */
+  /* e1 画布：2.5% 纯中性灰基准地平面 */
   --surface-canvas: var(--surface-base);
 
-  /* e2 外壳：微弱收敛（0.8% 微收，透出轻盈通透感） */
-  --surface-shell: color-mix(
-    in oklab,
-    var(--surface-base),
-    var(--surface-deep-target) 0.8%
-  );
+  /* e2 外壳：2.5% 纯中性灰深底 */
+  --surface-shell: #f9f9f9;
 
   /* e3 卡片：在暖灰底板上自浮起 */
   --surface-card: var(--surface-main);
@@ -84,12 +80,12 @@ html[data-theme='light'] {
   --tab-active-bg: var(--surface-input);
 
   /* [WAVE2-DEPRECATED-ALIAS] 旧表面与背景别名桥接层（Wave 2 Codemod 后一键清除） */
-  --user-surface-outer: #f7f6f5; /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-surface-outer: #f9f9f9; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-main: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-input: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
   --surface-outer: var(
     --user-surface-outer,
-    #f7f6f5
+    #f9f9f9
   ); /* [WAVE2-DEPRECATED-ALIAS] */
   --surface-main: var(
     --user-surface-main,
@@ -115,15 +111,20 @@ html[data-theme='light'] {
   --bg-card-subtle: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --leaf-card-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
   --workspace-surface-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --shell-chrome-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --shell-chrome-bg: #f9f9f9; /* [WAVE2-DEPRECATED-ALIAS] */
   --shell-inset-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --composer-bg: var(--surface-input); /* [WAVE2-DEPRECATED-ALIAS] */
   --tab-active-bg: var(--surface-input);
   --tab-active-surface: var(--surface-input);
   --seg-slider-bg: var(--surface-input);
-  --button-secondary-bg: var(--bg-card);
+  /* 次级按钮实色底（浅色）：卡面色向深混 4%，只暗几个百分点，靠灰度台阶分层、不用描边（2026-11-01 用户定版） */
+  --button-secondary-bg: color-mix(
+    in oklab,
+    var(--surface-main),
+    var(--surface-deep-target) 4%
+  );
   --user-bubble-bg: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
-  --content-frame-border: #ebeae9; /* [WAVE2-DEPRECATED-ALIAS] */
+  --content-frame-border: #ececec; /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 /* ── 暗色主题表面派生 (Dark Surface Ladder) ── */
@@ -229,7 +230,12 @@ html[data-theme='dark'] {
   --tab-active-surface: color-mix(in srgb, var(--surface-base), #ffffff 16%);
   --seg-slider-bg: var(--state-selected);
   --sidebar-active: var(--state-selected);
-  --button-secondary-bg: var(--state-active);
+  /* 次级按钮实色底（暗色）：基色向提亮目标混 8.5%，比卡面亮几个百分点；由基色派生、所有皮肤自动跟随，禁止写死色值（2026-11-01 用户定版，替代旧 6% 透明叠加；同日收尾对齐：比例由 5.5% 抬到 8.5%，与设置行底（卡面 +5%）同档，避免按钮坐在行上比行还暗） */
+  --button-secondary-bg: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) 8.5%
+  );
   --user-bubble-bg: color-mix(
     in srgb,
     var(--user-text-primary) 9%,
