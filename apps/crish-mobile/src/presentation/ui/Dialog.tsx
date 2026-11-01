@@ -2,7 +2,7 @@
 // 遮罩（J10）：静止全屏层、只做 opacity 过渡（强档 scrimStrong，iOS 叠 BlurView
 // 复现原型 blur(2px)）；卡片单独入场——translateY(12) + 淡入、0.26s emphasized，
 // 遮罩不随卡片移动。面板（J7）：iOS 半透明强档，Android 实色兜底。
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -26,6 +26,8 @@ export interface DialogProps {
   visible: boolean;
   title: string;
   description?: string;
+  /** 标题/正文与动作行之间的内容槽（G3：输入型弹窗放表单控件） */
+  children?: ReactNode;
   actions: readonly DialogAction[];
   onDismiss: () => void;
   testID?: string;
@@ -38,6 +40,7 @@ export function Dialog({
   visible,
   title,
   description,
+  children,
   actions,
   onDismiss,
   testID,
@@ -120,6 +123,7 @@ export function Dialog({
               {description}
             </AppText>
           ) : null}
+          {children}
           <View
             style={[styles.actions, { gap: theme.space.sm + theme.space.xxs }]}
           >

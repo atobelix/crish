@@ -18,6 +18,8 @@ export interface SheetOptionRowProps {
   onPress: () => void;
   /** 选中：右侧显示品牌色对号 */
   selected?: boolean;
+  /** 危险动作（红字；与 DropdownMenu 条目的 danger 口径一致，G3 删除行用） */
+  danger?: boolean;
   /** 标题后内联状态文（如「在线」/ 连接阶段文案） */
   hint?: string;
   /** 状态文色调：success = 纯绿（在线）；muted = 弱灰 */
@@ -32,6 +34,7 @@ export function SheetOptionRow({
   label,
   onPress,
   selected = false,
+  danger = false,
   hint,
   hintTone = 'muted',
   showChevron = false,
@@ -61,7 +64,12 @@ export function SheetOptionRow({
       ]}
     >
       <View style={[styles.left, { gap: theme.space.xs }]}>
-        <AppText variant="body" numberOfLines={1} style={styles.label}>
+        <AppText
+          variant="body"
+          numberOfLines={1}
+          color={danger ? 'danger' : undefined}
+          style={styles.label}
+        >
           {label}
         </AppText>
         {hint ? (

@@ -29,6 +29,7 @@ import { countUserDecisions } from '@/domain/pure/approvalAttention';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { AppText, Icon, IconButton } from '@/presentation/ui';
 import { SessionListItem } from '@/presentation/components/sessions/SessionListItem';
+import { useSessionOpsController } from '@/presentation/components/sessions/useSessionOpsController';
 import { useDrawerController } from './DrawerContext';
 
 /** 从当前路径解析聚焦会话 id（/session/[id]） */
@@ -67,6 +68,12 @@ export function CrishDrawerContent() {
     setClock({ open: controller.isOpen, nowMs: Date.now() });
   }
   const vm = useSessionListVm(clock.nowMs);
+  // 会话操作（G3）：行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）
+  const sessionOps = useSessionOpsController();
+  const openSessionActions = (sessionId: string) => {
+    const target = [...vm.today, ...vm.earlier].find((s) => s.id === sessionId);
+    if (target) sessionOps.openActions(target);
+  };
 
   // 搜索态：0 = 常态（扫一扫/通知展开），1 = 搜索（叉号展开、动作钮收拢）
   const [searching, setSearching] = useState(false);
@@ -269,6 +276,7 @@ export function CrishDrawerContent() {
                   session={session}
                   selected={session.id === selectedSessionId}
                   onPress={openSession}
+                  onLongPress={openSessionActions}
                 />
               ))}
             </View>
@@ -344,6 +352,9 @@ export function CrishDrawerContent() {
           testID="drawer-new-chat"
         />
       </View>
+
+      {/* 会话操作层（G3：操作 Sheet + 改名弹窗 + 删除确认） */}
+      {sessionOps.layer}
     </View>
   );
 }

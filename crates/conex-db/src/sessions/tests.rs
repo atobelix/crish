@@ -104,3 +104,124 @@ fn list_sessions_and_keyset_pagination_use_aligned_index_without_temp_btree() {
     }
     assert_eq!(paged_ids, all_ids);
 }
+
+// ── G3 定向字段面（C40-C43 存储层）──
+
+fn insert_run_row(db: &LocalDb, run_id: &str, session_id: &str, status: &str) {
+    let run_id = run_id.to_string();
+    let session_id = session_id.to_string();
+    let status = status.to_string();
+    db.write_blocking(move |conn| {
+        conn.execute(
+            "INSERT INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
+             VALUES (?1, ?2, ?3, NULL, 0, 0, 0)",
+            rusqlite::params![run_id, session_id, status],
+        )
+        .unwrap();
+        Ok(())
+    })
+    .unwrap();
+}
+
+fn insert_pending_row(db: &LocalDb, id: &str, session_id: &str) {
+    let id = id.to_string();
+    let session_id = session_id.to_string();
+    db.write_blocking(move |conn| {
+        conn.execute(
+            "INSERT INTO pending_inputs (id, session_id, run_id, payload, created_at)
+             VALUES (?1, ?2, 'r-x', '{}', 0)",
+            rusqlite::params![id, session_id],
+        )
+        .unwrap();
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn g3_targeted_updates_hit_single_columns_only() {
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s-1", 500)).unwrap();
+
+    assert!(db.update_session_title("s-1", "新标题").unwrap());
+    assert!(db.update_session_pinned("s-1", true).unwrap());
+    assert!(db.update_session_archived("s-1", true).unwrap());
+
+    let entry = db.get_session_entry("s-1").unwrap().expect("条目应存在");
+    assert_eq!(entry.title, "新标题");
+    assert!(entry.is_pinned);
+    assert!(entry.is_archived);
+    // 其余列不动：updated_at 保持原值（定向更新不刷新活动时刻）
+    assert_eq!(entry.updated_at, 500);
+    assert_eq!(entry.folder, "常规会话");
+
+    // 不存在的会话：命中 false、读取 None（命令层据此回 cmd.not_found）
+    assert!(!db.update_session_title("s-missing", "x").unwrap());
+    assert!(!db.update_session_pinned("s-missing", true).unwrap());
+    assert!(!db.update_session_archived("s-missing", true).unwrap());
+    assert!(db.get_session_entry("s-missing").unwrap().is_none());
+}
+
+#[test]
+fn g3_guarded_delete_removes_row_meta_and_captures_outputs() {
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s-1", 500)).unwrap();
+    db.set_session_meta("s-1:output_dir", "C:/ws/.agent-outputs/s-1")
+        .unwrap();
+    db.set_session_meta("s-1:output_root", "C:/ws/.agent-outputs")
+        .unwrap();
+    db.set_session_meta("s-1:other", "v").unwrap();
+
+    let outcome = db.delete_session_guarded("s-1").unwrap();
+    assert_eq!(
+        outcome,
+        SessionDeleteOutcome::Deleted {
+            output_dir: Some("C:/ws/.agent-outputs/s-1".to_string()),
+            output_root: Some("C:/ws/.agent-outputs".to_string()),
+        }
+    );
+    assert!(db.get_session_entry("s-1").unwrap().is_none());
+    // meta 前缀键同事务清干净（RUN-15 口径）
+    assert!(db.get_session_meta("s-1:other").unwrap().is_none());
+}
+
+#[test]
+fn g3_guarded_delete_blocks_active_run_pending_and_hydrated() {
+    let db = LocalDb::open_in_memory().unwrap();
+
+    db.upsert_session_entry(&sample_entry("s-run", 500)).unwrap();
+    insert_run_row(&db, "r-1", "s-run", "running");
+    assert_eq!(
+        db.delete_session_guarded("s-run").unwrap(),
+        SessionDeleteOutcome::Blocked(SessionDeleteBlocker::ActiveRun)
+    );
+    assert!(db.get_session_entry("s-run").unwrap().is_some());
+
+    // 终态 run 不阻断
+    db.upsert_session_entry(&sample_entry("s-done", 500)).unwrap();
+    insert_run_row(&db, "r-2", "s-done", "completed");
+    assert!(matches!(
+        db.delete_session_guarded("s-done").unwrap(),
+        SessionDeleteOutcome::Deleted { .. }
+    ));
+
+    db.upsert_session_entry(&sample_entry("s-pending", 500)).unwrap();
+    insert_pending_row(&db, "p-1", "s-pending");
+    assert_eq!(
+        db.delete_session_guarded("s-pending").unwrap(),
+        SessionDeleteOutcome::Blocked(SessionDeleteBlocker::PendingInputs)
+    );
+
+    let mut hydrated = sample_entry("s-sub", 500);
+    hydrated.hydrated_from_engine = Some(true);
+    db.upsert_session_entry(&hydrated).unwrap();
+    assert_eq!(
+        db.delete_session_guarded("s-sub").unwrap(),
+        SessionDeleteOutcome::Blocked(SessionDeleteBlocker::EngineHydrated)
+    );
+
+    assert_eq!(
+        db.delete_session_guarded("s-missing").unwrap(),
+        SessionDeleteOutcome::NotFound
+    );
+}

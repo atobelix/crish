@@ -65,6 +65,7 @@ pub use reader_pool::{
     DEFAULT_READER_POOL_SIZE, DEFAULT_SQLITE_BUSY_TIMEOUT_MS,
 };
 pub use runs::{ParseRunStatusError, PendingInput, RunStatus, StoredRun};
+pub use sessions::{OrphanCleanupOutcome, SessionDeleteBlocker, SessionDeleteOutcome};
 pub use usage_analytics::{
     ActivityMatrixCell, ActivityMatrixDto, InsertUsageRecordInput, UsageDashboardDto,
     UsageHeroStats, UsageModelBreakdownItem, UsageRecordRow, UsageTimeseriesPoint,

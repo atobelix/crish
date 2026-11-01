@@ -24,6 +24,13 @@ export function useSessionListVm(nowMs: number): SessionListVm {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
 
+  // 归档会话不进主列表（与主屏 homeScreen 的 isArchived 过滤同口径——
+  // G3 前抽屉未过滤，归档后行在此残留与主屏不一致，一并对齐）
+  const visibleSessions = useMemo(
+    () => sessions.filter((session) => session.isArchived !== true),
+    [sessions]
+  );
+
   const previewOf = useCallback(
     (sessionId: string) => lastPreviewOfWindow(windows[sessionId]),
     [windows]
@@ -32,10 +39,10 @@ export function useSessionListVm(nowMs: number): SessionListVm {
   const groups = useMemo(
     () =>
       groupSessionsByDay(
-        filterSessions(sessions, deferredQuery, previewOf),
+        filterSessions(visibleSessions, deferredQuery, previewOf),
         nowMs
       ),
-    [sessions, deferredQuery, previewOf, nowMs]
+    [visibleSessions, deferredQuery, previewOf, nowMs]
   );
 
   return {
@@ -43,7 +50,7 @@ export function useSessionListVm(nowMs: number): SessionListVm {
     query,
     setQuery,
     windows,
-    hasSessions: sessions.length > 0,
+    hasSessions: visibleSessions.length > 0,
     connected,
     refresh,
   };

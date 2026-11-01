@@ -19,6 +19,72 @@ pub struct OrphanCleanupOutcome {
     pub output_root: Option<String>,
 }
 
+/// 单会话删除阻断原因（G3/C43 显式单删守卫）：与孤儿清理的豁免谓词
+/// （protected）一一对应——同一套「什么会话不能删」的真源，显式删除
+/// 只是不套宽限期（宽限期防 keepIds 对账误删，显式单删是确认动作）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionDeleteBlocker {
+    /// 引擎水合子代理会话（hydrated_from_engine = 1）：桌面孤儿清理
+    /// 一律豁免，显式删除同样拒绝——删除会级联子代理会话树与审计流
+    EngineHydrated,
+    /// 存在非终态 run（queued / initializing / running /
+    /// awaiting-approval / completing / cancelling）
+    ActiveRun,
+    /// 存在未消费的 pending_inputs（会话仍处于运行期产出待消费状态）
+    PendingInputs,
+}
+
+/// 单会话删除守卫判定（连接级纯函数）：行不存在 → Ok(None)（存在性
+/// 由调用方区分）；命中多项守卫时按 EngineHydrated → ActiveRun →
+/// PendingInputs 的优先级返回首项（错误码映射在命令实现层）。
+pub(crate) fn session_delete_blocker_conn(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<Option<SessionDeleteBlocker>, DbFailure> {
+    let row = conn
+        .query_row(
+            "SELECT COALESCE(hydrated_from_engine, 0),
+                    EXISTS (
+                        SELECT 1 FROM runs r
+                        WHERE r.session_id = sessions.id
+                          AND r.status IN (
+                              'queued','initializing','running','awaiting-approval',
+                              'completing','cancelling'
+                          )
+                    ),
+                    EXISTS (
+                        SELECT 1 FROM pending_inputs p
+                        WHERE p.session_id = sessions.id
+                    )
+             FROM sessions WHERE id = ?1",
+            rusqlite::params![session_id],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| DbFailure {
+            message: format!("session_delete_blocker: {e}"),
+            kind: DbFailureKind::Other("session_delete_blocker".to_string()),
+        })?;
+    let Some((hydrated, active_run, pending)) = row else {
+        return Ok(None);
+    };
+    Ok(if hydrated == 1 {
+        Some(SessionDeleteBlocker::EngineHydrated)
+    } else if active_run == 1 {
+        Some(SessionDeleteBlocker::ActiveRun)
+    } else if pending == 1 {
+        Some(SessionDeleteBlocker::PendingInputs)
+    } else {
+        None
+    })
+}
+
 /// 孤儿会话清理连接级纯函数（D-P11：供 `write_blocking` 闭包调用；
 /// 绝对禁止捕获 `LocalDb` / 调用 `self.*` / 开启 `conn.transaction()`——
 /// 外层 Actor 已持 `BEGIN IMMEDIATE`，本函数直接在其事务内顺序执行）。

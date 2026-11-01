@@ -66,6 +66,8 @@ export interface ChatFlatItemProps {
   /** 末行不画虚线分隔 */
   isLast?: boolean;
   onPress: (sessionId: string) => void;
+  /** 长按打开会话操作（G3：与 Composer 语音长按同为 App 既有手势面） */
+  onLongPress?: (sessionId: string) => void;
 }
 
 export const ChatFlatItem = memo(function ChatFlatItem({
@@ -74,6 +76,7 @@ export const ChatFlatItem = memo(function ChatFlatItem({
   nowMs,
   isLast = false,
   onPress,
+  onLongPress,
 }: ChatFlatItemProps) {
   const theme = useTheme();
   const status = chatStatusOf(session);
@@ -93,6 +96,7 @@ export const ChatFlatItem = memo(function ChatFlatItem({
             : '已完成'
       }`}
       onPress={() => onPress(session.id)}
+      onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
       style={({ pressed }) => [
         {
           gap: theme.space.xs + 2,

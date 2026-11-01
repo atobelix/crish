@@ -8,8 +8,24 @@ use rusqlite::OptionalExtension;
 mod lease;
 mod orphan;
 
-pub use orphan::OrphanCleanupOutcome;
+pub use orphan::{OrphanCleanupOutcome, SessionDeleteBlocker};
 pub(crate) use orphan::{cleanup_orphan_sessions_conn, delete_session_meta_prefix_conn};
+
+/// 守卫删除结果（G3/C43：单写事务内「判定守卫 → 捕获产出 meta → 删除」
+/// 原子完成；壳层据 Deleted 携带的 meta 值做产出目录回收站清理，
+/// 与孤儿清理的 RUN-07 口径一致）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionDeleteOutcome {
+    /// 已删除；携带删前捕获的产出 meta（`{id}:output_dir` / `{id}:output_root`）
+    Deleted {
+        output_dir: Option<String>,
+        output_root: Option<String>,
+    },
+    /// 会话不存在（未执行任何删除）
+    NotFound,
+    /// 命中删除守卫（未执行任何删除；原因与孤儿清理豁免谓词同源）
+    Blocked(SessionDeleteBlocker),
+}
 
 impl LocalDb {
     /// 幂等插入会话行（自愈路径 / 引擎兜底用）。
@@ -185,18 +201,154 @@ impl LocalDb {
     /// 前缀显式删除，保证「删会话 → 按前缀查询 session_meta 返回 0 行」）。
     pub fn delete_session(&self, session_id: &str) -> Result<(), DbFailure> {
         let session_id = session_id.to_string();
+        self.write_blocking(move |conn| delete_session_rows_conn(conn, &session_id))
+    }
+
+    // ===== G3: 移动端会话操作（C40-C43）定向字段面 =====
+    // 与桌面侧栏同一存储层、同一语义：桌面经 upsert_session_entry 全条目
+    // 写 title / is_pinned / is_archived；远程面走定向单列 UPDATE，避免
+    // 全条目覆盖与桌面并发编辑互相踩踏。其余列一律不动（updated_at 亦
+    // 不刷新——桌面 upsert 写回的同样是其内存条目的既有 updated_at）。
+
+    /// 读取单个会话索引条目（不存在 → None）。读路径同 list_sessions。
+    pub fn get_session_entry(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<SessionIndexEntry>, DbFailure> {
+        let session_id = session_id.to_string();
+        self.read(move |conn| {
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
+                            timestamp, updated_at, message_count, pinned_message_ids,
+                            engine_cursor, engine_last_run_id, hydrated_from_engine
+                     FROM sessions
+                     WHERE id = ?1",
+                )
+                .map_err(|e| self.latch_error("get_session_entry_prepare", e))?;
+
+            let entry = stmt
+                .query_row(rusqlite::params![session_id], map_session_index_entry)
+                .optional()
+                .map_err(|e| self.latch_error("get_session_entry_row", e))?;
+
+            Ok(entry)
+        })
+    }
+
+    /// 定向改名（仅 title 列）。返回是否命中行（false = 会话不存在）。
+    pub fn update_session_title(
+        &self,
+        session_id: &str,
+        title: &str,
+    ) -> Result<bool, DbFailure> {
+        let session_id = session_id.to_string();
+        let title = title.to_string();
         self.write_blocking(move |conn| {
-            conn.execute(
-                "DELETE FROM sessions WHERE id = ?1",
-                rusqlite::params![session_id],
-            )
-            .map_err(|e| DbFailure {
-                message: format!("delete_session: {e}"),
-                kind: DbFailureKind::Other("delete_session".to_string()),
-            })?;
-            delete_session_meta_prefix_conn(conn, &session_id)?;
-            orphan::delete_session_sequence_conn(conn, &session_id)?;
-            Ok(())
+            let affected = conn
+                .execute(
+                    "UPDATE sessions SET title = ?2 WHERE id = ?1",
+                    rusqlite::params![session_id, title],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("update_session_title: {e}"),
+                    kind: DbFailureKind::Other("update_session_title".to_string()),
+                })?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 定向置顶标记（仅 is_pinned 列）。返回是否命中行。
+    pub fn update_session_pinned(
+        &self,
+        session_id: &str,
+        pinned: bool,
+    ) -> Result<bool, DbFailure> {
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            let affected = conn
+                .execute(
+                    "UPDATE sessions SET is_pinned = ?2 WHERE id = ?1",
+                    rusqlite::params![session_id, i64::from(pinned)],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("update_session_pinned: {e}"),
+                    kind: DbFailureKind::Other("update_session_pinned".to_string()),
+                })?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 定向归档标记（仅 is_archived 列）。返回是否命中行。
+    pub fn update_session_archived(
+        &self,
+        session_id: &str,
+        archived: bool,
+    ) -> Result<bool, DbFailure> {
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            let affected = conn
+                .execute(
+                    "UPDATE sessions SET is_archived = ?2 WHERE id = ?1",
+                    rusqlite::params![session_id, i64::from(archived)],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("update_session_archived: {e}"),
+                    kind: DbFailureKind::Other("update_session_archived".to_string()),
+                })?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 守卫删除（G3/C43 显式单删）：单写事务内依次判定存在性 → 删除
+    /// 守卫（orphan::session_delete_blocker_conn，与孤儿清理豁免谓词
+    /// 同源；显式删除不套宽限期——宽限期防的是 keepIds 对账误删，
+    /// 显式单删是用户确认动作）→ 捕获产出 meta → 执行删除（行 + meta
+    /// 前缀键 + sequence 槽，与 delete_session 同口径）。
+    pub fn delete_session_guarded(
+        &self,
+        session_id: &str,
+    ) -> Result<SessionDeleteOutcome, DbFailure> {
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            let exists = conn
+                .query_row(
+                    "SELECT 1 FROM sessions WHERE id = ?1",
+                    rusqlite::params![session_id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("delete_session_guarded_exists: {e}"),
+                    kind: DbFailureKind::Other("delete_session_guarded".to_string()),
+                })?;
+            if exists.is_none() {
+                return Ok(SessionDeleteOutcome::NotFound);
+            }
+            if let Some(blocker) = orphan::session_delete_blocker_conn(conn, &session_id)? {
+                return Ok(SessionDeleteOutcome::Blocked(blocker));
+            }
+            // RUN-07 同口径：删行/删键前捕获产出 meta（键名与孤儿清理一致）
+            let read_meta = |suffix: &str| -> Result<Option<String>, DbFailure> {
+                let key = format!("{session_id}:{suffix}");
+                conn.query_row(
+                    "SELECT value FROM session_meta WHERE key = ?1",
+                    rusqlite::params![key],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("delete_session_guarded_capture_meta: {e}"),
+                    kind: DbFailureKind::Other("delete_session_guarded".to_string()),
+                })
+            };
+            let output_dir = read_meta("output_dir")?;
+            let output_root = read_meta("output_root")?;
+            delete_session_rows_conn(conn, &session_id)?;
+            Ok(SessionDeleteOutcome::Deleted {
+                output_dir,
+                output_root,
+            })
         })
     }
 
@@ -347,6 +499,25 @@ impl LocalDb {
             Ok(())
         })
     }
+}
+
+/// 连接级删除三步（行 DELETE + session_meta 前缀键 + session_sequence
+/// 槽）：delete_session 与 delete_session_guarded 共用同一口径。
+fn delete_session_rows_conn(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<(), DbFailure> {
+    conn.execute(
+        "DELETE FROM sessions WHERE id = ?1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("delete_session: {e}"),
+        kind: DbFailureKind::Other("delete_session".to_string()),
+    })?;
+    delete_session_meta_prefix_conn(conn, session_id)?;
+    orphan::delete_session_sequence_conn(conn, session_id)?;
+    Ok(())
 }
 
 fn map_session_index_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionIndexEntry> {

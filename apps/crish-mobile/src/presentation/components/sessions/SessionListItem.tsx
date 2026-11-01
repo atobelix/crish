@@ -9,6 +9,8 @@ import { AppText, Badge } from '@/presentation/ui';
 export interface SessionListItemProps {
   session: SessionSummary;
   onPress: (sessionId: string) => void;
+  /** 长按打开会话操作（G3：与 Composer 语音长按同为 App 既有手势面） */
+  onLongPress?: (sessionId: string) => void;
   /** 当前打开的会话 */
   selected?: boolean;
 }
@@ -31,6 +33,7 @@ function sessionA11yLabel(session: SessionSummary): string {
 export const SessionListItem = memo(function SessionListItem({
   session,
   onPress,
+  onLongPress,
   selected = false,
 }: SessionListItemProps) {
   const theme = useTheme();
@@ -42,6 +45,7 @@ export const SessionListItem = memo(function SessionListItem({
       accessibilityState={{ selected }}
       accessibilityLabel={sessionA11yLabel(session)}
       onPress={() => onPress(session.id)}
+      onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
       style={({ pressed }) => [
         styles.row,
         {
