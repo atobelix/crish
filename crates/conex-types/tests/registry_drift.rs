@@ -1891,8 +1891,8 @@ fn registry_drift_timeline_truncate_registered() {
 // 生成脚本（scripts/generate-engine-bindings.mjs，R0-03 泛化为多注册表分发）
 // 的机器可读导出。本段把注册表与 Rust 侧真实 serde 行为锁定：
 //
-// - kind 全量：注册表 103 条 kind（messageId 1-103 连续）== 模块
-//   [conex_device_protocol::all_kinds]（静态 29 + remote 37 + result 37），
+// - kind 全量：注册表 117 条 kind（messageId 1-117 连续）== 模块
+//   [conex_device_protocol::all_kinds]（静态 29 + remote 44 + result 44），
 //   且 messages 与 kinds 一一对应（id/kind/rustVariant 引用可解析）；
 // - 错误码全量：注册表 errors 段（common+protocol+business）去重后 45 个
 //   == [conex_device_protocol::ALL_ERROR_CODES]，且 common 码必须重新登记在
@@ -2126,7 +2126,7 @@ fn device_sample_value(reg: &DeviceRegistry, ty: &str) -> Value {
 }
 
 /// 按注册表 rustVariant 映射到 Rust 类型做回环校验（29 条静态消息体 +
-/// 命令/响应/错误信封，全量覆盖 103 kind 的 wire 载荷形态）
+/// 命令/响应/错误信封，全量覆盖 117 kind 的 wire 载荷形态）
 fn check_device_body_roundtrip(rust_variant: &str, fields: &[FieldSpec], sample: Value) {
     match rust_variant {
         "PairHello" => check_roundtrip::<PairHello>(rust_variant, fields, sample),
@@ -2163,7 +2163,7 @@ fn check_device_body_roundtrip(rust_variant: &str, fields: &[FieldSpec], sample:
     }
 }
 
-// ── 9.1 kind 全量：注册表 103 条 ↔ Rust all_kinds() ──
+// ── 9.1 kind 全量：注册表 117 条 ↔ Rust all_kinds() ──
 
 #[test]
 fn device_registry_kinds_match_rust_all_kinds() {
@@ -2174,9 +2174,12 @@ fn device_registry_kinds_match_rust_all_kinds() {
     );
     assert_eq!(reg.schema_version, 1);
     assert_eq!(reg.protocol_version, 1);
-    assert_eq!(reg.message_count, 103, "M6 §1.1：kind 总数必须为 103");
-    assert_eq!(reg.kinds.len(), 103);
-    assert_eq!(reg.messages.len(), 103);
+    assert_eq!(
+        reg.message_count, 117,
+        "M6 §1.1：kind 总数必须为 117（基线 103 + G 系列 remote/result 各 +7）"
+    );
+    assert_eq!(reg.kinds.len(), 117);
+    assert_eq!(reg.messages.len(), 117);
 
     // kinds 与 messages 一一对应（id/kind 双键）
     for (i, kind) in reg.kinds.iter().enumerate() {
@@ -2260,9 +2263,9 @@ fn device_registry_kinds_match_rust_all_kinds() {
         }
     }
 
-    // 与 Rust 侧 103 全量集合一致（all_kinds = 静态 29 + remote 37 + result 37）
+    // 与 Rust 侧 117 全量集合一致（all_kinds = 静态 29 + remote 44 + result 44）
     let rust_kinds: std::collections::BTreeSet<&str> = all_kinds().into_iter().collect();
-    assert_eq!(rust_kinds.len(), 103);
+    assert_eq!(rust_kinds.len(), 117);
     let reg_kinds: std::collections::BTreeSet<&str> =
         reg.kinds.iter().map(|k| k.kind.as_str()).collect();
     assert_eq!(
@@ -2315,15 +2318,16 @@ fn device_registry_error_codes_match_rust_all_error_codes() {
     }
 }
 
-// ── 9.2.5 命令面：37 条 C01-C37 ↔ Rust REMOTE_KINDS/RESULT_KINDS ──
+// ── 9.2.5 命令面：44 条 C01-C44 ↔ Rust REMOTE_KINDS/RESULT_KINDS ──
 
 #[test]
 fn device_registry_commands_match_rust_kinds() {
     let reg = device_registry();
     assert_eq!(
         reg.commands.len(),
-        37,
-        "命令必须为 37 条（M6 §4：F1 10 + F2 5 + F4 8 + F5 4 + F6 5 + 设备域 5）"
+        44,
+        "命令必须为 44 条（M6 §4 基线 37：F1 10 + F2 5 + F4 8 + F5 4 + F6 5 + 设备域 5；\
+         G 系列 +7：G2 模型 C38/C39、G3 会话操作 C40-C43、G7 技能 C44）"
     );
     let error_codes: std::collections::BTreeSet<&str> =
         all_device_error_codes(&reg).into_iter().collect();
@@ -2331,7 +2335,7 @@ fn device_registry_commands_match_rust_kinds() {
         reg.commands.iter().map(|c| c.number.as_str()).collect();
     for (i, cmd) in reg.commands.iter().enumerate() {
         let expected_number = format!("C{:02}", i + 1);
-        assert_eq!(cmd.number, expected_number, "命令编号必须 C01-C37 连续");
+        assert_eq!(cmd.number, expected_number, "命令编号必须 C01-C44 连续");
         assert_eq!(
             cmd.kind,
             format!("remote.{}", cmd.name),
@@ -2385,7 +2389,7 @@ fn device_registry_commands_match_rust_kinds() {
         whitelist_count >= 10,
         "命令白名单必须成规模非空：{whitelist_count}"
     );
-    // remote.* 37 个 kind == Rust REMOTE_KINDS；result.* 37 个 kind == RESULT_KINDS
+    // remote.* 44 个 kind == Rust REMOTE_KINDS；result.* 44 个 kind == RESULT_KINDS
     let remote_kinds: std::collections::BTreeSet<&str> =
         reg.commands.iter().map(|c| c.kind.as_str()).collect();
     let rust_remote: std::collections::BTreeSet<&str> = REMOTE_KINDS.iter().copied().collect();
@@ -2405,7 +2409,7 @@ fn device_registry_commands_match_rust_kinds() {
         "注册表 result.* kind 与 Rust RESULT_KINDS 不一致"
     );
     // C 编号集合必须与命令表一一对应（防能力位引用悬空）
-    assert_eq!(command_numbers.len(), 37);
+    assert_eq!(command_numbers.len(), 44);
 }
 
 // ── 9.3 能力位全量：注册表 17 位 ↔ Rust ALL_CAPABILITIES wire 名 ──
@@ -2582,10 +2586,10 @@ fn device_registry_static_message_bodies_match_serde_wire() {
     }
     assert_eq!(
         checked, 29,
-        "静态消息（内联 fields）必须为 29 条（103 - 37 - 37）"
+        "静态消息（内联 fields）必须为 29 条（117 - 44 - 44）"
     );
 
-    // 命令/响应信封单独锁定（remote.* / result.* 共 74 条共用两个 body 类型）
+    // 命令/响应信封单独锁定（remote.* / result.* 共 88 条共用两个 body 类型）
     let request_fields = match reg.types.get("CommandRequest") {
         Some(TypeSpec::Struct { fields }) => fields,
         _ => panic!("types 表必须登记 CommandRequest"),
