@@ -1,5 +1,7 @@
-// 外观与主题子面板（原型 subTheme）：跟随系统 / 浅色 / 深色单选，选中行 = 绿色对号。
+// 外观与主题子面板（原型 subTheme）：跟随系统 / 浅色 / 深色 / 纯净中性灰四档
+// 单选（第四档为推导档，J5/J8)，选中行 = 绿色对号 15。
 import { ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useTheme,
   THEME_MODES,
@@ -16,22 +18,27 @@ export interface SettingsThemeViewProps {
 
 export function SettingsThemeView({ vm, onBack }: SettingsThemeViewProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
-      <AppHeader title="外观与主题" onBack={onBack} centered />
+      <AppHeader title="外观与主题" onBack={onBack} floating />
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
-          paddingTop: theme.space.sm,
+          paddingTop: insets.top + theme.size.touchLarge + theme.space.sm + 2,
           paddingBottom: theme.space.section,
           gap: theme.space.lg,
         }}
       >
-        <View style={{ gap: theme.space.xs }}>
+        <View style={{ gap: theme.space.xs + 2 }}>
           <AppText
-            variant="footnote"
+            variant="sectionLabel"
             color="textTertiary"
-            style={{ paddingHorizontal: theme.space.xs + 2 }}
+            style={{
+              paddingHorizontal: theme.space.xs + 2,
+              fontWeight: '500',
+              letterSpacing: -(theme.type.sectionLabel.letterSpacing ?? 0),
+            }}
           >
             界面主题
           </AppText>
@@ -52,7 +59,7 @@ export function SettingsThemeView({ vm, onBack }: SettingsThemeViewProps) {
                   vm.themeMode === mode ? (
                     <Icon
                       name="check"
-                      size={theme.size.iconSmall}
+                      size={theme.size.iconSmall - 1}
                       color={theme.colors.brand}
                     />
                   ) : null

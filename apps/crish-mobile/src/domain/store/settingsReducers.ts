@@ -2,12 +2,19 @@
 // 分组按 F6 规格收敛为**实际接线消费面**（R4 裁决：非必要不留投机配置面——
 // 未接线到 UI/行为的分组字段不预置，未来落地时按组追加，merge-with-defaults 天然兼容）：
 // - 通知 notification：总开关 + 场景级开关（F6 §10.1/§10.2；prefsGate 通道映射消费）；
-// - 外观 appearance：主题三选（F6 §9 本机偏好，不回写桌面；useTheme 投影消费）。
+// - 外观 appearance：主题四选（F6 §9 本机偏好，不回写桌面；useTheme 投影消费）；
+// - 输入 composer：权限模式（G1 追加；与桌面 permissionModes 同三档同默认，
+//   发起 run 时经 domain/pure/permissionMode 映射透传，本机偏好不回写桌面）。
 // 组合纪律（M5 §1.3）：不复制契约字段——本机偏好自有字段（无跨端契约副本）。
 // 类型安全：SettingsGroups 分组→类型映射，store 动作泛型约束。
+import type { PermissionMode } from '@crish/shared-types';
 
-/** 主题模式三选（F6 §9：跟随系统/浅色/深色，默认跟随系统；useTheme 消费） */
-export type ThemeMode = 'system' | 'light' | 'dark';
+/** 主题模式四选（F6 §9：跟随系统/浅色/深色，默认跟随系统；useTheme 消费。
+ * 第四档 'neutral'（纯净中性灰）为 2026-11-01 原型对齐 M7 追加（裁决 J5)：
+ * 原型主题面板有此选项名但无色值，其色板为推导值（theme.ts neutralBase)。
+ * 持久化兼容：存量存档只有前三档值，均为本联合的合法成员，hydrate 深合并
+ * 原样保留、无需迁移；未知字符串不会写入（写入面只有 setThemeMode 的类型约束）。 */
+export type ThemeMode = 'system' | 'light' | 'dark' | 'neutral';
 
 /** 正文字号三选（原型 subFont：标准 / 适度放大 / 大号无障碍；theme type 阶梯乘数消费） */
 export type FontScale = 'standard' | 'large' | 'xlarge';
@@ -36,7 +43,7 @@ export interface NotifyPrefs {
 
 /** 外观组（F6 §9 本机偏好） */
 export interface AppearancePrefs {
-  /** 主题三选（默认跟随系统） */
+  /** 主题四选（默认跟随系统） */
   theme: ThemeMode;
   /** 正文字号（默认标准） */
   fontScale: FontScale;
@@ -44,10 +51,19 @@ export interface AppearancePrefs {
   monoFont: MonoFont;
 }
 
+/** 输入组（G1：Composer 上下文偏好） */
+export interface ComposerPrefs {
+  /** 权限模式三档（与桌面 permissionModes 同值域 ask/smart/full；
+   * 默认 smart 与桌面 DEFAULT_PERMISSION_MODE 一致，桌面
+   * apps/crish-desktop/src/api/permissionModes.ts:31） */
+  permissionMode: PermissionMode;
+}
+
 /** 分组 → 类型映射（组合纪律：类型安全唯一真源，store 动作泛型 K 走此映射） */
 export interface SettingsGroups {
   notification: NotifyPrefs;
   appearance: AppearancePrefs;
+  composer: ComposerPrefs;
 }
 
 export type SettingsGroupName = keyof SettingsGroups;
@@ -69,6 +85,9 @@ export function defaultSettingsGroups(): SettingsGroups {
       theme: 'system',
       fontScale: 'standard',
       monoFont: 'system',
+    },
+    composer: {
+      permissionMode: 'smart',
     },
   };
 }
