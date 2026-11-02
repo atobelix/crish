@@ -107,14 +107,21 @@ jobs:
       # i18n 词条门禁补接（P1-1）：对称 / 未用 / 硬编码 / 引用四脚本聚合；
       # 此前仅本地 pre-commit 与 check:desktop 聚合接线，服务端无防线。
       # 与 check:desktop 同口径，CI 单独接线确保 PR 级拦截。
+      # 步级 if: always()：独立于 depcruise 等前序步的成败运行——新门禁
+      # 不得被存量红项掩盖信号；depcruise 的红保持原样呈现（治存量另行立项），
+      # 本步自身失败仍照常令 job 失败。
       - run: npm run check:i18n
+        if: always()
       # UI 生成物漂移门禁补接（P1-1）：llms.txt 组件契约
       # （generate-ui-contracts --check）与 ui/index.ts 桶文件
       # （sync-ui-exports --check）此前既不在任何 workflow、也不在
       # pre-commit，无任何自动运行点。与 check:desktop 同口径，
       # CI 单独接线确保 PR 级拦截。
+      # 步级 if: always()：与上方 i18n 门禁同口径，独立于前序步成败运行。
       - run: npm run check:ui-contracts
+        if: always()
       - run: npm run check:ui-exports
+        if: always()
 
   vitest-fast:
     runs-on: ubuntu-24.04
