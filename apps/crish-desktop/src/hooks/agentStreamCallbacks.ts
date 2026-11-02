@@ -114,15 +114,20 @@ export function buildAgentStreamCallbacks(
         status: 'running',
       });
     },
-    onThought: (t: string) =>
+    onThought: (t: string, _turnIndex?: number, mode?: 'append' | 'set') =>
       pa((m) => {
+        // R6：t 为 delta 增量（mode='append'，下游累积）或全文覆写
+        // （mode='set'：轮次首帧 / message-end 权威收口）；mode 缺省按 set
+        // （兼容旧式全文调用）。
+        const replacing = mode !== 'append';
         // 同步更新 m.thinking（向下兼容 fallback 渲染）
-        m.thinking = t;
+        m.thinking = replacing ? t : (m.thinking ?? '') + t;
         // 同时维护 m.blocks 中的思考块，支持多轮独立思考卡片交错展示
         if (!m.blocks) m.blocks = [];
         // 取当前活跃轮次（由 turnIndex 字段跟踪，默认 0）
         const currentTurn: number =
-          typeof (m as { _activeTurnIndex?: unknown })._activeTurnIndex === 'number'
+          typeof (m as { _activeTurnIndex?: unknown })._activeTurnIndex ===
+          'number'
             ? (m as { _activeTurnIndex?: number })._activeTurnIndex!
             : 0;
         const thoughtKey = `thought-turn-${currentTurn}`;
@@ -131,9 +136,12 @@ export function buildAgentStreamCallbacks(
         );
         if (existingIdx >= 0) {
           // 同轮次就地更新（流式追加）
+          const prevBlock = m.blocks[existingIdx]!;
           m.blocks[existingIdx] = {
-            ...m.blocks[existingIdx]!,
-            content: t,
+            ...prevBlock,
+            content: replacing
+              ? t
+              : (('content' in prevBlock ? prevBlock.content : '') ?? '') + t,
             isStreaming: true,
           };
         } else {

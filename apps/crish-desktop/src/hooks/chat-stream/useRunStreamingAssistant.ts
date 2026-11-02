@@ -181,17 +181,20 @@ export function useRunStreamingAssistant(
               .session.getState()
               .setEngineLastRunId(sid, runId);
           },
-          onThought: (thought) => {
+          onThought: (thought, _turnIndex, mode) => {
             // D2 单轨收敛：thinking 仅经 batcher → streamingStore（与 onChunk 同构），
             // 不再同步直写 sessionStore.updateMessageThinking。
+            // R6：thought 为 delta 增量（mode='append'）或全文覆写（mode='set'，
+            // 轮次首帧 / message-end 权威收口）；mode 缺省（旧式全文调用）按 set。
             if (!assertLive()) return;
             // S4.3：首帧思考清理运行时状态（消除幽灵重试瞬态行）
             clearRuntimeStatus(sid);
             tracker().updateStage(sid, 'thinking');
-            thinkingBatcherRef.current?.push(
-              streamBatchKey(sid, assistantMsgId),
-              thought
-            );
+            const batcher = thinkingBatcherRef.current;
+            if (!batcher) return;
+            const key = streamBatchKey(sid, assistantMsgId);
+            if (mode === 'append') batcher.push(key, thought);
+            else batcher.set(key, thought);
           },
           onToolStart: (toolId, name, args, explanation) => {
             if (!assertLive()) return;

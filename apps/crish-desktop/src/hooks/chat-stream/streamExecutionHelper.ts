@@ -4,13 +4,12 @@
  * 封装并发流冲突检测、思考占位清理与完成终态收口逻辑。
  */
 import type { MutableRefObject } from 'react';
-import type { StreamTextBatcher } from '../../api/streamTextBatcher';
 import { sessionStreams } from '../../api/sessionStreamManager';
 import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
-import { buildTerminalToolPatches } from './helpers';
+import { buildTerminalToolPatches, flushPendingToolCommits } from './helpers';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { getStreamThinking, setStreamText } from '../../store/streamingStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -56,12 +55,45 @@ export function handleStreamConflict(sid: string, userMsgId: string): boolean {
 }
 
 /**
+ * R6：按消息 id 的索引查找（替代逐 chunk 的线性 find）。
+ * 索引按 messages 数组身份 WeakMap 缓存：流式期 session messages 数组在
+ * 提交间隙保持不变，逐 chunk 命中缓存即 O(1)；数组身份变化（落盘提交）
+ * 时重建一次。语义与 find 逐项一致（同 id 取首个命中——id 在会话内唯一）。
+ */
+const messageByIdIndexCache = new WeakMap<
+  readonly SessionMessage[],
+  Map<string, SessionMessage>
+>();
+
+function findMessageByIdIndexed(
+  messages: readonly SessionMessage[] | undefined,
+  messageId: string
+): SessionMessage | undefined {
+  if (!messages) return undefined;
+  let index = messageByIdIndexCache.get(messages);
+  if (!index) {
+    index = new Map<string, SessionMessage>();
+    for (const m of messages) {
+      if (!index.has(m.id)) index.set(m.id, m);
+    }
+    messageByIdIndexCache.set(messages, index);
+  }
+  return index.get(messageId);
+}
+
+/** thinking 批合并器在本文件只用到的结构面（R6 后实现为增量批合并器）。 */
+export interface ThinkingBatcherHandle {
+  hasPending: (key?: string) => boolean;
+  drop: (key: string) => void;
+}
+
+/**
  * 当接收到有效文本 chunk 时，如果占位思考仍为初始提示词且无真实思考流，则清理思考占位符。
  */
 export function handleThinkingResetOnChunk(
   sid: string,
   assistantMsgId: string,
-  thinkingBatcher: StreamTextBatcher | null | undefined
+  thinkingBatcher: ThinkingBatcherHandle | null | undefined
 ): void {
   // 1. 关键防御：优先检查轻量 streamingStore 中是否已有实时思考内容
   const liveThinking = getStreamThinking(sid, assistantMsgId);
@@ -75,9 +107,10 @@ export function handleThinkingResetOnChunk(
     return;
   }
 
-  // 2. 检查持久化 sessionStore 中的占位状态
-  const cur = getSessionById(sid)?.messages?.find(
-    (m: SessionMessage) => m.id === assistantMsgId
+  // 2. 检查持久化 sessionStore 中的占位状态（R6：id 索引查找）
+  const cur = findMessageByIdIndexed(
+    getSessionById(sid)?.messages,
+    assistantMsgId
   );
   if (cur?.thinking === '正在处理…' || cur?.thinking === '正在思考中...') {
     const key = streamBatchKey(sid, assistantMsgId);
@@ -100,7 +133,7 @@ export interface StreamCompletionContext {
   localRunId: string | null;
   gotRealText: boolean;
   runEndedWithNetworkError: boolean;
-  thinkingBatcher: StreamTextBatcher | null | undefined;
+  thinkingBatcher: { drop: (key: string) => void } | null | undefined;
   flushStreamBatchers: () => void;
   generationMapRef: MutableRefObject<Map<string, number>>;
   state: StreamRunState;
@@ -128,6 +161,9 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
 
   markStreamingActive(false);
   flushStreamBatchers();
+  // R6 落盘边界：批处理刷出的工具终态提交先同步落盘，收口读取的 asst
+  // 工具行即为终态（否则待落盘的 success 会被误判为未返回结果补错误 patch）。
+  flushPendingToolCommits();
   const { committedText, elapsed, asst } = commitRunCompletion({
     sid,
     assistantMsgId,

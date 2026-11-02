@@ -53,12 +53,70 @@ function publishToolDiffsLazy(files: Parameters<PublishToolDiffsFn>[0]): void {
 }
 
 /**
+ * R6 微批合并：工具终态提交在同一微任务内合并为一次落盘。
+ *
+ * 并行工具成簇终结时，逐个 commit 会逐个写 sessionStore → 逐个触发全量
+ * 投影。改为：commit 只做字段合并并入队（同工具同窗多次提交按字段后覆前
+ * 合并），微任务收尾统一 flush；同窗内后续提交以队列中的合并快照为
+ * existing 基准，语义与逐个立即写入逐项等价（lite 仍在 commit 时读取，
+ * 调用方随后的 clearStreamTool 不受影响）。
+ *
+ * 落盘边界（同步 flush，杜绝读到未落盘的中间态）：
+ * - commitStreamToolsToSession 收尾、commitStreamToSession 入口；
+ * - executeStreamCompletion 在 flushStreamBatchers 后（收口批显式调用）；
+ * - 其余场景由微任务自动 flush（事件任务之间必然落盘）。
+ */
+interface PendingToolCommit {
+  sessionId: string;
+  messageId: string;
+  toolId: string;
+  /** 合并后的完整工具行快照：同窗后续提交的 existing 基准 / add 路径的落盘对象 */
+  snapshot: MessageToolCall;
+  /** 已存在工具的累积 partial（flush 走 updateMessageToolCall）；新建工具为 null（走 add） */
+  updates: Partial<MessageToolCall> | null;
+}
+
+const pendingToolCommits = new Map<string, PendingToolCommit>();
+let toolCommitFlushScheduled = false;
+
+function pendingToolKey(
+  sessionId: string,
+  messageId: string,
+  toolId: string
+): string {
+  return `${sessionId}\u0000${messageId}\u0000${toolId}`;
+}
+
+export function flushPendingToolCommits(): void {
+  if (pendingToolCommits.size === 0) return;
+  const entries = Array.from(pendingToolCommits.values());
+  pendingToolCommits.clear();
+  for (const e of entries) {
+    if (e.updates) {
+      updateMessageToolCall(e.sessionId, e.messageId, e.toolId, e.updates);
+    } else {
+      addMessageToolCall(e.sessionId, e.messageId, e.snapshot);
+    }
+  }
+}
+
+function scheduleToolCommitFlush(): void {
+  if (toolCommitFlushScheduled) return;
+  toolCommitFlushScheduled = true;
+  queueMicrotask(() => {
+    toolCommitFlushScheduled = false;
+    flushPendingToolCommits();
+  });
+}
+
+/**
  * Apply one tool patch into session messages (immer once).
  * Merges any lite-store intermediate fields so success patches that omit
  * name/args still land a complete durable row.
  *
  * T4 A3：写入统一走 `store/storeAccess` 编排单点（sessionAccess 门面），
  * 不再直写 layoutStore（单一写入通道语义，check:store-writes 对齐）。
+ * R6：落盘经微批队列（见上方 PendingToolCommit 说明），本函数只合并与入队。
  */
 export function commitToolPatchToSession(
   sessionId: string,
@@ -67,9 +125,13 @@ export function commitToolPatchToSession(
   patch: StreamToolCallPatch | StreamToolLive
 ): void {
   const lite = getStreamTools(sessionId, messageId)?.[toolId];
-  const existing = getSessionById(sessionId)
-    ?.messages?.find((m) => m.id === messageId)
-    ?.toolCalls?.find((t) => t.id === toolId);
+  const key = pendingToolKey(sessionId, messageId, toolId);
+  const pending = pendingToolCommits.get(key);
+  const existing =
+    pending?.snapshot ??
+    getSessionById(sessionId)
+      ?.messages?.find((m) => m.id === messageId)
+      ?.toolCalls?.find((t) => t.id === toolId);
 
   const name = patch.name || lite?.name || existing?.name || 'tool';
   const argumentsText =
@@ -148,9 +210,21 @@ export function commitToolPatchToSession(
     if (status === 'success' || status === 'error') {
       updates.finishedAt = Date.now();
     }
-    updateMessageToolCall(sessionId, messageId, toolId, updates);
+    const snapshot: MessageToolCall = { ...existing, ...updates };
+    if (pending && pending.updates === null) {
+      // 同窗内该工具是新建未落盘：updates 折进 add 快照，仍走 add 路径
+      pending.snapshot = snapshot;
+    } else {
+      pendingToolCommits.set(key, {
+        sessionId,
+        messageId,
+        toolId,
+        snapshot,
+        updates: { ...pending?.updates, ...updates },
+      });
+    }
   } else {
-    addMessageToolCall(sessionId, messageId, {
+    const toolCall: MessageToolCall = {
       id: toolId,
       name,
       arguments: argumentsText || '',
@@ -166,8 +240,16 @@ export function commitToolPatchToSession(
       ...(status === 'success' || status === 'error'
         ? { finishedAt: Date.now() }
         : {}),
+    };
+    pendingToolCommits.set(key, {
+      sessionId,
+      messageId,
+      toolId,
+      snapshot: toolCall,
+      updates: null,
     });
   }
+  scheduleToolCommitFlush();
 }
 
 /**
@@ -185,6 +267,8 @@ export function commitStreamToolsToSession(
     if (!patch) continue;
     commitToolPatchToSession(sessionId, messageId, toolId, patch);
   }
+  // R6 落盘边界：本函数返回前同步 flush，调用方随后的 store 读取即见终态
+  flushPendingToolCommits();
   clearStreamTools(sessionId, messageId);
 }
 
@@ -208,6 +292,8 @@ export function commitStreamToSession(
     clear?: boolean;
   }
 ): string {
+  // R6 落盘边界：先把此前入队的工具提交同步落盘，再读/写消息正文与思考
+  flushPendingToolCommits();
   if (options?.commitThinking !== false) {
     const thinking = getStreamThinking(sessionId, messageId);
     if (thinking != null && thinking !== '') {

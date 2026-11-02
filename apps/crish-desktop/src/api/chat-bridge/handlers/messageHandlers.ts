@@ -73,6 +73,25 @@ export function onMessageStart(
   // message-start 无 UI 语义：显式空实现，保证分派表全键覆盖
 }
 
+/**
+ * R6：已见过思考增量的轮次登记（按 run state 对象身份键控，随 state 回收）。
+ * onThought 改传 delta 后，handler 不再维护累计全文回放；仅需判定「本轮首个
+ * 思考增量」以便下游以 set 语义覆写上一轮的累积（轮次切换语义与旧全文覆写
+ * 逐项一致）。state.turnStreamedThoughts 因此停用（字段保留待状态类型清理）。
+ */
+const thoughtTurnsSeenByState = new WeakMap<object, Set<number>>();
+
+function markThoughtTurnSeen(state: object, turn: number): boolean {
+  let seen = thoughtTurnsSeenByState.get(state);
+  if (!seen) {
+    seen = new Set<number>();
+    thoughtTurnsSeenByState.set(state, seen);
+  }
+  if (seen.has(turn)) return false;
+  seen.add(turn);
+  return true;
+}
+
 export function onMessageDelta(
   env: HandlerEnv,
   envelope: EngineEnvelope<'message-delta'>
@@ -108,14 +127,16 @@ export function onMessageDelta(
   }
 
   if (block.type === 'thought') {
-    if (!state.turnStreamedThoughts) {
-      state.turnStreamedThoughts = new Map<number, string>();
-    }
-    const prevThought = state.turnStreamedThoughts.get(currentTurn) || '';
-    const nextThought = prevThought + t;
-    state.turnStreamedThoughts.set(currentTurn, nextThought);
+    // R6：只传本帧 delta（下游按 mode 累积），删累计全文回放——旧实现每帧把
+    // prevThought + t 的全文经 onThought 整体下发，长思考流构成 O(n²) 拷贝。
+    // 本轮首个增量以 'set' 下发：下游覆写上一轮累积后从本轮重新累积。
+    const isFirstThoughtOfTurn = markThoughtTurnSeen(state, currentTurn);
     state.assistantThought += t;
-    callbacks.onThought(nextThought, currentTurn);
+    callbacks.onThought(
+      t,
+      currentTurn,
+      isFirstThoughtOfTurn ? 'set' : 'append'
+    );
     return;
   }
 
@@ -192,11 +213,11 @@ export function onMessageEnd(
   // 步进活跃轮次
   state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, targetTurn);
 
-  // 1. 思考链收口：权威覆盖对应轮次
+  // 1. 思考链收口：权威覆盖对应轮次（R6：'set' 全文覆写流式累积）
   if (thought.trim()) {
     state.turnAuthoritativeThoughts.set(targetTurn, thought.trim());
     state.assistantThought = thought.trim();
-    callbacks.onThought(thought.trim(), targetTurn);
+    callbacks.onThought(thought.trim(), targetTurn, 'set');
   }
 
   // 2. 正文收口：Map 双账本模型与多轮分段权威覆盖，单生产者铁律（绝对不调 onChunk 追加！）

@@ -185,7 +185,7 @@ describe('tool progress → streamingStore (not session immer)', () => {
     expect(updateMessageToolCall).not.toHaveBeenCalled();
   });
 
-  it('success status commits durable session row and clears lite tool', () => {
+  it('success status commits durable session row and clears lite tool', async () => {
     setStreamTool('s1', 'm1', 't1', {
       id: 't1',
       name: 'shell',
@@ -199,6 +199,9 @@ describe('tool progress → streamingStore (not session immer)', () => {
       output: 'ok',
     });
     expect(getStreamTool('s1', 'm1', 't1')).toBeUndefined();
+    // R6 微批：commit 先入队，微任务收尾才落盘（同步点尚未写入）
+    expect(addMessageToolCall).not.toHaveBeenCalled();
+    await Promise.resolve();
     // New tool → addMessageToolCall with merged name/args from lite
     expect(addMessageToolCall).toHaveBeenCalledTimes(1);
     const added = addMessageToolCall.mock.calls[0];

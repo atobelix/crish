@@ -43,6 +43,48 @@ import {
 
 export type { MessageVirtualizerProps, PinnedItem };
 
+/**
+ * R6：msgIds 增量维护（替代每次 messages 变化全量 `messages.map`）。
+ * - 与上一轮逐项 id 相同（流式提交只换消息对象、id 序列不变 —— 占绝大多数）
+ *   → 返回上一轮数组本身（引用不变，下游按 msgIds 身份的订阅/测高不重跑）；
+ * - 纯尾部追加 → 复用前缀拼接新增 id；
+ * - 其余结构变化 → 全量重建（低频路径）。
+ */
+export function deriveMsgIdsIncremental(
+  prev: { ids: string[] } | null,
+  messages: readonly SessionMessage[]
+): string[] {
+  if (prev) {
+    const prevIds = prev.ids;
+    if (prevIds.length === messages.length) {
+      let same = true;
+      for (let i = 0; i < messages.length; i++) {
+        if (messages[i]!.id !== prevIds[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return prevIds;
+    } else if (prevIds.length < messages.length) {
+      let prefixSame = true;
+      for (let i = 0; i < prevIds.length; i++) {
+        if (messages[i]!.id !== prevIds[i]) {
+          prefixSame = false;
+          break;
+        }
+      }
+      if (prefixSame) {
+        const next = prevIds.slice();
+        for (let i = prevIds.length; i < messages.length; i++) {
+          next.push(messages[i]!.id);
+        }
+        return next;
+      }
+    }
+  }
+  return messages.map((m) => m.id);
+}
+
 const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const {
     messages,
@@ -113,7 +155,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const handleFillFollowUp = composer?.handleFillFollowUp;
   const onSendFollowUp = composer?.onSendFollowUp;
   const handleSendFollowUp = composer?.handleSendFollowUp;
-  const msgIds = useMemo(() => messages.map((m) => m.id), [messages]);
+  // R6：msgIds 增量维护——id 序列不变时保持数组引用（见 deriveMsgIdsIncremental）
+  const msgIdsRef = useRef<{ ids: string[] } | null>(null);
+  const msgIds = useMemo(() => {
+    const ids = deriveMsgIdsIncremental(msgIdsRef.current, messages);
+    msgIdsRef.current = { ids };
+    return ids;
+  }, [messages]);
   const vs = useVirtualScroll({
     ids: msgIds,
     itemCount: messages.length,
@@ -539,5 +587,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   );
 };
 
-export const MessageVirtualizer =
-  memoizeMessageVirtualizer(MessageVirtualizerInner);
+export const MessageVirtualizer = memoizeMessageVirtualizer(
+  MessageVirtualizerInner
+);
