@@ -135,19 +135,8 @@ export const AGENT_HUE_PALETTE: readonly AgentHueSpec[] = AGENT_HUE_ANGLES.map(
   }
 );
 
-/**
- * 根据子智能体 ID 或名称计算确定性色彩身份与几何图标。
- * 空串、空白串或异常输入安全退化至默认槽位，绝不抛异常。
- */
-export function agentIdentity(idOrName?: string | null): AgentIdentity {
-  const str = String(idOrName ?? '').trim() || 'agent';
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const hueIndex = (Math.abs(hash) % 8) + 1;
-  const spec = AGENT_HUE_PALETTE[hueIndex - 1]!;
+/** 由色环槽位规格构造身份对象（agentIdentity 与会话级分配的唯一构造点） */
+function identityFromSpec(spec: AgentHueSpec): AgentIdentity {
   return {
     hueIndex: spec.hueIndex,
     hueVar: spec.hueVar,
@@ -162,5 +151,61 @@ export function agentIdentity(idOrName?: string | null): AgentIdentity {
   };
 }
 
+/**
+ * 根据子智能体 ID 或名称计算确定性色彩身份与几何图标。
+ * 空串、空白串或异常输入安全退化至默认槽位，绝不抛异常。
+ */
+export function agentIdentity(idOrName?: string | null): AgentIdentity {
+  const str = String(idOrName ?? '').trim() || 'agent';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const hueIndex = (Math.abs(hash) % 8) + 1;
+  return identityFromSpec(AGENT_HUE_PALETTE[hueIndex - 1]!);
+}
+
 /** resolveAgentIdentity 为 agentIdentity 的同义导出 */
 export const resolveAgentIdentity = agentIdentity;
+
+/**
+ * 会话级身份分配（R4a 地基；供 R4b 在流内分派卡 / 侧栏 / 团队板 / 顶栏
+ * 四面共用同一分配结果）：在 agentIdentity 的纯哈希之上做 sibling
+ * 撞色顺延——哈希只有 8 槽，同批并行子 agent 必然可能撞色/撞标号，
+ * 若各呈现面各自调 agentIdentity(id)，同会话两个 agent 会同色同标。
+ *
+ * 规则：
+ * - 按传入顺序（= 会话 agents 的既有顺序）逐个占槽；哈希槽已被同批
+ *   更早的 agent 占用时，顺延到其后的第一个空槽（环回 1..8，
+ *   glyph / iconName 随槽位规格一并取顺延槽的）；
+ * - 无冲突时结果与逐个 agentIdentity(id) 完全一致——单 agent 时
+ *   恒等于 agentIdentity(id)，不改变既有单 agent 呈现；
+ * - 同批 ≥9 个 agent 时槽位耗尽，后到者回退其纯哈希结果（撞色在
+ *   8 槽下不可避免，如实保留确定性，不引入随机/时间因素）；
+ * - 空白 id 跳过（无法定址）；同一 id 重复出现只占一次。
+ * 返回 Map<agentId, AgentIdentity>（key 为 trim 后的 id）。
+ */
+export function resolveAgentIdentities(
+  agents: readonly { id?: string | null }[]
+): Map<string, AgentIdentity> {
+  const out = new Map<string, AgentIdentity>();
+  const taken = new Set<number>();
+  for (const a of agents ?? []) {
+    const id = String(a?.id ?? '').trim();
+    if (!id || out.has(id)) continue;
+    let identity = agentIdentity(id);
+    if (taken.has(identity.hueIndex)) {
+      for (let step = 1; step < 8; step++) {
+        const next = ((identity.hueIndex - 1 + step) % 8) + 1;
+        if (!taken.has(next)) {
+          identity = identityFromSpec(AGENT_HUE_PALETTE[next - 1]!);
+          break;
+        }
+      }
+    }
+    taken.add(identity.hueIndex);
+    out.set(id, identity);
+  }
+  return out;
+}

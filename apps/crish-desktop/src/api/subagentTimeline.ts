@@ -56,10 +56,18 @@ function toolResultFields(result: unknown): {
   name: string;
   text: string;
   isError: boolean;
+  /** 引擎 ToolBatchResult.durationMs（契约必填）；宽松载荷缺失/非法时为 undefined */
+  durationMs?: number;
 } {
   const r = asRec(result) || {};
   const id = String(r.toolCallId ?? r.id ?? '');
   const name = String(r.toolName ?? r.name ?? 'tool');
+  const durationMs =
+    typeof r.durationMs === 'number' &&
+    Number.isFinite(r.durationMs) &&
+    r.durationMs >= 0
+      ? r.durationMs
+      : undefined;
   const isError = Boolean(r.isError ?? r.error);
   let text = '';
   if (typeof r.output === 'string') {
@@ -85,7 +93,7 @@ function toolResultFields(result: unknown): {
   } else if (r.error != null && r.error !== false) {
     text = typeof r.error === 'string' ? r.error : String(r.error);
   }
-  return { id, name, text, isError };
+  return { id, name, text, isError, durationMs };
 }
 
 function ensureToolBlock(a: SessionMessage, id: string): void {
@@ -179,6 +187,8 @@ export function applySubagentEventToMessages(
       // 已终态的不因重放 tool-start 回退为 running
       if (existing.status !== 'success' && existing.status !== 'error') {
         existing.status = 'running';
+        // 工具时刻补写（R4a）：仅补缺，不覆盖已有值（重放幂等）
+        if (existing.startedAt == null) existing.startedAt = Date.now();
       }
     } else {
       a.toolCalls.push({
@@ -187,6 +197,10 @@ export function applySubagentEventToMessages(
         arguments: args,
         explanation,
         status: 'running',
+        // 工具时刻补写（R4a）：引擎 ToolBatchCall 不带时刻字段，startedAt
+        // 以前端接收 tool-start 的本地时刻近似（与主对话工具行同为本地钟口径；
+        // 此前子 agent 工具调用从不写此字段，侧栏详情无耗时可显示）
+        startedAt: Date.now(),
       });
       ensureToolBlock(a, id);
     }
@@ -197,7 +211,13 @@ export function applySubagentEventToMessages(
     const a = ensureAsst();
     if (!a.toolCalls) a.toolCalls = [];
     if (!a.blocks) a.blocks = [];
-    const { id, name, text, isError } = toolResultFields(event.result);
+    const {
+      id,
+      name,
+      text,
+      isError,
+      durationMs: engineDurationMs,
+    } = toolResultFields(event.result);
     const status: MessageToolCall['status'] = isError ? 'error' : 'success';
     const output = text || (isError ? 'failed' : '完成');
 
@@ -217,6 +237,16 @@ export function applySubagentEventToMessages(
       if (name && name !== 'tool' && (!tc.name || tc.name === 'tool')) {
         tc.name = name;
       }
+      // 工具时刻补写（R4a）：durationMs 优先引擎 ToolBatchResult 的实测值，
+      // 缺失时以本地接收时刻差（tool-end − startedAt）近似；仅补缺防重放覆盖
+      if (tc.durationMs == null) {
+        const derived =
+          engineDurationMs ??
+          (tc.startedAt != null
+            ? Math.max(0, Date.now() - tc.startedAt)
+            : undefined);
+        if (derived !== undefined) tc.durationMs = derived;
+      }
     } else {
       // 漏收 tool-start 时仍落一条终态，避免子 agent 时间线空白
       const newId = id || `tc-${Date.now().toString(36)}`;
@@ -227,6 +257,11 @@ export function applySubagentEventToMessages(
         explanation: name,
         status,
         output,
+        // 漏收 tool-start 的终态：startedAt 无从得知（不伪造），
+        // 引擎实测 durationMs 在场时照实落数
+        ...(engineDurationMs !== undefined
+          ? { durationMs: engineDurationMs }
+          : {}),
       };
       a.toolCalls.push(tc);
       ensureToolBlock(a, newId);

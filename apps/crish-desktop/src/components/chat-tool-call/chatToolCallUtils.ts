@@ -1,7 +1,9 @@
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 
 /** 工具行状态中文标签（aria / 行尾 / data 共用，避免英文 status 直出） */
-export function toolStatusZh(status: MessageToolCall['status'] | undefined): string {
+export function toolStatusZh(
+  status: MessageToolCall['status'] | undefined
+): string {
   switch (status) {
     case 'running':
       return '运行中';
@@ -42,7 +44,9 @@ export function findAgentForTool(
         )
       : null;
     if (byDesc) return byDesc;
-    return agents[0] || null;
+    // R4a：删除原 agents[0] 兜底——匹配不到时降级为普通工具行呈现，
+    // 不把徽章挂到无关的第一个 agent 上（挂错比不挂更误导）
+    return null;
   }
   return null;
 }

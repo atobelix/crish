@@ -93,14 +93,29 @@ export type StreamRequestOptions = {
 };
 
 export interface StreamCallbacks {
-  onThought: (thought: string, turnIndex?: number) => void;
+  /**
+   * R6：思考下发改为增量协议（消除桥接层累计全文 O(n²) 回放）。
+   * - mode='append'：thought 为本帧 delta，消费侧累积；
+   * - mode='set'（含缺省，兼容旧式全文调用）：thought 为全文，消费侧覆写
+   *   （轮次首帧以首个 delta 作 set、message-end 以权威全文作 set）。
+   */
+  onThought: (
+    thought: string,
+    turnIndex?: number,
+    mode?: 'append' | 'set'
+  ) => void;
   onToolStart: (
     toolId: string,
     name: string,
     args: string,
     explanation: string
   ) => void;
-  onToolSuccess: (toolId: string, output: string, diffs?: FileDiff[], durationMs?: number) => void;
+  onToolSuccess: (
+    toolId: string,
+    output: string,
+    diffs?: FileDiff[],
+    durationMs?: number
+  ) => void;
   onToolError: (toolId: string, error: string, durationMs?: number) => void;
   onChunk: (chunk: string) => void;
   onComplete: () => void;
@@ -129,6 +144,17 @@ export interface StreamCallbacks {
     parentToolCallId?: string;
     description: string;
     mode: string;
+    /**
+     * 引擎 SubagentStarted 的展示字段（R4a 透传；此前在桥接层被丢弃，
+     * 导致 displayLabel/depth/subagentPath 在实时会话无数据源）：
+     * role = SubagentRole wire 名（如 researcher / implementer），
+     * 是 SessionAgent.displayLabel 在实时路径的唯一来源。
+     */
+    role?: string;
+    /** 能力档 wire 名（如 read-only / read-write），落 SessionAgent.capabilityMode */
+    capabilityMode?: string;
+    /** 引擎侧启动时刻（ISO 8601 UTC 串），落 SessionAgent.startedAt 的解析源 */
+    startedAt?: string;
   }) => void;
   onSubagentEvent?: (info: {
     subagentId: string;

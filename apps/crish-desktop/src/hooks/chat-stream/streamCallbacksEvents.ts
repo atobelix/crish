@@ -15,6 +15,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { recordStreamDiag } from '../../api/streamDiag';
 import type { StreamCallbacks } from '../../api/chatApi';
+import { resolveSubagentStartedMeta } from '../../api/chat-bridge/handlers/subagentHandlers';
 import { sessionStreams } from '../../api/sessionStreamManager';
 import type { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
@@ -63,6 +64,14 @@ export function applySubagentStarted(opts: {
   const { sid, info, upsertSessionAgent, queueToolCallPatch } = opts;
   if (!info.subagentId) return;
   const taskLabel = (info.description || '协作任务').trim() || '协作任务';
+  // R4a：引擎展示字段（role/capabilityMode/startedAt）落数 + 嵌套链派生，
+  // 与全局面共用 resolveSubagentStartedMeta，两面构建口径一致
+  const meta = resolveSubagentStartedMeta(
+    info,
+    getSessionById(sid)?.agents ?? [],
+    info.subagentId,
+    info.parentToolCallId
+  );
   upsertSessionAgent(sid, {
     id: info.subagentId,
     subagentRunId: info.subagentRunId,
@@ -71,9 +80,13 @@ export function applySubagentStarted(opts: {
     parentToolCallId: info.parentToolCallId,
     description: taskLabel,
     mode: info.mode || 'research',
+    ...(meta.displayLabel ? { displayLabel: meta.displayLabel } : {}),
+    ...(meta.capabilityMode ? { capabilityMode: meta.capabilityMode } : {}),
+    depth: meta.depth,
+    subagentPath: meta.subagentPath,
     status: 'running',
     messages: [],
-    startedAt: Date.now(),
+    startedAt: meta.startedAt,
   });
   if (info.parentToolCallId) {
     queueToolCallPatch(

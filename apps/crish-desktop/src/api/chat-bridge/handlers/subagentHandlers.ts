@@ -13,6 +13,7 @@
  */
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
 import { getSessionStoreState } from '../../../store/storeAccess';
+import type { SessionAgent } from '../../../store/types';
 import type { EngineEnvelope, LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -23,6 +24,78 @@ function mapSubagentEndStatus(raw: string): 'completed' | 'failed' | 'stopped' {
     : /fail|error/i.test(raw)
       ? 'failed'
       : 'completed';
+}
+
+/** SubagentStarted 展示字段落数结果（R4a 地基） */
+export interface SubagentStartedMeta {
+  /** 引擎 role 落数；空白/缺失时不设（标题链自行兜底） */
+  displayLabel?: string;
+  /** 引擎 capabilityMode wire 名（原样落字段，消费方自判） */
+  capabilityMode?: string;
+  /** 启动时刻 epoch ms（引擎 ISO 时刻优先，本地接收时刻兜底） */
+  startedAt: number;
+  /** 嵌套深度：0 = 主会话直接子 agent */
+  depth: number;
+  /** 从根 agent 到自身（含自身）的 id 路径链 */
+  subagentPath: string[];
+}
+
+/**
+ * SubagentStarted 展示字段的统一落数口径（R4a）：per-run 面
+ * （streamCallbacksEvents.applySubagentStarted）与本文件全局面共用，
+ * 保证两面构建出的 SessionAgent 字段一致、与 DB 回放同名字段同义。
+ *
+ * - displayLabel ← 引擎 `role`（SubagentRole wire 名，如 researcher）：
+ *   started 事件不带 spawn 的 display_label 参数，role 是实时路径上
+ *   唯一的角色标签数据源（DB 回放的 displayLabel 来自落库列，实时
+ *   路径此前恒缺失，标题链第一环因此在实时会话从不生效）。
+ * - startedAt ← 引擎 ISO 8601 时刻（与 DB 的 started_at 同源）；
+ *   缺失/不可解析时回退本地接收时刻（近似兜底，量级为桥接延迟）。
+ * - depth / subagentPath ← parentToolCallId 链派生：父工具调用所在
+ *   agent 为父级（depth + 1、路径续接其 subagentPath）；父工具调用
+ *   不在任一 sibling 的时间线内（主会话直派）→ depth 0、[selfId]。
+ *   父 agent 的 depth/subagentPath 缺省时按 0 / [parentId] 合成。
+ */
+export function resolveSubagentStartedMeta(
+  raw: { role?: unknown; capabilityMode?: unknown; startedAt?: unknown },
+  siblings: readonly SessionAgent[],
+  selfId: string,
+  parentToolCallId?: string
+): SubagentStartedMeta {
+  const role = typeof raw.role === 'string' ? raw.role.trim() : '';
+  const capabilityMode =
+    typeof raw.capabilityMode === 'string' ? raw.capabilityMode.trim() : '';
+  let startedAt = Number.NaN;
+  if (typeof raw.startedAt === 'string' && raw.startedAt.trim()) {
+    startedAt = Date.parse(raw.startedAt);
+  } else if (typeof raw.startedAt === 'number') {
+    startedAt = raw.startedAt;
+  }
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    startedAt = Date.now();
+  }
+  let depth = 0;
+  let subagentPath: string[] = [selfId];
+  if (parentToolCallId) {
+    const parent = siblings.find(
+      (a) =>
+        a.id !== selfId &&
+        (a.messages || []).some((m) =>
+          (m.toolCalls || []).some((t) => t.id === parentToolCallId)
+        )
+    );
+    if (parent) {
+      depth = (parent.depth ?? 0) + 1;
+      subagentPath = [...(parent.subagentPath ?? [parent.id]), selfId];
+    }
+  }
+  return {
+    ...(role ? { displayLabel: role } : {}),
+    ...(capabilityMode ? { capabilityMode } : {}),
+    startedAt,
+    depth,
+    subagentPath,
+  };
 }
 
 export function onSubagentStarted(
@@ -38,6 +111,10 @@ export function onSubagentStarted(
       parentToolCallId: ev.parentToolCallId,
       description: ev.description ?? '协作 agent',
       mode: ev.mode ?? 'research',
+      // R4a：引擎必带展示字段（role/capabilityMode/startedAt）——此前在此丢弃
+      role: ev.role,
+      capabilityMode: ev.capabilityMode,
+      startedAt: ev.startedAt,
     });
     return;
   }
@@ -51,6 +128,12 @@ export function onSubagentStarted(
       : undefined,
     description: String(msg.description ?? '协作 agent'),
     mode: String(msg.mode ?? 'research'),
+    // R4a：legacy 信封同 wire 契约，展示字段在场时一并透传
+    ...(typeof msg.role === 'string' ? { role: msg.role } : {}),
+    ...(typeof msg.capabilityMode === 'string'
+      ? { capabilityMode: msg.capabilityMode }
+      : {}),
+    ...(typeof msg.startedAt === 'string' ? { startedAt: msg.startedAt } : {}),
   });
 }
 
@@ -132,6 +215,13 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
   const parentToolCallId = raw.parentToolCallId
     ? String(raw.parentToolCallId)
     : undefined;
+  // R4a：展示字段与嵌套链与 per-run 面同一落数口径（共用 resolveSubagentStartedMeta）
+  const meta = resolveSubagentStartedMeta(
+    raw,
+    store.sessionsById[sid]?.agents ?? [],
+    subagentId,
+    parentToolCallId
+  );
   store.upsertSessionAgent(sid, {
     id: subagentId,
     subagentRunId: String(raw.subagentRunId ?? ''),
@@ -140,9 +230,13 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
     parentToolCallId,
     description: String(raw.description ?? '协作任务').trim() || '协作任务',
     mode: String(raw.mode ?? 'research'),
+    ...(meta.displayLabel ? { displayLabel: meta.displayLabel } : {}),
+    ...(meta.capabilityMode ? { capabilityMode: meta.capabilityMode } : {}),
+    depth: meta.depth,
+    subagentPath: meta.subagentPath,
     status: 'running',
     messages: [],
-    startedAt: Date.now(),
+    startedAt: meta.startedAt,
   });
   if (parentToolCallId) {
     // T-E 步骤 3（S1）：raw setState → markToolCallLocalStatus（终态工具卡不回退

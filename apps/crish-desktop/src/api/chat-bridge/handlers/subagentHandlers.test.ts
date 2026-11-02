@@ -17,6 +17,7 @@ import {
   onSubagentEndedGlobal,
   onSubagentEventGlobal,
   onSubagentStartedGlobal,
+  resolveSubagentStartedMeta,
 } from './subagentHandlers';
 import { useLayoutStore } from '../../../store/layoutStore';
 import type { SessionAgent } from '../../../store/types';
@@ -62,6 +63,10 @@ describe('onSubagentStarted（I5-M7 信封对齐：Rust 契约字段逐一消费
       parentToolCallId: 'tc-9',
       description: '调研子代理',
       mode: 'research',
+      // R4a：展示字段透传（role/capabilityMode/startedAt 不再被桥接层丢弃）
+      role: 'researcher',
+      capabilityMode: 'readonly',
+      startedAt: '2026-08-03T08:00:00.000Z',
     });
   });
 
@@ -89,6 +94,10 @@ describe('onSubagentStarted（I5-M7 信封对齐：Rust 契约字段逐一消费
       parentToolCallId: undefined,
       description: '协作 agent',
       mode: 'research',
+      // R4a：展示字段缺失时不透传（undefined，不伪造）
+      role: undefined,
+      capabilityMode: undefined,
+      startedAt: undefined,
     });
   });
 
@@ -129,6 +138,10 @@ describe('onSubagentStarted（I5-M7 信封对齐：Rust 契约字段逐一消费
       parentToolCallId: 'tc-typed-9',
       description: '强类型子代理',
       mode: 'research',
+      // R4a：强类型信封的必带展示字段同样透传
+      role: 'researcher',
+      capabilityMode: 'readonly',
+      startedAt: '2026-08-03T08:00:00.000Z',
     });
   });
 });
@@ -391,6 +404,79 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
     expect(ag!.parentToolCallId).toBe('tc-9');
   });
 
+  it('started 全局消费（R4a）：role/capabilityMode/startedAt 落 displayLabel/capabilityMode/startedAt + 主派 depth/path', () => {
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-meta',
+      subagentRunId: 'sr-meta',
+      role: 'implementer',
+      capabilityMode: 'read-only',
+      startedAt: '2026-08-03T08:00:00.000Z',
+      description: '实现模块 B',
+      mode: 'implement',
+      parentToolCallId: 'tc-main-1',
+    });
+    const ag = agentById('sa-meta');
+    expect(ag).toBeDefined();
+    expect(ag!.displayLabel).toBe('implementer');
+    expect(ag!.capabilityMode).toBe('read-only');
+    expect(ag!.startedAt).toBe(Date.parse('2026-08-03T08:00:00.000Z'));
+    // 父工具调用不在任一 agent 时间线内（主会话直派）→ depth 0、路径仅自身
+    expect(ag!.depth).toBe(0);
+    expect(ag!.subagentPath).toEqual(['sa-meta']);
+  });
+
+  it('started 全局消费（R4a）：嵌套分派按 parentToolCallId 链派生 depth/subagentPath', () => {
+    useSessionStore.getState().upsertSessionAgent(sid, {
+      id: 'sa-parent',
+      subagentRunId: 'sr-parent',
+      parentSessionId: sid,
+      parentRunId: 'run-parent',
+      description: '父 agent',
+      mode: 'research',
+      status: 'running',
+      messages: [
+        {
+          id: 'parent-asst-1',
+          sender: 'assistant',
+          text: '',
+          timestamp: Date.now(),
+          status: 'processing',
+          toolCalls: [
+            {
+              id: 'tc-spawn-child',
+              name: 'run_subagent',
+              arguments: '',
+              status: 'running',
+            },
+          ],
+          blocks: [],
+        },
+      ],
+      startedAt: Date.now(),
+      depth: 0,
+      subagentPath: ['sa-parent'],
+    });
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-child',
+      subagentRunId: 'sr-child',
+      role: 'reviewer',
+      capabilityMode: 'read-only',
+      startedAt: '2026-08-03T09:00:00.000Z',
+      parentToolCallId: 'tc-spawn-child',
+    });
+    const child = agentById('sa-child');
+    expect(child).toBeDefined();
+    expect(child!.depth).toBe(1);
+    expect(child!.subagentPath).toEqual(['sa-parent', 'sa-child']);
+    expect(child!.displayLabel).toBe('reviewer');
+  });
+
   it('started 全局消费防双写：同 id agent 已存在（per-run 已建）→ 跳过不覆盖', () => {
     useSessionStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
@@ -615,5 +701,69 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
     const tc = toolCall('m1', 'tc-spawn');
     expect(tc!.status).toBe('error');
     expect(tc!.output).toBe('协作未完成');
+  });
+});
+
+describe('resolveSubagentStartedMeta（R4a 落数口径）', () => {
+  it('startedAt 非法/缺失 → 回退本地接收时刻（近似兜底）', () => {
+    const before = Date.now();
+    const meta = resolveSubagentStartedMeta(
+      { role: 'researcher', startedAt: 'not-a-date' },
+      [],
+      'sa-x'
+    );
+    expect(meta.startedAt).toBeGreaterThanOrEqual(before);
+    expect(meta.startedAt).toBeLessThanOrEqual(Date.now());
+    const meta2 = resolveSubagentStartedMeta({}, [], 'sa-x');
+    expect(meta2.startedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('role 空白 → 不设 displayLabel；capabilityMode 同理（不伪造）', () => {
+    const meta = resolveSubagentStartedMeta(
+      {
+        role: '   ',
+        capabilityMode: '',
+        startedAt: '2026-08-03T08:00:00.000Z',
+      },
+      [],
+      'sa-x'
+    );
+    expect(meta.displayLabel).toBeUndefined();
+    expect(meta.capabilityMode).toBeUndefined();
+    expect(meta.startedAt).toBe(Date.parse('2026-08-03T08:00:00.000Z'));
+    expect(meta.depth).toBe(0);
+    expect(meta.subagentPath).toEqual(['sa-x']);
+  });
+
+  it('父 agent 的 depth/subagentPath 缺省时按 0 / [parentId] 合成续接', () => {
+    const parent = {
+      id: 'sa-p',
+      subagentRunId: 'sr-p',
+      parentSessionId: 's1',
+      parentRunId: 'run-parent',
+      description: '父',
+      mode: 'research',
+      status: 'running',
+      messages: [
+        {
+          id: 'm1',
+          sender: 'assistant',
+          text: '',
+          timestamp: 0,
+          toolCalls: [
+            { id: 'tc-kid', name: 'run_subagent', status: 'running' },
+          ],
+        },
+      ],
+      startedAt: 0,
+    } as unknown as SessionAgent;
+    const meta = resolveSubagentStartedMeta(
+      { role: 'planner' },
+      [parent],
+      'sa-kid',
+      'tc-kid'
+    );
+    expect(meta.depth).toBe(1);
+    expect(meta.subagentPath).toEqual(['sa-p', 'sa-kid']);
   });
 });
