@@ -91,6 +91,7 @@ impl ComputerTool {
                 input_schema,
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             kind,
             ctx,

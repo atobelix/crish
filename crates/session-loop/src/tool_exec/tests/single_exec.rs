@@ -104,6 +104,7 @@ async fn tool_context_compression_store_injected_from_exec_ctx() {
                 input_schema: serde_json::json!({"type": "object"}),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             })
         }
         async fn execute(&self, ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {

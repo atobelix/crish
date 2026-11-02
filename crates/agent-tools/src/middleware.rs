@@ -523,6 +523,7 @@ mod tests {
             input_schema: json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         mw.on_definition(&mut def);
         assert_eq!(def.description, "运行命令（改写）");
@@ -541,6 +542,7 @@ mod tests {
             input_schema: json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         let original = def.clone();
         recorder.on_definition(&mut def);
@@ -564,6 +566,7 @@ mod tests {
             input_schema: json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         let chain: Vec<&dyn ToolMiddleware> = vec![&first, &second];
         for mw in chain {

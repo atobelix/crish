@@ -33,6 +33,7 @@ impl ListTabsTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -94,6 +95,7 @@ impl NewTabTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -142,6 +144,7 @@ impl CloseTabTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -188,6 +191,7 @@ impl SwitchTabTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

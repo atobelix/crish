@@ -21,6 +21,14 @@ pub fn default_input_schema() -> serde_json::Value {
 static DEFAULT_INPUT_SCHEMA: std::sync::LazyLock<serde_json::Value> =
     std::sync::LazyLock::new(default_input_schema);
 
+/// 通用转后台的全局默认阈值（毫秒）
+///
+/// 工具开放转后台资格时缺省取此值（`background_after_ms =
+/// Some(DEFAULT_BACKGROUND_AFTER_MS)`）；BG2 的装配点（run_launch）
+/// 注入同一常量作为全局默认，禁止另立第二套数字（定案
+/// 2026-11-01：T = 20s 全局默认、per-tool 可覆盖）。
+pub const DEFAULT_BACKGROUND_AFTER_MS: u32 = 20_000;
+
 /// 工具定义（对齐 TS ToolDefinition）
 ///
 /// 仅承载声明信息，不含执行逻辑。序列化字段 camelCase，
@@ -44,6 +52,25 @@ pub struct ToolDefinition {
     /// fatalOnError 是工具级属性，不是按错误类型一刀切。
     #[serde(default)]
     pub fatal_on_error: bool,
+    /// 后台执行策略（工具调用超时转后台，BG1 契约）：执行超过该时长
+    /// （毫秒）仍未完成时，执行器（BG2）把执行单元移交通用后台注册
+    /// 表、本调用以占位结果收口，对话不被慢工具钉住。
+    /// - `None`（缺省）= **禁入**：该工具永不转后台，慢即按现行硬
+    ///   超时口径处理（快工具慢 = 故障，应报错暴露而非后台化）；
+    /// - `Some(ms)` = 该工具的转后台阈值（全局默认档为
+    ///   [DEFAULT_BACKGROUND_AFTER_MS]）。
+    ///
+    /// 资格判据（开放 `Some` 前必须同时满足，BG2 逐工具评审）：
+    /// 执行可所有权化（不借用会话可变状态）、结果自包含、副作用
+    /// 边界清楚。v1 只开放慢速只读工具 + shell 内部促进；写工具与
+    /// 本地快工具保持 `None`。注意注册表对已转后台的任务**不设
+    /// 时长上限**——本字段只是「何时转」的阈值，不是「多久杀」的
+    /// 上限，两者不得混淆。
+    ///
+    /// 序列化：`None` 时不出现在出站形状中（skip_serializing_if），
+    /// 既有工具的 wire 形状逐字节不变。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_after_ms: Option<u32>,
 }
 
 impl ToolDefinition {
@@ -62,6 +89,14 @@ impl ToolDefinition {
     /// approval_expired/user_denied 永不致命）。
     pub fn is_fatal_error(&self) -> bool {
         self.fatal_on_error
+    }
+
+    /// 转后台资格谓词（BG1 契约点）：BG2 的执行器接线与 BG4 的
+    /// shell 促进判定一律经此收口，不许在消费侧另行解释字段语义。
+    /// `Some(..)` 即有资格（阈值见 [Self::background_after_ms]），
+    /// `None` 即禁入。
+    pub fn is_background_eligible(&self) -> bool {
+        self.background_after_ms.is_some()
     }
 }
 
@@ -190,6 +225,7 @@ mod tests {
             input_schema: json!({ "type": "object" }),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         let v = serde_json::to_value(&def).unwrap();
         // 序列化字段对齐 02 §二.6：inputSchema 驼峰
@@ -200,6 +236,30 @@ mod tests {
 
         let back: ToolDefinition = serde_json::from_value(v).unwrap();
         assert_eq!(back, def);
+    }
+
+    /// BG1：background_after_ms 的 serde 契约——缺省（旧形状无此键）
+    /// 反序列化为 None（禁入）；None 出站不出现该键（既有 wire 形状
+    /// 逐字节不变）；Some 以 camelCase 出站且可回读。
+    #[test]
+    fn background_after_ms_serde_contract() {
+        let def: ToolDefinition =
+            serde_json::from_value(json!({ "name": "echo", "description": "d" })).unwrap();
+        assert_eq!(def.background_after_ms, None);
+        assert!(!def.is_background_eligible());
+        let v = serde_json::to_value(&def).unwrap();
+        assert!(v.get("backgroundAfterMs").is_none());
+
+        let def2 = ToolDefinition {
+            background_after_ms: Some(DEFAULT_BACKGROUND_AFTER_MS),
+            ..def
+        };
+        assert!(def2.is_background_eligible());
+        assert_eq!(def2.background_after_ms, Some(20_000));
+        let v = serde_json::to_value(&def2).unwrap();
+        assert_eq!(v["backgroundAfterMs"], 20_000);
+        let back: ToolDefinition = serde_json::from_value(v).unwrap();
+        assert_eq!(back, def2);
     }
 
     #[test]
@@ -221,6 +281,7 @@ mod tests {
             input_schema: serde_json::Value::Null,
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         assert_eq!(
             def.effective_input_schema(),

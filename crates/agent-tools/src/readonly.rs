@@ -273,7 +273,8 @@ mod tests {
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
         // 注册面 →40（新增 P1 通信/能力四工具 + P2 switch_agent_model）
-        assert_eq!(reg.len(), 40);
+        // →41（BG1：tool_task 并入）
+        assert_eq!(reg.len(), 41);
         assert!(reg.has("run_subagent"));
     }
 
@@ -293,8 +294,9 @@ mod tests {
         // 假谓词 → 空注册表（fail-closed 底线）
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
-        // 原注册表不受影响（注册面 40 = 内置 + P1 通信/能力工具 + P2 模型切换）
-        assert_eq!(reg.len(), 40);
+        // 原注册表不受影响（注册面 41 = 内置 + P1 通信/能力工具 + P2 模型切换
+        // + BG1 tool_task）
+        assert_eq!(reg.len(), 41);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -360,8 +362,9 @@ mod tests {
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪；注册面 40 = 内置 + P1 通信/能力工具 + P2 模型切换）
-        assert_eq!(reg.len(), 40);
+        // 原注册表不受影响（非破坏性裁剪；注册面 41 = 内置 + P1 通信/能力工具
+        // + P2 模型切换 + BG1 tool_task）
+        assert_eq!(reg.len(), 41);
         assert!(reg.has("write_file"));
         // W4-B/F/R 写工具不得进只读 / design 面（design 仅 + diff_file）
         for tt in ["analysis", "design"] {
@@ -442,8 +445,8 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        // 40 内置（含 P0/P1/P2 工具）+ 4 browser_* 假工具
-        assert_eq!(reg.len(), 44);
+        // 41 内置（含 P0/P1/P2 工具 + BG1 tool_task）+ 4 browser_* 假工具
+        assert_eq!(reg.len(), 45);
         assert!(reg.has("browser_navigate"));
     }
 

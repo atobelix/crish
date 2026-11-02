@@ -24,6 +24,9 @@
 //!   定时任务注册 + WorkflowCreationChannel 契约（引擎侧复用既有
 //!   create-workflow IPC 校验/注册逻辑适配；通道经 BuiltinToolConfig 注入，
 //!   None = common.unsupported；注册面 33→34）
+//! - `tool_task`：tool_task（BG1）——通用后台注册表的模型面查询工具
+//!   （status / result 按 callId）；查询后端经 BuiltinToolConfig 注入，
+//!   None = common.unsupported（注册面 40→41）
 //! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
 //!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
 //!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
@@ -95,6 +98,9 @@ pub mod shell;
 pub mod subagent;
 pub mod subagent_report;
 pub mod switch_agent_model;
+// BG1（工具调用超时转后台）：tool_task —— 通用后台注册表查询工具
+// （契约在本模块，后端实现在 conex-run::tool_background）
+pub mod tool_task;
 pub mod wait_subagents;
 
 use crate::audit::{NoopAuditSink, SecurityAuditSink};
@@ -115,6 +121,11 @@ pub struct BuiltinToolConfig {
     pub default_shell_timeout_ms: u64,
     /// shell 工具默认输出保留上限（字节）
     pub default_shell_max_output_bytes: usize,
+    /// shell 工具 sync 模式促进窗口系统默认（毫秒，BG4）：sync 等待
+    /// 超过该窗口且后台管理器在场时 adopt 转后台（促进窗口只决定
+    /// 「何时转后台」，与 timeoutMs 的契约层内在超时是两个独立概念）；
+    /// 模型显式传入 waitMsBeforeAsync 时以其为准
+    pub default_shell_promote_window_ms: u64,
     /// 删除工具回收站根目录（I2-S3：None 时执行期回退工作区 `.crish-trash`）
     pub trash_root: Option<PathBuf>,
     /// 安全审计 sink（I2-S8：删除/重定向/拦截发射 security-audit 事件；
@@ -164,6 +175,10 @@ pub struct BuiltinToolConfig {
     /// 返回结构化不可用错误；引擎侧复用既有 create-workflow IPC 校验/注册
     /// 逻辑适配后注入——agent-tools 只定义契约，禁止平行第二套注册链路）
     pub workflow_creation_channel: Option<Arc<dyn create_workflow::WorkflowCreationChannel>>,
+    /// 通用后台注册表查询后端（BG1：None = 未接线，tool_task 返回
+    /// common.unsupported；引擎侧由通用后台注册表实现 ToolBackgroundQuery
+    /// 后注入——agent-tools 只定义查询契约）
+    pub tool_background_query: Option<Arc<dyn tool_task::ToolBackgroundQuery>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -173,6 +188,9 @@ impl Default for BuiltinToolConfig {
             // D0/U-BUDGET：预算定义收敛至 conex-shared::perf_budget（数值不变）
             default_shell_max_output_bytes:
                 conex_shared::perf_budget::SHELL_MAX_OUTPUT_BYTES_DEFAULT,
+            // BG4：促进窗口系统默认与通用后台阈值 T 对齐（20 秒，
+            // 单一真源在 shell::DEFAULT_PROMOTE_WINDOW_MS）
+            default_shell_promote_window_ms: shell::DEFAULT_PROMOTE_WINDOW_MS,
             trash_root: None,
             audit_sink: None,
             subagent_spawner: None,
@@ -188,6 +206,7 @@ impl Default for BuiltinToolConfig {
             child_agent_registrar: None,
             subagent_model_channel: None,
             workflow_creation_channel: None,
+            tool_background_query: None,
         }
     }
 }
@@ -224,6 +243,7 @@ pub fn register_builtin_tools_with_config(
         config.trash_root.clone(),
         Arc::clone(&audit_sink),
         config.background_manager.clone(),
+        config.default_shell_promote_window_ms,
     )))?;
     registry.register(Arc::new(diff::DiffTextTool::new()))?;
     registry.register(Arc::new(delete::DeleteFileTool::with_audit_sink(
@@ -292,6 +312,12 @@ pub fn register_builtin_tools_with_config(
     // common.unsupported；引擎侧复用 create-workflow IPC 校验/注册逻辑适配）
     registry.register(Arc::new(create_workflow::CreateWorkflowTool::with_channel(
         config.workflow_creation_channel.clone(),
+    )))?;
+    // tool_task（BG1）：通用后台注册表的模型面查询（status / result）；
+    // tool_background_query 字段透传（None = 未接线，工具返回
+    // common.unsupported；引擎侧由 conex-run 注册表实现查询后端）
+    registry.register(Arc::new(tool_task::ToolTaskTool::with_query(
+        config.tool_background_query.clone(),
     )))?;
     // resolve_output_dir（T-EG-08 / REQ-G01）：查询类工具——解析会话文档
     // 产出目录（显式 folder 优先 / 默认日期目录 / 惰性幂等）；服务经
@@ -867,7 +893,8 @@ mod tests {
         // →35（P0：configure_agents 并入）
         // →39（P1：report_progress / ask_parent / request_capability / grant_capability）
         // →40（P2：switch_agent_model 并入）
-        assert_eq!(registry.len(), 40);
+        // →41（BG1：tool_task 并入）
+        assert_eq!(registry.len(), 41);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -914,6 +941,7 @@ mod tests {
                 "set_timer",
                 "shell_command",
                 "switch_agent_model",
+                "tool_task",
                 "wait_subagents",
                 "write_file",
             ]

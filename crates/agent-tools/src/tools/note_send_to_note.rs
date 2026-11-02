@@ -87,6 +87,7 @@ intent_id 幂等：重复调用不双插。后端未接线时返回 ok=false / n
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

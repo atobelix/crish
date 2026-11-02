@@ -46,6 +46,7 @@ impl SnapshotTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -130,6 +131,7 @@ impl ScreenshotTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -213,6 +215,7 @@ impl WaitForTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -336,6 +339,7 @@ impl GetUrlTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -383,6 +387,7 @@ impl GetTitleTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

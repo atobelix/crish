@@ -195,6 +195,7 @@ impl Tool for AlwaysRequiresApprovalTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -236,6 +237,7 @@ impl Tool for ApprovalOnceTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
@@ -266,6 +268,7 @@ impl Tool for DangerousTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {

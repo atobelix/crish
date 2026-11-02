@@ -26,6 +26,7 @@ impl CountingTool {
                 input_schema: json!({ "type": "object", "properties": {} }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             calls: Arc::new(AtomicUsize::new(0)),
         }
@@ -71,6 +72,7 @@ impl FailingTool {
                 input_schema: json!({ "type": "object", "properties": {} }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             calls: Arc::new(AtomicUsize::new(0)),
         }
@@ -469,6 +471,7 @@ impl BigOutputTool {
                 input_schema: json!({ "type": "object", "properties": {} }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -702,6 +705,7 @@ impl StreamingTool {
                 input_schema: json!({ "type": "object", "properties": {} }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             calls: Arc::new(AtomicUsize::new(0)),
         }
@@ -775,6 +779,7 @@ impl GatedStreamTool {
                 input_schema: json!({ "type": "object", "properties": {} }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             gate: Arc::new(tokio::sync::Notify::new()),
         }

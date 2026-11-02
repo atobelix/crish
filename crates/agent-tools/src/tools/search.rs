@@ -86,6 +86,7 @@ impl GrepSearchTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -467,6 +468,7 @@ impl FuzzyFindTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

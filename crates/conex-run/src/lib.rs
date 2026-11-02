@@ -3,6 +3,7 @@
 //! 自壳层（`apps/agent-workbench/src-tauri`）下沉的 run/workflow 编排域：
 //! run 状态机与生命周期（`run/`）、idle 续跑、重试熔断、审批门、历史缓存、
 //! 调度器（`sched`）、子代理派生（`subagent_spawner`）、定时器（`timers`）、
+//! 工具后台注册表（`tool_background`，BG1 契约层）、
 //! 事件桥契约（`core_event_bridge` + `buffer`）、任务事件消费、无人值守
 //! 唤醒链路（`wake_watcher` + `wakeup_summary`）、provider 执行底座
 //! （`engine_provider` + `engine_channels` + `engine_handle`）与统一错误
@@ -39,6 +40,10 @@ pub mod stream_error_retry;
 pub mod subagent_spawner;
 pub mod task_event_consumer;
 pub mod timers;
+// BG1（工具调用超时转后台）：tool_task 通用后台注册表——内存注册表
+// （状态机 / 并发排队 / 取消传播）+ session_meta 持久化存储契约；
+// 执行器三方竞速接线在 BG2，本模块不驱动任何工具执行
+pub mod tool_background;
 pub mod wait_channel;
 pub mod wake_watcher;
 pub mod wakeup_summary;

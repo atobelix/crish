@@ -56,6 +56,7 @@ impl ClickTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -152,6 +153,7 @@ impl TypeTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -243,6 +245,7 @@ impl KeyTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -322,6 +325,7 @@ impl ScrollTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -406,6 +410,7 @@ impl HoverTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -466,6 +471,7 @@ impl DragTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -532,6 +538,7 @@ impl SelectOptionTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -624,6 +631,7 @@ impl UploadTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

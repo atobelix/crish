@@ -37,6 +37,7 @@ impl NavigateTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -81,6 +82,7 @@ impl BackTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -123,6 +125,7 @@ impl ForwardTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -168,6 +171,7 @@ impl ReloadTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

@@ -21,6 +21,7 @@ impl Tool for BigOutputTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -44,6 +45,7 @@ impl Tool for HugeOutputTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {

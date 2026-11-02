@@ -550,6 +550,7 @@ mod tests {
                     input_schema: serde_json::json!({"type": "object"}),
                     dangerous: false,
                     fatal_on_error: false,
+                    background_after_ms: None,
                 })
             }
             async fn execute(

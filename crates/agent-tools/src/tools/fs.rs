@@ -48,6 +48,7 @@ impl ReadFileTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             max_bytes: max_bytes.unwrap_or(DEFAULT_READ_MAX_BYTES),
         }
@@ -344,6 +345,7 @@ impl WriteFileTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -559,6 +561,7 @@ impl ListDirTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }
@@ -694,6 +697,7 @@ impl FileStatTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

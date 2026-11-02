@@ -207,6 +207,7 @@ async fn mcp_dynamic_tool_snapshot_injection_and_execution_forwarding() {
         }),
         dangerous: false,
         fatal_on_error: false,
+        background_after_ms: None,
     };
 
     let adapter = Arc::new(agent_tools::mcp::McpDynamicToolAdapter::new(

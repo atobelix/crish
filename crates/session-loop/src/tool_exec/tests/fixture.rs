@@ -24,6 +24,7 @@ impl Tool for EchoTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
@@ -46,6 +47,7 @@ impl Tool for DangerousEchoTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
@@ -70,6 +72,7 @@ impl Tool for SlowTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -93,6 +96,7 @@ impl Tool for FailTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -115,6 +119,7 @@ impl Tool for FailToolFatal {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: true,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -142,6 +147,7 @@ impl Tool for StreamTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -203,6 +209,7 @@ impl Tool for RecordingCtxTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
@@ -231,6 +238,7 @@ impl Tool for CountingEchoTool {
             input_schema: serde_json::json!({"type": "object"}),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         })
     }
     async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {

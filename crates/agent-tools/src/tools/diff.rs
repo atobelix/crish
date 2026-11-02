@@ -34,6 +34,7 @@ impl DiffTextTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
         }
     }

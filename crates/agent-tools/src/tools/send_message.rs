@@ -154,6 +154,7 @@ impl SendMessageTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             subagent_inject,
             self_message,
