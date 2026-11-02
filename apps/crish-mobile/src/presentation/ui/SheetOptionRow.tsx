@@ -26,6 +26,8 @@ export interface SheetOptionRowProps {
   hintTone?: 'muted' | 'success';
   /** 右侧箭头（二级入口） */
   showChevron?: boolean;
+  /** 禁用（如离线设备行）：不可点、整体弱化呈现，不触发 onPress */
+  disabled?: boolean;
   testID?: string;
   style?: StyleProp<ViewStyle>;
 }
@@ -38,6 +40,7 @@ export function SheetOptionRow({
   hint,
   hintTone = 'muted',
   showChevron = false,
+  disabled = false,
   testID,
   style,
 }: SheetOptionRowProps) {
@@ -47,18 +50,21 @@ export function SheetOptionRow({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
         {
           borderRadius: theme.radius.md,
-          backgroundColor: pressed
-            ? theme.colors.fillPressed
-            : theme.colors.fillSubtle,
+          backgroundColor:
+            pressed && !disabled
+              ? theme.colors.fillPressed
+              : theme.colors.fillSubtle,
           paddingHorizontal: theme.space.md + theme.space.xxs,
           paddingVertical: theme.space.md + 1,
           gap: theme.space.sm,
+          opacity: disabled ? 0.45 : 1,
         },
         style,
       ]}

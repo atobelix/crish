@@ -4,6 +4,7 @@
 // 永远连不上」或「换目标后仍连旧设备」。
 import { accountStore } from '@/domain/store/accountStore';
 import { connectionStore } from '@/domain/store/connectionStore';
+import { deviceDirectoryStore } from '@/domain/store/deviceDirectoryStore';
 import type { AccountDevice } from '@/domain/types/account';
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
@@ -79,6 +80,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   stopAccountRuntime();
   accountStore.getState().reset();
+  deviceDirectoryStore.getState().clear();
   getObsMock.mockReturnValue(null);
 });
 
@@ -216,5 +218,35 @@ describe('目标切换与销毁', () => {
     expect(disposeObsMock).toHaveBeenCalled();
     expect(accountRemoteTargetId()).toBeNull();
     expect(connectionStore.getState().phase).toBe('disconnected');
+  });
+});
+
+describe('已知设备目录喂数（G4）', () => {
+  it('登录态同步把最新发现并入目录', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    expect(deviceDirectoryStore.getState().knownDevices).toEqual([
+      expect.objectContaining({ id: 'd-1', online: true }),
+    ]);
+  });
+
+  it('后续发现中消失的设备在目录里转离线保留（不谎报在线）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-2' })],
+    });
+    const known = deviceDirectoryStore.getState().knownDevices;
+    expect(known.find((d) => d.id === 'd-1')?.online).toBe(false);
+    expect(known.find((d) => d.id === 'd-2')?.online).toBe(true);
+  });
+
+  it('登出清空目录（账号作用域，不残留上一账号设备）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    expect(deviceDirectoryStore.getState().knownDevices.length).toBe(1);
+    accountStore.setState({ status: 'loggedOut' });
+    expect(deviceDirectoryStore.getState().knownDevices).toEqual([]);
   });
 });

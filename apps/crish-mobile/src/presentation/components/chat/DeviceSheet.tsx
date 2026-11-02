@@ -1,10 +1,16 @@
-// 连接设备 Sheet（原型 cloud-pc 面板的诚实化映射）：
-// 移动端同一时刻只有一台配对桌面（多设备列表为原型 mock，不移植）——
-// 行 = 当前配对桌面（在线状态 + 点击重连）；动作 = 扫码添加新设备。
+// 连接设备 Sheet（G4 多设备切换）：
+// - 账号模式：列出本账号的已知设备目录（relay 发现的在线桌面 + 历史已知
+//   的离线桌面灰置），点选在线设备即切换控制目标——切换经票据重连真实
+//   生效（accountRuntime 按 targetDeviceId 重建接线并清空旧主机会话面），
+//   不是只改选中态。当前目标带对号；目标行在未连通时点击 = 重连。
+// - 局域网配对行：中继未接管且已配对时呈现（= 历史单设备形态，语义不变）；
+//   中继接管后配对行让位账号设备行，避免把非当前连接误报为当前设备。
+// - 扫码添加新设备行两种模式都在（配对新桌面走既有扫码链）。
 // 行距按原型 sheet-clean-list 的 6；「在线」按原型 device-status-text 纯绿字内联呈现。
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { Sheet, SheetOptionRow } from '@/presentation/ui';
+import { AppText, Sheet, SheetOptionRow } from '@/presentation/ui';
 import type { DeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
 
 export interface DeviceSheetProps {
@@ -24,21 +30,85 @@ export function DeviceSheet({
   testID,
 }: DeviceSheetProps) {
   const theme = useTheme();
-  const statusHint = device.connected ? '在线' : device.phaseLabel;
+  const { accountMode, relayEngaged, pairedHost, refreshDevices } = device;
+
+  // 打开 Sheet 时补一轮设备发现，让在线状态尽量新（发现心跳为 15s 周期）。
+  // refreshDevices 在 VM 内为 useCallback 稳定引用，依赖它不会重复触发。
+  useEffect(() => {
+    if (visible && accountMode) refreshDevices();
+  }, [visible, accountMode, refreshDevices]);
+
+  const showPairedRow = pairedHost !== null && !relayEngaged;
+  const pairedHint = device.connected ? '在线' : device.phaseLabel;
+
   return (
     <Sheet visible={visible} onClose={onClose} title="连接设备" testID={testID}>
       <View style={[styles.list, { gap: theme.space.xs + theme.space.xxs }]}>
-        <SheetOptionRow
-          testID="device-sheet-current"
-          label={device.host ?? '已配对桌面'}
-          selected
-          hint={statusHint}
-          hintTone={device.connected ? 'success' : 'muted'}
-          onPress={() => {
-            if (!device.connected) device.reconnect();
-            onClose();
-          }}
-        />
+        {accountMode ? (
+          <>
+            {device.devices.length === 0 ? (
+              <View style={styles.empty}>
+                <AppText variant="body" color="textSecondary">
+                  暂无已知设备
+                </AppText>
+                <AppText
+                  variant="caption"
+                  color="textTertiary"
+                  style={styles.emptyText}
+                >
+                  在电脑上打开 Crish
+                  并登录同一账号后，在线的电脑会自动出现在这里。
+                </AppText>
+              </View>
+            ) : (
+              device.devices.map((row) => {
+                const hint = row.isTarget
+                  ? device.connected
+                    ? '在线'
+                    : row.online
+                      ? device.phaseLabel
+                      : '离线'
+                  : row.online
+                    ? '在线'
+                    : '离线';
+                const hintIsSuccess =
+                  row.online && (!row.isTarget || device.connected);
+                return (
+                  <SheetOptionRow
+                    key={row.id}
+                    testID={`device-sheet-device-${row.id}`}
+                    label={row.name}
+                    selected={row.isTarget}
+                    hint={hint}
+                    hintTone={hintIsSuccess ? 'success' : 'muted'}
+                    disabled={!row.online}
+                    onPress={() => {
+                      if (row.isTarget) {
+                        if (!device.connected) device.reconnect();
+                      } else {
+                        device.switchDevice(row.id);
+                      }
+                      onClose();
+                    }}
+                  />
+                );
+              })
+            )}
+          </>
+        ) : null}
+        {showPairedRow ? (
+          <SheetOptionRow
+            testID="device-sheet-current"
+            label={pairedHost ?? '已配对桌面'}
+            selected
+            hint={pairedHint}
+            hintTone={device.connected ? 'success' : 'muted'}
+            onPress={() => {
+              if (!device.connected) device.reconnect();
+              onClose();
+            }}
+          />
+        ) : null}
         <SheetOptionRow
           testID="device-sheet-scan"
           label="扫码添加新设备"
@@ -49,6 +119,16 @@ export function DeviceSheet({
           }}
         />
       </View>
+      {accountMode && device.devices.length > 0 ? (
+        <AppText
+          variant="caption"
+          color="textTertiary"
+          style={{ marginTop: theme.space.md }}
+        >
+          点选在线设备即可切换要控制的电脑；切换后，会话、项目与模型都会跟随所选电脑。离线设备需先在电脑上打开
+          Crish 并登录同一账号。
+        </AppText>
+      ) : null}
     </Sheet>
   );
 }
@@ -56,6 +136,15 @@ export function DeviceSheet({
 const styles = StyleSheet.create({
   list: {
     flexDirection: 'column',
+  },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  emptyText: {
+    textAlign: 'center',
   },
 });
 

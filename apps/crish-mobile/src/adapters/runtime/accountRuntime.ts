@@ -12,6 +12,7 @@ import {
 } from '@/adapters/wiring/observationWiring';
 import { RelaySocket } from '@/network/RelaySocket';
 import { accountStore } from '@/domain/store/accountStore';
+import { deviceDirectoryStore } from '@/domain/store/deviceDirectoryStore';
 import { approvalStore } from '@/domain/store/approvalStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { eventStore } from '@/domain/store/eventStore';
@@ -51,6 +52,14 @@ function disposeRemote(): void {
 export function syncAccountRemote(): void {
   const { status, targetDeviceId, devices, accessToken } =
     accountStore.getState();
+  // 已知设备目录喂数（G4）：登录态把最新一轮发现并入目录（本轮未命中的
+  // 历史设备转离线灰置保留，供设备 Sheet 多设备列表呈现）；非登录态清空
+  // （设备是账号作用域数据，登出/换账号不得残留上一账号的设备）。
+  if (status === 'loggedIn') {
+    deviceDirectoryStore.getState().mergeFresh(devices);
+  } else {
+    deviceDirectoryStore.getState().clear();
+  }
   const target = devices.find((device) => device.id === targetDeviceId);
   const eligible =
     status === 'loggedIn' &&
