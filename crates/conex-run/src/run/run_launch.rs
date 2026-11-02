@@ -1467,6 +1467,15 @@ pub async fn run_task_impl(
         // conex-shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT（64KiB
         // 事件载荷预算）。测试注入 None 仍合法（工具级 200KB 覆盖保留）。
         output_budget_bytes: Some(conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT),
+        // BG2（工具调用超时转后台）：通用后台宿主注入——引擎注册
+        // 表适配（与 tool_task 查询面同一单例，主 run 与子代理 run
+        // 共用本装配点）；全局默认 T 以 DEFAULT_BACKGROUND_AFTER_MS
+        // 同一常量显式注入（N6 纪律：禁止仅靠 ..Default 隐式继
+        // 承），逐工具定义声明可覆盖。
+        tool_background: Some(state.engine.tool_background_host()),
+        background_after_default: std::time::Duration::from_millis(u64::from(
+            agent_tools::definition::DEFAULT_BACKGROUND_AFTER_MS,
+        )),
         task_type: subagent_config.as_ref().and_then(|c| c.task_type.clone()),
         ..ToolBatchOptions::default()
     };

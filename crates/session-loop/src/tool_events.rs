@@ -34,6 +34,8 @@
 //! > 变体随 `AgentEvent` 的 tool-update 变体删除——S1 流式进度无出站事件（前端零消费），
 //! > 终值仍由 tool-end 承载；`ToolProgress`（agent-tools 流式协议类型）保留。
 
+use agent_tools::context::AbortToken;
+use agent_tools::definition::DEFAULT_BACKGROUND_AFTER_MS;
 use agent_tools::permission::PermissionMode;
 use conex_agents::capability::CapabilityCell;
 use conex_agents::permission::PermissionCell;
@@ -198,6 +200,83 @@ pub trait ApprovalGate: Send + Sync {
         requester: Option<&ApprovalRequester>,
         reason: Option<&str>,
     ) -> ApprovalOutcome;
+}
+/// 工具后台托管接缝（BG2 · 工具调用超时转后台）
+///
+/// 执行器在 detach 点消费的注册表宿主面：session-loop 不依赖
+/// conex-run（依赖方向反之），故以 trait 注入（与 [ApprovalGate]
+/// 同款接缝）——实现权威在 `conex-run::tool_background`（适配
+/// `ToolBackgroundRegistry`），与 `tool_task` 查询面共享同一注册表
+/// 实例。装配缺失（options 未注入）时执行器永不 detach，行为与
+/// BG2 之前一致。
+///
+/// 方法口径与注册表一一对应（登记幂等 / 准入分类 / 在途去重 /
+/// 子令牌竞速 / 落定先落定者胜），本 trait 不引入第二套语义。
+#[async_trait::async_trait]
+pub trait ToolBackgroundHost: Send + Sync + std::fmt::Debug {
+    /// 在途去重查询：同 (session, tool, 入参摘要) 已有未落定条目
+    /// 时返回其 callId——执行器据此直接以占位收口、不重复执行。
+    fn find_inflight(
+        &self,
+        session_id: &str,
+        tool_name: &str,
+        args_digest: &str,
+    ) -> Option<String>;
+
+    /// 在途条目已运行毫秒数（去重占位的 elapsedMs 来源）：Running
+    /// 取开始执行至今，Queued 取登记至今；条目不存在/已终态
+    /// → None。
+    fn inflight_elapsed_ms(&self, call_id: &str, now_ms: u64) -> Option<u64>;
+
+    /// 登记 detach 任务（同 callId 幂等）：返回准入分类。
+    fn register(&self, task: ToolBackgroundRegistration) -> ToolBackgroundAdmission;
+
+    /// 条目独立子令牌（执行包装与之竞速实现注册表侧取消）；
+    /// 条目不存在/已终态 → None。
+    fn entry_token(&self, call_id: &str) -> Option<AbortToken>;
+
+    /// 等待排队条目获槽；获槽前进入终态/不存在 → false（执行
+    /// 单元随之丢弃，条目终态已由注册表收口）。
+    async fn wait_admitted(&self, call_id: &str) -> bool;
+
+    /// 挂入执行包装任务句柄（取消时注册表据此 abort）；仅对已获
+    /// 槽的条目调用，返回是否挂入成功。
+    fn attach_handle(&self, call_id: &str, handle: tokio::task::JoinHandle<()>) -> bool;
+
+    /// 执行落定（先落定者胜）：非 Running 返回 false。
+    fn settle(&self, call_id: &str, result: ClassifiedToolResult, now_ms: u64) -> bool;
+}
+
+/// detach 登记请求（执行器侧 DTO；宿主适配到注册表登记请求）
+#[derive(Debug, Clone)]
+pub struct ToolBackgroundRegistration {
+    /// 工具调用 id（全局唯一键）
+    pub call_id: String,
+    /// 会话 id（容量按会话计数）
+    pub session_id: String,
+    /// 发起 run id（级联取消与审计归属）
+    pub run_id: Option<String>,
+    /// 工具名
+    pub tool_name: String,
+    /// 入参摘要（与 ToolIdempotencyGuard 执行键同一口径生成，
+    /// 宿主/注册表只做不透明比较）
+    pub args_digest: String,
+    /// 发起 run 的中止令牌（条目子令牌派生自它——手动停止级联
+    /// 取消的令牌面）
+    pub parent_token: AbortToken,
+    /// 登记时刻（ms epoch）
+    pub now_ms: u64,
+}
+
+/// detach 登记的准入分类（与注册表 RegisterOutcome 一一对应）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolBackgroundAdmission {
+    /// 已获执行槽位（Running）
+    Admitted,
+    /// 已登记、排队等待槽位（Queued；排队不计时）
+    Queued,
+    /// 同 callId 已登记（幂等命中）
+    AlreadyExists,
 }
 
 /// 工具错误分类（fatalOnError 判定依据，01 §五.8）
@@ -426,6 +505,17 @@ pub struct ToolBatchOptions {
     pub max_parallel: Option<usize>,
     /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
     pub task_type: Option<String>,
+    /// 通用后台托管接缝（BG2）：None = 未装配——有资格工具也永不
+    /// detach、按现行 60s 硬超时收口（行为与 BG2 之前一致）。生产
+    /// 装配点（run_launch）注入引擎注册表适配，与 `tool_task`
+    /// 查询面同一注册表实例。
+    pub tool_background: Option<Arc<dyn ToolBackgroundHost>>,
+    /// 全局默认转后台阈值 T（BG2）：工具定义声明
+    /// `background_after_ms = Some(0)`（= 声明资格但不指定具体值）
+    /// 时取此值；`Some(ms)`（ms > 0）的逐工具声明优先。缺省 =
+    /// [DEFAULT_BACKGROUND_AFTER_MS]（20s 定案）；生产装配点
+    /// run_launch 以同一常量显式注入，禁止另立第二套数字。
+    pub background_after_default: Duration,
 }
 
 impl ToolBatchOptions {
@@ -454,6 +544,11 @@ impl Default for ToolBatchOptions {
             approval_timeout: None,
             max_parallel: None,
             task_type: None,
+            // BG2：未装配宿主 = 永不 detach（BG2 之前的行为）
+            tool_background: None,
+            background_after_default: Duration::from_millis(
+                u64::from(DEFAULT_BACKGROUND_AFTER_MS),
+            ),
         }
     }
 }

@@ -104,6 +104,24 @@ impl ToolExecutor {
         self.revert_policy = policy;
         self
     }
+
+    /// BG2：detach 移交用浅克隆——工具注册表 / 幂等守卫 / 中间件
+    /// 链 / 钩子均为 Arc 共享，超时配置与回退策略为值拷贝，并发
+    /// 观测共享同一计数点（与 [ParallelExecObs] 文档口径一致）。
+    /// 后台包装任务以克隆出的执行器驱动「执行 + 后处理」完整
+    /// 单元：后处理（on_result 链 / 钩子 / 结果分类）与在环路径
+    /// 同一实现同一语义，不另立第二套收口。
+    pub(crate) fn clone_executor(&self) -> Self {
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: self.idempotency.clone(),
+            middleware: self.middleware.clone(),
+            middleware_timeouts: self.middleware_timeouts,
+            hooks: self.hooks.clone(),
+            revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
+    }
 }
 
 impl ToolExecutor {

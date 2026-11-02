@@ -84,6 +84,9 @@ impl McpRegistryShell {
             name: def.name.clone(),
             description: def.description.clone(),
             input_schema: def.effective_input_schema().clone(),
+            // 本地工具对外不声明 readOnlyHint（本地定义无对应的
+            // 只读声明面）——缺省无注解，与解析侧 fail-closed 对齐
+            annotations: crate::mcp::bridge::McpToolAnnotations::default(),
         }
     }
 
@@ -322,6 +325,7 @@ mod tests {
             input_schema: json!({ "type": "object", "properties": { "ops": {} } }),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         };
         let info = McpRegistryShell::definition_to_mcp_tool(&def);
         assert_eq!(info.name, "block_batch");

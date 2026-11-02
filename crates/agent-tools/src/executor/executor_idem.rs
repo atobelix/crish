@@ -7,6 +7,11 @@ use serde_json::Value;
 
 /// 从执行上下文与入参构造幂等上下文
 ///
+/// 消费方有二且必须同源：执行器内的幂等守卫接线（本模块原用途）
+/// 与 BG2 在途去重（session-loop 在 detach 点经
+/// [crate::idempotency::inflight_digest] 生成注册表摘要）——两方
+/// 共用本构造，键口径不漂移。
+///
 /// snapshotTag 取入参携带值（如 edit 类工具的 snapshotTag 字段），
 /// 作为文件状态类工具的更精确键；ctx 无需显式提供。
 /// 键素材另附加「目标存在性」探针（F7 遗留 2 接线）：路径类工具同参对
@@ -14,7 +19,7 @@ use serde_json::Value;
 /// tool.file_exists），参数 hash 键须含目标当前存在状态，否则同一键会掩盖
 /// 结果差异。check 与 record 各自实时探测：record 记录的是执行后的状态，
 /// 重试时状态一致则去重、状态翻转（如外部删除后重试）则重新执行。
-pub(super) fn build_idempotency_context(
+pub fn build_idempotency_context(
     ctx: &ExecutorContext,
     tool_name: &str,
     args: &Value,

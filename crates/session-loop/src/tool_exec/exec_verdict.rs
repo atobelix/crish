@@ -385,6 +385,7 @@ mod tests {
                 input_schema: serde_json::json!({"type": "object"}),
                 dangerous: false,
                 fatal_on_error: false,
+                background_after_ms: None,
             })
         }
         async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
@@ -411,6 +412,7 @@ mod tests {
                     input_schema: serde_json::json!({"type": "object"}),
                     dangerous: true,
                     fatal_on_error: false,
+                    background_after_ms: None,
                 })
             } else {
                 DEF_SAFE.get_or_init(|| ToolDefinition {
@@ -419,6 +421,7 @@ mod tests {
                     input_schema: serde_json::json!({"type": "object"}),
                     dangerous: false,
                     fatal_on_error: false,
+                    background_after_ms: None,
                 })
             }
         }

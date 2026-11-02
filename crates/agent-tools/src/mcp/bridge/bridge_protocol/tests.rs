@@ -48,12 +48,14 @@ fn adapt_tool_list_builds_prefixed_defs() {
             name: "read".to_string(),
             description: "读文件".to_string(),
             input_schema: json!({ "type": "object", "properties": {} }),
+            annotations: McpToolAnnotations::default(),
         },
         // 缺 description / inputSchema：回退默认
         McpToolInfo {
             name: "write".to_string(),
             description: String::new(),
             input_schema: Value::Null,
+            annotations: McpToolAnnotations::default(),
         },
     ];
     let defs = adapt_tool_list("files", &tools);
@@ -159,4 +161,52 @@ fn response_result_maps_json_rpc_error() {
 #[test]
 fn default_call_timeout_is_30_seconds() {
     assert_eq!(DEFAULT_MCP_CALL_TIMEOUT, Duration::from_secs(30));
+}
+
+/// BG2：MCP 转后台资格只认服务器显式声明的 readOnlyHint——
+/// 声明只读 → 通用档阈值；未声明/false → 禁入（不凭工具名猜测）。
+#[test]
+fn adapt_tool_list_background_eligibility_follows_read_only_hint() {
+    let tools = vec![
+        McpToolInfo {
+            name: "fetch".to_string(),
+            description: String::new(),
+            input_schema: Value::Null,
+            annotations: McpToolAnnotations {
+                read_only_hint: true,
+            },
+        },
+        McpToolInfo {
+            name: "mutate".to_string(),
+            description: String::new(),
+            input_schema: Value::Null,
+            annotations: McpToolAnnotations::default(),
+        },
+    ];
+    let defs = adapt_tool_list("srv", &tools);
+    assert_eq!(
+        defs[0].background_after_ms,
+        Some(crate::definition::DEFAULT_BACKGROUND_AFTER_MS)
+    );
+    assert_eq!(defs[1].background_after_ms, None);
+}
+
+/// BG2：parse_tool_info 解析 annotations.readOnlyHint；缺失/畸形
+/// 注解按未声明降级（fail-closed），不拒绝工具声明本身。
+#[test]
+fn parse_tool_info_reads_annotations_fail_closed() {
+    let ro = parse_tool_info(&json!({
+        "name": "fetch",
+        "annotations": { "readOnlyHint": true }
+    }))
+    .unwrap();
+    assert!(ro.annotations.read_only_hint);
+    let bare = parse_tool_info(&json!({ "name": "fetch" })).unwrap();
+    assert!(!bare.annotations.read_only_hint);
+    let malformed = parse_tool_info(&json!({
+        "name": "fetch",
+        "annotations": { "readOnlyHint": "yes" }
+    }))
+    .unwrap();
+    assert!(!malformed.annotations.read_only_hint);
 }

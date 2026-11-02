@@ -16,6 +16,7 @@ mod executor_idem;
 mod executor_run;
 mod executor_types;
 
+pub use executor_idem::build_idempotency_context;
 pub use executor_run::{execute_stream_with_output_policy, execute_with_output_policy};
 pub use executor_types::{ExecutorContext, ToolExecutionPolicy, ToolResult};
 

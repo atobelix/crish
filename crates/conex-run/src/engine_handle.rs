@@ -45,6 +45,9 @@ use crate::wait_channel::{
     EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, WaitChannel, WaitDispatchStore,
     WaitStore,
 };
+use crate::tool_background::{
+    RegistryBackgroundHost, SessionMetaToolBackgroundStore, ToolBackgroundRegistry,
+};
 use crate::wake_watcher::LastWakeupTracker;
 
 /// 毒丸恢复计数（B1-5 观测化：构建面 8 处锁中毒恢复次数——EngineHandle
@@ -122,6 +125,10 @@ pub struct EngineHandle {
     continuity: Arc<ContinuityChannelBoard>,
     /// 会话级子代理策略服务（configure_agents 的落地实现；None = 无 DB 测试路径）
     agent_policy: Option<Arc<crate::agent_policy::AgentPolicyService>>,
+    /// 通用后台注册表单例（BG2）：`tool_task` 查询面与执行器
+    /// detach 宿主共享同一实例（装配于 [assemble_engine_core]，
+    /// 禁止两处各建一份）
+    tool_background: Arc<ToolBackgroundRegistry>,
 }
 
 impl EngineHandle {
@@ -183,6 +190,7 @@ impl EngineHandle {
             audit_sink: core.audit_sink,
             continuity: core.continuity,
             agent_policy: core.agent_policy,
+            tool_background: core.tool_background,
         }
     }
 
@@ -225,6 +233,20 @@ impl EngineHandle {
     /// 会话级子代理策略服务（configure_agents / run 启动装载共用；None = 无 DB）
     pub fn agent_policy_service(&self) -> Option<Arc<crate::agent_policy::AgentPolicyService>> {
         self.agent_policy.clone()
+    }
+    /// 通用后台注册表单例（BG2 / BG3 共用面：查询、级联取消、
+    /// 冷启动 OutcomeUnknown 合成的原料入口）
+    pub fn tool_background_registry(&self) -> &Arc<ToolBackgroundRegistry> {
+        &self.tool_background
+    }
+    /// 执行器 detach 宿主（BG2）：薄适配新建、内含同一注册表
+    /// 单例——ToolBatchOptions 装配注入用（run_launch）
+    pub fn tool_background_host(
+        &self,
+    ) -> Arc<dyn session_loop::tool_events::ToolBackgroundHost> {
+        Arc::new(RegistryBackgroundHost::new(Arc::clone(
+            &self.tool_background,
+        )))
     }
 
     /// 按模型覆盖解析 provider（None / 与当前一致 → 当前 provider）。
@@ -502,6 +524,9 @@ pub struct EngineCore {
     pub continuity: Arc<ContinuityChannelBoard>,
     /// 会话级策略服务（None = 无 LocalDb）
     pub agent_policy: Option<Arc<crate::agent_policy::AgentPolicyService>>,
+    /// 通用后台注册表单例（BG2；组装进 [EngineHandle] 后由
+    /// tool_background_host / tool_background_registry 对外）
+    pub tool_background: Arc<ToolBackgroundRegistry>,
 }
 
 /// 引擎装配主路径（crate 域：timer / wait / continuity / scheduler /
@@ -604,6 +629,11 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
     // 经 ToolContext.background 透传；G5 T-CF-05/06：timer_channel 注入；
     // T-CF-10：subagent_wait_channel 注入；审计 01 W1：三通道板卡注入）
     let mut registry = ToolRegistry::new();
+    // ── BG2：通用后台注册表单例（session_meta 落盘存储；
+    // tool_task 查询面与执行器 detach 宿主共享同一实例）──
+    let tool_background = Arc::new(ToolBackgroundRegistry::new(Arc::new(
+        SessionMetaToolBackgroundStore::new(db.clone()),
+    )));
     let builtin_config = agent_tools::tools::BuiltinToolConfig {
         background_manager,
         timer_channel: Some(Arc::clone(&timer_registry) as Arc<dyn TimerChannel>),
@@ -627,6 +657,11 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         subagent_model_channel: Some(Arc::clone(&continuity)
             as Arc<dyn agent_tools::tools::switch_agent_model::SubagentModelChannel>),
         audit_sink: Some(Arc::clone(&audit_sink) as agent_tools::audit::AuditSink),
+        // BG1/BG2：tool_task 查询后端 = 通用后台注册表单例
+        tool_background_query: Some(
+            Arc::clone(&tool_background)
+                as Arc<dyn agent_tools::tools::tool_task::ToolBackgroundQuery>,
+        ),
         ..agent_tools::tools::BuiltinToolConfig::default()
     };
     if let Err(error) =
@@ -689,6 +724,7 @@ pub fn assemble_engine_core(config: EngineAssemblyConfig) -> EngineCore {
         audit_sink,
         continuity,
         agent_policy,
+        tool_background,
     }
 }
 

@@ -29,6 +29,16 @@ pub const DEFAULT_MCP_INIT_TIMEOUT: Duration = Duration::from_secs(10);
 /// 工具枚举 tools/list 超时
 pub const DEFAULT_MCP_LIST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// MCP 工具注解（tools/list `annotations` 对象；MCP spec ToolAnnotations）
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolAnnotations {
+    /// 只读提示（readOnlyHint）：true = 服务器声明该工具无副作用。
+    /// 缺省 false——未声明即按可能有副作用对待（fail-closed），
+    /// BG2 转后台资格据此判定（见 [adapt_tool_list]）。
+    #[serde(default)]
+    pub read_only_hint: bool,
+}
 /// tools/list 返回的单个工具声明（MCP Tool 形状）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +51,9 @@ pub struct McpToolInfo {
     /// 入参 JSON Schema（缺省回退兜底形状）
     #[serde(default)]
     pub input_schema: Value,
+    /// 工具注解（缺省 = 无注解：readOnlyHint 按未声明对待）
+    #[serde(default)]
+    pub annotations: McpToolAnnotations,
 }
 
 /// 确定性防冲突前缀命名规范：`mcp_<clean_id>_<short_hash>__<tool>`
@@ -113,6 +126,13 @@ pub fn adapt_tool_list(server_id: &str, tools: &[McpToolInfo]) -> Vec<ToolDefini
             },
             dangerous: false,
             fatal_on_error: false,
+            // BG2 资格：仅服务器显式声明 readOnlyHint 的工具开放
+            // 通用档阈值（v1「只读慢工具」口径）；未声明/非只读
+            // 保持禁入——不凭工具名猜测副作用边界。
+            background_after_ms: tool
+                .annotations
+                .read_only_hint
+                .then_some(crate::definition::DEFAULT_BACKGROUND_AFTER_MS),
         })
         .collect()
 }
@@ -141,10 +161,18 @@ pub(crate) fn parse_tool_info(value: &Value) -> Result<McpToolInfo, ToolError> {
         .get("inputSchema")
         .cloned()
         .unwrap_or_else(default_input_schema);
+    // annotations 非对象/字段类型不符时按无注解降级（不因注解解析
+    // 失败拒绝整个工具声明；readOnlyHint 保持 fail-closed 缺省）
+    let annotations = value
+        .get("annotations")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
     Ok(McpToolInfo {
         name,
         description,
         input_schema,
+        annotations,
     })
 }
 

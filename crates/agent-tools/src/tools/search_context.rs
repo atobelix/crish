@@ -58,6 +58,11 @@ impl SearchContextTool {
                 }),
                 dangerous: false,
                 fatal_on_error: false,
+                // BG2 资格开放（BG1 判据逐项核对）：纯只读检索——
+                // 会话作用域 fail-closed、结果自包含、执行只读
+                // ctx.compression_store 的 Arc 快照（可所有权化，
+                // 不借用会话可变状态）。慢查询不再钉住对话。
+                background_after_ms: Some(crate::definition::DEFAULT_BACKGROUND_AFTER_MS),
             },
         }
     }

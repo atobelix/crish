@@ -360,6 +360,15 @@ pub fn execution_key(ctx: &IdempotencyContext, args: &Value) -> String {
     }
 }
 
+/// BG2 在途去重摘要（薄适配）：后台注册表的 `args_digest` 与守卫的
+/// 执行键**同一口径**——直接取 [execution_key]，使「已执行去重」
+/// （守卫）与「在途去重」（注册表）共享一套键纪律，不另立第二套
+/// 摘要方案。上下文构造（含 snapshotTag 提取与路径存在性探针）与
+/// 守卫消费侧完全一致，经 [crate::executor::build_idempotency_context]
+/// 构造——登记时与查询时两次计算天然同值，键不漂移。
+pub fn inflight_digest(ctx: &IdempotencyContext, args: &Value) -> String {
+    execution_key(ctx, args)
+}
 /// 参数规范 hash（SipHash-13，非加密散列，仅作同进程/同域去重键）
 ///
 /// 输入为 `canonicalize_json` 的规范序列化，保证键序不同但逻辑相同的
@@ -627,6 +636,28 @@ mod tests {
         assert_eq!(execution_key(&c, &args), "write_file@tag-1");
     }
 
+    /// BG2 薄适配对齐：`inflight_digest` 与守卫执行键逐场景同值
+    /// （普通入参 / 入参 snapshotTag / 额外键素材三条键路径全覆盖），
+    /// 保证注册表在途去重与守卫已执行去重永不分叉。
+    #[test]
+    fn inflight_digest_matches_execution_key() {
+        let args = json!({ "path": "a.txt" });
+        let c = ctx("run-1", "sess-1", "read_file");
+        assert_eq!(inflight_digest(&c, &args), execution_key(&c, &args));
+        let tagged = json!({ "path": "a.txt", "snapshotTag": "tag-9" });
+        assert_eq!(
+            inflight_digest(&c, &tagged),
+            execution_key(&c, &tagged)
+        );
+        assert_eq!(inflight_digest(&c, &tagged), "read_file@tag-9");
+        let mut probed = ctx("run-1", "sess-1", "read_file");
+        probed.extra_key_material = vec!["path:exists=true".to_string()];
+        assert_eq!(
+            inflight_digest(&probed, &args),
+            execution_key(&probed, &args)
+        );
+        assert_ne!(inflight_digest(&probed, &args), inflight_digest(&c, &args));
+    }
     // ── 持久化钩子 ──
 
     /// 测试用内存持久化实现（模拟跨进程 store 共享）

@@ -43,6 +43,7 @@ fn create_test_session(server_id: &str, tool_name: &str, state_code: u8) -> Arc<
         input_schema: serde_json::json!({"type": "object"}),
         dangerous: false,
         fatal_on_error: false,
+        background_after_ms: None,
     };
     tool_index.insert(
         tool_name.to_string(),
