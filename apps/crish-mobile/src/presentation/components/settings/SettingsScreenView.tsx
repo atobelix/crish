@@ -16,6 +16,8 @@ import {
 } from '@/presentation/ui';
 import { FONT_SCALE_LABELS } from './SettingsFontView';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
+import { useLocalChatStore } from '@/adapters/hooks/useAppStore';
+import { resolveActiveSelection } from '@/domain/pure/localChatProtocol';
 import { logoutAccount } from '@/adapters/account/accountService';
 import { AccountAvatar } from '@/presentation/account/ui';
 import { ConnectionHelpSheet } from '@/presentation/components/status/ConnectionHelpSheet';
@@ -30,6 +32,9 @@ export interface SettingsScreenViewProps {
   onOpenNotification: () => void;
   onOpenScan: () => void;
   onConfirmRemove: () => void | Promise<void>;
+  /** 本地助手（手机本地供应商直连，与远程宿主模型无关）；两入口齐备才渲染该组 */
+  onOpenLocalChat?: () => void;
+  onOpenLocalProviders?: () => void;
 }
 
 export default function SettingsScreenView({
@@ -42,6 +47,8 @@ export default function SettingsScreenView({
   onOpenNotification,
   onOpenScan,
   onConfirmRemove,
+  onOpenLocalChat,
+  onOpenLocalProviders,
 }: SettingsScreenViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -59,6 +66,15 @@ export default function SettingsScreenView({
     '登录 Crish 账号';
   // 主题行值文案走 THEME_MODE_LABELS 单一真源（四档全对，含纯净中性灰）
   const themeLabel = THEME_MODE_LABELS[vm.themeMode];
+  // 本地助手摘要：当前供应商名（无当前选择但已有配置→诚实标注；无配置→未配置）
+  const localConfig = useLocalChatStore((s) => s.config);
+  const localSelection = resolveActiveSelection(localConfig);
+  const localSummary =
+    localSelection !== null
+      ? localSelection.provider.displayName
+      : Object.keys(localConfig.providers).length > 0
+        ? '未选当前供应商'
+        : '未配置';
 
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
@@ -198,6 +214,28 @@ export default function SettingsScreenView({
             divider={false}
           />
         </SettingsGroup>
+
+        {onOpenLocalChat && onOpenLocalProviders ? (
+          <SettingsGroup label="本地助手">
+            <ListRow
+              title="本地对话"
+              leading={<RowIcon name="zap" />}
+              trailing={
+                <AppText variant="footnote" color="textTertiary">
+                  {localSummary}
+                </AppText>
+              }
+              showChevron
+              onPress={onOpenLocalChat}
+            />
+            <ListRow
+              title="供应商配置"
+              leading={<RowIcon name="settings" />}
+              onPress={onOpenLocalProviders}
+              divider={false}
+            />
+          </SettingsGroup>
+        ) : null}
 
         <SettingsGroup label="关于">
           <ListRow

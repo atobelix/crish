@@ -17,6 +17,10 @@ import {
   settingsStore,
   type SettingsState,
 } from '@/domain/store/settingsStore';
+import {
+  localChatStore,
+  type LocalChatState,
+} from '@/domain/store/localChatStore';
 
 export const useAuthStore = <T>(selector: (s: AuthState) => T): T =>
   useStore(authStore, useShallow(selector));
@@ -38,3 +42,7 @@ export const useSessionStore = <T>(selector: (s: SessionState) => T): T =>
 /** 设置面订阅（R4 批次2 单真源：appearance/notification 持久化分组） */
 export const useSettingsStore = <T>(selector: (s: SettingsState) => T): T =>
   useStore(settingsStore, useShallow(selector));
+
+/** 本地对话配置面订阅（供应商配置/当前选择；密钥不经本面暴露） */
+export const useLocalChatStore = <T>(selector: (s: LocalChatState) => T): T =>
+  useStore(localChatStore, useShallow(selector));

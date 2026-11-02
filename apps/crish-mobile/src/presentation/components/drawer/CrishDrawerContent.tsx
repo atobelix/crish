@@ -234,6 +234,11 @@ export function CrishDrawerContent() {
         testID="drawer-approval-history"
         onPress={() => openRootPage('/approval-history')}
       />
+      <QuietNavRow
+        label="本地对话"
+        testID="drawer-local-chat"
+        onPress={() => openRootPage('/local-chat')}
+      />
 
       {/* 会话列表（ScrollView 内轻量分组；数据量为数十条级，过滤即时） */}
       <ScrollView

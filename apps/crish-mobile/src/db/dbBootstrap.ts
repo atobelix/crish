@@ -24,6 +24,7 @@ import {
 } from '@/adapters/persistence/persistBootstrap';
 import { settingsStore } from '@/domain/store/settingsStore';
 import { notificationStore } from '@/domain/store/notificationStore';
+import { localChatStore } from '@/domain/store/localChatStore';
 
 /** 移动端本地数据库文件名（expo-sqlite 打开名） */
 export const MOBILE_DB_NAME = 'crish-mobile.db';
@@ -109,5 +110,6 @@ async function hydrateStores(): Promise<void> {
   await Promise.all([
     settingsStore.getState().hydrate(),
     notificationStore.getState().hydrate(),
+    localChatStore.getState().hydrate(),
   ]);
 }

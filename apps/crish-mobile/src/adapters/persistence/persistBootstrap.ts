@@ -20,6 +20,11 @@ import {
   configureNotificationsPersistence,
   type NotificationsPersist,
 } from '@/domain/store/notificationStore';
+import {
+  configureLocalChatPersistence,
+  configureLocalChatSecure,
+} from '@/domain/store/localChatStore';
+import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
 
 /** notifications DAO → NotificationsPersist 适配（title 可空归一为展示空串） */
@@ -76,4 +81,11 @@ export function configureSqlitePersistence(driver: SqlDriver | null): void {
       ? null
       : new DaoNotificationsPersist(new SqlNotificationsDao(driver))
   );
+  // 本地对话（localChatStore）：非敏感配置共用 SqlSettingsDao（kv 键
+  // localchat.config）；API Key 走 SecureStore 驱动——与 SQL 可用性无关，
+  // DB 降级时密钥面独立成立。
+  configureLocalChatPersistence(
+    driver === null ? null : (new SqlSettingsDao(driver) as SettingsPersist)
+  );
+  configureLocalChatSecure(expoSecureStoreDriver());
 }

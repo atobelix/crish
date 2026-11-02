@@ -21,6 +21,8 @@ export default function SettingsScreen() {
       onOpenFont={() => router.push('/settings-font')}
       onOpenNotification={() => router.push('/settings-notification')}
       onOpenScan={() => router.push('/pair/scan')}
+      onOpenLocalChat={() => router.push('/local-chat')}
+      onOpenLocalProviders={() => router.push('/settings-local-providers')}
       onConfirmRemove={onConfirmRemove}
     />
   );
