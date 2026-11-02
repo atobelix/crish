@@ -40,8 +40,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const SRC_DIR = resolve(REPO_ROOT, 'apps/crish-desktop/src');
 const LOCALES_DIR = join(SRC_DIR, 'i18n', 'locales');
-const REGISTRY_INFO_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/info.ts');
-const REGISTRY_CODES_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/codes.ts');
+const REGISTRY_INFO_PATH = resolve(
+  REPO_ROOT,
+  'packages/shared-types/src/generated/errors/info.ts'
+);
+const REGISTRY_CODES_PATH = resolve(
+  REPO_ROOT,
+  'packages/shared-types/src/generated/errors/codes.ts'
+);
 const BASELINE_PATH = resolve(__dirname, 'check-i18n-references-baseline.json');
 
 const DUMP = process.argv.includes('--dump');
@@ -53,7 +59,10 @@ const DUMP = process.argv.includes('--dump');
 function evaluateTsModule(filePath) {
   const tsCode = readFileSync(filePath, 'utf8');
   const jsCode = ts.transpileModule(tsCode, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
 
   const moduleObj = { exports: {} };
@@ -63,7 +72,8 @@ function evaluateTsModule(filePath) {
     if (!existsSync(target)) {
       if (existsSync(target + '.ts')) target = target + '.ts';
       else if (existsSync(target + '.js')) target = target + '.js';
-      else if (existsSync(join(target, 'index.ts'))) target = join(target, 'index.ts');
+      else if (existsSync(join(target, 'index.ts')))
+        target = join(target, 'index.ts');
     }
     if (existsSync(target) && !statSync(target).isDirectory()) {
       // 返回原始 exports（保留 .default 与 __esModule），使被求值模块内部的
@@ -73,7 +83,14 @@ function evaluateTsModule(filePath) {
     return {};
   };
 
-  const fn = new Function('module', 'exports', 'require', '__dirname', '__filename', jsCode);
+  const fn = new Function(
+    'module',
+    'exports',
+    'require',
+    '__dirname',
+    '__filename',
+    jsCode
+  );
   fn(moduleObj, moduleObj.exports, customRequire, dirname(filePath), filePath);
   return moduleObj.exports;
 }
@@ -81,7 +98,11 @@ function evaluateTsModule(filePath) {
 function loadSingleTsModule(filePath) {
   const exp = evaluateTsModule(filePath);
   if (!exp || typeof exp !== 'object') return {};
-  if (exp.default && typeof exp.default === 'object' && !Array.isArray(exp.default)) {
+  if (
+    exp.default &&
+    typeof exp.default === 'object' &&
+    !Array.isArray(exp.default)
+  ) {
     return exp.default;
   }
   for (const [k, v] of Object.entries(exp)) {
@@ -98,7 +119,12 @@ function loadRuntimeDictionary(localeId) {
   // 设置域词典已拆为懒加载：静态词典的 settings 仅含核心子集，
   // 引用口径仍按全量校验——把 settings-domain/settingsFull 汇合的全量
   // 设置词典并回 settings 命名空间（与运行时 I18nProvider 的合并口径一致）。
-  const fullPath = join(LOCALES_DIR, localeId, 'settings-domain', 'settingsFull.ts');
+  const fullPath = join(
+    LOCALES_DIR,
+    localeId,
+    'settings-domain',
+    'settingsFull.ts'
+  );
   if (existsSync(fullPath)) {
     // loadSingleTsModule 返回挑选后的导出值：settingsFull.ts 的默认导出即
     // 全量设置词典对象本身（扁平点分键，与核心 settings 的 title 键同源），
@@ -148,7 +174,11 @@ function resolveInSingleDict(dict, key) {
   const parts = key.split('.');
   let current = dict;
   for (const part of parts) {
-    if (part === '__proto__' || part === 'constructor' || part === 'prototype') {
+    if (
+      part === '__proto__' ||
+      part === 'constructor' ||
+      part === 'prototype'
+    ) {
       return undefined;
     }
     if (
@@ -183,7 +213,9 @@ function loadRegistryDomains() {
   const arrayStart = codesContent.indexOf('CRISH_ERROR_CODES');
   const arrayEnd = codesContent.indexOf(']', arrayStart);
   const arrayText = codesContent.slice(arrayStart, arrayEnd);
-  for (const m of arrayText.matchAll(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']/g)) {
+  for (const m of arrayText.matchAll(
+    /["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']/g
+  )) {
     codes.add(m[1]);
   }
 
@@ -226,7 +258,13 @@ function walkSourceFiles(dir, result = []) {
 function extractFromFile(filePath) {
   const text = readFileSync(filePath, 'utf8');
   const kind = filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  const sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, kind);
+  const sf = ts.createSourceFile(
+    filePath,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    kind
+  );
   const literals = [];
   const templates = [];
 
@@ -238,18 +276,31 @@ function extractFromFile(filePath) {
         // t()/translate() 的第一实参位置：这是「从不直接喂给 t()」这一
         // §四分类前提的强制点——处于该位置的字面量永不适用基线豁免
         let inTranslateCall = false;
-        if (parent && ts.isCallExpression(parent) && parent.arguments[0] === node) {
+        if (
+          parent &&
+          ts.isCallExpression(parent) &&
+          parent.arguments[0] === node
+        ) {
           const callee = parent.expression;
-          if (ts.isIdentifier(callee) && (callee.text === 't' || callee.text === 'translate')) {
+          if (
+            ts.isIdentifier(callee) &&
+            (callee.text === 't' || callee.text === 'translate')
+          ) {
             inTranslateCall = true;
-          } else if (ts.isPropertyAccessExpression(callee) && callee.name.text === 't') {
+          } else if (
+            ts.isPropertyAccessExpression(callee) &&
+            callee.name.text === 't'
+          ) {
             inTranslateCall = true;
           }
         }
         literals.push({ key: v, line: line + 1, inTranslateCall });
       }
     } else if (ts.isTemplateExpression(node)) {
-      const parts = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)];
+      const parts = [
+        node.head.text,
+        ...node.templateSpans.map((s) => s.literal.text),
+      ];
       const skeleton = parts.join('${}');
       // 占位段以普通字符替换后仍呈点分键形者，才视为动态键骨架
       // （DOM id / React key 类模板如 `size-${}` 不含点分结构，自然排除）
@@ -333,7 +384,8 @@ function main() {
     `  - 词典加载: zh-CN / en-US（顶层命名空间 ${Object.keys(dictZh).length} 个）`
   );
 
-  const { codes: registryCodes, actions: registryActions } = loadRegistryDomains();
+  const { codes: registryCodes, actions: registryActions } =
+    loadRegistryDomains();
   console.log(
     `  - 注册表值域: 错误码 ${registryCodes.size} 个，action 键 ${registryActions.size} 个`
   );
@@ -374,13 +426,20 @@ function main() {
   // 注册表源
   const REGISTRY_FILE = 'packages/shared-types/src/generated/errors/info.ts';
   for (const code of registryCodes) {
-    push({ source: 'registry', file: REGISTRY_FILE, line: 0, key: `error.${code}.title` });
+    push({
+      source: 'registry',
+      file: REGISTRY_FILE,
+      line: 0,
+      key: `error.${code}.title`,
+    });
   }
   for (const act of registryActions) {
     push({ source: 'registry', file: REGISTRY_FILE, line: 0, key: act });
   }
 
-  console.log(`  - 候选键总数: ${candidates.length}（文件 ${files.length} 个）`);
+  console.log(
+    `  - 候选键总数: ${candidates.length}（文件 ${files.length} 个）`
+  );
 
   const failures = [];
   const exempted = [];
@@ -393,7 +452,9 @@ function main() {
     }
     // t() 直呼位置的字面量不适用任何基线豁免（见 extractFromFile 注释）
     const entry =
-      c.source === 'literal' && c.inTranslateCall ? null : matchBaseline(baseline, c);
+      c.source === 'literal' && c.inTranslateCall
+        ? null
+        : matchBaseline(baseline, c);
     if (entry) {
       exempted.push({ ...c, baselineId: entry.id });
     } else {
@@ -432,12 +493,16 @@ function main() {
   if (DUMP) {
     console.log('\n[check-i18n-references] 豁免明细 (--dump):');
     for (const e of exempted) {
-      console.log(`  [EXEMPT:${e.baselineId}] ${e.key} · ${e.file}${e.line ? ':' + e.line : ''}`);
+      console.log(
+        `  [EXEMPT:${e.baselineId}] ${e.key} · ${e.file}${e.line ? ':' + e.line : ''}`
+      );
     }
   }
 
   if (failures.length > 0) {
-    console.error(`\n❌ [check-i18n-references] FAIL: ${failures.length} 个引用解析失败（基线外）:`);
+    console.error(
+      `\n❌ [check-i18n-references] FAIL: ${failures.length} 个引用解析失败（基线外）:`
+    );
     for (const f of failures) {
       console.error(
         `  ✗ [${f.source}] ${f.key} · ${f.file}${f.line ? ':' + f.line : ''}` +
@@ -450,7 +515,9 @@ function main() {
     process.exit(1);
   }
 
-  console.log('\n✅ [check-i18n-references] PASS: 全部引用可解析或已登记豁免，零基线外失败');
+  console.log(
+    '\n✅ [check-i18n-references] PASS: 全部引用可解析或已登记豁免，零基线外失败'
+  );
   process.exit(0);
 }
 

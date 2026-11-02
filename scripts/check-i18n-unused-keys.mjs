@@ -30,8 +30,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const LOCALES_DIR = resolve(REPO_ROOT, 'apps/crish-desktop/src/i18n/locales');
 const BASE_LOCALE = 'zh-CN';
-const ERROR_REGISTRY_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/info.ts');
-const ERROR_CODES_PATH = resolve(REPO_ROOT, 'packages/shared-types/src/generated/errors/codes.ts');
+const ERROR_REGISTRY_PATH = resolve(
+  REPO_ROOT,
+  'packages/shared-types/src/generated/errors/info.ts'
+);
+const ERROR_CODES_PATH = resolve(
+  REPO_ROOT,
+  'packages/shared-types/src/generated/errors/codes.ts'
+);
 
 const SCAN_DIRS = [
   'apps/crish-desktop/src',
@@ -63,7 +69,10 @@ const GUIDE_TEXT = {
 function loadSingleTsModule(filePath) {
   const tsCode = readFileSync(filePath, 'utf8');
   const jsCode = ts.transpileModule(tsCode, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
 
   const moduleObj = { exports: {} };
@@ -73,7 +82,8 @@ function loadSingleTsModule(filePath) {
     if (!existsSync(target)) {
       if (existsSync(target + '.ts')) target = target + '.ts';
       else if (existsSync(target + '.js')) target = target + '.js';
-      else if (existsSync(join(target, 'index.ts'))) target = join(target, 'index.ts');
+      else if (existsSync(join(target, 'index.ts')))
+        target = join(target, 'index.ts');
     }
     if (existsSync(target) && !statSync(target).isDirectory()) {
       return loadSingleTsModule(target);
@@ -81,13 +91,24 @@ function loadSingleTsModule(filePath) {
     return {};
   };
 
-  const fn = new Function('module', 'exports', 'require', '__dirname', '__filename', jsCode);
+  const fn = new Function(
+    'module',
+    'exports',
+    'require',
+    '__dirname',
+    '__filename',
+    jsCode
+  );
   fn(moduleObj, moduleObj.exports, customRequire, dirname(filePath), filePath);
 
   const exp = moduleObj.exports;
   if (!exp || typeof exp !== 'object') return {};
 
-  if (exp.default && typeof exp.default === 'object' && !Array.isArray(exp.default)) {
+  if (
+    exp.default &&
+    typeof exp.default === 'object' &&
+    !Array.isArray(exp.default)
+  ) {
     return exp.default;
   }
   if (exp.zhCN && typeof exp.zhCN === 'object' && !Array.isArray(exp.zhCN)) {
@@ -96,7 +117,11 @@ function loadSingleTsModule(filePath) {
   if (exp.enUS && typeof exp.enUS === 'object' && !Array.isArray(exp.enUS)) {
     return exp.enUS;
   }
-  if (exp.dictionary && typeof exp.dictionary === 'object' && !Array.isArray(exp.dictionary)) {
+  if (
+    exp.dictionary &&
+    typeof exp.dictionary === 'object' &&
+    !Array.isArray(exp.dictionary)
+  ) {
     return exp.dictionary;
   }
 
@@ -120,7 +145,12 @@ function loadLocaleDictionary(localesDir, localeId) {
     const files = readdirSync(dirPath);
 
     for (const file of files) {
-      if (file.endsWith('.ts') && file !== 'index.ts' && !file.endsWith('.test.ts') && !file.endsWith('.spec.ts')) {
+      if (
+        file.endsWith('.ts') &&
+        file !== 'index.ts' &&
+        !file.endsWith('.test.ts') &&
+        !file.endsWith('.spec.ts')
+      ) {
         const modName = file.replace('.ts', '');
         const modObj = loadSingleTsModule(join(dirPath, file));
         if (modObj && typeof modObj === 'object') {
@@ -199,7 +229,9 @@ function getDynamicContractWhitelist() {
   if (existsSync(ERROR_REGISTRY_PATH)) {
     const content = readFileSync(ERROR_REGISTRY_PATH, 'utf8');
     // 匹配形如 "provider.network": {（生成注册表为双引号写法，兼容单引号）
-    const codeMatches = content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']\s*:\s*\{/g) || [];
+    const codeMatches =
+      content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']\s*:\s*\{/g) ||
+      [];
     for (const m of codeMatches) {
       const code = m.replace(/["':\s{]/g, '');
       allowed.add(`error.${code}.title`);
@@ -216,7 +248,8 @@ function getDynamicContractWhitelist() {
 
   if (existsSync(ERROR_CODES_PATH)) {
     const content = readFileSync(ERROR_CODES_PATH, 'utf8');
-    const codes = content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']/g) || [];
+    const codes =
+      content.match(/["']([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["']/g) || [];
     for (const c of codes) {
       const code = c.replace(/["']/g, '');
       allowed.add(`error.${code}.title`);
@@ -250,14 +283,18 @@ export function checkUnusedKeys() {
   console.log('[check-i18n-unused-keys] 开始扫描未消费死词条...');
 
   if (!existsSync(LOCALES_DIR)) {
-    console.error(`❌ [check-i18n-unused-keys] FAIL: 语言包目录不存在: ${LOCALES_DIR}`);
+    console.error(
+      `❌ [check-i18n-unused-keys] FAIL: 语言包目录不存在: ${LOCALES_DIR}`
+    );
     process.exit(1);
   }
 
   // 2. 载入基准语言字典全部键集合
   const rawDict = loadLocaleDictionary(LOCALES_DIR, BASE_LOCALE);
   if (!rawDict || typeof rawDict !== 'object') {
-    console.error(`❌ [check-i18n-unused-keys] 无法载入基准语言字典: ${BASE_LOCALE}`);
+    console.error(
+      `❌ [check-i18n-unused-keys] 无法载入基准语言字典: ${BASE_LOCALE}`
+    );
     process.exit(1);
   }
 
@@ -291,7 +328,10 @@ export function checkUnusedKeys() {
       usedKeys.add(key);
       continue;
     }
-    if (key.startsWith('action.') && contractWhitelist.has(key.replace(/^action\./, ''))) {
+    if (
+      key.startsWith('action.') &&
+      contractWhitelist.has(key.replace(/^action\./, ''))
+    ) {
       usedKeys.add(key);
       continue;
     }
@@ -315,7 +355,9 @@ export function checkUnusedKeys() {
 
   // 5. 处理 --list 输出
   if (LIST) {
-    console.log(`\n[check-i18n-unused-keys] 全量词条消费清单 (${dictKeys.size} 个词条):`);
+    console.log(
+      `\n[check-i18n-unused-keys] 全量词条消费清单 (${dictKeys.size} 个词条):`
+    );
     for (const key of [...dictKeys].sort()) {
       const isUsed = usedKeys.has(key);
       const tag = isUsed ? '[USED]  ' : '[UNUSED]';
@@ -325,33 +367,47 @@ export function checkUnusedKeys() {
 
   // 6. 报告与判定结论
   const elapsed = Date.now() - t0;
-  console.log(`\n[check-i18n-unused-keys] 扫描完成: 已消费 ${usedKeys.size} 个，未消费 ${orphanKeys.length} 个 (耗时: ${elapsed}ms)`);
+  console.log(
+    `\n[check-i18n-unused-keys] 扫描完成: 已消费 ${usedKeys.size} 个，未消费 ${orphanKeys.length} 个 (耗时: ${elapsed}ms)`
+  );
 
   if (orphanKeys.length > 0) {
-    console.warn(`\n⚠️  [check-i18n-unused-keys] 检出 ${orphanKeys.length} 个疑似未消费的孤立词条:`);
+    console.warn(
+      `\n⚠️  [check-i18n-unused-keys] 检出 ${orphanKeys.length} 个疑似未消费的孤立词条:`
+    );
     for (const key of orphanKeys.slice(0, 20)) {
       console.warn(
         `⚠️  [check-i18n-unused-keys] 未消费孤立词条 · 词条 [${key}] · 实测: 0 处引用 · 阈值: 必须被有效消费 · 正确做法: 若为废弃键请从 locales/ 清退；若为后续波次预置词条请尽快接入`
       );
     }
     if (orphanKeys.length > 20) {
-      console.warn(`  ... 等共 ${orphanKeys.length} 项未消费词条，使用 --list 查看全量明细。`);
+      console.warn(
+        `  ... 等共 ${orphanKeys.length} 项未消费词条，使用 --list 查看全量明细。`
+      );
     }
 
     if (STRICT) {
-      console.error(`\n❌ [check-i18n-unused-keys] 严格模式阻断: 发现 ${orphanKeys.length} 个未消费孤立词条！`);
+      console.error(
+        `\n❌ [check-i18n-unused-keys] 严格模式阻断: 发现 ${orphanKeys.length} 个未消费孤立词条！`
+      );
       process.exit(1);
     } else {
-      console.log('  提示：当前处于实现准备波次，预置词条未消费暂不阻断。运行 `node scripts/check-i18n-unused-keys.mjs --guide unused_i18n_key` 获取指引。');
+      console.log(
+        '  提示：当前处于实现准备波次，预置词条未消费暂不阻断。运行 `node scripts/check-i18n-unused-keys.mjs --guide unused_i18n_key` 获取指引。'
+      );
       process.exit(0);
     }
   }
 
-  console.log(`\n✅ [check-i18n-unused-keys] 完美！全量词典键均被有效消费，零死词条残留 (耗时: ${elapsed}ms)`);
+  console.log(
+    `\n✅ [check-i18n-unused-keys] 完美！全量词典键均被有效消费，零死词条残留 (耗时: ${elapsed}ms)`
+  );
   process.exit(0);
 }
 
-const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+const isDirectRun =
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isDirectRun) {
   checkUnusedKeys();
 }
