@@ -620,3 +620,91 @@ describe('VS-01 ~ VS-05：虚拟滚动首帧测高保护、跨会话 scrollTop �
     );
   });
 });
+
+describe('R2：vs 身份稳定 / actualTick 按需递增 / onScroll 同步提交', () => {
+  it('返回对象身份稳定：无字段变化的重渲染返回同一引用', () => {
+    const ids = ['a', 'b'];
+    const { result, rerender } = renderHook(() =>
+      useVirtualScroll({ ids, itemCount: 2, fallbackHeight: 100 })
+    );
+    const first = result.current;
+    rerender();
+    rerender();
+    expect(result.current).toBe(first);
+    expect(result.current.visibleRange).toBe(first.visibleRange);
+  });
+
+  it('actualTick 按需递增：净零测高变化（等量补偿）不触发窗口重算，真实变化才触发', () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a', 'b'], itemCount: 2, fallbackHeight: 100 })
+    );
+    act(() => {
+      result.current.manager.setActual('a', 100);
+      result.current.manager.setActual('b', 100);
+    });
+    const vsBefore = result.current;
+    const rangeBefore = result.current.visibleRange;
+    expect(result.current.totalHeight).toBe(200);
+
+    // 同帧等量补偿：a +30 / b −30 —— visibleRange 四字段与 totalHeight 计算结果不变
+    act(() => {
+      result.current.setActual('a', 130);
+      result.current.setActual('b', 70);
+      result.current.flushPendingGeometry();
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(130);
+    expect(result.current.manager.getActualHeight('b')).toBe(70);
+    expect(result.current.totalHeight).toBe(200);
+    // 窗口计算结果未变 ⇒ 不递增 actualTick ⇒ vs 与 visibleRange 身份都保持
+    expect(result.current).toBe(vsBefore);
+    expect(result.current.visibleRange).toBe(rangeBefore);
+
+    // 真实变化：totalHeight 改变 ⇒ 递增并产出新窗口对象
+    act(() => {
+      result.current.setActual('a', 200);
+      result.current.flushPendingGeometry();
+    });
+    expect(result.current.totalHeight).toBe(270);
+    expect(result.current.visibleRange).not.toBe(rangeBefore);
+  });
+
+  it('onScroll 同步提交：每事件即时落定最新位置（W3-3 同步不变量），同值事件不触发重渲染', () => {
+    // 波1收口裁决：原「前沿立即 + rAF 尾随合并」使尾随值帧末才落定，窗口/purge
+    // 决策在一帧内读到旧位置，违反 W3-3 同步不变量（domPurge 契约回归），已改回
+    // 同步提交；本测试钉住新契约：任意事件序列后 scrollTop 立即等于最新事件值，
+    // 无需等待帧末；同值事件经 setState 短路，vs 身份保持不变。
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a', 'b'], itemCount: 2, fallbackHeight: 100 })
+    );
+    const el = document.createElement('div');
+    const fire = (v: number) => {
+      Object.defineProperty(el, 'scrollTop', {
+        value: v,
+        configurable: true,
+        writable: true,
+      });
+      result.current.onScroll({
+        currentTarget: el,
+      } as unknown as React.UIEvent<HTMLDivElement>);
+    };
+
+    act(() => {
+      fire(100);
+    });
+    expect(result.current.scrollTop).toBe(100);
+
+    // 同任务内连续事件：最后一个值同步落定（React 批处理合并为一次渲染）
+    act(() => {
+      fire(200);
+      fire(300);
+    });
+    expect(result.current.scrollTop).toBe(300);
+
+    // 同值事件：短路不重渲染，返回对象身份不变
+    const before = result.current;
+    act(() => {
+      fire(300);
+    });
+    expect(result.current).toBe(before);
+  });
+});

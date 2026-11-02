@@ -22,6 +22,26 @@ import {
   type PerformProgrammaticScrollFn,
 } from './useVirtualScrollGesture';
 
+/** R2：几何计算结果快照（visibleRange 关键字段 + totalHeight） */
+interface GeometrySnapshot {
+  range: VisibleRange;
+  totalHeight: number;
+}
+
+/** 两份几何快照全等 = 测高写入未改变窗口/总高计算结果（actualTick 按需递增的判据） */
+function isSameGeometrySnapshot(
+  a: GeometrySnapshot,
+  b: GeometrySnapshot
+): boolean {
+  return (
+    a.totalHeight === b.totalHeight &&
+    a.range.startIndex === b.range.startIndex &&
+    a.range.endIndex === b.range.endIndex &&
+    a.range.startOffset === b.range.startOffset &&
+    a.range.estimatedTotalHeight === b.range.estimatedTotalHeight
+  );
+}
+
 export interface UseVirtualScrollOptions {
   /** 消息 ID 序列 */
   ids?: string[];
@@ -98,6 +118,37 @@ export function useVirtualScroll(
   );
   const [actualTick, setActualTick] = useState(0);
 
+  // R2：渲染参数镜像——flush 在 rAF/事件回调中执行，快照比较取最近一次渲染的几何参数
+  const scrollTopStateRef = useRef(0);
+  const viewportHeightStateRef = useRef(DEFAULT_VIEWPORT_HEIGHT_PX);
+  const itemCountRef = useRef(itemCount);
+  const overscanStateRef = useRef(DEFAULT_OVERSCAN);
+
+  // R2：scrollTop 同步提交。全部写入点（程序滚动/锚点补偿/清空/原生 scroll 事件）
+  // 经 applyScrollTop 同步落定，同值短路不触发重渲染。
+  // 波1收口裁决：原设计对原生事件做「前沿立即 + rAF 尾随合并」，但尾随值在帧末
+  // 才落定，使窗口/purge 决策在一帧内读到旧位置——违反 W3-3「视口内行神圣不可
+  // 卸载」的同步不变量（MessageVirtualizer.domPurge 契约实测回归），故事件提交
+  // 改回同步；同任务内的多事件由 React 批处理天然合并为一次渲染，流式期回路
+  // 的主断环在 actualTick 快照守卫一侧，不依赖此处合帧。
+  const applyScrollTop = useCallback((value: number) => {
+    setScrollTop((prev) => (prev === value ? prev : value));
+  }, []);
+
+  /** 以最近一次渲染参数计算当前几何快照（纯读 manager，不触发任何状态写入） */
+  const computeGeometrySnapshot = useCallback((): GeometrySnapshot => {
+    const count = itemCountRef.current;
+    return {
+      range: manager.computeVisibleRange(
+        scrollTopStateRef.current,
+        viewportHeightStateRef.current,
+        count,
+        overscanStateRef.current
+      ),
+      totalHeight: manager.getTotalHeight(count),
+    };
+  }, [manager]);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -143,6 +194,8 @@ export function useVirtualScroll(
 
   /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
   const flushActualMeasurements = useCallback(() => {
+    // R2：写入前几何快照——收口时与写入后快照比较，净零变化不递增 actualTick
+    const geometryBefore = computeGeometrySnapshot();
     let estimatesChanged = false;
     let deltaAbove = 0;
     const curStartIdx = renderedRangeRef.current.startIndex;
@@ -179,15 +232,19 @@ export function useVirtualScroll(
       if (!isNearBottom && el.scrollTop > 0) {
         el.scrollTop += deltaAbove;
         latestScrollTopRef.current = el.scrollTop;
-        setScrollTop(el.scrollTop);
+        applyScrollTop(el.scrollTop);
       }
     }
 
     // 只要模型变了就刷新占位。只改树、不改渲染高度，会在下一次切标签时跳几个像素。
+    // R2：但递增 actualTick 的判据收紧为「窗口/总高计算结果实际变化」——
+    // 等量补偿、窗外不计入项等净零变化不再触发 MessageVirtualizer 整窗重算。
     if (anyChanged || estimatesChanged) {
-      setActualTick((t) => t + 1);
+      if (!isSameGeometrySnapshot(geometryBefore, computeGeometrySnapshot())) {
+        setActualTick((t) => t + 1);
+      }
     }
-  }, [manager]);
+  }, [applyScrollTop, computeGeometrySnapshot, manager]);
 
   const {
     gestureActiveRef,
@@ -220,9 +277,9 @@ export function useVirtualScroll(
       } else {
         gesturePerformProgrammaticScroll(arg1, arg2 as number, arg3);
       }
-      setScrollTop((prev) => (prev === targetTop ? prev : targetTop));
+      applyScrollTop(targetTop);
     },
-    [gesturePerformProgrammaticScroll]
+    [applyScrollTop, gesturePerformProgrammaticScroll]
   );
 
   const scheduleActualFlush = useCallback(() => {
@@ -260,6 +317,12 @@ export function useVirtualScroll(
     [overscan]
   );
 
+  // R2：几何参数镜像回填（供回调中的快照比较读取最近一次渲染的参数）
+  scrollTopStateRef.current = scrollTop;
+  viewportHeightStateRef.current = viewportHeight;
+  itemCountRef.current = itemCount;
+  overscanStateRef.current = overscanSafe;
+
   const visibleRange = useMemo(
     () =>
       manager.computeVisibleRange(
@@ -292,13 +355,13 @@ export function useVirtualScroll(
       const newScrollTop = e.currentTarget.scrollTop;
       latestScrollTopRef.current = newScrollTop;
       if (isProgrammaticScrollEvent(newScrollTop)) {
-        setScrollTop((prev) => (prev === newScrollTop ? prev : newScrollTop));
+        applyScrollTop(newScrollTop);
         return;
       }
       bumpGestureEpoch();
-      setScrollTop((prev) => (prev === newScrollTop ? prev : newScrollTop));
+      applyScrollTop(newScrollTop);
     },
-    [bumpGestureEpoch, isProgrammaticScrollEvent]
+    [applyScrollTop, bumpGestureEpoch, isProgrammaticScrollEvent]
   );
 
   const syncOrder = useCallback(
@@ -346,12 +409,17 @@ export function useVirtualScroll(
         }
         return;
       }
+      // R2：与 flush 同口径——仅当估高写入改变窗口/总高计算结果时才递增 actualTick
+      const geometryBefore = computeGeometrySnapshot();
       const changed = manager.preloadEstimates(estimates);
-      if (changed) {
+      if (
+        changed &&
+        !isSameGeometrySnapshot(geometryBefore, computeGeometrySnapshot())
+      ) {
         setActualTick((t) => t + 1);
       }
     },
-    [gestureActiveRef, manager]
+    [computeGeometrySnapshot, gestureActiveRef, manager]
   );
 
   const clearHeights = useCallback(() => {
@@ -369,29 +437,54 @@ export function useVirtualScroll(
       containerRef.current.scrollTop = 0;
     }
     latestScrollTopRef.current = 0;
-    setScrollTop(0);
+    applyScrollTop(0);
     setActualTick((t) => t + 1);
-  }, [manager, markProgrammaticScroll, resetGestureState]);
+  }, [applyScrollTop, manager, markProgrammaticScroll, resetGestureState]);
 
-  return {
-    visibleRange,
-    containerRef,
-    onScroll,
-    syncOrder,
-    setEstimated,
-    setActual,
-    preloadEstimates,
-    clearHeights,
-    manager,
-    scrollTop,
-    viewportHeight,
-    totalHeight,
-    containerHeight: viewportHeight,
-    isGestureActive,
-    flushPendingGeometry,
-    markProgrammaticScroll,
-    performProgrammaticScroll,
-    cancelProgrammaticScroll,
-    isProgrammaticScrollEvent,
-  };
+  // R2：返回对象身份稳定化——字段不变时同引用返回。
+  // 此前每次渲染新建对象字面量，使一切以 vs 为依赖的 effect/回调（尤其贴底跟随）
+  // 在每次渲染后重跑并读布局；稳定后只随真实几何/滚动字段变化而更新。
+  return useMemo<UseVirtualScrollResult>(
+    () => ({
+      visibleRange,
+      containerRef,
+      onScroll,
+      syncOrder,
+      setEstimated,
+      setActual,
+      preloadEstimates,
+      clearHeights,
+      manager,
+      scrollTop,
+      viewportHeight,
+      totalHeight,
+      containerHeight: viewportHeight,
+      isGestureActive,
+      flushPendingGeometry,
+      markProgrammaticScroll,
+      performProgrammaticScroll,
+      cancelProgrammaticScroll,
+      isProgrammaticScrollEvent,
+    }),
+    [
+      visibleRange,
+      containerRef,
+      onScroll,
+      syncOrder,
+      setEstimated,
+      setActual,
+      preloadEstimates,
+      clearHeights,
+      manager,
+      scrollTop,
+      viewportHeight,
+      totalHeight,
+      isGestureActive,
+      flushPendingGeometry,
+      markProgrammaticScroll,
+      performProgrammaticScroll,
+      cancelProgrammaticScroll,
+      isProgrammaticScrollEvent,
+    ]
+  );
 }

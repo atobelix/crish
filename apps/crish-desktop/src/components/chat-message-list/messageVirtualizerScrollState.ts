@@ -249,12 +249,21 @@ export function useStickToBottomFollow({
   setIsAtBottom,
   observedTopRef,
 }: StickToBottomFollowParams): void {
+  // R2：vs 经 ref 读取。vs 对象身份曾随宿主渲染频繁变化（R2 前为每渲染新建），
+  // 使本 effect 在每次渲染后都执行并读 container.scrollHeight（DOM 写后读布局）。
+  // 改后 effect 触发源只剩消息/总高/会话等真实变化，执行时取最新 vs 快照，口径不变。
+  const vsRef = useRef(vs);
+  vsRef.current = vs;
+
   useLayoutEffect(() => {
+    const vsNow = vsRef.current;
     const container = containerRef.current;
     if (!container) return;
     const scrollH = container.scrollHeight || totalHeight;
     const clientH =
-      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
+      container.clientHeight ||
+      vsNow.viewportHeight ||
+      DEFAULT_VIEWPORT_HEIGHT_PX;
     const maxScroll = Math.max(0, scrollH - clientH);
 
     // 初始挂载且未发生会话切换、且真实 scrollTop === 0 处于顶部时：
@@ -263,7 +272,7 @@ export function useStickToBottomFollow({
       initialScroll !== 'bottom' &&
       !isSessionSwitch &&
       container.scrollTop <= SCROLL_TOP_EPSILON_PX &&
-      vs.scrollTop <= SCROLL_TOP_EPSILON_PX;
+      vsNow.scrollTop <= SCROLL_TOP_EPSILON_PX;
     if (isStaticTopMount && maxScroll > SCROLL_TOP_EPSILON_PX) {
       if (isAtBottomRef.current) {
         isAtBottomRef.current = false;
@@ -282,16 +291,15 @@ export function useStickToBottomFollow({
 
     if (
       Math.abs(container.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX ||
-      Math.abs(vs.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX
+      Math.abs(vsNow.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX
     ) {
-      vs.performProgrammaticScroll(container, maxScroll);
+      vsNow.performProgrammaticScroll(container, maxScroll);
       observedTopRef.current = maxScroll;
     }
   }, [
     messages,
     totalHeight,
     containerRef,
-    vs,
     isAnchorLocked,
     isAtBottomRef,
     setIsAtBottom,
