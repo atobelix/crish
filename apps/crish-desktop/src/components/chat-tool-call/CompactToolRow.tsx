@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
@@ -24,11 +24,7 @@ import { extractFilePathFromToolArgs } from '../../api/workspaceFsApi';
 import type { ChatToolStackProps } from './ChatToolCallBlock';
 import { ToolCallHeader } from './ToolCallHeader';
 import { ToolCallOutput } from './ToolCallOutput';
-import {
-  toolStatusZh,
-  toolResultBodyId,
-  findAgentForTool,
-} from './chatToolCallUtils';
+import { toolStatusZh, toolResultBodyId } from './chatToolCallUtils';
 import {
   useToolExpansionState,
   findPreviousToolInItems,
@@ -74,7 +70,6 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
     vsm,
   }) {
     const {
-      agents,
       activeSessionId,
       expandedTools,
       onToggleTool,
@@ -87,7 +82,6 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       onOpenTerminal,
       onApprovalAllow,
       onApprovalDeny,
-      renderLinkedAgentPanel,
     } = props.actions ?? {};
 
     const [liveNow, setLiveNow] = useState(Date.now());
@@ -219,46 +213,9 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       );
     }
 
-    const linkedAgent = findAgentForTool(tc, agents);
-    if (linkedAgent && activeSessionId) {
-      // 关联子 agent 行：由组合根注入的渲染器（ChatToolStackProps.renderLinkedAgentPanel）
-      // 渲染内嵌 InlineAgentPanel；未注入（无子 agent 上下文）时回退普通工具行。
-      const linkedPanel = renderLinkedAgentPanel?.(
-        linkedAgent,
-        activeSessionId,
-        tc
-      );
-      if (linkedPanel) {
-        return (
-          <Suspense
-            key={String(rowKey)}
-            fallback={
-              <div
-                className={`${styles.toolRow} ${styles.isRunning} tool-row is-running`}
-              >
-                <div
-                  className={`${styles.toolRowHead} ${styles.toolRowHeadStatic}`}
-                >
-                  <span className={styles.toolRowIcoSlot} aria-hidden>
-                    <span className={styles.toolRowLive}>
-                      <span
-                        className="loading-spinner"
-                        style={{ width: 8, height: 8, borderWidth: 1.5 }}
-                      />
-                    </span>
-                  </span>
-                  <span className={styles.toolRowSummary}>
-                    <span className={styles.toolActionText}>协作子任务…</span>
-                  </span>
-                </div>
-              </div>
-            }
-          >
-            {linkedPanel}
-          </Suspense>
-        );
-      }
-    }
+    // 注：关联子 agent 的分派行不会到达本组件——R4b 起分派在组合根
+    // （MessageToolCallsSection）已被提取为独立分派卡；未命中 agent 的
+    // 分派调用按普通工具行在此呈现（降级口径与 findAgentForTool 一致）。
 
     const defaultOpen = isToolRowDefaultOpen(tc);
     const human = toolHumanLabel(tc);

@@ -13,7 +13,10 @@ import {
   toolHasDisplayableResult,
   toolHumanLabel,
 } from './toolCardPresenter';
-import type { ToolRenderItem } from './toolPresentationTypes';
+import {
+  isSubagentToolName,
+  type ToolRenderItem,
+} from './toolPresentationTypes';
 
 function statusRank(s: MessageToolCall['status']): number {
   if (s === 'success') return 4;
@@ -129,6 +132,14 @@ export function buildToolRenderItems(
 
   for (const tc of visible) {
     if (tc.status === 'pending_approval') {
+      flush();
+      out.push({ kind: 'single', tc });
+      continue;
+    }
+    // 子代理分派调用（R4b 提取）：永不入组、永不充当组内 prev——分派在渲染层
+    // 被提取为独立消息卡（MessageToolCallsSection → SubagentDispatchCard），
+    // 工具分组只聚合普通工具；分派前后的普通工具也不跨卡并组。
+    if (isSubagentToolName(tc.name)) {
       flush();
       out.push({ kind: 'single', tc });
       continue;

@@ -108,16 +108,18 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     // 却会抹掉意图说明与真实命令——单工具直接渲染工具行，详情仍由工具行自身默认折叠。
     const isGroupFolding = metrics.toolCount >= 2;
 
-    // 默认折叠；若当前正在运行或包含子代理（铁律四）则直出展开
+    // 默认折叠；当前正在运行则直出展开。
+    // （R4b：原「含子代理强制展开（铁律四）」已删——分派在组合根被提取为
+    //  独立卡片，工具组内不再出现子代理调用，无强展豁免。）
     const [isExpanded, setIsExpanded] = useState<boolean>(
-      () => defaultExpanded || metrics.hasRunning || metrics.subagentCount > 0
+      () => defaultExpanded || metrics.hasRunning
     );
 
-    // 流式执行中进入 running 时保持展开；全部工具执行完毕后自动收敛折叠（用户手动切换或子代理除外）
+    // 流式执行中进入 running 时保持展开；全部工具执行完毕后自动收敛折叠（用户手动切换除外）
     useEffect(() => {
       const wasRunning = prevHasRunningRef.current;
       prevHasRunningRef.current = metrics.hasRunning;
-      if (metrics.hasRunning || metrics.subagentCount > 0) {
+      if (metrics.hasRunning) {
         setIsExpanded(true);
       } else if (wasRunning && !userInteractedRef.current && !defaultExpanded) {
         const currentHeight =
@@ -129,7 +131,6 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       }
     }, [
       metrics.hasRunning,
-      metrics.subagentCount,
       defaultExpanded,
       onInvalidate,
       triggerViewportRecovery,

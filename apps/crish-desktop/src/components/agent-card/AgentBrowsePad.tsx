@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import styles from './AgentCard.module.css';
 import { Button, Tooltip } from '@/components/ui';
 
@@ -9,10 +9,15 @@ import {
   selectSessionsById,
   useSessionField,
 } from '../../store/storeAccess';
+import {
+  agentIdentity,
+  resolveAgentIdentities,
+} from '../../api/tool-presentation/agentIdentity';
+import { AgentIdentityBadge } from './AgentIdentityBadge';
 import { AgentStatusChip } from './AgentStatusChip';
 import {
   STATUS_LABEL,
-  agentDisplayName,
+  agentDisplayNameWithRole,
   countPendingApprovals,
   formatAgentDuration,
   sortAgentsForBrowse,
@@ -48,6 +53,18 @@ export function AgentBrowsePad({
     () => agents.reduce((n, a) => n + countPendingApprovals(a), 0),
     [agents]
   );
+  // 会话级身份分配（与流内卡/头部/团队板同口径）
+  const identities = useMemo(() => resolveAgentIdentities(agents), [agents]);
+
+  // 浏览/切换收敛（R4b）：单 agent 会话的浏览列表退化为直达详情——
+  // 列表只有一项时不让用户多点一次，挂载即聚焦该 agent。
+  const onlyAgentId = agents.length === 1 ? agents[0]?.id : undefined;
+  useEffect(() => {
+    if (!onlyAgentId) return;
+    openAgentInSidePanel(onlyAgentId, {
+      sessionId: parentId || undefined,
+    });
+  }, [onlyAgentId, parentId]);
 
   return (
     <div
@@ -153,7 +170,8 @@ export function AgentBrowsePad({
             aria-label="已拉起智能体列表"
           >
             {sorted.map((a) => {
-              const name = agentDisplayName(a);
+              const name = agentDisplayNameWithRole(a);
+              const identity = identities.get(a.id) ?? agentIdentity(a.id);
               const pending = countPendingApprovals(a);
               const dur = formatAgentDuration(a);
               const titleBits = [
@@ -194,7 +212,7 @@ export function AgentBrowsePad({
                       });
                     }}
                   >
-                    <AppIcon name="bot" size={13} aria-hidden />
+                    <AgentIdentityBadge identity={identity} size={13} />
                     <span className={styles.agentLaunchItemT}>{name}</span>
                     {pending > 0 ? (
                       <Tooltip

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import type { FileDiff, SessionMessage } from '../../store/types';
+import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
 import {
   ChatAssistantMessageRow,
   ChatUserMessageRow,
@@ -10,6 +10,7 @@ export function AgentMessageRow({
   msg,
   parentSessionId,
   agentId,
+  agents,
   idx,
   totalMsgs,
   onOpenDiff,
@@ -19,6 +20,8 @@ export function AgentMessageRow({
   msg: SessionMessage;
   parentSessionId: string;
   agentId: string;
+  /** 本会话全部 agents（R4b：嵌套分派提取/归属判定需要真实列表，禁止再传 []） */
+  agents: SessionAgent[];
   idx: number;
   totalMsgs: number;
   onOpenDiff: (diff: FileDiff) => void;
@@ -65,7 +68,7 @@ export function AgentMessageRow({
       messageIndex={idx}
       virtualScrollManager={null}
       toolStackProps={{
-        agents: [],
+        agents,
         activeSessionId: parentSessionId,
         expandedTools: expandedTools,
         onToggleTool: onToggleTool,

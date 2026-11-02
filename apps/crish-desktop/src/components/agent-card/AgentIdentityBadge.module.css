@@ -1,0 +1,20 @@
+/* 子 agent 身份标（R4a 共享地基）：色点 + 几何标号，颜色全部走
+   --agent-hue-N 变量（由 identity.hueVar 内联注入），本文件不写死色值。 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+  flex: none;
+  user-select: none;
+}
+
+.dot {
+  border-radius: 50%;
+  flex: none;
+}
+
+.glyph {
+  line-height: 1;
+  flex: none;
+}

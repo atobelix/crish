@@ -1,0 +1,174 @@
+/* ───── Subagent Dispatch Card（R4b · 流内独立分派消息卡） ─────
+ * 结构配方沿用家族现行写法（24px 行高 / 13px 字号 / 状态悬停变色）；
+ * 时长与动效细节归 AN1 统一，本文件只落卡结构类。
+ * 无展开体、无左轨线：明细只在侧栏，本卡只有两行 + 失败恢复行。 */
+
+.card {
+  margin: 2px 0;
+  min-width: 0;
+  padding: 1px 4px 1px 2px;
+  border-radius: var(--radius-sm, 6px);
+  box-sizing: border-box;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.card:hover {
+  background: var(--state-hover);
+  color: var(--text-primary);
+}
+
+.card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 已在侧栏聚焦：左缘身份色细标（颜色取卡内身份标同源的 --agent-hue 由内联
+ * data 属性区分不可得，此处只用中性强调色示意聚焦态，不冒充身份色） */
+.sideFocused {
+  background: var(--state-hover);
+}
+
+/* 反向定位闪烁：ChatMessageList 命中锚点后短暂挂 data-locate-flash="1" */
+.card[data-locate-flash='1'] {
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 45%, transparent);
+}
+
+.line1 {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
+  color: inherit;
+}
+
+.title {
+  color: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  box-shadow: 0 0 0 2.5px
+    color-mix(in srgb, var(--accent-color) 22%, transparent);
+  animation: dispatch-dot-pulse var(--transition-pulse, 1.4s ease-in-out)
+    infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes dispatch-dot-pulse {
+  0%,
+  100% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+    box-shadow: 0 0 0 4.5px
+      color-mix(in srgb, var(--accent-color) 32%, transparent);
+  }
+}
+
+.pendingBadge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--font-size-xxs, 11px);
+  line-height: var(--line-height-ui, 1.4);
+  color: var(--accent-orange, var(--text-secondary));
+  white-space: nowrap;
+}
+
+/* Line 2: 追踪/结论行（缩进对齐身份标 + 标题起点 22px） */
+.line2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 0 1px 22px;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  min-height: 22px;
+  min-width: 0;
+}
+
+.traceLead {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.trace {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32em;
+  color: var(--text-secondary);
+}
+
+.failKind {
+  color: var(--accent-red);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 失败恢复动作行：与 Line 2 同缩进，按钮常驻可见（不藏展开体） */
+.recovery {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 2px 22px;
+}
+
+.linkResume {
+  color: var(--accent-color);
+}
+
+.linkResume:hover:not(:disabled) {
+  color: var(--accent-color);
+  text-decoration: underline;
+}
+
+.linkKill {
+  color: var(--danger-color, var(--accent-red));
+}
+
+.linkKill:hover:not(:disabled) {
+  color: var(--danger-color, var(--accent-red));
+  text-decoration: underline;
+}
+
+.linkResume:disabled,
+.linkKill:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

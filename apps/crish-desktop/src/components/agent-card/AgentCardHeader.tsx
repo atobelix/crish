@@ -1,24 +1,34 @@
 /**
- * AgentCard 详情头部：标题 + 状态徽标 + 失败/待批/时长提示 + 停止/关闭按钮。
+ * AgentCard 详情头部：身份标 + 标题 + 状态徽标 + 失败/待批/时长提示 +
+ * 反向定位/停止/关闭按钮。
  * 从 AgentCard.tsx 拆出以收敛单文件行数。
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import styles from './AgentCard.module.css';
 import { Button, Tooltip } from '@/components/ui';
 
 import type { SessionAgent } from '../../store/types';
 import { useI18n } from '../../i18n';
 import { AgentStatusChip } from './AgentStatusChip';
+import { AgentIdentityBadge } from './AgentIdentityBadge';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
 import {
-  agentDisplayName,
-  countPendingApprovals,
-  formatAgentDuration,
-} from './agentCardUtils';
+  locateSubagentDispatchInFlow,
+  resolveAgentCardTitle,
+} from '../../api/openAgentPanel';
+import {
+  agentIdentity,
+  resolveAgentIdentities,
+} from '../../api/tool-presentation/agentIdentity';
+import { countPendingApprovals, formatAgentDuration } from './agentCardUtils';
 import { AppIcon } from '@/components/ui/icons';
 
 export interface AgentCardHeaderProps {
   agent: SessionAgent;
+  /** 本会话全部 agents（身份分配按会话口径；缺省退化为单 agent 分配） */
+  agents?: SessionAgent[];
+  /** 所属主会话 id（反向定位锚点解析用） */
+  sessionId?: string;
   running: boolean;
   embedded?: boolean;
   hasSiblings: boolean;
@@ -29,6 +39,8 @@ export interface AgentCardHeaderProps {
 
 export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
   agent,
+  agents,
+  sessionId,
   running,
   embedded,
   hasSiblings,
@@ -37,9 +49,16 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
   onStop,
 }) => {
   const { t } = useI18n();
-  const titleName = agentDisplayName(agent);
+  const titleName = resolveAgentCardTitle(agent);
   const durationLabel = formatAgentDuration(agent);
   const pendingApproval = countPendingApprovals(agent);
+  // 与流内分派卡同一会话级身份分配（同 agent 同色同标）
+  const identity = useMemo(() => {
+    const list = agents && agents.length > 0 ? agents : [agent];
+    return (
+      resolveAgentIdentities(list).get(agent.id) ?? agentIdentity(agent.id)
+    );
+  }, [agents, agent]);
 
   return (
     <header
@@ -60,7 +79,7 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
             />
           </Tooltip>
         ) : null}
-        <AppIcon name="bot" size={14} aria-hidden />
+        <AgentIdentityBadge identity={identity} size={14} />
         {agent.mode || durationLabel || agent.summary?.trim() ? (
           <Tooltip
             content={[
@@ -144,6 +163,22 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
         ) : null}
       </div>
       <div className={styles.agentCardActions}>
+        {/* 反向定位（R4b）：滚动主列到本 agent 的流内分派卡并闪烁高亮 */}
+        <Tooltip content={t('chat.agentCard.locateInFlow')}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={styles.agentCardBtn}
+            aria-label={t('chat.agentCard.locateInFlowAria')}
+            icon={<AppIcon name="locate" size={14} aria-hidden />}
+            onClick={() => {
+              locateSubagentDispatchInFlow(agent.id, {
+                sessionId: sessionId || agent.parentSessionId || undefined,
+              });
+            }}
+          />
+        </Tooltip>
         {running ? (
           <Tooltip content="停止子智能体">
             <Button

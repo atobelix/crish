@@ -9,12 +9,17 @@ import { Button, Tooltip } from '@/components/ui';
 
 import type { SessionAgent } from '../../store/types';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
+import {
+  agentIdentity,
+  resolveAgentIdentities,
+} from '../../api/tool-presentation/agentIdentity';
+import { AgentIdentityBadge } from './AgentIdentityBadge';
 import { AgentStatusDot } from './AgentStatusDot';
 import {
   STATUS_LABEL,
   SNIPPET_MAX,
   normalizeAgentId,
-  agentTitle,
+  agentTitleWithRole,
   rankAgentStatus,
   toolProgress,
   formatCompactDuration,
@@ -70,6 +75,9 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         return (b.startedAt || 0) - (a.startedAt || 0);
       });
     }, [agents]);
+
+    // 会话级身份分配（与流内卡/侧栏头部/顶栏同口径：同 agent 同色同标）
+    const identities = useMemo(() => resolveAgentIdentities(sorted), [sorted]);
 
     const boardStats = useMemo(() => {
       let runningN = 0;
@@ -264,7 +272,8 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
             const prog = toolProgress(a);
             const pct = progressPercent(a, prog);
             const isOn = activeNorm === a.id;
-            const title = agentTitle(a);
+            const title = agentTitleWithRole(a);
+            const identity = identities.get(a.id) ?? agentIdentity(a.id);
             const snippet = summarySnippet(a, snippetMax);
             const toolsHint = formatToolsHint(a, prog, !!compact);
             const dur = formatCompactDuration(a);
@@ -304,6 +313,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 >
                   <div className={styles.agentTeamCardTop}>
                     <AgentStatusDot status={a.status} />
+                    <AgentIdentityBadge identity={identity} size={12} />
                     <span className={styles.agentTeamCardTitle}>{title}</span>
                   </div>
                   {/* compact：单行摘要+工具/时长，提高侧栏信息密度 */}

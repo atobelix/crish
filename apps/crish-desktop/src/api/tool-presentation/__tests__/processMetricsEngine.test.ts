@@ -24,7 +24,11 @@ import type {
 
 /* ────────────────────────── 构造器 ────────────────────────── */
 
-function tools(key: string, names: string[], status: 'success' | 'running' | 'error' = 'success'): TimelineToolsItem {
+function tools(
+  key: string,
+  names: string[],
+  status: 'success' | 'running' | 'error' = 'success'
+): TimelineToolsItem {
   return {
     kind: 'tools',
     key,
@@ -79,7 +83,9 @@ describe('canonicalizeFsPath · 跨平台路径归一', () => {
   });
 
   it('正反斜杠混排归一到同一结果（去重前提）', () => {
-    expect(canonicalizeFsPath('C:\\a\\b.ts')).toBe(canonicalizeFsPath('c:/a/b.ts'));
+    expect(canonicalizeFsPath('C:\\a\\b.ts')).toBe(
+      canonicalizeFsPath('c:/a/b.ts')
+    );
   });
 });
 
@@ -87,12 +93,16 @@ describe('canonicalizeFsPath · 跨平台路径归一', () => {
 
 describe('aggregateProcessMetrics · 聚合正确性', () => {
   it('子代理计入 subagentCount 且同时计入 toolCount（子集关系）', () => {
-    const items: AssistantTimelineItem[] = [tools('k1', ['invoke_subagent', 'read_file'])];
+    const items: AssistantTimelineItem[] = [
+      tools('k1', ['invoke_subagent', 'read_file']),
+    ];
     const m = aggregateProcessMetrics(items);
     expect(m.subagentCount).toBe(1);
     expect(m.toolCount).toBe(2);
     // 负向：toolCount 不得等于各分类之和（否则会漏掉 subagent）
-    expect(m.toolCount).not.toBe(m.readFilesCount + m.searchCount + m.commandCount + m.editFilesCount);
+    expect(m.toolCount).not.toBe(
+      m.readFilesCount + m.searchCount + m.commandCount + m.editFilesCount
+    );
   });
 
   it('思考耗时累加进 thoughtDurationMs 与 totalDurationMs', () => {
@@ -112,8 +122,24 @@ describe('aggregateProcessMetrics · 聚合正确性', () => {
         kind: 'tools',
         key: 'k1',
         items: [
-          { kind: 'single', tc: { id: '1', name: 'read_file', status: 'success', arguments: 'C:\\a\\b.ts' } },
-          { kind: 'single', tc: { id: '2', name: 'view_file', status: 'success', arguments: 'c:/a/b.ts' } },
+          {
+            kind: 'single',
+            tc: {
+              id: '1',
+              name: 'read_file',
+              status: 'success',
+              arguments: 'C:\\a\\b.ts',
+            },
+          },
+          {
+            kind: 'single',
+            tc: {
+              id: '2',
+              name: 'view_file',
+              status: 'success',
+              arguments: 'c:/a/b.ts',
+            },
+          },
         ],
       },
     ];
@@ -151,20 +177,51 @@ describe('aggregateProcessMetrics · 聚合正确性', () => {
 /* ────────────────────── arbitrateLeadAction ────────────────────── */
 
 describe('arbitrateLeadAction · 主导动作仲裁优先级', () => {
-  const order = ['subagent', 'edit', 'search', 'read', 'command', 'thought'] as const;
+  const order = [
+    'subagent',
+    'edit',
+    'search',
+    'read',
+    'command',
+    'thought',
+  ] as const;
 
   it('完整优先级链：subagent > edit > search > read > command > thought > mixed', () => {
     const cases: Array<[Partial<ProcessSegmentMetrics>, string]> = [
-      [{ subagentCount: 1, editFilesCount: 1, searchCount: 1, readFilesCount: 1, commandCount: 1, thoughtCount: 1 }, 'subagent'],
-      [{ editFilesCount: 1, searchCount: 1, readFilesCount: 1, commandCount: 1, thoughtCount: 1 }, 'edit'],
-      [{ searchCount: 1, readFilesCount: 1, commandCount: 1, thoughtCount: 1 }, 'search'],
+      [
+        {
+          subagentCount: 1,
+          editFilesCount: 1,
+          searchCount: 1,
+          readFilesCount: 1,
+          commandCount: 1,
+          thoughtCount: 1,
+        },
+        'subagent',
+      ],
+      [
+        {
+          editFilesCount: 1,
+          searchCount: 1,
+          readFilesCount: 1,
+          commandCount: 1,
+          thoughtCount: 1,
+        },
+        'edit',
+      ],
+      [
+        { searchCount: 1, readFilesCount: 1, commandCount: 1, thoughtCount: 1 },
+        'search',
+      ],
       [{ readFilesCount: 1, commandCount: 1, thoughtCount: 1 }, 'read'],
       [{ commandCount: 1, thoughtCount: 1 }, 'command'],
       [{ thoughtCount: 1 }, 'thought'],
       [{}, 'mixed'],
     ];
     for (const [patch, expected] of cases) {
-      expect(arbitrateLeadAction({ ...emptyMetrics(), ...patch })).toBe(expected);
+      expect(arbitrateLeadAction({ ...emptyMetrics(), ...patch })).toBe(
+        expected
+      );
     }
   });
 
@@ -174,7 +231,14 @@ describe('arbitrateLeadAction · 主导动作仲裁优先级', () => {
   });
 
   it('负向断言：order 数组与实现一致', () => {
-    expect(order).toEqual(['subagent', 'edit', 'search', 'read', 'command', 'thought']);
+    expect(order).toEqual([
+      'subagent',
+      'edit',
+      'search',
+      'read',
+      'command',
+      'thought',
+    ]);
   });
 });
 
@@ -216,17 +280,23 @@ describe('formatDurationLabel · 耗时文案边界穷举', () => {
 describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决）', () => {
   it('多元素段 · 运行中 → 「正在处理 xx 时间」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
-    expect(formatProcessControlLabel(m, true, 4_200, true)).toBe('正在处理 4.2 秒');
+    expect(formatProcessControlLabel(m, true, 4_200, true)).toBe(
+      '正在处理 4.2 秒'
+    );
   });
 
   it('多元素段 · 终态 → 「已完成 xx 时间」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
-    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe('已完成 12.5 秒');
+    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe(
+      '已完成 12.5 秒'
+    );
   });
 
   it('多元素段 · 终态跨分钟 → 「已完成 m 分 s 秒」', () => {
     const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 3 };
-    expect(formatProcessControlLabel(m, true, 65_400, false)).toBe('已完成 1 分 5 秒');
+    expect(formatProcessControlLabel(m, true, 65_400, false)).toBe(
+      '已完成 1 分 5 秒'
+    );
   });
 
   it('单思考段（不显示工作时间区域）→ 「思考」', () => {
@@ -236,11 +306,15 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
 
   it('单工具调用段 → 「已运行 N 条命令」', () => {
     const m = { ...emptyMetrics(), toolCount: 4 };
-    expect(formatProcessControlLabel(m, false, 8_000, false)).toBe('已运行 4 条命令');
+    expect(formatProcessControlLabel(m, false, 8_000, false)).toBe(
+      '已运行 4 条命令'
+    );
   });
 
   it('空段兜底 → 「处理过程」', () => {
-    expect(formatProcessControlLabel(emptyMetrics(), false, 0, false)).toBe('处理过程');
+    expect(formatProcessControlLabel(emptyMetrics(), false, 0, false)).toBe(
+      '处理过程'
+    );
   });
 
   it('负向断言：任何输入组合都不得产出「已深度思考」', () => {
@@ -256,7 +330,9 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       for (const capsule of [true, false]) {
         for (const live of [true, false]) {
           for (const ms of [0, 3_200, 12_500, 3_600_000]) {
-            expect(formatProcessControlLabel(m, capsule, ms, live)).not.toContain('已深度思考');
+            expect(
+              formatProcessControlLabel(m, capsule, ms, live)
+            ).not.toContain('已深度思考');
           }
         }
       }
@@ -274,8 +350,12 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       toolCount: 11,
     };
     // 1. showWorkTime=true: 承载工作耗时，绝不含工具细分字样
-    expect(formatProcessControlLabel(m, true, 5_000, true)).toBe('正在处理 5.0 秒');
-    expect(formatProcessControlLabel(m, true, 5_000, false)).toBe('已完成 5.0 秒');
+    expect(formatProcessControlLabel(m, true, 5_000, true)).toBe(
+      '正在处理 5.0 秒'
+    );
+    expect(formatProcessControlLabel(m, true, 5_000, false)).toBe(
+      '已完成 5.0 秒'
+    );
     for (const live of [true, false]) {
       const out = formatProcessControlLabel(m, true, 5_000, live);
       expect(out).not.toContain('\u00b7');
@@ -288,7 +368,10 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
 
     // 2. showWorkTime=false: 展示调用了多少工具、分别是什么类型的描述（2026-09-11 用户裁决）
     const summary = formatProcessControlLabel(m, false, 5_000, false);
-    expect(summary).toBe('已调用 1 个子代理 · 已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令');
+    // R4b：子代理分派已提取为独立卡，过程摘要不再混排子代理计数
+    expect(summary).toBe(
+      '已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令'
+    );
   });
 
   it('负向断言（源码级）：战役源码中「已深度思考」仅可存在于说明性注释，不得存在于可执行字面量', () => {
@@ -306,7 +389,9 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       const code = src
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(^|[^:])\/\/.*$/gm, '$1');
-      expect(code, `${rel} 中不得存在「${needle}」字面量`).not.toContain(needle);
+      expect(code, `${rel} 中不得存在「${needle}」字面量`).not.toContain(
+        needle
+      );
     }
   });
 });
@@ -318,10 +403,14 @@ describe('hasProcessContent', () => {
     expect(hasProcessContent({ ...emptyMetrics(), toolCount: 1 })).toBe(true);
   });
   it('有思考 → true', () => {
-    expect(hasProcessContent({ ...emptyMetrics(), thoughtCount: 1 })).toBe(true);
+    expect(hasProcessContent({ ...emptyMetrics(), thoughtCount: 1 })).toBe(
+      true
+    );
   });
   it('有注入 → true', () => {
-    expect(hasProcessContent({ ...emptyMetrics(), injectionCount: 1 })).toBe(true);
+    expect(hasProcessContent({ ...emptyMetrics(), injectionCount: 1 })).toBe(
+      true
+    );
   });
   it('全空 → false', () => {
     expect(hasProcessContent(emptyMetrics())).toBe(false);

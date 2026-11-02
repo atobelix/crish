@@ -32,6 +32,16 @@ export type UiEventMap = {
   'open-external-import': void;
   'pick-workspace': void;
   'open-agent-panel': { agentId?: string; sessionId?: string; leafId?: string };
+  /**
+   * R4b 反向定位：侧栏详情头「在对话中定位」派发；主列 ChatMessageList 订阅后
+   * 按 msgId 滚动到派发卡所在消息，并按 parentToolCallId 闪烁高亮流内卡片。
+   */
+  'locate-subagent-dispatch': {
+    sessionId?: string;
+    agentId: string;
+    parentToolCallId?: string;
+    msgId?: string;
+  };
   /** 通用工具抽屉面板定址开启 */
   'open-tool-panel': { panelId: string; sessionId?: string; leafId?: string };
   /** 右侧工具坞折叠/展开切换 */
@@ -134,6 +144,7 @@ export const UI_EVENT_NAMES = [
   'open-tasks',
   'pick-workspace',
   'open-agent-panel',
+  'locate-subagent-dispatch',
   'open-tool-panel',
   'toggle-right-panel',
   'update-changed',

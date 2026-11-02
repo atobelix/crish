@@ -5,9 +5,9 @@
  * `label`：`${toolHumanLabel(last)} · ${n} 步`）+ 组内子行展开列表。
  * 不再展平（flattenRenderTools 已删）也不再按 turnId/startedAt 重分组
  * （parallelGroup 已删，语义下沉 timelineNormalizer.buildToolRenderItems）。
- * 关联子 agent 行（CompactToolRow 内嵌 InlineAgentPanel）由组合根经
- * renderLinkedAgentPanel 注入，避免 chat-tool-call → agent-card 反向依赖
- * （InlineAgentPanel 渲染 ChatToolStack 形成的环形依赖）。
+ * 关联子 agent 分派行不在本栈渲染：R4b 起分派由组合根
+ * （MessageToolCallsSection）从渲染项序列中提取为独立消息卡
+ * （SubagentDispatchCard），本栈只承载普通工具行。
  */
 import React from 'react';
 
@@ -34,14 +34,6 @@ export interface ChatToolStackActions {
   /** 批量批准：msgIds 与 toolIds 等长，按 bar 内相邻 pending 组 */
   onBatchApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
   onBatchDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
-  /** 关联子 agent 面板渲染器（组合根注入；切断 chat-tool-call → agent-card 依赖） */
-  renderLinkedAgentPanel?:
-    | ((
-        agent: SessionAgent,
-        parentSessionId: string,
-        tc: MessageToolCall
-      ) => React.ReactNode)
-    | undefined;
 }
 
 export interface ChatToolStackProps {

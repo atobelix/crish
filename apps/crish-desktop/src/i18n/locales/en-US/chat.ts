@@ -110,6 +110,9 @@ export const chat: ChatTranslations = {
   'approval.countdownAutoDeny':
     'Without approval, denied automatically in {seconds}s',
   'approval.reasonPrefix': 'Reason: ',
+  'approval.requesterSubagent': 'Requested by subagent "{label}"',
+  'approval.requesterSubagentAnon': 'Requested by a subagent',
+  'approval.arbiterMainAgentSuffix': ' · adjudicated by the main agent',
 
   // ── 3.2 Goal Mode Ribbon (chat.goal.*) ──
   'goal.modeLabel': 'Goal Mode',
@@ -266,6 +269,32 @@ export const chat: ChatTranslations = {
   'agentCard.retries': ' · {count} retries',
   'agentCard.pendingTools': '{count} tools awaiting approval',
   'agentCard.pendingBadge': 'Pending',
+  // ── Subagent role names (wire-name presentation mapping; consumed via global t in agentRoleLabel) ──
+  'agentCard.role.researcher': 'Researcher',
+  'agentCard.role.implementer': 'Implementer',
+  'agentCard.role.reviewer': 'Reviewer',
+  'agentCard.role.debugger': 'Debugger',
+  'agentCard.role.planner': 'Planner',
+  // ── Sidebar reverse locate (AgentCardHeader) ──
+  'agentCard.locateInFlow': 'Locate in conversation',
+  'agentCard.locateInFlowAria': 'Locate dispatch card in conversation',
+  // ── In-flow dispatch card (SubagentDispatchCard) ──
+  'agentCard.dispatch.statusWorking': 'Working',
+  'agentCard.dispatch.statusWorkingSec': 'Working {sec}s',
+  'agentCard.dispatch.statusReady': 'Ready',
+  'agentCard.dispatch.statusFailed': 'Failed',
+  'agentCard.dispatch.statusStopped': 'Stopped',
+  'agentCard.dispatch.statusIdle': 'Idle',
+  'agentCard.dispatch.progress': 'Completed {done}/{total} steps',
+  'agentCard.dispatch.durationUsed': 'Took {duration}',
+  'agentCard.dispatch.toolCount': '{count} tools',
+  'agentCard.dispatch.pendingCount': '{count} pending',
+  'agentCard.dispatch.pendingAria': '{count} awaiting your approval',
+  'agentCard.dispatch.cardAria':
+    '{title}, {status}. Open details in the side panel',
+  'agentCard.dispatch.errorFallback': 'Execution error',
+  'agentCard.dispatch.resume': 'Resume',
+  'agentCard.dispatch.kill': 'Close',
   untitledSession: 'New chat',
   browserTabTitle: 'Browser',
   goalChipLabel: 'goal',

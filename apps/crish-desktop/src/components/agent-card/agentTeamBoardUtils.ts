@@ -5,6 +5,7 @@
  */
 import type { SessionAgent } from '../../store/types';
 import { humanizeAgentSummary } from '../../api/toolPresentation';
+import { mapSubagentRoleWireName } from '../../api/tool-presentation/agentRoleLabel';
 
 export const STATUS_LABEL: Record<SessionAgent['status'], string> = {
   running: '运行中',
@@ -38,6 +39,14 @@ export function agentTitle(agent: SessionAgent): string {
   return '子智能体';
 }
 
+/** 呈现名：与 agentTitle 同链，仅 displayLabel 先经角色 wire 名映射
+ * （R4b 呈现层口径，见 agentRoleLabel）。 */
+export function agentTitleWithRole(agent: SessionAgent): string {
+  const label = (agent.displayLabel || '').trim();
+  if (label) return mapSubagentRoleWireName(label);
+  return agentTitle(agent);
+}
+
 /** 运行中优先 → 失败 → 已停止 → 完成；同组新在前 */
 export function rankAgentStatus(st: SessionAgent['status']): number {
   if (st === 'running') return 0;
@@ -69,7 +78,9 @@ export function formatCompactDuration(agent: SessionAgent): string | null {
   const start = agent.startedAt;
   if (!start || !Number.isFinite(start)) return null;
   const end =
-    agent.endedAt && Number.isFinite(agent.endedAt) ? agent.endedAt : Date.now();
+    agent.endedAt && Number.isFinite(agent.endedAt)
+      ? agent.endedAt
+      : Date.now();
   const sec = Math.max(0, Math.round((end - start) / 1000));
   if (sec < 60) return `${sec}秒`;
   if (sec < 3600) {
@@ -126,7 +137,7 @@ export function summarySnippet(agent: SessionAgent, maxLen: number): string {
 export function formatToolsHint(
   agent: SessionAgent,
   prog: ReturnType<typeof toolProgress>,
-  compact: boolean,
+  compact: boolean
 ): string {
   if (prog.total <= 0) {
     return agent.status === 'running' ? '执行中…' : '';
@@ -136,7 +147,9 @@ export function formatToolsHint(
     return '';
   }
   if (agent.status === 'failed') {
-    return compact ? `工具 ${prog.done}/${prog.total}` : `工具 ${prog.done}/${prog.total}`;
+    return compact
+      ? `工具 ${prog.done}/${prog.total}`
+      : `工具 ${prog.done}/${prog.total}`;
   }
   if (compact) {
     let h = `工具 ${prog.done}/${prog.total}`;
@@ -151,7 +164,7 @@ export function formatToolsHint(
 
 export function progressPercent(
   agent: SessionAgent,
-  prog: ReturnType<typeof toolProgress>,
+  prog: ReturnType<typeof toolProgress>
 ): number {
   if (prog.total > 0) return Math.round((prog.done / prog.total) * 100);
   if (agent.status === 'completed') return 100;

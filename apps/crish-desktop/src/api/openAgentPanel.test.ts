@@ -27,8 +27,11 @@ import {
   planOpenAgentInSidePanel,
   resolveAgentPanelLabel,
   resolveAgentPanelOpenTarget,
+  resolveAgentCardTitle,
   resolveAgentPanelStatusLabel,
   resolveAgentPanelTitle,
+  resolveSubagentDispatchAnchor,
+  shortAgentIdCode,
   shouldReuseAgentPanelFocus,
 } from './openAgentPanel';
 
@@ -77,23 +80,46 @@ describe('openAgentPanel pure helpers', () => {
       expect(resolveAgentPanelTitle(undefined)).toBe(DEFAULT_AGENT_PANEL_TITLE);
       expect(resolveAgentPanelTitle({})).toBe(DEFAULT_AGENT_PANEL_TITLE);
       expect(resolveAgentPanelTitle({ description: '', mode: '' })).toBe(
-        DEFAULT_AGENT_PANEL_TITLE,
+        DEFAULT_AGENT_PANEL_TITLE
       );
       expect(resolveAgentPanelTitle({ description: '   ', mode: '\t' })).toBe(
-        DEFAULT_AGENT_PANEL_TITLE,
+        DEFAULT_AGENT_PANEL_TITLE
       );
     });
 
     it('prefers description over mode over fallback', () => {
       expect(
-        resolveAgentPanelTitle({ description: '查 bug', mode: 'explore' }),
+        resolveAgentPanelTitle({ description: '查 bug', mode: 'explore' })
       ).toBe('查 bug');
-      expect(resolveAgentPanelTitle({ description: '  ', mode: 'explore' })).toBe(
-        'explore',
-      );
       expect(
-        resolveAgentPanelTitle({ description: '', mode: '' }, { fallback: '自定义' }),
+        resolveAgentPanelTitle({ description: '  ', mode: 'explore' })
+      ).toBe('explore');
+      expect(
+        resolveAgentPanelTitle(
+          { description: '', mode: '' },
+          { fallback: '自定义' }
+        )
       ).toBe('自定义');
+    });
+
+    it('R4a 标题链对齐：displayLabel 优先于 description，空白 label 跳过', () => {
+      expect(
+        resolveAgentPanelTitle({
+          displayLabel: 'implementer',
+          description: '实现模块 B',
+          mode: 'implement',
+        })
+      ).toBe('implementer');
+      expect(
+        resolveAgentPanelTitle({
+          displayLabel: '   ',
+          description: '实现模块 B',
+          mode: 'implement',
+        })
+      ).toBe('实现模块 B');
+      expect(
+        resolveAgentPanelTitle({ displayLabel: '', mode: 'explore' })
+      ).toBe('explore');
     });
 
     it('label uses description → mode → id → 默认子智能体', () => {
@@ -101,7 +127,9 @@ describe('openAgentPanel pure helpers', () => {
       expect(resolveAgentPanelLabel({ description: '任务 A' })).toBe('任务 A');
       expect(resolveAgentPanelLabel({ mode: 'research' })).toBe('research');
       expect(resolveAgentPanelLabel({ id: '  x-9  ' })).toBe('x-9');
-      expect(resolveAgentPanelLabel({ id: '  ' })).toBe(DEFAULT_AGENT_PANEL_LABEL);
+      expect(resolveAgentPanelLabel({ id: '  ' })).toBe(
+        DEFAULT_AGENT_PANEL_LABEL
+      );
     });
 
     it('status labels cover all known statuses', () => {
@@ -148,19 +176,20 @@ describe('openAgentPanel pure helpers', () => {
 
   describe('resolveAgentPanelOpenTarget', () => {
     it('single agent with id → focus; empty/multi/blank id → browse', () => {
-      expect(resolveAgentPanelOpenTarget([{ id: 'solo', description: 'S' }])).toEqual({
+      expect(
+        resolveAgentPanelOpenTarget([{ id: 'solo', description: 'S' }])
+      ).toEqual({
         mode: 'focus',
         agentId: 'solo',
       });
       expect(resolveAgentPanelOpenTarget([])).toEqual({ mode: 'browse' });
       expect(resolveAgentPanelOpenTarget(null)).toEqual({ mode: 'browse' });
-      expect(
-        resolveAgentPanelOpenTarget([
-          { id: 'a' },
-          { id: 'b' },
-        ]),
-      ).toEqual({ mode: 'browse' });
-      expect(resolveAgentPanelOpenTarget([{ id: '  ' }])).toEqual({ mode: 'browse' });
+      expect(resolveAgentPanelOpenTarget([{ id: 'a' }, { id: 'b' }])).toEqual({
+        mode: 'browse',
+      });
+      expect(resolveAgentPanelOpenTarget([{ id: '  ' }])).toEqual({
+        mode: 'browse',
+      });
       expect(resolveAgentPanelOpenTarget([{}])).toEqual({ mode: 'browse' });
     });
   });
@@ -175,7 +204,9 @@ describe('openAgentPanel pure helpers', () => {
         clearActiveAgentId: false,
         emitOpenEvent: false,
       });
-      expect(planOpenAgentInSidePanel({ agentId: '  \t' }).action).toBe('reject');
+      expect(planOpenAgentInSidePanel({ agentId: '  \t' }).action).toBe(
+        'reject'
+      );
       expect(planOpenAgentInSidePanel({ mode: 'focus' }).action).toBe('reject');
     });
 
@@ -205,7 +236,8 @@ describe('openAgentPanel pure helpers', () => {
         expect(p.reused).toBe(false);
         expect(p.setActiveAgentId).toBe(false);
         expect(p.clearActiveAgentId).toBe(true);
-        expect(p.title).toBe(DEFAULT_AGENT_PANEL_TITLE);
+        // R4b 标题链新口径：名称链皆空时回退 id 短码（# + 前 8 字符），不再用通用兜底
+        expect(p.title).toBe('#streamin');
       }
     });
 
@@ -256,7 +288,10 @@ describe('openAgentPanel pure helpers', () => {
     });
 
     it('browse plan never touches main column', () => {
-      const p = planOpenAgentInSidePanel({ mode: 'browse', sessionId: '  s1  ' });
+      const p = planOpenAgentInSidePanel({
+        mode: 'browse',
+        sessionId: '  s1  ',
+      });
       expect(p).toMatchObject({
         action: 'browse',
         sessionId: 's1',
@@ -275,7 +310,8 @@ describe('openAgentPanel pure helpers', () => {
       });
       expect(p.action).toBe('focus');
       if (p.action === 'focus') {
-        expect(p.title).toBe(DEFAULT_AGENT_PANEL_TITLE);
+        // R4b 标题链新口径：名称链皆空时回退 id 短码（短 id 原样），不再用通用兜底
+        expect(p.title).toBe('t1');
       }
       const p2 = planOpenAgentInSidePanel({
         agentId: 't1',
@@ -325,7 +361,10 @@ describe('openAgentPanel pure helpers', () => {
       }
       const sid = listSessions(useSessionStore.getState())[0]?.id;
       if (sid) st.setActiveSessionId(sid);
-      useSessionStore.setState({ panelAgentId: 'keep-me', activeAgentId: null });
+      useSessionStore.setState({
+        panelAgentId: 'keep-me',
+        activeAgentId: null,
+      });
 
       // 纯路径
       planOpenAgentInSidePanel({
@@ -351,7 +390,10 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
   beforeEach(() => {
     const st = useSessionStore.getState();
     if (!listSessions(st).length) {
-      st.createSession({ title: 'agent-panel-test', id: `apt-sess-${Date.now()}` });
+      st.createSession({
+        title: 'agent-panel-test',
+        id: `apt-sess-${Date.now()}`,
+      });
     }
     const sid = listSessions(useSessionStore.getState())[0]?.id;
     if (sid) st.setActiveSessionId(sid);
@@ -442,11 +484,15 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     st.togglePanel(ws!.id, 'agent', true);
     st.togglePanel(ws!.id, 'terminal', true);
 
-    const live = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
+    const live = useWorkspaceStore
+      .getState()
+      .workspaces.find((w) => w.id === ws!.id)!;
     const toolCol = live.columns.find((c) => !c.id.includes('chat'));
     expect(toolCol).toBeTruthy();
     // 找到含 agent 的组
-    const group = toolCol!.groups.find((g) => g.cards.some((c) => c.id === 'agent'));
+    const group = toolCol!.groups.find((g) =>
+      g.cards.some((c) => c.id === 'agent')
+    );
     expect(group).toBeTruthy();
     // 强制同组为 files|agent|terminal 且 active=agent
     useWorkspaceStore.setState((draft: any) => {
@@ -468,7 +514,8 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => c.id.includes('chat'));
     const chatActiveBefore = chatColBefore?.groups[0]?.activeCardId;
-    const chatCardsBefore = chatColBefore?.groups[0]?.cards.map((c) => c.id) ?? [];
+    const chatCardsBefore =
+      chatColBefore?.groups[0]?.cards.map((c) => c.id) ?? [];
     openAgentInSidePanel('agent-close-side');
     const groupId = useWorkspaceStore
       .getState()
@@ -482,9 +529,12 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     expect(after.panelAgentId).toBeNull();
     expect(after.activeAgentId).toBeNull();
 
-    const wsAfter = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
+    const wsAfter = useWorkspaceStore
+      .getState()
+      .workspaces.find((w) => w.id === ws!.id)!;
     const toolAfter = wsAfter.columns.find((c) => !c.id.includes('chat'));
-    const gAfter = toolAfter?.groups.find((g) => g.id === groupId) ?? toolAfter?.groups[0];
+    const gAfter =
+      toolAfter?.groups.find((g) => g.id === groupId) ?? toolAfter?.groups[0];
     // agent tab 已关
     expect(gAfter?.cards.map((c) => c.id) ?? []).not.toContain('agent');
     // 落到左侧 files，绝不 chat
@@ -493,7 +543,9 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     // 主列 chat 原样
     const chatAfter = wsAfter.columns.find((c) => c.id.includes('chat'));
     expect(chatAfter?.groups[0]?.activeCardId).toBe(chatActiveBefore);
-    expect(chatAfter?.groups[0]?.cards.map((c) => c.id)).toEqual(chatCardsBefore);
+    expect(chatAfter?.groups[0]?.cards.map((c) => c.id)).toEqual(
+      chatCardsBefore
+    );
   });
 
   it('closeAgentSidePanel 关唯一 agent 收空组，不把 chat 注入工具列', () => {
@@ -521,8 +573,7 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     const groupId = useWorkspaceStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
-      .columns.find((c) => !c.id.includes('chat'))!
-      .groups[0]!.id;
+      .columns.find((c) => !c.id.includes('chat'))!.groups[0]!.id;
 
     const chatBefore = useWorkspaceStore
       .getState()
@@ -537,7 +588,9 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     openAgentInSidePanel('solo-agent');
     closeAgentSidePanel(ws!.id, groupId);
 
-    const after = useWorkspaceStore.getState().workspaces.find((w) => w.id === ws!.id)!;
+    const after = useWorkspaceStore
+      .getState()
+      .workspaces.find((w) => w.id === ws!.id)!;
     expect(useSessionStore.getState().panelAgentId).toBeNull();
     expect(useSessionStore.getState().activeAgentId).toBeNull();
 
@@ -552,7 +605,9 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     // 主列 chat 原样
     const chatAfter = after.columns.find((c) => c.id.includes('chat'))!;
     expect(chatAfter.groups[0]?.activeCardId).toBe(chatActiveBefore);
-    expect(chatAfter.groups[0]?.cards.map((c) => c.id)).toEqual(chatCardsBefore);
+    expect(chatAfter.groups[0]?.cards.map((c) => c.id)).toEqual(
+      chatCardsBefore
+    );
     // 列数不因「重开 chat」膨胀
     expect(after.columns.filter((c) => c.id.includes('chat')).length).toBe(1);
     expect(after.columns.length).toBeLessThanOrEqual(colCountBefore);
@@ -627,8 +682,14 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
   it('openAgentPanelBrowse 可带 sessionId 切换且 panel 为浏览态', () => {
     const st = useSessionStore.getState();
-    const a = st.createSession({ title: 'browse-a', id: `apt-ba-${Date.now()}` });
-    const b = st.createSession({ title: 'browse-b', id: `apt-bb-${Date.now()}` });
+    const a = st.createSession({
+      title: 'browse-a',
+      id: `apt-ba-${Date.now()}`,
+    });
+    const b = st.createSession({
+      title: 'browse-b',
+      id: `apt-bb-${Date.now()}`,
+    });
     st.setActiveSessionId(a);
     openAgentInSidePanel('will-clear');
     openAgentPanelBrowse({ sessionId: b });
@@ -648,22 +709,28 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
   it('open 派发 open-agent-panel 事件（含 agentId）；browse 无 agentId', () => {
     const events: Array<{ type: string; detail: unknown }> = [];
-    const spy = vi.spyOn(window, 'dispatchEvent').mockImplementation((ev: Event) => {
-      const ce = ev as CustomEvent;
-      events.push({ type: ce.type, detail: ce.detail });
-      return true;
-    });
+    const spy = vi
+      .spyOn(window, 'dispatchEvent')
+      .mockImplementation((ev: Event) => {
+        const ce = ev as CustomEvent;
+        events.push({ type: ce.type, detail: ce.detail });
+        return true;
+      });
     try {
       openAgentInSidePanel('evt-agent');
       openAgentPanelBrowse();
       const agentEv = events.filter((e) => e.type === 'crish-open-agent-panel');
       expect(agentEv.length).toBeGreaterThanOrEqual(2);
-      expect(agentEv.some((e) => (e.detail as { agentId?: string })?.agentId === 'evt-agent')).toBe(
-        true,
-      );
+      expect(
+        agentEv.some(
+          (e) => (e.detail as { agentId?: string })?.agentId === 'evt-agent'
+        )
+      ).toBe(true);
       // browse 的 detail 为空对象或无 agentId
       const browse = agentEv[agentEv.length - 1];
-      expect((browse!.detail as { agentId?: string } | undefined)?.agentId).toBeUndefined();
+      expect(
+        (browse!.detail as { agentId?: string } | undefined)?.agentId
+      ).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
@@ -685,10 +752,12 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
 
   it('empty id open 不派发事件（与 plan reject 对齐）', () => {
     const events: Event[] = [];
-    const spy = vi.spyOn(window, 'dispatchEvent').mockImplementation((ev: Event) => {
-      events.push(ev);
-      return true;
-    });
+    const spy = vi
+      .spyOn(window, 'dispatchEvent')
+      .mockImplementation((ev: Event) => {
+        events.push(ev);
+        return true;
+      });
     try {
       openAgentInSidePanel('');
       openAgentInSidePanel('  ');
@@ -699,5 +768,102 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('R4b：id 短码 / 卡片标题 / 反向定位锚点', () => {
+  describe('shortAgentIdCode', () => {
+    it('空 id → 空串', () => {
+      expect(shortAgentIdCode(undefined)).toBe('');
+      expect(shortAgentIdCode(null)).toBe('');
+      expect(shortAgentIdCode('   ')).toBe('');
+    });
+    it('短 id 原样返回（无 #）', () => {
+      expect(shortAgentIdCode('ag-1')).toBe('ag-1');
+      expect(shortAgentIdCode('12345678')).toBe('12345678');
+    });
+    it('长 id → # + 前 8 字符', () => {
+      expect(shortAgentIdCode('agent-9f3c2b1d-extra')).toBe('#agent-9f');
+    });
+  });
+
+  describe('resolveAgentPanelTitle id 短码档', () => {
+    it('三链皆空时回退 id 短码而非通用兜底', () => {
+      expect(resolveAgentPanelTitle({ id: 'agent-9f3c2b1d-extra' })).toBe(
+        '#agent-9f'
+      );
+      expect(resolveAgentPanelTitle({ id: 'ag-1' })).toBe('ag-1');
+    });
+    it('有名称链时优先名称链，id 短码不抢占', () => {
+      expect(
+        resolveAgentPanelTitle({ id: 'agent-9f3c2b1d', description: '查 bug' })
+      ).toBe('查 bug');
+    });
+  });
+
+  describe('resolveAgentCardTitle（wire 名呈现层映射）', () => {
+    it('五种引擎 role wire 名映射中文角色名', () => {
+      expect(resolveAgentCardTitle({ displayLabel: 'researcher' })).toBe(
+        '研究员'
+      );
+      expect(resolveAgentCardTitle({ displayLabel: 'implementer' })).toBe(
+        '实现者'
+      );
+      expect(resolveAgentCardTitle({ displayLabel: 'reviewer' })).toBe(
+        '评审者'
+      );
+      expect(resolveAgentCardTitle({ displayLabel: 'debugger' })).toBe(
+        '调试者'
+      );
+      expect(resolveAgentCardTitle({ displayLabel: 'planner' })).toBe('规划者');
+    });
+    it('自由文本 displayLabel 原样透传（面板标题链不变）', () => {
+      expect(resolveAgentCardTitle({ displayLabel: '自定义标签' })).toBe(
+        '自定义标签'
+      );
+    });
+    it('displayLabel 缺省时沿用 description → mode → id 短码链', () => {
+      expect(resolveAgentCardTitle({ description: '探索' })).toBe('探索');
+      expect(resolveAgentCardTitle({ mode: 'explore' })).toBe('explore');
+      expect(resolveAgentCardTitle({ id: 'agent-9f3c2b1d-extra' })).toBe(
+        '#agent-9f'
+      );
+    });
+    it('resolveAgentPanelTitle 本身保持原文（R4a 钉版行为不变）', () => {
+      expect(resolveAgentPanelTitle({ displayLabel: 'implementer' })).toBe(
+        'implementer'
+      );
+    });
+  });
+
+  describe('resolveSubagentDispatchAnchor', () => {
+    const session = {
+      agents: [{ id: 'ag-1', parentToolCallId: 't-sub-1' }, { id: 'ag-2' }],
+      messages: [
+        {
+          id: 'm1',
+          toolCalls: [{ id: 't-other' }, { id: 't-sub-1' }],
+        },
+        { id: 'm2', toolCalls: [{ id: 't-x' }] },
+      ],
+    } as never;
+
+    it('命中：返回 agentId + parentToolCallId 与所在消息 id', () => {
+      expect(resolveSubagentDispatchAnchor(session, 'ag-1')).toEqual({
+        agentId: 'ag-1',
+        parentToolCallId: 't-sub-1',
+        msgId: 'm1',
+      });
+    });
+    it('agent 无 parentToolCallId → 仅 agentId（无锚点可滚，监听端自然无操作）', () => {
+      expect(resolveSubagentDispatchAnchor(session, 'ag-2')).toEqual({
+        agentId: 'ag-2',
+      });
+    });
+    it('agent 不存在 / 入参缺失 → null', () => {
+      expect(resolveSubagentDispatchAnchor(session, 'ag-x')).toBeNull();
+      expect(resolveSubagentDispatchAnchor(null, 'ag-1')).toBeNull();
+      expect(resolveSubagentDispatchAnchor(session, '')).toBeNull();
+    });
   });
 });

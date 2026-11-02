@@ -14,6 +14,7 @@
 
 import { getCompositionRoot } from '../app/compositionRoot';
 import { emitUiEvent } from './uiEvents';
+import { mapSubagentRoleWireName } from './tool-presentation/agentRoleLabel';
 
 /** 侧栏「聊天」面板 card id（关 tab 用；禁止当主对话 chat 处理） */
 export const AGENT_SIDE_PANEL_CARD_ID = 'agent' as const;
@@ -42,6 +43,8 @@ export type AgentSidePanelFocus = {
 /** 纯函数可读的最小 agent 形状（勿耦合 SessionAgent 全量） */
 export type AgentPanelAgentLike = {
   id?: string | null;
+  /** 角色标签（R4a 起实时会话有数据源：引擎 role 落 SessionAgent.displayLabel） */
+  displayLabel?: string | null;
   description?: string | null;
   mode?: string | null;
   status?: string | null;
@@ -54,7 +57,7 @@ export type AgentPanelAgentLike = {
  * 不生成 id、不写 store。
  */
 export function normalizeAgentPanelAgentId(
-  id: string | null | undefined,
+  id: string | null | undefined
 ): string | null {
   if (id == null) return null;
   const t = String(id).trim();
@@ -83,20 +86,64 @@ export function __resetAgentPanelClientIdSeqForTests(): void {
 }
 
 /**
- * 侧栏标题：description → mode → fallback。
- * 空串/纯空白 description|mode 跳过，避免空 title 污染 UI。
+ * agent id 短码（标题链末端兜底）：trim；空 → ''；≤8 字符原样；
+ * 更长 → `#` + 前 8 字符（`#` 标明这是 id 代码而非名称；完整 id 不在此
+ * 丢失定址能力，调用方仍可经 agent.id 原值 / data-agent-id 取得）。
+ */
+export function shortAgentIdCode(id: string | null | undefined): string {
+  const t = (id ?? '').trim();
+  if (!t) return '';
+  return t.length <= 8 ? t : `#${t.slice(0, 8)}`;
+}
+
+/**
+ * 侧栏标题：displayLabel → description → mode → id 短码 → fallback。
+ * 与 agentCardUtils.agentDisplayName 同一标题链（R4a 对齐）：此前本函数
+ * 不认 displayLabel、而名称链以 displayLabel 为首，两处口径分裂——同一
+ * agent 在侧栏标题与列表名称可能显示两副面孔。R4a 起 displayLabel 在
+ * 实时会话有数据源（引擎 role 落数），两链自此同序：displayLabel →
+ * description → mode，候选空白一律跳过（避免空 title 污染 UI）。
+ * R4b 补末端一步：mode 之后落 id 短码（与名称链的 id 兜底同向、仅截短
+ * 口径不同），fallback 只在连 id 都没有时命中——无任何标签的 agent 不再
+ * 在标题处完全不可辨识。本函数保持数据原貌：displayLabel 的 wire 名
+ * 不在此映射中文（呈现面用 resolveAgentCardTitle）。
  */
 export function resolveAgentPanelTitle(
   agent: AgentPanelAgentLike | null | undefined,
-  opts?: { fallback?: string },
+  opts?: { fallback?: string }
 ): string {
-  const fallback = (opts?.fallback ?? DEFAULT_AGENT_PANEL_TITLE).trim() || DEFAULT_AGENT_PANEL_TITLE;
+  const fallback =
+    (opts?.fallback ?? DEFAULT_AGENT_PANEL_TITLE).trim() ||
+    DEFAULT_AGENT_PANEL_TITLE;
   if (!agent) return fallback;
+  const label = (agent.displayLabel ?? '').trim();
+  if (label) return label;
   const desc = (agent.description ?? '').trim();
   if (desc) return desc;
   const mode = (agent.mode ?? '').trim();
   if (mode) return mode;
+  const idCode = shortAgentIdCode(agent.id);
+  if (idCode) return idCode;
   return fallback;
+}
+
+/**
+ * 呈现面标题（R4b）：流内分派卡 / 侧栏头部专用——与 resolveAgentPanelTitle
+ * 同一标题链，唯一差异是 displayLabel 先经呈现层角色映射（引擎 role wire 名
+ * → 中文角色名，见 agentRoleLabel）。映射只发生在呈现面：resolveAgentPanelTitle
+ * 本身保持数据原貌（R4a 口径），桥接/规划层不做文案加工。
+ */
+export function resolveAgentCardTitle(
+  agent: AgentPanelAgentLike | null | undefined,
+  opts?: { fallback?: string }
+): string {
+  if (!agent) return resolveAgentPanelTitle(agent, opts);
+  const label = (agent.displayLabel ?? '').trim();
+  if (!label) return resolveAgentPanelTitle(agent, opts);
+  return resolveAgentPanelTitle(
+    { ...agent, displayLabel: mapSubagentRoleWireName(label) },
+    opts
+  );
 }
 
 /**
@@ -105,9 +152,11 @@ export function resolveAgentPanelTitle(
  */
 export function resolveAgentPanelLabel(
   agent: AgentPanelAgentLike | null | undefined,
-  opts?: { fallback?: string },
+  opts?: { fallback?: string }
 ): string {
-  const fallback = (opts?.fallback ?? DEFAULT_AGENT_PANEL_LABEL).trim() || DEFAULT_AGENT_PANEL_LABEL;
+  const fallback =
+    (opts?.fallback ?? DEFAULT_AGENT_PANEL_LABEL).trim() ||
+    DEFAULT_AGENT_PANEL_LABEL;
   if (!agent) return fallback;
   const desc = (agent.description ?? '').trim();
   if (desc) return desc;
@@ -118,9 +167,9 @@ export function resolveAgentPanelLabel(
   return fallback;
 }
 
-/** 状态徽标文案（与 AgentCard / InlineAgentPanel 一致） */
+/** 状态徽标文案（与 AgentCard / SubagentDispatchCard 一致） */
 export function resolveAgentPanelStatusLabel(
-  status: string | null | undefined,
+  status: string | null | undefined
 ): string {
   switch (status) {
     case 'running':
@@ -142,7 +191,7 @@ export function resolveAgentPanelStatusLabel(
  */
 export function findAgentPanelAgent(
   agents: ReadonlyArray<AgentPanelAgentLike> | null | undefined,
-  agentId: string | null | undefined,
+  agentId: string | null | undefined
 ): AgentPanelAgentLike | undefined {
   const id = normalizeAgentPanelAgentId(agentId);
   if (!id || !agents?.length) return undefined;
@@ -159,9 +208,10 @@ export function findAgentPanelAgent(
 export function shouldReuseAgentPanelFocus(
   panelAgentId: string | null | undefined,
   targetAgentId: string | null | undefined,
-  activeAgentId?: string | null,
+  activeAgentId?: string | null
 ): boolean {
-  if (activeAgentId != null && String(activeAgentId).trim() !== '') return false;
+  if (activeAgentId != null && String(activeAgentId).trim() !== '')
+    return false;
   const cur = normalizeAgentPanelAgentId(panelAgentId);
   const next = normalizeAgentPanelAgentId(targetAgentId);
   return Boolean(cur && next && cur === next);
@@ -174,7 +224,7 @@ export function shouldReuseAgentPanelFocus(
  * 纯决策，不写 store。
  */
 export function resolveAgentPanelOpenTarget(
-  agents: ReadonlyArray<AgentPanelAgentLike> | null | undefined,
+  agents: ReadonlyArray<AgentPanelAgentLike> | null | undefined
 ): { mode: 'focus'; agentId: string } | { mode: 'browse' } {
   if (!agents || agents.length !== 1) return { mode: 'browse' };
   const only = agents[0];
@@ -248,7 +298,7 @@ export type PlanOpenAgentInSidePanelInput = {
  * - 否则 → focus（create 新侧栏焦点）
  */
 export function planOpenAgentInSidePanel(
-  input: PlanOpenAgentInSidePanelInput,
+  input: PlanOpenAgentInSidePanelInput
 ): AgentPanelOpenPlan {
   const sessionId = normalizeAgentPanelAgentId(input.sessionId) ?? undefined;
 
@@ -298,7 +348,7 @@ export function planOpenAgentInSidePanel(
   const agentForTitle =
     input.agent && normalizeAgentPanelAgentId(input.agent.id) === agentId
       ? input.agent
-      : listed ?? input.agent ?? { id: agentId };
+      : (listed ?? input.agent ?? { id: agentId });
 
   const explicit = (input.title ?? '').trim();
   const title = explicit || resolveAgentPanelTitle(agentForTitle);
@@ -307,7 +357,7 @@ export function planOpenAgentInSidePanel(
   const reused = shouldReuseAgentPanelFocus(
     input.panelAgentId,
     agentId,
-    input.activeAgentId,
+    input.activeAgentId
   );
 
   return {
@@ -329,7 +379,9 @@ export function planOpenAgentInSidePanel(
  */
 export function assertAgentPanelPlanSideOnly(plan: AgentPanelOpenPlan): void {
   if (plan.setActiveAgentId !== false) {
-    throw new Error('agent panel plan must never set activeAgentId (main column)');
+    throw new Error(
+      'agent panel plan must never set activeAgentId (main column)'
+    );
   }
 }
 
@@ -396,7 +448,10 @@ export function browseAgentSidePanel(opts?: AgentPanelOpenOpts): void {
  * 空/空白 id 为 no-op（与 plan reject empty-agent-id 对齐）。
  * 不校验 agents 是否已入列（流式乐观打开）；需严格校验请先 planOpenAgentInSidePanel。
  */
-export function openAgentInSidePanel(agentId: string, opts?: AgentPanelOpenOpts): void {
+export function openAgentInSidePanel(
+  agentId: string,
+  opts?: AgentPanelOpenOpts
+): void {
   const plan = planOpenAgentInSidePanel({
     mode: 'focus',
     agentId,
@@ -438,7 +493,108 @@ export function closeAgentSidePanel(wsId: string, groupId: string): void {
   const g = normalizeId(groupId);
   if (!w || !g) return;
   // 单一写路径：workspace closeTab（left-neighbor active，不 ensureChat）
-  getCompositionRoot().workspace.getState().closeTabInGroup(w, g, AGENT_SIDE_PANEL_CARD_ID);
+  getCompositionRoot()
+    .workspace.getState()
+    .closeTabInGroup(w, g, AGENT_SIDE_PANEL_CARD_ID);
+}
+
+/** 反向定位锚点：在会话消息中定位派发某 agent 的父消息（纯函数，可单测） */
+export type SubagentDispatchAnchor = {
+  agentId: string;
+  /** 派发该 agent 的父工具调用 id（卡片 DOM 锚点 data-parent-tool-call-id） */
+  parentToolCallId?: string;
+  /** 承载该工具调用的父消息 id（主列滚动目标） */
+  msgId?: string;
+};
+
+/** 锚点解析所需的最小会话形状（勿耦合 Session 全量类型） */
+export type DispatchAnchorSessionLike = {
+  agents?: ReadonlyArray<{
+    id?: string | null;
+    parentToolCallId?: string | null;
+  } | null> | null;
+  messages?: ReadonlyArray<{
+    id?: string | null;
+    toolCalls?: ReadonlyArray<{ id?: string | null } | null> | null;
+  } | null> | null;
+};
+
+/**
+ * 纯解析：agent → 其派发锚点。
+ * - agent 不在会话 agents 内 → null（无锚可定）；
+ * - parentToolCallId 取 agent 落数字段；msgId 按该 id 在会话消息的
+ *   toolCalls 中反查承载消息；字段缺失/未命中时对应键缺省（事件仍可发，
+ *   主列侧按已有信息尽力滚动）。
+ */
+export function resolveSubagentDispatchAnchor(
+  session: DispatchAnchorSessionLike | null | undefined,
+  agentId: string | null | undefined
+): SubagentDispatchAnchor | null {
+  const id = normalizeAgentPanelAgentId(agentId);
+  if (!id || !session) return null;
+  const agent = (session.agents ?? []).find(
+    (a) => a && normalizeAgentPanelAgentId(a.id) === id
+  );
+  if (!agent) return null;
+  const parentToolCallId =
+    normalizeAgentPanelAgentId(agent.parentToolCallId) ?? undefined;
+  let msgId: string | undefined;
+  if (parentToolCallId) {
+    for (const m of session.messages ?? []) {
+      if (!m) continue;
+      if ((m.toolCalls ?? []).some((tc) => tc?.id === parentToolCallId)) {
+        msgId = normalizeAgentPanelAgentId(m.id) ?? undefined;
+        break;
+      }
+    }
+  }
+  return {
+    agentId: id,
+    ...(parentToolCallId ? { parentToolCallId } : {}),
+    ...(msgId ? { msgId } : {}),
+  };
+}
+
+/**
+ * 反向定位（R4b）：侧栏详情头「在对话中定位」→ 派发 `locate-subagent-dispatch`
+ * 事件，主列 ChatMessageList 订阅后滚动到派发卡所在消息并闪烁卡片。
+ * 本函数只解析锚点 + 发事件，绝不碰主列 DOM/滚动状态（与 openAgentInSidePanel
+ * 的侧栏写路径正交）；也不写 panelAgentId/activeAgentId。
+ * @returns 是否找到锚点并已派发事件（agent 不在任何会话中 → false）
+ */
+export function locateSubagentDispatchInFlow(
+  agentId: string,
+  opts?: AgentPanelOpenOpts
+): boolean {
+  const id = normalizeAgentPanelAgentId(agentId);
+  if (!id) return false;
+  const st = getCompositionRoot().session.getState();
+  const byId: Record<string, DispatchAnchorSessionLike & { id?: string }> =
+    st.sessionsById ?? {};
+  const preferred = normalizeId(opts?.sessionId);
+  const sessions = Object.values(byId);
+  const ordered = preferred
+    ? [
+        ...sessions.filter((s) => s?.id === preferred),
+        ...sessions.filter((s) => s?.id !== preferred),
+      ]
+    : sessions;
+  for (const sess of ordered) {
+    const anchor = resolveSubagentDispatchAnchor(sess, id);
+    if (!anchor) continue;
+    const sessionId =
+      preferred || normalizeAgentPanelAgentId(sess?.id) || undefined;
+    emitUiEvent('locate-subagent-dispatch', {
+      ...(sessionId ? { sessionId } : {}),
+      agentId: id,
+      ...(anchor.parentToolCallId
+        ? { parentToolCallId: anchor.parentToolCallId }
+        : {}),
+      ...(anchor.msgId ? { msgId: anchor.msgId } : {}),
+    });
+    return true;
+  }
+  return false;
 }
 
 /** 当前是否在侧栏聚焦某子 agent（非主列） */

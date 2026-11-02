@@ -166,9 +166,11 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
         data-agent-id={agent.id}
         data-agent-status={agent.status}
       >
-        {/* 侧栏单 agent 详情：无人工委派；多 agent 用 AgentTeamBoard 在侧栏内切换 */}
+        {/* 侧栏单 agent 详情：无人工委派；≥3 个 agent 时用 AgentTeamBoard 在侧栏内切换（R4b 收敛） */}
         <AgentCardHeader
           agent={agent}
+          agents={siblingAgents}
+          sessionId={parentSessId}
           running={running}
           embedded={embedded}
           hasSiblings={siblingAgents.length > 0}
@@ -181,7 +183,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
           onStop={() => hookHandleStopGeneration(agent.summary)}
         />
 
-        {siblingAgents.length > 1 ? (
+        {siblingAgents.length >= 3 ? (
           <AgentTeamBoard
             agents={siblingAgents}
             activeId={agent.id}
@@ -239,6 +241,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
                 msg={msg}
                 parentSessionId={parentSessId}
                 agentId={agent.id}
+                agents={siblingAgents}
                 idx={idx}
                 totalMsgs={agent.messages.length}
                 onOpenDiff={onOpenDiff}

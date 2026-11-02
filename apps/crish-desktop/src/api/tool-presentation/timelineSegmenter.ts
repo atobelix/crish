@@ -11,12 +11,18 @@
  * 【顶部工作工作时间区门槛】段内思考 + 工具计数之和 ≥ 2 才显示胶囊与虚线分割；
  * 单思考 / 单工具调用不显示（用户裁决 · 2026-09-11）。
  *
- * 【四铁律裁决优先级（短路顺序）】
- *   1. 铁律四：subagentCount >= 1 → foldable=true, defaultExpanded=true, forceExpanded=true
- *   2. 铁律一：hasNextText       → foldable=true, defaultExpanded=false
- *   3. 铁律二：isTurnLive        → foldable=true, defaultExpanded=true, isLive=true
- *   4. 铁律三：toolCount >= 2    → foldable=true, defaultExpanded=false
- *              否则              → foldable=false, defaultExpanded=true
+ * 【折叠裁决（短路顺序，与实现逐项对齐）】
+ *   1. hasNextText → foldable=true, defaultExpanded=true
+ *      （过程段已履职完成，默认平铺直出 · 2026-09-19 用户裁决）
+ *   2. isTurnLive  → foldable=true, defaultExpanded=true, isLive=true
+ *   3. 否则（终态尾段）→ foldable=true, defaultExpanded=true
+ *      （工作完成后不做整体内容折叠 · 2026-09-19 用户裁决）
+ *
+ * 【铁律四退役（R4b · 2026-11-01）】原子代理可见性特权（subagentCount >= 1 →
+ * forceExpanded 强制展开）已删除：分派已从过程段的工具分组中提取为独立消息卡
+ * （SubagentDispatchCard），含分派的过程段回归上述普通折叠规则。`forceExpanded`
+ * 字段保留（恒 false）待 R9 过程组重构统一处置；禁止在本模块或调用方以任何
+ * 条件重新点亮（负向红线）。
  *
  * 【SSOT】权威定义位置：本文件（07-方案收敛审计与SSOT裁决.md §2.2）。
  * 负向红线：禁止在本模块外实现分段逻辑；禁止调用方本地重推导 foldable/forceExpanded。
@@ -105,17 +111,13 @@ export function partitionTimelineSegments(
 
     const metrics = aggregateProcessMetrics(current);
 
-    // ── 铁律四：子代理可见性特权（最高优先级，命中即返回）──
+    // ── 折叠裁决（口径见文件头）：含分派的段不再有强制展开特权 ──
     let foldable: boolean;
     let defaultExpanded: boolean;
-    let forceExpanded = false;
+    const forceExpanded = false;
     let isLive = false;
 
-    if (metrics.subagentCount >= 1) {
-      foldable = true;
-      defaultExpanded = true;
-      forceExpanded = true;
-    } else if (hasNextText) {
+    if (hasNextText) {
       // 过程段已履职完成（后继存在正文），不再是 live 尾部段；默认保持展开直出（2026-09-19 用户裁决）
       foldable = true;
       defaultExpanded = true;

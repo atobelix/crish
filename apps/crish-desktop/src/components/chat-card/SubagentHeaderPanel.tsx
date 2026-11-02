@@ -5,6 +5,12 @@ import { countRunningSubagents } from './unitChromeLabel';
 import { Button, IconButton, Tooltip } from '@/components/ui';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { killSubagent } from '../../api/subagentRecoveryApi';
+import {
+  agentIdentity,
+  resolveAgentIdentities,
+} from '../../api/tool-presentation/agentIdentity';
+import { mapSubagentRoleWireName } from '../../api/tool-presentation/agentRoleLabel';
+import { AgentIdentityBadge } from '../agent-card/AgentIdentityBadge';
 import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
 import styles from './SubagentHeaderPanel.module.css';
 import { AppIcon } from '@/components/ui/icons';
@@ -69,6 +75,9 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
   );
 
   const menuItems = useMemo<MenuItem[]>(() => {
+    // 会话级身份分配（与流内卡/侧栏头部/团队板同口径：同 agent 同色同标）；
+    // 身份标占菜单图标位，状态仍由 badge 文本承载。
+    const identities = resolveAgentIdentities(agents);
     return agents.map((agent) => {
       const anyAgent = agent as Partial<SessionAgent> & {
         name?: string;
@@ -78,7 +87,9 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
       const agentName =
         anyAgent.name ||
         anyAgent.role ||
-        agent.displayLabel ||
+        (agent.displayLabel
+          ? mapSubagentRoleWireName(agent.displayLabel)
+          : '') ||
         agent.description ||
         agent.mode ||
         '子代理';
@@ -86,34 +97,29 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
       const isRunning = agent.status === 'running';
 
       let statusBadgeText = '空闲';
-      let statusIcon = <AppIcon name="bot" size={14} />;
       let badgeClass = styles.badgeIdle;
 
       if (isRunning) {
         statusBadgeText = '运行中';
-        statusIcon = (
-          <AppIcon name="play" size={14} className={styles.pulseGreen} />
-        );
         badgeClass = styles.badgeRunning;
       } else if (agent.status === 'completed') {
         statusBadgeText = '已完成';
-        statusIcon = <AppIcon name="check-circle" size={14} />;
         badgeClass = styles.badgeCompleted;
       } else if (agent.status === 'failed') {
         statusBadgeText = '失败';
-        statusIcon = <AppIcon name="x-circle" size={14} />;
         badgeClass = styles.badgeFailed;
       } else if (agent.status === 'stopped') {
         statusBadgeText = '已停止';
-        statusIcon = <AppIcon name="octagon-alert" size={14} />;
         badgeClass = styles.badgeStopped;
       }
+
+      const identity = identities.get(agent.id) ?? agentIdentity(agent.id);
 
       return {
         id: agent.id,
         label: agentName,
         sublabel: agentTask,
-        icon: statusIcon,
+        icon: <AgentIdentityBadge identity={identity} size={14} />,
         badge: statusBadgeText,
         badgeClassName: badgeClass,
         searchKeywords: `${agentName} ${agentTask || ''}`,

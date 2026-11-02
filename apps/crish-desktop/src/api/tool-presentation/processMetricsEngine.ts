@@ -12,8 +12,14 @@
  *   - 「已深度思考」文案已于 2026-09-11 用户裁决彻底废除，禁止任何形式回潮。
  */
 
-import type { AssistantTimelineItem, TimelineToolsItem } from './toolPresentationTypes';
-import type { ProcessLeadAction, ProcessSegmentMetrics } from './toolPresentationTypes';
+import type {
+  AssistantTimelineItem,
+  TimelineToolsItem,
+} from './toolPresentationTypes';
+import type {
+  ProcessLeadAction,
+  ProcessSegmentMetrics,
+} from './toolPresentationTypes';
 import { classifyToolAction } from './toolActionClassifier';
 import type { MessageToolCall } from '../../store/layoutStore';
 
@@ -61,7 +67,9 @@ function flattenToolCalls(item: TimelineToolsItem): MessageToolCall[] {
 /**
  * 从时间线项聚合 14 项过程度量（单段唯一聚合入口）。
  */
-export function aggregateProcessMetrics(items: readonly AssistantTimelineItem[]): ProcessSegmentMetrics {
+export function aggregateProcessMetrics(
+  items: readonly AssistantTimelineItem[]
+): ProcessSegmentMetrics {
   let thoughtCount = 0;
   let thoughtDurationMs = 0;
   let toolCount = 0;
@@ -185,7 +193,19 @@ function extractToolTargetPath(tc: MessageToolCall): string {
   }
   if (parsedArgs && typeof parsedArgs === 'object') {
     const rec = parsedArgs as Record<string, unknown>;
-    for (const key of ['path', 'filePath', 'file_path', 'target', 'TargetFile', 'target_file', 'AbsolutePath', 'SearchPath', 'path_within_root', 'uri', 'url']) {
+    for (const key of [
+      'path',
+      'filePath',
+      'file_path',
+      'target',
+      'TargetFile',
+      'target_file',
+      'AbsolutePath',
+      'SearchPath',
+      'path_within_root',
+      'uri',
+      'url',
+    ]) {
       const v = rec[key];
       if (typeof v === 'string' && v) return v;
     }
@@ -198,7 +218,9 @@ function extractToolTargetPath(tc: MessageToolCall): string {
  *
  * 该顺序即 `02-折叠态聚合文案与度量算法详案.md` §6 的唯一权威口径。
  */
-export function arbitrateLeadAction(metrics: ProcessSegmentMetrics): ProcessLeadAction {
+export function arbitrateLeadAction(
+  metrics: ProcessSegmentMetrics
+): ProcessLeadAction {
   if (metrics.subagentCount > 0) return 'subagent';
   if (metrics.editFilesCount > 0) return 'edit';
   if (metrics.searchCount > 0) return 'search';
@@ -241,7 +263,9 @@ export function formatDurationLabel(ms: number): string {
  *   - 纯读取：`已读取 3 个文件`
  *   - 纯思考：`思考`
  */
-export function formatProcessActionsSummary(metrics: ProcessSegmentMetrics): string {
+export function formatProcessActionsSummary(
+  metrics: ProcessSegmentMetrics
+): string {
   if (metrics.toolCount === 0 && metrics.thoughtCount > 0) {
     if (metrics.thoughtDurationMs > 0) {
       return `已思考 ${formatDurationLabel(metrics.thoughtDurationMs)}`;
@@ -250,9 +274,9 @@ export function formatProcessActionsSummary(metrics: ProcessSegmentMetrics): str
   }
 
   const parts: string[] = [];
-  if (metrics.subagentCount > 0) {
-    parts.push(`已调用 ${metrics.subagentCount} 个子代理`);
-  }
+  // 子代理分派不计入段摘要（R4b）：分派已从工具分组提取为独立消息卡，
+  // 摘要只描述段内工具动作；subagentCount 仍由 aggregateProcessMetrics
+  // 如实聚合（仲裁/计数消费方不变），仅不再拼进文案。
   if (metrics.searchCount > 0) {
     parts.push(`已搜索 ${metrics.searchCount} 次`);
   }
@@ -270,8 +294,11 @@ export function formatProcessActionsSummary(metrics: ProcessSegmentMetrics): str
     return parts.join(' · ');
   }
 
-  if (metrics.toolCount > 0) {
-    return `已运行 ${metrics.toolCount} 条命令`;
+  // 兜底计数同样剔除子代理调用：toolCount 含 subagent（子集不变量），
+  // 纯分派段不得误报为「已运行 N 条命令」。
+  const nonSubagentToolCount = metrics.toolCount - metrics.subagentCount;
+  if (nonSubagentToolCount > 0) {
+    return `已运行 ${nonSubagentToolCount} 条命令`;
   }
 
   if (metrics.thoughtCount > 0) {

@@ -3,18 +3,18 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import type { SessionAgent } from '../../store/types';
-import { TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
 import { SubagentBlock } from './SubagentBlock';
 
-vi.mock('../../components/agent-card/InlineAgentPanel', () => ({
-  InlineAgentPanel: (props: {
+vi.mock('../../components/agent-card/SubagentDispatchCard', () => ({
+  SubagentDispatchCard: (props: {
     agent: SessionAgent;
-    defaultOpen?: boolean;
+    parentSessionId: string;
+    parentToolCallId?: string;
   }) => (
     <div
-      data-testid="inline-agent-panel"
+      data-testid="subagent-dispatch-card"
       data-agent-id={props.agent.id}
-      data-default-open={String(Boolean(props.defaultOpen))}
+      data-parent-tool-call-id={props.parentToolCallId}
     />
   ),
 }));
@@ -34,23 +34,26 @@ function agent(): SessionAgent {
   };
 }
 
-describe('SubagentBlock', () => {
-  it('装饰 InlineAgentPanel 且默认不合上面板以外的核，限高对齐像素帽', async () => {
+describe('SubagentBlock（R4b 双路收敛）', () => {
+  it('渲染与经典路径同一张分派卡，且外壳不再对展开体限高', async () => {
     const { container } = render(
       <SubagentBlock agent={agent()} parentSessionId="sess-1" />
     );
-    expect(container.querySelector('[data-flow-subagent="ag-1"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-flow-subagent="ag-1"]')
+    ).not.toBeNull();
     const root = container.querySelector('[data-flow-subagent]') as HTMLElement;
-    expect(root.style.maxHeight).toBe(`${TOOL_OUTPUT_PIXEL_CAP}px`);
+    // 旧口径（FLOW_OUTPUT_STYLE 输出限高）已随 InlineAgentPanel 展开体退役
+    expect(root.style.maxHeight).toBe('');
     await waitFor(() => {
       expect(
-        container.querySelector('[data-testid="inline-agent-panel"]')
+        container.querySelector('[data-testid="subagent-dispatch-card"]')
       ).not.toBeNull();
     });
     expect(
       container
-        .querySelector('[data-testid="inline-agent-panel"]')
-        ?.getAttribute('data-default-open')
-    ).toBe('false');
+        .querySelector('[data-testid="subagent-dispatch-card"]')
+        ?.getAttribute('data-parent-tool-call-id')
+    ).toBe('t-sub');
   });
 });

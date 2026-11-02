@@ -21,6 +21,7 @@ import {
   NarrativeRenderSlotsContext,
 } from '../chat-message/narrativeRenderSlots';
 import { isContextStateCarrierMessage } from '../../store/storeAccess';
+import { onUiEvent } from '../../api/uiEvents';
 
 export type {
   ChatMessageListApprovalProps,
@@ -152,6 +153,39 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     scopedScrollToMessage,
     leafRootRef,
   ]);
+
+  // 反向定位（R4b）：侧栏详情头「在对话中定位」→ 滚动到派发卡所在消息，
+  // 再按 parentToolCallId 找到流内卡片闪烁高亮（卡片未挂载/已窗外时退化为
+  // 只滚消息，与固定消息跳转同一能力边界，不假装定位成功）。
+  useEffect(() => {
+    return onUiEvent('locate-subagent-dispatch', (detail) => {
+      if (!detail) return;
+      if (detail.sessionId && detail.sessionId !== activeSessionId) return;
+      const root = leafRootRef?.current;
+      if (detail.msgId) {
+        scopedScrollToMessage(detail.msgId, root);
+      }
+      const toolCallId = detail.parentToolCallId;
+      if (!toolCallId || !root) return;
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const safe =
+            typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+              ? CSS.escape(toolCallId)
+              : toolCallId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          const card = root.querySelector<HTMLElement>(
+            `[data-parent-tool-call-id="${safe}"]`
+          );
+          if (!card) return;
+          card.scrollIntoView({ block: 'nearest' });
+          card.setAttribute('data-locate-flash', '1');
+          window.setTimeout(() => {
+            card.removeAttribute('data-locate-flash');
+          }, 1200);
+        });
+      });
+    });
+  }, [activeSessionId, scopedScrollToMessage, leafRootRef]);
 
   const hideThinkingBlock = useSettingsField((s) =>
     Boolean(s.appSettings?.hideThinkingBlock)

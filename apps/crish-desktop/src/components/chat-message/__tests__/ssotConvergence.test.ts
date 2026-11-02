@@ -27,7 +27,8 @@ function collectSourceFiles(dir: string): string[] {
   const out: string[] = [];
   if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === '__tests__' || name.startsWith('.')) continue;
+    if (name === 'node_modules' || name === '__tests__' || name.startsWith('.'))
+      continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       out.push(...collectSourceFiles(full));
@@ -111,11 +112,11 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
      */
     function stripCommentsAndStrings(src: string): string {
       return src
-        .replace(/\/\*[\s\S]*?\*\//g, '')       // 块注释
-        .replace(/(^|[^:])\/\/.*$/gm, '$1')      // 行注释（避免误伤 http://）
-        .replace(/'(?:[^'\\]|\\.)*'/g, "''")     // 单引号字符串
-        .replace(/"(?:[^"\\]|\\.)*"/g, '""')     // 双引号字符串
-        .replace(/`(?:[^`\\]|\\.)*`/g, '``');    // 模板字符串
+        .replace(/\/\*[\s\S]*?\*\//g, '') // 块注释
+        .replace(/(^|[^:])\/\/.*$/gm, '$1') // 行注释（避免误伤 http://）
+        .replace(/'(?:[^'\\]|\\.)*'/g, "''") // 单引号字符串
+        .replace(/"(?:[^"\\]|\\.)*"/g, '""') // 双引号字符串
+        .replace(/`(?:[^`\\]|\\.)*`/g, '``'); // 模板字符串
     }
 
     it.each(DEAD_FIELDS)('旧字段已根除（忽略注释/字符串）：%s', (field) => {
@@ -135,11 +136,10 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
 
     it.each(DEAD_CLASSES)('旧样式类已物理切除：%s', (cls) => {
       const cssFiles = ALL_SOURCES.filter((f) => f.endsWith('.css'));
-      const hits = cssFiles.filter((f) => readFileSync(f, 'utf8').includes(cls));
-      expect(
-        hits,
-        `残留 CSS：${hits.join(', ')}`
-      ).toEqual([]);
+      const hits = cssFiles.filter((f) =>
+        readFileSync(f, 'utf8').includes(cls)
+      );
+      expect(hits, `残留 CSS：${hits.join(', ')}`).toEqual([]);
     });
   });
 
@@ -190,14 +190,14 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
     });
   });
 
-  describe('六、铁律四（子代理强制展开）在真实宿主链路中生效', () => {
-    it('timelineSegmenter 实现子代理短路（subagentCount >= 1）', () => {
+  describe('六、铁律四退役（R4b）：分派提取后子代理无强制展开特权', () => {
+    it('timelineSegmenter 不得以 subagentCount 短路 forceExpanded（负向断言，防回潮）', () => {
       const src = readFileSync(
         join(SRC, 'api/tool-presentation/timelineSegmenter.ts'),
         'utf8'
       );
-      expect(src).toMatch(/metrics\.subagentCount\s*>=\s*1/);
-      expect(src).toMatch(/forceExpanded\s*=\s*true/);
+      expect(src).not.toMatch(/metrics\.subagentCount\s*>=\s*1/);
+      expect(src).not.toMatch(/forceExpanded\s*=\s*true/);
     });
 
     it('FoldableProcessSection 消费 forceExpanded 并在强展时永不挂 hidden', () => {
@@ -237,12 +237,17 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
       expect(hexes, `发现裸 Hex：${hexes.join(', ')}`).toEqual([]);
     });
 
-    it.each(CONVERGED_CSS)('不得存在 [hidden] 的 display:none !important 覆盖：%s', (rel) => {
-      const src = readFileSync(join(SRC, rel), 'utf8');
-      const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
-      // 核心铁律：必须保留浏览器默认 content-visibility: hidden，否则原生检索无法穿透
-      expect(code).not.toMatch(/\[hidden\][^{]*\{[^}]*display\s*:\s*none\s*!important/);
-    });
+    it.each(CONVERGED_CSS)(
+      '不得存在 [hidden] 的 display:none !important 覆盖：%s',
+      (rel) => {
+        const src = readFileSync(join(SRC, rel), 'utf8');
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
+        // 核心铁律：必须保留浏览器默认 content-visibility: hidden，否则原生检索无法穿透
+        expect(code).not.toMatch(
+          /\[hidden\][^{]*\{[^}]*display\s*:\s*none\s*!important/
+        );
+      }
+    );
   });
 
   describe('八、api 层不得反向依赖 components 层（运行期依赖方向红线）', () => {
@@ -256,11 +261,17 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
         // 此处只扫描会真实求值的值导入。
         const valueImports = src
           .split('\n')
-          .filter((line) => /^\s*import\s/.test(line) && !/^\s*import\s+type\s/.test(line))
+          .filter(
+            (line) =>
+              /^\s*import\s/.test(line) && !/^\s*import\s+type\s/.test(line)
+          )
           .join('\n');
-        if (/from\s+['"][^'"]*components\//.test(valueImports)) offenders.push(name);
+        if (/from\s+['"][^'"]*components\//.test(valueImports))
+          offenders.push(name);
       }
-      expect(offenders, `运行期反向依赖文件：${offenders.join(', ')}`).toEqual([]);
+      expect(offenders, `运行期反向依赖文件：${offenders.join(', ')}`).toEqual(
+        []
+      );
     });
 
     it('toolPresentationTypes 对 icons 的依赖必须是 type-only（禁止运行期耦合）', () => {
@@ -268,7 +279,9 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
         join(SRC, 'api/tool-presentation/toolPresentationTypes.ts'),
         'utf8'
       );
-      expect(src).toMatch(/import\s+type\s*\{[^}]*IconName[^}]*\}\s*from\s*['"][^'"]*components\/ui\/icons['"]/);
+      expect(src).toMatch(
+        /import\s+type\s*\{[^}]*IconName[^}]*\}\s*from\s*['"][^'"]*components\/ui\/icons['"]/
+      );
     });
   });
 });

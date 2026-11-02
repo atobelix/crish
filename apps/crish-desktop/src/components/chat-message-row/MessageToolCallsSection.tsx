@@ -5,12 +5,18 @@
  * 核心特性：
  * - 整合 24px 极简思考行（ReasoningRow）与 24px 工具单行（ChatToolStack）；
  * - 尺寸变化统一交由外层消息行宿主 ResizeObserver 单轨测量，组件内部零私有 RO 与零越权高度作废；
- * - 保持关联子 agent 行渲染器（InlineAgentPanel）懒加载注入。
+ * - 【R4b 分派提取】子 agent 分派调用在此从工具渲染项序列中**提取**为独立
+ *   消息卡（SubagentDispatchCard，懒加载保持分包）：按发生顺序立在原位置，
+ *   前后的普通工具各自成段进 FoldableToolGroup——分派不再被工具组吞没、
+ *   不再以行替换形式藏在工具行里（CompactToolRow 的 renderLinkedAgentPanel
+ *   注入路径已随提取整段删除）。提取判定与旧行替换同口径：findAgentForTool
+ *   命中（parentToolCallId / 描述匹配）；未命中时分派调用降级为普通工具行。
  */
-import React, { lazy, useCallback, useMemo } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo } from 'react';
 import styles from './ChatMessageRow.module.css';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import { FoldableToolGroup } from '../chat-tool-call/FoldableToolGroup';
+import { findAgentForTool } from '../chat-tool-call/chatToolCallUtils';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 import {
@@ -20,15 +26,19 @@ import {
 import { ReasoningRow } from './ReasoningRow';
 
 /**
- * 关联子 agent 行渲染器：内嵌 InlineAgentPanel（懒加载保持分包）。
- * 注入点选择：chat-tool-call 不得反向依赖 agent-card（InlineAgentPanel →
- * ChatToolStack → CompactToolRow 环形依赖），组合根在此提供渲染器。
+ * 流内子 agent 分派卡（懒加载保持分包）。
+ * 组合根在此直接渲染：chat-tool-call 不再需要反向注入渲染器。
  */
-const InlineAgentPanel = lazy(() =>
-  import('../agent-card/InlineAgentPanel').then((m) => ({
-    default: m.InlineAgentPanel,
+const SubagentDispatchCard = lazy(() =>
+  import('../agent-card/SubagentDispatchCard').then((m) => ({
+    default: m.SubagentDispatchCard,
   }))
 );
+
+/** 提取后的渲染块：普通工具段（进 FoldableToolGroup）或独立分派卡 */
+type ToolSectionBlock =
+  | { type: 'tools'; items: ToolRenderItem[] }
+  | { type: 'dispatch'; agent: SessionAgent; tc: MessageToolCall };
 
 export interface MessageThinkingConfig {
   content: string;
@@ -116,37 +126,50 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
       [toolStackProps, msgId]
     );
 
-    // D7.4：hostProps / actions 引用稳定（useMemo），供 FoldableToolGroup / ChatToolStack memo 短路
-    const host = useMemo(() => {
-      if (!hasTools) return null;
-      return buildToolStackHostProps(toolRenderItems, msgId, {
-        ...toolStackProps,
-        onToggleTool: handleToggleTool,
-      });
-    }, [hasTools, toolRenderItems, msgId, toolStackProps, handleToggleTool]);
-
-    const hostWithAgentPanel = useMemo(() => {
-      if (!host) return null;
-      return {
-        ...host,
-        actions: {
-          ...host.actions,
-          renderLinkedAgentPanel: (
-            agent: SessionAgent,
-            parentSessionId: string,
-            tc: MessageToolCall
-          ) => (
-            <InlineAgentPanel
-              agent={agent}
-              parentSessionId={parentSessionId}
-              defaultOpen={
-                tc.status === 'running' || agent.status === 'running'
-              }
-            />
-          ),
-        },
+    // 4. 【R4b 提取】把渲染项序列切成「普通工具段 / 分派卡」块序列（保序）：
+    //    single 且 findAgentForTool 命中 → 独立卡；其余（含未命中 agent 的
+    //    分派调用、group 项）留在工具段。连续分派 = 连续卡块，不做汇总行。
+    const blocks = useMemo((): ToolSectionBlock[] => {
+      if (!hasTools) return [];
+      const out: ToolSectionBlock[] = [];
+      let run: ToolRenderItem[] = [];
+      const flushRun = () => {
+        if (run.length > 0) {
+          out.push({ type: 'tools', items: run });
+          run = [];
+        }
       };
-    }, [host]);
+      for (const item of toolRenderItems) {
+        if (item.kind === 'single') {
+          const agent = findAgentForTool(item.tc, toolStackProps.agents);
+          if (agent && toolStackProps.activeSessionId) {
+            flushRun();
+            out.push({ type: 'dispatch', agent, tc: item.tc });
+            continue;
+          }
+        }
+        run.push(item);
+      }
+      flushRun();
+      return out;
+    }, [
+      hasTools,
+      toolRenderItems,
+      toolStackProps.agents,
+      toolStackProps.activeSessionId,
+    ]);
+
+    // D7.4：每段 hostProps 引用稳定（useMemo），供 FoldableToolGroup / ChatToolStack memo 短路
+    const blockHosts = useMemo(() => {
+      return blocks.map((b) =>
+        b.type === 'tools'
+          ? buildToolStackHostProps(b.items, msgId, {
+              ...toolStackProps,
+              onToggleTool: handleToggleTool,
+            })
+          : null
+      );
+    }, [blocks, msgId, toolStackProps, handleToggleTool]);
 
     if (!hasTools && !hasThinking) return null;
 
@@ -168,13 +191,38 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
           />
         ) : null}
 
-        {hasTools && hostWithAgentPanel ? (
-          <FoldableToolGroup
-            items={toolRenderItems}
-            msgId={msgId}
-            hostProps={hostWithAgentPanel}
-          />
-        ) : null}
+        {blocks.map((block, i) => {
+          if (block.type === 'dispatch') {
+            return (
+              <Suspense
+                key={`dispatch-${block.tc.id}`}
+                fallback={
+                  <div
+                    style={{ minHeight: 24 }}
+                    data-dispatch-card-fallback={block.agent.id}
+                    aria-hidden
+                  />
+                }
+              >
+                <SubagentDispatchCard
+                  agent={block.agent}
+                  parentSessionId={toolStackProps.activeSessionId}
+                  parentToolCallId={block.tc.id}
+                />
+              </Suspense>
+            );
+          }
+          const host = blockHosts[i];
+          if (!host) return null;
+          return (
+            <FoldableToolGroup
+              key={`tools-${block.items[0]?.kind === 'single' ? block.items[0].tc.id : block.items[0]?.id}`}
+              items={block.items}
+              msgId={msgId}
+              hostProps={host}
+            />
+          );
+        })}
       </div>
     );
   });
