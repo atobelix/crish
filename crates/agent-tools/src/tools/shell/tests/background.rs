@@ -2,12 +2,15 @@ use super::super::shell_exec::terminate_process_tree;
 use super::super::shell_invoke::build_shell_invocation;
 use super::super::*;
 use super::{ctx, tool};
+use crate::audit::NoopAuditSink;
 use crate::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskRef, BackgroundTaskStatus,
-    KillResult, LogSlice,
+    KillResult, LogSlice, TaskState,
 };
 use crate::context::ToolContext;
+use crate::streaming::ToolStreamItem;
 use conex_test_utils::TempWorkspace;
+use futures_util::StreamExt;
 use serde_json::json;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -266,6 +269,384 @@ async fn kill_on_drop_false_child_survives_drop() {
     );
     // 清理：树杀（避免测试残留进程）
     let _ = terminate_process_tree(pid);
+}
+
+// ===== BG4：sync 内部促进（超窗 adopt 转后台）=====
+
+/// 保留式后台任务管理器（BG4 测试替身）：真实持有 adopt 的 Child，
+/// status 按 try_wait 实时判定、kill 真终止进程树——用于断言「进程在
+/// manager 中存活、后续经管理面可查可终止」（生产实现在壳层 registry）
+#[derive(Debug)]
+struct RetainingBackgroundManager {
+    tasks: Mutex<std::collections::HashMap<String, RetainedTask>>,
+    next_task_id: std::sync::atomic::AtomicUsize,
+}
+
+/// adopt 后保留的任务条目（Child 所有权在本替身，与生产 registry 同构）
+#[derive(Debug)]
+struct RetainedTask {
+    child: tokio::process::Child,
+    pid: Option<u32>,
+    command: String,
+    cwd: PathBuf,
+    is_daemon: bool,
+    killed: bool,
+}
+
+impl RetainingBackgroundManager {
+    fn new() -> Self {
+        Self {
+            tasks: Mutex::new(std::collections::HashMap::new()),
+            next_task_id: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn adopt_count(&self) -> usize {
+        self.tasks.lock().unwrap().len()
+    }
+
+    fn pid_of(&self, task_id: &str) -> Option<u32> {
+        self.tasks.lock().unwrap().get(task_id).and_then(|t| t.pid)
+    }
+}
+
+#[async_trait]
+impl BackgroundTaskManager for RetainingBackgroundManager {
+    async fn adopt(&self, req: BackgroundAdoptRequest) -> Result<BackgroundTaskRef, ToolError> {
+        let n = self
+            .next_task_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let task_id = format!("task-{n}");
+        let pid = req.child.id();
+        self.tasks.lock().unwrap().insert(
+            task_id.clone(),
+            RetainedTask {
+                child: req.child,
+                pid,
+                command: req.command,
+                cwd: req.cwd,
+                is_daemon: req.is_daemon,
+                killed: false,
+            },
+        );
+        Ok(BackgroundTaskRef {
+            task_id: task_id.clone(),
+            log_path: PathBuf::from(format!("logs/tasks/{task_id}.log")),
+        })
+    }
+
+    async fn list(&self, _include_finished: bool) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
+        let tasks = self.tasks.lock().unwrap();
+        Ok(tasks
+            .iter()
+            .map(|(task_id, task)| BackgroundTaskInfo {
+                task_id: task_id.clone(),
+                command: task.command.clone(),
+                cwd: task.cwd.display().to_string(),
+                status: if task.killed {
+                    TaskState::Killed
+                } else {
+                    TaskState::Running
+                },
+                started_at_ms: 0,
+                duration_ms: 0,
+                finished_at_ms: None,
+                exit_code: None,
+                log_path: format!("logs/tasks/{task_id}.log"),
+                line_count: 0,
+                last_output_at_ms: 0,
+                is_daemon: task.is_daemon,
+                resource: None,
+                prompt: None,
+                owner_run_id: None,
+                suspicious: false,
+            })
+            .collect())
+    }
+
+    async fn status(&self, task_id: &str) -> Result<BackgroundTaskStatus, ToolError> {
+        let mut tasks = self.tasks.lock().unwrap();
+        let task = match tasks.get_mut(task_id) {
+            Some(t) => t,
+            None => return Err(ToolError::not_found(task_id)),
+        };
+        let (state, exit_code) = if task.killed {
+            (TaskState::Killed, None)
+        } else {
+            match task.child.try_wait() {
+                Ok(Some(status)) => (
+                    if status.success() {
+                        TaskState::Completed
+                    } else {
+                        TaskState::Failed
+                    },
+                    status.code(),
+                ),
+                Ok(None) => (TaskState::Running, None),
+                Err(_) => (TaskState::Failed, None),
+            }
+        };
+        Ok(BackgroundTaskStatus {
+            task_id: task_id.to_string(),
+            status: state,
+            exit_code,
+            log_path: format!("logs/tasks/{task_id}.log"),
+            duration_ms: 0,
+            line_count: 0,
+            last_output_at_ms: 0,
+            resource: None,
+            tail: String::new(),
+            prompt: None,
+            termination_diagnostics: Vec::new(),
+        })
+    }
+
+    async fn read_log(
+        &self,
+        task_id: &str,
+        _start_line: Option<u64>,
+        _max_lines: u64,
+    ) -> Result<LogSlice, ToolError> {
+        Err(ToolError::not_found(task_id))
+    }
+
+    async fn send_input(
+        &self,
+        _task_id: &str,
+        _text: &str,
+        _append_newline: bool,
+    ) -> Result<(), ToolError> {
+        Ok(())
+    }
+
+    async fn kill(&self, task_id: &str) -> Result<KillResult, ToolError> {
+        // 先摘出条目再终止/回收（不持锁 await），完成后回填 killed 标记
+        let mut task = {
+            let mut tasks = self.tasks.lock().unwrap();
+            match tasks.remove(task_id) {
+                Some(t) => t,
+                None => return Err(ToolError::not_found(task_id)),
+            }
+        };
+        if task.killed {
+            let code = task
+                .child
+                .try_wait()
+                .ok()
+                .flatten()
+                .and_then(|s| s.code());
+            self.tasks.lock().unwrap().insert(task_id.to_string(), task);
+            return Ok(KillResult::AlreadyExited {
+                task_id: task_id.to_string(),
+                exit_code: code,
+            });
+        }
+        if let Ok(Some(status)) = task.child.try_wait() {
+            self.tasks.lock().unwrap().insert(task_id.to_string(), task);
+            return Ok(KillResult::AlreadyExited {
+                task_id: task_id.to_string(),
+                exit_code: status.code(),
+            });
+        }
+        if let Some(pid) = task.pid {
+            let _ = terminate_process_tree(pid);
+        }
+        let _ = task.child.wait().await;
+        task.killed = true;
+        self.tasks.lock().unwrap().insert(task_id.to_string(), task);
+        Ok(KillResult::Killed {
+            task_id: task_id.to_string(),
+            via_force: true,
+        })
+    }
+}
+
+/// 注入 RetainingBackgroundManager 的测试上下文
+fn bg_ctx(ws: &TempWorkspace, manager: &Arc<RetainingBackgroundManager>) -> ToolContext {
+    ToolContext {
+        background: Some(Arc::clone(manager) as Arc<dyn BackgroundTaskManager>),
+        ..ctx(ws)
+    }
+}
+
+/// 构造带自定义促进窗口系统默认的工具（把 20s 系统默认换成小值以便
+/// 验证缺省路径，不改生产默认数值）
+fn tool_with_promote_default(promote_default_ms: u64) -> ShellCommandTool {
+    ShellCommandTool::with_background_manager(
+        30_000,
+        200_000,
+        None,
+        Arc::new(NoopAuditSink),
+        None,
+        promote_default_ms,
+    )
+}
+
+/// BG4 验收（execute 路径）：sync（缺省模式）+ 显式促进窗口——窗口
+/// 到点返回 background 信封（不等命令跑完）、adopt 恰好一次、进程在
+/// manager 中存活且状态可查、kill 可终止（进程消失、状态转 Killed）
+#[tokio::test]
+async fn sync_promote_explicit_window_adopts_and_task_survives() {
+    let ws = TempWorkspace::new("bg4_sync_promote");
+    let manager = Arc::new(RetainingBackgroundManager::new());
+    let ctx = bg_ctx(&ws, &manager);
+    let t = tool();
+    let started = std::time::Instant::now();
+    let out = t
+        .execute(
+            &ctx,
+            json!({
+                "command": sleep_cmd(30),
+                "waitMsBeforeAsync": 300,
+                "timeoutMs": 30000
+            }),
+        )
+        .await
+        .unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(out["mode"], "background", "sync 超窗应转后台：{out}");
+    assert!(
+        out.get("timedOut").is_none(),
+        "转后台信封不得带 timedOut：{out}"
+    );
+    let task_id = out["taskId"].as_str().unwrap().to_string();
+    assert!(task_id.starts_with("task-"), "taskId 命名风格 task-<seq>");
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "应在促进窗口到点即返回而非等 30s 命令跑完，实际 {elapsed:?}"
+    );
+    assert_eq!(manager.adopt_count(), 1, "adopt 必须恰好调用一次");
+    // 进程在 manager 中存活、状态可查
+    let pid = manager.pid_of(&task_id).expect("adopt 应记录 pid");
+    assert!(process_alive(pid), "转后台后进程必须存活");
+    let status = manager.status(&task_id).await.unwrap();
+    assert_eq!(status.status, TaskState::Running, "任务应处于运行中");
+    // 可终止：kill 后进程消失、状态转 Killed
+    let killed = manager.kill(&task_id).await.unwrap();
+    assert!(
+        matches!(killed, KillResult::Killed { .. }),
+        "kill 应成功终止：{killed:?}"
+    );
+    for _ in 0..50 {
+        if !process_alive(pid) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(!process_alive(pid), "kill 后进程必须消失");
+    let status = manager.status(&task_id).await.unwrap();
+    assert_eq!(status.status, TaskState::Killed, "终止后状态应为 Killed");
+}
+
+/// BG4 验收：sync + 未传 waitMsBeforeAsync——走系统默认促进窗口
+/// （本测试经构造注入小值验证缺省路径，生产默认 20s 不变）
+#[tokio::test]
+async fn sync_promote_system_default_window_adopts() {
+    let ws = TempWorkspace::new("bg4_sync_promote_default");
+    let manager = Arc::new(RetainingBackgroundManager::new());
+    let ctx = bg_ctx(&ws, &manager);
+    let t = tool_with_promote_default(300);
+    let out = t
+        .execute(
+            &ctx,
+            json!({ "command": sleep_cmd(30), "timeoutMs": 30000 }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        out["mode"], "background",
+        "系统默认促进窗口到点应转后台：{out}"
+    );
+    assert_eq!(manager.adopt_count(), 1, "adopt 必须恰好调用一次");
+    let task_id = out["taskId"].as_str().unwrap().to_string();
+    let _ = manager.kill(&task_id).await;
+}
+
+/// BG4 验收：显式 timeoutMs 小于促进窗口——窗口与 timeoutMs 重合，
+/// 到点即契约超时本身：仍树杀 + timedOut，绝不 adopt
+#[tokio::test]
+async fn sync_small_timeout_ms_keeps_contract_timeout() {
+    let ws = TempWorkspace::new("bg4_sync_small_timeout");
+    let manager = Arc::new(RetainingBackgroundManager::new());
+    let ctx = bg_ctx(&ws, &manager);
+    let t = tool();
+    let out = t
+        .execute(
+            &ctx,
+            json!({ "command": sleep_cmd(10), "timeoutMs": 800 }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        out["timedOut"], true,
+        "timeoutMs 小于促进窗口时到点即契约超时：{out}"
+    );
+    assert_eq!(out["mode"], "sync");
+    assert_eq!(manager.adopt_count(), 0, "契约超时不得 adopt");
+}
+
+/// BG4 验收：manager 不在场——促进窗口不生效，sync 按 timeoutMs
+/// 全程等待后树杀 + timedOut（现行语义零回归；若误在 300ms 窗口
+/// 收口，本测试耗时断言会失败）
+#[tokio::test]
+async fn sync_without_manager_promote_window_ignored() {
+    let ws = TempWorkspace::new("bg4_sync_no_manager");
+    let t = tool();
+    let started = std::time::Instant::now();
+    let out = t
+        .execute(
+            &ctx(&ws),
+            json!({
+                "command": sleep_cmd(30),
+                "waitMsBeforeAsync": 300,
+                "timeoutMs": 4000
+            }),
+        )
+        .await
+        .unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(out["timedOut"], true, "未接线时超时仍走树杀：{out}");
+    assert_eq!(out["mode"], "sync");
+    assert!(
+        elapsed >= Duration::from_millis(3000),
+        "manager 不在场时促进窗口不得生效，应按 timeoutMs 等待后收口，实际 {elapsed:?}"
+    );
+}
+
+/// BG4 验收（流式路径 execute_stream）：sync 流式等待超促进窗口——
+/// Terminal 为 background 信封、adopt 恰好一次（生产链路经
+/// execute_stream 消费，本路径与 execute 同口径）
+#[tokio::test]
+async fn stream_sync_promote_adopts() {
+    let ws = TempWorkspace::new("bg4_stream_promote");
+    let manager = Arc::new(RetainingBackgroundManager::new());
+    let ctx = bg_ctx(&ws, &manager);
+    let t = tool();
+    let mut stream = t
+        .execute_stream(
+            &ctx,
+            json!({
+                "command": sleep_cmd(30),
+                "waitMsBeforeAsync": 300,
+                "timeoutMs": 30000
+            }),
+        )
+        .await;
+    let mut terminal = None;
+    while let Some(item) = stream.next().await {
+        if let ToolStreamItem::Terminal(result) = item {
+            terminal = Some(result);
+            break;
+        }
+    }
+    let out = terminal
+        .expect("流必须产出 Terminal")
+        .expect("促进收口不得为 Err");
+    assert_eq!(out["mode"], "background", "流式 sync 超窗应转后台：{out}");
+    assert!(out["taskId"].as_str().is_some(), "信封应含 taskId");
+    assert_eq!(manager.adopt_count(), 1, "adopt 必须恰好调用一次");
+    let task_id = out["taskId"].as_str().unwrap().to_string();
+    let _ = manager.kill(&task_id).await;
 }
 
 /// 进程存活探测（Windows tasklist / Unix /proc）

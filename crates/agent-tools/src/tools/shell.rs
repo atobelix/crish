@@ -28,6 +28,24 @@ const MAX_TIMEOUT_MS: u64 = 600_000;
 /// auto-background 模式等待窗口缺省值（毫秒，T-AB-02）
 const DEFAULT_WAIT_MS_BEFORE_ASYNC: u64 = 3_000;
 
+/// sync 模式促进窗口的系统默认（毫秒，BG4）
+///
+/// 本工具存在**两个彼此独立的超时概念，不得混为一谈**：
+/// (i) 促进窗口（本常量量级，20s）：只决定 sync 等待「何时转后台」——
+///     窗口到点且 BackgroundTaskManager 在场时，子进程所有权 adopt 给
+///     manager、工具立即返回 background 信封（不杀进程）；manager 不在场
+///     时窗口不生效，sync 仍按 timeoutMs 全程等待；
+/// (ii) `timeoutMs`：工具契约层的内在超时（AI 显式设置的绝对长跑防护
+///     上限）——sync 下窗口与 timeoutMs 重合时到点即契约超时本身，维持
+///     树杀 + timedOut；进程被 adopt 转后台后，其生死由
+///     BackgroundTaskManager 按既有语义管理（转后台任务默认无限运行），
+///     与通用后台注册表的「无时长上限」是两套机制、互不套用。
+///
+/// 数值对齐通用后台阈值 T=20s（工具调用超时转后台方案 §5.1）；装配面
+/// 可经 `BuiltinToolConfig.default_shell_promote_window_ms` 覆盖，模型
+/// 显式传入 waitMsBeforeAsync 时以其为准（见 prepare）。
+pub(crate) const DEFAULT_PROMOTE_WINDOW_MS: u64 = 20_000;
+
 /// 命令执行工具
 pub(crate) struct ShellCommandTool {
     def: ToolDefinition,
@@ -42,6 +60,9 @@ pub(crate) struct ShellCommandTool {
     /// 后台任务管理器（T-AB-02：None = 未接线，超时保持「树杀」现状；
     /// 执行期优先读 ToolContext.background，回退本字段）
     background_manager: Option<Arc<dyn BackgroundTaskManager>>,
+    /// sync 促进窗口系统默认（毫秒，BG4：见 DEFAULT_PROMOTE_WINDOW_MS
+    /// 的双超时概念注释；prepare 解析为 PreparedCommand.promote_window_ms）
+    promote_window_default_ms: u64,
 }
 
 impl ShellCommandTool {
@@ -76,25 +97,29 @@ impl ShellCommandTool {
             trash_root,
             audit_sink,
             None,
+            DEFAULT_PROMOTE_WINDOW_MS,
         )
     }
 
     /// 新建命令工具并注入后台任务管理器（T-AB-02 注册面接线点：
-    /// BuiltinToolConfig.background_manager 透传；None = 未接线保持现状）
+    /// BuiltinToolConfig.background_manager 透传；None = 未接线保持现状；
+    /// BG4：promote_window_default_ms 同经 BuiltinToolConfig 透传）
     pub(crate) fn with_background_manager(
         default_timeout_ms: u64,
         max_output_bytes: usize,
         trash_root: Option<PathBuf>,
         audit_sink: Arc<dyn SecurityAuditSink>,
         background_manager: Option<Arc<dyn BackgroundTaskManager>>,
+        promote_window_default_ms: u64,
     ) -> Self {
         Self {
             def: ToolDefinition {
                 name: "shell_command".to_string(),
                 description: "执行项目命令并等待完成（git status、快速脚本等）。\
-                              timeoutMs 为 AI 显式设置的绝对长跑防护上限，waitMsBeforeAsync 为 auto-background 模式的\
-                              转后台等待窗口——两个维度独立。转后台任务默认无限运行，终止依赖 kill 工具\
-                              或健康判定通知。"
+                              timeoutMs 为 AI 显式设置的绝对长跑防护上限（工具契约层内在超时），waitMsBeforeAsync 为\
+                              转后台等待窗口（促进窗口）——两个维度独立：sync 模式下等待超过促进窗口且后台管理器\
+                              在场时转后台托管而非超时杀死；timeoutMs 较小时仍按其契约超时收口。转后台任务默认\
+                              无限运行，终止依赖 kill 工具或健康判定通知。"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
@@ -106,9 +131,9 @@ impl ShellCommandTool {
                         "mode": {
                             "type": "string",
                             "enum": ["sync", "auto-background", "daemon"],
-                            "description": "执行模式（默认 sync）：sync 同步等待、超时树杀；auto-background 等待窗口（waitMsBeforeAsync）后转后台托管（不杀进程）；daemon 立即转后台守护（run 结束不回收）"
+                            "description": "执行模式（默认 sync）：sync 同步等待——促进窗口内完成返回同步结果，超窗且后台管理器在场时转后台托管（不杀进程），否则超时树杀；auto-background 等待窗口（waitMsBeforeAsync）后转后台托管（不杀进程）；daemon 立即转后台守护（run 结束不回收）"
                         },
-                        "waitMsBeforeAsync": { "type": "number", "description": "auto-background 模式的等待窗口毫秒数（默认 3000）：窗口内完成返回同步结果，窗口超时转后台" },
+                        "waitMsBeforeAsync": { "type": "number", "description": "转后台等待窗口（促进窗口）毫秒数（auto-background 默认 3000；sync 模式缺省走系统默认 20000）：窗口内完成返回同步结果，窗口超时转后台" },
                         "isDaemon": { "type": "boolean", "description": "守护标记（daemon 模式专用）：true 时 spawn 后立即转后台，不经过等待窗口" },
                         "resourceMonitor": { "type": "boolean", "description": "资源监控开关（默认 false）：true 时后台任务启用 CPU/内存/IO 采样" }
                     },
@@ -117,12 +142,14 @@ impl ShellCommandTool {
                 }),
                 dangerous: true,
                 fatal_on_error: false,
+                background_after_ms: None,
             },
             default_timeout_ms,
             max_output_bytes,
             trash_root,
             audit_sink,
             background_manager,
+            promote_window_default_ms,
         }
     }
 }
@@ -148,6 +175,10 @@ pub(crate) struct PreparedCommand {
     max_output_bytes: usize,
     mode: ShellMode,
     wait_ms: u64,
+    /// sync 促进窗口（毫秒，BG4）：min(timeoutMs, waitMsBeforeAsync ??
+    /// 系统默认)——只决定 sync 何时转后台，仅 manager 在场时生效，
+    /// 与 timeoutMs（契约层内在超时）是两个独立概念
+    promote_window_ms: u64,
     is_daemon: bool,
     resource_monitor: bool,
     manager: Option<Arc<dyn BackgroundTaskManager>>,
@@ -199,9 +230,18 @@ impl ShellCommandTool {
             Ok(m) => m,
             Err(e) => return Prepared::Done(Err(e)),
         };
-        let wait_ms = optional_u64(args, "waitMsBeforeAsync")
-            .unwrap_or(DEFAULT_WAIT_MS_BEFORE_ASYNC)
-            .clamp(1, MAX_TIMEOUT_MS);
+        // waitMsBeforeAsync 显式值（钳制后）：auto-background 的等待窗口
+        // 缺省 3000ms（T-AB-02 既有口径）；sync 促进窗口缺省走系统默认
+        // 20s（BG4）——两模式缺省值不同，必须分开解析，不得共用一个缺省
+        let wait_explicit = optional_u64(args, "waitMsBeforeAsync")
+            .map(|w| w.clamp(1, MAX_TIMEOUT_MS));
+        let wait_ms = wait_explicit.unwrap_or(DEFAULT_WAIT_MS_BEFORE_ASYNC);
+        // BG4 促进窗口（sync 专用）：min(timeoutMs, 显式 waitMsBeforeAsync
+        // ?? 系统默认）——窗口只决定「何时转后台」；与 timeoutMs 重合时
+        // 到点即契约超时本身（执行层据 window < timeoutMs 判定，见
+        // shell_exec 的双超时注释）
+        let promote_window_ms =
+            timeout_ms.min(wait_explicit.unwrap_or(self.promote_window_default_ms));
         let is_daemon =
             mode == ShellMode::Daemon || optional_bool(args, "isDaemon").unwrap_or(false);
         let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
@@ -278,6 +318,7 @@ impl ShellCommandTool {
             max_output_bytes,
             mode,
             wait_ms,
+            promote_window_ms,
             is_daemon,
             resource_monitor,
             manager,
@@ -310,6 +351,7 @@ impl Tool for ShellCommandTool {
                     c.max_output_bytes,
                     c.mode,
                     c.wait_ms,
+                    c.promote_window_ms,
                     c.is_daemon,
                     c.resource_monitor,
                     c.manager,

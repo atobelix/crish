@@ -330,6 +330,7 @@ pub(crate) async fn run_command_maybe_background(
     max_output_bytes: usize,
     mode: ShellMode,
     wait_ms: u64,
+    promote_window_ms: u64,
     is_daemon: bool,
     resource_monitor: bool,
     manager: Option<Arc<dyn BackgroundTaskManager>>,
@@ -346,8 +347,12 @@ pub(crate) async fn run_command_maybe_background(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // BC03-1：废除普通分支的 kill_on_drop(false)，同步路径置为 true
-    if mode == ShellMode::Daemon || mode == ShellMode::AutoBackground {
+    // BC03-1：废除普通分支的 kill_on_drop(false)，同步路径置为 true；
+    // BG4：sync + manager 在场时超窗可能 adopt 转后台，adopt 契约要求
+    // kill_on_drop(false)——本 future 被上层丢弃（abort / 竞速取消）时
+    // 由 ProcessTreeGuard 的 Drop 树杀兜底（guard.disarm 仅在 adopt /
+    // 正常回收时调用），不会泄漏进程
+    if mode == ShellMode::Daemon || mode == ShellMode::AutoBackground || manager.is_some() {
         child_cmd.kill_on_drop(false);
     } else {
         child_cmd.kill_on_drop(true);
@@ -426,11 +431,26 @@ pub(crate) async fn run_command_maybe_background(
     let mut acc_out = OutputAccumulator::new();
     let mut acc_err = OutputAccumulator::new();
 
-    // 等待窗口：sync = timeoutMs（AI 显式设置的绝对上限）；auto-background =
-    // min(waitMsBeforeAsync, timeoutMs)——timeoutMs 仍是等待上限，超窗一律
-    // 不杀（转后台），「转后台任务默认无限运行」
+    // 等待窗口（BG4 双超时概念，务必分开）：
+    // (i) 促进窗口只决定「何时转后台」：sync = promote_window_ms
+    //     （prepare 已解析为 min(timeoutMs, waitMsBeforeAsync ?? 系统默认
+    //     20s)），且**仅 manager 在场时生效**——不在场时 sync 窗口退化为
+    //     timeoutMs 全程等待（现行语义零回归）；auto-background =
+    //     min(waitMsBeforeAsync, timeoutMs)（既有口径不变）；
+    // (ii) timeoutMs 是工具契约层的内在超时：窗口与 timeoutMs 重合时，
+    //     到点即契约超时本身（树杀 + timedOut，不促进）；进程被 adopt
+    //     后其生死由 BackgroundTaskManager 按既有语义管理，与通用后台
+    //     注册表的「无时长上限」是两套机制、互不套用。
+    // loop 层 60s 硬超时因促进窗口 ≤20s 先于它触发 adopt 返回而对
+    // shell 不再有截断作用——工具自洽收口，loop 不感知。
     let window_ms = match effective_mode {
-        ShellMode::Sync => timeout_ms,
+        ShellMode::Sync => {
+            if manager.is_some() {
+                promote_window_ms
+            } else {
+                timeout_ms
+            }
+        }
         ShellMode::AutoBackground => wait_ms.min(timeout_ms),
         ShellMode::Daemon => unreachable!("daemon 已在上面短路"),
     };
@@ -470,9 +490,16 @@ pub(crate) async fn run_command_maybe_background(
                 session_id,
             )
         }
-        // 窗口超时
+        // 窗口到点：两条收口路线（BG4 双超时概念的落点）——
+        // (a) adopt 转后台：auto-background 恒走此路（既有语义）；sync 仅当
+        //     促进窗口先于契约超时到点（window_ms < timeout_ms，此时
+        //     manager 必在场——窗口计算已保证）才走此路；
+        // (b) 契约超时收口：窗口与 timeoutMs 重合（到点即契约超时本身）
+        //     或 manager 不在场——树杀 + timedOut（现行语义不变）。
         StreamEnd::TimedOut => {
-            if effective_mode == ShellMode::AutoBackground {
+            let try_adopt = effective_mode == ShellMode::AutoBackground
+                || (effective_mode == ShellMode::Sync && window_ms < timeout_ms);
+            if try_adopt {
                 // 不杀：管道收回 Child → adopt 转移（所有权归 registry）。
                 // 超时已完成读取的字节经 BufReader::into_inner 丢弃为空的缓冲
                 // 无损失（fill_buf/consume 全程消费），registry 从管道续读
@@ -507,12 +534,12 @@ pub(crate) async fn run_command_maybe_background(
                     }
                 }
             } else {
-                // 同步模式：树杀语义不变（先 drop 流式 reader 句柄再树杀，
+                // 契约超时：树杀语义不变（先 drop 流式 reader 句柄再树杀，
                 // 避免句柄泄漏与子进程写端永久阻塞）
                 drop(out_reader);
                 drop(err_reader);
                 guard.kill_tree().await;
-                kill_and_reap_best_effort(&mut child, "timeout:sync 模式").await;
+                kill_and_reap_best_effort(&mut child, "timeout:sync 契约超时").await;
                 Ok(build_timeout_result(
                     command,
                     cwd,
@@ -532,6 +559,9 @@ pub(crate) async fn run_command_maybe_background(
 /// 逐字节一致）。与 execute 的差异只在「读取与推送」：execute 的
 /// stream_until_deadline 静默累积，本路径每个数据块单独推一条
 /// ToolProgress::Text；预算 / abort / 超时语义均与 execute 对齐。
+/// BG4：等待窗口与 execute 同口径——manager 在场时窗口 = 促进窗口，
+/// 到点 adopt 转后台（Terminal = background 信封）；不在场时窗口 =
+/// timeoutMs，到点即契约超时（树杀 + timedOut），见 finish_window_expired。
 // G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：tokio spawn——
 // 命令已过命令门禁（prepare）才产生进程，与 run_command_maybe_background
 // 同一豁免面（函数级 allow + 理由）。
@@ -549,8 +579,10 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // BC03-1：废除普通分支的 kill_on_drop(false)，置为 true
-        .kill_on_drop(true);
+        // BC03-1：废除普通分支的 kill_on_drop(false)，置为 true；
+        // BG4：manager 在场时超窗可能 adopt，adopt 契约要求
+        // kill_on_drop(false)——流被丢弃时由 guard 的 Drop 树杀兜底
+        .kill_on_drop(c.manager.is_none());
     // Windows：隐藏控制台闪现（与 execute 同步路径同构）
     #[cfg(windows)]
     {
@@ -608,6 +640,15 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         }
     };
 
+    // BG4：sync 流式等待窗口与 execute 路径同口径——manager 在场时为
+    // 促进窗口（到点 adopt 转后台），不在场时退化为 timeoutMs（到点即
+    // 契约超时）。两个超时概念的区别见 run_command_maybe_background
+    // 的窗口注释。
+    let window_ms = if c.manager.is_some() {
+        c.promote_window_ms
+    } else {
+        c.timeout_ms
+    };
     let state = ShellStreamState::Running(RunningState {
         child,
         guard,
@@ -620,9 +661,12 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         cum_bytes: 0,
         budget_exceeded: false,
         max_output_bytes: c.max_output_bytes,
-        // sync 路径：等待窗口 = timeoutMs（AI 显式设置的绝对长跑防护上限）
-        deadline: tokio::time::Instant::now() + Duration::from_millis(c.timeout_ms),
+        deadline: tokio::time::Instant::now() + Duration::from_millis(window_ms),
+        window_ms,
         timeout_ms: c.timeout_ms,
+        manager: c.manager,
+        is_daemon: c.is_daemon,
+        resource_monitor: c.resource_monitor,
         command: c.command,
         cwd: c.cwd,
         shell_label,
@@ -651,7 +695,16 @@ struct RunningState {
     budget_exceeded: bool,
     max_output_bytes: usize,
     deadline: tokio::time::Instant,
+    /// 生效等待窗口（毫秒，BG4）：manager 在场 = 促进窗口，否则 =
+    /// timeout_ms；与 timeout_ms 的大小关系决定到点走 adopt 还是契约
+    /// 超时收口（见 finish_window_expired）
+    window_ms: u64,
+    /// 工具契约层内在超时（毫秒）：窗口与之重合时到点即契约超时本身
     timeout_ms: u64,
+    /// 后台任务管理器（BG4 adopt 转移目标；None = 不可转后台）
+    manager: Option<Arc<dyn BackgroundTaskManager>>,
+    is_daemon: bool,
+    resource_monitor: bool,
     command: String,
     cwd: PathBuf,
     shell_label: String,
@@ -680,8 +733,10 @@ impl ShellStreamState {
     /// 判定顺序（§3.1.6 流不变式：Progress* + Terminal 恒为末项）：
     /// 1. abort——每块读取前自查 ctx.abort_token，中止即停止推送、
     ///    杀进程尽快收口（已聚合字节进 Terminal，供非中止消费方兜底）；
-    /// 2. 超时——sync 窗口（= timeoutMs）耗尽 → 树杀 + timedOut 结果收口
-    ///    （与 execute 同步路径超时形状一致）；
+    /// 2. 窗口到点——BG4：促进窗口先于契约超时到点且 manager 在场 →
+    ///    adopt 转后台（Terminal = background 信封）；否则契约超时 →
+    ///    树杀 + timedOut 结果收口（与 execute 路径同口径，见
+    ///    finish_window_expired）；
     /// 3. 双管道 EOF——wait 回收 + 聚合结果收口（build_sync_result 复用）；
     /// 4. 读块循环——select 交替读 stdout/stderr 单块，每块推一条
     ///    Progress；预算超限帧不推送（push_chunk 返回 None）续帧排空。
@@ -735,18 +790,10 @@ impl ShellStreamState {
                 );
                 return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
             }
-            // 超时：等待窗口（sync = timeoutMs）耗尽 → 树杀 + timedOut 收口
+            // 窗口到点：BG4 收口（adopt 转后台或契约超时，见
+            // finish_window_expired）
             if tokio::time::Instant::now() >= r.deadline {
-                kill_child(r.child, &mut r.guard, r.child_pid).await;
-                let duration_ms = r.started.elapsed().as_millis() as u64;
-                let terminal = Ok(build_timeout_result(
-                    &r.command,
-                    &r.cwd,
-                    &r.shell_label,
-                    r.timeout_ms,
-                    duration_ms,
-                ));
-                return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+                return Some(finish_window_expired(r).await);
             }
             let remain = r
                 .deadline
@@ -773,18 +820,10 @@ impl ShellStreamState {
                     }
                     return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
                 }
-                // 等待窗口耗尽（与上方 now >= deadline 检查互补）
+                // 等待窗口耗尽（与上方 now >= deadline 检查互补）：
+                // BG4 收口（adopt 转后台或契约超时）
                 _ = tokio::time::sleep(remain) => {
-                    kill_child(r.child, &mut r.guard, r.child_pid).await;
-                    let duration_ms = r.started.elapsed().as_millis() as u64;
-                    let terminal = Ok(build_timeout_result(
-                        &r.command,
-                        &r.cwd,
-                        &r.shell_label,
-                        r.timeout_ms,
-                        duration_ms,
-                    ));
-                    return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+                    return Some(finish_window_expired(r).await);
                 }
                 // stdout 块 → Progress（逐块推送，§3.1.8 逐块到达）
                 res = read_one_chunk(&mut r.out_reader), if !r.out_eof => {
@@ -861,6 +900,65 @@ async fn read_one_chunk<R: AsyncBufRead + Unpin>(
     let chunk = buf.to_vec();
     reader.consume(len);
     Ok((chunk, false))
+}
+
+/// 流式等待窗口到点收口（BG4，与 execute 路径 TimedOut 分支同口径）：
+/// - 促进条件成立（manager 在场且促进窗口先于契约超时到点，
+///   window_ms < timeout_ms）→ 管道收回 Child、guard.disarm 后 adopt
+///   转后台，Terminal = 与 auto-background 同构的 background 信封；
+/// - 否则（窗口与 timeoutMs 重合 = 契约超时本身，或 manager 不在场时
+///   窗口已退化为 timeoutMs）→ 树杀 + timedOut（现行语义不变）。
+/// 两个超时概念的区别见 run_command_maybe_background 的窗口注释。
+async fn finish_window_expired(r: RunningState) -> (ToolStreamItem, ShellStreamState) {
+    let RunningState {
+        mut child,
+        mut guard,
+        out_reader,
+        err_reader,
+        manager,
+        window_ms,
+        timeout_ms,
+        is_daemon,
+        resource_monitor,
+        command,
+        cwd,
+        shell_label,
+        started,
+        child_pid,
+        ..
+    } = r;
+    let duration_ms = started.elapsed().as_millis() as u64;
+    if manager.is_some() && window_ms < timeout_ms {
+        let manager = manager.expect("促进条件已判定 manager 在场");
+        // 管道收回 Child（fill_buf/consume 全程消费，into_inner 无损），
+        // registry 从管道续读
+        child.stdout = Some(out_reader.into_inner());
+        child.stderr = Some(err_reader.into_inner());
+        guard.disarm();
+        let terminal = adopt_child(
+            manager,
+            child,
+            &command,
+            &cwd,
+            is_daemon,
+            resource_monitor,
+            shell_label,
+        )
+        .await;
+        (ToolStreamItem::Terminal(terminal), ShellStreamState::Done)
+    } else {
+        drop(out_reader);
+        drop(err_reader);
+        kill_child(child, &mut guard, child_pid).await;
+        let terminal = Ok(build_timeout_result(
+            &command,
+            &cwd,
+            &shell_label,
+            timeout_ms,
+            duration_ms,
+        ));
+        (ToolStreamItem::Terminal(terminal), ShellStreamState::Done)
+    }
 }
 
 /// 收口杀进程（abort / 超时共用）：先树杀（Windows JobObject / taskkill 树 / Unix

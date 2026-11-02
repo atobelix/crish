@@ -126,7 +126,10 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
 /// 命令执行三模式（T-AB-02：REQ-A01）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellMode {
-    /// 同步等待（窗口 = timeoutMs，超时树杀——改造前语义）
+    /// 同步等待：促进窗口（min(timeoutMs, waitMsBeforeAsync ?? 系统默认
+    /// 20s)，BG4）内完成返回同步结果；超窗且 BackgroundTaskManager 在场
+    /// 时 Child 经 manager.adopt 转后台托管（不杀）；窗口与 timeoutMs
+    /// 重合（到点即契约超时本身）或 manager 不在场时维持超时树杀
     Sync,
     /// 等待窗口（waitMsBeforeAsync）内完成返回同步结果；窗口超时不杀，
     /// Child 经 manager.adopt 转后台托管
