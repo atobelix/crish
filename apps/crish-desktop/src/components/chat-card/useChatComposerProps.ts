@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useChatInput } from './useChatInput';
 import { useSlashMenu } from './useSlashMenu';
 import { useChatAttachments } from './useChatAttachments';
@@ -43,10 +43,23 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
     setSlashMenuOpen,
     slashSelectedIndex,
     setSlashSelectedIndex,
-    filteredCommands,
+    filteredCommands: rawFilteredCommands,
     loadSkillSlash,
     skillCommandsEnabled,
   } = useSlashMenu({ chatInput });
+
+  // R1（打字解耦，性能 P0-2）：useSlashMenu 的 filteredCommands 是逐渲染
+  // .filter() 产物——数组身份恒新，但元素对象出自其 useMemo 命令池、身份
+  // 稳定。此处按元素逐项比对：内容未变时复用上一份数组引用，避免这份
+  // 恒新引用击穿 ChatComposer 的 memo 与 ChatCard 主输入框的元素 memo。
+  const filteredCommandsRef = useRef(rawFilteredCommands);
+  if (
+    filteredCommandsRef.current.length !== rawFilteredCommands.length ||
+    filteredCommandsRef.current.some((cmd, i) => cmd !== rawFilteredCommands[i])
+  ) {
+    filteredCommandsRef.current = rawFilteredCommands;
+  }
+  const filteredCommands = filteredCommandsRef.current;
 
   const {
     attachments,

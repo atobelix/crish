@@ -1,4 +1,11 @@
-import React, { Suspense, lazy, useRef, useState, useEffect } from 'react';
+import React, {
+  Suspense,
+  lazy,
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+} from 'react';
 import styles from './ChatCard.module.css';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
@@ -33,6 +40,19 @@ const ExtensionsMainSurface = lazy(() =>
 
 import { useChatCardDragDrop } from './useChatCardDragDrop';
 import { AppIcon } from '@/components/ui/icons';
+
+/**
+ * R1（打字解耦，性能 P0-2）：把上游逐渲染新建的回调收敛为身份恒定的
+ * trampoline——内部 ref 恒指向最新闭包，调用语义与直调完全一致（无陈旧
+ * 闭包风险），但引用永不变化，可安全进入下方分组 useMemo 的依赖数组。
+ */
+function useLatestCallback<A extends unknown[], R>(
+  fn: (...args: A) => R
+): (...args: A) => R {
+  const ref = useRef(fn);
+  ref.current = fn;
+  return useCallback((...args: A) => ref.current(...args), []);
+}
 
 export type ComposerSurfaceState = 'landing' | 'docking' | 'docked';
 
@@ -156,22 +176,34 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       []
     );
 
-    const mainModelBadgeNode = (
-      <ModelBadgePicker
-        engineModel={state.engineModel}
-        needsModelSetup={state.needsModelSetup}
-        needsKeySetup={state.needsKeySetup}
-        showModelDropdown={state.showModelDropdown}
-        setShowModelDropdown={state.setShowModelDropdown}
-      />
+    const mainModelBadgeNode = React.useMemo(
+      () => (
+        <ModelBadgePicker
+          engineModel={state.engineModel}
+          needsModelSetup={state.needsModelSetup}
+          needsKeySetup={state.needsKeySetup}
+          showModelDropdown={state.showModelDropdown}
+          setShowModelDropdown={state.setShowModelDropdown}
+        />
+      ),
+      [
+        state.engineModel,
+        state.needsModelSetup,
+        state.needsKeySetup,
+        state.showModelDropdown,
+        state.setShowModelDropdown,
+      ]
     );
 
-    const editModelBadgeNode = (
-      <ModelBadgePicker
-        engineModel={state.engineModel}
-        needsModelSetup={state.needsModelSetup}
-        needsKeySetup={state.needsKeySetup}
-      />
+    const editModelBadgeNode = React.useMemo(
+      () => (
+        <ModelBadgePicker
+          engineModel={state.engineModel}
+          needsModelSetup={state.needsModelSetup}
+          needsKeySetup={state.needsKeySetup}
+        />
+      ),
+      [state.engineModel, state.needsModelSetup, state.needsKeySetup]
     );
 
     // 显式表面过渡状态机（ComposerSurfaceCoordinator）：
@@ -216,23 +248,71 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     const isDocking = surfaceState === 'docking';
 
     // 底部主输入框：持续常驻，草稿状态完全独立保全
-    const mainComposerElement = (
-      <ChatComposer
-        {...state.composerProps}
-        emptyKind={state.emptyKind}
-        layoutVariant={isLanding ? 'multiline' : 'adaptive'}
-        onPasteImage={state.composerProps.handlePasteImage}
-        onPasteFiles={state.composerProps.handlePasteFiles}
-        onStop={state.composerProps.handleStopGeneration}
-        onForceStop={state.composerProps.handleForceCancelGeneration}
-        onFilesSelected={state.composerProps.handleDroppedFiles}
-        onPickFiles={state.composerProps.handlePickFiles}
-        onOpenPath={state.openPathInFilesPanel}
-        isProcessing={state.isProcessing}
-        permissionMode={state.permissionMode}
-        onPermissionChange={state.setPermissionMode}
-        rightActions={mainModelBadgeNode}
-      />
+    // R1（性能 P0-2）：元素 memo 化——依赖逐项取 composerProps 的字段值与
+    // 本组件侧字段，任一字段身份不变时元素引用恒定，ChatCard 因流式/审批
+    // 等无关状态重渲染时 React 可整棵跳过输入框子树（与 ChatComposer 的
+    // React.memo 形成双层防线）；草稿变化时 chatInput 本就是其受控值，
+    // 元素随之更新属预期。
+    const mainComposerElement = React.useMemo(
+      () => (
+        <ChatComposer
+          {...state.composerProps}
+          emptyKind={state.emptyKind}
+          layoutVariant={isLanding ? 'multiline' : 'adaptive'}
+          onPasteImage={state.composerProps.handlePasteImage}
+          onPasteFiles={state.composerProps.handlePasteFiles}
+          onStop={state.composerProps.handleStopGeneration}
+          onForceStop={state.composerProps.handleForceCancelGeneration}
+          onFilesSelected={state.composerProps.handleDroppedFiles}
+          onPickFiles={state.composerProps.handlePickFiles}
+          onOpenPath={state.openPathInFilesPanel}
+          isProcessing={state.isProcessing}
+          permissionMode={state.permissionMode}
+          onPermissionChange={state.setPermissionMode}
+          rightActions={mainModelBadgeNode}
+        />
+      ),
+      [
+        state.composerProps.chatInput,
+        state.composerProps.setChatInput,
+        state.composerProps.isComposing,
+        state.composerProps.setIsComposing,
+        state.composerProps.hasUndo,
+        state.composerProps.handleUndoDraft,
+        state.composerProps.draftInjectionTick,
+        state.composerProps.slashMenuOpen,
+        state.composerProps.setSlashMenuOpen,
+        state.composerProps.slashSelectedIndex,
+        state.composerProps.setSlashSelectedIndex,
+        state.composerProps.filteredCommands,
+        state.composerProps.loadSkillSlash,
+        state.composerProps.attachments,
+        state.composerProps.setAttachments,
+        state.composerProps.fileInputRef,
+        state.composerProps.handleFilesSelected,
+        state.composerProps.handlePathsSelected,
+        state.composerProps.handleDroppedFiles,
+        state.composerProps.handlePickFiles,
+        state.composerProps.handlePasteImage,
+        state.composerProps.handlePasteFiles,
+        state.composerProps.handlePastePath,
+        state.composerProps.canSend,
+        state.composerProps.showPlusMenu,
+        state.composerProps.setShowPlusMenu,
+        state.composerProps.runStreamingAssistant,
+        state.composerProps.handleSendChat,
+        state.composerProps.handleStopGeneration,
+        state.composerProps.handleSilentStopGeneration,
+        state.composerProps.handleForceCancelGeneration,
+        state.composerProps.onSend,
+        state.emptyKind,
+        isLanding,
+        state.openPathInFilesPanel,
+        state.isProcessing,
+        state.permissionMode,
+        state.setPermissionMode,
+        mainModelBadgeNode,
+      ]
     );
 
     // 原位编辑输入框：在被编辑用户消息行原位呼出，具备独立输入/附件态与叉号取消
@@ -269,6 +349,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     // R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组 + 派生上移（案甲）——
     // ① localHasKey 上移（模块级调用稳定）② onOpenTerminal/onOpenDiff 闭包上移
     // ③ goalMode 四派生值在此计算；ribbons 对象 useMemo 稳定引用
+    // 波1收口：依赖由整个 state 对象收敛为字段级——原 [state] 使每次按键
+    // （state 换新引用）都重算本对象并击穿下游 memo，与 R1 的分组稳定化口径对齐。
     const ribbons = React.useMemo(
       () => ({
         streaming: {
@@ -298,53 +380,174 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           },
         },
       }),
-
-      [state]
+      [
+        state.openSidePanel,
+        state.diffFiles,
+        state.engineHint,
+        state.needsKeySetup,
+        state.needsModelSetup,
+        state.onEmptySurface,
+        state.setShowModelDropdown,
+        state.goalModeActive,
+        state.goalMode,
+        state.composerProps,
+        state.activeSessionId,
+      ]
     );
 
-    // 有消息枝才进 stream 槽；空态 / 定时任务面保持现逻辑，不被槽吞掉
-    const chatStreamProps: ChatMessageListProps = {
-      messages: {
+    // R1（打字解耦，性能 P0-2）：chatStreamProps 六个分组逐组 useMemo 身份
+    // 稳定化。此前这里是渲染体内裸对象字面量：ChatCard 每次渲染（含每次
+    // 按键）都新建全部分组对象，ChatMessageList 的 memo 与
+    // MessageVirtualizer 的分组引用比较恒失效，按键即整列表窗口重算。
+    // 现在依赖只取各组的原始字段：草稿（chatInput）不进任何一组的依赖，
+    // 按键时六组与容器对象引用全不变，两级 memo 真正命中。
+    // 上游逐渲染新建的回调经 useLatestCallback 收敛为恒定引用：
+    // handleSendFollowUp 的 useCallback 依赖整个 composerProps 字面量、
+    // 生成/审批 handler 链入 chat-stream 与审批执行器内部，均无法在本批
+    // 边界内保证身份；trampoline 调用恒走最新闭包，语义不变。
+    const stableSendFollowUp = useLatestCallback(state.handleSendFollowUp);
+    const stableRegenerate = useLatestCallback(state.handleRegenerate);
+    const stableBranch = useLatestCallback(state.handleBranch);
+    const stableRetract = useLatestCallback(state.handleRetract);
+    const stableEditMessageAndResend = useLatestCallback(
+      state.handleEditMessageAndResend
+    );
+    const stableApprovalAllow = useLatestCallback(
+      state.approvalState.handleApprovalAllow
+    );
+    const stableApprovalDeny = useLatestCallback(
+      state.approvalState.handleApprovalDeny
+    );
+    const stableBatchApprove = useLatestCallback(
+      state.approvalState.handleBatchApprove
+    );
+    const stableBatchDeny = useLatestCallback(
+      state.approvalState.handleBatchDeny
+    );
+
+    const messagesGroup = React.useMemo<ChatMessageListProps['messages']>(
+      () => ({
         messages: state.displayMessages,
         allMessages: state.messages,
         agents: state.agents,
         activeSessionId: state.activeSessionId || '',
         showAllMessages: state.isFiltering,
-      },
-      projectPicker: {
+      }),
+      [
+        state.displayMessages,
+        state.messages,
+        state.agents,
+        state.activeSessionId,
+        state.isFiltering,
+      ]
+    );
+
+    const projectPickerGroup = React.useMemo<
+      ChatMessageListProps['projectPicker']
+    >(
+      () => ({
         showProjectPicker: state.showProjectPicker,
         onShowProjectPicker: state.setShowProjectPicker,
         onProjectChanged: state.handleProjectChanged,
-      },
-      composer: {
+      }),
+      [
+        state.showProjectPicker,
+        state.setShowProjectPicker,
+        state.handleProjectChanged,
+      ]
+    );
+
+    // composerElement（就地编辑框）仅在编辑态非空：编辑期间它随编辑草稿
+    // 逐渲染更新、本组随之刷新属语义必需（列表行内渲染的正是该元素）；
+    // 非编辑态恒为 null，不影响打字路径的稳定命中。
+    const composerGroup = React.useMemo<ChatMessageListProps['composer']>(
+      () => ({
         onSetChatInput: state.composerProps.setChatInput,
-        onSendFollowUp: state.handleSendFollowUp,
+        onSendFollowUp: stableSendFollowUp,
         editingMessageId,
         onStartEditMessage: handleStartEditMessage,
         onCancelEditMessage: handleCancelEditMessage,
         composerElement: editComposerElement,
-      },
-      generation: {
-        onRegenerate: state.handleRegenerate,
-        onBranch: state.handleBranch,
-        onRetract: state.handleRetract,
-        onEditMessageAndResend: state.handleEditMessageAndResend,
-      },
-      approval: {
+      }),
+      [
+        state.composerProps.setChatInput,
+        stableSendFollowUp,
+        editingMessageId,
+        handleStartEditMessage,
+        handleCancelEditMessage,
+        editComposerElement,
+      ]
+    );
+
+    const generationGroup = React.useMemo<ChatMessageListProps['generation']>(
+      () => ({
+        onRegenerate: stableRegenerate,
+        onBranch: stableBranch,
+        onRetract: stableRetract,
+        onEditMessageAndResend: stableEditMessageAndResend,
+      }),
+      [
+        stableRegenerate,
+        stableBranch,
+        stableRetract,
+        stableEditMessageAndResend,
+      ]
+    );
+
+    const approvalGroup = React.useMemo<ChatMessageListProps['approval']>(
+      () => ({
         approvalBusy: state.approvalState.approvalBusy,
         pendingApprovalMsgId: state.approvalState.pendingApprovalMsgId,
-        onApprovalAllow: state.approvalState.handleApprovalAllow,
-        onApprovalDeny: state.approvalState.handleApprovalDeny,
-        onBatchApprove: state.approvalState.handleBatchApprove,
-        onBatchDeny: state.approvalState.handleBatchDeny,
-      },
-      navigation: {
+        onApprovalAllow: stableApprovalAllow,
+        onApprovalDeny: stableApprovalDeny,
+        onBatchApprove: stableBatchApprove,
+        onBatchDeny: stableBatchDeny,
+      }),
+      [
+        state.approvalState.approvalBusy,
+        state.approvalState.pendingApprovalMsgId,
+        stableApprovalAllow,
+        stableApprovalDeny,
+        stableBatchApprove,
+        stableBatchDeny,
+      ]
+    );
+
+    const navigationGroup = React.useMemo<ChatMessageListProps['navigation']>(
+      () => ({
         onOpenDiff: state.openDiffInRightPanel,
         onOpenPath: state.openPathInFilesPanel,
         onOpenTerminal: state.handleOpenTerminal,
         onOpenDiffPanel: state.handleOpenDiffPanel,
-      },
-    };
+      }),
+      [
+        state.openDiffInRightPanel,
+        state.openPathInFilesPanel,
+        state.handleOpenTerminal,
+        state.handleOpenDiffPanel,
+      ]
+    );
+
+    // 有消息枝才进 stream 槽；空态 / 定时任务面保持现逻辑，不被槽吞掉。
+    // 容器对象一并 memo 化：SlotOutlet 的 context 引用随之稳定。
+    const chatStreamProps = React.useMemo<ChatMessageListProps>(
+      () => ({
+        messages: messagesGroup,
+        projectPicker: projectPickerGroup,
+        composer: composerGroup,
+        generation: generationGroup,
+        approval: approvalGroup,
+        navigation: navigationGroup,
+      }),
+      [
+        messagesGroup,
+        projectPickerGroup,
+        composerGroup,
+        generationGroup,
+        approvalGroup,
+        navigationGroup,
+      ]
+    );
 
     return (
       <>

@@ -40,7 +40,7 @@ export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP };
 import { AppIcon } from '@/components/ui/icons';
 
-export const ChatComposer: React.FC<ChatComposerProps> = ({
+const ChatComposerInner: React.FC<ChatComposerProps> = ({
   chatInput,
   setChatInput,
   isComposing,
@@ -404,3 +404,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     </AppErrorBoundary>
   );
 };
+
+// R1（打字解耦，性能 P0-2）：组件包 React.memo——调用方（ChatCard）的
+// props 已逐项身份稳定化（草稿/附件等真实变化才换引用），父级因流式
+// 增量、审批态等无关状态重渲染时不再连带重渲染输入框子树；受控
+// value/onChange 口径不变，打字时仅以新 value 正常更新。
+export const ChatComposer = React.memo(ChatComposerInner);
+ChatComposer.displayName = 'ChatComposer';
