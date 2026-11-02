@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 58 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 57 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! camelCase。字段清单、类型映射与逐字段语义以 `contracts/engine-events.json`
 //! 为准；前端 TS 由 `scripts/generate-engine-bindings.mjs` 生成，注册表与 enum
 //! 的一致性由 `tests/registry_drift.rs` 锁定。
@@ -34,7 +34,7 @@ pub use types::{
     SubagentEventPayload, TimelineTruncateReason, ToolMetadata, TurnUsage,
 };
 
-/// 58 种域事件（tagged enum，双端契约唯一事实源）。
+/// 57 种域事件（tagged enum，双端契约唯一事实源）。
 ///
 /// 变体顺序即注册表编号；每个变体的 wire 名与字段语义见注册表。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -127,6 +127,12 @@
           "required": true,
           "description": "本轮工具调用数",
           "integer": true
+        },
+        {
+          "name": "usage",
+          "type": "TurnUsage",
+          "required": false,
+          "description": "每轮 usage（旧帧缺省）"
         }
       ],
       "backpressure": "critical",
@@ -254,6 +260,13 @@
           "type": "string",
           "required": true,
           "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "turnIndex",
+          "type": "number",
+          "required": false,
+          "description": "轮次序号",
+          "integer": true
         }
       ],
       "backpressure": "critical",
@@ -290,6 +303,25 @@
           "type": "string",
           "required": true,
           "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "attempt",
+          "type": "number",
+          "required": false,
+          "description": "审批重试 attempt 链",
+          "integer": true
+        },
+        {
+          "name": "deduplicated",
+          "type": "boolean",
+          "required": false,
+          "description": "批内去重标记"
+        },
+        {
+          "name": "executedInput",
+          "type": "JsonValue",
+          "required": false,
+          "description": "中间件改写后的实际执行入参"
         }
       ],
       "backpressure": "critical",
@@ -1026,6 +1058,12 @@
           "type": "string",
           "required": false,
           "description": "父 run 发起 spawn 的工具调用 id"
+        },
+        {
+          "name": "subagentSessionId",
+          "type": "string",
+          "required": false,
+          "description": "子代理会话 id"
         }
       ]
     },
@@ -1115,6 +1153,12 @@
           "type": "string",
           "required": true,
           "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "subagentSessionId",
+          "type": "string",
+          "required": false,
+          "description": "子代理会话 id"
         }
       ]
     },
@@ -2462,7 +2506,7 @@
     "AgentMessageBlock": {
       "kind": "tagged",
       "tag": "type",
-      "description": "消息内容块（tagged enum：text/thought/tool-call/tool-result）",
+      "description": "消息内容块（tagged enum：text/thought/tool-call/tool-result/image）",
       "variants": [
         {
           "name": "text",
@@ -2545,6 +2589,36 @@
               "type": "boolean",
               "required": true,
               "description": "是否错误"
+            }
+          ]
+        },
+        {
+          "name": "image",
+          "description": "图片块",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string",
+              "required": false,
+              "description": "图片 URL"
+            },
+            {
+              "name": "data",
+              "type": "string",
+              "required": false,
+              "description": "图片内嵌数据"
+            },
+            {
+              "name": "mimeType",
+              "type": "string",
+              "required": true,
+              "description": "图片 MIME 类型"
+            },
+            {
+              "name": "alt",
+              "type": "string",
+              "required": false,
+              "description": "替代文本"
             }
           ]
         }
@@ -3081,6 +3155,18 @@
           "type": "JsonValue",
           "required": false,
           "description": "附加元数据"
+        },
+        {
+          "name": "requesterRunId",
+          "type": "string",
+          "required": false,
+          "description": "请求方 run 归属（缺省=主 agent run；有值=子代理 run id）"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "子代理申请理由（主 agent 裁决面展示与审计用）"
         }
       ]
     },
@@ -3560,6 +3646,54 @@
           "type": "JsonValue",
           "required": false,
           "description": "类别负载"
+        }
+      ]
+    },
+    "TurnUsage": {
+      "kind": "struct",
+      "description": "单轮 usage 载荷（turn-end.usage 可选字段）",
+      "fields": [
+        {
+          "name": "promptTokens",
+          "type": "number",
+          "required": true,
+          "description": "输入 token",
+          "integer": true
+        },
+        {
+          "name": "completionTokens",
+          "type": "number",
+          "required": true,
+          "description": "输出 token",
+          "integer": true
+        },
+        {
+          "name": "totalTokens",
+          "type": "number",
+          "required": true,
+          "description": "总 token",
+          "integer": true
+        },
+        {
+          "name": "cacheReadTokens",
+          "type": "number",
+          "required": true,
+          "description": "缓存命中读取 token",
+          "integer": true
+        },
+        {
+          "name": "cacheWriteTokens",
+          "type": "number",
+          "required": true,
+          "description": "缓存写入 token",
+          "integer": true
+        },
+        {
+          "name": "cacheMissTokens",
+          "type": "number",
+          "required": true,
+          "description": "未命中输入 token",
+          "integer": true
         }
       ]
     }

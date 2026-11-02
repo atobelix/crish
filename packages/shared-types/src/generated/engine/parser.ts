@@ -7,7 +7,7 @@
 // =======================================================================
 
 import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent, EngineCronFiredEvent, EngineRecoveryEscalatedEvent, EngineRecoverySteeringEvent, EngineRecoveryForkEvent, EngineRecoveryReportEvent, EngineRecoveryBudgetDeniedEvent, EngineGoalRoundStartedEvent, EngineGoalRoundCompletedEvent, EngineGoalContinuationDecidedEvent, EngineSteeringEvaluatedEvent, EngineControlIntentEvent, EngineHookOutcomeEvent, EngineSummaryBackgroundEvent, EngineStageSummaryMilestoneEvent, EngineNudgeEnqueuedEvent, EngineRecoveryAcknowledgedEvent, EngineRecoveryRetryAttemptedEvent, EngineProviderRequestAnchoredEvent, EngineTimelineTruncateEvent } from "./events";
-import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason, AgentMessageMetadataKind } from "./types";
+import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, AgentMessageBlockImage, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, TurnUsage, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason, AgentMessageMetadataKind } from "./types";
 import { AGENT_MESSAGE_ROLE_VALUES, AGENT_END_REASON_VALUES, RUN_TERMINAL_STATUS_VALUES, APPROVAL_DECISION_VALUES, TOOL_CATEGORY_VALUES, TOOL_CONCURRENCY_VALUES, TOOL_ARTIFACT_KIND_VALUES, PROVIDER_DIAGNOSTIC_PHASE_VALUES, SYSTEM_PROMPT_WIRE_MODE_VALUES, PROVIDER_ERROR_KIND_VALUES, RUNTIME_CHECKPOINT_KIND_VALUES, CONTEXT_COMPRESSION_TRIGGER_VALUES, CONTEXT_COMPRESSION_REASON_VALUES, CONTEXT_COMPRESSION_POLICY_TIER_VALUES, CONTEXT_COMPRESSION_POLICY_ACTION_VALUES, COMPRESSION_CACHE_INVALIDATION_VALUES, MISS_ATTRIBUTION_VALUES, SECURITY_AUDIT_OPERATION_VALUES, SECURITY_AUDIT_DECISION_VALUES, SUBAGENT_EVENT_KIND_VALUES, SUBAGENT_END_STATUS_VALUES, TIMELINE_TRUNCATE_REASON_VALUES, AGENT_MESSAGE_METADATA_KIND_VALUES } from "./types";
 import type { JsonValue } from "../../primitive-types";
 
@@ -385,6 +385,28 @@ export function parseAgentMessageBlockToolResult(v: unknown): ParseResult<AgentM
 
 
 
+export function parseAgentMessageBlockImage(v: unknown): ParseResult<AgentMessageBlockImage> {
+  if (!isRecord(v)) return parseErr("AgentMessageBlockImage: payload must be an object");
+  if (v["type"] !== "image") return parseErr("AgentMessageBlockImage: type mismatch");
+  const url = optField(v, "url", checkString);
+  if (!url.ok) return url;
+  const data = optField(v, "data", checkString);
+  if (!data.ok) return data;
+  const mimeType = reqField(v, "mimeType", checkString);
+  if (!mimeType.ok) return mimeType;
+  const alt = optField(v, "alt", checkString);
+  if (!alt.ok) return alt;
+  return parseOk({
+    type: "image",
+    ...(url.data !== undefined ? { url: url.data } : {}),
+    ...(data.data !== undefined ? { data: data.data } : {}),
+    mimeType: mimeType.data,
+    ...(alt.data !== undefined ? { alt: alt.data } : {}),
+  });
+}
+
+
+
 export function parseAgentMessageBlock(v: unknown): ParseResult<AgentMessageBlock> {
   if (!isRecord(v)) return parseErr("AgentMessageBlock: payload must be an object");
   const t = v["type"];
@@ -393,6 +415,7 @@ export function parseAgentMessageBlock(v: unknown): ParseResult<AgentMessageBloc
     case "thought": return parseAgentMessageBlockThought(v);
     case "tool-call": return parseAgentMessageBlockToolCall(v);
     case "tool-result": return parseAgentMessageBlockToolResult(v);
+    case "image": return parseAgentMessageBlockImage(v);
     default: return parseErr("AgentMessageBlock: unknown type '" + String(t) + "'");
   }
 }
@@ -672,6 +695,10 @@ export function parsePermissionRequest(v: unknown): ParseResult<PermissionReques
   if (!toolMetadata.ok) return toolMetadata;
   const metadata = optField(v, "metadata", checkJsonValue);
   if (!metadata.ok) return metadata;
+  const requesterRunId = optField(v, "requesterRunId", checkString);
+  if (!requesterRunId.ok) return requesterRunId;
+  const reason = optField(v, "reason", checkString);
+  if (!reason.ok) return reason;
   return parseOk({
     id: id.data,
     sessionId: sessionId.data,
@@ -682,6 +709,8 @@ export function parsePermissionRequest(v: unknown): ParseResult<PermissionReques
     summary: summary.data,
     toolMetadata: toolMetadata.data,
     ...(metadata.data !== undefined ? { metadata: metadata.data } : {}),
+    ...(requesterRunId.data !== undefined ? { requesterRunId: requesterRunId.data } : {}),
+    ...(reason.data !== undefined ? { reason: reason.data } : {}),
   });
 }
 
@@ -934,6 +963,30 @@ export function parseSubagentEventPayload(v: unknown): ParseResult<SubagentEvent
   });
 }
 
+export function parseTurnUsage(v: unknown): ParseResult<TurnUsage> {
+  if (!isRecord(v)) return parseErr("TurnUsage: payload must be an object");
+  const promptTokens = reqField(v, "promptTokens", checkInteger);
+  if (!promptTokens.ok) return promptTokens;
+  const completionTokens = reqField(v, "completionTokens", checkInteger);
+  if (!completionTokens.ok) return completionTokens;
+  const totalTokens = reqField(v, "totalTokens", checkInteger);
+  if (!totalTokens.ok) return totalTokens;
+  const cacheReadTokens = reqField(v, "cacheReadTokens", checkInteger);
+  if (!cacheReadTokens.ok) return cacheReadTokens;
+  const cacheWriteTokens = reqField(v, "cacheWriteTokens", checkInteger);
+  if (!cacheWriteTokens.ok) return cacheWriteTokens;
+  const cacheMissTokens = reqField(v, "cacheMissTokens", checkInteger);
+  if (!cacheMissTokens.ok) return cacheMissTokens;
+  return parseOk({
+    promptTokens: promptTokens.data,
+    completionTokens: completionTokens.data,
+    totalTokens: totalTokens.data,
+    cacheReadTokens: cacheReadTokens.data,
+    cacheWriteTokens: cacheWriteTokens.data,
+    cacheMissTokens: cacheMissTokens.data,
+  });
+}
+
 export function parseEngineAgentStartEvent(v: unknown): ParseResult<EngineAgentStartEvent> {
   if (!isRecord(v)) return parseErr("EngineAgentStartEvent: payload must be an object");
   if (v["type"] !== "agent-start") return parseErr("EngineAgentStartEvent: type mismatch");
@@ -996,12 +1049,15 @@ export function parseEngineTurnEndEvent(v: unknown): ParseResult<EngineTurnEndEv
   if (!timestamp.ok) return timestamp;
   const toolCallCount = reqField(v, "toolCallCount", checkInteger);
   if (!toolCallCount.ok) return toolCallCount;
+  const usage = optField(v, "usage", parseTurnUsage);
+  if (!usage.ok) return usage;
   return parseOk({
     type: "turn-end",
     sessionId: sessionId.data,
     turnIndex: turnIndex.data,
     timestamp: timestamp.data,
     toolCallCount: toolCallCount.data,
+    ...(usage.data !== undefined ? { usage: usage.data } : {}),
   });
 }
 
@@ -1067,12 +1123,15 @@ export function parseEngineToolStartEvent(v: unknown): ParseResult<EngineToolSta
   if (!call.ok) return call;
   const timestamp = reqField(v, "timestamp", checkString);
   if (!timestamp.ok) return timestamp;
+  const turnIndex = optField(v, "turnIndex", checkInteger);
+  if (!turnIndex.ok) return turnIndex;
   return parseOk({
     type: "tool-start",
     sessionId: sessionId.data,
     batchId: batchId.data,
     call: call.data,
     timestamp: timestamp.data,
+    ...(turnIndex.data !== undefined ? { turnIndex: turnIndex.data } : {}),
   });
 }
 
@@ -1087,12 +1146,21 @@ export function parseEngineToolEndEvent(v: unknown): ParseResult<EngineToolEndEv
   if (!result.ok) return result;
   const timestamp = reqField(v, "timestamp", checkString);
   if (!timestamp.ok) return timestamp;
+  const attempt = optField(v, "attempt", checkInteger);
+  if (!attempt.ok) return attempt;
+  const deduplicated = optField(v, "deduplicated", checkBoolean);
+  if (!deduplicated.ok) return deduplicated;
+  const executedInput = optField(v, "executedInput", checkJsonValue);
+  if (!executedInput.ok) return executedInput;
   return parseOk({
     type: "tool-end",
     sessionId: sessionId.data,
     batchId: batchId.data,
     result: result.data,
     timestamp: timestamp.data,
+    ...(attempt.data !== undefined ? { attempt: attempt.data } : {}),
+    ...(deduplicated.data !== undefined ? { deduplicated: deduplicated.data } : {}),
+    ...(executedInput.data !== undefined ? { executedInput: executedInput.data } : {}),
   });
 }
 
@@ -1481,6 +1549,8 @@ export function parseEngineSubagentStartedEvent(v: unknown): ParseResult<EngineS
   if (!mode.ok) return mode;
   const parentToolCallId = optField(v, "parentToolCallId", checkString);
   if (!parentToolCallId.ok) return parentToolCallId;
+  const subagentSessionId = optField(v, "subagentSessionId", checkString);
+  if (!subagentSessionId.ok) return subagentSessionId;
   return parseOk({
     type: "subagent-started",
     sessionId: sessionId.data,
@@ -1492,6 +1562,7 @@ export function parseEngineSubagentStartedEvent(v: unknown): ParseResult<EngineS
     ...(description.data !== undefined ? { description: description.data } : {}),
     ...(mode.data !== undefined ? { mode: mode.data } : {}),
     ...(parentToolCallId.data !== undefined ? { parentToolCallId: parentToolCallId.data } : {}),
+    ...(subagentSessionId.data !== undefined ? { subagentSessionId: subagentSessionId.data } : {}),
   });
 }
 
@@ -1530,6 +1601,8 @@ export function parseEngineSubagentEndedEvent(v: unknown): ParseResult<EngineSub
   if (!summary.ok) return summary;
   const endedAt = reqField(v, "endedAt", checkString);
   if (!endedAt.ok) return endedAt;
+  const subagentSessionId = optField(v, "subagentSessionId", checkString);
+  if (!subagentSessionId.ok) return subagentSessionId;
   return parseOk({
     type: "subagent-ended",
     sessionId: sessionId.data,
@@ -1538,6 +1611,7 @@ export function parseEngineSubagentEndedEvent(v: unknown): ParseResult<EngineSub
     status: status.data,
     ...(summary.data !== undefined ? { summary: summary.data } : {}),
     endedAt: endedAt.data,
+    ...(subagentSessionId.data !== undefined ? { subagentSessionId: subagentSessionId.data } : {}),
   });
 }
 

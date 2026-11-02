@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { AgentEndReason, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus, RunCacheStats, MissAttribution, SecurityAuditOperation, ImpactAssessment, SecurityAuditDecision, SubagentEventPayload, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason } from "./types";
+import type { AgentEndReason, TurnUsage, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus, RunCacheStats, MissAttribution, SecurityAuditOperation, ImpactAssessment, SecurityAuditDecision, SubagentEventPayload, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason } from "./types";
 
 import type { JsonValue } from "../../primitive-types";
 
@@ -37,6 +37,7 @@ export interface EngineTurnEndEvent {
   turnIndex: number;
   timestamp: string;
   toolCallCount: number;
+  usage?: TurnUsage;
 }
 
 export interface EngineMessageStartEvent {
@@ -66,6 +67,7 @@ export interface EngineToolStartEvent {
   batchId: string;
   call: ToolBatchCall;
   timestamp: string;
+  turnIndex?: number;
 }
 
 export interface EngineToolEndEvent {
@@ -74,6 +76,9 @@ export interface EngineToolEndEvent {
   batchId: string;
   result: ToolBatchResult;
   timestamp: string;
+  attempt?: number;
+  deduplicated?: boolean;
+  executedInput?: JsonValue;
 }
 
 export interface EngineToolBatchStartEvent {
@@ -231,6 +236,7 @@ export interface EngineSubagentStartedEvent {
   description?: string;
   mode?: string;
   parentToolCallId?: string;
+  subagentSessionId?: string;
 }
 
 export interface EngineSubagentEventEvent {
@@ -249,6 +255,7 @@ export interface EngineSubagentEndedEvent {
   status: SubagentEndStatus;
   summary?: string;
   endedAt: string;
+  subagentSessionId?: string;
 }
 
 export interface EngineTaskStartedEvent {

@@ -113,7 +113,15 @@ export interface AgentMessageBlockToolResult {
   isError: boolean;
 }
 
-export type AgentMessageBlock = AgentMessageBlockText | AgentMessageBlockThought | AgentMessageBlockToolCall | AgentMessageBlockToolResult;
+export interface AgentMessageBlockImage {
+  type: "image";
+  url?: string;
+  data?: string;
+  mimeType: string;
+  alt?: string;
+}
+
+export type AgentMessageBlock = AgentMessageBlockText | AgentMessageBlockThought | AgentMessageBlockToolCall | AgentMessageBlockToolResult | AgentMessageBlockImage;
 
 export interface ToolOutput {
   text?: string;
@@ -218,6 +226,8 @@ export interface PermissionRequest {
   summary: string;
   toolMetadata: ToolMetadata;
   metadata?: JsonValue;
+  requesterRunId?: string;
+  reason?: string;
 }
 
 export interface ContextCompressionPolicyMetadata {
@@ -308,5 +318,14 @@ export interface ImpactAssessment {
 export interface SubagentEventPayload {
   kind: SubagentEventKind;
   payload?: JsonValue;
+}
+
+export interface TurnUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheMissTokens: number;
 }
 

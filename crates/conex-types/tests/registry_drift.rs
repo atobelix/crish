@@ -37,7 +37,8 @@ use conex_types::events::{
 };
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{
-    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ImageContentBlock,
+    ToolCallBlock,
 };
 use conex_types::session::AgentEndReason;
 use conex_types::tool::{
@@ -425,6 +426,7 @@ fn check_payload_struct(reg: &Registry, rust_name: &str) {
         "SubagentEventPayload" => {
             check_roundtrip::<SubagentEventPayload>(rust_name, fields, sample)
         }
+        "TurnUsage" => check_roundtrip::<TurnUsage>(rust_name, fields, sample),
         other => panic!("注册表含未接入漂移检查的载荷类型 {other}"),
     }
 }
@@ -2625,4 +2627,862 @@ fn device_registry_constants_match_rust_version_consts() {
     expect_u64("EVENT_WINDOW", EVENT_WINDOW as u64);
     expect_u64("MAX_SUBSCRIPTIONS", MAX_SUBSCRIPTIONS as u64);
     expect_u64("MAX_STREAMS", MAX_STREAMS as u64);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. 字段集合全等护栏（最大实例口径；补 §2/§3 回环的 Option 盲区）
+//
+// §2/§3 的回环样本只按注册表「必填」字段构造：Rust 侧若有注册表未登记的
+// Option 字段（skip_serializing_if = "Option::is_none"），样本不给值 →
+// 反序列化为 None → 回序列化被跳过，回环断言看不见——R7 修复的
+// PermissionRequest.requesterRunId/reason 丢失正是此盲区（注册表漏登记
+// 时既有测试全绿）。本节以「最大实例」补上字段集合全等断言：
+//
+// - 每个被注册表覆盖的 struct / tagged 变体 / 事件变体各构造一个全字段
+//   满载的 Rust 实例：穷尽字面量书写（Rust 侧增删字段时本节先编译失败，
+//   编译器即第一道漂移锁），Option 字段一律 Some，Vec 给一元素；
+// - 序列化后取键集合，断言与注册表登记字段名集合全等（事件与 tagged
+//   变体另加 tag 键 "type"）。wire 名口径（rename_all / rename /
+//   skip_serializing_if）全部由 serde 序列化本身给出，不做反射或名猜测。
+//
+// 覆盖边界：以注册表现有登记为界——types 段全部 struct、AgentMessageBlock
+// 的全部登记变体、events 段全部事件；未登记类型不纳入。
+//
+// 存量漂移基线 FIELD_SET_DRIFT_BASELINE：本节上线时全量比对发现的既有
+// 字段级漂移（均为 Rust 有、注册表漏登记的可选字段）。基线只豁免
+// 「实际多出且已登记于此」的字段；注册表多登记的方向（missing）不设
+// 基线、直接失败。基线条目必须保持「仍在漂移」：漂移被修复（注册表
+// 补登记或 Rust 删字段）后条目自动失效并使测试失败，强制移除——
+// 基线只准随漂移修复而缩小，不准新增掩盖新漂移（新漂移必须修注册表
+// 或 Rust 本身，而不是进基线）。
+
+use conex_types::events::TurnUsage;
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+/// 存量字段漂移基线：（归属名，wire 字段名）。
+/// 归属名口径：struct = Rust 类型名；tagged 变体 = "AgentMessageBlock.{wire}"；
+/// 事件 = "event:{wire}"。
+/// 初始 7 条（event:turn-end/usage、event:tool-start/turnIndex、
+/// event:tool-end/{attempt,deduplicated,executedInput}、subagent 两事件的
+/// subagentSessionId）已随注册表补登记全部愈合，基线归零（2026-11-01）。
+const FIELD_SET_DRIFT_BASELINE: &[(&str, &str)] = &[];
+
+fn field_set_of(value: &Value) -> BTreeSet<String> {
+    value
+        .as_object()
+        .unwrap_or_else(|| panic!("字段集合断言要求对象型序列化结果，实际：{value}"))
+        .keys()
+        .cloned()
+        .collect()
+}
+
+/// 断言「注册表登记字段集合 == 最大实例序列化键集合」。
+/// extra 方向仅豁免基线条目；missing 方向无豁免。
+fn assert_field_set(owner: &str, registered: &BTreeSet<String>, actual: &BTreeSet<String>) {
+    let baseline: BTreeSet<&str> = FIELD_SET_DRIFT_BASELINE
+        .iter()
+        .filter(|(o, _)| *o == owner)
+        .map(|(_, f)| *f)
+        .collect();
+    for f in &baseline {
+        assert!(
+            actual.contains(*f) && !registered.contains(*f),
+            "{owner} 的基线条目 {f} 已不再漂移（注册表已补登记或 Rust 已删字段）：\
+             请从 FIELD_SET_DRIFT_BASELINE 移除该条目"
+        );
+    }
+    let extra: Vec<&String> = actual
+        .difference(registered)
+        .filter(|k| !baseline.contains(k.as_str()))
+        .collect();
+    let missing: Vec<&String> = registered.difference(actual).collect();
+    assert!(
+        extra.is_empty() && missing.is_empty(),
+        "{owner} 字段集合漂移：Rust 序列化多出注册表外字段 {extra:?}，\
+         注册表登记但序列化缺失字段 {missing:?}"
+    );
+}
+
+fn mx_string() -> String {
+    "x".to_string()
+}
+
+// ── 最大实例：载荷 struct ──
+
+fn mx_tool_output() -> ToolOutput {
+    ToolOutput {
+        text: Some(mx_string()),
+        json: Some(json!(null)),
+        artifacts: Some(vec![ToolArtifact {
+            kind: ToolArtifactKind::File,
+            title: mx_string(),
+            uri: Some(mx_string()),
+            text: Some(mx_string()),
+            metadata: Some(json!(null)),
+        }]),
+    }
+}
+
+fn mx_tool_metadata() -> ToolMetadata {
+    ToolMetadata {
+        category: Some(mx_string()),
+        is_read_only: Some(false),
+        fatal_on_error: Some(false),
+        concurrency: Some(mx_string()),
+    }
+}
+
+fn mx_agent_message() -> AgentMessage {
+    AgentMessage {
+        id: mx_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: mx_string(),
+        blocks: vec![AgentMessageBlock::Text { text: mx_string() }],
+        metadata: Some(json!(null)),
+        client_message_id: Some(mx_string()),
+        content: Some(mx_string()),
+    }
+}
+
+fn mx_tool_batch_call() -> ToolBatchCall {
+    ToolBatchCall {
+        id: mx_string(),
+        tool_name: mx_string(),
+        summary: mx_string(),
+        input: json!(null),
+        category: ToolCategory::Terminal,
+        concurrency: ToolConcurrency::Parallel,
+    }
+}
+
+fn mx_tool_batch_result() -> ToolBatchResult {
+    ToolBatchResult {
+        id: mx_string(),
+        tool_name: mx_string(),
+        output: mx_tool_output(),
+        is_error: false,
+        duration_ms: 0,
+    }
+}
+
+fn mx_provider_diagnostic() -> ProviderDiagnostic {
+    ProviderDiagnostic {
+        phase: ProviderDiagnosticPhase::RequestStart,
+        provider_id: Some(mx_string()),
+        endpoint: Some(mx_string()),
+        url: Some(mx_string()),
+        attempt: Some(0),
+        max_attempts: Some(0),
+        elapsed_ms: Some(0),
+        status: Some(0),
+        status_text: Some(mx_string()),
+        retryable: Some(false),
+        reason: Some(mx_string()),
+        error_kind: Some(ProviderErrorKind::Aborted),
+        retry_after_ms: Some(0),
+        chunks: Some(0),
+        bytes: Some(0),
+        headers: Some(json!(null)),
+        configured_model: Some(mx_string()),
+        actual_model: Some(mx_string()),
+        model_mismatch: Some(false),
+        stream_requested: Some(false),
+        system_prompt_wire_mode: Some(SystemPromptWireMode::NativeSystemRole),
+        has_system_role: Some(false),
+        system_prompt_present: Some(false),
+        system_message_count: Some(0),
+        rewritten_system_message_count: Some(0),
+        message_count: Some(0),
+        tool_count: Some(0),
+        message_role_counts: Some(json!(null)),
+        partial: Some(json!(null)),
+    }
+}
+
+fn mx_runtime_checkpoint_record() -> RuntimeCheckpointRecord {
+    RuntimeCheckpointRecord {
+        id: mx_string(),
+        kind: RuntimeCheckpointKind::WorkspaceCheckpoint,
+        label: mx_string(),
+        tool_call_id: mx_string(),
+        tool_name: mx_string(),
+        artifact_uri: Some(mx_string()),
+        manifest_path: Some(mx_string()),
+        snapshot_path: Some(mx_string()),
+        source_path: Some(mx_string()),
+        metadata: Some(json!(null)),
+    }
+}
+
+fn mx_runtime_checkpoint_restore_record() -> RuntimeCheckpointRestoreRecord {
+    RuntimeCheckpointRestoreRecord {
+        checkpoint_id: mx_string(),
+        tool_call_id: mx_string(),
+        tool_name: mx_string(),
+        restored: vec![mx_string()],
+        deleted: vec![mx_string()],
+        skipped: vec![mx_string()],
+        metadata: Some(json!(null)),
+    }
+}
+
+fn mx_permission_request() -> PermissionRequest {
+    PermissionRequest {
+        id: mx_string(),
+        session_id: mx_string(),
+        cwd: mx_string(),
+        tool_call_id: mx_string(),
+        tool_name: mx_string(),
+        parameters: json!(null),
+        summary: mx_string(),
+        tool_metadata: mx_tool_metadata(),
+        metadata: Some(json!(null)),
+        requester_run_id: Some(mx_string()),
+        reason: Some(mx_string()),
+    }
+}
+
+fn mx_compression_policy() -> ContextCompressionPolicyMetadata {
+    ContextCompressionPolicyMetadata {
+        tier: ContextCompressionPolicyTier::Manual,
+        action: ContextCompressionPolicyAction::Compact,
+        forced: false,
+        threshold_exceeded: false,
+        provider_retry: false,
+    }
+}
+
+fn mx_compression_handoff() -> ContextCompressionHandoffMetadata {
+    ContextCompressionHandoffMetadata {
+        trigger: ContextCompressionTrigger::Auto,
+        reason: ContextCompressionReason::Manual,
+        tier: ContextCompressionPolicyTier::Manual,
+        action: ContextCompressionPolicyAction::Compact,
+        provider_retry: false,
+        summary: mx_string(),
+        compressed_message_count: 0,
+        kept_message_count: 0,
+        tokens_before: 0,
+        tokens_after: 0,
+        threshold_tokens: 0,
+        first_kept_message_id: Some(mx_string()),
+        last_message_id: Some(mx_string()),
+        last_user_message_id: Some(mx_string()),
+        completed_task_summaries: vec![mx_string()],
+        pending_tasks: vec![mx_string()],
+        session_events: vec![mx_string()],
+        file_snapshot_hints: vec![mx_string()],
+        recent_successful_commands: vec![mx_string()],
+        recent_failed_diagnostics: vec![mx_string()],
+    }
+}
+
+fn mx_compression_cache_boundary() -> ContextCompressionCacheBoundaryMetadata {
+    ContextCompressionCacheBoundaryMetadata {
+        kind: mx_string(),
+        version: 1,
+        stable_prefix_hash: mx_string(),
+        cache_key: mx_string(),
+        structured_summary_cache_key: mx_string(),
+        structured_summary_stable_hash: mx_string(),
+        invalidates: vec![CompressionCacheInvalidation::PromptStablePrefix],
+        invalidation_reason: ContextCompressionReason::Manual,
+        compressed_message_ids: vec![mx_string()],
+        kept_message_ids: vec![mx_string()],
+        first_kept_message_id: Some(mx_string()),
+    }
+}
+
+fn mx_compression_record() -> ContextCompressionRecord {
+    ContextCompressionRecord {
+        id: mx_string(),
+        trigger: ContextCompressionTrigger::Auto,
+        reason: Some(ContextCompressionReason::Manual),
+        policy: Some(mx_compression_policy()),
+        summary: mx_string(),
+        first_kept_message_id: Some(mx_string()),
+        compressed_message_ids: vec![mx_string()],
+        kept_message_ids: vec![mx_string()],
+        tokens_before: 0,
+        tokens_after: 0,
+        threshold_tokens: Some(0),
+        created_at: mx_string(),
+        handoff: Some(mx_compression_handoff()),
+        cache_boundary: Some(mx_compression_cache_boundary()),
+        details: Some(json!(null)),
+    }
+}
+
+fn mx_run_cache_stats() -> RunCacheStats {
+    RunCacheStats {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        cache_miss_tokens: 0,
+        sample_count: 0,
+        hit_ratio: Some(0.0),
+        write_ratio: Some(0.0),
+        missed_tokens: 0,
+        warm_until_ms: Some(0),
+    }
+}
+
+fn mx_turn_usage() -> TurnUsage {
+    TurnUsage {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        cache_miss_tokens: 0,
+    }
+}
+
+fn mx_impact_assessment() -> ImpactAssessment {
+    ImpactAssessment {
+        file_count: 0,
+        total_size_bytes: 0,
+        directory_count: 0,
+        cross_directory: false,
+        flagged: false,
+    }
+}
+
+fn mx_subagent_event_payload() -> SubagentEventPayload {
+    SubagentEventPayload {
+        kind: SubagentEventKind::Progress,
+        payload: Some(json!(null)),
+    }
+}
+
+/// 注册表 types 段 struct 的最大实例序列化（未接入的类型直接 panic，
+/// 与 §3 check_payload_struct 同一纪律：新登记类型必须接线）。
+fn maximal_struct_json(rust_name: &str) -> Value {
+    match rust_name {
+        "AgentMessage" => serde_json::to_value(mx_agent_message()).unwrap(),
+        "ToolOutput" => serde_json::to_value(mx_tool_output()).unwrap(),
+        "ToolArtifact" => serde_json::to_value(ToolArtifact {
+            kind: ToolArtifactKind::File,
+            title: mx_string(),
+            uri: Some(mx_string()),
+            text: Some(mx_string()),
+            metadata: Some(json!(null)),
+        })
+        .unwrap(),
+        "ToolBatchCall" => serde_json::to_value(mx_tool_batch_call()).unwrap(),
+        "ToolBatchResult" => serde_json::to_value(mx_tool_batch_result()).unwrap(),
+        "ProviderDiagnostic" => serde_json::to_value(mx_provider_diagnostic()).unwrap(),
+        "RuntimeCheckpointRecord" => serde_json::to_value(mx_runtime_checkpoint_record()).unwrap(),
+        "RuntimeCheckpointRestoreRecord" => {
+            serde_json::to_value(mx_runtime_checkpoint_restore_record()).unwrap()
+        }
+        "ToolMetadata" => serde_json::to_value(mx_tool_metadata()).unwrap(),
+        "PermissionRequest" => serde_json::to_value(mx_permission_request()).unwrap(),
+        "ContextCompressionPolicyMetadata" => {
+            serde_json::to_value(mx_compression_policy()).unwrap()
+        }
+        "ContextCompressionHandoffMetadata" => {
+            serde_json::to_value(mx_compression_handoff()).unwrap()
+        }
+        "ContextCompressionCacheBoundaryMetadata" => {
+            serde_json::to_value(mx_compression_cache_boundary()).unwrap()
+        }
+        "ContextCompressionRecord" => serde_json::to_value(mx_compression_record()).unwrap(),
+        "RunCacheStats" => serde_json::to_value(mx_run_cache_stats()).unwrap(),
+        "ImpactAssessment" => serde_json::to_value(mx_impact_assessment()).unwrap(),
+        "SubagentEventPayload" => serde_json::to_value(mx_subagent_event_payload()).unwrap(),
+        "TurnUsage" => serde_json::to_value(mx_turn_usage()).unwrap(),
+        other => panic!("注册表含未接入字段集合断言的载荷类型 {other}"),
+    }
+}
+
+#[test]
+fn payload_struct_field_sets_match_registry() {
+    let reg = registry();
+    for (name, spec) in &reg.types {
+        let TypeSpec::Struct { fields } = spec else {
+            continue;
+        };
+        let registered: BTreeSet<String> = fields.iter().map(|f| f.name.clone()).collect();
+        let actual = field_set_of(&maximal_struct_json(name));
+        assert_field_set(name, &registered, &actual);
+    }
+}
+
+// ── 最大实例：AgentMessageBlock tagged 变体 ──
+
+fn maximal_block_variant(wire: &str) -> AgentMessageBlock {
+    match wire {
+        "text" => AgentMessageBlock::Text { text: mx_string() },
+        "thought" => AgentMessageBlock::Thought {
+            text: mx_string(),
+            redacted: Some(false),
+        },
+        "tool-call" => AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: mx_string(),
+            tool_name: mx_string(),
+            input: json!(null),
+        }),
+        "tool-result" => AgentMessageBlock::ToolResult {
+            tool_call_id: mx_string(),
+            tool_name: mx_string(),
+            output: mx_tool_output(),
+            is_error: false,
+        },
+        "image" => AgentMessageBlock::Image(ImageContentBlock {
+            url: Some(mx_string()),
+            data: Some(mx_string()),
+            mime_type: mx_string(),
+            alt: Some(mx_string()),
+        }),
+        other => panic!("注册表含未接入字段集合断言的 AgentMessageBlock 变体 {other}"),
+    }
+}
+
+#[test]
+fn tagged_block_variant_field_sets_match_registry() {
+    let reg = registry();
+    let spec = reg
+        .types
+        .get("AgentMessageBlock")
+        .expect("注册表必须含 AgentMessageBlock");
+    let TypeSpec::Tagged { tag, variants } = spec else {
+        panic!("AgentMessageBlock 必须是 tagged 类型");
+    };
+    assert_eq!(tag, "type");
+    for v in variants {
+        let mut registered: BTreeSet<String> = v.fields.iter().map(|f| f.name.clone()).collect();
+        registered.insert(tag.clone());
+        let actual = field_set_of(&serde_json::to_value(maximal_block_variant(&v.name)).unwrap());
+        assert_field_set(
+            &format!("AgentMessageBlock.{}", v.name),
+            &registered,
+            &actual,
+        );
+    }
+}
+
+// ── 最大实例：事件变体 ──
+
+/// 注册表 events 段事件的最大实例（按 rust_variant 分发；未接入直接
+/// panic，与 §3 同一纪律：新登记事件必须接线）。
+#[allow(clippy::too_many_lines)]
+fn maximal_event(rust_variant: &str) -> AgentEvent {
+    let s = mx_string();
+    match rust_variant {
+        "AgentStart" => AgentEvent::AgentStart {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+        },
+        "AgentEnd" => AgentEvent::AgentEnd {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            reason: AgentEndReason::Stop,
+            error: Some(s.clone()),
+        },
+        "TurnStart" => AgentEvent::TurnStart {
+            session_id: s.clone(),
+            turn_index: 0,
+            timestamp: s.clone(),
+        },
+        "TurnEnd" => AgentEvent::TurnEnd {
+            session_id: s.clone(),
+            turn_index: 0,
+            timestamp: s.clone(),
+            tool_call_count: 0,
+            usage: Some(TurnUsage::default()),
+        },
+        "MessageStart" => AgentEvent::MessageStart {
+            session_id: s.clone(),
+            message: Arc::new(mx_agent_message()),
+        },
+        "MessageDelta" => AgentEvent::MessageDelta {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            message_id: s.clone(),
+            block: AgentMessageBlock::Text { text: s.clone() },
+        },
+        "MessageEnd" => AgentEvent::MessageEnd {
+            session_id: s.clone(),
+            message: Arc::new(mx_agent_message()),
+            turn_index: Some(0),
+        },
+        "ToolStart" => AgentEvent::ToolStart {
+            session_id: s.clone(),
+            batch_id: s.clone(),
+            call: mx_tool_batch_call(),
+            timestamp: s.clone(),
+            turn_index: Some(0),
+        },
+        "ToolEnd" => AgentEvent::ToolEnd {
+            session_id: s.clone(),
+            batch_id: s.clone(),
+            result: mx_tool_batch_result(),
+            timestamp: s.clone(),
+            attempt: Some(0),
+            deduplicated: Some(false),
+            executed_input: Some(json!(null)),
+        },
+        "ToolBatchStart" => AgentEvent::ToolBatchStart {
+            session_id: s.clone(),
+            batch_id: s.clone(),
+            timestamp: s.clone(),
+            summary: s.clone(),
+            calls: vec![mx_tool_batch_call()],
+        },
+        "ToolBatchEnd" => AgentEvent::ToolBatchEnd {
+            session_id: s.clone(),
+            batch_id: s.clone(),
+            timestamp: s.clone(),
+            calls: vec![mx_tool_batch_result()],
+        },
+        "ContextCompressionStart" => AgentEvent::ContextCompressionStart {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            reason: s.clone(),
+            tokens_before: 0,
+        },
+        "ContextCompressionEnd" => AgentEvent::ContextCompressionEnd {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            result: Some(Box::new(mx_compression_record())),
+            aborted: false,
+            error: Some(s.clone()),
+        },
+        "ProviderDiagnostic" => AgentEvent::ProviderDiagnostic {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            diagnostic: mx_provider_diagnostic(),
+        },
+        "RuntimeError" => AgentEvent::RuntimeError {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            error: s.clone(),
+            retryable: Some(false),
+        },
+        "RuntimeSteering" => AgentEvent::RuntimeSteering {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            reason: s.clone(),
+            message: mx_agent_message(),
+        },
+        "RuntimeInterventionRequired" => AgentEvent::RuntimeInterventionRequired {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            reason: s.clone(),
+            choices: vec![s.clone()],
+            message: s.clone(),
+        },
+        "ApprovalRequested" => AgentEvent::ApprovalRequested {
+            session_id: s.clone(),
+            request: mx_permission_request(),
+            timestamp: s.clone(),
+        },
+        "ApprovalResolved" => AgentEvent::ApprovalResolved {
+            session_id: s.clone(),
+            tool_call_id: s.clone(),
+            request_id: Some(s.clone()),
+            decision: ApprovalDecision::Approved,
+            timestamp: s.clone(),
+        },
+        "CheckpointCreated" => AgentEvent::CheckpointCreated {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            checkpoint: mx_runtime_checkpoint_record(),
+        },
+        "CheckpointRestored" => AgentEvent::CheckpointRestored {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            restore: mx_runtime_checkpoint_restore_record(),
+        },
+        "RunTerminal" => AgentEvent::RunTerminal {
+            session_id: s.clone(),
+            run_id: s.clone(),
+            timestamp: s.clone(),
+            terminal: RunTerminalStatus::Completed,
+            error: Some(s.clone()),
+        },
+        "CacheStatsUpdated" => AgentEvent::CacheStatsUpdated {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            stats: mx_run_cache_stats(),
+        },
+        "CacheWasteAlert" => AgentEvent::CacheWasteAlert {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            attribution: MissAttribution::Cold,
+            missed_tokens: 0,
+            idle_ms: 0,
+            model_changed: false,
+            missed_cost_usd: Some(0.0),
+        },
+        "ColdCacheWarning" => AgentEvent::ColdCacheWarning {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            ttl_seconds: 0,
+            idle_ms: 0,
+            resend_estimate_tokens: 0,
+        },
+        "SecurityAudit" => AgentEvent::SecurityAudit {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            operation: SecurityAuditOperation::Delete,
+            targets: vec![s.clone()],
+            impact: mx_impact_assessment(),
+            decision: SecurityAuditDecision::Allowed,
+            permission_mode: Some(s.clone()),
+            tool_call_id: Some(s.clone()),
+        },
+        "SubagentStarted" => AgentEvent::SubagentStarted {
+            session_id: s.clone(),
+            subagent_id: s.clone(),
+            subagent_run_id: s.clone(),
+            role: s.clone(),
+            capability_mode: s.clone(),
+            started_at: s.clone(),
+            description: Some(s.clone()),
+            mode: Some(s.clone()),
+            parent_tool_call_id: Some(s.clone()),
+            subagent_session_id: Some(s.clone()),
+        },
+        "SubagentEvent" => AgentEvent::SubagentEvent {
+            session_id: s.clone(),
+            subagent_id: s.clone(),
+            subagent_run_id: s.clone(),
+            event: mx_subagent_event_payload(),
+        },
+        "SubagentEnded" => AgentEvent::SubagentEnded {
+            session_id: s.clone(),
+            subagent_id: s.clone(),
+            subagent_run_id: s.clone(),
+            status: SubagentEndStatus::Completed,
+            summary: Some(s.clone()),
+            ended_at: s.clone(),
+            subagent_session_id: Some(s.clone()),
+        },
+        "TaskStarted" => AgentEvent::TaskStarted {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            command: s.clone(),
+            cwd: s.clone(),
+            owner_run_id: s.clone(),
+            is_daemon: false,
+        },
+        "TaskOutput" => AgentEvent::TaskOutput {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            line: Some(s.clone()),
+            chunk: Some(s.clone()),
+            line_count: Some(0),
+        },
+        "TaskHeartbeat" => AgentEvent::TaskHeartbeat {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            resource: json!(null),
+        },
+        "TaskSuspicious" => AgentEvent::TaskSuspicious {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            silence_ms: 0,
+            last_output_at_ms: 0,
+        },
+        "TaskCompleted" => AgentEvent::TaskCompleted {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            exit_code: 0,
+            duration_ms: 0,
+            line_count: 0,
+        },
+        "TaskFailed" => AgentEvent::TaskFailed {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            exit_code: 0,
+            tail: vec![s.clone()],
+            duration_ms: 0,
+        },
+        "TaskKilled" => AgentEvent::TaskKilled {
+            session_id: s.clone(),
+            task_id: s.clone(),
+            via_force: false,
+            diagnostics: Some(s.clone()),
+        },
+        "TimerFired" => AgentEvent::TimerFired {
+            session_id: s.clone(),
+            timer_id: s.clone(),
+            prompt: s.clone(),
+            fired_at_ms: 0,
+        },
+        "TimerCancelled" => AgentEvent::TimerCancelled {
+            session_id: s.clone(),
+            timer_id: s.clone(),
+            reason: s.clone(),
+            cancelled_at_ms: 0,
+        },
+        "CronFired" => AgentEvent::CronFired {
+            session_id: s.clone(),
+            cron_id: s.clone(),
+            prompt: s.clone(),
+            expression: s.clone(),
+            iteration: 0,
+            fired_at_ms: 0,
+        },
+        "RecoveryEscalated" => AgentEvent::RecoveryEscalated {
+            session_id: s.clone(),
+            subagent_run_id: Some(s.clone()),
+            kind: s.clone(),
+            retries: 0,
+            elapsed_ms: 0,
+            detail: Some(s.clone()),
+        },
+        "RecoverySteering" => AgentEvent::RecoverySteering {
+            session_id: s.clone(),
+            subagent_id: s.clone(),
+            subagent_run_id: s.clone(),
+            fingerprint: s.clone(),
+            retries: 0,
+            remaining_status: s.clone(),
+            pending: false,
+            created_at_ms: 0,
+        },
+        "RecoveryFork" => AgentEvent::RecoveryFork {
+            session_id: s.clone(),
+            fingerprint: s.clone(),
+            subagent_id: s.clone(),
+            from_run_id: s.clone(),
+            from_leaf_id: s.clone(),
+            new_run_id: s.clone(),
+            new_leaf_id: s.clone(),
+            context_mode: s.clone(),
+        },
+        "RecoveryReport" => AgentEvent::RecoveryReport {
+            session_id: s.clone(),
+            subagent_id: s.clone(),
+            subagent_run_id: s.clone(),
+            stuck_at_ms: 0,
+            suggestion: s.clone(),
+        },
+        "RecoveryBudgetDenied" => AgentEvent::RecoveryBudgetDenied {
+            session_id: s.clone(),
+            subagent_run_id: Some(s.clone()),
+            fingerprint: s.clone(),
+            count: 0,
+            max: 0,
+        },
+        "GoalRoundStarted" => AgentEvent::GoalRoundStarted {
+            round: 0,
+            max_rounds: 0,
+            goal: s.clone(),
+        },
+        "GoalRoundCompleted" => AgentEvent::GoalRoundCompleted {
+            round: 0,
+            tool_call_count: 0,
+            tool_success_count: 0,
+            message_count: 0,
+            decision: s.clone(),
+            reason_detail: s.clone(),
+            stalled_delta: 0,
+            evidence: s.clone(),
+        },
+        "GoalContinuationDecided" => AgentEvent::GoalContinuationDecided {
+            action: s.clone(),
+            reason: s.clone(),
+            prompt: Some(s.clone()),
+            progress_signature: Some(s.clone()),
+            detail: Some(s.clone()),
+        },
+        "SteeringEvaluated" => AgentEvent::SteeringEvaluated {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            phase: s.clone(),
+            hit_strategies: vec![s.clone()],
+            steering_count_before: 0,
+            steering_count_after: 0,
+            budget_remaining: Some(0),
+            reset: false,
+        },
+        "ControlIntent" => AgentEvent::ControlIntent {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            kind: s.clone(),
+            intent_id: s.clone(),
+            source: Some(s.clone()),
+            reason: Some(s.clone()),
+            state: s.clone(),
+        },
+        "HookOutcome" => AgentEvent::HookOutcome {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            hook_type: s.clone(),
+            outcome: s.clone(),
+            hook_name: Some(s.clone()),
+            blocked_reason: Some(s.clone()),
+        },
+        "SummaryBackground" => AgentEvent::SummaryBackground {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            phase: s.clone(),
+            attempt: 0,
+            reason: Some(s.clone()),
+            message_id: Some(s.clone()),
+        },
+        "StageSummaryMilestone" => AgentEvent::StageSummaryMilestone {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            milestone_type: s.clone(),
+            tier: Some(s.clone()),
+            milestone_index: Some(0),
+        },
+        "NudgeEnqueued" => AgentEvent::NudgeEnqueued {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            reason: s.clone(),
+            target_ring: s.clone(),
+            overwrote: false,
+        },
+        "RecoveryAcknowledged" => AgentEvent::RecoveryAcknowledged {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            notification_id: Some(s.clone()),
+            subagent_run_id: s.clone(),
+        },
+        "RecoveryRetryAttempted" => AgentEvent::RecoveryRetryAttempted {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            attempt: 0,
+            delay_ms: 0,
+            budget_remaining: 0,
+            from_run_id: s.clone(),
+            new_run_id: s.clone(),
+        },
+        "ProviderRequestAnchored" => AgentEvent::ProviderRequestAnchored {
+            session_id: s.clone(),
+            timestamp: s.clone(),
+            turn_index: 0,
+            model: Some(s.clone()),
+            request_started_at_ms: 0,
+        },
+        "TimelineTruncate" => AgentEvent::TimelineTruncate {
+            session_id: s.clone(),
+            run_id: s.clone(),
+            boundary_seq: 0,
+            reason: TimelineTruncateReason::UserRequested,
+            target_message_id: s.clone(),
+            timestamp: s.clone(),
+        },
+        other => panic!("注册表含未接入字段集合断言的事件变体 {other}"),
+    }
+}
+
+#[test]
+fn event_field_sets_match_registry() {
+    let reg = registry();
+    for ev in &reg.events {
+        let mut registered: BTreeSet<String> = ev.fields.iter().map(|f| f.name.clone()).collect();
+        registered.insert("type".to_string());
+        let actual = field_set_of(&serde_json::to_value(maximal_event(&ev.rust_variant)).unwrap());
+        assert_field_set(&format!("event:{}", ev.wire), &registered, &actual);
+    }
 }
