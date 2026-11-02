@@ -1,5 +1,13 @@
 import '@testing-library/jest-dom';
-import { beforeEach, afterEach, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { loadSettingsDomain } from './i18n/settingsDomain';
+
+// 设置域词典懒加载（i18n/settingsDomain）：生产环境随设置中心打开按需加载，
+// 静态核心词典不含设置域全量。测试环境在每个测试文件开始前预载双语全量
+// 设置词典，使隔离挂载的设置/账号组件拿到与生产打开设置后一致的完整词典。
+beforeAll(async () => {
+  await Promise.all([loadSettingsDomain('zh-CN'), loadSettingsDomain('en-US')]);
+});
 
 // =============================================================================
 // Tauri invoke mock 基础设施（Stream F）

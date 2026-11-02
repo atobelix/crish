@@ -25,6 +25,7 @@ import {
 import { useSettingsNav } from '../useSettingsNav';
 import { SettingsSidebar } from './SettingsSidebar';
 import { useI18n } from '../../i18n';
+import { useSettingsDomain } from '../../i18n/settingsDomain';
 
 /** 设置 tab 懒加载：按需加载，首屏只加载当前激活 tab */
 const ModelsSettingsTab = lazy(() =>
@@ -198,7 +199,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onClose,
   initialTab,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  // 设置中心打开时按需加载设置域全量词典（首屏只含核心词典）
+  useSettingsDomain(language, isOpen);
 
   const storeTab = useSettingsUiStore((s) => s.settingsActiveTab);
   const setSettingsActiveTab = useSettingsUiStore(

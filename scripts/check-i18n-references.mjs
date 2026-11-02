@@ -94,7 +94,25 @@ function loadSingleTsModule(filePath) {
 
 function loadRuntimeDictionary(localeId) {
   const indexPath = join(LOCALES_DIR, localeId, 'index.ts');
-  return loadSingleTsModule(indexPath);
+  const dict = loadSingleTsModule(indexPath);
+  // 设置域词典已拆为懒加载：静态词典的 settings 仅含核心子集，
+  // 引用口径仍按全量校验——把 settings-domain/settingsFull 汇合的全量
+  // 设置词典并回 settings 命名空间（与运行时 I18nProvider 的合并口径一致）。
+  const fullPath = join(LOCALES_DIR, localeId, 'settings-domain', 'settingsFull.ts');
+  if (existsSync(fullPath)) {
+    // loadSingleTsModule 返回挑选后的导出值：settingsFull.ts 的默认导出即
+    // 全量设置词典对象本身（扁平点分键，与核心 settings 的 title 键同源），
+    // 故校验其形态后直接作为 settings 命名空间（形态不符时不合并、保持红）。
+    const settingsFull = loadSingleTsModule(fullPath);
+    if (
+      settingsFull &&
+      typeof settingsFull === 'object' &&
+      typeof settingsFull.title === 'string'
+    ) {
+      dict.settings = settingsFull;
+    }
+  }
+  return dict;
 }
 
 /* ------------------------------------------------------------------ */

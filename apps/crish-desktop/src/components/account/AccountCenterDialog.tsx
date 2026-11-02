@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { AnimatePresence, m } from 'motion/react';
 import { AppIcon, Button, Dialog, Tooltip, cn } from '../ui';
 import { useI18n } from '../../i18n';
+import { useSettingsDomain } from '../../i18n/settingsDomain';
 import { useAuthField } from '../../store/storeAccess';
 import { useAccountUiStore } from '../../store/accountUiStore';
 import { AccountAuthStep } from './AccountAuthPanes';
@@ -35,8 +36,10 @@ function AccountMark() {
 }
 
 export function AccountCenterDialog() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const open = useAccountUiStore((state) => state.loginOpen);
+  // 登录弹窗使用设置域账号词条，打开时按需加载设置域全量词典
+  useSettingsDomain(language, open);
   const closeLogin = useAccountUiStore((state) => state.closeLogin);
   const isLoggedIn = useAuthField((state) => state.isLoggedIn);
   const flow = useAccountAuthFlow(closeLogin);

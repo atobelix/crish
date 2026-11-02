@@ -689,6 +689,17 @@ export default defineConfig({
             return 'vendor-shared-utils';
           }
 
+          // 设置域全量词典单独成包：仅经动态 import 懒加载，不进首屏静态图
+          if (
+            n.includes('/src/i18n/locales/') &&
+            (n.includes('/settings-domain/') ||
+              /\/settings(?:Parts|PartAbout|PartExtensions|Models|Account)\.ts$/.test(
+                n
+              ))
+          ) {
+            return 'i18n-settings';
+          }
+
           if (n.includes('/src/i18n/locales/')) {
             return 'i18n-locales';
           }

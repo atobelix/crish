@@ -12,12 +12,17 @@ import {
   STORAGE_KEY_LOCALE,
   type I18nContextValue,
   type I18nDictionary,
+  type SettingsTranslations,
   type SupportedLanguage,
   type TranslateFunction,
   type TranslationKey,
   type TranslationParams,
 } from './types';
 import { dictionaries } from './locales';
+import {
+  getLoadedSettingsDomain,
+  subscribeSettingsDomain,
+} from './settingsDomain';
 import { registerErrorTranslateFn } from '../utils/error-translation';
 
 /**
@@ -380,13 +385,23 @@ export function getGlobalActiveLanguage(): SupportedLanguage {
   return globalActiveLanguage;
 }
 
+/**
+ * 生效词典：静态核心词典 + 已懒加载的设置域全量词典。设置域未加载完成时
+ * 只有核心词典，设置域词条经翻译回退链降级呈现，加载完成后自动补齐。
+ */
+function getEffectiveDictionary(lang: SupportedLanguage): I18nDictionary {
+  const base = dictionaries[lang] ?? dictionaries[DEFAULT_LANGUAGE];
+  const settingsFull = getLoadedSettingsDomain(lang);
+  if (!settingsFull || base.settings === settingsFull) return base;
+  return { ...base, settings: settingsFull };
+}
 function updateGlobalTranslator(lang: SupportedLanguage): void {
   const languageChanged = globalActiveLanguage !== lang;
   globalActiveLanguage = lang;
   if (languageChanged) {
     globalSessionLanguageEpoch += 1;
   }
-  const dict = dictionaries[lang] ?? dictionaries[DEFAULT_LANGUAGE];
+  const dict = getEffectiveDictionary(lang);
   globalActiveTranslator = createTranslateFunction(dict);
   // 连接到 error-translation.ts
   registerErrorTranslateFn((key: string, fallback?: string) =>
@@ -396,11 +411,18 @@ function updateGlobalTranslator(lang: SupportedLanguage): void {
 
 // 模块加载时初始化一次
 updateGlobalTranslator(DEFAULT_LANGUAGE);
+// 设置域词典懒加载完成后刷新全局翻译器（语言未变，不推进会话 epoch）
+subscribeSettingsDomain(() => {
+  updateGlobalTranslator(globalActiveLanguage);
+});
 
 export const I18nContext = createContext<I18nContextValue>({
   language: DEFAULT_LANGUAGE,
   setLanguage: () => {},
-  t: globalActiveTranslator,
+  // 动态委托全局翻译器：语言切换与设置域词典懒加载完成后，无 Provider
+  // 场景（如隔离挂载的组件）也自动跟随最新生效词典，不冻结在模块初始化快照。
+  t: (key, fallbackOrParams, params) =>
+    globalActiveTranslator(key, fallbackOrParams, params),
   dictionary: dictionaries[DEFAULT_LANGUAGE],
   sessionEpoch: 0,
 });
@@ -446,9 +468,21 @@ export const I18nProvider: React.FC<I18nProviderProps> = ({
     setSessionEpoch(globalSessionLanguageEpoch);
   }, [language]);
 
-  const dictionary = useMemo(() => {
-    return dictionaries[language] ?? dictionaries[DEFAULT_LANGUAGE];
+  // 设置域全量词典：随设置中心等入口懒加载完成后并入生效词典
+  const [loadedSettings, setLoadedSettings] = useState<
+    SettingsTranslations | undefined
+  >(() => getLoadedSettingsDomain(language));
+  useEffect(() => {
+    setLoadedSettings(getLoadedSettingsDomain(language));
+    return subscribeSettingsDomain(() => {
+      setLoadedSettings(getLoadedSettingsDomain(language));
+    });
   }, [language]);
+  const dictionary = useMemo(() => {
+    const base = dictionaries[language] ?? dictionaries[DEFAULT_LANGUAGE];
+    if (!loadedSettings || base.settings === loadedSettings) return base;
+    return { ...base, settings: loadedSettings };
+  }, [language, loadedSettings]);
 
   const t = useMemo(() => {
     return createTranslateFunction(dictionary, {

@@ -1,4 +1,6 @@
 import { useToast } from '../../services/toast/ToastContext';
+import { useI18n } from '../../i18n';
+import { useSettingsDomain } from '../../i18n/settingsDomain';
 /**
  * 主对话区 · 定时任务：与设置页同源 workflow API，嵌入 chat-doc-flow 展示。
  * 壳组件：只保留头部 + 预设行 + 表单/列表/运行历史装配；共享状态与动作
@@ -42,6 +44,9 @@ type Props = {
 
 export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   const { showToast } = useToast();
+  const { language } = useI18n();
+  // 本面板也会从聊天卡片挂载（设置中心之外），挂载时按需加载设置域全量词典
+  useSettingsDomain(language);
   const currentWorkspacePath = getWorkspacePath();
   const state = useWorkflowsState({
     surface: 'chat',

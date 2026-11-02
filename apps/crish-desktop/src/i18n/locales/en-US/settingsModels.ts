@@ -2,23 +2,6 @@
 // Must keep the same key set and interpolation params as zh-CN/settingsModels.ts.
 
 export const settingsPartModels = {
-  // ── Model vendor display names (models.vendor.*; referenced by ModelVendorMeta.nameKey) ──
-  'models.vendor.deepseek': 'DeepSeek',
-  'models.vendor.qwen': 'Qwen (Tongyi Qianwen)',
-  'models.vendor.moonshot': 'Moonshot AI (Kimi)',
-  'models.vendor.zhipu': 'Zhipu AI (GLM)',
-  'models.vendor.minimax': 'MiniMax (Hailuo)',
-  'models.vendor.bytedance': 'ByteDance (Doubao)',
-  'models.vendor.stepfun': 'StepFun',
-  'models.vendor.baichuan': 'Baichuan AI',
-  'models.vendor.zeroone': '01.AI',
-  'models.vendor.baidu': 'Baidu (ERNIE Bot)',
-  'models.vendor.tencent': 'Tencent (Hunyuan)',
-  'models.vendor.iflytek': 'iFlytek (Spark)',
-  'models.vendor.sensetime': 'SenseTime (SenseNova)',
-  'models.vendor.kling': 'Kuaishou (Kling)',
-  'models.vendor.siliconflow': 'SiliconFlow',
-
   // ── Models settings tab overview & global default model (models.*) ──
   'models.addProvider': 'Add Provider',
   'models.globalDefaultModel': 'Global Default Model',
@@ -70,6 +53,4 @@ export const settingsPartModels = {
   'models.probe.handshakeOk':
     'Provider handshake successful (URL and credentials verified, click "Fetch" to add models)',
   'models.probe.checkFailed': 'Connection check failed: {error}',
-  'models.probe.contextWindowWriteFailed':
-    'Failed to merge scanned context windows into the unified tree: {error}',
 };

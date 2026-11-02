@@ -9,7 +9,6 @@ export const settingsPartAccount = {
   'account.save': '保存',
   'account.signIn': '登录',
   'account.signOut': '退出登录',
-  'account.signedOut': '未登录',
   'account.changePassword': '修改密码',
   'account.changePassword.desc':
     '我们会向你的账号邮箱发送验证码，验证后即可设置新密码。',
@@ -107,8 +106,4 @@ export const settingsPartAccount = {
   'account.delete.confirm': '注销账号',
 
   // ── 快捷设置菜单 ──
-  'account.quick.myAccount': '我的账号',
-  'account.quick.signIn': '登录账号',
-  'account.quick.manageTip': '在设置中管理账号',
-  'account.quick.signInTip': '登录或注册 Crish 账号',
 };

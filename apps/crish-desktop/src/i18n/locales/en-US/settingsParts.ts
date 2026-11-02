@@ -392,18 +392,6 @@ export const settingsPartRest = {
   'security.pressEnterToAdd': 'Press Enter to add',
   'security.permissionSection': 'Permissions',
   'security.permissionModeAria': 'Permission mode',
-  'security.modeAskLabel': 'Ask every time',
-  'security.modeAskShortLabel': 'Ask every time',
-  'security.modeAskDesc':
-    'Confirm before file changes, write operations and command execution',
-  'security.modeSmartLabel': 'Smart allow',
-  'security.modeSmartShortLabel': 'Smart allow',
-  'security.modeSmartDesc':
-    'Safe read-only commands run directly; write operations and dangerous commands require confirmation',
-  'security.modeFullLabel': 'Full access',
-  'security.modeFullShortLabel': 'Full allow',
-  'security.modeFullDesc':
-    'Allow everything except physically destructive commands, with no per-action confirmation',
   'security.morePaths': '+{count} more',
   'security.noOpenProjects': 'No open projects',
   'security.noOpenProjectsDesc': 'Projects will be displayed here once opened',

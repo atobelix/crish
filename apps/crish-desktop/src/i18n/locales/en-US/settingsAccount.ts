@@ -9,7 +9,6 @@ export const settingsPartAccount = {
   'account.save': 'Save',
   'account.signIn': 'Sign in',
   'account.signOut': 'Sign out',
-  'account.signedOut': 'Not signed in',
   'account.changePassword': 'Change password',
   'account.changePassword.desc':
     "We'll send a verification code to your account email. Enter it to set a new password.",
@@ -114,8 +113,4 @@ export const settingsPartAccount = {
   'account.delete.confirm': 'Delete account',
 
   // ── 快捷设置菜单 ──
-  'account.quick.myAccount': 'My account',
-  'account.quick.signIn': 'Sign in',
-  'account.quick.manageTip': 'Manage your account in Settings',
-  'account.quick.signInTip': 'Sign in or sign up for Crish',
 };
