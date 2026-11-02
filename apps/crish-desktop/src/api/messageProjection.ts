@@ -7,12 +7,13 @@
  * 共用的投影原语，杜绝各写一套：
  *
  * - `projectAgentMessageContent`   —— AgentMessage → { text, thought }（text/thought 块归一）；
- * - `agentBlockToTimelineBlock`    —— AgentMessageBlock → MessageTimelineBlock（text/thought/tool_call 投影装饰）；
+ * - `agentBlockToTimelineBlock`    —— AgentMessageBlock → MessageTimelineBlock | null（text/thought/tool_call 投影装饰；image 不合成返回 null）；
  * - `projectAgentMessageToSessionMessage` —— 单条 AgentMessage → SessionMessage 投影入口。
  *
  * 语义约定：
- * - image / step_start / step_end 是前端专有块，不冒充事件块；generated 四块
- *   （text/thought/tool-call/tool-result）是唯一事件块权威；
+ * - image / step_start / step_end 是前端专有时间线块，不冒充事件块；generated 五块
+ *   （text/thought/tool-call/tool-result/image）是唯一事件块权威，其中 image
+ *   事件块只经消息级 images 通道承接，不由 agentBlockToTimelineBlock 合成；
  * - 前端展示层继续消费既有 `content` 字段（保持 50 文件引用面不变），
  *   generated 的 `text` 一并归一，不强行改展示层字段名。
  */
@@ -54,11 +55,13 @@ export function projectAgentMessageContent(agent: {
 
 /**
  * generated 事件块 → 前端时间线投影装饰块（text/thought/tool_call 子集）。
- * image / step_start / step_end 无事件块等价物，不由本函数合成。
+ * image 事件块不在本函数合成时间线块（返回 null，由调用方过滤）：前端 image
+ * 时间线块承载 MessageImageRef[]，由消息级 images 通道与水合层构造（既有分工）；
+ * step_start / step_end 无事件块等价物，同样不由本函数合成。
  */
 export function agentBlockToTimelineBlock(
   block: AgentMessageBlock
-): MessageTimelineBlock {
+): MessageTimelineBlock | null {
   switch (block.type) {
     case 'thought':
       return {
@@ -71,6 +74,9 @@ export function agentBlockToTimelineBlock(
     case 'tool-result':
       // 事件块 tool-result 没有独立前端展示块；投影为 tool_call 锚点（无 id 不生成）
       return { type: 'tool_call', id: block.toolCallId };
+    case 'image':
+      // 图片展示走消息级 images 通道，本函数不合成 image 时间线块
+      return null;
     case 'text':
     default:
       return { type: 'text', content: block.text };
@@ -106,7 +112,9 @@ export function projectAgentMessageToSessionMessage(
       : 'assistant');
   const blocks: MessageTimelineBlock[] = (
     Array.isArray(agent.blocks) ? agent.blocks : []
-  ).map(agentBlockToTimelineBlock);
+  )
+    .map(agentBlockToTimelineBlock)
+    .filter((b): b is MessageTimelineBlock => b !== null);
   const result: SessionMessage = {
     id: opts?.id ?? agent.id,
     sender,
