@@ -35,6 +35,7 @@ import {
   plainApprovalQuestion,
   shouldResetAllowConfirmArmed,
 } from '../../api/chatApprovalUi';
+import { agentIdentity } from '../../api/tool-presentation/agentIdentity';
 import type {
   MessageToolApprovalMeta,
   MessageToolApprovalPayload,
@@ -104,6 +105,10 @@ function toRiskMeta(
     source: riskMeta.source || 'unknown',
     ...(payload !== undefined && { payload }),
     ...(riskMeta.metadata !== undefined && { metadata: riskMeta.metadata }),
+    ...(riskMeta.requester !== undefined && {
+      requester: riskMeta.requester,
+    }),
+    ...(riskMeta.arbiter !== undefined && { arbiter: riskMeta.arbiter }),
   };
 }
 
@@ -260,12 +265,31 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
     zoneHint;
   const riskAriaSummary = hasRiskFacts ? approvalRiskSummary(riskMeta) : '';
 
+  // R7 申请人标注：requester 存在 = 子 agent 发起（主 agent 发起时桥接层
+  // 不写 requester，卡片不标注、与既有呈现一致）。身份标按 subagentId 走
+  // agentIdentity 同源取值（与分派卡同一色板/标号）；解析不到 subagentId
+  // 时只出文案不出身份标，绝不按 runId 误挂身份。申请理由作上下文一行，
+  // 与 summary / riskReason 同文时不重复展示（parse 层有 reason→riskReason
+  // 的兜底串扰，此处收口去重）。
+  const requester = riskMeta?.requester;
+  const requesterIdentity = requester?.subagentId
+    ? agentIdentity(requester.subagentId)
+    : null;
+  const requesterReason =
+    requester?.reason &&
+    requester.reason !== summary &&
+    requester.reason !== riskMeta?.riskReason
+      ? requester.reason
+      : '';
+  const showRequesterReason = Boolean(requesterReason);
+
   const showSummary = Boolean(summary && summary !== question);
   const showReason = Boolean(
     riskMeta?.riskReason && riskMeta.riskReason !== summary
   );
   const hasCmd = Boolean(cmd && cmd.trim());
-  const hasExtraDesc = showSummary || showReason || showApprovalReason;
+  const hasExtraDesc =
+    showSummary || showReason || showApprovalReason || showRequesterReason;
   const density: 'compact' | 'default' =
     !hasCmd && !hasExtraDesc && chips.length <= 2 ? 'compact' : 'default';
 
@@ -431,6 +455,52 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
           </span>
         ) : null}
       </div>
+
+      {requester ? (
+        <div
+          data-testid="approval-requester"
+          data-requester-agent={requester.subagentId ?? requester.runId}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 4,
+            fontSize: 'var(--font-size-xs)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {requesterIdentity ? (
+            <span
+              aria-hidden
+              style={{
+                color: requesterIdentity.hueVar,
+                fontSize: 11,
+                lineHeight: 1,
+              }}
+            >
+              {requesterIdentity.glyph}
+            </span>
+          ) : null}
+          <span>
+            {requester.label
+              ? t('chat.approval.requesterSubagent', {
+                  label: requester.label,
+                })
+              : t('chat.approval.requesterSubagentAnon')}
+            {riskMeta?.arbiter === 'main-agent' ? (
+              <span style={{ color: 'var(--text-tertiary)' }}>
+                {t('chat.approval.arbiterMainAgentSuffix')}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
+      {showRequesterReason ? (
+        <div className={styles.approvalCardDesc} data-requester-reason>
+          {requesterReason}
+        </div>
+      ) : null}
 
       <div className={styles.approvalCardTitle} id={titleId}>
         {question}

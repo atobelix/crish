@@ -227,6 +227,16 @@ export const CORE_NORMALIZERS: Record<string, Normalizer> = {
         toolMetadata: (isRecord(req.toolMetadata)
           ? req.toolMetadata
           : {}) as ToolMetadata,
+        // R7 审批归属宽容承接（与生成 parser 同口径）：metadata 原样透传
+        // （裁决来源 arbiter 在其内），requesterRunId / reason 非空才带——
+        // 缺省即主 agent 发起，与引擎 skip_serializing_if 的缺省语义一致。
+        ...(req.metadata !== undefined
+          ? { metadata: req.metadata as PermissionRequest['metadata'] }
+          : {}),
+        ...(str(req.requesterRunId)
+          ? { requesterRunId: str(req.requesterRunId) }
+          : {}),
+        ...(str(req.reason) ? { reason: str(req.reason) } : {}),
       },
     };
   },

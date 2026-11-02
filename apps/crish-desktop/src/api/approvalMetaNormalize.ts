@@ -4,6 +4,7 @@
  */
 
 import {
+  type ApprovalArbiter,
   type ApprovalRiskLevel,
   type ApprovalRiskMeta,
   type ApprovalRiskSource,
@@ -41,7 +42,11 @@ export function firstBoolean(...vals: unknown[]): boolean | undefined {
 export function coerceMetaText(input: unknown): string {
   if (input == null) return '';
   if (typeof input === 'string') return input;
-  if (typeof input === 'number' || typeof input === 'boolean' || typeof input === 'bigint') {
+  if (
+    typeof input === 'number' ||
+    typeof input === 'boolean' ||
+    typeof input === 'bigint'
+  ) {
     return String(input);
   }
   return '';
@@ -62,7 +67,9 @@ export function isKnownTrustZone(v: unknown): v is ApprovalTrustZone {
   return (APPROVAL_TRUST_ZONES as readonly string[]).includes(z ?? '');
 }
 
-export function levelFromZone(zone: string | undefined): ApprovalRiskLevel | undefined {
+export function levelFromZone(
+  zone: string | undefined
+): ApprovalRiskLevel | undefined {
   if (!zone) return undefined;
   switch (zone.toUpperCase()) {
     case 'T0':
@@ -82,19 +89,35 @@ export function levelFromZone(zone: string | undefined): ApprovalRiskLevel | und
 /** 规范化风险等级（大小写/空白不敏感） */
 export function normalizeRiskLevel(v: unknown): ApprovalRiskLevel | undefined {
   if (typeof v !== 'string') {
-    if (v === 'low' || v === 'medium' || v === 'high' || v === 'critical' || v === 'unknown') {
+    if (
+      v === 'low' ||
+      v === 'medium' ||
+      v === 'high' ||
+      v === 'critical' ||
+      v === 'unknown'
+    ) {
       return v;
     }
     return undefined;
   }
   const s = v.trim().toLowerCase();
-  if (s === 'low' || s === 'medium' || s === 'high' || s === 'critical' || s === 'unknown') {
+  if (
+    s === 'low' ||
+    s === 'medium' ||
+    s === 'high' ||
+    s === 'critical' ||
+    s === 'unknown'
+  ) {
     return s;
   }
   return undefined;
 }
 
-export function isHardlineRisk(risk: string | undefined, trustZone: string | undefined, hardlineFlag: unknown): boolean {
+export function isHardlineRisk(
+  risk: string | undefined,
+  trustZone: string | undefined,
+  hardlineFlag: unknown
+): boolean {
   if (hardlineFlag === true) return true;
   if (trustZone === 'T4') return true;
   if (risk && risk.trim().toLowerCase() === 'hardline') return true;
@@ -108,7 +131,7 @@ export function isHardlineRisk(risk: string | undefined, trustZone: string | und
  * null/undefined → true；仅 unknown 默认字段且无 zone/risk/reason/标志 → true。
  */
 export function isEmptyApprovalRiskMeta(
-  meta: ApprovalRiskMeta | null | undefined,
+  meta: ApprovalRiskMeta | null | undefined
 ): boolean {
   if (meta == null) return true;
   if (firstString(meta.trustZone)) return false;
@@ -124,7 +147,7 @@ export function isEmptyApprovalRiskMeta(
 
 /** isEmptyApprovalRiskMeta 的反义：有可展示事实 */
 export function hasApprovalRiskFacts(
-  meta: ApprovalRiskMeta | null | undefined,
+  meta: ApprovalRiskMeta | null | undefined
 ): boolean {
   return !isEmptyApprovalRiskMeta(meta);
 }
@@ -134,7 +157,7 @@ export function hasApprovalRiskFacts(
  * 永不抛；null → EMPTY 克隆。
  */
 export function coerceApprovalRiskMeta(
-  input: Partial<ApprovalRiskMeta> | null | undefined,
+  input: Partial<ApprovalRiskMeta> | null | undefined
 ): ApprovalRiskMeta {
   if (input == null || typeof input !== 'object' || Array.isArray(input)) {
     return {
@@ -149,9 +172,34 @@ export function coerceApprovalRiskMeta(
   const riskReason = firstString(input.riskReason);
   const riskLevel = normalizeRiskLevel(input.riskLevel) ?? 'unknown';
   const source: ApprovalRiskSource =
-    input.source === 'backend' || input.source === 'derived' || input.source === 'unknown'
+    input.source === 'backend' ||
+    input.source === 'derived' ||
+    input.source === 'unknown'
       ? input.source
       : 'unknown';
+  // R7 归属字段透传：requester 须带非空 runId 才保留（防脏数据冒充归属），
+  // 子字段按文本规范化；arbiter 仅认 'user' / 'main-agent' 两个 wire 值。
+  const reqIn = input.requester;
+  const reqRunId =
+    reqIn && typeof reqIn === 'object' ? firstString(reqIn.runId) : undefined;
+  const requester = reqRunId
+    ? {
+        runId: reqRunId,
+        ...(firstString(reqIn?.subagentId)
+          ? { subagentId: firstString(reqIn?.subagentId) }
+          : {}),
+        ...(firstString(reqIn?.label)
+          ? { label: firstString(reqIn?.label) }
+          : {}),
+        ...(firstString(reqIn?.reason)
+          ? { reason: firstString(reqIn?.reason) }
+          : {}),
+      }
+    : undefined;
+  const arbiter: ApprovalArbiter | undefined =
+    input.arbiter === 'user' || input.arbiter === 'main-agent'
+      ? input.arbiter
+      : undefined;
   return {
     ...(trustZone ? { trustZone } : {}),
     ...(risk ? { risk } : {}),
@@ -160,6 +208,8 @@ export function coerceApprovalRiskMeta(
     requiresDoubleConfirm: Boolean(input.requiresDoubleConfirm),
     recommendSnapshot: Boolean(input.recommendSnapshot),
     source,
+    ...(requester ? { requester } : {}),
+    ...(arbiter ? { arbiter } : {}),
   };
 }
 

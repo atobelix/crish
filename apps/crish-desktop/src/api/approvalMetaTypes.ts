@@ -8,6 +8,25 @@ export type ApprovalRiskLevel =
 
 export type ApprovalRiskSource = 'backend' | 'derived' | 'unknown';
 
+/** R7 审批裁决来源（引擎 PermissionRequest.metadata.arbiter 的 wire 值） */
+export type ApprovalArbiter = 'user' | 'main-agent';
+
+/**
+ * R7 审批申请人归属快照（桥接层由 requesterRunId 解析 SessionAgent 后写入；
+ * 与 store 的 MessageApprovalRequester 同形）。缺省（字段不存在）= 主 agent
+ * 发起，卡片不标注；subagentId/label 解析不到时缺省，卡片降级通用标注。
+ */
+export type ApprovalRequesterMeta = {
+  /** 发起 run 的引擎 runId */
+  runId: string;
+  /** 对应 SessionAgent.id（桥接层解析到时才有；身份标按此取值） */
+  subagentId?: string;
+  /** 申请人展示名快照（displayLabel → description → mode → id 兜底链） */
+  label?: string;
+  /** 子代理申请理由（PermissionRequest.reason 快照） */
+  reason?: string;
+};
+
 export type ApprovalRiskMeta = {
   trustZone?: string;
   risk?: string;
@@ -18,6 +37,10 @@ export type ApprovalRiskMeta = {
   source: ApprovalRiskSource;
   /** 原始审批 metadata（倒计时 / 策略 / 判点原因等，展示层透传） */
   metadata?: Record<string, unknown>;
+  /** R7 审批申请人归属（子 agent 发起时存在；缺省 = 主 agent 发起） */
+  requester?: ApprovalRequesterMeta;
+  /** R7 裁决来源（'main-agent' = 主 agent 裁决；缺省/'user' = 用户裁决） */
+  arbiter?: ApprovalArbiter;
 };
 
 /** UI tone（卡片 badge / chip 着色契约） */

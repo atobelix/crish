@@ -15,11 +15,56 @@ import { logInternalError } from '../../userFacingErrors';
 import { extractApprovalCommandArgs } from '../../engineEventSchema';
 import { parseApprovalRiskMeta } from '../../approvalMeta';
 import { parseApprovalPayload } from '../../approvalPayload';
+import { getSessionById } from '../../../store/storeAccess';
+import type {
+  ApprovalArbiter,
+  ApprovalRequesterMeta,
+} from '../../approvalMetaTypes';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** R7：从 PermissionRequest.metadata 提取裁决来源（仅认 wire 值
+ * 'main-agent' / 'user'；缺省/未知值视为未标注——引擎用户裁决面本就不写
+ * arbiter 键，缺省即用户裁决） */
+function extractArbiter(metadata: unknown): ApprovalArbiter | undefined {
+  if (!isRecord(metadata)) return undefined;
+  const a = metadata.arbiter;
+  return a === 'main-agent' || a === 'user' ? a : undefined;
+}
+
+/**
+ * R7：把引擎 requesterRunId 解析为申请人归属快照。
+ * 匹配口径：会话内 SessionAgent.subagentRunId === requesterRunId（与
+ * useAgentToolApproval 的 agents.find 同口径）；展示名走 displayLabel →
+ * description → mode → id 兜底链（与 agentCardUtils.agentDisplayName 同链）。
+ * 解析不到（agent 尚未落库 / runId 未回填）时只保留 runId 与 reason，
+ * 卡片据此降级为无身份标的通用标注，绝不挂错 agent。
+ */
+function resolveApprovalRequester(
+  sessionId: string,
+  runId: string,
+  reason: string | undefined
+): ApprovalRequesterMeta {
+  const trimmedReason = reason?.trim() ? reason.trim() : undefined;
+  const agent = getSessionById(sessionId)?.agents?.find(
+    (a) => a.subagentRunId === runId
+  );
+  if (!agent) {
+    return { runId, ...(trimmedReason ? { reason: trimmedReason } : {}) };
+  }
+  const label = [agent.displayLabel, agent.description, agent.mode, agent.id]
+    .map((c) => (c ?? '').trim())
+    .find((c) => c.length > 0);
+  return {
+    runId,
+    subagentId: agent.id,
+    ...(label ? { label } : {}),
+    ...(trimmedReason ? { reason: trimmedReason } : {}),
+  };
 }
 
 export function onApprovalRequested(
@@ -52,6 +97,25 @@ export function onApprovalRequested(
   const payload = parseApprovalPayload(raw);
   const approvalMeta = parseApprovalRiskMeta(raw);
   const metaWithPayload = payload ? { ...approvalMeta, payload } : approvalMeta;
+  // R7 审批归属透传：申请人与裁决来源自生成类型承接（event.request 是
+  // parser / 宽容归一后的权威形态）——requesterRunId 非空 = 子 agent 发起，
+  // arbiter 自 request.metadata 提取。两者皆缺省（主 agent 发起 + 用户
+  // 裁决）时 meta 不带归属字段，与既有行为逐字节一致。
+  const requesterRunId = (event.request.requesterRunId ?? '').trim();
+  const arbiter = extractArbiter(event.request.metadata);
+  const metaWithAttribution = {
+    ...metaWithPayload,
+    ...(requesterRunId
+      ? {
+          requester: resolveApprovalRequester(
+            env.sessionId,
+            requesterRunId,
+            event.request.reason
+          ),
+        }
+      : {}),
+    ...(arbiter ? { arbiter } : {}),
+  };
 
   if (approvalFlow.debugSets().pending.includes(toolCallId)) {
     return;
@@ -70,7 +134,7 @@ export function onApprovalRequested(
       toolName,
       args,
       explanation,
-      metaWithPayload
+      metaWithAttribution
     );
   } else {
     callbacks.onToolStart(toolCallId, toolName, args, explanation);

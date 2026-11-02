@@ -137,6 +137,25 @@ type MessageApprovalRiskLevel =
 /** 审批风险来源：后端事实 / 派生 / 未知 */
 type MessageApprovalRiskSource = 'backend' | 'derived' | 'unknown';
 
+/** R7 审批裁决来源（与引擎 PermissionRequest.metadata.arbiter wire 值同源） */
+export type MessageApprovalArbiter = 'user' | 'main-agent';
+
+/**
+ * R7 审批申请人归属快照（桥接层由 requesterRunId 解析 SessionAgent 后写入；
+ * 与 approvalMeta.ApprovalRequesterMeta 同形）。requester 字段缺省 = 主 agent
+ * 发起；subagentId/label 为桥接层解析快照，解析不到时缺省（卡片降级标注）。
+ */
+export interface MessageApprovalRequester {
+  /** 发起 run 的引擎 runId */
+  runId: string;
+  /** 对应 SessionAgent.id（桥接层解析到时才有；身份标按此取值） */
+  subagentId?: string;
+  /** 申请人展示名快照（displayLabel → description → mode → id 兜底链） */
+  label?: string;
+  /** 子代理申请理由（PermissionRequest.reason 快照） */
+  reason?: string;
+}
+
 /** 后端审批风险事实（BE-04）；仅展示，不按工具名猜 */
 export interface MessageToolApprovalMeta {
   trustZone?: string;
@@ -150,6 +169,10 @@ export interface MessageToolApprovalMeta {
   payload?: MessageToolApprovalPayload;
   /** 原始审批 metadata（倒计时 / 超时策略 / 判点原因，卡片透传展示） */
   metadata?: Record<string, unknown>;
+  /** R7 审批申请人归属（子 agent 发起时存在；缺省 = 主 agent 发起，不标注） */
+  requester?: MessageApprovalRequester;
+  /** R7 裁决来源（'main-agent' = 主 agent 裁决；缺省/'user' = 用户裁决） */
+  arbiter?: MessageApprovalArbiter;
 }
 
 /** 回退面积（C3/S6 载荷；字段可空 = 未知，与 revert.rs RevertArea 对齐） */

@@ -1,4 +1,5 @@
 import type { SessionAgent } from '../../store/types';
+import { mapSubagentRoleWireName } from '../../api/tool-presentation/agentRoleLabel';
 
 /**
  * 例外声明（T05.5.1 tokens 唯一源）：
@@ -34,7 +35,10 @@ export function sortAgentsForBrowse(agents: SessionAgent[]): SessionAgent[] {
 export function formatAgentDuration(agent: SessionAgent): string | null {
   const start = agent.startedAt;
   if (!start || !Number.isFinite(start)) return null;
-  const end = agent.endedAt && Number.isFinite(agent.endedAt) ? agent.endedAt : Date.now();
+  const end =
+    agent.endedAt && Number.isFinite(agent.endedAt)
+      ? agent.endedAt
+      : Date.now();
   const sec = Math.max(0, Math.round((end - start) / 1000));
   if (sec < 60) return `${sec} 秒`;
   if (sec < 3600) {
@@ -62,19 +66,46 @@ export function agentDisplayName(agent: SessionAgent): string {
   return '子智能体';
 }
 
+/**
+ * 待用户审批计数（R7 口径）：仅 `arbiter !== 'main-agent'` 计入用户待办——
+ * arbiter='user' 或字段缺省（主 agent 发起、默认用户裁决）计入；经主 agent
+ * 裁决的子 agent 审批不打扰用户。
+ * 注记：子 agent 路径（subagentHandlers / subagentTimeline /
+ * useAgentToolApproval）目前不写 approvalMeta，agent.messages 内的工具调用
+ * 暂无 arbiter 可过滤（缺省 → 计入，与主 agent 发起同口径）；待该路径写通
+ * approvalMeta 后本过滤自动生效，无需再改本函数。
+ */
 export function countPendingApprovals(agent: SessionAgent): number {
   let n = 0;
   for (const m of agent.messages || []) {
     for (const t of m.toolCalls || []) {
-      if (t.status === 'pending_approval') n += 1;
+      if (
+        t.status === 'pending_approval' &&
+        t.approvalMeta?.arbiter !== 'main-agent'
+      ) {
+        n += 1;
+      }
     }
   }
   return n;
 }
 
+/** 呈现名：与 agentDisplayName 同链，仅 displayLabel 先经角色 wire 名映射
+ * （R4b 呈现层口径，见 agentRoleLabel）；列表/卡面等呈现面用本函数，
+ * 数据/桥接面（如审批 requester 快照）继续用 agentDisplayName 原貌。 */
+export function agentDisplayNameWithRole(agent: SessionAgent): string {
+  const label = (agent.displayLabel || '').trim();
+  if (label) return mapSubagentRoleWireName(label);
+  return agentDisplayName(agent);
+}
+
 /** 新窗口打开 agent 只读快照（Blob URL，避免 document.write）；非侧栏主路径 */
 export function openAgentInNewWindow(agent: SessionAgent): void {
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=720,height=900');
+  const w = window.open(
+    '',
+    '_blank',
+    'noopener,noreferrer,width=720,height=900'
+  );
   if (!w) return;
   const esc = (s: string) =>
     s
@@ -88,7 +119,7 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
   lines.push(
     `<p class="meta">${esc(agent.mode || '')} · ${esc(statusLabel)}${
       agent.summary ? ' · ' + esc(agent.summary) : ''
-    }</p>`,
+    }</p>`
   );
   for (const m of agent.messages || []) {
     if (m.sender === 'user') {
@@ -108,14 +139,14 @@ export function openAgentInNewWindow(agent: SessionAgent): void {
                   : String(tc.status || '');
         lines.push(
           `<div class="t"><b>${esc(tc.name)}</b> ${esc(tcStatus)}<pre>${esc(
-            (tc.output || '').slice(0, 2000),
-          )}</pre></div>`,
+            (tc.output || '').slice(0, 2000)
+          )}</pre></div>`
         );
       }
     }
   }
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><title>${esc(
-    agent.description || '子智能体',
+    agent.description || '子智能体'
   )}</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#222;background:#fafafa}
