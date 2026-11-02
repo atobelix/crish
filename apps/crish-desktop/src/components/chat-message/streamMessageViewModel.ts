@@ -122,7 +122,15 @@ export function useStreamMessageViewModel(
     })
   );
 
-  const merged = useMemo(() => {
+  // R3 分层装配（渲染整改波 1）：旧实现把 thinking/工具/正文三层合并塞进
+  // 同一个 useMemo，纯文本帧（streamText 每帧变化）也会重跑工具层——
+  // applyStreamToolsToMessage 内的逐工具 findIndex 与 alignToolCallBlocks
+  // 全表对齐是 O(工具数 × 块数) 的无用功。现拆为两层：
+  //   工具层（thinking + tools）：只随 msg / streamThinking / streamTools 变；
+  //     streamingStore.setStreamText 按引用保留 tools，故文本帧此层恒命中。
+  //   正文层（text）：每帧只做一次直通判定，O(1)。
+  // 合并顺序与旧实现一致（thinking → tools → text），产物语义不变。
+  const toolMerged = useMemo(() => {
     let next: SessionMessage = msg;
     if (
       streamThinking != null &&
@@ -134,11 +142,15 @@ export function useStreamMessageViewModel(
     if (streamTools) {
       next = applyStreamToolsToMessage(next, streamTools);
     }
-    if (streamText != null && streamText !== msg.text) {
-      next = applyStreamTextToMessage(next, streamText);
-    }
     return next;
-  }, [msg, streamText, streamTools, streamThinking]);
+  }, [msg, streamTools, streamThinking]);
+
+  const merged = useMemo(() => {
+    if (streamText != null && streamText !== toolMerged.text) {
+      return applyStreamTextToMessage(toolMerged, streamText);
+    }
+    return toolMerged;
+  }, [toolMerged, streamText]);
 
   return { msg: merged, streamText };
 }

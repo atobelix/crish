@@ -1,8 +1,34 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import type { SessionMessage } from '../../store/types';
+import { streamStoreKey, useStreamingStore } from '../../store/storeAccess';
 import {
   applyStreamTextToMessage,
   applyStreamToolsToMessage,
+  useStreamMessageViewModel,
 } from './streamMessageViewModel';
+
+const alignSpy = vi.hoisted(() => vi.fn());
+vi.mock(
+  '../../api/tool-presentation/timelineNormalizer',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../../api/tool-presentation/timelineNormalizer')
+      >();
+    return {
+      ...actual,
+      alignToolCallBlocks: (
+        blocks: Parameters<typeof actual.alignToolCallBlocks>[0],
+        toolCalls: Parameters<typeof actual.alignToolCallBlocks>[1]
+      ) => {
+        alignSpy(blocks, toolCalls);
+        return actual.alignToolCallBlocks(blocks, toolCalls);
+      },
+    };
+  }
+);
 
 describe('applyStreamTextToMessage', () => {
   it('returns msg when streamText is undefined', () => {
@@ -113,5 +139,77 @@ describe('applyStreamToolsToMessage', () => {
       arguments: '{"path":"/tmp"}',
       output: '执行中…',
     });
+  });
+});
+
+describe('useStreamMessageViewModel 分层装配（R3）', () => {
+  beforeEach(() => {
+    alignSpy.mockClear();
+    useStreamingStore.setState({ byKey: Object.create(null) });
+  });
+
+  it('纯文本帧不重跑工具对齐；工具变更才重跑', () => {
+    const sessionId = 'sess-r3';
+    const msgId = 'msg-r3';
+    const baseMsg = {
+      id: msgId,
+      sender: 'assistant',
+      text: '',
+      status: 'processing',
+      toolCalls: [],
+      blocks: [],
+    } as unknown as SessionMessage;
+
+    act(() => {
+      useStreamingStore.setState({
+        byKey: {
+          [streamStoreKey(sessionId, msgId)]: {
+            sessionId,
+            messageId: msgId,
+            text: 'A',
+            tools: {
+              t1: { id: 't1', name: 'shell', status: 'running' },
+            },
+          },
+        },
+      });
+    });
+
+    const { result, rerender } = renderHook(() =>
+      useStreamMessageViewModel(baseMsg, sessionId)
+    );
+    const alignAfterMount = alignSpy.mock.calls.length;
+    expect(alignAfterMount).toBeGreaterThan(0);
+    expect(result.current.msg.toolCalls?.length).toBe(1);
+    expect(result.current.msg.text).toBe('A');
+    const toolCallsRef = result.current.msg.toolCalls;
+    const blocksRef = result.current.msg.blocks;
+
+    // 纯文本帧 ×5（setStreamText 按引用保留 tools）→ 工具层 memo 恒命中
+    for (let f = 1; f <= 5; f += 1) {
+      act(() => {
+        useStreamingStore
+          .getState()
+          .setStreamText(sessionId, msgId, 'A' + 'x'.repeat(f));
+      });
+      rerender();
+    }
+    expect(alignSpy.mock.calls.length).toBe(alignAfterMount);
+    expect(result.current.msg.text).toBe('Axxxxx');
+    // 工具层产物引用稳定（下游时间线签名的 toolCalls/blocks 输入不变）
+    expect(result.current.msg.toolCalls).toBe(toolCallsRef);
+    expect(result.current.msg.blocks).toBe(blocksRef);
+
+    // 工具变更 → 工具层重算，对齐恰好再跑一次
+    act(() => {
+      useStreamingStore.getState().setStreamTool(sessionId, msgId, 't1', {
+        id: 't1',
+        status: 'success',
+        output: 'done',
+      });
+    });
+    rerender();
+    expect(alignSpy.mock.calls.length).toBe(alignAfterMount + 1);
+    expect(result.current.msg.toolCalls?.[0]?.status).toBe('success');
   });
 });
