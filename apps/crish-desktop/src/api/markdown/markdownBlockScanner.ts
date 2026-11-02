@@ -19,6 +19,30 @@ export interface MarkdownBlockScanResult {
   draft: string;
 }
 
+/**
+ * 未闭合围栏的行组封口参数：正文每满 {@link FENCE_GROUP_LINES} 行封一组，
+ * 使巨型单块（整文件代码块）的大部分尽早进入封口缓存路径，活跃尾块只剩
+ * 不满一组的余量。首组需攒满两组量才封，避免中等代码块在流式期被无谓拆分。
+ * 行组只是流式期的渲染分片：围栏真正闭合（或 flush）时合成为整块原文，
+ * 静态切分结果与未引入行组时逐字一致。
+ */
+const FENCE_GROUP_LINES = 50;
+const FENCE_GROUP_TRIGGER_LINES = FENCE_GROUP_LINES * 2;
+
+/** 正在累积的未闭合围栏（已有行组封入 sealedBlocks 尾部）。 */
+interface OpenFenceState {
+  /** 围栏起始行下标（lines 内） */
+  startLine: number;
+  /** 围栏起始行原文（语言标记等），续组与草稿合成时复用 */
+  openerLine: string;
+  fenceChar: string;
+  fenceLen: number;
+  /** 下一条尚未封入行组的正文行下标 */
+  nextBodyLine: number;
+  /** 已为本围栏封入 sealedBlocks 的行组数（位于 sealedBlocks 尾部） */
+  sealedGroupCount: number;
+}
+
 const atxHeadingPattern = /^( {0,3})#{1,6}(?:\s+.*|\s*)$/;
 const thematicBreakPattern = /^( {0,3})([-*_])(?:\s*\2){2,}\s*$/;
 const openingTagPattern = /<([A-Za-z][\w:-]*)[\s>/]/;
@@ -81,6 +105,7 @@ export class MarkdownBlockScanner {
   private pendingStartLine = 0;
   private paragraphScanLine = 1;
   private sealedBlocks: string[] = [];
+  private openFence: OpenFenceState | null = null;
 
   constructor(initialText = '') {
     if (initialText) this.appendChunk(initialText);
@@ -96,6 +121,18 @@ export class MarkdownBlockScanner {
 
   flush(): string[] {
     this.scanAndSeal(true);
+    if (this.openFence) {
+      // 未闭合围栏收尾：行组合成回整块原文（与 split 的逐字契约一致）。
+      const fence = this.openFence;
+      if (fence.sealedGroupCount > 0) {
+        this.sealedBlocks.length -= fence.sealedGroupCount;
+      }
+      const remaining = this.lines.slice(fence.startLine).join('\n');
+      if (remaining.trim().length > 0) this.sealedBlocks.push(remaining);
+      this.pendingStartLine = this.lines.length;
+      this.openFence = null;
+      return [...this.sealedBlocks];
+    }
     if (this.pendingStartLine < this.lines.length) {
       const remaining = this.lines.slice(this.pendingStartLine).join('\n');
       if (remaining.trim().length > 0) this.sealedBlocks.push(remaining);
@@ -109,6 +146,12 @@ export class MarkdownBlockScanner {
   }
 
   getPendingDraft(): string {
+    if (this.openFence) {
+      // 围栏中段：草稿需带上围栏起始行，续余正文才仍按代码块渲染。
+      const fence = this.openFence;
+      const rest = this.lines.slice(fence.nextBodyLine).join('\n');
+      return rest ? `${fence.openerLine}\n${rest}` : fence.openerLine;
+    }
     if (this.pendingStartLine >= this.lines.length) return '';
     return this.lines.slice(this.pendingStartLine).join('\n');
   }
@@ -122,6 +165,7 @@ export class MarkdownBlockScanner {
     this.pendingStartLine = 0;
     this.paragraphScanLine = 1;
     this.sealedBlocks = [];
+    this.openFence = null;
   }
 
   static split(fullText: string): string[] {
@@ -150,6 +194,14 @@ export class MarkdownBlockScanner {
   private scanAndSeal(isFlushing: boolean): void {
     const totalLines = this.lines.length;
     const maxSafeIdx = isFlushing ? totalLines : totalLines - 1;
+
+    // 未闭合围栏优先推进：围栏正文内的一切行（含空行、类标题行）都只是
+    // 代码正文，绝不能落入下方通用块扫描。围栏在本轮内闭合时先合成整块，
+    // 再由通用扫描处理围栏之后的块。
+    if (this.openFence) {
+      this.advanceOpenFence(isFlushing);
+      if (this.openFence) return;
+    }
 
     while (this.pendingStartLine < totalLines) {
       while (
@@ -196,6 +248,17 @@ export class MarkdownBlockScanner {
           this.pendingStartLine = closedAtLine + 1;
           continue;
         }
+        // 未闭合（或闭合行就是当前活行、尚不可封）：进入围栏累积态，
+        // 后续推进（含行组封口）交给 advanceOpenFence。
+        this.openFence = {
+          startLine: start,
+          openerLine: startLine,
+          fenceChar,
+          fenceLen,
+          nextBodyLine: start + 1,
+          sealedGroupCount: 0,
+        };
+        this.advanceOpenFence(isFlushing);
         break;
       }
 
@@ -301,6 +364,60 @@ export class MarkdownBlockScanner {
       this.paragraphScanLine = Math.max(this.paragraphScanLine, scanLimit);
       break;
     }
+  }
+
+  /**
+   * 推进未闭合围栏：
+   * - 闭合行已可封时，先把本围栏已封的行组从 sealedBlocks 尾部摘除，
+   *   再整块原文封口（行组只是流式期分片，最终形态与未分片时一致）；
+   * - 仍未闭合时，把已定稿的正文（末行是活行、绝不封入）按行组封口。
+   */
+  private advanceOpenFence(isFlushing: boolean): void {
+    const fence = this.openFence;
+    if (!fence) return;
+    const totalLines = this.lines.length;
+
+    let closedAtLine = -1;
+    for (let i = fence.nextBodyLine; i < totalLines; i += 1) {
+      const match = (this.lines[i] ?? '').match(codeFenceClosePattern);
+      if (
+        match &&
+        match[2] &&
+        match[2][0] === fence.fenceChar &&
+        match[2].length >= fence.fenceLen
+      ) {
+        closedAtLine = i;
+        break;
+      }
+    }
+
+    if (closedAtLine !== -1 && (closedAtLine < totalLines - 1 || isFlushing)) {
+      if (fence.sealedGroupCount > 0) {
+        this.sealedBlocks.length -= fence.sealedGroupCount;
+      }
+      this.sealRange(fence.startLine, closedAtLine);
+      this.pendingStartLine = closedAtLine + 1;
+      this.openFence = null;
+      return;
+    }
+
+    const immutableEnd = totalLines - 1;
+    const available = immutableEnd - fence.nextBodyLine;
+    const maySeal =
+      fence.sealedGroupCount > 0 || available >= FENCE_GROUP_TRIGGER_LINES;
+    if (maySeal) {
+      const closing = fence.fenceChar.repeat(fence.fenceLen);
+      while (fence.nextBodyLine + FENCE_GROUP_LINES <= immutableEnd) {
+        const groupEnd = fence.nextBodyLine + FENCE_GROUP_LINES - 1;
+        const body = this.lines
+          .slice(fence.nextBodyLine, groupEnd + 1)
+          .join('\n');
+        this.sealedBlocks.push(`${fence.openerLine}\n${body}\n${closing}`);
+        fence.sealedGroupCount += 1;
+        fence.nextBodyLine = groupEnd + 1;
+      }
+    }
+    this.pendingStartLine = fence.nextBodyLine;
   }
 
   private sealRange(startLine: number, endLine: number): void {

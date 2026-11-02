@@ -49,6 +49,60 @@ describe('MarkdownBlockScanner', () => {
   });
 });
 
+describe('MarkdownBlockScanner fence line groups (R5)', () => {
+  const bodyLines = (count: number): string[] =>
+    Array.from({ length: count }, (_, i) => `const v${i} = ${i};`);
+
+  it('seals line groups of an unclosed giant fence and keeps a small draft', () => {
+    const scanner = new MarkdownBlockScanner();
+    scanner.appendChunk(['```ts', ...bodyLines(130)].join('\n') + '\n');
+
+    const sealed = scanner.getSealedBlocks();
+    expect(sealed).toHaveLength(2);
+    for (const group of sealed) {
+      const groupLines = group.split('\n');
+      expect(groupLines[0]).toBe('```ts');
+      expect(groupLines[groupLines.length - 1]).toBe('```');
+      expect(groupLines).toHaveLength(52);
+    }
+
+    const draft = scanner.getPendingDraft();
+    expect(draft.startsWith('```ts\n')).toBe(true);
+    expect(draft).toContain('const v129 = 129;');
+    expect(draft.split('\n').length).toBeLessThanOrEqual(32);
+  });
+
+  it('consolidates line groups back into the verbatim fence when it closes', () => {
+    const scanner = new MarkdownBlockScanner();
+    const body = bodyLines(130);
+    const full = ['```ts', ...body, '```'].join('\n');
+    scanner.appendChunk(['```ts', ...body].join('\n') + '\n');
+    expect(scanner.getSealedBlocks()).toHaveLength(2);
+
+    scanner.appendChunk('```\n\nafter');
+    expect(scanner.getSealedBlocks()).toEqual([full]);
+    expect(scanner.getPendingDraft()).toBe('after');
+  });
+
+  it('keeps split() output verbatim for a giant closed fence', () => {
+    const full = ['```ts', ...bodyLines(200), '```'].join('\n');
+    expect(MarkdownBlockScanner.split(full)).toEqual([full]);
+  });
+
+  it('keeps split() output verbatim for a giant unclosed fence', () => {
+    const text = ['```ts', ...bodyLines(200)].join('\n');
+    expect(MarkdownBlockScanner.split(text)).toEqual([text]);
+  });
+
+  it('does not split a medium fence below the trigger while streaming', () => {
+    const scanner = new MarkdownBlockScanner();
+    scanner.appendChunk(['```ts', ...bodyLines(60)].join('\n') + '\n');
+    expect(scanner.getSealedBlocks()).toEqual([]);
+    expect(scanner.getPendingDraft()).toContain('```ts');
+    expect(scanner.getPendingDraft()).toContain('const v59 = 59;');
+  });
+});
+
 describe('closeMarkdownDraftForRender', () => {
   it('closes an unclosed fence', () => {
     expect(closeMarkdownDraftForRender('```ts\nconst x = 1;')).toBe(

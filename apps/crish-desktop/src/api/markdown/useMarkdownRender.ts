@@ -2,7 +2,7 @@
  * Markdown 渲染 React Hooks。
  *
  * - `useMarkdownResult`：封口块/文档 chunk 的静态渲染（走批量调度 + 缓存）；
- * - `useStreamingMarkdownResult`：活跃尾块的 Rust 流式渲染（latest-wins 节流）；
+ * - `useStreamingMarkdownResult`：活跃尾块的 Rust 流式渲染（前缀有效落帧，settle 后立即追新）；
  * - `useMarkdownPrewarm`：静态消息/文档挂载时批量预热。
  */
 import { useEffect, useRef, useState } from 'react';
@@ -144,6 +144,23 @@ export function useMarkdownResult(
   return state;
 }
 
+/**
+ * 活跃尾块的轮询间隔（ms）：随尾块长度分档拉长并封顶。
+ *
+ * 尾块每帧走一次 Rust IPC 全量重渲，成本随长度近似线性增长；巨型单块
+ * （整文件代码块、长表格）用更长的间隔把单位时间渲染次数压下来，
+ * 短文本保持 33ms 的跟手感。
+ */
+export function streamPollIntervalMs(textLength: number): number {
+  if (textLength <= 2_000) return 33;
+  if (textLength <= 8_000) return 50;
+  if (textLength <= 16_000) return 80;
+  if (textLength <= 32_000) return 120;
+  if (textLength <= 64_000) return 200;
+  if (textLength <= 128_000) return 320;
+  return 500;
+}
+
 export function useStreamingMarkdownResult(
   text: string,
   variant: MarkdownVariant,
@@ -168,15 +185,21 @@ export function useStreamingMarkdownResult(
     let inFlight = false;
     let lastAttempted = '';
 
+    const schedule = (delay: number) => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(tick, delay);
+    };
+
     const tick = () => {
       if (stopped) return;
+      timer = null;
       const current = textRef.current;
       if (!current.trim()) {
-        timer = window.setTimeout(tick, 33);
+        schedule(33);
         return;
       }
       if (inFlight || current === lastAttempted) {
-        timer = window.setTimeout(tick, current.length > 32_000 ? 120 : 33);
+        schedule(streamPollIntervalMs(current.length));
         return;
       }
 
@@ -184,14 +207,36 @@ export function useStreamingMarkdownResult(
       lastAttempted = current;
       const source = closeMarkdownDraftForRender(current);
       const sourceVariant = variantRef.current;
+      // 本次尝试 settle 时仍落后于最新文本时为 true（前缀落帧后追新、
+      // 或非前缀分叉丢弃后重试），finally 据此立即以最新文本再渲。
+      let settledBehind = false;
 
       void renderMarkdownStream(source, sourceVariant)
         .then((result) => {
           if (stopped) return;
-          // 文本在 IPC 往返期间前移时本帧结果已过期。不能直接丢弃等下一 tick：
-          // 高频吐字下会连续丢帧，富文本迟迟不更新（纯文本 fallback 长时间定格）。
-          // 这里落一次「过渡帧」——先展示旧文本的渲染结果；下一 tick 因
-          // lastAttempted 仍是旧值，会立即用新文本再排一次，最终收敛到最新。
+          const latest = textRef.current;
+          if (latest !== current) {
+            // 文本在 IPC 往返期间已前移。只追加的流里本次快照是最新文本
+            // 的前缀：快照结果是合法进度而非过渡帧（下游 patch 对增长
+            // 文本走增量追加，不是整块替换），直接落帧并立即追新——
+            // 否则长尾块会陷入「往返期间必被前移追上 → 整帧丢弃」的
+            // 饥饿—倾泻循环：长时间一字不出，偶尔落帧即积压全量。
+            // 只有文本被改写（重试/编辑/回滚等非前缀分叉）才丢弃旧结果。
+            if (
+              result !== null &&
+              variantRef.current === sourceVariant &&
+              latest.startsWith(current)
+            ) {
+              setState({
+                html: result.html,
+                truncated: result.truncated,
+                loading: false,
+                failed: false,
+              });
+            }
+            settledBehind = result !== null;
+            return;
+          }
           if (result) {
             setState({
               html: result.html,
@@ -199,7 +244,7 @@ export function useStreamingMarkdownResult(
               loading: false,
               failed: false,
             });
-          } else if (textRef.current === current) {
+          } else {
             setState((prev) => ({ ...prev, loading: false, failed: true }));
           }
         })
@@ -210,9 +255,19 @@ export function useStreamingMarkdownResult(
         })
         .finally(() => {
           inFlight = false;
+          if (stopped) return;
+          // 仍落后于最新文本 → 立即以最新文本再渲；已收敛/失败则按长度
+          // 分档安排下一次轮询，失败不在此紧重试，避免 IPC 异常时空转。
+          // 渲染尝试次数有上界：同一时刻至多一帧在飞，每次尝试只在上一
+          // 帧 settle 后由 tick 发起、且快照取发起时刻的最新文本（同一
+          // 文本不重复尝试），故尝试次数 ≤ settle 次数，不会因落帧语义
+          // 放宽而出现无界追赶渲染。
+          if (settledBehind) {
+            schedule(0);
+          } else {
+            schedule(streamPollIntervalMs(textRef.current.length));
+          }
         });
-
-      timer = window.setTimeout(tick, current.length > 32_000 ? 120 : 33);
     };
 
     void tick();
