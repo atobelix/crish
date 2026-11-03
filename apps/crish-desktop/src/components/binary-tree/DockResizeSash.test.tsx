@@ -14,6 +14,9 @@
  */
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent, act } from '@testing-library/react';
 import {
@@ -422,6 +425,38 @@ describe('DockResizeSash 高性能拖拽引擎测试套件', () => {
       expect(releasePointerCaptureSpy).toHaveBeenCalledWith(1);
       expect(onCommitRatio).toHaveBeenCalledTimes(1);
     });
+
+    it('Esc 取消（统一手势协议）：移动后按 Esc 恢复起始比例且绝不提交', () => {
+      const onCommitRatio = vi.fn();
+      const branch = makeHorizontalBranch({ splitRatio: 0.5 });
+      const { sash } = renderSashHarness(branch, onCommitRatio, 600, 400);
+
+      fireEvent.pointerDown(sash, {
+        button: 0,
+        pointerId: 5,
+        clientX: 300,
+        clientY: 200,
+      });
+      expect(document.body.classList.contains('dock-split-resizing')).toBe(
+        true
+      );
+      fireEvent.pointerMove(sash, {
+        pointerId: 5,
+        clientX: 360,
+        clientY: 200,
+      });
+
+      // Esc 目标为 sash（拖拽期焦点所在），捕获期标记先于 hook 的结束回调
+      fireEvent.keyDown(sash, { key: 'Escape' });
+
+      expect(document.body.classList.contains('dock-split-resizing')).toBe(
+        false
+      );
+      expect(sash.getAttribute('data-resizing')).toBeNull();
+      expect(releasePointerCaptureSpy).toHaveBeenCalledWith(5);
+      // 取消语义：不提交（区别于失焦/指针取消的兜底提交）
+      expect(onCommitRatio).not.toHaveBeenCalled();
+    });
   });
 
   describe('6. 快捷操作（双击均分 50/50 与键盘微调）', () => {
@@ -446,6 +481,26 @@ describe('DockResizeSash 高性能拖拽引擎测试套件', () => {
 
       fireEvent.keyDown(sash, { key: 'ArrowLeft' });
       expect(onCommitRatio).toHaveBeenCalledWith('b_h1', 0.48);
+    });
+  });
+
+  describe('8. 中性灰呈现口径（R3 迁移钉版）', () => {
+    it('CSS：8px 热区本体 + 中性灰阶激活，无 accent 绿、无辉光', () => {
+      const cssSrc = readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          'DockResizeSash.module.css'
+        ),
+        'utf8'
+      );
+      expect(cssSrc).toMatch(/\.horizontal[\s\S]*?width:\s*8px/);
+      expect(cssSrc).toMatch(/\.vertical[\s\S]*?height:\s*8px/);
+      expect(cssSrc).toContain('var(--border-color)');
+      expect(cssSrc).not.toMatch(/--accent-primary/);
+      expect(cssSrc).not.toMatch(/--accent-green/);
+      expect(cssSrc).not.toMatch(/--accent-color/);
+      expect(cssSrc).not.toMatch(/box-shadow/);
+      expect(cssSrc).not.toMatch(/#10b981/i);
     });
   });
 

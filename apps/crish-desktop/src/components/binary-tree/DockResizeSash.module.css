@@ -1,75 +1,72 @@
 /**
  * apps/crish-desktop/src/components/binary-tree/DockResizeSash.module.css
- * 右坞内部分屏分割线样式（DockResizeSash — Dock Split Architecture V2）
+ * 右坞内部分屏分割线样式（DockResizeSash — 分割线统一波次 R3 迁移后形态）
  *
- * 遵循设计纪律：
- * - 严守 AGENTS.md §13：无厚重阴影，克制高亮；
- * - 严守 AGENTS.md §14：现代色彩语法 hsl(h s l / a)；
- * - 静态呈现为 1px 细线（var(--border-subtle)）；
- * - 8px 绝对居中的透明触控命中区（Hitbox: ::after 伪元素扩大命中）；
- * - 悬浮与拖拽时柔和高亮主题色（var(--accent-primary)）；
- * - body.dock-split-resizing 呈现全局 cursor 锁定与 iframe 防劫持。
+ * 口径（用户 2026-11-02 裁决 + 既有设计纪律）：
+ * - 热区本体即 8px 条（与统一 SplitResizer 同档），不再用 ::after 扩命中；
+ * - 静态呈现为居中 1px 发丝线（var(--border-subtle)）；
+ * - 激活（hover / focus-visible / 拖拽）仅走中性灰阶台阶
+ *   （--border-subtle → --border-color），带 150ms 过渡，无辉光、无绿色；
+ * - body.dock-split-resizing 全局联动（选区锁 / 过渡关停 / iframe 防劫持）
+ *   为本组件自有协议，随手势类保留。
  */
 
 .sash {
   position: absolute;
-  z-index: var(--z-resizer, 100);
-  background: var(--border-subtle);
+  z-index: var(--z-resizer);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   outline: none;
-  transition:
-    background-color var(--duration-fast, 150ms) var(--ease-standard),
-    box-shadow var(--duration-fast, 150ms) var(--ease-standard);
 }
 
-/* 水平分屏分割线（调节左右窗格宽度，静态 1px 居中） */
+/* 左右分屏：竖直热区条（宽 8px，居中于分界线），沿线调宽 */
 .horizontal,
 .sashHorizontal {
-  width: 1px;
+  width: 8px;
+  transform: translateX(-50%);
   cursor: col-resize;
+}
+
+/* 上下分屏：水平热区条（高 8px，居中于分界线），沿线调高 */
+.vertical,
+.sashVertical {
+  height: 8px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+
+/* 居中发丝线：激活表达全部由这条线的灰阶台阶承担 */
+.line {
+  position: absolute;
+  background: var(--border-subtle);
+  pointer-events: none;
+  transition: background-color var(--duration-fast, 150ms) var(--ease-standard);
+}
+
+.horizontal .line,
+.sashHorizontal .line {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
   transform: translateX(-0.5px);
 }
 
-/* 垂直分屏分割线（调节上下窗格高度，静态 1px 居中） */
-.vertical,
-.sashVertical {
+.vertical .line,
+.sashVertical .line {
+  top: 50%;
+  left: 0;
+  right: 0;
   height: 1px;
-  cursor: row-resize;
   transform: translateY(-0.5px);
 }
 
-/* 8px 绝对居中的透明触控命中区（Hitbox: ::after 伪元素扩大命中） */
-.sash::after {
-  content: '';
-  position: absolute;
-  background: transparent;
-  pointer-events: auto;
-}
-
-.horizontal::after,
-.sashHorizontal::after {
-  top: 0;
-  bottom: 0;
-  left: -3.5px;
-  width: 8px;
-}
-
-.vertical::after,
-.sashVertical::after {
-  left: 0;
-  right: 0;
-  top: -3.5px;
-  height: 8px;
-}
-
-/* 悬停与拖拽高亮主题色（柔和微光，克制无厚重阴影） */
-.sash:hover,
-.sash:focus-visible,
-.sash[data-resizing='true'] {
-  background: color-mix(in srgb, var(--accent-primary) 70%, transparent);
-  box-shadow: 0 0 2px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+/* 悬停 / 键盘聚焦 / 拖拽激活：中性灰阶加深一档，无辉光 */
+.sash:hover .line,
+.sash:focus-visible .line,
+.sash[data-resizing='true'] .line {
+  background: var(--border-color);
 }
 
 /* 全局拖拽激活态联动与 cursor 锁定 */
@@ -83,8 +80,7 @@
   -webkit-user-select: none;
 }
 
-:global(body.dock-split-resizing) .sash,
-:global(body.dock-split-resizing) .sash::after {
+:global(body.dock-split-resizing) .line {
   transition: none;
 }
 

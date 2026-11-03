@@ -1,15 +1,39 @@
 /**
- * 右坞内部分割线高性能拖拽引擎（DockResizeSash.tsx）
+ * 右坞内部分割线（DockResizeSash.tsx）— 分割线统一波次 R3 迁移后形态
  *
- * 遵循系统性重构与零补丁原则：
- * 1. 采用 RAF 节流 + 百分比 DOM 直写（top/left/width/height %），拖拽中零 React 重渲染、零 Zustand 写状态；
- * 2. 严格落实 >= 16px 物理防碰撞死区缓冲（与外层 LeafDockResizer 保持物理安全距离）；
- * 3. 严格落实 [0.2, 0.8] 比例安全钳制与窗格最小像素保护（宽 >= 120px，高 >= 80px）；
- * 4. 拖拽期间挂载全局透明遮罩与 iframe 指针事件屏蔽，派发 dock-split-resizing-changed 事件；
- * 5. 支持双击 50/50 均分与键盘 Arrow 方向键微调。
+ * 架构分工（统一 hook 与坞域能力的边界）：
+ * 1. 手势协议由统一 hook `useSplitResize` 托管：指针捕获、window 级 move/up、
+ *    rAF 节流、Esc 取消、blur / pointercancel 按提交当前值兜底、单一 body
+ *    协议（data-split-resizing + 光标锁）。本组件不再自滚手势监听。
+ * 2. 坞域能力全部保留为调用方专有层，不进统一 hook：
+ *    - 比例域钳制单一真源 `calculateClampedRatio`（[0.2, 0.8] + 窗格最小像素
+ *      保护 + >= 16px 物理防碰撞死区），hook 只提供指针增量（px），
+ *      增量经本函数换算为比例——hook 的 px 坐标原点仅作增量基准，
+ *      因此容器尺寸在手势开始时实测即可，不依赖渲染期量测新鲜度；
+ *    - 拖拽期关联窗格 DOM 直写（findAssociatedPanes + paintLive）、
+ *      `--dock-live-ratio-{branchId}` 容器变量与 `crish:layout-live-resize` 广播；
+ *    - 全局透明遮罩 + iframe 指针屏蔽 + `dock-split-resizing-changed` 事件
+ *      （nativeBrowserGeometry 的同步契约）与 body.dock-split-resizing 类
+ *      （本组件 CSS 的全局联动协议）；
+ *    - 键盘微调与双击均分：比例域语义（±2% / 50/50）与钳制同源，
+ *      由本组件在 separatorProps 之上覆写同名处理器（hook 的 px 步进
+ *      对比例域无意义，理由同 TreeResizeSash 的键盘自持）。
+ * 3. 结束提交契约：坞域要求任何手势结束都提交一次当前比例（含失焦 /
+ *    指针取消 / 松手未移动）；统一 hook 在「钳制值未变化」时不触发
+ *    onCommit，故由 onDragStateChange 兜底补提交（Esc 取消除外——
+ *    Esc 经捕获期监听标记，取消不提交、几何由 hook 的恢复回调还原）。
+ * 4. 呈现：8px 热区本体 + 1px 中性发丝线；激活（hover / focus-visible /
+ *    拖拽）仅走灰阶台阶 --border-subtle → --border-color，无辉光、无绿色
+ *    （用户 2026-11-02 裁决：全站中性灰）。
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { FlatDockBranch } from './flattenDockTree';
 import type { NormalizedRect, SpatialDirection } from '../../store/layout-tree';
 import {
@@ -18,6 +42,7 @@ import {
   removeDragOverlay,
 } from '../../utils/dragOverlay';
 import { useI18n } from '../../i18n';
+import { useSplitResize } from '../../hooks/useSplitResize';
 import styles from './DockResizeSash.module.css';
 
 export interface DockResizeSashProps {
@@ -31,6 +56,13 @@ export const MAX_SPLIT_RATIO = 0.8;
 export const MIN_PANE_WIDTH = 120;
 export const MIN_PANE_HEIGHT = 80;
 export const DEADZONE_BUFFER_PX = 16;
+
+/**
+ * 统一 hook 的 px 域宽界：坞域全部钳制由 calculateClampedRatio 承担，
+ * hook 侧 min/max 仅需不截断任何真实指针行程（取远超屏幕行程的宽界），
+ * 其 aria / Home / End 语义均由本组件覆写，不受宽界影响。
+ */
+const HOOK_WIDE_BOUND = 100_000;
 
 export interface CalculateRatioParams {
   direction: SpatialDirection;
@@ -242,30 +274,67 @@ export function findAssociatedPanes(
   return { first, second };
 }
 
+/** 一次拖拽会话的坞域状态（手势本体在统一 hook 内，这里只存域侧账本） */
+interface DockDragSession {
+  /** 手势开始时的 splitRatio（增量换算与取消还原的基准） */
+  startRatio: number;
+  /** 手势开始时实测的容器尺寸（死区/最小窗格钳制的输入） */
+  containerRect: { width: number; height: number };
+  /** 最近一次实时换算出的比例（兜底提交用） */
+  liveRatio: number;
+  /** 本次手势是否已由 hook 的 onCommit 提交过 */
+  commitSeen: boolean;
+  /** 本次手势是否被 Esc 取消（捕获期监听标记，先于 hook 的结束回调） */
+  escCancel: boolean;
+}
+
 export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
   ({ branch, containerRef, onCommitRatio }) => {
     const { t } = useI18n();
     const sashRef = useRef<HTMLDivElement>(null);
-    const isDraggingRef = useRef(false);
-    const startCoordsRef = useRef({ x: 0, y: 0 });
-    const startRatioRef = useRef(branch.splitRatio);
-    const currentRatioRef = useRef(branch.splitRatio);
-    const containerRectRef = useRef({ left: 0, top: 0, width: 0, height: 0 });
-    const pendingPointerEventRef = useRef<
-      PointerEvent | React.PointerEvent | null
-    >(null);
-    const rafIdRef = useRef<number | null>(null);
-    const activePointerIdRef = useRef<number | null>(null);
     const overlayRef = useRef<HTMLElement | null>(null);
     const restoreIframesRef = useRef<(() => void) | null>(null);
     const associatedPanesRef = useRef<{
       first: HTMLElement | null;
       second: HTMLElement | null;
     }>({ first: null, second: null });
+    const sessionRef = useRef<DockDragSession | null>(null);
 
     const isHorizontal = branch.direction === 'horizontal';
 
-    // 1. 非拖拽态几何定位（拖拽期间由 RAF 直接操控 DOM，避免 React 重渲染冲刷）
+    // 容器实测（与迁移前手势启动时的量测口径一致：rect 优先，client 兜底）
+    const measureContainer = useCallback(() => {
+      const container = containerRef.current;
+      if (!container) return { width: 0, height: 0 };
+      const rect = container.getBoundingClientRect();
+      return {
+        width: rect.width || container.clientWidth || 0,
+        height: rect.height || container.clientHeight || 0,
+      };
+    }, [containerRef]);
+
+    /**
+     * hook 的 px 坐标原点：value = splitRatio × axisPx。axisPx 仅决定增量
+     * 基准的数值尺度（增量 = livePx − dragStartPx，与原点无关），故以
+     * calculateClampedRatio 同口径回退（500/400）初始化、渲染后实测校正
+     * 即可，不需要事件级新鲜度。
+     */
+    const [axisPx, setAxisPx] = useState<number>(() => {
+      const fallback = isHorizontal ? 500 : 400;
+      const fraction = isHorizontal ? branch.rect.width : branch.rect.height;
+      return fraction * fallback;
+    });
+    useLayoutEffect(() => {
+      const size = measureContainer();
+      const axis =
+        (isHorizontal ? branch.rect.width : branch.rect.height) *
+        (isHorizontal ? size.width : size.height);
+      if (axis > 0) {
+        setAxisPx((prev) => (Math.abs(prev - axis) > 0.5 ? axis : prev));
+      }
+    });
+
+    // 1. 非拖拽态几何定位（拖拽期间由 paintLive 直写，避免 React 重渲染冲刷）
     useLayoutEffect(() => {
       const el = sashRef.current;
       if (!el || document.body.classList.contains('dock-split-resizing'))
@@ -284,20 +353,9 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
       }
     }, [isHorizontal, branch.sash.x, branch.sash.y, branch.sash.length]);
 
-    // 同步外部稳态 splitRatio
-    useEffect(() => {
-      if (!isDraggingRef.current) {
-        currentRatioRef.current = branch.splitRatio;
-      }
-    }, [branch.splitRatio]);
-
-    // 组件卸载时安全回收全局状态与看门狗
+    // 组件卸载时安全回收全局状态（遮罩 / iframe / body 类）
     useEffect(() => {
       return () => {
-        if (rafIdRef.current !== null) {
-          cancelAnimationFrame(rafIdRef.current);
-          rafIdRef.current = null;
-        }
         if (overlayRef.current) {
           removeDragOverlay(overlayRef.current);
           overlayRef.current = null;
@@ -310,12 +368,20 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
       };
     }, []);
 
-    // 2. DOM 直写关联窗格
-    const updateAssociatedPanesDom = useCallback(
+    // 2. 实时比例 → sash 自身 + 关联窗格 DOM 直写（零 React 状态，零 store 写入）
+    const paintLive = useCallback(
       (ratio: number) => {
+        const sashEl = sashRef.current;
+        if (sashEl) {
+          if (isHorizontal) {
+            sashEl.style.left = `${(branch.rect.x + branch.rect.width * ratio) * 100}%`;
+          } else {
+            sashEl.style.top = `${(branch.rect.y + branch.rect.height * ratio) * 100}%`;
+          }
+        }
+
         const { first, second } = associatedPanesRef.current;
         const { rect } = branch;
-
         if (isHorizontal) {
           if (first) {
             first.style.width = `${rect.width * ratio * 100}%`;
@@ -340,217 +406,124 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
             String(ratio)
           );
         }
+        window.dispatchEvent(new Event('crish:layout-live-resize'));
       },
       [branch, isHorizontal, containerRef]
     );
 
-    // 3. onPointerDown 启动拖拽
-    const handlePointerDown = useCallback(
-      (e: React.PointerEvent<HTMLDivElement>) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const sashEl = sashRef.current;
-        if (!sashEl) return;
-
-        // Pointer Capture 锁死
-        try {
-          sashEl.setPointerCapture(e.pointerId);
-          activePointerIdRef.current = e.pointerId;
-        } catch {
-          /* jsdom 或环境降级 */
-        }
-
-        isDraggingRef.current = true;
-        startCoordsRef.current = { x: e.clientX, y: e.clientY };
-        startRatioRef.current = branch.splitRatio;
-        currentRatioRef.current = branch.splitRatio;
-
-        const container = containerRef.current;
-        if (container) {
-          const cRect = container.getBoundingClientRect();
-          containerRectRef.current = {
-            left: cRect.left,
-            top: cRect.top,
-            width: cRect.width || container.clientWidth || 0,
-            height: cRect.height || container.clientHeight || 0,
-          };
-        } else {
-          containerRectRef.current = { left: 0, top: 0, width: 0, height: 0 };
-        }
-
-        // 查找关联窗格
-        associatedPanesRef.current = findAssociatedPanes(
-          container,
-          branch,
-          sashEl
-        );
-
-        // 挂载激活态标记与全局透明遮罩
-        sashEl.setAttribute('data-resizing', 'true');
-        document.body.classList.add('dock-split-resizing');
-
-        const cursor = isHorizontal ? 'col-resize' : 'row-resize';
-        overlayRef.current = createDragOverlay(cursor);
-        restoreIframesRef.current = disableIframePointerEvents();
-
-        // 广播看门狗事件（通知 Webview 禁用 Hit-Test）
-        window.dispatchEvent(
-          new CustomEvent('dock-split-resizing-changed', {
-            detail: { resizing: true, branchId: branch.branchId },
-          })
-        );
-      },
-      [branch, isHorizontal, containerRef]
-    );
-
-    // 4. onPointerMove RAF 节流直写
-    const handlePointerMove = useCallback(
-      (e: PointerEvent | React.PointerEvent) => {
-        if (!isDraggingRef.current) return;
-
-        pendingPointerEventRef.current = e;
-
-        const deltaX = e.clientX - startCoordsRef.current.x;
-        const deltaY = e.clientY - startCoordsRef.current.y;
-        const deltaPx = isHorizontal ? deltaX : deltaY;
-
-        const newRatio = calculateClampedRatio({
+    /** 指针增量（px）→ 钳制后比例：全部域钳制收敛于 calculateClampedRatio */
+    const ratioFromDelta = useCallback(
+      (deltaPx: number) => {
+        const session = sessionRef.current;
+        return calculateClampedRatio({
           direction: branch.direction,
           deltaPx,
-          initialRatio: startRatioRef.current,
+          initialRatio: session?.startRatio ?? branch.splitRatio,
           branchRect: branch.rect,
-          containerRect: containerRectRef.current,
+          containerRect: session?.containerRect ?? measureContainer(),
         });
-
-        // 同步更新 ratio 引用（确保 pointerup 瞬时提交准确）
-        currentRatioRef.current = newRatio;
-
-        // RAF 调度更新 DOM 样式（零 React 状态，零 Zustand 写入）
-        if (rafIdRef.current === null) {
-          rafIdRef.current = requestAnimationFrame(() => {
-            rafIdRef.current = null;
-            if (!isDraggingRef.current) return;
-
-            const ratio = currentRatioRef.current;
-            const sashEl = sashRef.current;
-            if (sashEl) {
-              if (isHorizontal) {
-                const sashX = (branch.rect.x + branch.rect.width * ratio) * 100;
-                sashEl.style.left = `${sashX}%`;
-              } else {
-                const sashY =
-                  (branch.rect.y + branch.rect.height * ratio) * 100;
-                sashEl.style.top = `${sashY}%`;
-              }
-            }
-
-            updateAssociatedPanesDom(ratio);
-            window.dispatchEvent(new Event('crish:layout-live-resize'));
-          });
-        }
       },
-      [branch, isHorizontal, updateAssociatedPanesDom]
+      [branch.direction, branch.rect, branch.splitRatio, measureContainer]
     );
 
-    // 5. onPointerUp / onPointerCancel 结束并提交
-    const handlePointerEnd = useCallback(
-      (e?: PointerEvent | React.PointerEvent) => {
-        if (!isDraggingRef.current) return;
-        isDraggingRef.current = false;
-
-        if (rafIdRef.current !== null) {
-          cancelAnimationFrame(rafIdRef.current);
-          rafIdRef.current = null;
-        }
-        pendingPointerEventRef.current = null;
-
-        const sashEl = sashRef.current;
-        const pointerId =
-          activePointerIdRef.current ??
-          (e && 'pointerId' in e ? e.pointerId : null);
-
-        // 释放 PointerCapture
-        if (sashEl && pointerId !== null) {
-          try {
-            if (typeof sashEl.hasPointerCapture === 'function') {
-              if (sashEl.hasPointerCapture(pointerId)) {
-                sashEl.releasePointerCapture(pointerId);
-              }
-            } else if (typeof sashEl.releasePointerCapture === 'function') {
-              sashEl.releasePointerCapture(pointerId);
-            }
-          } catch {
-            /* ignore */
+    // 3. 统一手势 hook（px 域仅作增量信道，域语义全部在本组件换算）
+    const resize = useSplitResize({
+      value: branch.splitRatio * axisPx,
+      min: -HOOK_WIDE_BOUND,
+      max: HOOK_WIDE_BOUND,
+      orientation: isHorizontal ? 'vertical' : 'horizontal',
+      commitMode: 'release',
+      onLiveChange: (px) => {
+        if (!sessionRef.current) return;
+        const ratio = ratioFromDelta(
+          px - resizeRef.current.dragStartValueRef.current
+        );
+        sessionRef.current.liveRatio = ratio;
+        paintLive(ratio);
+      },
+      onCommit: (px) => {
+        const session = sessionRef.current;
+        if (!session) return;
+        session.commitSeen = true;
+        const ratio = ratioFromDelta(
+          px - resizeRef.current.dragStartValueRef.current
+        );
+        session.liveRatio = ratio;
+        onCommitRatio(branch.branchId, ratio);
+      },
+      onDragStateChange: (nowDragging) => {
+        if (nowDragging) {
+          // 手势开始：建立域会话（实测容器、锁定关联窗格、挂全局服务）
+          sessionRef.current = {
+            startRatio: branch.splitRatio,
+            containerRect: measureContainer(),
+            liveRatio: branch.splitRatio,
+            commitSeen: false,
+            escCancel: false,
+          };
+          associatedPanesRef.current = findAssociatedPanes(
+            containerRef.current,
+            branch,
+            sashRef.current
+          );
+          document.body.classList.add('dock-split-resizing');
+          overlayRef.current = createDragOverlay(
+            isHorizontal ? 'col-resize' : 'row-resize'
+          );
+          restoreIframesRef.current = disableIframePointerEvents();
+          window.dispatchEvent(
+            new CustomEvent('dock-split-resizing-changed', {
+              detail: { resizing: true, branchId: branch.branchId },
+            })
+          );
+        } else {
+          // 手势结束：回收全局服务并广播，随后按坞域契约兜底提交
+          const session = sessionRef.current;
+          sessionRef.current = null;
+          document.body.classList.remove('dock-split-resizing');
+          if (overlayRef.current) {
+            removeDragOverlay(overlayRef.current);
+            overlayRef.current = null;
+          }
+          if (restoreIframesRef.current) {
+            restoreIframesRef.current();
+            restoreIframesRef.current = null;
+          }
+          window.dispatchEvent(
+            new CustomEvent('dock-split-resizing-changed', {
+              detail: { resizing: false, branchId: branch.branchId },
+            })
+          );
+          window.dispatchEvent(new Event('crish:layout-live-resize'));
+          if (session && !session.commitSeen && !session.escCancel) {
+            onCommitRatio(branch.branchId, session.liveRatio);
           }
         }
-        activePointerIdRef.current = null;
-
-        if (sashEl) {
-          sashEl.removeAttribute('data-resizing');
-        }
-        document.body.classList.remove('dock-split-resizing');
-
-        if (overlayRef.current) {
-          removeDragOverlay(overlayRef.current);
-          overlayRef.current = null;
-        }
-        if (restoreIframesRef.current) {
-          restoreIframesRef.current();
-          restoreIframesRef.current = null;
-        }
-
-        window.dispatchEvent(
-          new CustomEvent('dock-split-resizing-changed', {
-            detail: { resizing: false, branchId: branch.branchId },
-          })
-        );
-        window.dispatchEvent(new Event('crish:layout-live-resize'));
-
-        const finalRatio = currentRatioRef.current;
-        onCommitRatio(branch.branchId, finalRatio);
       },
-      [branch.branchId, onCommitRatio]
-    );
+    });
+    const resizeRef = useRef(resize);
+    resizeRef.current = resize;
+    const { dragging, separatorProps } = resize;
 
-    // 6. 全局 Window 事件兜底（防失焦、防丢失 pointerup）
+    // Esc 取消标记：捕获期监听先于 hook 的结束回调置位，供兜底提交判别
     useEffect(() => {
-      const onWindowPointerMove = (ev: PointerEvent) => {
-        if (isDraggingRef.current) {
-          handlePointerMove(ev);
+      if (!dragging) return;
+      const onKeyDownCapture = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && sessionRef.current) {
+          sessionRef.current.escCancel = true;
         }
       };
-      const onWindowPointerUp = (ev: PointerEvent) => {
-        if (isDraggingRef.current) {
-          handlePointerEnd(ev);
-        }
-      };
-      const onWindowPointerCancel = (ev: PointerEvent) => {
-        if (isDraggingRef.current) {
-          handlePointerEnd(ev);
-        }
-      };
-      const onWindowBlur = () => {
-        if (isDraggingRef.current) {
-          handlePointerEnd();
-        }
-      };
-
-      window.addEventListener('pointermove', onWindowPointerMove);
-      window.addEventListener('pointerup', onWindowPointerUp);
-      window.addEventListener('pointercancel', onWindowPointerCancel);
-      window.addEventListener('blur', onWindowBlur);
-
+      window.addEventListener('keydown', onKeyDownCapture, {
+        capture: true,
+      });
       return () => {
-        window.removeEventListener('pointermove', onWindowPointerMove);
-        window.removeEventListener('pointerup', onWindowPointerUp);
-        window.removeEventListener('pointercancel', onWindowPointerCancel);
-        window.removeEventListener('blur', onWindowBlur);
+        window.removeEventListener('keydown', onKeyDownCapture, {
+          capture: true,
+        });
       };
-    }, [handlePointerMove, handlePointerEnd]);
+    }, [dragging]);
 
-    // 7. 双击快速均分 50/50
+    // 4. 双击快速均分 50/50（比例域常量提交，覆写 hook 的 px 复位）
     const handleDoubleClick = useCallback(
       (e: React.MouseEvent) => {
         e.preventDefault();
@@ -560,7 +533,7 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
       [branch.branchId, onCommitRatio]
     );
 
-    // 8. 键盘微调（ArrowLeft/Right/Up/Down）
+    // 5. 键盘微调（比例域步进 ±2%，与 calculateClampedRatio 同源钳制）
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         const step = 0.02;
@@ -601,16 +574,20 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
       [branch, isHorizontal, containerRef, onCommitRatio]
     );
 
+    const setSashRef = useCallback((node: HTMLDivElement | null) => {
+      sashRef.current = node;
+    }, []);
+
     return (
       <div
-        ref={sashRef}
+        ref={setSashRef}
+        {...separatorProps}
         className={`${styles.sash} ${
           isHorizontal ? styles.horizontal : styles.vertical
         }`}
         data-dock-branch-id={branch.branchId}
         data-direction={branch.direction}
-        role="separator"
-        aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
+        data-resizing={dragging ? 'true' : undefined}
         aria-label={t(
           isHorizontal
             ? 'workspace.dock.adjustHorizontalRatio'
@@ -620,14 +597,11 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
         aria-valuemin={Math.round(MIN_SPLIT_RATIO * 100)}
         aria-valuemax={Math.round(MAX_SPLIT_RATIO * 100)}
         aria-valuenow={Math.round(branch.splitRatio * 100)}
-        tabIndex={0}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
         onDoubleClick={handleDoubleClick}
         onKeyDown={handleKeyDown}
-      />
+      >
+        <div className={styles.line} aria-hidden="true" />
+      </div>
     );
   },
   sashPropsEqual
