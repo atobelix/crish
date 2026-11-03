@@ -146,8 +146,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBe(true);
   });
 
-  // 4. ProjectManageModal 同心断言
-  it('契约 4：ProjectManageModal 方案 A 同心断言（.modalPanel 必须为 24px，.folderPickerDropzone 必须为 8px，.nameInput 必须为 8px）', () => {
+  // 4. ProjectManageModal 现代同心圆角断言（消解生硬 8px 锐利倒挂，对齐 20px/14px/12px 视觉和谐阶梯）
+  it('契约 4：ProjectManageModal 现代同心圆角断言（.modalPanel 必须为 20px，.folderPickerDropzone 必须为 14px，.nameInput 必须为 12px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'sidebar',
@@ -155,7 +155,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ProjectManageModal.module.css'
     );
 
-    // 断言 .modalPanel 必须为 var(--radius-3xl, 24px)
+    // 断言 .modalPanel 必须为 var(--radius-2xl, 20px)
     const panelMatch = modalCss.match(/\.modalPanel\s*\{[^}]+\}/);
     expect(
       panelMatch,
@@ -163,10 +163,10 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       panelMatch![0],
-      '.modalPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
-    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
+      '.modalPanel 的 border-radius 必须绑定为 var(--radius-2xl, 20px)'
+    ).toMatch(/border-radius:\s*var\(--radius-2xl,\s*20px\)/);
 
-    // 断言 .folderPickerDropzone 必须为 var(--radius-md, 8px)
+    // 断言 .folderPickerDropzone 必须为 var(--radius-xl, 14px)
     const dropzoneMatch = modalCss.match(/\.folderPickerDropzone\s*\{[^}]+\}/);
     expect(
       dropzoneMatch,
@@ -174,10 +174,10 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       dropzoneMatch![0],
-      '.folderPickerDropzone 的 border-radius 必须为 var(--radius-md, 8px)'
-    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+      '.folderPickerDropzone 的 border-radius 必须为 var(--radius-xl, 14px)'
+    ).toMatch(/border-radius:\s*var\(--radius-xl,\s*14px\)/);
 
-    // 断言 .nameInput 必须为 var(--radius-md, 8px)
+    // 断言 .nameInput 必须为 var(--radius-card, 12px)
     const nameInputMatch = modalCss.match(/\.nameInput\s*\{[^}]+\}/);
     expect(
       nameInputMatch,
@@ -185,8 +185,19 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       nameInputMatch![0],
-      '.nameInput 的 border-radius 必须为 var(--radius-md, 8px)'
-    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+      '.nameInput 的 border-radius 必须为 var(--radius-card, 12px)'
+    ).toMatch(/border-radius:\s*var\(--radius-card,\s*12px\)/);
+
+    // 断言 .modalFooter button 必须为 var(--radius-card, 12px)
+    const footerBtnMatch = modalCss.match(/\.modalFooter\s+button\s*\{[^}]+\}/);
+    expect(
+      footerBtnMatch,
+      'ProjectManageModal.module.css 中必须包含 .modalFooter button 规则块'
+    ).toBeTruthy();
+    expect(
+      footerBtnMatch![0],
+      '.modalFooter button 的 border-radius 必须为 var(--radius-card, 12px)'
+    ).toMatch(/border-radius:\s*var\(--radius-card,\s*12px\)/);
   });
 
   // 5. 通用 Dialog 外壳断言

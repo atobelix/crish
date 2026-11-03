@@ -1,10 +1,10 @@
 .modalPanel {
   --dialog-width: 440px;
   width: var(--dialog-width);
-  border-radius: var(--radius-3xl, 24px);
+  border-radius: var(--radius-2xl, 20px);
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-panel);
   box-shadow:
     0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
     0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
@@ -36,7 +36,7 @@
   user-select: none;
 }
 
-/* 文件夹选择区：纯净实线微卡片，同心圆角 8px（24px 外壳 - 16px 边距 = 8px 绝对同心） */
+/* 文件夹选择区：柔和同心微卡片，14px 阶梯圆角，与 20px 外壳形成自然内衬 */
 .folderPickerDropzone {
   display: flex;
   flex-direction: column;
@@ -44,8 +44,8 @@
   justify-content: center;
   gap: var(--space-2, 8px);
   padding: 24px var(--space-4, 16px);
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl, 14px);
+  border: 1px solid var(--border-panel);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-secondary);
   cursor: pointer;
@@ -83,7 +83,7 @@
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-card, 12px);
   background: var(--state-hover);
   border: 1px solid var(--edge-rim, transparent);
   color: var(--text-secondary);
@@ -113,44 +113,41 @@
   color: var(--text-primary);
 }
 
-/* 已选文件夹列表容器：微圆 8px */
+/* 已选文件夹列表容器：纯净单层卡片外壳，柔和同心 14px */
 .folderListCard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle);
-  background: var(--state-hover);
+  padding: 0;
+  border-radius: var(--radius-xl, 14px);
+  border: 1px solid var(--border-panel);
+  background: var(--surface-input, var(--bg-card));
   max-height: 180px;
   overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
 }
 
-/* 文件夹单项：内层圆角 6px */
+/* 文件夹单项：列表行形态，零独立边框与卡片底色，由外层容器自然裁切实现完美同心 */
 .folderItem {
   display: flex;
   align-items: center;
   gap: var(--space-2_5, 10px);
-  padding: 8px 10px;
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface-input, var(--bg-card));
-  border: 1px solid var(--border-subtle);
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast);
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  transition: background var(--transition-fast);
   min-width: 0;
+  box-sizing: border-box;
+}
+
+/* 仅在多项之间增加单层发丝分割线 */
+.folderItem + .folderItem {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .folderItem:hover {
-  background:
-    linear-gradient(var(--state-hover), var(--state-hover)),
-    var(--surface-input, var(--bg-card));
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 96%,
-    var(--text-primary) 4%
-  );
+  background: var(--state-hover);
 }
 
 .folderItemIcon {
@@ -187,13 +184,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-control, 8px);
   cursor: pointer;
   flex-shrink: 0;
   transition:
@@ -211,11 +208,11 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-1_5, 6px);
-  margin-top: 2px;
-  height: 34px;
+  margin-top: 4px;
+  height: 32px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-btn, 10px);
+  border: 1px solid var(--border-panel);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
@@ -228,24 +225,22 @@
 }
 
 .addMoreBtn:hover {
-  background:
-    linear-gradient(var(--state-hover), var(--state-hover)),
-    var(--surface-input, var(--bg-card));
+  background: var(--state-hover);
   color: var(--text-primary);
   border-color: color-mix(
     in srgb,
-    var(--border-subtle) 98%,
-    var(--text-primary) 2%
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
   );
 }
 
-/* 项目名称输入框：标准桌面高度 38px，微圆圆角 8px，与 Dropzone 绝对统一 */
+/* 项目名称输入框：标准桌面高度 38px，柔和同心 12px，消除 8px 锐利生硬感 */
 .nameInput {
   height: 38px;
   min-height: 38px;
   font-size: var(--font-size-sm, 13px);
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card, 12px);
+  border: 1px solid var(--border-panel);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-primary);
   padding: 0 14px;
@@ -303,7 +298,7 @@
   width: 100%;
   height: 36px;
   padding: 0 12px;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-btn, 10px);
   background: transparent;
   border: none;
   font-size: var(--font-size-sm, 13px);
@@ -333,7 +328,7 @@
   gap: var(--space-2, 8px);
 }
 
-/* 弹窗底部操作按钮同心化：微圆 8px + 16px 边距 = 24px 外壳绝对同心 */
+/* 弹窗底部操作按钮同心化：柔和同心 12px，消除 8px 锐利突兀感，与外壳 20px 弧度视觉对齐 */
 .modalFooter button {
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-card, 12px);
 }

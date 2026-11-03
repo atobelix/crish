@@ -389,18 +389,18 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     ).toMatch(/border-color:\s*var\(--settings-control-border\);/);
   });
 
-  it('弹窗内壳层不画分隔线：顶栏无 border-bottom、侧栏无 border-right、面板无外框线', () => {
-    for (const sel of [
-      '.settingsNav',
-      '.settingsHeader',
-      '.settingsMain',
-      '.coverContent',
-    ]) {
+  it('设置弹窗外框接入 --border-panel 质感描边，侧栏导航带单一发丝分割线', () => {
+    expect(rule('.settingsNav')).toMatch(
+      /border-right:\s*var\(--hairline-width\)\s*solid\s*var\(--border-panel\);/
+    );
+    for (const sel of ['.settingsHeader', '.settingsMain', '.coverContent']) {
       expect(rule(sel), sel).not.toMatch(
         /border(-right|-bottom)?:\s*(?!none)[^;]*solid/
       );
     }
-    expect(rule("[role='dialog'].settingsModal")).toMatch(/border:\s*none;/);
+    expect(rule("[role='dialog'].settingsModal")).toMatch(
+      /border:\s*1px solid var\(--border-panel\);/
+    );
     expect(rule("[role='dialog'].settingsModal")).toMatch(
       /box-shadow:\s*var\(--shadow-[a-z0-9]+\);/
     );

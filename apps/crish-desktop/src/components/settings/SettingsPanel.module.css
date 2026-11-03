@@ -33,7 +33,7 @@
   max-width: none;
   max-height: none;
   background: var(--surface-outer);
-  border: none;
+  border: 1px solid var(--border-panel);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
@@ -75,6 +75,7 @@
   min-height: 0;
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-2_5);
   background: var(--surface-outer);
+  border-right: var(--hairline-width) solid var(--border-panel);
   box-sizing: border-box;
   overflow: hidden;
 }
