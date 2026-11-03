@@ -49,6 +49,11 @@ export const settingsPartModels = {
   'models.profileList.ready': 'Configured and enabled',
   // ── Probe and form validation (models.probe.*) ──
   'models.probe.vendorNameEmpty': 'Vendor name cannot be empty',
+  // ── Field-level validation (models.field.*, shared by the F7 form family) ──
+  'models.field.positiveInteger': 'Enter a positive whole number',
+  'models.field.modelIdRequired': 'Enter a model ID',
+  'models.field.baseUrlInvalid':
+    'Enter a valid URL starting with http:// or https://',
   'models.probe.vendorNameSaveFailed': 'Failed to save vendor name',
   'models.probe.handshakeOk':
     'Provider handshake successful (URL and credentials verified, click "Fetch" to add models)',

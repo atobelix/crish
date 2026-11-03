@@ -45,6 +45,11 @@ export const settingsPartModels = {
   'models.profileList.ready': '已配置并启用',
   // ── 连通探活与表单校验（models.probe.*）──
   'models.probe.vendorNameEmpty': '厂商名称不能为空',
+  // ── 字段级校验（models.field.*，F7 表单族共用）──
+  'models.field.positiveInteger': '请输入正整数',
+  'models.field.modelIdRequired': '请输入模型 ID',
+  'models.field.baseUrlInvalid':
+    '请输入有效的 URL（以 http:// 或 https:// 开头）',
   'models.probe.vendorNameSaveFailed': '保存厂商名称失败',
   'models.probe.handshakeOk':
     '服务商握手正常（已验证服务地址与凭据有效，可点击右侧「自动获取」添加模型）',

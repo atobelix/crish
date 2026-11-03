@@ -27,6 +27,7 @@ export const settingsPartAccount = {
   'account.code.resend': 'Resend',
   'account.code.send': 'Send code',
   'account.code.sentTo': 'Code sent to {email}',
+  'account.changePassword.codeIncomplete': 'Enter the 6-digit code',
 
   // ── 错误 ──
   'account.error.failed': 'Something went wrong. Please try again later.',

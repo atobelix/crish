@@ -1,0 +1,9 @@
+/* 字段级错误文案（F7 统一口径）：错误挂在字段下方、保留至该字段被修正；
+   字号/行高/错误色与账号页既有 errorText 同源 token，各表单族共用本组件，
+   不再逐页手搓错误样式。 */
+.fieldError {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-body);
+  color: var(--color-error);
+}

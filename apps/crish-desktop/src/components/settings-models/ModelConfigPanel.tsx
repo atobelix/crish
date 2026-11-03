@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Input } from '@/components/ui';
+import { FieldError, Input } from '@/components/ui';
+import { positiveIntegerError } from './fieldValidation';
 import { findAutofillModel } from '../../services/modelsAutofillBaseline';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import { ModelThinkingSection } from './ModelThinkingSection';
@@ -46,6 +47,11 @@ export const ModelConfigPanel: React.FC<{
     [m, providerId]
   );
 
+  // 字段级错误（F7）：与 ManualAddForm 同一口径（共用校验 + FieldError 呈现），
+  // 派生自草稿当前值；非法时弹窗保存被 ModelConfigDialog 门住
+  const contextWindowError = positiveIntegerError(cfgDraft.contextWindow);
+  const maxOutputError = positiveIntegerError(cfgDraft.maxOutputTokens || '');
+
   return (
     <div className={styles.modelDialogFields}>
       {/* ── 1. 基础配置：展示名称 / 上下文长度 / 最大输出 Token ── */}
@@ -71,12 +77,16 @@ export const ModelConfigPanel: React.FC<{
             size="sm"
             value={cfgDraft.contextWindow}
             placeholder="如 128000"
+            aria-invalid={contextWindowError != null || undefined}
             onChange={(e) =>
               setCfgDraft((d) =>
                 d ? { ...d, contextWindow: e.target.value } : null
               )
             }
           />
+          {contextWindowError ? (
+            <FieldError>{contextWindowError}</FieldError>
+          ) : null}
         </label>
         <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
           <span>最大输出</span>
@@ -84,12 +94,14 @@ export const ModelConfigPanel: React.FC<{
             size="sm"
             value={cfgDraft.maxOutputTokens || ''}
             placeholder="如 4096 / 8192"
+            aria-invalid={maxOutputError != null || undefined}
             onChange={(e) =>
               setCfgDraft((d) =>
                 d ? { ...d, maxOutputTokens: e.target.value } : null
               )
             }
           />
+          {maxOutputError ? <FieldError>{maxOutputError}</FieldError> : null}
         </label>
       </div>
 

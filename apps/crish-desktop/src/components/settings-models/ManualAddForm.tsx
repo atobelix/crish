@@ -8,7 +8,9 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Button, Input } from '@/components/ui';
+import { Button, FieldError, Input } from '@/components/ui';
+import { t } from '../../i18n';
+import { positiveIntegerError } from './fieldValidation';
 import { ModelModalitiesEditor } from './ModelModalitiesEditor';
 import { ModelThinkingSection } from './ModelThinkingSection';
 import { ensureModelsCatalogLoaded } from '../../api/modelsCatalogStore';
@@ -55,6 +57,7 @@ export const ManualAddForm: React.FC<{
 }) => {
   const inputId = useId();
   const listboxId = useId();
+  const [modelIdTouched, setModelIdTouched] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(
     null
@@ -103,6 +106,16 @@ export const ManualAddForm: React.FC<{
     }
     return [];
   }, [addDraft.modelId, onlineIds, providerVendor]);
+  // 字段级错误（F7）：派生自当前草稿值，非法常驻字段下方、修正即消失；
+  // 数字字段非法时「添加模型」同样被门住，不让垃圾值流到落盘层
+  const contextWindowError = positiveIntegerError(addDraft.contextWindow);
+  const maxOutputError = positiveIntegerError(addDraft.maxOutputTokens || '');
+  const numericInvalid = contextWindowError != null || maxOutputError != null;
+  const modelIdError =
+    modelIdTouched && !addDraft.modelId.trim()
+      ? t('settings.models.field.modelIdRequired')
+      : null;
+
   const activeSuggestionIndex = activeSuggestionId
     ? suggestions.indexOf(activeSuggestionId)
     : -1;
@@ -290,6 +303,7 @@ export const ManualAddForm: React.FC<{
               isSuggestionMenuOpen ? activeOptionId : undefined
             }
             value={addDraft.modelId}
+            aria-invalid={modelIdError != null || undefined}
             onChange={(e) => {
               const val = e.target.value;
               setAddDraft((d) => ({ ...d, modelId: val }));
@@ -304,6 +318,9 @@ export const ManualAddForm: React.FC<{
             onBlur={() => {
               if (addDraft.modelId.trim()) {
                 applyAutofill(addDraft.modelId.trim());
+              } else {
+                // 失焦时仍为空：必填错误落到字段下方（此前只有按钮置灰、无任何说明）
+                setModelIdTouched(true);
               }
               setActiveSuggestionId(null);
               setShowSuggestions(false);
@@ -311,6 +328,7 @@ export const ManualAddForm: React.FC<{
             onKeyDown={handleModelIdKeyDown}
             spellCheck={false}
           />
+          {modelIdError ? <FieldError>{modelIdError}</FieldError> : null}
         </div>
 
         {/* 浮动智能补全菜单：仅渲染在线获取/已配置模型，无猜测 */}
@@ -382,10 +400,14 @@ export const ManualAddForm: React.FC<{
             size="sm"
             placeholder="如 128000"
             value={addDraft.contextWindow}
+            aria-invalid={contextWindowError != null || undefined}
             onChange={(e) =>
               setAddDraft((d) => ({ ...d, contextWindow: e.target.value }))
             }
           />
+          {contextWindowError ? (
+            <FieldError>{contextWindowError}</FieldError>
+          ) : null}
         </label>
 
         <label className={`${styles.mrdAddLabel} mrd-add-label`}>
@@ -394,10 +416,12 @@ export const ManualAddForm: React.FC<{
             size="sm"
             placeholder="如 4096 / 8192"
             value={addDraft.maxOutputTokens || ''}
+            aria-invalid={maxOutputError != null || undefined}
             onChange={(e) =>
               setAddDraft((d) => ({ ...d, maxOutputTokens: e.target.value }))
             }
           />
+          {maxOutputError ? <FieldError>{maxOutputError}</FieldError> : null}
         </label>
       </div>
 
@@ -439,7 +463,7 @@ export const ManualAddForm: React.FC<{
               type="button"
               variant="primary"
               size="sm"
-              disabled={!addDraft.modelId.trim()}
+              disabled={!addDraft.modelId.trim() || numericInvalid}
               onClick={handleManualAdd}
             >
               添加模型

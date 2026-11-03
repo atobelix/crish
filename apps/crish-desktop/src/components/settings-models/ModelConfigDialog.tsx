@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Button, Dialog } from '@/components/ui';
 import { ModelConfigPanel } from './ModelConfigPanel';
+import { isPositiveIntegerText } from './fieldValidation';
 import type { CfgDraft } from './useModelProfilesState';
 
 /**
@@ -27,6 +28,11 @@ export const ModelConfigDialog: React.FC<{
   const lastDraft = useRef<CfgDraft | null>(cfgDraft);
   if (cfgDraft) lastDraft.current = cfgDraft;
   const shown = cfgDraft ?? lastDraft.current;
+  // 数字字段非法时保存门住（错误本体由面板字段下呈现，F7 同口径）
+  const numericInvalid =
+    shown != null &&
+    (!isPositiveIntegerText(shown.contextWindow) ||
+      !isPositiveIntegerText(shown.maxOutputTokens || ''));
   const title = shown?.displayName?.trim() || modelId || '模型配置';
   const description =
     shown && modelId && title !== modelId ? modelId : undefined;
@@ -47,6 +53,7 @@ export const ModelConfigDialog: React.FC<{
             type="button"
             variant="primary"
             size="sm"
+            disabled={numericInvalid}
             onClick={() => void onSave()}
           >
             保存

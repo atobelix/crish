@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, FieldError, Input, Select } from '@/components/ui';
+import { isHttpUrlText } from './fieldValidation';
 import {
   upsertProfile,
   type ProviderProfile,
@@ -57,6 +58,9 @@ export const ProviderProfileForm: React.FC<{
   const [baseUrlDraft, setBaseUrlDraft] = useState(storeBaseUrl);
   const vendorName = storeProvider?.displayName || selected.name || '';
   const [vendorNameDraft, setVendorNameDraft] = useState(vendorName);
+  // 字段级错误（F7）：挂字段下、保留至该字段被修正，不走 toast
+  const [vendorNameError, setVendorNameError] = useState<string | null>(null);
+  const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const [protocolDraft, setProtocolDraft] =
     useState<ModelProtocol>(effectiveProtocol);
 
@@ -86,6 +90,9 @@ export const ProviderProfileForm: React.FC<{
   useEffect(() => {
     if (prevSelectedIdRef.current !== selected.id) {
       prevSelectedIdRef.current = selected.id;
+      // 切换服务商：上一家的字段错误不带过来
+      setVendorNameError(null);
+      setBaseUrlError(null);
       setIsCollapsed(
         defaultCollapsed !== undefined ? defaultCollapsed : isConfigured
       );
@@ -95,10 +102,12 @@ export const ProviderProfileForm: React.FC<{
   const handleSaveVendorName = () => {
     const trimmed = vendorNameDraft.trim();
     if (!trimmed) {
-      notify(false, t('settings.models.probe.vendorNameEmpty'));
-      setVendorNameDraft(vendorName);
+      // 字段级错误（F7）：错误挂字段下并保留用户草稿，不再 toast + 静默还原旧值——
+      // 用户应能看见自己输入了什么、错在哪，修正后错误自行消失
+      setVendorNameError(t('settings.models.probe.vendorNameEmpty'));
       return;
     }
+    setVendorNameError(null);
     if (trimmed !== vendorName) {
       void runAsLocalMutation(async () => {
         try {
@@ -176,6 +185,12 @@ export const ProviderProfileForm: React.FC<{
   const handleSaveBaseUrl = () => {
     if (isSavingBaseUrlRef.current) return;
     const trimmed = baseUrlDraft.trim();
+    if (!isHttpUrlText(trimmed)) {
+      // 字段级错误（F7）：格式不对不落盘，错误挂字段下（旧行为是任意字符串直接保存）
+      setBaseUrlError(t('settings.models.field.baseUrlInvalid'));
+      return;
+    }
+    setBaseUrlError(null);
     const current = storeBaseUrl || selected.baseUrl || '';
     if (trimmed !== current) {
       isSavingBaseUrlRef.current = true;
@@ -249,10 +264,18 @@ export const ProviderProfileForm: React.FC<{
               value={vendorNameDraft}
               placeholder="例如: senseNova、SiliconFlow、Ollama"
               spellCheck={false}
-              onChange={(e) => setVendorNameDraft(e.target.value)}
+              aria-invalid={vendorNameError != null || undefined}
+              onChange={(e) => {
+                setVendorNameDraft(e.target.value);
+                // 修正即清：填入非空内容后字段错误自行消失
+                if (e.target.value.trim()) setVendorNameError(null);
+              }}
               onBlur={handleSaveVendorName}
               onEnter={handleSaveVendorName}
             />
+            {vendorNameError ? (
+              <FieldError>{vendorNameError}</FieldError>
+            ) : null}
           </div>
 
           {/* Base URL */}
@@ -263,12 +286,16 @@ export const ProviderProfileForm: React.FC<{
               value={baseUrlDraft}
               placeholder="https://api.example.com/v1"
               spellCheck={false}
+              aria-invalid={baseUrlError != null || undefined}
               onChange={(e) => {
                 setBaseUrlDraft(e.target.value);
+                // 修正即清：改到合法（或清空为未设置）后字段错误自行消失
+                if (isHttpUrlText(e.target.value)) setBaseUrlError(null);
               }}
               onBlur={handleSaveBaseUrl}
               onEnter={handleSaveBaseUrl}
             />
+            {baseUrlError ? <FieldError>{baseUrlError}</FieldError> : null}
           </div>
 
           {/* API Key */}

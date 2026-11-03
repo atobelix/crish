@@ -21,6 +21,9 @@ const REASON_KEYS: Record<AccountPasswordRejectReason, string> = {
   too_weak: 'settings.account.strength.tooWeak',
 };
 
+/** 拒绝原因 → i18n 键的唯一映射：字段级错误文案与强度提示共用，不另立一份 */
+export { REASON_KEYS as PASSWORD_REJECT_REASON_KEYS };
+
 interface PasswordStrengthHintProps {
   password: string;
   email?: string | null;

@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from './Field.module.css';
 
 export interface FieldContextValue {
   id?: string;
@@ -61,10 +62,27 @@ export const FieldDescription: React.FC<FieldDescriptionProps> = ({
 export const FieldHint: React.FC<FieldHintProps> = ({ children, ...props }) => (
   <span {...props}>{children}</span>
 );
+/**
+ * 字段级错误呈现（全应用统一组件）：自带 role="alert" 与标准错误样式，
+ * 调用方只需给文案（可再叠 className）。错误应挂在出错字段下方，
+ * 并保留到该字段被修正为止——不要用表单级单槽 + 任意击键即清的老口径。
+ */
 export const FieldError: React.FC<FieldErrorProps> = ({
   children,
+  className,
+  role,
   ...props
-}) => <p {...props}>{children}</p>;
+}) => (
+  <p
+    {...props}
+    role={role ?? 'alert'}
+    className={
+      className ? `${styles.fieldError} ${className}` : styles.fieldError
+    }
+  >
+    {children}
+  </p>
+);
 export const FieldRequiredIndicator: React.FC<FieldRequiredIndicatorProps> = ({
   children = '*',
   ...props

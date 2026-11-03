@@ -27,6 +27,7 @@ export const settingsPartAccount = {
   'account.code.resend': '重新发送',
   'account.code.send': '发送验证码',
   'account.code.sentTo': '发送到 {email} 的验证码',
+  'account.changePassword.codeIncomplete': '请输入 6 位验证码',
 
   // ── 错误 ──
   'account.error.failed': '操作失败，请稍后重试',
