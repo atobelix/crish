@@ -48,6 +48,13 @@
   box-shadow: 0 0 0 var(--hairline-width) var(--focus-ring-color);
 }
 
+/* 冲突态：与录制态同构的发丝环 + 错误色——键位本身即冲突证据，不另加图标/边框；
+   定义在录制态之前：同一行进入录制时活态环优先 */
+.shortcutKeyBtn.conflict {
+  box-shadow: 0 0 0 var(--hairline-width) var(--color-error);
+  color: var(--color-error);
+}
+
 /* 录制态：Emerald 活态焦点环与无障碍对比度 */
 .shortcutKeyBtn.recording {
   outline: none;

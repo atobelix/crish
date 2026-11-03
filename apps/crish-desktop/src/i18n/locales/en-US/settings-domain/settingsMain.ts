@@ -109,6 +109,12 @@ export const settingsPartMain = {
   'shortcuts.recording': 'Recording...',
   'shortcuts.resetDefault': 'Reset to default',
   'shortcuts.conflictWarning': 'Shortcut conflicts with "{action}"',
+  'shortcuts.conflictTitle': 'Binding Conflicts',
+  'shortcuts.conflictItem': '"{a}" and "{b}" share the same binding {key}',
+  'shortcuts.conflictDesc':
+    'Pressing this key triggers only one of the two actions — rebind one of them',
+  'shortcuts.conflictResolve': 'Rebind',
+  'shortcuts.conflictRowDesc': 'Conflicts with "{action}" ({key})',
   'shortcuts.groupGlobal': 'Global Shortcuts',
   'shortcuts.groupChat': 'Chat & Composer',
   'shortcuts.groupNavigation': 'Navigation',

@@ -271,3 +271,54 @@ describe('SettingsShortcutsTab 键盘导航', () => {
     );
   });
 });
+
+describe('SettingsShortcutsTab 预存冲突呈现（F5）', () => {
+  const flushTwoFrames = () =>
+    act(
+      async () =>
+        new Promise((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => r(undefined)))
+        )
+    );
+
+  it('覆盖与默认键位撞车时呈现冲突区，写明双方动作与按键，双方行都被标注', () => {
+    // 切换侧栏的覆盖占用了「新建对话」的默认 Ctrl + N —— 新录制会被拦下，
+    // 但这种历史残留冲突此前只落控制台；现在必须在页面内现形
+    configService.set('shortcuts.overrides', { toggle_sidebar: 'Ctrl + N' });
+    renderTab();
+
+    expect(screen.getByText('绑定冲突')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /「(新建对话|切换侧栏)」与「(新建对话|切换侧栏)」绑定了相同按键/
+      )
+    ).toBeInTheDocument();
+    // 冲突双方的行 desc 都标注对侧与按键
+    expect(screen.getAllByText(/冲突（Ctrl \+ N）/)).toHaveLength(2);
+  });
+
+  it('点冲突项「去改键」清筛选并直达对应动作的录制态', async () => {
+    configService.set('shortcuts.overrides', { toggle_sidebar: 'Ctrl + N' });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: '去改键' }));
+    await flushTwoFrames();
+
+    const recording = screen.getByRole('button', { name: /正在录制「/ });
+    expect(recording).toBeInTheDocument();
+    expect(document.activeElement).toBe(recording);
+  });
+
+  it('经冲突入口改绑到无冲突组合后，冲突区消失', async () => {
+    configService.set('shortcuts.overrides', { toggle_sidebar: 'Ctrl + N' });
+    renderTab();
+    expect(screen.getByText('绑定冲突')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '去改键' }));
+    await flushTwoFrames();
+    pressKey({ key: 'y', ctrlKey: true, altKey: true });
+
+    expect(screen.queryByText('绑定冲突')).toBeNull();
+    expect(screen.queryByText(/冲突（Ctrl \+ N）/)).toBeNull();
+  });
+});

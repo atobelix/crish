@@ -87,6 +87,12 @@ export const settingsPartMain = {
   'shortcuts.recording': '正在录制...',
   'shortcuts.resetDefault': '恢复该快捷键默认值',
   'shortcuts.conflictWarning': '快捷键与「{action}」存在冲突',
+  'shortcuts.conflictTitle': '绑定冲突',
+  'shortcuts.conflictItem': '「{a}」与「{b}」绑定了相同按键 {key}',
+  'shortcuts.conflictDesc':
+    '按下该按键时只会触发其中一个动作，请为其一改绑其他按键',
+  'shortcuts.conflictResolve': '去改键',
+  'shortcuts.conflictRowDesc': '与「{action}」冲突（{key}）',
   'shortcuts.groupGlobal': '全局快捷键',
   'shortcuts.groupChat': '对话与编辑',
   'shortcuts.groupNavigation': '界面导航',

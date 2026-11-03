@@ -5,17 +5,44 @@
  * 冲突检测与自定义覆盖。依赖 ShortcutPlatformAdapt 与 ShortcutRegistry。
  */
 
-import { IS_MAC, formatForDisplay as platformFormat } from './ShortcutPlatformAdapt';
+import {
+  IS_MAC,
+  formatForDisplay as platformFormat,
+} from './ShortcutPlatformAdapt';
 import { BUILTIN_SHORTCUTS, type ShortcutMeta } from './ShortcutRegistry';
 import { configService } from './ConfigService';
 
 /** Shift 键产生字符到原始键的映射 */
 const SHIFT_MAP: Record<string, string> = {
-  '~': '`', '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-  '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-  '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
-  ':': ';', '"': "'", '<': ',', '>': '.', '?': '/',
+  '~': '`',
+  '!': '1',
+  '@': '2',
+  '#': '3',
+  $: '4',
+  '%': '5',
+  '^': '6',
+  '&': '7',
+  '*': '8',
+  '(': '9',
+  ')': '0',
+  _: '-',
+  '+': '=',
+  '{': '[',
+  '}': ']',
+  '|': '\\',
+  ':': ';',
+  '"': "'",
+  '<': ',',
+  '>': '.',
+  '?': '/',
 };
+
+/** 一处绑定冲突：actionId 与 conflictsWith 共用同一 binding（先登记者为准） */
+export interface ShortcutConflict {
+  actionId: string;
+  binding: string;
+  conflictsWith: string;
+}
 
 export class ShortcutService {
   private static instance: ShortcutService;
@@ -27,8 +54,16 @@ export class ShortcutService {
   private boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
   private boundKeyUp: ((e: KeyboardEvent) => void) | null = null;
   private container: HTMLElement | Document | null = null;
-  private matchCallbacks: Array<(match: { actionId: string; meta: ShortcutMeta; originalEvent: KeyboardEvent }) => void> = [];
+  private matchCallbacks: Array<
+    (match: {
+      actionId: string;
+      meta: ShortcutMeta;
+      originalEvent: KeyboardEvent;
+    }) => void
+  > = [];
   private contextRoots = new Map<string, HTMLElement>();
+  private conflictState: ShortcutConflict[] = [];
+  private conflictListeners = new Set<() => void>();
 
   static getInstance(): ShortcutService {
     if (!ShortcutService.instance) {
@@ -54,14 +89,21 @@ export class ShortcutService {
       const result = this.handleKeyDown(e);
       if (result) {
         for (const cb of this.matchCallbacks) {
-          try { cb({ ...result, originalEvent: e }); } catch { /* callback error */ }
+          try {
+            cb({ ...result, originalEvent: e });
+          } catch {
+            /* callback error */
+          }
         }
       }
     };
     this.boundKeyUp = () => {
       // reserved for future use
     };
-    this.container.addEventListener('keydown', this.boundKeyDown as EventListener);
+    this.container.addEventListener(
+      'keydown',
+      this.boundKeyDown as EventListener
+    );
     this.container.addEventListener('keyup', this.boundKeyUp as EventListener);
     this.loadCustomOverrides();
   }
@@ -69,10 +111,16 @@ export class ShortcutService {
   /** 销毁：移除所有 DOM 监听，清空序列缓冲和回调 */
   destroy(): void {
     if (this.container && this.boundKeyDown) {
-      this.container.removeEventListener('keydown', this.boundKeyDown as EventListener);
+      this.container.removeEventListener(
+        'keydown',
+        this.boundKeyDown as EventListener
+      );
     }
     if (this.container && this.boundKeyUp) {
-      this.container.removeEventListener('keyup', this.boundKeyUp as EventListener);
+      this.container.removeEventListener(
+        'keyup',
+        this.boundKeyUp as EventListener
+      );
     }
     this.boundKeyDown = null;
     this.boundKeyUp = null;
@@ -82,7 +130,13 @@ export class ShortcutService {
   }
 
   /** 注册快捷键匹配回调，返回取消订阅函数 */
-  onMatch(cb: (match: { actionId: string; meta: ShortcutMeta; originalEvent: KeyboardEvent }) => void): () => void {
+  onMatch(
+    cb: (match: {
+      actionId: string;
+      meta: ShortcutMeta;
+      originalEvent: KeyboardEvent;
+    }) => void
+  ): () => void {
     this.matchCallbacks.push(cb);
     return () => {
       const idx = this.matchCallbacks.indexOf(cb);
@@ -122,15 +176,19 @@ export class ShortcutService {
         keywords: [],
       },
     });
+    this.refreshConflicts();
   }
 
   /** 注销快捷键 */
   unregister(actionId: string): void {
     this.actions.delete(actionId);
+    this.refreshConflicts();
   }
 
   /** 处理键盘事件，返回匹配的快捷键或 null */
-  handleKeyDown(e: KeyboardEvent): { actionId: string; meta: ShortcutMeta } | null {
+  handleKeyDown(
+    e: KeyboardEvent
+  ): { actionId: string; meta: ShortcutMeta } | null {
     if (e.repeat) return null;
     if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
 
@@ -158,7 +216,7 @@ export class ShortcutService {
   private clearSequenceBuffer(): void {
     const now = Date.now();
     this.sequenceBuffer = this.sequenceBuffer.filter(
-      b => now - b.time < ShortcutService.SEQUENCE_TIMEOUT
+      (b) => now - b.time < ShortcutService.SEQUENCE_TIMEOUT
     );
   }
 
@@ -167,8 +225,11 @@ export class ShortcutService {
   }
 
   /** 尝试匹配序列键绑定 */
-  private matchSequenceBinding(): { actionId: string; meta: ShortcutMeta } | null {
-    const bufferStr = this.sequenceBuffer.map(b => b.key).join(' ');
+  private matchSequenceBinding(): {
+    actionId: string;
+    meta: ShortcutMeta;
+  } | null {
+    const bufferStr = this.sequenceBuffer.map((b) => b.key).join(' ');
     for (const [actionId, { binding, meta }] of this.actions) {
       if (!this.isSequenceBinding(binding)) continue;
       if (binding === bufferStr) {
@@ -181,7 +242,7 @@ export class ShortcutService {
 
   /** 检查当前缓冲区是否为某个序列绑定的前缀 */
   private isSequencePrefix(): boolean {
-    const bufferStr = this.sequenceBuffer.map(b => b.key).join(' ');
+    const bufferStr = this.sequenceBuffer.map((b) => b.key).join(' ');
     for (const { binding } of this.actions.values()) {
       if (!this.isSequenceBinding(binding)) continue;
       const parts = binding.split(/\s+/);
@@ -196,7 +257,9 @@ export class ShortcutService {
 
   // ─── 单次按键匹配 ───────────────────────────────
 
-  private matchSingleKeyBinding(e: KeyboardEvent): { actionId: string; meta: ShortcutMeta } | null {
+  private matchSingleKeyBinding(
+    e: KeyboardEvent
+  ): { actionId: string; meta: ShortcutMeta } | null {
     const matches: Array<{ actionId: string; meta: ShortcutMeta }> = [];
     for (const [actionId, { binding, meta }] of this.actions) {
       if (this.isSequenceBinding(binding)) continue;
@@ -211,7 +274,7 @@ export class ShortcutService {
   }
 
   private matchSingleKey(e: KeyboardEvent, binding: string): boolean {
-    const parts = binding.split(' + ').map(p => p.trim());
+    const parts = binding.split(' + ').map((p) => p.trim());
     const keyPart = parts[parts.length - 1]!;
     const mods = new Set(parts.slice(0, -1));
 
@@ -229,7 +292,11 @@ export class ShortcutService {
     return this.keysMatch(e.key, keyPart, e.shiftKey);
   }
 
-  private keysMatch(actual: string, expected: string, shiftHeld: boolean): boolean {
+  private keysMatch(
+    actual: string,
+    expected: string,
+    shiftHeld: boolean
+  ): boolean {
     if (actual === expected) return true;
     if (actual === ' ' && expected === 'Space') return true;
     // Shift 产生字符 → 无 Shift 字符
@@ -252,19 +319,19 @@ export class ShortcutService {
 
   /** 获取所有注册的快捷键元数据 */
   getAllActions(): ShortcutMeta[] {
-    return Array.from(this.actions.values()).map(a => a.meta);
+    return Array.from(this.actions.values()).map((a) => a.meta);
   }
 
   /** 按分类获取快捷键 */
   getByCategory(category: string): ShortcutMeta[] {
-    return this.getAllActions().filter(m => m.category === category);
+    return this.getAllActions().filter((m) => m.category === category);
   }
 
   // ─── 冲突检测 ────────────────────────────────────
 
   /** 检测所有已注册快捷键中存在相同绑定的冲突 */
-  detectConflicts(): { actionId: string; binding: string; conflictsWith: string }[] {
-    const result: { actionId: string; binding: string; conflictsWith: string }[] = [];
+  detectConflicts(): ShortcutConflict[] {
+    const result: ShortcutConflict[] = [];
     const bindingMap = new Map<string, string>();
 
     for (const [actionId, { binding }] of this.actions) {
@@ -279,12 +346,69 @@ export class ShortcutService {
     return result;
   }
 
+  // ─── 冲突状态面 ──────────────────────────────────
+
+  /**
+   * 当前冲突快照。引用稳定：冲突集无变化时不换新数组，
+   * 供 useSyncExternalStore 直接消费（设置页快捷键区内联呈现的数据源）。
+   */
+  getConflicts(): ShortcutConflict[] {
+    return this.conflictState;
+  }
+
+  /** 订阅冲突变化（仅在冲突集实际变化时回调），返回取消订阅函数 */
+  subscribeConflicts(listener: () => void): () => void {
+    this.conflictListeners.add(listener);
+    return () => {
+      this.conflictListeners.delete(listener);
+    };
+  }
+
+  /** 重算冲突快照，变化时通知订阅者；所有绑定变更路径的统一收口 */
+  refreshConflicts(): ShortcutConflict[] {
+    const next = this.detectConflicts();
+    const prev = this.conflictState;
+    const changed =
+      next.length !== prev.length ||
+      next.some(
+        (c, i) =>
+          c.actionId !== prev[i]!.actionId ||
+          c.binding !== prev[i]!.binding ||
+          c.conflictsWith !== prev[i]!.conflictsWith
+      );
+    if (changed) {
+      this.conflictState = next;
+      for (const listener of [...this.conflictListeners]) {
+        try {
+          listener();
+        } catch {
+          /* callback error */
+        }
+      }
+    }
+    return this.conflictState;
+  }
+
   // ─── 自定义覆盖 ──────────────────────────────────
 
-  /** 从 configService 加载已保存的自定义覆盖 */
+  /** 从 configService 加载已保存的自定义覆盖（与持久化记录全量同步） */
   loadCustomOverrides(): void {
     try {
-      const overrides = configService.get<Record<string, string>>('shortcuts.overrides');
+      const overrides =
+        configService.get<Record<string, string>>('shortcuts.overrides') ?? {};
+      // 全量同步：先把所有动作复位到注册表默认，再套用现存覆盖。旧实现只增
+      // 不减——设置页还原/删改覆盖后运行时仍用旧绑定、冲突也无从刷新；
+      // 复位优先保证删除与还原同样传导到运行时，并顺带刷新冲突状态面。
+      for (const [id, entry] of this.actions) {
+        this.actions.set(id, {
+          binding: this.resolvePlatformBinding(
+            entry.meta.defaultBinding,
+            entry.meta
+          ),
+          meta: entry.meta,
+        });
+      }
+      this.customOverrides.clear();
       for (const [id, binding] of Object.entries(overrides)) {
         this.customOverrides.set(id, binding);
         if (this.actions.has(id)) {
@@ -295,6 +419,7 @@ export class ShortcutService {
     } catch {
       // 解析失败忽略
     }
+    this.refreshConflicts();
   }
 
   /** 设置单个快捷键的自定义绑定并持久化 */
@@ -305,6 +430,7 @@ export class ShortcutService {
       this.actions.set(actionId, { binding, meta });
     }
     this.persistOverrides();
+    this.refreshConflicts();
   }
 
   /** 重置单个快捷键的自定义绑定为默认值 */
@@ -318,6 +444,7 @@ export class ShortcutService {
       });
     }
     this.persistOverrides();
+    this.refreshConflicts();
   }
 
   private persistOverrides(): void {

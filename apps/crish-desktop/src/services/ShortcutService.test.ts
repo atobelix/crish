@@ -110,10 +110,16 @@ describe('ShortcutService', () => {
       const onMatchCb = vi.fn();
       shortcutService.onMatch(onMatchCb);
 
-      const esc1 = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+      const esc1 = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      });
       document.dispatchEvent(esc1);
 
-      const esc2 = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+      const esc2 = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      });
       document.dispatchEvent(esc2);
 
       expect(onMatchCb).not.toHaveBeenCalled();
@@ -123,7 +129,9 @@ describe('ShortcutService', () => {
   describe('Custom Overrides & Conflict Detection', () => {
     it('allows overriding shortcut binding and resetting to default', () => {
       shortcutService.setCustomOverride('new_session', 'Ctrl + Shift + N');
-      expect(shortcutService.getBinding('new_session')).toBe('Ctrl + Shift + N');
+      expect(shortcutService.getBinding('new_session')).toBe(
+        'Ctrl + Shift + N'
+      );
 
       shortcutService.resetCustomOverride('new_session');
       expect(shortcutService.getBinding('new_session')).toBe('Ctrl + N');
@@ -134,6 +142,43 @@ describe('ShortcutService', () => {
       const conflicts = shortcutService.detectConflicts();
       expect(conflicts.length).toBeGreaterThan(0);
       expect(conflicts[0].binding).toBe('Ctrl + ,');
+    });
+  });
+
+  describe('冲突状态面（可订阅快照）', () => {
+    it('setCustomOverride 制造冲突后 getConflicts 即时反映，订阅者收到通知', () => {
+      const listener = vi.fn();
+      const unsub = shortcutService.subscribeConflicts(listener);
+      shortcutService.setCustomOverride('new_session', 'Ctrl + ,');
+      expect(listener).toHaveBeenCalledTimes(1);
+      const conflicts = shortcutService.getConflicts();
+      expect(conflicts).toHaveLength(1);
+      expect(conflicts[0]).toMatchObject({ binding: 'Ctrl + ,' });
+      unsub();
+    });
+
+    it('冲突消除后快照清空并再次通知；无变化时不重复通知且快照引用稳定', () => {
+      shortcutService.setCustomOverride('new_session', 'Ctrl + ,');
+      const withConflict = shortcutService.getConflicts();
+      const listener = vi.fn();
+      const unsub = shortcutService.subscribeConflicts(listener);
+      // 无变化的刷新不通知，快照引用保持不变（useSyncExternalStore 依赖此性质）
+      shortcutService.refreshConflicts();
+      expect(listener).not.toHaveBeenCalled();
+      expect(shortcutService.getConflicts()).toBe(withConflict);
+      shortcutService.resetCustomOverride('new_session');
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(shortcutService.getConflicts()).toHaveLength(0);
+      unsub();
+    });
+
+    it('loadCustomOverrides 全量同步：覆盖被删除后运行时绑定复位、冲突消失', () => {
+      shortcutService.setCustomOverride('new_session', 'Ctrl + ,');
+      expect(shortcutService.getConflicts()).toHaveLength(1);
+      // 模拟设置页把覆盖记录整体改写（本文件 mock 的 configService.get 恒返回 {}）
+      shortcutService.loadCustomOverrides();
+      expect(shortcutService.getBinding('new_session')).toBe('Ctrl + N');
+      expect(shortcutService.getConflicts()).toHaveLength(0);
     });
   });
 
@@ -186,7 +231,9 @@ describe('ShortcutService', () => {
 
       const consumedIds = new Set([...caseIds, ...whitelistIds]);
       const orphans = [...consumedIds].filter((id) => !registeredIds.has(id));
-      expect(orphans, `消费面引用了未注册的 id：${orphans.join(', ')}`).toEqual([]);
+      expect(orphans, `消费面引用了未注册的 id：${orphans.join(', ')}`).toEqual(
+        []
+      );
     });
 
     it('注册表每 id 都有执行面 handler（switch case 覆盖，防注册无 handler 回潮）', () => {
@@ -205,7 +252,11 @@ describe('ShortcutService', () => {
 
     it('注册表无已退役的幽灵 id（toggle_runtime / command_palette / close_tab 不复活）', () => {
       const ids = new Set(BUILTIN_SHORTCUTS.map((m) => m.id));
-      for (const retired of ['toggle_runtime', 'command_palette', 'close_tab']) {
+      for (const retired of [
+        'toggle_runtime',
+        'command_palette',
+        'close_tab',
+      ]) {
         expect(ids.has(retired), `${retired} 已退役，不得重新注册`).toBe(false);
       }
     });

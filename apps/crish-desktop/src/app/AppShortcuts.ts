@@ -146,8 +146,10 @@ export function useAppShortcuts({
   }, [showFirstRun, setShowTelemetry, setSidebarCollapsed]);
 
   useEffect(() => {
-    // 冲突检测生产接线（T2-2）：改键/注册表变更后任何环境都兜底告警，防绑定漂移静默生效
-    const conflicts = ShortcutService.getInstance().detectConflicts();
+    // 冲突检测生产接线（T2-2）：改键/注册表变更后任何环境都兜底告警，防绑定漂移静默生效。
+    // refreshConflicts 同时把冲突写入服务的可订阅状态面（F5），设置页快捷键区
+    // 据此内联呈现冲突条目与改键入口——控制台告警只作诊断兜底，不再是唯一出口。
+    const conflicts = ShortcutService.getInstance().refreshConflicts();
     if (conflicts.length > 0) {
       console.warn('[crish] 快捷键绑定冲突:', conflicts);
       if (import.meta.env.DEV) {

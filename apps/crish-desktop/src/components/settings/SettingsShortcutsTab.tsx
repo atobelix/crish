@@ -23,6 +23,8 @@ import uiStyles from './SettingsUI.module.css';
 import { Button, Input, Tooltip } from '@/components/ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { useI18n } from '../../i18n';
+import { ShortcutService } from '../../services/ShortcutService';
+import { useShortcutConflicts } from '../../hooks/useShortcutConflicts';
 import {
   SHORTCUT_ITEMS,
   defaultBindingOf,
@@ -58,6 +60,17 @@ export const SettingsShortcutsTab: React.FC = () => {
   const headMetaId = useId();
   const listId = useId();
   const btnRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /** actionId → 行按钮直达 ref（冲突入口跳转用，免索引对齐假设） */
+  const btnByIdRef = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // 冲突状态面（F5）：服务侧可订阅快照，冲突在此内联呈现，不再只落控制台
+  const conflicts = useShortcutConflicts();
+
+  // 进页与持久化记录全量同步一次：历史残留冲突（旧版本覆盖、外部改写）在此
+  // 现形；同时让运行时绑定与本页展示同源（还原/删改覆盖也传导到运行时）。
+  useEffect(() => {
+    ShortcutService.getInstance().loadCustomOverrides();
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -104,6 +117,8 @@ export const SettingsShortcutsTab: React.FC = () => {
       try {
         configService.set('shortcuts.overrides', updated);
         setCustomShortcuts(updated);
+        // 落盘后同步运行时服务：新绑定即时生效，冲突状态面随之刷新
+        ShortcutService.getInstance().loadCustomOverrides();
         try {
           clientApi
             .saveSettingsEx('__global__', 'global', {
@@ -231,6 +246,44 @@ export const SettingsShortcutsTab: React.FC = () => {
 
   const clearQuery = useCallback(() => setQuery(''), []);
 
+  const labelOf = useCallback(
+    (id: string) => SHORTCUT_ITEMS.find((s) => s.id === id)?.label ?? id,
+    []
+  );
+
+  /** 每行参与冲突时的对侧信息（冲突双方的行都标注，不只报后登记者） */
+  const conflictByAction = useMemo(() => {
+    const map = new Map<string, { otherId: string; binding: string }>();
+    for (const c of conflicts) {
+      if (!map.has(c.actionId)) {
+        map.set(c.actionId, { otherId: c.conflictsWith, binding: c.binding });
+      }
+      if (!map.has(c.conflictsWith)) {
+        map.set(c.conflictsWith, { otherId: c.actionId, binding: c.binding });
+      }
+    }
+    return map;
+  }, [conflicts]);
+
+  /** 点冲突项「去改键」：清筛选 → 聚焦目标行 → 直接进入该动作的录制态 */
+  const jumpToRebind = useCallback((actionId: string) => {
+    setQuery('');
+    // 等筛选清空、列表恢复全量后再聚焦（行按钮 ref 此时才齐备）；
+    // 按钮按 actionId 直存 ref，不依赖「渲染顺序 = SHORTCUT_ITEMS 顺序」的索引对齐
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const btn = btnByIdRef.current[actionId];
+        if (!btn) return;
+        // focusIndex 按行按钮在渲染序列中的实际位置取（分组渲染顺序与
+        // SHORTCUT_ITEMS 顺序在分类交错时并不一致，不能按注册表序反推）
+        const idx = btnRefs.current.indexOf(btn);
+        if (idx >= 0) setFocusIndex(idx);
+        btn.focus();
+        setRecordingShortcutId(actionId);
+      });
+    });
+  }, []);
+
   const moveFocus = useCallback(
     (delta: number) => {
       if (flatIds.length === 0) return;
@@ -339,6 +392,43 @@ export const SettingsShortcutsTab: React.FC = () => {
       title={t('settings.tabs.shortcuts', '快捷键')}
       meta={headerMeta}
     >
+      {conflicts.length > 0 ? (
+        <SettingsSection
+          title={t('settings.shortcuts.conflictTitle', '绑定冲突')}
+        >
+          <SettingsCard>
+            {conflicts.map((c) => {
+              const a = labelOf(c.actionId);
+              const b = labelOf(c.conflictsWith);
+              const keyLabel = formatShortcutLabel(c.binding);
+              return (
+                <SettingsRow
+                  key={`${c.actionId}:${c.binding}`}
+                  title={t(
+                    'settings.shortcuts.conflictItem',
+                    `「${a}」与「${b}」绑定了相同按键 ${keyLabel}`,
+                    { a, b, key: keyLabel }
+                  )}
+                  desc={t(
+                    'settings.shortcuts.conflictDesc',
+                    '按下该按键时只会触发其中一个动作，请为其一改绑其他按键'
+                  )}
+                  control={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => jumpToRebind(c.actionId)}
+                    >
+                      {t('settings.shortcuts.conflictResolve', '去改键')}
+                    </Button>
+                  }
+                />
+              );
+            })}
+          </SettingsCard>
+        </SettingsSection>
+      ) : null}
       {grouped.length === 0 ? (
         <SettingsSection>
           <SettingsCard>
@@ -399,6 +489,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                     const rawKey = customShortcuts[sh.id] || '';
                     const displayKey = formatShortcutLabel(rawKey || undefined);
                     const customized = isCustomized(customShortcuts, sh.id);
+                    const conflictInfo = conflictByAction.get(sh.id);
                     const tabIndex =
                       flatIds.length === 0
                         ? -1
@@ -410,6 +501,20 @@ export const SettingsShortcutsTab: React.FC = () => {
                       <SettingsRow
                         key={sh.id}
                         title={sh.label}
+                        desc={
+                          conflictInfo
+                            ? t(
+                                'settings.shortcuts.conflictRowDesc',
+                                `与「${labelOf(conflictInfo.otherId)}」冲突（${formatShortcutLabel(conflictInfo.binding)}）`,
+                                {
+                                  action: labelOf(conflictInfo.otherId),
+                                  key: formatShortcutLabel(
+                                    conflictInfo.binding
+                                  ),
+                                }
+                              )
+                            : undefined
+                        }
                         control={
                           <div className={styles.controlGroup}>
                             {customized && !isRecording ? (
@@ -462,6 +567,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                                 type="button"
                                 ref={(el) => {
                                   btnRefs.current[rowIndex] = el;
+                                  btnByIdRef.current[sh.id] = el;
                                 }}
                                 onClick={() =>
                                   setRecordingShortcutId(
@@ -469,7 +575,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                                   )
                                 }
                                 onFocus={() => setFocusIndex(rowIndex)}
-                                className={`${styles.shortcutKeyBtn} shortcut-key-btn${isRecording ? ` ${styles.recording} recording` : ''}`}
+                                className={`${styles.shortcutKeyBtn} shortcut-key-btn${isRecording ? ` ${styles.recording} recording` : ''}${conflictInfo ? ` ${styles.conflict}` : ''}`}
                                 variant="secondary"
                                 size="sm"
                                 active={isRecording}
