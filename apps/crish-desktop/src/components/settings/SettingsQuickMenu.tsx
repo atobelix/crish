@@ -34,6 +34,9 @@ import {
 import { SignOutConfirmDialog } from '../account/SignOutConfirmDialog';
 
 export interface SettingsQuickMenuProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
   trigger?: React.ReactNode;
   renderTrigger?: (params: {
     open: boolean;
@@ -69,10 +72,24 @@ type QuickEntry = {
 };
 
 export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
+  open: externalOpen,
+  onOpenChange: externalOnOpenChange,
+  anchorRef,
   trigger,
   renderTrigger,
 }) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = externalOpen !== undefined;
+  const open = isControlled ? externalOpen : internalOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (!isControlled) {
+        setInternalOpen(next);
+      }
+      externalOnOpenChange?.(next);
+    },
+    [isControlled, externalOnOpenChange]
+  );
   const { t, language } = useI18n();
   const { showToast } = useToast();
   const isLoggedIn = useAuthField((state) => state.isLoggedIn);
@@ -137,14 +154,15 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
       // 按关闭来源决定是否还原焦点（Esc/Tab/选中 → 还原；外点/触发器 → 不抢）
       const shouldRestore = restoreOnCloseRef.current;
       restoreOnCloseRef.current = false;
+      const targetBtn = anchorRef?.current ?? btnRef.current;
       if (shouldRestore) {
         queueMicrotask(() => {
-          btnRef.current?.focus();
+          targetBtn?.focus();
         });
       } else {
         queueMicrotask(() => {
-          if (document.activeElement === btnRef.current) {
-            btnRef.current?.blur();
+          if (document.activeElement === targetBtn) {
+            targetBtn?.blur();
           }
         });
       }
@@ -366,7 +384,8 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
             }
           },
         }}
-        trigger={finalTrigger}
+        anchor={anchorRef}
+        trigger={anchorRef ? undefined : finalTrigger}
         position={{ side: 'top', align: 'start', sideOffset: 6 }}
         panel={{ contentClassName: styles.sbQuickMenu }}
       >

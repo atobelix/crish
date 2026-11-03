@@ -84,6 +84,10 @@ export interface MenuProps {
   panel?: MenuPanelConfig;
   outsideHandlers?: MenuOutsideHandlers;
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  /** 点击菜单项时是否自动关闭菜单（默认 true；复合 children 场景可设 false 由项自身控制） */
+  closeOnSelect?: boolean;
+  /** 自定义外点判定豁免谓词（例如自定义 Portal 浮层内的节点） */
+  isDismissIgnoredTarget?: (target: Node | null) => boolean;
   cascade?: {
     onSubmenuExpand?: (index: number, optionOrElement: unknown) => void;
     onSubmenuCollapse?: () => void;
@@ -96,18 +100,93 @@ interface MenuComponent extends React.FC<MenuProps> {
   Portal: typeof BaseMenu.Portal;
   Positioner: typeof BaseMenu.Positioner;
   Popup: typeof BaseMenu.Popup;
-  Item: typeof BaseMenu.Item;
+  /* Item / SubmenuTrigger / RadioItem / Separator 四成员在下方 Object.assign
+   * 中提供的是本文件的本地包装（forwardRef<HTMLDivElement, …>），而非
+   * BaseMenu 原件：Base UI 将这四者的 ref 元素类型标为 HTMLElement，
+   * 与包装的 HTMLDivElement 在 RefObject 上不可变冲突（原 TS2322 根因），
+   * 故接口如实声明包装类型；其余成员为原件直出，声明 typeof BaseMenu.*。 */
+  Item: typeof MenuItem;
   Submenu: typeof BaseMenu.SubmenuRoot;
   SubmenuRoot: typeof BaseMenu.SubmenuRoot;
-  SubmenuTrigger: typeof BaseMenu.SubmenuTrigger;
+  SubmenuTrigger: typeof MenuSubmenuTrigger;
   Group: typeof BaseMenu.Group;
   GroupLabel: typeof BaseMenu.GroupLabel;
   RadioGroup: typeof BaseMenu.RadioGroup;
-  RadioItem: typeof BaseMenu.RadioItem;
+  RadioItem: typeof MenuRadioItem;
   CheckboxItem: typeof BaseMenu.CheckboxItem;
-  Separator: typeof BaseMenu.Separator;
+  Separator: typeof MenuSeparator;
   Arrow: typeof BaseMenu.Arrow;
 }
+
+export type MenuItemProps = React.ComponentPropsWithoutRef<
+  typeof BaseMenu.Item
+>;
+export const MenuItem = React.forwardRef<HTMLDivElement, MenuItemProps>(
+  function MenuItem({ className, ...props }, ref) {
+    return (
+      <BaseMenu.Item
+        ref={ref}
+        className={[styles.menuItem, className].filter(Boolean).join(' ')}
+        {...props}
+      />
+    );
+  }
+);
+
+export type MenuRadioItemProps = React.ComponentPropsWithoutRef<
+  typeof BaseMenu.RadioItem
+>;
+export const MenuRadioItem = React.forwardRef<
+  HTMLDivElement,
+  MenuRadioItemProps
+>(function MenuRadioItem({ closeOnClick = false, className, ...props }, ref) {
+  return (
+    <BaseMenu.RadioItem
+      ref={ref}
+      closeOnClick={closeOnClick}
+      data-keep-open="true"
+      className={className}
+      {...props}
+    />
+  );
+});
+
+export type MenuSeparatorProps = React.ComponentPropsWithoutRef<
+  typeof BaseMenu.Separator
+>;
+export const MenuSeparator = React.forwardRef<
+  HTMLDivElement,
+  MenuSeparatorProps
+>(function MenuSeparator({ className, ...props }, ref) {
+  return (
+    <BaseMenu.Separator
+      ref={ref}
+      className={[styles.separator, className].filter(Boolean).join(' ')}
+      {...props}
+    />
+  );
+});
+
+export type MenuSubmenuTriggerProps = React.ComponentPropsWithoutRef<
+  typeof BaseMenu.SubmenuTrigger
+>;
+export const MenuSubmenuTrigger = React.forwardRef<
+  HTMLDivElement,
+  MenuSubmenuTriggerProps
+>(function MenuSubmenuTrigger(
+  { delay = 80, closeDelay = 150, className, ...props },
+  ref
+) {
+  return (
+    <BaseMenu.SubmenuTrigger
+      ref={ref}
+      delay={delay}
+      closeDelay={closeDelay}
+      className={className}
+      {...props}
+    />
+  );
+});
 
 export const Menu: MenuComponent = Object.assign(
   React.memo(function Menu({
@@ -123,6 +202,8 @@ export const Menu: MenuComponent = Object.assign(
     panel,
     outsideHandlers,
     onKeyDown,
+    closeOnSelect = true,
+    isDismissIgnoredTarget,
     cascade,
   }: MenuProps) {
     const align = position?.align ?? 'end';
@@ -163,6 +244,49 @@ export const Menu: MenuComponent = Object.assign(
     const parentMenuId = parentMenu?.menuId;
     const dialogOverlay = React.useContext(DialogOverlayContext);
 
+    const isDismissIgnored = useCallback(
+      (target: Node | null): boolean => {
+        if (!target) return false;
+        const targetEl =
+          target instanceof Element ? target : target.parentElement;
+        if (!targetEl) return false;
+
+        // 1. 命中菜单自身浮层
+        if (contentRef.current && contentRef.current.contains(targetEl)) {
+          return true;
+        }
+
+        // 2. 命中触发器
+        const triggerEl = anchor?.current ?? triggerRef.current;
+        if (triggerEl && triggerEl.contains(targetEl)) {
+          return true;
+        }
+
+        // 3. 命中 Base UI 菜单架构下的子菜单、级联浮层、Positioner、Popup、MenuItem、RadioItem 等
+        if (
+          targetEl.closest('[data-base-ui-menu-popup]') ||
+          targetEl.closest('[data-base-ui-menu-positioner]') ||
+          targetEl.closest('[role="menu"]') ||
+          targetEl.closest('[role="menuitem"]') ||
+          targetEl.closest('[role="menuitemradio"]') ||
+          targetEl.closest('[role="menuitemcheckbox"]') ||
+          targetEl.closest('[data-menu-inside="true"]') ||
+          targetEl.closest('.sb-quick-sub-positioner') ||
+          targetEl.closest('.sb-quick-submenu')
+        ) {
+          return true;
+        }
+
+        // 4. 自定义外点豁免谓词
+        if (isDismissIgnoredTarget && isDismissIgnoredTarget(target)) {
+          return true;
+        }
+
+        return false;
+      },
+      [anchor, isDismissIgnoredTarget]
+    );
+
     const handleOpenChange = useCallback(
       (nextOpen: boolean) => {
         // 幂等：Base UI 外点可能同时触发 outside-press 与 focus-out 两次 false，
@@ -197,6 +321,14 @@ export const Menu: MenuComponent = Object.assign(
         parentId: parentMenuId ?? undefined,
         dismissible: true,
         onDismiss: () => handleOpenChange(false),
+        isDismissIgnoredTarget: isDismissIgnored,
+        onPointerDownOutside: (event) => {
+          const target = event.target as Node | null;
+          if (isDismissIgnored(target)) {
+            return true;
+          }
+          return false;
+        },
         onEscapeKeyDown: (event) => {
           onEscapeKeyDown?.(event);
         },
@@ -341,6 +473,17 @@ export const Menu: MenuComponent = Object.assign(
             open={isOpen}
             onOpenChange={(nextOpen, details) => {
               if (!nextOpen) {
+                // 当 closeOnSelect 为 false 时（复合 children 自管关闭场景）：
+                // 仅允许 escape-key 与真实 outside-press 关闭。
+                // 严禁 focus-out、item-press、close-press 等把整个菜单带走！
+                if (
+                  !closeOnSelect &&
+                  details.reason !== 'escape-key' &&
+                  details.reason !== 'outside-press'
+                ) {
+                  return;
+                }
+
                 if (details.reason === 'escape-key') {
                   const event = details.event as KeyboardEvent;
                   if (
@@ -360,8 +503,7 @@ export const Menu: MenuComponent = Object.assign(
                 } else if (details.reason === 'outside-press') {
                   const target = (details.event as MouseEvent)
                     ?.target as Node | null;
-                  const triggerEl = anchor?.current ?? triggerRef.current;
-                  if (triggerEl && target && triggerEl.contains(target)) {
+                  if (isDismissIgnored(target)) {
                     return;
                   }
                   const isDescendant = layerStackService
@@ -379,6 +521,17 @@ export const Menu: MenuComponent = Object.assign(
                       detail: { originalEvent: details.event as PointerEvent },
                     })
                   );
+                } else if (details.reason === 'item-press') {
+                  const target = (details.event as MouseEvent | undefined)
+                    ?.target as Node | null;
+                  const targetEl = target instanceof Element ? target : null;
+                  const isRadioOrKeepOpen =
+                    targetEl?.closest(
+                      '[role="menuitemradio"], [data-keep-open="true"], [data-close-on-click="false"]'
+                    ) != null;
+                  if (isRadioOrKeepOpen || !closeOnSelect) {
+                    return;
+                  }
                 }
               }
               handleOpenChange(nextOpen);
@@ -503,16 +656,16 @@ export const Menu: MenuComponent = Object.assign(
     Portal: BaseMenu.Portal,
     Positioner: BaseMenu.Positioner,
     Popup: BaseMenu.Popup,
-    Item: BaseMenu.Item,
+    Item: MenuItem,
     Submenu: BaseMenu.SubmenuRoot,
     SubmenuRoot: BaseMenu.SubmenuRoot,
-    SubmenuTrigger: BaseMenu.SubmenuTrigger,
+    SubmenuTrigger: MenuSubmenuTrigger,
     Group: BaseMenu.Group,
     GroupLabel: BaseMenu.GroupLabel,
     RadioGroup: BaseMenu.RadioGroup,
-    RadioItem: BaseMenu.RadioItem,
+    RadioItem: MenuRadioItem,
     CheckboxItem: BaseMenu.CheckboxItem,
-    Separator: BaseMenu.Separator,
+    Separator: MenuSeparator,
     Arrow: BaseMenu.Arrow,
   }
 );

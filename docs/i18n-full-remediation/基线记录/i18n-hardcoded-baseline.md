@@ -1,4 +1,4 @@
-# i18n 源码硬编码中文门禁基线
+﻿# i18n 源码硬编码中文门禁基线
 
 > 由 `node scripts/check-i18n-hardcoded.mjs --update-baseline` 自动生成/收紧。
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → PASS。存量按战役波次单调递减收敛。
@@ -11,6 +11,7 @@
 > 禁止借此引入任何展示文案硬编码；展示文案一律进双语字典。
 
 <!-- BASELINE_START -->
+apps/crish-desktop/src/api/chat-bridge/handlers/approvalHandlers.ts 1
 apps/crish-desktop/src/App.tsx 8
 apps/crish-desktop/src/api/StreamRenderBuffer.ts 1
 apps/crish-desktop/src/api/agentProfiles.ts 9
@@ -132,7 +133,7 @@ apps/crish-desktop/src/api/tauriInvoke.ts 2
 apps/crish-desktop/src/api/terminalShellApi.ts 3
 apps/crish-desktop/src/api/themePresets.ts 16
 apps/crish-desktop/src/api/thinkingGear.ts 11
-apps/crish-desktop/src/api/tool-presentation/processMetricsEngine.ts 15
+apps/crish-desktop/src/api/tool-presentation/processMetricsEngine.ts 17
 apps/crish-desktop/src/api/tool-presentation/toolCardPresenter.ts 1
 apps/crish-desktop/src/api/tool-presentation/toolCommandExtractor.ts 65
 apps/crish-desktop/src/api/tool-presentation/toolDomainDescriptions.ts 44
@@ -265,8 +266,8 @@ apps/crish-desktop/src/components/chat-tool-call/ToolCallHeader.tsx 2
 apps/crish-desktop/src/components/chat-tool-call/ToolCallInputPane.tsx 9
 apps/crish-desktop/src/components/chat-tool-call/ToolCallOutput.tsx 2
 apps/crish-desktop/src/components/chat-tool-call/ToolCallOutputPane.tsx 23
-apps/crish-desktop/src/components/chat-tool-call/chatToolCallUtils.ts 6
-apps/crish-desktop/src/components/chat-tool-call/toolHeaderPresentation.ts 27
+apps/crish-desktop/src/components/chat-tool-call/chatToolCallUtils.ts 8
+apps/crish-desktop/src/components/chat-tool-call/toolHeaderPresentation.ts 55
 apps/crish-desktop/src/components/chat-tool-call/toolOutputParser.ts 7
 apps/crish-desktop/src/components/custom-tags/AiCard.tsx 11
 apps/crish-desktop/src/components/custom-tags/CustomTagErrorBoundary.tsx 4
