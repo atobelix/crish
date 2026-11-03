@@ -13,6 +13,7 @@ import {
   type WizardStep,
 } from './components/firstRunWizardLib';
 import styles from './App.module.css';
+import { useI18n } from './i18n';
 
 import { useAppBootstrap } from './app/AppBootstrap';
 import { useEngineBootstrap } from './app/useEngineBootstrap';
@@ -65,6 +66,7 @@ function DevHealthOverlayMount() {
 // ── 非关键路径组件：代码分割，按需加载 ──
 
 function App() {
+  const { t } = useI18n();
   const { isHydrated } = usePreferencesHydration();
   const activeWorkspaceId = useWorkspaceStore(
     (s) => s.workspaces[s.activeWorkspaceIndex]?.id || 'ws-0'
@@ -164,7 +166,7 @@ function App() {
           data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
           <a href="#crish-main" className={styles.skipLink}>
-            跳转到主要内容
+            {t('common.skipToMainContent')}
           </a>
 
           <main id="crish-main" className="main-layout" aria-label="主工作区">
