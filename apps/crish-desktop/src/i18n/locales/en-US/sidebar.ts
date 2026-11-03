@@ -114,6 +114,25 @@ export const sidebar: Record<string, string> = {
   coreOfflineDesc: 'Kernel offline, please check background service',
   viewLogsAction: 'View Logs',
   retryAction: 'Retry Connection',
+
+  // Session context menu (unified context menu base)
+  sessionMenuOpenHere: 'Open Here',
+  sessionMenuOpenSplit: 'Split View',
+  sessionMenuOpenNew: 'Open in New Window',
+  sessionMenuBranch: 'Fork',
+  sessionMenuDelete: 'Delete Conversation',
+  sessionMenuExport: 'Export Markdown',
+
+  // Sort/group/filter cascade menu
+  sortMenuSort: 'Sort By',
+  sortMenuSortActive: 'Recently Active',
+  sortMenuSortName: 'Name',
+  sortMenuGroup: 'Group By',
+  sortMenuGroupProject: 'By Project',
+  sortMenuGroupNone: 'Flat List',
+  sortMenuFilter: 'List Scope',
+  sortMenuFilterAll: 'All Conversations',
+  sortMenuFilterPinned: 'Pinned Only',
 };
 
 export default sidebar;

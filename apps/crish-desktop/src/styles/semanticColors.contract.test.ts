@@ -136,15 +136,18 @@ describe('固定语义色契约', () => {
     expect(badge).not.toMatch(/filetree-badge-[a-z]+-bg/);
     expect(badge).toContain('color: var(--status-untracked)');
     expect(badge).toContain('color: var(--status-conflicted)');
+    // 危险菜单项的语义色链：统一菜单基座（ui/Menu）的 danger 项引用
+    // --color-error / --color-error-bg，二者在明暗两主题均恒等于固定 token
+    // --danger-soft-bg（见本文件上方 decl 断言），语义链不断。
     const menu = readFileSync(
-      resolve(ROOT, 'components/ui/SmartPanel/SmartPanel.module.css'),
+      resolve(ROOT, 'components/ui/Menu/Menu.module.css'),
       'utf8'
     ).replace(/\s+/g, ' ');
     expect(menu).toContain(
-      '.item.danger:hover, .item.danger.focused { background-color: var(--danger-soft-bg); }'
+      '.menuItem:where(.menuItemDanger) { color: var(--color-error); }'
     );
     expect(menu).toContain(
-      '.item.danger:active { background-color: var(--danger-soft-bg-hover); }'
+      '.menuItem:where(.menuItemDanger:hover) { background: var(--color-error-bg);'
     );
     expect(decl(light, '--sep-danger-color')).toBe('var(--danger-fg)');
   });

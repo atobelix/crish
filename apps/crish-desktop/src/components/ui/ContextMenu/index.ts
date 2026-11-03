@@ -1,48 +1,35 @@
 /**
- * apps/crish-desktop/src/components/ui/ContextMenu/index.ts
+ * ui/ContextMenu 统一导出入口（Base UI 收敛版）
  *
- * ui/ContextMenu 统一导出入口
+ * 全应用唯一的上下文菜单实现：与 ui/Menu 共用 Base UI menu 引擎、
+ * LayerStack 与 Menu.module.css 视觉词汇；本目录只提供受控 open +
+ * 锚点驱动的「上下文」调用形态（右键/程序化弹出）。
  */
 
 export {
   ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
   ContextMenuItem,
-  ContextMenuCheckboxItem,
-  ContextMenuRadioItem,
-  ContextMenuRadioGroup,
+  ContextMenuSeparator,
   ContextMenuGroup,
   ContextMenuLabel,
-  ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubTrigger,
   ContextMenuSubContent,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuCheckboxItem,
 } from './ContextMenu';
 
-export {
-  useContextMenuRoot,
-  useContextMenuLayer,
-  useContextMenuSub,
-  useContextMenuRadioGroup,
-} from './ContextMenuContext';
-
 export type {
-  ContextMenuProps,
-  ContextMenuTriggerProps,
-  ContextMenuContentProps,
-  ContextMenuItemProps,
+  ContextMenuAnchor,
+  ContextMenuAlign,
   ContextMenuCheckboxItemProps,
+  ContextMenuItemProps,
+  ContextMenuProps,
   ContextMenuRadioItemProps,
-  ContextMenuRadioGroupProps,
-  ContextMenuGroupProps,
-  ContextMenuLabelProps,
-  ContextMenuSeparatorProps,
-  ContextMenuShortcutProps,
+  ContextMenuSide,
+  ContextMenuSubContentProps,
   ContextMenuSubProps,
   ContextMenuSubTriggerProps,
-  ContextMenuSubContentProps,
-  ContextMenuSize,
-  ContextMenuItemVariant,
 } from './types';

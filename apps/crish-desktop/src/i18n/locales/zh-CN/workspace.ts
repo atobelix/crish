@@ -162,6 +162,20 @@ export const workspace: WorkspaceTranslations = {
   'launcher.running': '运行中',
   'launcher.waitingApproval': '等待审批: {tool}',
   'launcher.projects': '项目',
+
+  // ── 文件树右键菜单 (File Tree Context Menu) ─────────────────────────────
+  'fileTree.open': '打开',
+  'fileTree.reveal': '在资源管理器中显示',
+  'fileTree.openDefault': '用系统默认打开',
+  'fileTree.openWith': '打开方式',
+  'fileTree.openWithApp': '用 {name} 打开',
+  'fileTree.copyAbsolutePath': '复制绝对路径',
+  'fileTree.copyRelativePath': '复制相对路径',
+  'fileTree.expand': '展开',
+  'fileTree.collapse': '折叠',
+  'fileTree.menuLabel': '文件操作',
+  'fileTree.pathCopiedAbs': '绝对路径已复制',
+  'fileTree.pathCopiedRel': '相对路径已复制',
 };
 
 export default workspace;

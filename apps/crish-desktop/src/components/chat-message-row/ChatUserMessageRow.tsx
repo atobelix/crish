@@ -34,7 +34,9 @@ import type { ChatAttachment } from '../../hooks/chat-stream';
 import { isBusyRetryPending } from '../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
 import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
-import { useUserBubbleEntrance } from './useUserBubbleEntrance';
+import { useMessageRowEntrance } from './useMessageRowEntrance';
+import { MessageContextMenu } from './MessageContextMenu';
+import { t } from '../../i18n';
 
 /**
  * 存量信封消息只读剥离器（信封 SSOT 收口后的唯一读侧兼容点）：
@@ -153,7 +155,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   void _onCancelEdit;
   void _onEditMessageAndResend;
   const { showToast } = useToast();
-  const { isEntering, handleAnimationEnd } = useUserBubbleEntrance(
+  const { isEntering, handleAnimationEnd } = useMessageRowEntrance(
     msg.id,
     msg.timestamp
   );
@@ -250,6 +252,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   );
 
   const rowRef = useRef<HTMLDivElement>(null);
+  const [msgMenu, setMsgMenu] = useState<{
+    x: number;
+    y: number;
+    el: HTMLElement | null;
+  } | null>(null);
 
   const handleCopy = useCallback(() => {
     // 复制口径与呈现一致：存量信封消息剥离出用户原文，不复制系统上下文
@@ -321,7 +328,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   const hasTextContent =
     Boolean(
       parsedStructured.isStructured
-        ? parsedStructured.userInputText && parsedStructured.userInputText.trim()
+        ? parsedStructured.userInputText &&
+            parsedStructured.userInputText.trim()
         : displayText && displayText.trim()
     ) ||
     isQueued ||
@@ -359,9 +367,17 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
       data-editing={isEditingRow ? 'true' : undefined}
+      data-entering={isEntering ? 'true' : undefined}
       data-session-user-row
+      onAnimationEnd={handleAnimationEnd}
       role="article"
       aria-label={rowAria}
+      onContextMenu={(e) => {
+        // 就地编辑态：右键属于编辑器原生语义，不挂行菜单
+        if (isEditingRow) return;
+        e.preventDefault();
+        setMsgMenu({ x: e.clientX, y: e.clientY, el: e.currentTarget });
+      }}
     >
       <div
         className={`${styles.userStack}${isEditingRow ? ` ${styles.userStackEditing}` : ''}`}
@@ -379,7 +395,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
             {/* 统一类输入框卡片：内嵌顶部附件卡片横排流 + 底部正文文本 */}
             {hasAttachmentCards || hasTextContent ? (
               <div
-                className={`${styles.userBubble}${isEntering ? ` ${styles.userBubbleEntering}` : ''} ${isLong ? styles.userBubbleExpandable : ''}${isPinned ? ` ${styles.userBubblePinned}` : ''}`}
+                className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}${isPinned ? ` ${styles.userBubblePinned}` : ''}`}
                 data-entering={isEntering ? 'true' : undefined}
                 data-first-message={messageIndex === 0 ? 'true' : undefined}
                 onAnimationEnd={handleAnimationEnd}
@@ -480,6 +496,24 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           </>
         )}
       </div>
+
+      {msgMenu && !isEditingRow ? (
+        <MessageContextMenu
+          x={msgMenu.x}
+          y={msgMenu.y}
+          anchorEl={msgMenu.el}
+          copyLabel={t('chat.message.copy', '复制消息')}
+          pinLabel={
+            isPinned
+              ? t('chat.message.unpin', '取消固定消息')
+              : t('chat.message.pin', '固定消息')
+          }
+          isPinned={!!isPinned}
+          onClose={() => setMsgMenu(null)}
+          onCopy={handleCopy}
+          onTogglePin={() => onTogglePin(msg.id)}
+        />
+      ) : null}
     </div>
   );
 };

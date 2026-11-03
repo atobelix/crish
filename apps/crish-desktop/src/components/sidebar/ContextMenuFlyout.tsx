@@ -1,183 +1,55 @@
 /**
  * apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx
  *
- * 现代化侧栏排序/分组/过滤级联子菜单
- * 架构收敛：标准自研 5px 负重叠级联、无缝覆盖与全键盘无障碍漫游。
+ * 侧栏排序/分组/过滤级联菜单（ui/Menu 的 Base UI 原语装配）。
+ *
+ * 收敛说明（2026-11-02 右键菜单收敛批）：原手写级联引擎（FlyoutRow/FlyoutOption、
+ * 80/150ms 悬停定时器、ArrowKey 漫游、flipLeft 几何测量）全部退役，改由
+ * Base UI SubmenuRoot/SubmenuTrigger/RadioGroup 原生承担悬停意图、安全悬停路径、
+ * 碰撞翻转与键盘导航；LayerStack 登记与 Esc 分层语义保持收敛前契约：
+ * 子菜单打开时 Esc 只收子菜单并回焦行触发器，第二次 Esc 才关整个菜单。
  */
 
 import React, {
   useCallback,
+  useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from 'react';
-import { Button, Menu } from '@/components/ui';
+import { Menu, useLayerRegistration, LayerProvider } from '@/components/ui';
+import { DialogOverlayContext } from '../ui/Dialog/dialogOverlayContext';
+import menuStyles from '../ui/Menu/Menu.module.css';
 import styles from './SidebarContextMenus.module.css';
 import { AppIcon } from '@/components/ui/icons';
+import { t } from '../../i18n';
 
-type FlyKey = 'sort' | 'group' | 'filter' | null;
-
-const FLY_ORDER: NonNullable<FlyKey>[] = ['sort', 'group', 'filter'];
-
-/**
- * 级联下拉行（具 5px 负重叠几何自适应与按需避让翻转）
- */
-const FlyoutRow: React.FC<{
-  type: NonNullable<FlyKey>;
-  label: string;
-  valueLabel: string;
-  open: boolean;
-  flyoutRef: (el: HTMLDivElement | null) => void;
-  rowRef: (el: HTMLDivElement | null) => void;
-  onFlyEnter: () => void;
-  onFlyLeave: () => void;
-  onFlyClick: () => void;
-  onFlyoutEnter: () => void;
-  onFlyoutLeave: () => void;
-  onRowKeyDown: (e: React.KeyboardEvent) => void;
-  onFlyoutKeyDown: (e: React.KeyboardEvent) => void;
-  children: React.ReactNode;
-}> = ({
-  type,
-  label,
-  valueLabel,
-  open,
-  flyoutRef,
-  rowRef,
-  onFlyEnter,
-  onFlyLeave,
-  onFlyClick,
-  onFlyoutEnter,
-  onFlyoutLeave,
-  onRowKeyDown,
-  onFlyoutKeyDown,
-  children,
-}) => {
-  const localRowElRef = useRef<HTMLDivElement | null>(null);
-  const localFlyoutElRef = useRef<HTMLDivElement | null>(null);
-  const [flipLeft, setFlipLeft] = useState(false);
-
-  const handleRowRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      localRowElRef.current = el;
-      rowRef(el);
-    },
-    [rowRef]
-  );
-
-  const handleFlyoutRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      localFlyoutElRef.current = el;
-      flyoutRef(el);
-    },
-    [flyoutRef]
-  );
-
-  useLayoutEffect(() => {
-    if (!open || !localRowElRef.current) return;
-    const rowRect = localRowElRef.current.getBoundingClientRect();
-    const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 156;
-    // 5px 负重叠几何判定：贴合右侧，若溢出视口则翻转至左侧
-    setFlipLeft(rowRect.right + flyoutWidth - 5 > window.innerWidth - 8);
-  }, [open]);
-
-  return (
-    <div
-      className={`${styles.sortFilterRow} ${open ? styles.isOpen : ''}`}
-      role="menuitem"
-      tabIndex={0}
-      data-fly-row={type}
-      ref={handleRowRef}
-      aria-haspopup="true"
-      aria-expanded={open}
-      onMouseEnter={onFlyEnter}
-      onMouseLeave={onFlyLeave}
-      onClick={(e) => {
-        if (
-          localFlyoutElRef.current &&
-          e.target instanceof Node &&
-          localFlyoutElRef.current.contains(e.target)
-        ) {
-          return;
-        }
-        onFlyClick();
-      }}
-      onKeyDown={onRowKeyDown}
-    >
-      <span className={styles.sortFilterRowLabel}>{label}</span>
-      <span className={styles.sortFilterRowRight}>
-        <span className={styles.sortFilterRowValue}>{valueLabel}</span>
-        <AppIcon
-          name="chevron-right"
-          size={14}
-          className={styles.sortFilterChev}
-          aria-hidden
-        />
-      </span>
-      {open ? (
-        <div
-          ref={handleFlyoutRef}
-          className={`${styles.sortFilterFlyout} ${flipLeft ? styles.flipLeft : ''}`}
-          role="group"
-          aria-label={label}
-          onMouseEnter={onFlyoutEnter}
-          onMouseLeave={onFlyoutLeave}
-          onKeyDown={onFlyoutKeyDown}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
-/**
- * 级联子菜单单选项
- */
-const FlyoutOption: React.FC<{
-  checked: boolean;
-  onSelect: () => void;
-  children: React.ReactNode;
-}> = ({ checked, onSelect, children }) => {
-  return (
-    <Button
-      bare
-      type="button"
-      role="menuitemradio"
-      aria-checked={checked}
-      className={`${styles.sortFilterOption} ${checked ? styles.isOn : ''}`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
-    >
-      <span>{children}</span>
-      {checked ? (
-        <AppIcon
-          name="check"
-          size={14}
-          className={styles.sortFilterCheck}
-          aria-hidden
-        />
-      ) : null}
-    </Button>
-  );
-};
+type FlyKey = 'sort' | 'group' | 'filter';
+type SortType = 'active' | 'name';
+type GroupType = 'folder' | 'none';
+type FilterType = 'all' | 'pinned';
 
 export interface ContextMenuFlyoutProps {
   sortMenuRef: React.RefObject<HTMLDivElement | null>;
   sortDropdownOpen: boolean;
   sortDropdownCoords: { x: number; y: number } | null;
-  sortType: 'active' | 'name';
-  groupType: 'folder' | 'none';
-  filterType: 'all' | 'pinned';
-  onSetSortType: (v: 'active' | 'name') => void;
-  onSetGroupType: (v: 'folder' | 'none') => void;
-  onSetFilterType: (v: 'all' | 'pinned') => void;
+  sortType: SortType;
+  groupType: GroupType;
+  filterType: FilterType;
+  onSetSortType: (v: SortType) => void;
+  onSetGroupType: (v: GroupType) => void;
+  onSetFilterType: (v: FilterType) => void;
   onCloseSortDropdown: () => void;
   sortTriggerRef?: React.RefObject<HTMLElement | null>;
+}
+
+interface FlyoutSection<V extends string> {
+  type: FlyKey;
+  label: string;
+  valueLabel: string;
+  value: V;
+  options: { value: V; label: string }[];
+  onPick: (v: V) => void;
 }
 
 /**
@@ -196,283 +68,283 @@ export const ContextMenuFlyout: React.FC<ContextMenuFlyoutProps> = ({
   onCloseSortDropdown,
   sortTriggerRef,
 }) => {
-  const [fly, setFly] = useState<FlyKey>(null);
-  const flyTimerRef = useRef<{ enter?: number; leave?: number }>({});
+  const [fly, setFly] = React.useState<FlyKey | null>(null);
+  const layerId = React.useId();
+  const dialogOverlay = useContext(DialogOverlayContext);
 
-  const clearFlyTimers = useCallback(() => {
-    clearTimeout(flyTimerRef.current.enter);
-    clearTimeout(flyTimerRef.current.leave);
-  }, []);
-
-  useEffect(() => {
-    if (!sortDropdownOpen) {
-      clearFlyTimers();
-      setFly(null);
-    }
-    return clearFlyTimers;
-  }, [sortDropdownOpen, clearFlyTimers]);
-
-  const handleFlyEnter = useCallback((type: FlyKey) => {
-    clearTimeout(flyTimerRef.current.leave);
-    clearTimeout(flyTimerRef.current.enter);
-    flyTimerRef.current.enter = window.setTimeout(() => {
-      setFly(type);
-    }, 80);
-  }, []);
-
-  const handleFlyLeave = useCallback((type: FlyKey) => {
-    clearTimeout(flyTimerRef.current.enter);
-    clearTimeout(flyTimerRef.current.leave);
-    flyTimerRef.current.leave = window.setTimeout(() => {
-      setFly((prev) => (prev === type ? null : prev));
-    }, 150);
-  }, []);
-
-  const cancelFlyLeave = useCallback(() => {
-    clearTimeout(flyTimerRef.current.leave);
-  }, []);
-
-  const handleFlyClick = useCallback(
-    (type: NonNullable<FlyKey>) => {
-      clearFlyTimers();
-      setFly(type);
-    },
-    [clearFlyTimers]
-  );
-
-  const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>(
-    {
-      sort: null,
-      group: null,
-      filter: null,
-    }
-  );
-  const rowRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>({
+  const popupRefObj = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef<Record<FlyKey, HTMLElement | null>>({
     sort: null,
     group: null,
     filter: null,
   });
 
-  const handleRowKeyDown = useCallback(
-    (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        clearFlyTimers();
-        setFly(type);
-        requestAnimationFrame(() => {
-          const first = flyoutRefs.current[type]?.querySelector<HTMLElement>(
-            '[role="menuitemradio"]'
-          );
-          first?.focus();
-        });
-        return;
-      }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        e.stopPropagation();
-        const idx = FLY_ORDER.indexOf(type);
-        const nextIdx =
-          (idx + (e.key === 'ArrowDown' ? 1 : -1) + FLY_ORDER.length) %
-          FLY_ORDER.length;
-        const nextType = FLY_ORDER[nextIdx]!;
-        setFly(null);
-        rowRefs.current[nextType]?.focus();
-      }
+  const mergedPopupRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      popupRefObj.current = el;
+      sortMenuRef.current = el;
     },
-    [clearFlyTimers]
-  );
-
-  const handleFlyoutKeyDown = useCallback(
-    (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        clearFlyTimers();
-        setFly(null);
-        rowRefs.current[type]?.focus();
-        return;
-      }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const container = flyoutRefs.current[type];
-        if (!container) return;
-        const radios = Array.from(
-          container.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
-        );
-        if (radios.length === 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const activeIdx = radios.indexOf(document.activeElement as HTMLElement);
-        const nextIdx =
-          activeIdx < 0
-            ? 0
-            : (activeIdx + (e.key === 'ArrowDown' ? 1 : -1) + radios.length) %
-              radios.length;
-        radios[nextIdx]?.focus();
-      }
-    },
-    [clearFlyTimers]
+    [sortMenuRef]
   );
 
   useEffect(() => {
-    if (!sortDropdownOpen) return;
-    requestAnimationFrame(() => {
-      const first =
-        rowRefs.current.sort ??
-        sortMenuRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-      first?.focus();
-    });
-  }, [sortDropdownOpen, sortMenuRef]);
+    if (!sortDropdownOpen) setFly(null);
+  }, [sortDropdownOpen]);
 
-  const sections = useMemo(
-    () => [
-      {
-        type: 'sort' as const,
-        label: '排序方式',
-        valueLabel: sortType === 'name' ? '按名称' : '按最近活跃',
-        options: [
-          {
-            label: '按最近活跃',
-            checked: sortType === 'active',
-            onSelect: () => {
-              onSetSortType('active');
-              onCloseSortDropdown();
-            },
-          },
-          {
-            label: '按名称',
-            checked: sortType === 'name',
-            onSelect: () => {
-              onSetSortType('name');
-              onCloseSortDropdown();
-            },
-          },
-        ],
+  // 开菜单初始焦点落首行（与收敛前行为一致，键盘用户可直接漫游）
+  useEffect(() => {
+    if (!sortDropdownOpen) return;
+    const raf = requestAnimationFrame(() => {
+      rowRefs.current.sort?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sortDropdownOpen]);
+
+  useLayerRegistration(
+    {
+      id: layerId,
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: () => {
+        onCloseSortDropdown();
       },
-      {
-        type: 'group' as const,
-        label: '分组方式',
-        valueLabel: groupType === 'none' ? '平铺列表' : '按项目分组',
-        options: [
-          {
-            label: '按项目分组',
-            checked: groupType === 'folder',
-            onSelect: () => {
-              onSetGroupType('folder');
-              onCloseSortDropdown();
-            },
-          },
-          {
-            label: '平铺列表',
-            checked: groupType === 'none',
-            onSelect: () => {
-              onSetGroupType('none');
-              onCloseSortDropdown();
-            },
-          },
-        ],
+      onEscapeKeyDown: (event) => {
+        if (fly !== null) {
+          event.preventDefault();
+          const current = fly;
+          setFly(null);
+          rowRefs.current[current]?.focus();
+        }
       },
-      {
-        type: 'filter' as const,
-        label: '列表范围',
-        valueLabel: filterType === 'pinned' ? '仅置顶' : '全部会话',
-        options: [
-          {
-            label: '全部会话',
-            checked: filterType === 'all',
-            onSelect: () => {
-              onSetFilterType('all');
-              onCloseSortDropdown();
-            },
-          },
-          {
-            label: '仅置顶',
-            checked: filterType === 'pinned',
-            onSelect: () => {
-              onSetFilterType('pinned');
-              onCloseSortDropdown();
-            },
-          },
-        ],
-      },
-    ],
-    [
-      sortType,
-      groupType,
-      filterType,
-      onSetSortType,
-      onSetGroupType,
-      onSetFilterType,
-      onCloseSortDropdown,
-    ]
+      elementRef: popupRefObj,
+      anchorRef: sortTriggerRef,
+    },
+    sortDropdownOpen
   );
 
+  const handleRootOpenChange = useCallback(
+    (
+      next: boolean,
+      details: Parameters<
+        NonNullable<React.ComponentProps<typeof Menu.Root>['onOpenChange']>
+      >[1]
+    ) => {
+      if (next) return;
+      if (details.reason === 'outside-press') {
+        const target = (details.event as Event | undefined)
+          ?.target as Node | null;
+        const triggerEl = sortTriggerRef?.current;
+        // 点在排序按钮上：由按钮侧 toggle 语义裁决（与 ui/Menu 锚点模式同一守卫）
+        if (triggerEl && target && triggerEl.contains(target)) return;
+        const popupEl = popupRefObj.current;
+        if (popupEl && target && popupEl.contains(target)) return;
+      }
+      onCloseSortDropdown();
+    },
+    [onCloseSortDropdown, sortTriggerRef]
+  );
+
+  const positionerAnchor = useMemo(() => {
+    if (sortTriggerRef) return sortTriggerRef;
+    if (sortDropdownCoords) {
+      const { x, y } = sortDropdownCoords;
+      return {
+        getBoundingClientRect: () =>
+          ({
+            x,
+            y,
+            width: 0,
+            height: 0,
+            top: y,
+            left: x,
+            right: x,
+            bottom: y,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      };
+    }
+    return undefined;
+  }, [sortTriggerRef, sortDropdownCoords]);
+
+  const sections: FlyoutSection<string>[] = [
+    {
+      type: 'sort',
+      label: t('sidebar.sortMenuSort', '排序方式'),
+      valueLabel:
+        sortType === 'name'
+          ? t('sidebar.sortMenuSortName', '按名称')
+          : t('sidebar.sortMenuSortActive', '按最近活跃'),
+      value: sortType,
+      options: [
+        {
+          value: 'active',
+          label: t('sidebar.sortMenuSortActive', '按最近活跃'),
+        },
+        { value: 'name', label: t('sidebar.sortMenuSortName', '按名称') },
+      ],
+      onPick: (v) => {
+        onSetSortType(v as SortType);
+        onCloseSortDropdown();
+      },
+    },
+    {
+      type: 'group',
+      label: t('sidebar.sortMenuGroup', '分组方式'),
+      valueLabel:
+        groupType === 'none'
+          ? t('sidebar.sortMenuGroupNone', '平铺列表')
+          : t('sidebar.sortMenuGroupProject', '按项目分组'),
+      value: groupType,
+      options: [
+        {
+          value: 'folder',
+          label: t('sidebar.sortMenuGroupProject', '按项目分组'),
+        },
+        {
+          value: 'none',
+          label: t('sidebar.sortMenuGroupNone', '平铺列表'),
+        },
+      ],
+      onPick: (v) => {
+        onSetGroupType(v as GroupType);
+        onCloseSortDropdown();
+      },
+    },
+    {
+      type: 'filter',
+      label: t('sidebar.sortMenuFilter', '列表范围'),
+      valueLabel:
+        filterType === 'pinned'
+          ? t('sidebar.sortMenuFilterPinned', '仅置顶')
+          : t('sidebar.sortMenuFilterAll', '全部会话'),
+      value: filterType,
+      options: [
+        {
+          value: 'all',
+          label: t('sidebar.sortMenuFilterAll', '全部会话'),
+        },
+        {
+          value: 'pinned',
+          label: t('sidebar.sortMenuFilterPinned', '仅置顶'),
+        },
+      ],
+      onPick: (v) => {
+        onSetFilterType(v as FilterType);
+        onCloseSortDropdown();
+      },
+    },
+  ];
+
+  // 常驻挂载、由 open 状态驱动：关闭时 Base UI 退场动画（data-ending-style）
+  // 完整播放后再卸载 Popup，与全仓触发式菜单的动效衔接一致，不做瞬时消失。
   return (
-    <Menu
-      openState={{
-        open: sortDropdownOpen,
-        onOpenChange: (open) => {
-          if (!open) onCloseSortDropdown();
-        },
-      }}
-      outsideHandlers={{
-        onEscapeKeyDown: (event) => {
-          if (fly !== null) {
-            event.preventDefault();
-            clearFlyTimers();
-            setFly(null);
-            rowRefs.current[fly]?.focus();
-          }
-        },
-      }}
-      anchor={sortTriggerRef}
-      position={{ align: 'start', side: 'bottom', sideOffset: 4 }}
-      panel={{
-        contentClassName: `${styles.sortFilterMenu} ${styles.open} no-drag`,
-        contentStyle:
-          !sortTriggerRef?.current && sortDropdownCoords
-            ? {
-                position: 'fixed',
-                left: sortDropdownCoords.x,
-                top: sortDropdownCoords.y,
-              }
-            : undefined,
-      }}
-    >
-      {sections.map((sec) => (
-        <FlyoutRow
-          key={sec.type}
-          type={sec.type}
-          label={sec.label}
-          valueLabel={sec.valueLabel}
-          open={fly === sec.type}
-          flyoutRef={(el) => {
-            flyoutRefs.current[sec.type] = el;
-          }}
-          rowRef={(el) => {
-            rowRefs.current[sec.type] = el;
-          }}
-          onFlyEnter={() => handleFlyEnter(sec.type)}
-          onFlyLeave={() => handleFlyLeave(sec.type)}
-          onFlyClick={() => handleFlyClick(sec.type)}
-          onFlyoutEnter={cancelFlyLeave}
-          onFlyoutLeave={() => handleFlyLeave(sec.type)}
-          onRowKeyDown={(e) => handleRowKeyDown(sec.type, e)}
-          onFlyoutKeyDown={(e) => handleFlyoutKeyDown(sec.type, e)}
-        >
-          {sec.options.map((opt) => (
-            <FlyoutOption
-              key={opt.label}
-              checked={opt.checked}
-              onSelect={opt.onSelect}
+    <LayerProvider layerId={layerId} tier="popover">
+      <Menu.Root
+        open={sortDropdownOpen}
+        onOpenChange={handleRootOpenChange}
+        modal={false}
+      >
+        <Menu.Portal container={dialogOverlay ?? undefined}>
+          <Menu.Positioner
+            anchor={
+              positionerAnchor as React.ComponentProps<
+                typeof Menu.Positioner
+              >['anchor']
+            }
+            side="bottom"
+            align="start"
+            sideOffset={4}
+            className={menuStyles.positioner}
+          >
+            <Menu.Popup
+              ref={mergedPopupRef}
+              className={`${menuStyles.menuContent} ${styles.sortFilterMenu} no-drag`}
+              style={{ minWidth: 212 }}
             >
-              {opt.label}
-            </FlyoutOption>
-          ))}
-        </FlyoutRow>
-      ))}
-    </Menu>
+              {sections.map((sec) => {
+                const subOpen = fly === sec.type;
+                return (
+                  <Menu.SubmenuRoot
+                    key={sec.type}
+                    open={subOpen}
+                    onOpenChange={(next) => {
+                      if (next) {
+                        setFly(sec.type);
+                      } else {
+                        setFly((prev) => (prev === sec.type ? null : prev));
+                      }
+                    }}
+                  >
+                    <Menu.SubmenuTrigger
+                      ref={(el: HTMLElement | null) => {
+                        rowRefs.current[sec.type] = el;
+                      }}
+                      delay={80}
+                      closeDelay={150}
+                      className={`${styles.sortFilterRow} ${subOpen ? styles.isOpen : ''}`}
+                      data-fly-row={sec.type}
+                    >
+                      <span className={styles.sortFilterRowLabel}>
+                        {sec.label}
+                      </span>
+                      <span className={styles.sortFilterRowRight}>
+                        <span className={styles.sortFilterRowValue}>
+                          {sec.valueLabel}
+                        </span>
+                        <AppIcon
+                          name="chevron-right"
+                          size={14}
+                          className={styles.sortFilterChev}
+                          aria-hidden
+                        />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Portal container={dialogOverlay ?? undefined}>
+                      <Menu.Positioner
+                        side="right"
+                        align="start"
+                        sideOffset={-5}
+                        className={menuStyles.positioner}
+                      >
+                        <Menu.Popup
+                          className={menuStyles.menuContent}
+                          style={{ minWidth: 152 }}
+                        >
+                          <Menu.RadioGroup
+                            value={sec.value}
+                            onValueChange={(v) => sec.onPick(v as string)}
+                          >
+                            {sec.options.map((opt) => {
+                              const checked = opt.value === sec.value;
+                              return (
+                                <Menu.RadioItem
+                                  key={opt.value}
+                                  value={opt.value}
+                                  className={`${styles.sortFilterOption} ${checked ? styles.isOn : ''}`}
+                                >
+                                  <span>{opt.label}</span>
+                                  {checked ? (
+                                    <AppIcon
+                                      name="check"
+                                      size={14}
+                                      className={styles.sortFilterCheck}
+                                      aria-hidden
+                                    />
+                                  ) : null}
+                                </Menu.RadioItem>
+                              );
+                            })}
+                          </Menu.RadioGroup>
+                        </Menu.Popup>
+                      </Menu.Positioner>
+                    </Menu.Portal>
+                  </Menu.SubmenuRoot>
+                );
+              })}
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </LayerProvider>
   );
 };

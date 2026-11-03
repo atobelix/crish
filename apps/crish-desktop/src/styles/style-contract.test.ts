@@ -406,7 +406,6 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
   it('浮层组件与 Menu 严禁声明 scrollbar-width（走 webkit 细条，无三角箭头）', () => {
     const floatingPanels = [
       'src/components/ui/Menu/Menu.module.css',
-      'src/components/ui/SmartPanel/SmartPanel.module.css',
       'src/components/ui/SmartExpandablePanel/SmartExpandablePanel.module.css',
     ] as const;
     for (const rel of floatingPanels) {
@@ -430,7 +429,6 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     'FontSelectField.module.css',
     'ModelsSettingsTab.module.css',
     'SmartExpandablePanel.module.css',
-    'SmartPanel.module.css',
     'SelectContent.module.css',
     'Menu.module.css',
     'PermissionModeMenu.module.css',

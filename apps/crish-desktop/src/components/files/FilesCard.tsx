@@ -1,5 +1,12 @@
 import { useToast } from '../../services/toast/ToastContext';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip, Input } from '@/components/ui';
 
@@ -21,6 +28,7 @@ import { FileActions } from './FileActions';
 import { AppIcon } from '@/components/ui/icons';
 import { preferencesClient } from '../../api/preferences';
 import { useFileListRatio } from './hooks/useFileListRatio';
+import { useSplitResize } from '../../hooks/useSplitResize';
 import {
   shouldConsumeScopedEvent,
   useLeafScope,
@@ -35,6 +43,51 @@ export interface FilesCardProps {
 
 const REFRESH_LABEL = '刷新';
 
+/** 文件列表分栏比例域（百分数），与 useFileListRatio 的归一化口径一致 */
+export const FILES_LIST_RATIO_MIN = 15;
+export const FILES_LIST_RATIO_MAX = 75;
+
+/**
+ * 统一 hook 的 px 域宽界：文件域全部钳制由 clampFilesListRatio 承担，
+ * hook 侧 min/max 仅需不截断任何真实指针行程（与 R3 同例）。
+ */
+const SPLIT_HOOK_WIDE_BOUND = 100_000;
+
+/** 分栏比例钳制单一真源（百分数域 [15, 75]） */
+export function clampFilesListRatio(ratio: number): number {
+  if (!Number.isFinite(ratio)) return FILES_LIST_RATIO_MIN;
+  return Math.min(FILES_LIST_RATIO_MAX, Math.max(FILES_LIST_RATIO_MIN, ratio));
+}
+
+/**
+ * 指针增量（px）→ 钳制后新比例：以手势开始时实测的容器宽度换算，
+ * 容器不可测（宽为 0）时保持起始比例（导出供单元测试直接断言）。
+ */
+export function filesListRatioFromDelta(
+  startRatio: number,
+  deltaPx: number,
+  containerWidth: number
+): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
+    return clampFilesListRatio(startRatio);
+  }
+  return clampFilesListRatio(startRatio + (deltaPx / containerWidth) * 100);
+}
+
+/** 一次分栏拖拽会话的文件域账本（手势本体在统一 hook 内） */
+interface FilesSplitDragSession {
+  /** 手势开始时的分栏比例（增量换算与取消还原的基准） */
+  startRatio: number;
+  /** 手势开始时实测的容器宽度（增量换算的基准） */
+  containerWidth: number;
+  /** 最近一次实时换算出的比例（兜底落盘用） */
+  liveRatio: number;
+  /** 本次手势是否已由 hook 的 onCommit 提交过 */
+  commitSeen: boolean;
+  /** 本次手势是否被 Esc 取消（捕获期监听标记，先于 hook 的结束回调） */
+  escCancel: boolean;
+}
+
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
   ({ initialPath, sessionId, leafId }) => {
     const { showToast } = useToast();
@@ -45,81 +98,144 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);
     const bodySplitRef = useRef<HTMLDivElement>(null);
-    const [isResizing, setIsResizing] = useState(false);
     const [listWidthRatio, setListWidthRatio] = useFileListRatio();
 
-    const handleSplitResizeStart = useCallback(
-      (
-        e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>
-      ) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        const container = bodySplitRef.current;
-        if (!container) return;
+    // ── 分栏拖拽（分割线统一波次 R5：手势协议收编至统一 hook） ──────────
+    // 架构分工与 R3 DockResizeSash 同构：
+    // 1. 手势协议由 useSplitResize 托管：指针捕获、window 级 move/up、
+    //    rAF 节流、Esc 取消、blur / pointercancel 按提交当前值兜底、单一
+    //    body 协议（data-split-resizing + 光标锁）。本组件不再自滚手势监听，
+    //    迁移前 onPointerDown / onMouseDown 双绑同一 handler 的问题随之消除。
+    // 2. 文件域语义全部留在本组件：比例域 [15, 75]% 的钳制单一真源
+    //    clampFilesListRatio；hook 只提供指针增量（px），增量以手势开始时
+    //    实测的容器宽度换算为比例（filesListRatioFromDelta）。
+    // 3. 拖中实时呈现直写容器 --files-list-ratio 变量（零 setState、零每帧
+    //    重渲染，与迁移前 setState 写比例的观感等价）；松手提交时才写回
+    //    listWidthRatio 状态并落盘偏好。Esc 取消时 hook 的恢复回调把变量
+    //    刷回起始比例，本组件经捕获期标记识别取消——取消不提交、不落盘。
+    // 4. 结束落盘契约：迁移前 pointerup / pointercancel 恒落盘一次（含按下
+    //    未移动），故落盘挂在 onDragStateChange 兜底（onCommit 未触发且非
+    //    Esc 取消时补落盘），与 R3 的兜底提交同例。
+    const splitSessionRef = useRef<FilesSplitDragSession | null>(null);
 
-        const handleEl = e.currentTarget;
-        if ('setPointerCapture' in handleEl && 'pointerId' in e) {
-          try {
-            handleEl.setPointerCapture((e as React.PointerEvent).pointerId);
-          } catch {
-            /* ignore */
+    const measureSplitContainerWidth = useCallback(() => {
+      const container = bodySplitRef.current;
+      if (!container) return 0;
+      const rect = container.getBoundingClientRect();
+      return rect.width || container.clientWidth || 0;
+    }, []);
+
+    // 容器宽度实测：仅作 hook 的 px 值域基准（增量与原点无关），渲染后校正即可
+    const [splitContainerWidth, setSplitContainerWidth] = useState(0);
+    useLayoutEffect(() => {
+      const width = measureSplitContainerWidth();
+      if (width > 0) {
+        setSplitContainerWidth((prev) =>
+          Math.abs(prev - width) > 0.5 ? width : prev
+        );
+      }
+    });
+
+    const persistListRatio = useCallback((ratio: number) => {
+      void preferencesClient
+        .setPreference('files_list_ratio', ratio)
+        .catch(() => {
+          /* best-effort ratio persist */
+        });
+    }, []);
+
+    const splitResize = useSplitResize({
+      value: (listWidthRatio / 100) * splitContainerWidth,
+      min: -SPLIT_HOOK_WIDE_BOUND,
+      max: SPLIT_HOOK_WIDE_BOUND,
+      orientation: 'vertical',
+      commitMode: 'release',
+      onLiveChange: (px) => {
+        const session = splitSessionRef.current;
+        if (!session) return;
+        const ratio = filesListRatioFromDelta(
+          session.startRatio,
+          px - splitResizeRef.current.dragStartValueRef.current,
+          session.containerWidth
+        );
+        session.liveRatio = ratio;
+        bodySplitRef.current?.style.setProperty(
+          '--files-list-ratio',
+          `${ratio}%`
+        );
+      },
+      onCommit: (px) => {
+        const session = splitSessionRef.current;
+        if (!session) return;
+        session.commitSeen = true;
+        const ratio = filesListRatioFromDelta(
+          session.startRatio,
+          px - splitResizeRef.current.dragStartValueRef.current,
+          session.containerWidth
+        );
+        session.liveRatio = ratio;
+        setListWidthRatio(ratio);
+        persistListRatio(ratio);
+      },
+      onDragStateChange: (nowDragging) => {
+        if (nowDragging) {
+          splitSessionRef.current = {
+            startRatio: listWidthRatio,
+            containerWidth: measureSplitContainerWidth(),
+            liveRatio: listWidthRatio,
+            commitSeen: false,
+            escCancel: false,
+          };
+        } else {
+          const session = splitSessionRef.current;
+          splitSessionRef.current = null;
+          if (session && !session.commitSeen && !session.escCancel) {
+            setListWidthRatio(session.liveRatio);
+            persistListRatio(session.liveRatio);
           }
         }
-
-        setIsResizing(true);
-        const containerRect = container.getBoundingClientRect();
-        const calcRatio = (clientX: number) => {
-          if (containerRect.width <= 0) return 15;
-          const offsetX = clientX - containerRect.left;
-          return Math.max(
-            15,
-            Math.min(75, (offsetX / containerRect.width) * 100)
-          );
-        };
-
-        const handleMove = (moveEv: MouseEvent | PointerEvent) => {
-          setListWidthRatio(calcRatio(moveEv.clientX));
-        };
-
-        const handleUp = (upEv: MouseEvent | PointerEvent) => {
-          if ('releasePointerCapture' in handleEl && 'pointerId' in upEv) {
-            try {
-              if (
-                handleEl.hasPointerCapture?.((upEv as PointerEvent).pointerId)
-              ) {
-                handleEl.releasePointerCapture(
-                  (upEv as PointerEvent).pointerId
-                );
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-          window.removeEventListener('pointermove', handleMove);
-          window.removeEventListener('pointerup', handleUp);
-          window.removeEventListener('pointercancel', handleUp);
-          window.removeEventListener('mousemove', handleMove);
-          window.removeEventListener('mouseup', handleUp);
-          setIsResizing(false);
-
-          if (containerRect.width > 0) {
-            const finalRatio = calcRatio(upEv.clientX);
-            setListWidthRatio(finalRatio);
-            void preferencesClient
-              .setPreference('files_list_ratio', finalRatio)
-              .catch(() => {
-                /* best-effort ratio persist */
-              });
-          }
-        };
-
-        window.addEventListener('pointermove', handleMove);
-        window.addEventListener('pointerup', handleUp);
-        window.addEventListener('pointercancel', handleUp);
-        window.addEventListener('mousemove', handleMove);
-        window.addEventListener('mouseup', handleUp);
       },
-      [setListWidthRatio]
+    });
+    const splitResizeRef = useRef(splitResize);
+    splitResizeRef.current = splitResize;
+    const { dragging: splitDragging, separatorProps: splitSeparatorProps } =
+      splitResize;
+
+    // Esc 取消标记：捕获期监听先于 hook 的结束回调置位，供兜底落盘判别
+    useEffect(() => {
+      if (!splitDragging) return;
+      const onKeyDownCapture = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && splitSessionRef.current) {
+          splitSessionRef.current.escCancel = true;
+        }
+      };
+      window.addEventListener('keydown', onKeyDownCapture, {
+        capture: true,
+      });
+      return () => {
+        window.removeEventListener('keydown', onKeyDownCapture, {
+          capture: true,
+        });
+      };
+    }, [splitDragging]);
+
+    // 键盘微调：比例域步进 ±2%（Shift ±10%），Home / End 到界，立即提交并
+    // 落盘。hook 的 px 步进对比例域无意义，与 R3 同例在本组件覆写。
+    const handleSplitKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        const step = e.shiftKey ? 10 : 2;
+        let next: number | null = null;
+        if (e.key === 'ArrowLeft') next = listWidthRatio - step;
+        else if (e.key === 'ArrowRight') next = listWidthRatio + step;
+        else if (e.key === 'Home') next = FILES_LIST_RATIO_MIN;
+        else if (e.key === 'End') next = FILES_LIST_RATIO_MAX;
+        if (next === null) return;
+        e.preventDefault();
+        const ratio = clampFilesListRatio(next);
+        setListWidthRatio(ratio);
+        persistListRatio(ratio);
+      },
+      [listWidthRatio, persistListRatio]
     );
 
     const handleOpenFile = useCallback(
@@ -170,13 +286,25 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       [nav, handleOpenFile]
     );
 
+    // 文件树右键菜单：按命中节点 path 定向复制（不依赖当前选择态）
+    const handleCopyPathFor = useCallback(
+      (path: string, mode: 'abs' | 'rel') => {
+        preview.copyPath(path, nav.root, mode);
+        showToast(
+          mode === 'abs'
+            ? t('workspace.fileTree.pathCopiedAbs')
+            : t('workspace.fileTree.pathCopiedRel')
+        );
+      },
+      [preview, nav.root, showToast]
+    );
+
     // 纠偏 L190：使用 nav.root，彻底消除 nav.cwd 死锁
     const handleCopyPath = useCallback(
       (mode: 'abs' | 'rel') => {
-        preview.copyPath(preview.selected || nav.root, nav.root, mode);
-        showToast(mode === 'abs' ? '绝对路径已复制' : '相对路径已复制');
+        handleCopyPathFor(preview.selected || nav.root, mode);
       },
-      [preview, nav.root, showToast]
+      [handleCopyPathFor, preview.selected, nav.root]
     );
 
     const handleNavigate = useCallback(
@@ -465,14 +593,17 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 onFilterChange={(v) => nav.setFilter(v)}
                 onFilterModeToggle={() => nav.setFilterMode(!nav.filterMode)}
                 onErrorDismiss={() => nav.setError('')}
+                fileOpeners={preview.fileOpeners}
+                onCopyPath={handleCopyPathFor}
               />
               <div
-                className={`${styles.filesSplitResizer} ${isResizing ? styles.isResizing : ''}`}
-                onPointerDown={handleSplitResizeStart}
-                onMouseDown={handleSplitResizeStart}
-                role="separator"
-                aria-orientation="vertical"
+                {...splitSeparatorProps}
+                className={`${styles.filesSplitResizer} ${splitDragging ? styles.isResizing : ''}`}
                 aria-label="调整目录树与预览宽度"
+                aria-valuemin={FILES_LIST_RATIO_MIN}
+                aria-valuemax={FILES_LIST_RATIO_MAX}
+                aria-valuenow={Math.round(listWidthRatio)}
+                onKeyDown={handleSplitKeyDown}
               />
               <FilePreview
                 targetSessionId={scopedSessionId}

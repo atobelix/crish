@@ -1,406 +1,548 @@
 /**
- * apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+ * ui/ContextMenu —— 全应用唯一的上下文菜单实现（Base UI 收敛版）
  *
- * 现代化声明式 ContextMenu 复合组件体系轻量级装配入口
- * 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
- * 规范：发丝边框、18px 同心外圆角、6px 统一内衬、12px 条目圆角、二级子菜单负 5px 重叠
+ * 收敛裁决（2026-11-02 右键菜单收敛批）：
+ * - 与 ui/Menu 共用同一套引擎：@base-ui/react/menu 原语 + LayerStack 浮层中枢
+ *   + Menu.module.css 视觉词汇。不再保留手写定位/漫游/时序的第二套实现。
+ * - 本组件是该引擎的「上下文」调用形态：受控 open、锚点（右键坐标/元素）驱动、
+ *   无 Trigger 元素；调用方已有的 onContextMenu 状态机即唯一真源。
+ *   (@base-ui/react/context-menu 的 Trigger 中心模型会与调用方状态机重复持有
+ *   打开态与点位，故不采用；其实测能力已核查，结论见本批报告。)
+ * - LayerStack 登记由本组件独占（type: 'context-menu'）：登记即驱逐同级
+ *   exclusive 浮层、外点/Esc 退栈、Tooltip 静默与焦点还原与全应用一致。
+ * - Esc 分层：LayerStack 全局 keydown 为捕获相，先于一切元素级处理；
+ *   子菜单打开时由本组件的登记钩子先行收起子菜单并消费事件，
+ *   第二次 Esc 才关闭整个菜单（与旧 ContextMenuFlyout 的分层语义一致）。
  */
-
 import React, {
-  useState,
-  useRef,
   useCallback,
-  useMemo,
+  useContext,
   useEffect,
-  forwardRef,
+  useId,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
-import type {
-  ContextMenuProps,
-  ContextMenuTriggerProps,
-  ContextMenuGroupProps,
-  ContextMenuLabelProps,
-  ContextMenuSeparatorProps,
-  ContextMenuShortcutProps,
-  ContextMenuSubProps,
-} from './contextMenuTypes';
+import { Menu as BaseMenu } from '@base-ui/react/menu';
 import {
-  ContextMenuRootContext,
-  useContextMenuRoot,
-  ContextMenuSubContext,
-} from './ContextMenuContext';
-import type { VirtualPoint } from '../internal/positioner/types';
-import { cn } from './contextMenuPositioner';
-import styles from './ContextMenu.module.css';
-
-/* ========================================================================= */
-/* 子模块聚合导出（保持对外导出与 API 契约 100% 稳定）                         */
-/* ========================================================================= */
-
-export {
-  ContextMenuContent,
-  ContextMenuSubContent,
-} from './ContextMenuContent';
-
-export {
-  ContextMenuItem,
-  ContextMenuCheckboxItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSubTrigger,
-} from './ContextMenuItem';
-
-export type {
-  ContextMenuProps,
-  ContextMenuTriggerProps,
-  ContextMenuContentProps,
-  ContextMenuItemProps,
+  useLayerRegistration,
+  LayerProvider,
+} from '../internal/layer-registration/useLayerRegistration';
+import { layerStackService } from '../internal/layer-stack/LayerStackManager';
+import { resolveElement } from '../internal/layer-stack/layerStackTypes';
+import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
+import { AppIcon } from '../icons';
+import menuStyles from '../Menu/Menu.module.css';
+import type {
+  ContextMenuAnchor,
   ContextMenuCheckboxItemProps,
+  ContextMenuItemProps,
+  ContextMenuProps,
   ContextMenuRadioItemProps,
-  ContextMenuRadioGroupProps,
-  ContextMenuGroupProps,
-  ContextMenuLabelProps,
-  ContextMenuSeparatorProps,
-  ContextMenuShortcutProps,
+  ContextMenuSubContentProps,
   ContextMenuSubProps,
   ContextMenuSubTriggerProps,
-  ContextMenuSubContentProps,
-  ContextMenuSize,
-  ContextMenuItemVariant,
-} from './contextMenuTypes';
+} from './types';
 
-/* ========================================================================= */
-/* 1. ContextMenu (根组件)                                                    */
-/* ========================================================================= */
+export type {
+  ContextMenuAnchor,
+  ContextMenuAlign,
+  ContextMenuCheckboxItemProps,
+  ContextMenuItemProps,
+  ContextMenuProps,
+  ContextMenuRadioItemProps,
+  ContextMenuSide,
+  ContextMenuSubContentProps,
+  ContextMenuSubProps,
+  ContextMenuSubTriggerProps,
+} from './types';
+
+/* ── 子菜单登记表：根组件借此实现 Esc 先收子菜单的分层语义 ─────────────── */
+
+interface SubMenuEntry {
+  isOpen: () => boolean;
+  close: () => void;
+}
+
+const SubMenuRegistryContext = React.createContext<{
+  register: (entry: SubMenuEntry) => () => void;
+} | null>(null);
+
+function isPointAnchor(
+  anchor: ContextMenuAnchor
+): anchor is { x: number; y: number } {
+  return (
+    typeof (anchor as { x?: unknown }).x === 'number' &&
+    typeof (anchor as { y?: unknown }).y === 'number'
+  );
+}
+
+type RootOpenChangeDetails = Parameters<
+  NonNullable<React.ComponentProps<typeof BaseMenu.Root>['onOpenChange']>
+>[1];
+
+/* ── 根组件 ─────────────────────────────────────────────────────────────── */
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
-  children,
-  open: controlledOpen,
+  open,
   onOpenChange,
-  anchor: propAnchor,
-  size = 'md',
-  modal = false,
+  anchor,
+  anchorElement,
+  side = 'bottom',
+  align = 'start',
+  sideOffset = 6,
+  alignOffset = 0,
+  layerId: layerIdProp,
+  popupRef,
+  zIndex,
+  popupClassName,
+  popupStyle,
+  'data-testid': dataTestId,
+  'aria-label': ariaLabel,
+  children,
 }) => {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const generatedId = useId();
+  const layerId = layerIdProp ?? generatedId;
+  const dialogOverlay = useContext(DialogOverlayContext);
 
-  const setOpen = useCallback(
-    (nextOpen: boolean) => {
-      if (controlledOpen === undefined) setUncontrolledOpen(nextOpen);
-      onOpenChange?.(nextOpen);
+  const popupRefObj = useRef<HTMLDivElement | null>(null);
+  const anchorRefObj = useRef<HTMLElement | null>(null);
+
+  const resolveAnchorElement = useCallback((): HTMLElement | null => {
+    if (anchorElement) return anchorElement;
+    if (!anchor || isPointAnchor(anchor)) return null;
+    return resolveElement(
+      anchor as React.RefObject<HTMLElement | null> | HTMLElement
+    );
+  }, [anchor, anchorElement]);
+
+  // 动态 Ref 同步（与 useLayerRegistration 的 layerRef 模式一致，消除挂载期 stale）
+  anchorRefObj.current = resolveAnchorElement();
+
+  const mergedPopupRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      popupRefObj.current = el;
+      if (popupRef) popupRef.current = el;
     },
-    [controlledOpen, onOpenChange]
+    [popupRef]
   );
 
-  const [internalAnchor, setInternalAnchor] = useState<VirtualPoint | null>(
-    null
-  );
-  const anchor = propAnchor ?? internalAnchor;
-
-  const floatingLayersRef = useRef<Set<HTMLElement>>(new Set());
-
-  const registerFloatingLayer = useCallback((el: HTMLElement) => {
-    floatingLayersRef.current.add(el);
-    return () => {
-      floatingLayersRef.current.delete(el);
-    };
-  }, []);
-
-  const isInsideFloatingLayers = useCallback(
-    (target: EventTarget | null): boolean => {
-      if (!target || !(target instanceof Node)) return false;
-      for (const layer of floatingLayersRef.current) {
-        if (layer.contains(target)) return true;
-      }
-      return false;
-    },
+  /* 子菜单登记表（Esc 分层） */
+  const subStackRef = useRef<SubMenuEntry[]>([]);
+  const subRegistry = useMemo(
+    () => ({
+      register: (entry: SubMenuEntry) => {
+        subStackRef.current = [...subStackRef.current, entry];
+        return () => {
+          subStackRef.current = subStackRef.current.filter((e) => e !== entry);
+        };
+      },
+    }),
     []
   );
 
-  const closeMenu = useCallback(() => {
-    setOpen(false);
-    setInternalAnchor(null);
-  }, [setOpen]);
-
+  /* 关闭通知去重：Base UI 外点可能连发 outside-press + focus-out 两次 false，
+     与 ui/Menu 平铺组件同一防御（避免消费方 onClose 双触发） */
+  const lastNotifiedRef = useRef<boolean | null>(null);
   useEffect(() => {
-    if (!open) return;
+    lastNotifiedRef.current = open;
+  }, [open]);
 
-    const handlePointerDown = (e: PointerEvent | MouseEvent) => {
-      if (isInsideFloatingLayers(e.target)) return;
-
-      const anchorNode =
-        anchor && typeof anchor === 'object' && 'current' in anchor
-          ? (anchor as { current: unknown }).current
-          : anchor instanceof HTMLElement
-            ? anchor
-            : null;
-      if (
-        anchorNode instanceof Node &&
-        e.target instanceof Node &&
-        (anchorNode === e.target || anchorNode.contains(e.target))
-      ) {
-        return;
-      }
-
-      closeMenu();
-    };
-
-    const handleGlobalContextMenu = (e: MouseEvent) => {
-      if (!isInsideFloatingLayers(e.target)) closeMenu();
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') closeMenu();
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown, true);
-    window.addEventListener('contextmenu', handleGlobalContextMenu, true);
-    window.addEventListener('keydown', handleKeyDown, true);
-
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown, true);
-      window.removeEventListener('contextmenu', handleGlobalContextMenu, true);
-      window.removeEventListener('keydown', handleKeyDown, true);
-    };
-  }, [open, isInsideFloatingLayers, closeMenu, anchor]);
-
-  const rootContextValue = useMemo(
-    () => ({
-      open,
-      setOpen,
-      anchor,
-      setAnchor: setInternalAnchor,
-      size,
-      modal,
-      closeMenu,
-      registerFloatingLayer,
-      isInsideFloatingLayers,
-    }),
-    [
-      open,
-      setOpen,
-      anchor,
-      setInternalAnchor,
-      size,
-      modal,
-      closeMenu,
-      registerFloatingLayer,
-      isInsideFloatingLayers,
-    ]
+  const notifyOpenChange = useCallback(
+    (next: boolean) => {
+      if (lastNotifiedRef.current === next) return;
+      lastNotifiedRef.current = next;
+      onOpenChange?.(next);
+    },
+    [onOpenChange]
   );
 
+  useLayerRegistration(
+    {
+      id: layerId,
+      type: 'context-menu',
+      dismissible: true,
+      onDismiss: () => notifyOpenChange(false),
+      onEscapeKeyDown: (event) => {
+        const stack = subStackRef.current;
+        for (let i = stack.length - 1; i >= 0; i--) {
+          const entry = stack[i];
+          if (entry && entry.isOpen()) {
+            event.preventDefault();
+            entry.close();
+            return true;
+          }
+        }
+        return undefined;
+      },
+      elementRef: popupRefObj,
+      anchorRef: anchorRefObj,
+      restoreFocusTarget: resolveAnchorElement() ?? undefined,
+    },
+    open
+  );
+
+  const handleRootOpenChange = useCallback(
+    (next: boolean, details: RootOpenChangeDetails) => {
+      if (!next) {
+        if (details.reason === 'escape-key') {
+          // CJK IME 合成态绝对放行（与 ui/Menu 同一守卫）
+          const event = details.event as KeyboardEvent | undefined;
+          if (
+            (event as { isComposing?: boolean } | undefined)?.isComposing ||
+            event?.keyCode === 229 ||
+            event?.key === 'Process'
+          ) {
+            return;
+          }
+        } else if (details.reason === 'outside-press') {
+          const target = (details.event as Event | undefined)
+            ?.target as Node | null;
+          // 点在触发元素上：由触发侧的 toggle 语义裁决，基座不得抢先关闭
+          const anchorEl = resolveAnchorElement();
+          if (anchorEl && target && anchorEl.contains(target)) return;
+          const popupEl = popupRefObj.current;
+          if (popupEl && target && popupEl.contains(target)) return;
+          const isDescendant = layerStackService
+            .getDescendants(layerId)
+            .some((child) => {
+              const el = resolveElement(child.elementRef);
+              return el && target && el.contains(target);
+            });
+          if (isDescendant) return;
+        }
+      }
+      notifyOpenChange(next);
+    },
+    [layerId, notifyOpenChange, resolveAnchorElement]
+  );
+
+  const positionerAnchor = useMemo(() => {
+    if (!anchor) return undefined;
+    if (isPointAnchor(anchor)) {
+      const { x, y } = anchor;
+      return {
+        getBoundingClientRect: () =>
+          ({
+            x,
+            y,
+            width: 0,
+            height: 0,
+            top: y,
+            left: x,
+            right: x,
+            bottom: y,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      };
+    }
+    return anchor;
+  }, [anchor]);
+
+  const anchorElForFocus = resolveAnchorElement();
+
   return (
-    <ContextMenuRootContext.Provider value={rootContextValue}>
-      {children}
-    </ContextMenuRootContext.Provider>
+    <LayerProvider layerId={layerId} tier="popover">
+      <SubMenuRegistryContext.Provider value={subRegistry}>
+        <BaseMenu.Root
+          open={open}
+          onOpenChange={handleRootOpenChange}
+          modal={false}
+        >
+          <BaseMenu.Portal container={dialogOverlay ?? undefined}>
+            <BaseMenu.Positioner
+              anchor={
+                positionerAnchor as React.ComponentProps<
+                  typeof BaseMenu.Positioner
+                >['anchor']
+              }
+              side={side}
+              align={align}
+              sideOffset={sideOffset}
+              alignOffset={alignOffset}
+              className={menuStyles.positioner}
+              style={zIndex ? { zIndex } : undefined}
+            >
+              <BaseMenu.Popup
+                ref={mergedPopupRef}
+                className={[menuStyles.menuContent, popupClassName]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{
+                  pointerEvents: 'auto',
+                  ...(zIndex ? { zIndex } : null),
+                  ...popupStyle,
+                }}
+                data-testid={dataTestId}
+                aria-label={ariaLabel}
+                finalFocus={anchorElForFocus ? () => anchorElForFocus : false}
+              >
+                {children}
+              </BaseMenu.Popup>
+            </BaseMenu.Positioner>
+          </BaseMenu.Portal>
+        </BaseMenu.Root>
+      </SubMenuRegistryContext.Provider>
+    </LayerProvider>
   );
 };
 
 ContextMenu.displayName = 'ContextMenu';
 
-/* ========================================================================= */
-/* 2. ContextMenuTrigger (右键触发器)                                         */
-/* ========================================================================= */
+/* ── 菜单项 ─────────────────────────────────────────────────────────────── */
 
-export const ContextMenuTrigger = forwardRef<
-  HTMLElement,
-  ContextMenuTriggerProps
->(
-  (
-    {
-      children,
-      disabled = false,
-      asChild = false,
-      onContextMenu,
-      className,
-      ...rest
-    },
-    forwardedRef
-  ) => {
-    const { setOpen, setAnchor } = useContextMenuRoot();
-    const localRef = useRef<HTMLElement>(null);
-    const triggerRef =
-      (forwardedRef as React.RefObject<HTMLElement>) || localRef;
-
-    const handleContextMenu = useCallback(
-      (e: React.MouseEvent<HTMLElement>) => {
+export const ContextMenuItem = React.forwardRef<
+  HTMLDivElement,
+  ContextMenuItemProps
+>(function ContextMenuItem(
+  {
+    icon,
+    shortcut,
+    danger,
+    disabled,
+    onSelect,
+    closeOnClick = true,
+    className,
+    title,
+    children,
+  },
+  ref
+) {
+  return (
+    <BaseMenu.Item
+      ref={ref}
+      disabled={disabled}
+      closeOnClick={closeOnClick}
+      title={title}
+      className={[
+        menuStyles.menuItem,
+        danger ? menuStyles.menuItemDanger : null,
+        disabled ? menuStyles.menuItemDisabled : null,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      onClick={() => {
         if (disabled) return;
-        e.preventDefault();
-        e.stopPropagation();
+        onSelect?.();
+      }}
+    >
+      {icon != null ? (
+        <span className={menuStyles.menuItemIcon} aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      <span className={menuStyles.menuItemLabel}>{children}</span>
+      {shortcut != null ? (
+        <span className={menuStyles.menuItemShortcut}>{shortcut}</span>
+      ) : null}
+    </BaseMenu.Item>
+  );
+});
 
-        setAnchor({ x: e.clientX, y: e.clientY });
-        setOpen(true);
-        onContextMenu?.(e);
-      },
-      [disabled, setAnchor, setOpen, onContextMenu]
-    );
-
-    if (asChild && React.isValidElement(children)) {
-      const childProps = children.props as {
-        onContextMenu?: (e: React.MouseEvent<HTMLElement>) => void;
-        className?: string;
-      };
-      return React.cloneElement(children as React.ReactElement<any>, {
-        ref: triggerRef,
-        'data-slot': 'context-menu-trigger',
-        className: cn(childProps.className, className),
-        onContextMenu: (e: React.MouseEvent<HTMLElement>) => {
-          childProps.onContextMenu?.(e);
-          handleContextMenu(e);
-        },
-      });
-    }
-
-    return (
-      <div
-        ref={triggerRef as React.RefObject<HTMLDivElement>}
-        data-slot="context-menu-trigger"
-        className={className}
-        onContextMenu={handleContextMenu}
-        {...rest}
-      >
-        {children}
-      </div>
-    );
-  }
+export const ContextMenuSeparator: React.FC<{ className?: string }> = ({
+  className,
+}) => (
+  <BaseMenu.Separator
+    className={[menuStyles.separator, className].filter(Boolean).join(' ')}
+  />
 );
 
-ContextMenuTrigger.displayName = 'ContextMenuTrigger';
+export const ContextMenuGroup: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => <BaseMenu.Group>{children}</BaseMenu.Group>;
 
-/* ========================================================================= */
-/* 3. ContextMenuSub (二级子菜单控制器)                                       */
-/* ========================================================================= */
+export const ContextMenuLabel: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => (
+  <BaseMenu.GroupLabel className={menuStyles.menuTitle}>
+    {children}
+  </BaseMenu.GroupLabel>
+);
+
+export const ContextMenuShortcut: React.FC<{
+  children?: React.ReactNode;
+}> = ({ children }) => (
+  <span className={menuStyles.menuItemShortcut}>{children}</span>
+);
+
+/* ── 子菜单 ─────────────────────────────────────────────────────────────── */
 
 export const ContextMenuSub: React.FC<ContextMenuSubProps> = ({
-  children,
-  open: controlledOpen,
+  open: openProp,
   onOpenChange,
+  children,
 }) => {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const registry = useContext(SubMenuRegistryContext);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
 
-  const setOpen = useCallback(
-    (nextOpen: boolean) => {
-      if (controlledOpen === undefined) setUncontrolledOpen(nextOpen);
-      onOpenChange?.(nextOpen);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (openProp === undefined) setInternalOpen(next);
+      onOpenChange?.(next);
     },
-    [controlledOpen, onOpenChange]
+    [openProp, onOpenChange]
   );
 
-  const triggerRef = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLElement>(null);
-  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const handleRef = useRef(handleOpenChange);
+  handleRef.current = handleOpenChange;
+  const entryRef = useRef<SubMenuEntry | null>(null);
+  if (!entryRef.current) {
+    entryRef.current = {
+      isOpen: () => openRef.current,
+      close: () => handleRef.current(false),
+    };
+  }
 
-  const clearTimers = useCallback(() => {
-    if (openTimerRef.current) clearTimeout(openTimerRef.current);
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    openTimerRef.current = null;
-    closeTimerRef.current = null;
-  }, []);
-
-  const openSubmenu = useCallback(() => {
-    clearTimers();
-    setOpen(true);
-  }, [clearTimers, setOpen]);
-
-  const closeSubmenu = useCallback(
-    (delayMs = 200) => {
-      clearTimers();
-      if (delayMs <= 0) {
-        setOpen(false);
-        return;
-      }
-      closeTimerRef.current = setTimeout(() => setOpen(false), delayMs);
-    },
-    [clearTimers, setOpen]
-  );
-
-  useEffect(() => () => clearTimers(), [clearTimers]);
-
-  const subContextValue = useMemo(
-    () => ({
-      open,
-      setOpen,
-      triggerRef,
-      contentRef,
-      openSubmenu,
-      closeSubmenu,
-    }),
-    [open, setOpen, openSubmenu, closeSubmenu]
-  );
+  useEffect(() => {
+    if (!registry || !entryRef.current) return;
+    return registry.register(entryRef.current);
+  }, [registry]);
 
   return (
-    <ContextMenuSubContext.Provider value={subContextValue}>
+    <BaseMenu.SubmenuRoot
+      open={open}
+      onOpenChange={(next) => handleOpenChange(next)}
+    >
       {children}
-    </ContextMenuSubContext.Provider>
+    </BaseMenu.SubmenuRoot>
   );
 };
 
-ContextMenuSub.displayName = 'ContextMenuSub';
+export const ContextMenuSubTrigger = React.forwardRef<
+  HTMLDivElement,
+  ContextMenuSubTriggerProps
+>(function ContextMenuSubTrigger(
+  { icon, disabled, className, chevron = true, children },
+  ref
+) {
+  return (
+    <BaseMenu.SubmenuTrigger
+      ref={ref}
+      disabled={disabled}
+      className={[menuStyles.menuItem, className].filter(Boolean).join(' ')}
+    >
+      {icon != null ? (
+        <span className={menuStyles.menuItemIcon} aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      <span className={menuStyles.menuItemLabel}>{children}</span>
+      {chevron ? (
+        <span className={menuStyles.menuItemChevron} aria-hidden="true">
+          <AppIcon name="chevron-right" size={14} />
+        </span>
+      ) : null}
+    </BaseMenu.SubmenuTrigger>
+  );
+});
 
-/* ========================================================================= */
-/* 4. 辅助结构组件：Separator、Label、Group、Shortcut                          */
-/* ========================================================================= */
-
-export const ContextMenuSeparator: React.FC<ContextMenuSeparatorProps> = ({
+export const ContextMenuSubContent: React.FC<ContextMenuSubContentProps> = ({
   className,
-  ...rest
-}) => (
-  <div
-    role="separator"
-    aria-orientation="horizontal"
-    data-slot="context-menu-separator"
-    className={cn(styles.separator, className)}
-    {...rest}
-  />
-);
-ContextMenuSeparator.displayName = 'ContextMenuSeparator';
-
-export const ContextMenuLabel: React.FC<ContextMenuLabelProps> = ({
+  sideOffset = -5,
   children,
-  inset = false,
-  className,
-  ...rest
-}) => (
-  <div
-    role="presentation"
-    data-slot="context-menu-label"
-    data-inset={inset ? 'true' : undefined}
-    className={cn(styles.label, className)}
-    {...rest}
+}) => {
+  const dialogOverlay = useContext(DialogOverlayContext);
+  return (
+    <BaseMenu.Portal container={dialogOverlay ?? undefined}>
+      <BaseMenu.Positioner
+        side="right"
+        align="start"
+        sideOffset={sideOffset}
+        className={menuStyles.positioner}
+      >
+        <BaseMenu.Popup
+          className={[menuStyles.menuContent, className]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {children}
+        </BaseMenu.Popup>
+      </BaseMenu.Positioner>
+    </BaseMenu.Portal>
+  );
+};
+
+/* ── 单选 / 多选 ────────────────────────────────────────────────────────── */
+
+export const ContextMenuRadioGroup: React.FC<{
+  value?: string;
+  onValueChange?: (value: string) => void;
+  children?: React.ReactNode;
+}> = ({ value, onValueChange, children }) => (
+  <BaseMenu.RadioGroup
+    value={value}
+    onValueChange={(next) => onValueChange?.(next as string)}
   >
     {children}
-  </div>
+  </BaseMenu.RadioGroup>
 );
-ContextMenuLabel.displayName = 'ContextMenuLabel';
 
-export const ContextMenuGroup: React.FC<ContextMenuGroupProps> = ({
-  children,
-  className,
-  ...rest
-}) => (
-  <div
-    role="group"
-    data-slot="context-menu-group"
-    className={cn(styles.group, className)}
-    {...rest}
-  >
-    {children}
-  </div>
-);
-ContextMenuGroup.displayName = 'ContextMenuGroup';
+export const ContextMenuRadioItem = React.forwardRef<
+  HTMLDivElement,
+  ContextMenuRadioItemProps
+>(function ContextMenuRadioItem(
+  { value, icon, disabled, checked, className, children },
+  ref
+) {
+  return (
+    <BaseMenu.RadioItem
+      ref={ref}
+      value={value}
+      disabled={disabled}
+      className={[
+        menuStyles.menuItem,
+        checked ? menuStyles.isSelected : null,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {icon != null ? (
+        <span className={menuStyles.menuItemIcon} aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      <span className={menuStyles.menuItemLabel}>{children}</span>
+      {checked ? (
+        <span className={menuStyles.menuItemCheck} aria-hidden="true">
+          <AppIcon name="check" size={14} />
+        </span>
+      ) : null}
+    </BaseMenu.RadioItem>
+  );
+});
 
-export const ContextMenuShortcut: React.FC<ContextMenuShortcutProps> = ({
-  children,
-  className,
-  ...rest
-}) => (
-  <span
-    data-slot="context-menu-shortcut"
-    className={cn(styles.shortcut, className)}
-    {...rest}
-  >
-    {children}
-  </span>
-);
-ContextMenuShortcut.displayName = 'ContextMenuShortcut';
+export const ContextMenuCheckboxItem = React.forwardRef<
+  HTMLDivElement,
+  ContextMenuCheckboxItemProps
+>(function ContextMenuCheckboxItem(
+  { checked, disabled, icon, onCheckedChange, className, children },
+  ref
+) {
+  return (
+    <BaseMenu.CheckboxItem
+      ref={ref}
+      checked={checked}
+      disabled={disabled}
+      closeOnClick={false}
+      onCheckedChange={(next) => onCheckedChange?.(next)}
+      className={[menuStyles.menuItem, className].filter(Boolean).join(' ')}
+    >
+      {icon != null ? (
+        <span className={menuStyles.menuItemIcon} aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      <span className={menuStyles.menuItemLabel}>{children}</span>
+      {checked ? (
+        <span className={menuStyles.menuItemCheck} aria-hidden="true">
+          <AppIcon name="check" size={14} />
+        </span>
+      ) : null}
+    </BaseMenu.CheckboxItem>
+  );
+});

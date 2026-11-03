@@ -112,6 +112,25 @@ export const sidebar: Record<string, string> = {
   coreOfflineDesc: '内核离线，请检查后台服务',
   viewLogsAction: '查看日志',
   retryAction: '重试连接',
+
+  // 会话右键菜单（统一上下文菜单基座）
+  sessionMenuOpenHere: '在此处打开',
+  sessionMenuOpenSplit: '拆分视图',
+  sessionMenuOpenNew: '在新窗口打开',
+  sessionMenuBranch: '分叉',
+  sessionMenuDelete: '删除当前对话',
+  sessionMenuExport: '导出 Markdown',
+
+  // 排序/分组/过滤级联菜单
+  sortMenuSort: '排序方式',
+  sortMenuSortActive: '按最近活跃',
+  sortMenuSortName: '按名称',
+  sortMenuGroup: '分组方式',
+  sortMenuGroupProject: '按项目分组',
+  sortMenuGroupNone: '平铺列表',
+  sortMenuFilter: '列表范围',
+  sortMenuFilterAll: '全部会话',
+  sortMenuFilterPinned: '仅置顶',
 };
 
 export default sidebar;

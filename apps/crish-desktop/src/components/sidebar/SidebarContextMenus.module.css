@@ -1,120 +1,15 @@
-.contextMenu {
-  min-width: 160px;
-  max-width: min(240px, calc(100vw - 16px));
-  padding: 6px;
-  gap: var(--space-0_5);
-  border-radius: var(--radius-menu-outer, 18px);
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel, var(--border-color));
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
-  display: none;
-  flex-direction: column;
-  box-sizing: border-box;
-  -webkit-app-region: no-drag;
-}
+/* 侧栏排序/分组/过滤级联菜单（ui/Menu 原语装配）的行与选项样式。
+   面板主体走 ui/Menu 的 Menu.module.css（menuContent）；本文件只保留
+   「标签 + 当前值摘要 + chevron」行形态与单选项形态。
+   历史的手写 .contextMenu* 与 .sortFilterFlyout 飞层样式已随手写引擎一并退役。 */
 
-@keyframes crish-popover-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-}
-
-.contextMenu.open {
-  display: flex;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
-  transform-origin: top left;
-}
-.contextMenuExit {
-  display: flex;
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
-}
-
-.contextMenuItem {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  border: none;
-  background: transparent;
-  min-height: 32px;
-  padding: 5px 10px;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.35;
-  border-radius: var(--radius-menu-inner, 12px);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast);
-  cursor: pointer;
-  text-align: left;
-}
-
-.contextMenuItem:hover,
-.contextMenuItem:focus-visible {
-  background-color: var(--state-hover);
-  color: var(--text-primary);
-  outline: none;
-}
-
-.contextMenuItem:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--border-color);
-}
-
-.contextMenuItem svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-}
-
-.contextMenuItem:hover svg,
-.contextMenuItem:focus-visible svg {
-  color: var(--text-secondary);
-}
-
-.contextMenuDivider {
-  margin: 2px 4px;
-  height: 1px;
-  background-color: var(--border-color);
-}
-
-/* Sort/Filter Dropdown Menu */
+/* Sort/Filter Dropdown Menu（面板几何补充：宽度与溢出由消费方控制） */
 .sortFilterMenu {
   min-width: 212px;
-  padding: 6px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel, var(--border-color));
-  border-radius: var(--radius-menu-outer, 18px);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
-  display: none;
-  flex-direction: column;
-  gap: 2px;
-  box-sizing: border-box;
   overflow: visible;
   overflow-x: visible;
   overflow-y: visible;
   -webkit-app-region: no-drag;
-}
-
-.sortFilterMenu.open {
-  display: flex;
-  overflow: visible;
-  overflow-x: visible;
-  overflow-y: visible;
 }
 
 .sortFilterRow {
@@ -143,7 +38,9 @@
 
 .sortFilterRow:hover,
 .sortFilterRow:focus-visible,
-.sortFilterRow.isOpen {
+.sortFilterRow.isOpen,
+.sortFilterRow[data-popup-open],
+.sortFilterRow[data-highlighted] {
   background: var(--state-hover);
 }
 
@@ -170,32 +67,6 @@
   flex-shrink: 0;
 }
 
-.sortFilterFlyout {
-  position: absolute;
-  left: calc(100% - 5px);
-  top: -6px;
-  min-width: 152px;
-  padding: 6px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel, var(--border-color));
-  border-radius: var(--radius-menu-outer, 18px);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: var(--z-popover);
-  transform-origin: top left;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
-  box-sizing: border-box;
-  -webkit-app-region: no-drag;
-}
-
-.sortFilterFlyout.flipLeft {
-  left: auto;
-  right: calc(100% - 5px);
-  transform-origin: top right;
-}
-
 .sortFilterOption {
   display: flex;
   align-items: center;
@@ -218,13 +89,15 @@
   cursor: pointer;
   box-sizing: border-box;
   outline: none;
+  user-select: none;
   transition:
     background-color var(--transition-micro),
     color var(--transition-micro);
 }
 
 .sortFilterOption:hover,
-.sortFilterOption:focus-visible {
+.sortFilterOption:focus-visible,
+.sortFilterOption[data-highlighted] {
   background: var(--state-hover);
 }
 

@@ -32,9 +32,12 @@ import {
 
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
+import { MessageContextMenu } from './MessageContextMenu';
+import { t } from '../../i18n';
 import { CacheMetricsBadge } from './CacheMetricsBadge';
 import { isContextStateCarrierMessage } from '../../store/storeAccess';
 import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
+import { useMessageRowEntrance } from './useMessageRowEntrance';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
 
@@ -67,8 +70,17 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   void _messageIndex;
 
   const rowRef = useRef<HTMLDivElement>(null);
+  const { isEntering, handleAnimationEnd } = useMessageRowEntrance(
+    msg.id,
+    msg.timestamp
+  );
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [msgMenu, setMsgMenu] = useState<{
+    x: number;
+    y: number;
+    el: HTMLElement | null;
+  } | null>(null);
   const copiedTimer = useRef<number | null>(null);
   const rowAria = messageRowAriaLabel({
     role: 'assistant',
@@ -176,8 +188,16 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       data-role={isPureCarrier ? 'system' : 'assistant'}
       data-pinned={!isPureCarrier && isPinned ? 'true' : undefined}
       data-followup={!isPureCarrier && isFollowUp ? 'true' : undefined}
+      data-entering={isEntering ? 'true' : undefined}
+      onAnimationEnd={handleAnimationEnd}
       role={isPureCarrier ? 'region' : 'article'}
       aria-label={isPureCarrier ? '系统状态提示行' : rowAria}
+      onContextMenu={(e) => {
+        // 纯载体（系统状态）行无复制/固定语义，不挂行菜单
+        if (isPureCarrier) return;
+        e.preventDefault();
+        setMsgMenu({ x: e.clientX, y: e.clientY, el: e.currentTarget });
+      }}
     >
       {/* 拔除置顶独立的 MessageThinkingBlock，所有思维链下放至 MessageContent 自然交错渲染 */}
       <div
@@ -224,6 +244,24 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           }
         />
       )}
+
+      {msgMenu && !isPureCarrier ? (
+        <MessageContextMenu
+          x={msgMenu.x}
+          y={msgMenu.y}
+          anchorEl={msgMenu.el}
+          copyLabel={t('chat.message.copyBody', '复制正文')}
+          pinLabel={
+            isPinned
+              ? t('chat.message.unpin', '取消固定消息')
+              : t('chat.message.pin', '固定消息')
+          }
+          isPinned={!!isPinned}
+          onClose={() => setMsgMenu(null)}
+          onCopy={handleCopy}
+          onTogglePin={() => onTogglePin(msg.id)}
+        />
+      ) : null}
     </div>
   );
 };

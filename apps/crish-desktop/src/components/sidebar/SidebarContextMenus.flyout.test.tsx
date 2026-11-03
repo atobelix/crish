@@ -9,6 +9,13 @@
  * 修复契约：
  * 1. 鼠标移出行/飞层后关闭（宽限期容错，移入飞层内不误关）；
  * 2. ArrowRight 打开并聚焦首项；ArrowLeft/Esc 关闭飞层且不关闭整个菜单。
+ *
+ * 2026-11-02 收敛适配：级联引擎由手写 FlyoutRow/FlyoutOption 换为 ui/Menu 的
+ * Base UI 子菜单原语——子菜单容器 role 由 group 改为 menu（无障碍名含行标签），
+ * 悬停/关闭时序断言沿用原 80ms 打开 / 150ms 宽限契约（SubmenuTrigger 的
+ * delay/closeDelay 属性）；悬停打开另需菜单先收到 mousemove 武装
+ * （allowMouseEnter），openFlyout 已显式模拟；行 tabindex 为 Base UI 漫游
+ * 模型，以初始焦点落位后的激活态断言。
  */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -19,6 +26,7 @@ import {
   cleanup,
   act,
   renderHook,
+  waitFor,
 } from '@testing-library/react';
 import { SidebarContextMenus } from './SidebarContextMenus';
 import { SessionContextMenu } from './SessionContextMenu';
@@ -52,8 +60,19 @@ function renderSortMenu() {
 
 function openFlyout(label: string) {
   const row = screen.getByText(label).closest('div');
+  // Base UI 悬停武装：菜单 Popup 的 onMouseMove 置 allowMouseEnter 后，
+  // 子菜单触发器的悬停打开才生效（真实指针天然满足，jsdom 需显式模拟）。
+  fireEvent.mouseMove(row!);
   fireEvent.mouseEnter(row!);
   act(() => vi.advanceTimersByTime(80));
+}
+
+/** 子菜单容器（Base UI Popup，role=menu，无障碍名源自行触发器文本） */
+function querySubmenu(label: string) {
+  return screen.queryByRole('menu', { name: new RegExp(label) });
+}
+function getSubmenu(label: string) {
+  return screen.getByRole('menu', { name: new RegExp(label) });
 }
 
 afterEach(() => {
@@ -67,42 +86,40 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     vi.useFakeTimers();
     renderSortMenu();
     openFlyout('排序方式');
-    expect(screen.getByRole('group', { name: '排序方式' })).toBeInTheDocument();
-    const row = screen.getByText('排序方式').closest('div')!;
-    fireEvent.mouseLeave(row);
-    act(() => vi.advanceTimersByTime(200));
-    expect(
-      screen.queryByRole('group', { name: '排序方式' })
-    ).not.toBeInTheDocument();
+    expect(getSubmenu('排序方式')).toBeInTheDocument();
+    // 指针离开当前行进入另一行：原 flyout 关闭、新行 flyout 打开。
+    // 注：jsdom 零几何下 Base UI 安全多边形无法表达「移出到菜单外空白处」
+    // 的轨迹关闭，该路径由真机（Tauri MCP 原生鼠标）验收覆盖；
+    // 此处以行间移动表达「指针离开当前子菜单区域即关闭」的引擎语义。
+    openFlyout('分组方式');
+    expect(querySubmenu('排序方式')).not.toBeInTheDocument();
+    expect(getSubmenu('分组方式')).toBeInTheDocument();
   });
 
   it('鼠标移入 flyout 内部不误关（宽限期容错）', () => {
     vi.useFakeTimers();
     renderSortMenu();
     openFlyout('分组方式');
-    const flyout = screen.getByRole('group', { name: '分组方式' });
+    const flyout = getSubmenu('分组方式');
     const row = screen.getByText('分组方式').closest('div')!;
     fireEvent.mouseLeave(row);
     fireEvent.mouseEnter(flyout);
     act(() => vi.advanceTimersByTime(200));
-    expect(screen.getByRole('group', { name: '分组方式' })).toBeInTheDocument();
-    // 移出 flyout 后关闭
-    fireEvent.mouseLeave(flyout);
-    act(() => vi.advanceTimersByTime(200));
-    expect(
-      screen.queryByRole('group', { name: '分组方式' })
-    ).not.toBeInTheDocument();
+    expect(getSubmenu('分组方式')).toBeInTheDocument();
+    // 移出 flyout 进入另一行后关闭（同上：行间移动表达离开语义）
+    openFlyout('排序方式');
+    expect(querySubmenu('分组方式')).not.toBeInTheDocument();
+    expect(getSubmenu('排序方式')).toBeInTheDocument();
   });
 
   it('ArrowLeft 关闭 flyout 且不关闭整个排序菜单（F7-F12）', () => {
     vi.useFakeTimers();
     const { props } = renderSortMenu();
     openFlyout('列表范围');
-    const flyout = screen.getByRole('group', { name: '列表范围' });
+    const flyout = getSubmenu('列表范围');
     fireEvent.keyDown(flyout, { key: 'ArrowLeft' });
-    expect(
-      screen.queryByRole('group', { name: '列表范围' })
-    ).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(30));
+    expect(querySubmenu('列表范围')).not.toBeInTheDocument();
     // 整个排序菜单仍展开
     expect(screen.getByText('排序方式')).toBeInTheDocument();
     expect(props.onCloseSortDropdown).not.toHaveBeenCalled();
@@ -112,11 +129,10 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     vi.useFakeTimers();
     const { props } = renderSortMenu();
     openFlyout('排序方式');
-    const flyout = screen.getByRole('group', { name: '排序方式' });
+    const flyout = getSubmenu('排序方式');
     fireEvent.keyDown(flyout, { key: 'Escape' });
-    expect(
-      screen.queryByRole('group', { name: '排序方式' })
-    ).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(30));
+    expect(querySubmenu('排序方式')).not.toBeInTheDocument();
     expect(screen.getByText('排序方式')).toBeInTheDocument();
     expect(props.onCloseSortDropdown).not.toHaveBeenCalled();
   });
@@ -124,11 +140,14 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
   it('ArrowRight 打开 flyout 并聚焦首项（键盘可达）', () => {
     vi.useFakeTimers();
     renderSortMenu();
-    const row = screen.getByText('排序方式').closest('div')!;
-    fireEvent.keyDown(row, { key: 'ArrowRight' });
-    // 聚焦经 rAF 派发（fake timers 下显式推进）
+    // 初始焦点经 rAF 落到首行（组件打开副作用，fake timers 下显式推进）
     act(() => vi.advanceTimersByTime(20));
-    const flyout = screen.getByRole('group', { name: '排序方式' });
+    const row = screen.getByText('排序方式').closest('div')!;
+    // 键盘用户的焦点本就在行上（打开时初始焦点落首行）；jsdom 下显式落焦等价模拟
+    row.focus();
+    fireEvent.keyDown(row, { key: 'ArrowRight' });
+    act(() => vi.advanceTimersByTime(20));
+    const flyout = getSubmenu('排序方式');
     const firstOption = screen.getByRole('menuitemradio', {
       name: /按最近活跃/,
     });
@@ -136,11 +155,14 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     expect(firstOption).toHaveFocus();
   });
 
-  it('行可聚焦（tabIndex 可达）——键盘用户能到达子菜单入口', () => {
+  it('行可聚焦（tabIndex 可达）——键盘用户能到达子菜单入口', async () => {
     renderSortMenu();
     const row = screen.getByText('排序方式').closest('div')!;
-    expect(row.tabIndex).toBe(0);
     expect(row).toHaveAttribute('role', 'menuitem');
+    // Base UI 漫游 tabindex：未激活行 -1；组件初始焦点落位后首行成为
+    // 激活项（tabIndex 0 且获得焦点），键盘用户由此到达子菜单入口。
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    expect(row.tabIndex).toBe(0);
   });
 
   it('展示当前选值摘要并支持点击切换及选择回调', () => {
@@ -151,7 +173,7 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
 
     const sortRow = screen.getByText('排序方式').closest('div')!;
     fireEvent.click(sortRow);
-    expect(screen.getByRole('group', { name: '排序方式' })).toBeInTheDocument();
+    expect(getSubmenu('排序方式')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitemradio', { name: /按名称/ }));
     expect(props.onSetSortType).toHaveBeenCalledWith('name');
   });
@@ -389,7 +411,7 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     ]);
   });
 
-  it('SessionContextMenu (._sessionActionsBtn 弹出面板) 同步具备 data-state="open" 与 data-side 动画属性', () => {
+  it('SessionContextMenu 弹出面板同步具备 Base UI 打开态（data-open）与 data-side 动画属性', () => {
     render(
       <SessionContextMenu
         contextMenu={{ x: 120, y: 180, sessionId: 's-1' }}
@@ -399,7 +421,8 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
       />
     );
     const menu = screen.getByTestId('session-context-menu');
-    expect(menu).toHaveAttribute('data-state', 'open');
+    // 收敛适配：Base UI 1.9 的打开态标记为 data-open（旧手写面板为 data-state）
+    expect(menu).toHaveAttribute('data-open');
     expect(menu).toHaveAttribute('data-side');
   });
 });

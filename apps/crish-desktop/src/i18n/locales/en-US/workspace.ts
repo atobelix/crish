@@ -186,6 +186,20 @@ export const workspace: WorkspaceTranslations = {
   'launcher.running': 'Running',
   'launcher.waitingApproval': 'Waiting for approval: {tool}',
   'launcher.projects': 'Projects',
+
+  // ── File tree context menu ──────────────────────────────────────────────
+  'fileTree.open': 'Open',
+  'fileTree.reveal': 'Reveal in File Explorer',
+  'fileTree.openDefault': 'Open with Default App',
+  'fileTree.openWith': 'Open With',
+  'fileTree.openWithApp': 'Open with {name}',
+  'fileTree.copyAbsolutePath': 'Copy Absolute Path',
+  'fileTree.copyRelativePath': 'Copy Relative Path',
+  'fileTree.expand': 'Expand',
+  'fileTree.collapse': 'Collapse',
+  'fileTree.menuLabel': 'File Actions',
+  'fileTree.pathCopiedAbs': 'Absolute path copied',
+  'fileTree.pathCopiedRel': 'Relative path copied',
 };
 
 export default workspace;

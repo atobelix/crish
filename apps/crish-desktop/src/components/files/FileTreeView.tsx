@@ -10,7 +10,9 @@ import { Button, Tooltip } from '@/components/ui';
 import { FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { isSameFsPath } from '../../api/workspaceFsApi';
+import type { HostOpener } from '../../api/hostOpenersApi';
 import type { TreeNode } from './hooks/useFileNavigation';
+import { FileTreeContextMenu } from './FileTreeContextMenu';
 import { AppIcon } from '@/components/ui/icons';
 
 function TreeFileIcon({ name }: { name: string }) {
@@ -41,6 +43,10 @@ export interface FileTreeViewProps {
   onFilterChange: (v: string) => void;
   onFilterModeToggle: () => void;
   onErrorDismiss: () => void;
+  /** 右键菜单「打开方式」候选（宿主已装配的系统打开器列表） */
+  fileOpeners?: HostOpener[];
+  /** 右键菜单复制路径（按目标 path 定向复制，宿主负责 toast 反馈） */
+  onCopyPath?: (path: string, mode: 'abs' | 'rel') => void;
 }
 
 const ITEM_HEIGHT = 28;
@@ -62,6 +68,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     onFilterChange: _onFilterChange,
     onFilterModeToggle: _onFilterModeToggle,
     onErrorDismiss,
+    fileOpeners,
+    onCopyPath,
   }) {
     const ids = useMemo(() => flatTree.map((e) => e.path), [flatTree]);
 
@@ -83,6 +91,22 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
 
     const [pulseTarget, setPulseTarget] = useState<string | null>(null);
     const prevSelectedRef = useRef<string | null>(null);
+
+    // 行右键菜单（统一 ui/ContextMenu 基座）：右键不改选择态，
+    // 直接以命中节点为目标（目录右键不得触发 onSelect 的展开副作用）
+    const [ctxMenu, setCtxMenu] = useState<{
+      node: TreeNode;
+      x: number;
+      y: number;
+      anchorEl: HTMLElement | null;
+    } | null>(null);
+
+    const openRowContextMenu = useCallback(
+      (node: TreeNode, x: number, y: number, anchorEl: HTMLElement | null) => {
+        setCtxMenu({ node, x, y, anchorEl });
+      },
+      []
+    );
 
     const focusTreeRow = useCallback(
       (targetIndex: number) => {
@@ -195,6 +219,18 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     // ARIA tree pattern 键盘漫游
     const handleRowKeyDown = useCallback(
       (e: React.KeyboardEvent, idx: number, node: TreeNode) => {
+        if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+          e.preventDefault();
+          const el = e.currentTarget as HTMLElement | null;
+          const rect = el?.getBoundingClientRect();
+          openRowContextMenu(
+            node,
+            rect ? rect.left + 8 : 0,
+            rect ? rect.bottom : 0,
+            el
+          );
+          return;
+        }
         if (e.key === 'Enter') {
           e.preventDefault();
           onSelect(node.path, node.isDir);
@@ -230,7 +266,14 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
           onToggleExpand(node.path, e as unknown as React.MouseEvent);
         }
       },
-      [flatTree.length, expanded, onSelect, onToggleExpand, focusTreeRow]
+      [
+        flatTree.length,
+        expanded,
+        onSelect,
+        onToggleExpand,
+        focusTreeRow,
+        openRowContextMenu,
+      ]
     );
 
     return (
@@ -325,6 +368,16 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                     }}
                     onClick={() => onSelect(e.path, e.isDir)}
                     onDoubleClick={() => onDoubleClick(e.path, e.isDir)}
+                    onContextMenu={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      openRowContextMenu(
+                        e,
+                        ev.clientX,
+                        ev.clientY,
+                        ev.currentTarget
+                      );
+                    }}
                     role="treeitem"
                     aria-level={e.depth + 1}
                     aria-selected={isSelected}
@@ -383,6 +436,30 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
             </div>
           </>
         )}
+
+        {ctxMenu ? (
+          <FileTreeContextMenu
+            node={ctxMenu.node}
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            anchorEl={ctxMenu.anchorEl}
+            isExpanded={Boolean(expanded[ctxMenu.node.path])}
+            fileOpeners={fileOpeners ?? []}
+            onClose={() => setCtxMenu(null)}
+            onOpen={(p, isDir) => {
+              setCtxMenu(null);
+              onSelect(p, isDir);
+            }}
+            onCopyPath={
+              onCopyPath
+                ? (p, mode) => {
+                    setCtxMenu(null);
+                    onCopyPath(p, mode);
+                  }
+                : undefined
+            }
+          />
+        ) : null}
       </div>
     );
   }
