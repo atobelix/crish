@@ -1,5 +1,6 @@
 .sbQuickWrap {
   position: relative;
+  display: flex;
   flex: 1;
   min-width: 0;
 }
@@ -54,70 +55,56 @@
     --sep-radius-outer
   ); /* 方案 A 标尺：浮层外壳圆角锁 14px，根治 -6px 极端窒息挤压 */
   box-shadow: var(--shadow-dropdown);
-  padding: 6px; /* 方案 A 标尺：内衬 6px (14 = 8 + 6 绝对同心) */
+  padding: 8px; /* 舒展口径：内衬放宽（外壳 14 = 项圆角 8 + 内衬错位由基座同心口径吸收） */
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
-  min-width: 220px; /* 容器约束·不入 token */
-  max-width: min(280px, calc(100vw - 16px)); /* 容器约束·不入 token */
+  gap: var(--space-1);
+  min-width: 256px; /* 容器约束·不入 token */
+  max-width: min(304px, calc(100vw - 16px)); /* 容器约束·不入 token */
   max-height: min(var(--radix-popover-content-available-height), 70vh, 360px);
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   box-sizing: border-box;
+  transform-origin: var(--transform-origin);
+  will-change: transform, opacity;
+}
+/* 菜单面板入场/出场动画（与 ui/Menu/Menu.module.css 同款机制）：
+   position 为 side='top'，故使用 *-top 变体（从下往上展开）；
+   使用 data-state='open'/'closed' 属性（@base-ui/react/menu 菜单 Popup 自动注入）。
+   与 sbQuickSubmenu 的 @starting-style 机制并列，各管各的浮层。 */
+.sbQuickMenu[data-state='open'] {
+  animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
 }
 
-.sbQuickSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-1_5) var(--space-2_5);
+.sbQuickMenu[data-state='closed'] {
+  animation: crish-popover-exit-top var(--transition-popover-exit) forwards;
+  pointer-events: none;
 }
 
-.sbQuickLabel {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  padding: 0 var(--space-2);
+/* 减弱动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .sbQuickMenu[data-state='open'],
+  .sbQuickMenu[data-state='closed'] {
+    animation: none;
+    transition: opacity var(--duration-micro) var(--ease-standard);
+  }
 }
 
-.sbQuickSegment {
-  width: 100%;
-  --seg-outer-radius: var(--radius-menu-inner, 12px);
-  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad, 2px));
-}
-
-:global(.sb-quick-menu) :global(.sb-quick-segment) {
-  --seg-outer-radius: var(--radius-menu-inner, 12px);
-  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad, 2px));
-}
-
-.sbQuickSegment :global(button) {
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.sbQuickDivider {
-  margin: var(--space-1) var(--space-1_5);
-  border: none;
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  height: 0;
-  padding: 0;
-}
-
+/* 行高/字号/内边距为用户追加的放大口径（行 lg 档、字 body 档），勿回退至 md/sm */
 .sbQuickItem,
-.sbQuickItem,
-:global(.sb-quick-menu) :global(.sb-quick-item) {
+:global(.sb-quick-menu) :global(.sb-quick-item):not(.sbQuickIdentityMain) {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
-  height: var(--control-height-md);
-  min-height: var(--control-height-md);
-  padding: 0 var(--space-2_5);
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
+  padding: 0 var(--space-3);
   border-radius: var(--radius-menu-inner);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body);
   color: var(--text-primary);
   border: none;
   background: transparent;
@@ -132,17 +119,23 @@
   font-weight: var(--font-weight-normal);
 }
 
-.sbQuickItem:hover {
+.sbQuickItem:hover,
+:global(.sb-quick-menu)
+  :global(.sb-quick-item):not(.sbQuickIdentityMain):hover {
   background: var(--state-hover);
   color: var(--text-primary);
 }
 
-.sbQuickItem:active {
+.sbQuickItem:active,
+:global(.sb-quick-menu)
+  :global(.sb-quick-item):not(.sbQuickIdentityMain):active {
   background: var(--state-active);
   color: var(--text-primary);
 }
 
-.sbQuickItem:focus-visible {
+.sbQuickItem:focus-visible,
+:global(.sb-quick-menu)
+  :global(.sb-quick-item):not(.sbQuickIdentityMain):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
   color: var(--text-primary);
@@ -157,4 +150,215 @@
 .sbQuickItem:hover svg,
 .sbQuickItem:focus-visible svg {
   color: var(--text-primary);
+}
+
+.sbQuickItem:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 身份行：外层占满整个宽度，内含左侧用户可点击区（头像+名/邮箱）与右侧退出登录文本钮 */
+/* 高度/内边距无需强制覆盖标记（G-06）：基座 .menuItem 在 @layer components
+   内，分层规则恒低于未分层规则；同文件基行规则已以 :not() 排除本行。 */
+.sbQuickIdentityMain,
+:global(.sb-quick-menu) .sbQuickIdentityMain,
+:global(.sb-quick-menu) :global(.sb-quick-item).sbQuickIdentityMain {
+  width: 100%;
+  height: auto;
+  min-height: calc(var(--control-height-lg) + var(--space-4));
+  padding: var(--space-3) var(--space-2_5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: var(--radius-menu-inner);
+  box-sizing: border-box;
+}
+
+.sbQuickIdentityMain:hover,
+:global(.sb-quick-menu) .sbQuickIdentityMain:hover {
+  background: var(--state-hover);
+}
+
+.sbQuickIdentityContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2_5);
+}
+
+.sbQuickAvatar {
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  border-radius: var(--radius-circle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--account-avatar-bg);
+  color: var(--account-avatar-fg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.sbQuickAvatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sbQuickIdentityText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.sbQuickIdentityName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sbQuickIdentityEmail {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sbQuickSignOutWrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: var(--space-2);
+}
+
+/* 分隔线：用于身份卡片与下方功能项的视觉分隔，对齐设置界面的发丝分割线 */
+.sbQuickDivider {
+  margin: var(--space-1_5) var(--space-1);
+  border: none;
+  border-top: var(--hairline-width) solid var(--border-subtle);
+  padding: 0;
+}
+
+:global(html[data-theme='dark']) .sbQuickDivider {
+  border-top-color: color-mix(
+    in srgb,
+    var(--border-subtle) 90%,
+    var(--text-primary) 10%
+  );
+}
+
+/* 主题行右值 + 箭头（排序菜单行形态复刻；值文字为次级信息保留 12px） */
+.sbQuickRowRight {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sbQuickRowValue {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1;
+}
+
+.sbQuickChevRight {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* 主题子菜单（基座 Portal 独立浮层，视觉按排序子菜单蓝本） */
+.sbQuickSubPositioner {
+  z-index: var(--z-modal);
+}
+
+.sbQuickSubmenu {
+  background: var(--surface-overlay);
+  border: var(--hairline-width) solid
+    color-mix(in srgb, var(--surface-overlay) 95%, var(--text-primary) 5%);
+  border-radius: var(--sep-radius-outer);
+  box-shadow: var(--shadow-dropdown);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 184px; /* 容器约束·不入 token */
+  box-sizing: border-box;
+  outline: none;
+  /* 层间衔接动效：与基座 .popup 同机制（starting/ending-style + 过渡），
+     右向展开作水平微移，时长/曲线走全仓 popover 动效 token（过程与结果同步） */
+  transform-origin: var(--transform-origin);
+  opacity: 1;
+  transform: scale(1) translateX(0);
+  transition:
+    opacity var(--duration-micro) ease-out,
+    transform var(--duration-micro) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@starting-style {
+  .sbQuickSubmenu {
+    opacity: 0;
+    transform: scale(0.96) translateX(-5px);
+  }
+}
+
+.sbQuickSubmenu[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97) translateX(-4px);
+}
+
+/* 减弱动态偏好（与基座 Menu 同款守则） */
+@media (prefers-reduced-motion: reduce) {
+  .sbQuickSubmenu {
+    transition: opacity var(--duration-micro) var(--ease-standard);
+  }
+}
+
+.sbQuickSubItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--control-height-lg);
+  padding: 4px var(--space-3);
+  border: none;
+  border-radius: var(--radius-menu-inner);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
+}
+
+.sbQuickSubItem:hover,
+.sbQuickSubItem:focus-visible {
+  background: var(--state-hover);
+}
+
+.sbQuickSubItem.isOn {
+  font-weight: var(--font-weight-medium);
+}
+
+.sbQuickSubCheck {
+  color: var(--sep-accent-check);
+  flex-shrink: 0;
 }
