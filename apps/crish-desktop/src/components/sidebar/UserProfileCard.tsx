@@ -128,34 +128,36 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
 
     // 已登录：卡片作为独立触发按钮，快捷菜单通过 anchorRef 浮层关联（与加号按钮/ComposerFusedTrigger 同构）
     return (
-      <div className={styles.userCardRow}>
-        <Tooltip content={tooltip} disabled={menuOpen}>
-          <Button
-            ref={cardBtnRef}
-            bare
-            type="button"
-            className={`${styles.userProfileCard}${menuOpen ? ` ${styles.isOpen}` : ''}`}
-            data-testid="user-profile-card"
-            data-avatar="account"
-            data-role={roleLabel}
-            data-tooltip={tooltip}
-            aria-label={cardAriaLabel}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={handleToggleMenu}
-          >
-            {avatarNode}
-            <div className={styles.userTextStack}>
-              <span className={styles.userName}>{activeUser}</span>
-            </div>
-          </Button>
-        </Tooltip>
+      <>
+        <div className={styles.userCardRow}>
+          <Tooltip content={tooltip} disabled={menuOpen}>
+            <Button
+              ref={cardBtnRef}
+              bare
+              type="button"
+              className={`${styles.userProfileCard}${menuOpen ? ` ${styles.isOpen}` : ''}`}
+              data-testid="user-profile-card"
+              data-avatar="account"
+              data-role={roleLabel}
+              data-tooltip={tooltip}
+              aria-label={cardAriaLabel}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={handleToggleMenu}
+            >
+              {avatarNode}
+              <div className={styles.userTextStack}>
+                <span className={styles.userName}>{activeUser}</span>
+              </div>
+            </Button>
+          </Tooltip>
+        </div>
         <SettingsQuickMenu
           open={menuOpen}
           onOpenChange={setMenuOpen}
           anchorRef={cardBtnRef}
         />
-      </div>
+      </>
     );
   }
 );

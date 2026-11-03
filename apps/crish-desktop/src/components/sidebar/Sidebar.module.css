@@ -426,22 +426,22 @@
   background-color: transparent;
 }
 
-/* 左列：头像（账户入口）+ 名字（快捷设置菜单入口） */
+/* 左列：单一统合卡片（头像 + 名字一体化按钮） */
 .userCardRow {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
 }
 
 .userProfileCard {
+  width: 100%;
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
@@ -466,7 +466,22 @@
   color: var(--text-primary);
 }
 
-/* 头像按 v2 稿：纯色圆，无描边、无阴影 */
+/* 头像外层容器：24px 柔和圆角小圆圈 */
+.userAvatarWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: var(--radius-circle);
+  background: transparent;
+}
+
+/* 兼容保留 */
 .userAvatarButton {
   display: flex;
   align-items: center;
@@ -541,36 +556,10 @@
   box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 
-.sidebarResizer {
-  position: absolute;
-  right: -3px;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: var(--z-resizer, var(--z-chrome, 100));
-  background: transparent;
-  touch-action: none;
-}
-
-.sidebarResizer::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 2.5px;
-  width: 1px;
-  background: transparent;
-  pointer-events: none;
-  transition: background var(--transition-fast);
-}
-
-.sidebarResizer:hover::after,
-.sidebarResizer:global(.is-dragging)::after,
-:global(body.sidebar-resizing) .sidebarResizer::after {
-  background: var(--border-color);
-  width: 1px;
-  left: 2.5px;
-}
+/* 侧栏拖拽手柄已迁 ui/SplitResizer（R1）：定位由组件 style 注入
+ * （absolute / right:-4px / 全高），呈现（弹性胶囊）与热区（8px）归
+ * 组件本体，本文件不再持有 .sidebarResizer 规则。拖拽期 .sidebar 的
+ * 过渡关停仍走文件首部的 body.is-resizing / body.sidebar-resizing 组。 */
 
 /* Overlay mode */
 .overlay {

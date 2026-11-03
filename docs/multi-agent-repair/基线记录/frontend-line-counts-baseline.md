@@ -1,4 +1,4 @@
-﻿# 前端行数基线（RL-03 · frontend line counts）
+# 前端行数基线（RL-03 · frontend line counts）
 
 > 归属：05 代码质量方案（`docs/frontend-audit/20-proposals/05-code-quality-proposal.md` 步骤②）· 批次 7.3
 > 日期：2026-08-10（建线）· 维护：`node scripts/check-line-counts.mjs --update --all`
@@ -172,7 +172,7 @@ apps/crish-desktop/src/components/settings-models/ManualAddForm.tsx 432
 apps/crish-desktop/src/components/settings/SettingsAboutTab.tsx 430
 apps/crish-desktop/src/components/settings/SettingsPanel.tsx 431
 apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx 571
-apps/crish-desktop/src/components/settings/SettingsQuickMenu.tsx 530
+apps/crish-desktop/src/components/settings/SettingsQuickMenu.tsx 537
 apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 566
 apps/crish-desktop/src/components/settings/StatusDiagnosticsPanel.tsx 481
 apps/crish-desktop/src/components/settings/WorkflowEditModal.tsx 492

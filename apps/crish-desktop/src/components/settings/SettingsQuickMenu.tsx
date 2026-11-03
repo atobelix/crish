@@ -83,9 +83,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   const open = isControlled ? externalOpen : internalOpen;
   const setOpen = useCallback(
     (next: boolean) => {
-      if (!isControlled) {
-        setInternalOpen(next);
-      }
+      if (!isControlled) setInternalOpen(next);
       externalOnOpenChange?.(next);
     },
     [isControlled, externalOnOpenChange]
@@ -367,232 +365,240 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
     ? renderTrigger({ open, triggerProps })
     : (trigger ?? defaultTrigger);
 
-  return (
-    <div className={styles.sbQuickWrap} ref={rootRef}>
-      <Menu
-        key={anchorTick}
-        closeOnSelect={false}
-        openState={{ open, onOpenChange: handleOpenChange }}
-        outsideHandlers={{
-          onInteractOutside: () => {
-            // 外点关闭：不抢焦点
-            restoreOnCloseRef.current = false;
-          },
-          onCloseAutoFocus: (e: Event) => {
-            if (!restoreOnCloseRef.current) {
-              e.preventDefault();
-            }
-          },
-        }}
-        anchor={anchorRef}
-        trigger={anchorRef ? undefined : finalTrigger}
-        position={{ side: 'top', align: 'start', sideOffset: 6 }}
-        panel={{ contentClassName: styles.sbQuickMenu }}
+  const menuNode = (
+    <Menu
+      key={anchorTick}
+      closeOnSelect={false}
+      openState={{ open, onOpenChange: handleOpenChange }}
+      outsideHandlers={{
+        onInteractOutside: () => {
+          // 外点关闭：不抢焦点
+          restoreOnCloseRef.current = false;
+        },
+        onCloseAutoFocus: (e: Event) => {
+          if (!restoreOnCloseRef.current) {
+            e.preventDefault();
+          }
+        },
+      }}
+      anchor={anchorRef}
+      trigger={anchorRef ? undefined : finalTrigger}
+      position={{ side: 'top', align: 'start', sideOffset: 6 }}
+      panel={{ contentClassName: styles.sbQuickMenu }}
+    >
+      <div
+        id={menuId}
+        ref={menuRef}
+        className="sb-quick-menu"
+        aria-label={t('settings.quickMenu.title')}
+        aria-orientation="vertical"
+        onKeyDownCapture={onMenuKeyDown}
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <div
-          id={menuId}
-          ref={menuRef}
-          className="sb-quick-menu"
-          aria-label={t('settings.quickMenu.title')}
-          aria-orientation="vertical"
-          onKeyDownCapture={onMenuKeyDown}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {isLoggedIn ? (
-            <>
-              <div
-                className={`${styles.sbQuickIdentityMain} sb-quick-item`}
-                data-testid="quick-settings-account"
-                role="menuitem"
-                tabIndex={-1}
-                onClick={() => go('profile')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    go('profile');
-                  }
-                }}
-              >
-                <div className={styles.sbQuickIdentityContent}>
-                  <span className={styles.sbQuickAvatar} aria-hidden="true">
-                    {showAvatarImage ? (
-                      <img
-                        className={styles.sbQuickAvatarImage}
-                        src={avatarUrl}
-                        alt=""
-                        onError={() => setFailedAvatar(avatarUrl)}
-                      />
-                    ) : accountInitialText ? (
-                      accountInitialText
-                    ) : (
-                      <AppIcon name="user" size={15} aria-hidden />
-                    )}
-                  </span>
-                  <span className={styles.sbQuickIdentityText}>
-                    <span className={styles.sbQuickIdentityName}>
-                      {displayName}
-                    </span>
-                    {accountEmail ? (
-                      <span className={styles.sbQuickIdentityEmail}>
-                        {accountEmail}
-                      </span>
-                    ) : null}
-                  </span>
-                </div>
-                <div className={styles.sbQuickSignOutWrap}>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    type="button"
-                    className="sb-quick-signout"
-                    data-testid="quick-settings-signout"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSignOutClick();
-                    }}
-                  >
-                    {t('settings.quickMenu.signOut')}
-                  </Button>
-                </div>
-              </div>
-              <Menu.Separator className={styles.sbQuickDivider} />
-            </>
-          ) : (
-            <>
-              <Tooltip content={accountTip}>
-                <Menu.Item
-                  className={`${styles.sbQuickItem} sb-quick-item`}
-                  data-testid="quick-settings-account"
-                  onClick={() => go('profile')}
-                >
-                  <AppIcon name="user" size={16} aria-hidden />
-                  <span>{accountLabel}</span>
-                </Menu.Item>
-              </Tooltip>
-              <Menu.Separator className={styles.sbQuickDivider} />
-            </>
-          )}
-
-          <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger
-              className={`${styles.sbQuickItem} sb-quick-item`}
-              data-testid="quick-settings-theme"
+        {isLoggedIn ? (
+          <>
+            <div
+              className={`${styles.sbQuickIdentityMain} sb-quick-item`}
+              data-testid="quick-settings-account"
+              role="menuitem"
               tabIndex={-1}
+              onClick={() => go('profile')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  go('profile');
+                }
+              }}
             >
-              <AppIcon name="dark-mode" size={16} aria-hidden />
-              <span>{t('settings.quickMenu.theme')}</span>
-              <span className={styles.sbQuickRowRight}>
-                <span className={styles.sbQuickRowValue}>
-                  {themeValueLabel}
+              <div className={styles.sbQuickIdentityContent}>
+                <span className={styles.sbQuickAvatar} aria-hidden="true">
+                  {showAvatarImage ? (
+                    <img
+                      className={styles.sbQuickAvatarImage}
+                      src={avatarUrl}
+                      alt=""
+                      onError={() => setFailedAvatar(avatarUrl)}
+                    />
+                  ) : accountInitialText ? (
+                    accountInitialText
+                  ) : (
+                    <AppIcon name="user" size={15} aria-hidden />
+                  )}
                 </span>
-                <AppIcon
-                  name="chevron-right"
-                  size={14}
-                  className={styles.sbQuickChevRight}
-                  aria-hidden
-                />
-              </span>
-            </Menu.SubmenuTrigger>
-            <Menu.Portal>
-              <Menu.Positioner
-                side="right"
-                align="start"
-                sideOffset={-5}
-                alignOffset={-6}
-                className={`${styles.sbQuickSubPositioner} sb-quick-sub-positioner`}
-              >
-                <Menu.Popup
-                  className={`${styles.sbQuickSubmenu} sb-quick-submenu`}
-                  data-menu-inside="true"
+                <span className={styles.sbQuickIdentityText}>
+                  <span className={styles.sbQuickIdentityName}>
+                    {displayName}
+                  </span>
+                  {accountEmail ? (
+                    <span className={styles.sbQuickIdentityEmail}>
+                      {accountEmail}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className={styles.sbQuickSignOutWrap}>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  type="button"
+                  className="sb-quick-signout"
+                  data-testid="quick-settings-signout"
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSignOutClick();
+                  }}
                 >
-                  <Menu.RadioGroup
-                    value={theme}
-                    onValueChange={(value) =>
-                      handleSelectTheme(value === 'dark' ? 'dark' : 'default')
-                    }
-                  >
-                    <Menu.RadioItem
-                      value="default"
-                      className={`${styles.sbQuickSubItem}${!isDark ? ` ${styles.isOn}` : ''}`}
-                      data-testid="quick-settings-theme-light"
-                      aria-label={t('settings.quickMenu.themeLightAria')}
-                      onClick={() => handleSelectTheme('default')}
-                    >
-                      <span>{t('settings.quickMenu.themeLight')}</span>
-                      {!isDark ? (
-                        <AppIcon
-                          name="check"
-                          size={14}
-                          className={styles.sbQuickSubCheck}
-                          aria-hidden
-                        />
-                      ) : null}
-                    </Menu.RadioItem>
-                    <Menu.RadioItem
-                      value="dark"
-                      className={`${styles.sbQuickSubItem}${isDark ? ` ${styles.isOn}` : ''}`}
-                      data-testid="quick-settings-theme-dark"
-                      aria-label={t('settings.quickMenu.themeDarkAria')}
-                      onClick={() => handleSelectTheme('dark')}
-                    >
-                      <span>{t('settings.quickMenu.themeDark')}</span>
-                      {isDark ? (
-                        <AppIcon
-                          name="check"
-                          size={14}
-                          className={styles.sbQuickSubCheck}
-                          aria-hidden
-                        />
-                      ) : null}
-                    </Menu.RadioItem>
-                  </Menu.RadioGroup>
-                </Menu.Popup>
-              </Menu.Positioner>
-            </Menu.Portal>
-          </Menu.SubmenuRoot>
-
-          {quickEntries.map((entry) => (
-            <Tooltip key={entry.id} content={entry.title}>
+                  {t('settings.quickMenu.signOut')}
+                </Button>
+              </div>
+            </div>
+            <Menu.Separator className={styles.sbQuickDivider} />
+          </>
+        ) : (
+          <>
+            <Tooltip content={accountTip}>
               <Menu.Item
                 className={`${styles.sbQuickItem} sb-quick-item`}
-                data-testid={`quick-settings-${entry.id}`}
-                aria-label={entry.ariaLabel}
-                onClick={() => go(entry.tab)}
+                data-testid="quick-settings-account"
+                onClick={() => go('profile')}
               >
-                {entry.icon}
-                <span>{entry.label}</span>
+                <AppIcon name="user" size={16} aria-hidden />
+                <span>{accountLabel}</span>
               </Menu.Item>
             </Tooltip>
-          ))}
+            <Menu.Separator className={styles.sbQuickDivider} />
+          </>
+        )}
 
-          <Tooltip content={t('about.checkUpdates')}>
+        <Menu.SubmenuRoot>
+          <Menu.SubmenuTrigger
+            className={`${styles.sbQuickItem} sb-quick-item`}
+            data-testid="quick-settings-theme"
+            tabIndex={-1}
+          >
+            <AppIcon name="dark-mode" size={16} aria-hidden />
+            <span>{t('settings.quickMenu.theme')}</span>
+            <span className={styles.sbQuickRowRight}>
+              <span className={styles.sbQuickRowValue}>{themeValueLabel}</span>
+              <AppIcon
+                name="chevron-right"
+                size={14}
+                className={styles.sbQuickChevRight}
+                aria-hidden
+              />
+            </span>
+          </Menu.SubmenuTrigger>
+          <Menu.Portal>
+            <Menu.Positioner
+              side="right"
+              align="start"
+              sideOffset={-5}
+              alignOffset={-6}
+              className={`${styles.sbQuickSubPositioner} sb-quick-sub-positioner`}
+            >
+              <Menu.Popup
+                className={`${styles.sbQuickSubmenu} sb-quick-submenu`}
+                data-menu-inside="true"
+              >
+                <Menu.RadioGroup
+                  value={theme}
+                  onValueChange={(value) =>
+                    handleSelectTheme(value === 'dark' ? 'dark' : 'default')
+                  }
+                >
+                  <Menu.RadioItem
+                    value="default"
+                    className={`${styles.sbQuickSubItem}${!isDark ? ` ${styles.isOn}` : ''}`}
+                    data-testid="quick-settings-theme-light"
+                    aria-label={t('settings.quickMenu.themeLightAria')}
+                    onClick={() => handleSelectTheme('default')}
+                  >
+                    <span>{t('settings.quickMenu.themeLight')}</span>
+                    {!isDark ? (
+                      <AppIcon
+                        name="check"
+                        size={14}
+                        className={styles.sbQuickSubCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </Menu.RadioItem>
+                  <Menu.RadioItem
+                    value="dark"
+                    className={`${styles.sbQuickSubItem}${isDark ? ` ${styles.isOn}` : ''}`}
+                    data-testid="quick-settings-theme-dark"
+                    aria-label={t('settings.quickMenu.themeDarkAria')}
+                    onClick={() => handleSelectTheme('dark')}
+                  >
+                    <span>{t('settings.quickMenu.themeDark')}</span>
+                    {isDark ? (
+                      <AppIcon
+                        name="check"
+                        size={14}
+                        className={styles.sbQuickSubCheck}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </Menu.RadioItem>
+                </Menu.RadioGroup>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.SubmenuRoot>
+
+        {quickEntries.map((entry) => (
+          <Tooltip key={entry.id} content={entry.title}>
             <Menu.Item
               className={`${styles.sbQuickItem} sb-quick-item`}
-              data-testid="quick-settings-updates"
-              disabled={checkingUpdate}
-              aria-label={
-                checkingUpdate
-                  ? t('about.checkingUpdates')
-                  : t('about.checkUpdates')
-              }
-              onClick={() => void handleCheckUpdate()}
+              data-testid={`quick-settings-${entry.id}`}
+              aria-label={entry.ariaLabel}
+              onClick={() => go(entry.tab)}
             >
-              <AppIcon name="refresh" size={16} aria-hidden />
-              <span>
-                {checkingUpdate
-                  ? t('about.checkingUpdates')
-                  : t('about.checkUpdates')}
-              </span>
+              {entry.icon}
+              <span>{entry.label}</span>
             </Menu.Item>
           </Tooltip>
+        ))}
+
+        <Tooltip content={t('about.checkUpdates')}>
+          <Menu.Item
+            className={`${styles.sbQuickItem} sb-quick-item`}
+            data-testid="quick-settings-updates"
+            disabled={checkingUpdate}
+            aria-label={
+              checkingUpdate
+                ? t('about.checkingUpdates')
+                : t('about.checkUpdates')
+            }
+            onClick={() => void handleCheckUpdate()}
+          >
+            <AppIcon name="refresh" size={16} aria-hidden />
+            <span>
+              {checkingUpdate
+                ? t('about.checkingUpdates')
+                : t('about.checkUpdates')}
+            </span>
+          </Menu.Item>
+        </Tooltip>
+      </div>
+    </Menu>
+  );
+
+  return (
+    <>
+      {anchorRef ? (
+        menuNode
+      ) : (
+        <div className={styles.sbQuickWrap} ref={rootRef}>
+          {menuNode}
         </div>
-      </Menu>
+      )}
       {/* 退出确认弹窗常驻挂载（Menu 兄弟位）：菜单关闭/登录态翻转都不被带走 */}
       <SignOutConfirmDialog
         open={signOutOpen}
         onClose={() => setSignOutOpen(false)}
       />
-    </div>
+    </>
   );
 };
