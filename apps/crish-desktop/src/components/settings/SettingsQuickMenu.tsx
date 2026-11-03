@@ -104,7 +104,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   // 身份行展示（与侧栏卡片同一套 accountIdentity 推导，含头像失败回落首字母）
   const displayName =
     accountDisplayName(user, profile) || t('settings.account.quick.myAccount');
-  const accountEmail = profile?.email || user?.email || '';
   const accountInitialText = accountInitial(displayName);
   const avatarUrl = resolveAvatarUrl(profile?.avatarUrl);
   const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
@@ -429,11 +428,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
                   <span className={styles.sbQuickIdentityName}>
                     {displayName}
                   </span>
-                  {accountEmail ? (
-                    <span className={styles.sbQuickIdentityEmail}>
-                      {accountEmail}
-                    </span>
-                  ) : null}
                 </span>
               </div>
               <div className={styles.sbQuickSignOutWrap}>

@@ -132,14 +132,14 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     expect(modelsItem).toHaveFocus();
   });
 
-  it('登录态身份行：头像首字母 + 名/邮箱 + 退出钮，ArrowDown 可达退出钮', async () => {
+  it('登录态身份行：头像首字母 + 用户名（不显邮箱） + 退出钮，ArrowDown 可达退出钮', async () => {
     loginAsTestUser();
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
     const menu = await screen.findByRole('menu');
     const account = screen.getByTestId('quick-settings-account');
     expect(account).toHaveTextContent('test-user');
-    expect(account).toHaveTextContent('test@example.com');
+    expect(account).not.toHaveTextContent('test@example.com');
     expect(account).toHaveTextContent('T');
     const signOut = screen.getByTestId('quick-settings-signout');
     expect(signOut).toHaveTextContent('退出登录');

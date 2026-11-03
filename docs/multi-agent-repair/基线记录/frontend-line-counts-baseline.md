@@ -172,7 +172,7 @@ apps/crish-desktop/src/components/settings-models/ManualAddForm.tsx 432
 apps/crish-desktop/src/components/settings/SettingsAboutTab.tsx 430
 apps/crish-desktop/src/components/settings/SettingsPanel.tsx 431
 apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx 571
-apps/crish-desktop/src/components/settings/SettingsQuickMenu.tsx 537
+apps/crish-desktop/src/components/settings/SettingsQuickMenu.tsx 529
 apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 566
 apps/crish-desktop/src/components/settings/StatusDiagnosticsPanel.tsx 481
 apps/crish-desktop/src/components/settings/WorkflowEditModal.tsx 492
