@@ -128,7 +128,8 @@ export function toolLabelFromArgs(tc: MessageToolCall): string {
     const sl = p.startline || p.start_line;
     const el = p.endline || p.end_line;
     const lineTag = sl ? ` (L${sl}${el ? `-${el}` : ''})` : '';
-    return path ? `查看 ${basename(path)}${lineTag}` : '查看文件';
+    // 动词单源（HC1 · D-2）：与 toolHeaderPresentation 的 read 分支统一为「读取」
+    return path ? `读取 ${basename(path)}${lineTag}` : '读取文件';
   }
 
   // 6. 文件写入 / 创建 (write_file / write_to_file / create_file)

@@ -145,8 +145,8 @@ describe('timelineNormalizer', () => {
       expect(items[0]?.kind).toBe('group');
       if (items[0]?.kind === 'group') {
         expect(items[0].tools).toHaveLength(3);
-        // 死字段 label 复活：渲染端折叠头文案 `${toolHumanLabel(last)} · ${n} 步`
-        expect(items[0].label).toMatch(/· 3 步$/);
+        // label = 本组动作分布（formatProcessActionsSummary 单一来源，R8/D-6）
+        expect(items[0].label).toBe('已搜索 3 次');
         expect(items[0].id).toBe('grp-t1');
       }
     });
@@ -173,7 +173,7 @@ describe('timelineNormalizer', () => {
       expect(items[0]?.kind).toBe('group');
       if (items[0]?.kind === 'group') {
         expect(items[0].tools.map((t) => t.id)).toEqual(['p1', 'p2']);
-        expect(items[0].label).toMatch(/· 2 步$/);
+        expect(items[0].label).toBe('已运行 2 条命令');
       }
     });
 
@@ -264,12 +264,9 @@ describe('timelineNormalizer', () => {
         makeToolCall({ id: 't2', name: 'bash', status: 'success' }),
       ]);
       // 负向断言：t1 绝不能被插到「正文 2」之前（即 t2 之后）
-      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual([
-        't1',
-        'text',
-        't2',
-        'text',
-      ]);
+      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
+        ['t1', 'text', 't2', 'text']
+      );
     });
 
     it('因果时间戳就近插位：工具按其 startedAt 插回真实发生时段', () => {
@@ -279,15 +276,23 @@ describe('timelineNormalizer', () => {
         { type: 'tool_call' as const, id: 't-late', startTime: T0 + 5_000 },
       ];
       const next = alignToolCallBlocks(blocks, [
-        makeToolCall({ id: 't-late', name: 'bash', status: 'success', startedAt: T0 + 5_000 }),
-        makeToolCall({ id: 't-mid', name: 'bash', status: 'success', startedAt: T0 + 2_000 }),
+        makeToolCall({
+          id: 't-late',
+          name: 'bash',
+          status: 'success',
+          startedAt: T0 + 5_000,
+        }),
+        makeToolCall({
+          id: 't-mid',
+          name: 'bash',
+          status: 'success',
+          startedAt: T0 + 2_000,
+        }),
       ]);
       // t-mid 的时间戳晚于「早」、早于 t-late，必须落在两者之间
-      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual([
-        'text',
-        't-mid',
-        't-late',
-      ]);
+      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
+        ['text', 't-mid', 't-late']
+      );
     });
 
     it('剔除悬空 tool_call 块（id 不在 tools 中）', () => {
@@ -558,7 +563,10 @@ describe('timelineNormalizer', () => {
         { type: 'text' as const, content: '当前进行中', turnIndex: 1 },
       ];
 
-      const blocks = reconcileAssistantMessageBlocks(existingBlocks, incomingBlocks);
+      const blocks = reconcileAssistantMessageBlocks(
+        existingBlocks,
+        incomingBlocks
+      );
 
       // 断言必须包含 2 个 thought 块、2 个 tool_call 块和 1 个 text 块
       expect(blocks.filter((b) => b.type === 'thought')).toHaveLength(2);
@@ -566,10 +574,22 @@ describe('timelineNormalizer', () => {
       expect(blocks.filter((b) => b.type === 'text')).toHaveLength(1);
 
       // 插入顺序（严格按流式到达顺序）：incoming turn1 块先出现，orphan turn0 块追加到末尾
-      expect(blocks[0]).toMatchObject({ type: 'thought', content: 'Turn 1 新思维链', turnIndex: 1 });
+      expect(blocks[0]).toMatchObject({
+        type: 'thought',
+        content: 'Turn 1 新思维链',
+        turnIndex: 1,
+      });
       expect(blocks[1]).toMatchObject({ type: 'tool_call', id: 'tool-1' });
-      expect(blocks[2]).toMatchObject({ type: 'text', content: '当前进行中', turnIndex: 1 });
-      expect(blocks[3]).toMatchObject({ type: 'thought', content: 'Turn 0 思维链', turnIndex: 0 });
+      expect(blocks[2]).toMatchObject({
+        type: 'text',
+        content: '当前进行中',
+        turnIndex: 1,
+      });
+      expect(blocks[3]).toMatchObject({
+        type: 'thought',
+        content: 'Turn 0 思维链',
+        turnIndex: 0,
+      });
       expect(blocks[4]).toMatchObject({ type: 'tool_call', id: 'tool-0' });
     });
 
@@ -594,7 +614,10 @@ describe('timelineNormalizer', () => {
         },
       ];
 
-      const blocks = reconcileAssistantMessageBlocks(existingBlocks, incomingBlocks);
+      const blocks = reconcileAssistantMessageBlocks(
+        existingBlocks,
+        incomingBlocks
+      );
       expect(blocks).toHaveLength(2);
       expect(blocks[0]).toMatchObject({
         type: 'thought',
@@ -617,7 +640,11 @@ describe('timelineNormalizer', () => {
 
       for (let turn = 1; turn < 5; turn++) {
         const nextTurnBlocks = [
-          { type: 'thought' as const, content: `T${turn} 思考`, turnIndex: turn },
+          {
+            type: 'thought' as const,
+            content: `T${turn} 思考`,
+            turnIndex: turn,
+          },
           { type: 'tool_call' as const, id: `t${turn}`, turnIndex: turn },
         ];
         blocks = reconcileAssistantMessageBlocks(blocks, nextTurnBlocks);
@@ -660,7 +687,10 @@ describe('timelineNormalizer', () => {
       expect(reconciled[2]).toMatchObject({ id: 't-1', turnIndex: 1 });
       expect(reconciled[3]).toMatchObject({ content: '思考 T1', turnIndex: 1 });
       // orphan existing 追加到末尾
-      expect(reconciled[4]).toMatchObject({ content: '历史思考', turnIndex: 0 });
+      expect(reconciled[4]).toMatchObject({
+        content: '历史思考',
+        turnIndex: 0,
+      });
       expect(reconciled[5]).toMatchObject({ id: 't-legacy', turnIndex: 0 });
     });
 
@@ -679,17 +709,38 @@ describe('timelineNormalizer', () => {
 
       expect(reconciled).toHaveLength(5);
       // 插入顺序：incoming 的 turn2 text 先出现，然后 orphan 按 existingMap 迭代顺序追加
-      expect(reconciled[0]).toMatchObject({ type: 'text', content: '最终交付汇总', turnIndex: 2 });
-      expect(reconciled[1]).toMatchObject({ type: 'thought', content: '第 0 轮思考', turnIndex: 0 });
-      expect(reconciled[2]).toMatchObject({ type: 'tool_call', id: 'tool-0', turnIndex: 0 });
-      expect(reconciled[3]).toMatchObject({ type: 'thought', content: '第 1 轮思考', turnIndex: 1 });
-      expect(reconciled[4]).toMatchObject({ type: 'tool_call', id: 'tool-1', turnIndex: 1 });
+      expect(reconciled[0]).toMatchObject({
+        type: 'text',
+        content: '最终交付汇总',
+        turnIndex: 2,
+      });
+      expect(reconciled[1]).toMatchObject({
+        type: 'thought',
+        content: '第 0 轮思考',
+        turnIndex: 0,
+      });
+      expect(reconciled[2]).toMatchObject({
+        type: 'tool_call',
+        id: 'tool-0',
+        turnIndex: 0,
+      });
+      expect(reconciled[3]).toMatchObject({
+        type: 'thought',
+        content: '第 1 轮思考',
+        turnIndex: 1,
+      });
+      expect(reconciled[4]).toMatchObject({
+        type: 'tool_call',
+        id: 'tool-1',
+        turnIndex: 1,
+      });
     });
   });
 
   describe('parseInlineThoughtAndTextSafely (Markdown 代码块免疫与流式防御)', () => {
     it('T-02: 处于 Markdown 多行代码栅栏 ``` 内的 <think> 标签严禁被提取为思考项', () => {
-      const markdownCode = '演示代码：\n```xml\n<think>不要提取我</think>\n```\n结束。';
+      const markdownCode =
+        '演示代码：\n```xml\n<think>不要提取我</think>\n```\n结束。';
       const items = parseInlineThoughtAndTextSafely(markdownCode, 0, false);
 
       expect(items.some((i) => i.kind === 'thought')).toBe(false);
@@ -739,7 +790,8 @@ describe('timelineNormalizer', () => {
     });
 
     it('混合场景：既有正常代码块又有真实思考标签时精准分拣', () => {
-      const mixed = '<think>真实思考1</think>正文说明：\n```xml\n<think>假思考</think>\n```\n<think>真实思考2</think>最终正文。';
+      const mixed =
+        '<think>真实思考1</think>正文说明：\n```xml\n<think>假思考</think>\n```\n<think>真实思考2</think>最终正文。';
       const items = parseInlineThoughtAndTextSafely(mixed, 0, false);
 
       expect(items).toHaveLength(4);
@@ -952,9 +1004,19 @@ describe('timelineNormalizer', () => {
           thinking: '思考内容',
           toolCalls: [toolCall],
           blocks: [
-            { type: 'thought', id: 'thought-turn-0', content: '思考内容', turnIndex: 0 },
+            {
+              type: 'thought',
+              id: 'thought-turn-0',
+              content: '思考内容',
+              turnIndex: 0,
+            },
             { type: 'text', content: '正文 1', turnIndex: 0 },
-            { type: 'tool_call', id: 'tc-frozen-1', durationMs: 0, turnIndex: 0 },
+            {
+              type: 'tool_call',
+              id: 'tc-frozen-1',
+              durationMs: 0,
+              turnIndex: 0,
+            },
             { type: 'text', content: '正文 2', turnIndex: 0 },
           ] as SessionMessage['blocks'],
         })
@@ -962,7 +1024,9 @@ describe('timelineNormalizer', () => {
     }
 
     it('frozen 输入下不得抛错（旧实现因原地赋值抛 TypeError 被 catch 吞掉）', () => {
-      expect(() => buildAssistantTimeline(makeFrozenTimelineMessage())).not.toThrow();
+      expect(() =>
+        buildAssistantTimeline(makeFrozenTimelineMessage())
+      ).not.toThrow();
     });
 
     it('frozen 输入下仍产出 thought / tools / text 三段（不得降级为 text-fallback）', () => {

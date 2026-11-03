@@ -18,7 +18,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { MessageToolCall, SessionMessage } from '../../../store/layoutStore';
+import type {
+  MessageToolCall,
+  SessionMessage,
+} from '../../../store/layoutStore';
 import type { MessageTimelineBlock } from '../../../store/types';
 import {
   buildTerminalToolPatches,
@@ -58,7 +61,9 @@ function runChain(msg: SessionMessage) {
   //    （buildTerminalToolPatches 内部取真实 Date.now()，故本套件的 T0 一律用
   //     「真实时钟相对基准」构造，patch 相关断言用区间、纯函数断言用定值）
   const patches = buildTerminalToolPatches(msg.toolCalls, 'complete');
-  expect(patches.every((p) => p.durationMs === undefined || p.durationMs >= 0)).toBe(true);
+  expect(
+    patches.every((p) => p.durationMs === undefined || p.durationMs >= 0)
+  ).toBe(true);
   const settled = applyPatches(msg, patches);
 
   // 2. 介质端 → 消费端：时间线归一 + 分段
@@ -66,15 +71,26 @@ function runChain(msg: SessionMessage) {
   const segs = partitionTimelineSegments(settled.id, items, false, false);
   const seg = segs.find((s) => s.kind === 'process_section');
   if (seg?.kind !== 'process_section') {
-    throw new Error(`期望存在 process_section，实际：${segs.map((s) => s.kind).join(',')}`);
+    throw new Error(
+      `期望存在 process_section，实际：${segs.map((s) => s.kind).join(',')}`
+    );
   }
 
   const spanMs = (seg.endTime ?? 0) - (seg.startTime ?? 0);
-  const label = formatProcessControlLabel(seg.metrics, seg.showWorkTime, spanMs, seg.isLive);
+  const label = formatProcessControlLabel(
+    seg.metrics,
+    seg.showWorkTime,
+    spanMs,
+    seg.isLive
+  );
   return { seg, spanMs, label, items, patches };
 }
 
-function toolCall(id: string, startedAt: number, extra: Partial<MessageToolCall> = {}): MessageToolCall {
+function toolCall(
+  id: string,
+  startedAt: number,
+  extra: Partial<MessageToolCall> = {}
+): MessageToolCall {
   return {
     id,
     name: 'read_file',
@@ -123,9 +139,21 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
   });
 
   it('纯函数定值断言：缺失耗时按传入挂钟补齐（不依赖 Date.now）', () => {
-    expect(resolveTerminalDurationMs({ startedAt: T0 + 3_000 }, T0 + 8_000)).toBe(5_000);
-    expect(resolveTerminalDurationMs({ startedAt: T0 + 3_000, durationMs: 1_000 }, T0 + 8_000)).toBeUndefined();
-    expect(resolveTerminalDurationMs({ startedAt: T0 + 3_000, durationMs: 0 }, T0 + 8_000)).toBe(5_000);
+    expect(
+      resolveTerminalDurationMs({ startedAt: T0 + 3_000 }, T0 + 8_000)
+    ).toBe(5_000);
+    expect(
+      resolveTerminalDurationMs(
+        { startedAt: T0 + 3_000, durationMs: 1_000 },
+        T0 + 8_000
+      )
+    ).toBeUndefined();
+    expect(
+      resolveTerminalDurationMs(
+        { startedAt: T0 + 3_000, durationMs: 0 },
+        T0 + 8_000
+      )
+    ).toBe(5_000);
     expect(resolveTerminalDurationMs({}, T0 + 8_000)).toBeUndefined();
   });
 
@@ -136,7 +164,9 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
       sender: 'assistant',
       timestamp: t0,
       text: '最终总结正文',
-      toolCalls: [toolCall('tc-1', t0 + 5_000, { status: 'success', durationMs: 7_000 })],
+      toolCalls: [
+        toolCall('tc-1', t0 + 5_000, { status: 'success', durationMs: 7_000 }),
+      ],
       blocks: [
         {
           type: 'thought',
@@ -147,15 +177,23 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
           durationMs: 5_000,
         },
         blockTool('tc-1', t0 + 5_000),
-        { type: 'text', content: '最终总结正文', turnIndex: 0, startTime: t0 + 12_000 },
+        {
+          type: 'text',
+          content: '最终总结正文',
+          turnIndex: 0,
+          startTime: t0 + 12_000,
+        },
       ],
     } as SessionMessage;
 
     const { seg, spanMs, label } = runChain(msg);
 
-    // 2026-09-19 用户裁决：去除工作完成后的整体折叠，默认展开
+    // 默认开合以分段器 R8 表为准（timelineSegmenter 文件头，本表为组级
+    // 默认唯一权威）：已封口组 foldable=true、defaultExpanded=false。
+    // 原引 2026-09-19「终态默认展开」已被 R9/R8 口径明确覆盖
+    // （2026-11-02 整波收口裁定：本断言为存量过期，改期望不改代码）。
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(true);
+    expect(seg.defaultExpanded).toBe(false);
     expect(seg.isLive).toBe(false);
     expect(spanMs).toBe(12_000);
     expect(label).toBe('已完成 12.0 秒');
@@ -185,35 +223,70 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     expect(label).toBe('已完成 2.0 秒');
   });
 
-  it('后续工具段（正文之后）展示工具动作描述「已运行 1 条命令」（2026-09-11 用户裁决）', () => {
+  it('R9 单组：正文后工具入同一过程组（正文降级叙述行），组头承载整轮工作时间；动作摘要口径不变（2026-09-11 用户裁决）', () => {
     const msg: SessionMessage = {
       id: 'm-chain-4',
       sender: 'assistant',
       timestamp: T0,
       text: '总结',
-      toolCalls: [toolCall('tc-1', T0 + 2_000, { name: 'run_command', status: 'success', durationMs: 4_000 })],
+      toolCalls: [
+        toolCall('tc-1', T0 + 2_000, {
+          name: 'run_command',
+          status: 'success',
+          durationMs: 4_000,
+        }),
+      ],
       blocks: [
-        { type: 'thought', id: 'th-1', content: '思考一下', turnIndex: 0, startTime: T0, durationMs: 2_000 },
+        {
+          type: 'thought',
+          id: 'th-1',
+          content: '思考一下',
+          turnIndex: 0,
+          startTime: T0,
+          durationMs: 2_000,
+        },
         { type: 'text', content: '先输出部分正文', turnIndex: 0 },
         blockTool('tc-1', T0 + 2_000),
       ],
     } as SessionMessage;
 
-    const segs = partitionTimelineSegments(msg.id, buildAssistantTimeline(msg), false, false);
+    const segs = partitionTimelineSegments(
+      msg.id,
+      buildAssistantTimeline(msg),
+      false,
+      false
+    );
     const procSegs = segs.filter((s) => s.kind === 'process_section') as Array<{
       id: string;
       showWorkTime: boolean;
       metrics: any;
       items: any[];
     }>;
-    // 严格按时间线交错输出：思考段 -> 正文 -> 工具段，绝不允许强行聚合重排
-    expect(procSegs).toHaveLength(2);
+    // R9：正文之后仍有工具 → 该正文是组内叙述行，整轮只有一个过程组，
+    // 组内条目严格保持发生序（思考 -> 叙述正文 -> 工具），绝不重排
+    expect(procSegs).toHaveLength(1);
     expect(procSegs[0]?.showWorkTime).toBe(true);
-    expect(procSegs[0]?.items).toHaveLength(1);
-    expect(procSegs[1]?.showWorkTime).toBe(false);
-    expect(procSegs[1]?.items).toHaveLength(1);
-    const label = formatProcessControlLabel(procSegs[0]!.metrics, true, 6_000, false);
+    expect(procSegs[0]?.items.map((it: any) => it.kind)).toEqual([
+      'thought',
+      'text',
+      'tools',
+    ]);
+    // 组头工作时间 = 整轮物理跨度（思考 2s + 工具 4s = 6s）
+    const label = formatProcessControlLabel(
+      procSegs[0]!.metrics,
+      true,
+      6_000,
+      false
+    );
     expect(label).toBe('已完成 6.0 秒');
+    // 动作摘要口径不变（非工作时间组头文案函数对同一 metrics 的产出）
+    const actionLabel = formatProcessControlLabel(
+      procSegs[0]!.metrics,
+      false,
+      6_000,
+      false
+    );
+    expect(actionLabel).toBe('已运行 1 条命令');
   });
 
   it('负向断言：全链路文案不得出现已废除的「已深度思考」', () => {
@@ -226,7 +299,11 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
         toolCall('tc-1', T0, { status: 'success', durationMs: 1_000 }),
         toolCall('tc-2', T0 + 1_000, { status: 'success', durationMs: 1_000 }),
       ],
-      blocks: [blockTool('tc-1', T0), blockTool('tc-2', T0 + 1_000), { type: 'text', content: '总结' }],
+      blocks: [
+        blockTool('tc-1', T0),
+        blockTool('tc-2', T0 + 1_000),
+        { type: 'text', content: '总结' },
+      ],
     } as SessionMessage;
 
     const { label } = runChain(msg);

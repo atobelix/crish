@@ -1,7 +1,38 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
 import React from 'react';
+
+// markdown 渲染层同步替身（与 MarkdownBlockItem.gate.test.tsx 同模式）：
+// 真实 useMarkdownResult 经 Rust 桥异步产出 HTML，jsdom 下永不返回，
+// 活跃尾块按 R13 完成门口径在结果到达前零足迹——本文件的断言对象是
+// MessageContent 的分段/降级编排而非 markdown 引擎，故在此同步化。
+vi.mock('../../api/markdown/useMarkdownRender', () => ({
+  useMarkdownResult: vi.fn((markdown: string) =>
+    markdown
+      ? {
+          html: `S:${markdown}`,
+          truncated: false,
+          loading: false,
+          failed: false,
+        }
+      : { html: '', truncated: false, loading: false, failed: false }
+  ),
+  useMarkdownPrewarm: vi.fn(),
+}));
+vi.mock('../markdown/MarkdownSurface', () => ({
+  MarkdownSurface: ({
+    html,
+    className,
+  }: {
+    html: string;
+    className?: string;
+  }) => (
+    <div data-testid="md-surface" className={className}>
+      {html}
+    </div>
+  ),
+}));
 import { MessageContent } from './MessageContent';
 import { useStreamMessageViewModel } from './streamMessageViewModel';
 import { useStreamingStore } from '../../store/streamingStore';

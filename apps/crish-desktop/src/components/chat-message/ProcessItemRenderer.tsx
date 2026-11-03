@@ -33,10 +33,16 @@ export interface ProcessItemRendererProps {
   hasFinalAnswer?: boolean;
   isStreamingText?: boolean;
   streamingTextContent?: string;
+  /**
+   * 【R9】组内叙述行标记：text 项作为过程组内的中间正文渲染时为 true，
+   * 以过程排版（过程色、无答复间距）呈现；组外最终答复恒为 false。
+   * 叙述行恒为已封口静态文本，永不注入流式正文。
+   */
+  isNarration?: boolean;
 }
 
-export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
-  function ProcessItemRenderer({
+export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> =
+  React.memo(function ProcessItemRenderer({
     item,
     msgId,
     status,
@@ -49,6 +55,7 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
     hasFinalAnswer: _hasFinalAnswer,
     isStreamingText,
     streamingTextContent,
+    isNarration = false,
   }) {
     const toolItems = item.kind === 'tools' ? item.items : null;
     const itemsToPass = React.useMemo(
@@ -67,7 +74,7 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
         item.isLive ??
         (item.isStreaming !== undefined
           ? item.isStreaming
-          : (isThinkingMsg && !_hasFinalAnswer && !item.durationMs))
+          : isThinkingMsg && !_hasFinalAnswer && !item.durationMs)
       );
 
       if (renderThought) {
@@ -113,8 +120,13 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
       return (
         <div
           key={item.key}
-          className={styles.contentText}
+          className={
+            isNarration
+              ? `${styles.contentText} ${styles.narrationText}`
+              : styles.contentText
+          }
           data-kind="text"
+          data-narration={isNarration ? 'true' : undefined}
           data-start-time={item.startTime}
           data-duration-ms={item.durationMs}
         >
@@ -189,6 +201,5 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.mem
       return null;
     }
     return null;
-  }
-);
+  });
 ProcessItemRenderer.displayName = 'ProcessItemRenderer';

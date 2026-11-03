@@ -79,11 +79,12 @@
  * 【统一排版纪律 · 2026-09-11 用户裁决】
  * 控制栏文案与思考行 / 工具行严格同构：14px、字重 400、默认浅色。
  * 严禁此处再出现 12px / 500 字重 / --text-primary 的「花」样式。
+ * 【D5 定版 · 2026-11-02】字号随过程内容定版为 13px（覆盖上款字号部分）。
  */
 .summaryLabel {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-normal, 400);
   line-height: 1.2;
   color: inherit;
@@ -104,7 +105,8 @@
   line-height: 1;
   color: var(--text-tertiary);
   transform: rotate(0deg);
-  transition: transform var(--transition-micro, 100ms ease-out);
+  /* AN1 同钟：chevron 与段体 grid 共读根上的 --accordion-duration */
+  transition: transform var(--accordion-duration, var(--transition-accordion));
   flex-shrink: 0;
 }
 
@@ -128,12 +130,46 @@
   grid-template-rows: 1fr;
 }
 
+/*
+ * 段体（HC1 聚合封顶）：「思考 + 零散行」直排的段以段体为受限滚动区
+ * （--tool-aggregate-max-h 封顶 + 内部滚动，滚轮到界链式穿透）；
+ * 段内含真实工具组（≥2 工具的 FoldableToolGroup）时改由组体当滚动层，
+ * 段体只做折叠包络——滚动层级唯一化，指针路径上只许一层纵向滚动。
+ * 【F1 渐隐接入】段体经 ScrollFadeRegion 挂边缘渐隐（宿主即本层，
+ * data-fade 由 useScrollFade 内核维护，mask 作用于内层
+ * .sectionFadeInner）——用户裁决 (6)「封顶容器都带渐隐」覆盖 C1
+ * §5.2 的旧排除口径。含真实工具组时本层经 :has 让位（overflow 非
+ * auto），状态机以 computed overflow 为准恒 none，两层可滚时各自
+ * 按自身 overflow 显隐，无双重渐隐冲突。
+ */
 .sectionBodyInner {
   min-height: 0;
-  overflow: hidden;
+  max-height: var(--tool-aggregate-max-h, min(560px, 60vh));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+/*
+ * 段体渐隐内层（ScrollFadeRegion 内层的附加类）：承接段体原 flex
+ * 纵列布局——条目改为内层的 flex 子项后，间距 0、全宽拉伸与原直排
+ * 形态逐项一致；mask 由 scroll-fade.css 全局规则按宿主 data-fade
+ * 作用于本层。
+ */
+.sectionFadeInner {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sectionBodyInner:has(
+  [data-testid='foldable-tool-group']:not([data-single-tool='true'])
+) {
+  max-height: none;
+  overflow: visible;
 }
 
 /*

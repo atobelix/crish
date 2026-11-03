@@ -190,34 +190,38 @@ describe('SSOT 收敛 · 负向断言（旧字段 / 旧方法 / 旧类名零残�
     });
   });
 
-  describe('六、铁律四退役（R4b）：分派提取后子代理无强制展开特权', () => {
-    it('timelineSegmenter 不得以 subagentCount 短路 forceExpanded（负向断言，防回潮）', () => {
+  describe('六、铁律四段级属性删除（R9）：子代理无段级强制展开特权', () => {
+    it('timelineSegmenter 不产出 forceExpanded 字段（负向断言，防回潮）', () => {
       const src = readFileSync(
         join(SRC, 'api/tool-presentation/timelineSegmenter.ts'),
         'utf8'
       );
       expect(src).not.toMatch(/metrics\.subagentCount\s*>=\s*1/);
       expect(src).not.toMatch(/forceExpanded\s*=\s*true/);
+      // 段对象上不得再有 forceExpanded 字段赋值
+      expect(src).not.toMatch(/forceExpanded\s*:/);
     });
 
-    it('FoldableProcessSection 消费 forceExpanded 并在强展时永不挂 hidden', () => {
+    it('FoldableProcessSection 不再有段级强制展开机制，组体延迟挂载在位', () => {
       const src = readFileSync(
         join(SRC, 'components/chat-message/FoldableProcessSection.tsx'),
         'utf8'
       );
-      expect(src).toMatch(/forceExpanded/);
-      // 强展段恒为展开
-      expect(src).toMatch(/forceExpanded\s*\?\s*true\s*:/);
-      // 强展段禁用收起交互
-      expect(src).toMatch(/if\s*\(forceExpanded\)\s*return/);
+      // 负向：强展三元 / 强展守卫 / 强展赋值一律不得存在
+      expect(src).not.toMatch(/forceExpanded\s*\?\s*true\s*:/);
+      expect(src).not.toMatch(/if\s*\(forceExpanded\)\s*return/);
+      expect(src).not.toMatch(/forceExpanded\s*=/);
+      // 正向：R9 组级窗口化的组体延迟挂载 prop 在位
+      expect(src).toMatch(/deferredBodyHeight/);
     });
 
-    it('MessageContent 将 seg.forceExpanded 透传至容器（禁止本地重推导）', () => {
+    it('MessageContent 不再透传 forceExpanded（禁止本地重推导）', () => {
       const src = readFileSync(
         join(SRC, 'components/chat-message/MessageContent.tsx'),
         'utf8'
       );
-      expect(src).toMatch(/forceExpanded=\{seg\.forceExpanded\}/);
+      expect(src).not.toMatch(/seg\.forceExpanded/);
+      expect(src).not.toMatch(/forceExpanded=\{/);
       expect(src).toMatch(/isFoldable=\{seg\.foldable\}/);
       // 负向：不得本地推导 foldable
       expect(src).not.toMatch(/const\s+foldable\s*=/);

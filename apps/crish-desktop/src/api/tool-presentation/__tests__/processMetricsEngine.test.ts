@@ -12,6 +12,7 @@ import {
   arbitrateLeadAction,
   canonicalizeFsPath,
   formatDurationLabel,
+  formatProcessActionsSummary,
   formatProcessControlLabel,
   hasProcessContent,
 } from '../processMetricsEngine';
@@ -55,6 +56,7 @@ function emptyMetrics(): ProcessSegmentMetrics {
     totalDurationMs: 0,
     hasRunning: false,
     hasError: false,
+    errorCount: 0,
     isStreaming: false,
     leadAction: 'mixed',
   };
@@ -349,16 +351,17 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       subagentCount: 1,
       toolCount: 11,
     };
-    // 1. showWorkTime=true: 承载工作耗时，绝不含工具细分字样
+    // 1. showWorkTime=true: 承载工作耗时，绝不含工具细分字样（动作分布）；
+    // R8 起尾部可拼轮次级常驻统计（失败数 / 子 agent 数，〔同组 §3.2〕组头
+    // 组成定稿）——统计不是细分字样，不破 2026-09-11「时间栏专一承载」本意
     expect(formatProcessControlLabel(m, true, 5_000, true)).toBe(
-      '正在处理 5.0 秒'
+      '正在处理 5.0 秒 · 子 agent 1'
     );
     expect(formatProcessControlLabel(m, true, 5_000, false)).toBe(
-      '已完成 5.0 秒'
+      '已完成 5.0 秒 · 子 agent 1'
     );
     for (const live of [true, false]) {
       const out = formatProcessControlLabel(m, true, 5_000, live);
-      expect(out).not.toContain('\u00b7');
       expect(out).not.toContain('已编辑');
       expect(out).not.toContain('已搜索');
       expect(out).not.toContain('已读取');
@@ -368,10 +371,45 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
 
     // 2. showWorkTime=false: 展示调用了多少工具、分别是什么类型的描述（2026-09-11 用户裁决）
     const summary = formatProcessControlLabel(m, false, 5_000, false);
-    // R4b：子代理分派已提取为独立卡，过程摘要不再混排子代理计数
+    // 动作分布本体（formatProcessActionsSummary）仍不混排子代理计数（R4b）；
+    // 子 agent 数由轮次组头在本函数拼装层追加——两级分工见引擎注记
     expect(summary).toBe(
-      '已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令'
+      '已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令 · 子 agent 1'
     );
+  });
+
+  it('R8 组头拼装：失败数常驻组头（两分支同口径）；动作分布本体不含失败/子 agent 统计', () => {
+    const m = {
+      ...emptyMetrics(),
+      toolCount: 5,
+      commandCount: 3,
+      readFilesCount: 2,
+      hasError: true,
+      errorCount: 2,
+      subagentCount: 1,
+    };
+    // 工作时间分支：时间 + 失败数 + 子 agent 数，不拼动作分布
+    expect(formatProcessControlLabel(m, true, 12_500, false)).toBe(
+      '已完成 12.5 秒 · 失败 2 · 子 agent 1'
+    );
+    expect(formatProcessControlLabel(m, true, 12_500, true)).toBe(
+      '正在处理 12.5 秒 · 失败 2 · 子 agent 1'
+    );
+    // 分布分支：分布 + 失败数 + 子 agent 数
+    expect(formatProcessControlLabel(m, false, 12_500, false)).toBe(
+      '已读取 2 个文件 · 已运行 3 条命令 · 失败 2 · 子 agent 1'
+    );
+    // 动作分布单一来源本体：不含失败数与子 agent 数（工具组头消费口径）
+    expect(formatProcessActionsSummary(m)).toBe(
+      '已读取 2 个文件 · 已运行 3 条命令'
+    );
+    // 聚合层计数：errorCount 与 hasError 同步产出
+    const agg = aggregateProcessMetrics([
+      tools('e1', ['read_file', 'run_command'], 'error'),
+      tools('e2', ['grep_search'], 'success'),
+    ]);
+    expect(agg.hasError).toBe(true);
+    expect(agg.errorCount).toBe(2);
   });
 
   it('负向断言（源码级）：战役源码中「已深度思考」仅可存在于说明性注释，不得存在于可执行字面量', () => {
@@ -460,5 +498,41 @@ describe('classifyToolAction · 两阶段分类', () => {
   it('空名兜底为 command', () => {
     expect(classifyToolAction('')).toBe('command');
     expect(classifyToolAction(undefined)).toBe('command');
+  });
+});
+
+describe('formatProcessControlLabel · 无计时证据省略时长（F1 · R-C）', () => {
+  it('终态：跨度与聚合皆零 → 只拼「已完成」，不渲染 0.0 秒', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 2 };
+    const out = formatProcessControlLabel(m, true, 0, false);
+    expect(out).toBe('已完成');
+    expect(out).not.toContain('秒');
+  });
+
+  it('终态 · 无证据 + 失败数 → 「已完成 · 失败 N」（尾统计照常拼装）', () => {
+    const m = {
+      ...emptyMetrics(),
+      toolCount: 3,
+      hasError: true,
+      errorCount: 2,
+    };
+    expect(formatProcessControlLabel(m, true, 0, false)).toBe(
+      '已完成 · 失败 2'
+    );
+  });
+
+  it('运行中 · 无证据 → 只拼「正在处理」', () => {
+    const m = { ...emptyMetrics(), thoughtCount: 1, toolCount: 1 };
+    expect(formatProcessControlLabel(m, true, 0, true)).toBe('正在处理');
+  });
+
+  it('跨度为零但聚合耗时为正 → 以聚合为证据展示时长（口径不变）', () => {
+    const m = {
+      ...emptyMetrics(),
+      thoughtCount: 1,
+      toolCount: 1,
+      totalDurationMs: 12_500,
+    };
+    expect(formatProcessControlLabel(m, true, 0, false)).toBe('已完成 12.5 秒');
   });
 });

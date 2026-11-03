@@ -1,11 +1,11 @@
 /**
  * apps/crish-desktop/src/api/tool-presentation/__tests__/timelineSegmenter.test.ts
  *
- * 分段状态机与折叠裁决的纯逻辑穷举验证。
+ * 按轮单组分段状态机与折叠裁决的纯逻辑穷举验证（R9 过程组口径）。
  *
- * 覆盖：折叠裁决全部分支 + 短路顺序 + 负向断言（subagent 权威性）。
- * 铁律四（子代理强制展开特权）已随 R4b 分派提取退役，本文件以负向断言
- * 锁定其不得回潮：含 subagent 的段 forceExpanded 恒为 false。
+ * 覆盖：单组聚合（中间正文降级组内叙述行、发生序不变）、最终答复收紧
+ * 判定（其后无过程项）、纯过程收尾无答复段、状态通知物理界标、默认开合
+ * 过渡口径、段级 forceExpanded 物理删除的负向断言（不得回潮）。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -63,8 +63,8 @@ function injection(key: string): TimelineInjectionItem {
 
 /* ────────────────────────── 测试 ────────────────────────── */
 
-describe('partitionTimelineSegments · 基础切割', () => {
-  it('过程 + 正文 → 产出 1 个过程段 + 1 个正文段', () => {
+describe('partitionTimelineSegments · 基础切割（R9 单组模型）', () => {
+  it('过程 + 正文 → 产出 1 个过程组 + 1 个答复段', () => {
     const items: AssistantTimelineItem[] = [thought('t1', 1000), text('x1')];
     const segs = partitionTimelineSegments('m1', items, false, false);
 
@@ -75,14 +75,14 @@ describe('partitionTimelineSegments · 基础切割', () => {
     expect(segs[1]!.id).toBe('m1-text-0');
   });
 
-  it('无过程内容时不产出空过程段', () => {
+  it('无过程内容时不产出空过程组', () => {
     const items: AssistantTimelineItem[] = [text('x1')];
     const segs = partitionTimelineSegments('m1', items, false, false);
     expect(segs).toHaveLength(1);
     expect(segs[0]!.kind).toBe('text_narrative');
   });
 
-  it('多阶段过程与中间说明正文严格按原生因果时序交错分段，绝不强行聚合（2026-09-18 用户裁决）', () => {
+  it('R9 单组聚合：多阶段过程与中间正文全部入一个过程组，组内严格保持发生序，末正文独立为答复段', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
@@ -95,32 +95,70 @@ describe('partitionTimelineSegments · 基础切割', () => {
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
 
+    // 一轮 = 一个过程组 + 一个答复段（中间正文不再独立成段）
     expect(segs.map((s) => s.kind)).toEqual([
       'process_section',
       'text_narrative',
-      'process_section',
-      'text_narrative',
-      'process_section',
-      'text_narrative',
     ]);
-    expect(segs.map((s) => s.id)).toEqual([
-      'm1-proc-0',
-      'm1-text-0',
-      'm1-proc-1',
-      'm1-text-1',
-      'm1-proc-2',
-      'm1-text-2',
+    expect(segs.map((s) => s.id)).toEqual(['m1-proc-0', 'm1-text-0']);
+
+    // 组内条目与发生序逐项一致：思考 / 工具 / 中间正文（叙述行）交错原样保留
+    const group = segs[0] as { items: AssistantTimelineItem[] };
+    expect(group.items.map((it) => it.key)).toEqual([
+      't1',
+      'k1',
+      'x1',
+      't2',
+      'k2',
+      'x2',
+      'k3',
     ]);
-    // 每个过程段仅包含各自阶段的思考与工具，中间正文独立作为叙事段
-    const p0 = segs[0] as { items: AssistantTimelineItem[] };
-    expect(p0.items.map((it) => it.key)).toEqual(['t1', 'k1']);
-    const p1 = segs[2] as { items: AssistantTimelineItem[] };
-    expect(p1.items.map((it) => it.key)).toEqual(['t2', 'k2']);
-    const p2 = segs[4] as { items: AssistantTimelineItem[] };
-    expect(p2.items.map((it) => it.key)).toEqual(['k3']);
+    expect(group.items.map((it) => it.kind)).toEqual([
+      'thought',
+      'tools',
+      'text',
+      'thought',
+      'tools',
+      'text',
+      'tools',
+    ]);
+
+    // 答复段即最后一个正文项，且被标记为最终答复
+    const answer = segs[1] as {
+      item: TimelineTextItem;
+      isFinalAnswer: boolean;
+    };
+    expect(answer.item.key).toBe('x3');
+    expect(answer.isFinalAnswer).toBe(true);
   });
 
-  it('空正文不构成物理界标', () => {
+  it('最终答复判定收紧：正文之后仍有过程项时，该正文降级组内叙述行，整轮无答复段', () => {
+    const items: AssistantTimelineItem[] = [
+      text('x1', '先说结论再动手'),
+      thought('t1'),
+      tools('k1', ['read_file']),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]!.kind).toBe('process_section');
+    const group = segs[0] as { items: AssistantTimelineItem[] };
+    expect(group.items.map((it) => it.key)).toEqual(['x1', 't1', 'k1']);
+    // 负向断言：不得把被过程项跟随的正文误标为答复段
+    expect(segs.some((s) => s.kind === 'text_narrative')).toBe(false);
+  });
+
+  it('纯过程收尾（无正文）→ 整轮只有一个过程组、无答复段', () => {
+    const items: AssistantTimelineItem[] = [
+      thought('t1'),
+      tools('k1', ['read_file']),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]!.kind).toBe('process_section');
+    expect(segs[0]!.id).toBe('m1-proc-0');
+  });
+
+  it('空正文不构成物理界标、也不入组', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       text('x1', '   '),
@@ -128,7 +166,7 @@ describe('partitionTimelineSegments · 基础切割', () => {
       text('x2', '真实正文'),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
-    // 空正文既不构成界标、也不进入任何段 → 过程段合并为一个，含 2 项（thought + tools）
+    // 空正文既不构成界标、也不进入任何段 → 过程组合并为一个，含 2 项（thought + tools）
     expect(segs).toHaveLength(2);
     expect(segs[0]!.kind).toBe('process_section');
     expect((segs[0] as { items: unknown[] }).items).toHaveLength(2);
@@ -139,7 +177,7 @@ describe('partitionTimelineSegments · 基础切割', () => {
     expect(allKeys).not.toContain('x1');
   });
 
-  it('isFinalAnswer 仅标记最后一个正文段', () => {
+  it('isFinalAnswer 仅标记最后一个正文段（纯正文轮次）', () => {
     const items: AssistantTimelineItem[] = [text('x1'), text('x2'), text('x3')];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const texts = segs.filter((s) => s.kind === 'text_narrative');
@@ -149,25 +187,25 @@ describe('partitionTimelineSegments · 基础切割', () => {
   });
 });
 
-describe('partitionTimelineSegments · 终态过程段默认直出（2026-09-19 用户裁决）', () => {
-  it('中间过程段（有后继正文）→ foldable=true, defaultExpanded=true（去除整体折叠）', () => {
+describe('partitionTimelineSegments · 默认开合（R8 · 〔同组 §3.3〕组级表）', () => {
+  it('终态过程组（其后有答复）→ foldable=true, defaultExpanded=false（封口自动折为组头一行）', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
       text('x1'),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
-    const mid = segs[0] as {
+    const group = segs[0] as {
       foldable: boolean;
       defaultExpanded: boolean;
-      forceExpanded: boolean;
+      isLive: boolean;
     };
-    expect(mid.foldable).toBe(true);
-    expect(mid.defaultExpanded).toBe(true);
-    expect(mid.forceExpanded).toBe(false);
+    expect(group.foldable).toBe(true);
+    expect(group.defaultExpanded).toBe(false);
+    expect(group.isLive).toBe(false);
   });
 
-  it('存在后继正文时，过程段保持默认展开', () => {
+  it('流式期答复前的封口组 → defaultExpanded=false 且 isLive=false（封口即按终态折；live 只属尾部生长组）', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file']),
@@ -175,18 +213,16 @@ describe('partitionTimelineSegments · 终态过程段默认直出（2026-09-19 
       text('x1'),
     ];
     const segs = partitionTimelineSegments('m1', items, true, true);
-    const mid = segs[0] as {
+    const group = segs[0] as {
       foldable: boolean;
       defaultExpanded: boolean;
       isLive: boolean;
     };
-    expect(mid.foldable).toBe(true);
-    expect(mid.defaultExpanded).toBe(true);
-    expect(mid.isLive).toBe(false);
+    expect(group.foldable).toBe(true);
+    expect(group.defaultExpanded).toBe(false);
+    expect(group.isLive).toBe(false);
   });
-});
 
-describe('partitionTimelineSegments · 铁律二（尾部流式直出）', () => {
   it('尾部无正文 + turn live → foldable=true, defaultExpanded=true, isLive=true', () => {
     const items: AssistantTimelineItem[] = [
       text('x1'),
@@ -202,74 +238,148 @@ describe('partitionTimelineSegments · 铁律二（尾部流式直出）', () =>
     expect(tail.foldable).toBe(true);
     expect(tail.defaultExpanded).toBe(true);
     expect(tail.isLive).toBe(true);
+    // x1 其后有过程项 → 不是答复，已入组为叙述行：整轮只有一个组
+    expect(segs).toHaveLength(1);
   });
-});
 
-describe('partitionTimelineSegments · 终态自收敛（默认全部展开直出）', () => {
-  it('终态纯工具且 toolCount >= 2 → foldable=true, defaultExpanded=true', () => {
+  it('终态纯工具且 toolCount >= 2 → foldable=true, defaultExpanded=false', () => {
     const items: AssistantTimelineItem[] = [
       tools('k1', ['read_file', 'grep_search']),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(true);
+    expect(seg.defaultExpanded).toBe(false);
   });
 
-  it('终态纯工具且 toolCount < 2 → foldable=true, defaultExpanded=true', () => {
+  it('终态纯工具且 toolCount < 2 → foldable=true, defaultExpanded=false（单工具组有组头，同口径折）', () => {
     const items: AssistantTimelineItem[] = [tools('k1', ['read_file'])];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(true);
+    expect(seg.defaultExpanded).toBe(false);
   });
 
-  it('终态纯思考（无工具）→ defaultExpanded=true', () => {
+  it('终态纯思考（单条）→ defaultExpanded=true（单思考特例：无组头、思考行自有终态折叠）', () => {
     const items: AssistantTimelineItem[] = [thought('t1', 3000)];
     const segs = partitionTimelineSegments('m1', items, false, false);
     const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(seg.foldable).toBe(true);
     expect(seg.defaultExpanded).toBe(true);
   });
+
+  it('含失败工具的终态组 → defaultExpanded=false、metrics.errorCount 计数（失败组同口径折，失败数归组头）', () => {
+    const items: AssistantTimelineItem[] = [
+      {
+        kind: 'tools',
+        key: 'k1',
+        items: [
+          {
+            kind: 'single' as const,
+            tc: { id: 'k1-0', name: 'read_file', status: 'success' as const },
+          },
+          {
+            kind: 'single' as const,
+            tc: { id: 'k1-1', name: 'run_command', status: 'error' as const },
+          },
+          {
+            kind: 'single' as const,
+            tc: { id: 'k1-2', name: 'grep_search', status: 'error' as const },
+          },
+        ],
+      },
+      text('x1'),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    const seg = segs[0] as {
+      foldable: boolean;
+      defaultExpanded: boolean;
+      metrics: { hasError: boolean; errorCount: number };
+    };
+    expect(seg.foldable).toBe(true);
+    expect(seg.defaultExpanded).toBe(false);
+    expect(seg.metrics.hasError).toBe(true);
+    expect(seg.metrics.errorCount).toBe(2);
+  });
+
+  it('状态通知切分：首组终态折（false）；通知后第二组补轻量组头、同口径终态折（false）（F1 · R-A）', () => {
+    const items: AssistantTimelineItem[] = [
+      tools('k1', ['read_file', 'grep_search']),
+      injection('n1'),
+      tools('k2', ['run_command', 'view_file']),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
+    const groups = segs.filter((s) => s.kind === 'process_section') as {
+      id: string;
+      defaultExpanded: boolean;
+      isLive: boolean;
+    }[];
+    expect(groups).toHaveLength(2);
+    expect(groups[0]!.id).toBe('m1-proc-0');
+    expect(groups[0]!.defaultExpanded).toBe(false);
+    expect(groups[1]!.id).toBe('m1-proc-1');
+    expect(groups[1]!.defaultExpanded).toBe(false);
+    expect(groups[1]!.isLive).toBe(false);
+  });
+
+  it('状态通知切分 + 流式：尾部组 isLive=true 且 defaultExpanded=true（跟随当前动作）', () => {
+    const items: AssistantTimelineItem[] = [
+      tools('k1', ['read_file', 'grep_search']),
+      injection('n1'),
+      tools('k2', ['run_command']),
+    ];
+    const segs = partitionTimelineSegments('m1', items, true, false);
+    const groups = segs.filter((s) => s.kind === 'process_section') as {
+      defaultExpanded: boolean;
+      isLive: boolean;
+    }[];
+    expect(groups).toHaveLength(2);
+    // 首组被注入封口 → 按终态折
+    expect(groups[0]!.defaultExpanded).toBe(false);
+    expect(groups[0]!.isLive).toBe(false);
+    // 尾部生长组 → 展开
+    expect(groups[1]!.isLive).toBe(true);
+    expect(groups[1]!.defaultExpanded).toBe(true);
+  });
 });
 
-describe('partitionTimelineSegments · 铁律四退役（R4b：分派提取后无强制展开特权）', () => {
-  it('subagentCount >= 1 → forceExpanded=false（特权已删），其余裁决不变', () => {
+describe('partitionTimelineSegments · 段级 forceExpanded 已删除（R9，防回潮）', () => {
+  it('含 subagent 的组：metrics 整组聚合，段对象上不存在 forceExpanded 字段', () => {
     const items: AssistantTimelineItem[] = [
       tools('k1', ['invoke_subagent']),
       text('x1'),
       tools('k2', ['run_command']),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
+    // x1 其后有过程项 → 入组叙述行；整轮一个组
+    expect(segs).toHaveLength(1);
     const seg = segs[0] as {
       foldable: boolean;
       defaultExpanded: boolean;
-      forceExpanded: boolean;
       metrics: { subagentCount: number };
     };
     expect(seg.metrics.subagentCount).toBe(1);
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(true);
-    expect(seg.forceExpanded).toBe(false);
+    // R8：子 agent 不再构成强制展开——终态组按 §3.3 同口径自动折，
+    // 分派卡是组内条目（头行恒可见于展开态），不回潮段级强展
+    expect(seg.defaultExpanded).toBe(false);
+    // 负向断言：段级强制展开字段已物理删除，不得以任何形式残留
+    expect('forceExpanded' in seg).toBe(false);
   });
 
-  it('subagentCount >= 1（终态纯工具）→ forceExpanded=false，不再强制展开', () => {
+  it('含 subagent 的终态纯工具组 → 同样不存在 forceExpanded 字段', () => {
     const items: AssistantTimelineItem[] = [
       tools('k1', ['invoke_subagent', 'run_subagent', 'read_file']),
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
-    const seg = segs[0] as {
-      foldable: boolean;
-      defaultExpanded: boolean;
-      forceExpanded: boolean;
-    };
+    const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(true);
-    expect(seg.forceExpanded).toBe(false);
+    expect(seg.defaultExpanded).toBe(false);
+    expect('forceExpanded' in seg).toBe(false);
   });
 
-  /* ── 负向断言：无 subagent 不得获得特权 ── */
-  it('负向断言：无 subagent 的段 forceExpanded 必须为 false', () => {
+  /* ── 负向断言：任何组都不得携带段级强制展开 ── */
+  it('负向断言：全部输出段均无 forceExpanded 字段', () => {
     const items: AssistantTimelineItem[] = [
       tools('k1', ['read_file', 'grep_search', 'run_command']),
       text('x1'),
@@ -277,9 +387,9 @@ describe('partitionTimelineSegments · 铁律四退役（R4b：分派提取后�
     ];
     const segs = partitionTimelineSegments('m1', items, false, false);
     for (const seg of segs) {
+      expect('forceExpanded' in seg).toBe(false);
       if (seg.kind === 'process_section') {
         expect(seg.metrics.subagentCount).toBe(0);
-        expect(seg.forceExpanded).toBe(false);
       }
     }
   });
@@ -298,10 +408,10 @@ describe('partitionTimelineSegments · 铁律四退役（R4b：分派提取后�
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 顶部工作工作时间区显示门槛（用户裁决 · 2026-09-11）
- *   只有一个思考 或 只有一个工具调用 → 工作时间区域与分割线一律不显示
+ * 顶部工作时间唯一位置（用户裁决 · 2026-09-11）
+ *   ── R9 后由整轮唯一过程组（或注入切分后的首组）承载
  * ═══════════════════════════════════════════════════════════════════════════ */
-describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 用户裁决）', () => {
+describe('partitionTimelineSegments · 工作时间唯一位置（2026-09-11 用户裁决）', () => {
   function capsuleOf(items: AssistantTimelineItem[], isTurnLive = false) {
     const segs = partitionTimelineSegments('m1', items, isTurnLive, false);
     const seg = segs.find((s) => s.kind === 'process_section') as
@@ -315,8 +425,8 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     return seg;
   }
 
-  it('首个过程段（紧跟用户消息下方）→ showWorkTime=true（整轮唯一工作时间）', () => {
-    // 无论是单一思考、单一工具、还是混合，首个过程段均承载整轮工作时间
+  it('首个过程组（紧跟用户消息下方）→ showWorkTime=true（整轮唯一工作时间）', () => {
+    // 无论是单一思考、单一工具、还是混合，首个过程组均承载整轮工作时间
     expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(true);
     expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(true);
     expect(
@@ -327,7 +437,7 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     ).toBe(true);
   });
 
-  it('过程中间正文与后续工具严格按原生时序交错分段，首个过程段承载 showWorkTime', () => {
+  it('中间正文入组后仍由该唯一过程组承载 showWorkTime（组内含叙述行）', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       text('x1', '回答中间过渡正文'),
@@ -341,14 +451,17 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
       showWorkTime: boolean;
       items: AssistantTimelineItem[];
     }>;
-    expect(procSections).toHaveLength(2);
+    // R9：中间正文不再切出第二组——x1 其后有过程项，是组内叙述行
+    expect(procSections).toHaveLength(1);
     expect(procSections[0]?.showWorkTime).toBe(true);
-    expect(procSections[0]?.items).toHaveLength(1);
-    expect(procSections[1]?.showWorkTime).toBe(false);
-    expect(procSections[1]?.items).toHaveLength(1);
+    expect(procSections[0]?.items.map((it) => it.key)).toEqual([
+      't1',
+      'x1',
+      'k1',
+    ]);
   });
 
-  it('段起止时间戳：终态取段内最早 / 最晚 startTime', () => {
+  it('组起止时间戳：终态取组内最早 / 最晚 startTime', () => {
     const t1: TimelineThoughtItem = { ...thought('t1'), startTime: 1_000 };
     const k1: TimelineToolsItem = {
       ...tools('k1', ['read_file']),
@@ -359,7 +472,7 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     expect(seg?.endTime).toBe(4_500);
   });
 
-  it('段起止时间戳：活跃态 endTime 必须为 undefined（跳秒）', () => {
+  it('组起止时间戳：活跃态 endTime 必须为 undefined（跳秒）', () => {
     const t1: TimelineThoughtItem = { ...thought('t1'), startTime: 1_000 };
     const k1: TimelineToolsItem = {
       ...tools('k1', ['read_file']),
@@ -394,7 +507,7 @@ describe('partitionTimelineSegments · 工作时间区唯一位置（2026-09-11 
     expect(procSeg).toBeDefined();
     expect(procSeg.showWorkTime).toBe(true);
 
-    // 1. 外部工作时间段：从消息起点到终点跨度为整轮 54 秒（54000ms）
+    // 1. 外部工作时间：从消息起点到终点跨度为整轮 54 秒（54000ms）
     expect(procSeg.startTime).toBe(10_000);
     expect(procSeg.endTime).toBe(64_000);
     expect(procSeg.endTime - procSeg.startTime).toBe(54_000);
@@ -428,7 +541,7 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
     expect(partitionTimelineSegments('m1', [], false, false)).toEqual([]);
   });
 
-  it('仅注入项 → 产出状态通知段（绝不落入可折叠过程段）', () => {
+  it('仅注入项 → 产出状态通知段（绝不落入可折叠过程组）', () => {
     const segs = partitionTimelineSegments(
       'm1',
       [injection('i1')],
@@ -442,7 +555,7 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
     expect(segs.some((s) => s.kind === 'process_section')).toBe(false);
   });
 
-  it('注入项作为物理界标：先冲掉前置过程段，本体常驻平铺', () => {
+  it('注入项作为物理界标：先冲掉前置过程组，本体常驻平铺，后续项另起一组', () => {
     const items: AssistantTimelineItem[] = [
       thought('t1'),
       tools('k1', ['read_file', 'grep_search']),
@@ -457,14 +570,15 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
       'process_section',
       'text_narrative',
     ]);
-    // 注入前的段保持默认展开（去除整体折叠）
+    // R8 §3.3 + F1 · R-A：首组（工作时间控制栏）终态默认折叠；注入
+    // 后的组补轻量组头（非工作时间文案分支），同口径参与组级折——
+    // 终态默认折叠，重开入口即该轻量组头，不再平铺整段过程内容
     const first = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(first.foldable).toBe(true);
-    expect(first.defaultExpanded).toBe(true);
-    // 注入后的段同样保持默认展开
+    expect(first.defaultExpanded).toBe(false);
     const third = segs[2] as { foldable: boolean; defaultExpanded: boolean };
     expect(third.foldable).toBe(true);
-    expect(third.defaultExpanded).toBe(true);
+    expect(third.defaultExpanded).toBe(false);
   });
 
   it('负向断言：注入项绝不可出现在任何 process_section 的 items 中', () => {
@@ -497,10 +611,10 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * 终态段末点锚定（物理终点口径）
+ * 终态组末点锚定（物理终点口径）
  *
  * 历史缺陷：segEnd 取 max(startTime)，等价于把「末项自身执行时长」整体抹掉——
- * 双工具段只显示首工具耗时，单工具段恒为 0。终态定格必须锚定物理终点。
+ * 双工具组只显示首工具耗时，单工具组恒为 0。终态定格必须锚定物理终点。
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function proc(items: AssistantTimelineItem[], isLive = false) {
@@ -512,8 +626,8 @@ function proc(items: AssistantTimelineItem[], isLive = false) {
   return seg;
 }
 
-describe('partitionTimelineSegments · 终态段末点锚定（max(start + duration)）', () => {
-  it('双工具段：endTime 计入末项执行时长（负向：不得退化为 max(startTime)）', () => {
+describe('partitionTimelineSegments · 终态组末点锚定（max(start + duration)）', () => {
+  it('双工具组：endTime 计入末项执行时长（负向：不得退化为 max(startTime)）', () => {
     const t0 = 1_700_000_000_000;
     const seg = proc([
       { ...tools('a', ['read_file']), startTime: t0, durationMs: 3_000 },
@@ -545,7 +659,7 @@ describe('partitionTimelineSegments · 终态段末点锚定（max(start + durat
     expect(seg.endTime! - seg.startTime!).toBe(12_000);
   });
 
-  it('末项缺 durationMs：终点退化为该项起点，且恒不小于段起点', () => {
+  it('末项缺 durationMs：终点退化为该项起点，且恒不小于组起点', () => {
     const t0 = 1_700_000_000_000;
     const seg = proc([
       { ...tools('a', ['read_file']), startTime: t0, durationMs: 2_000 },
@@ -556,15 +670,15 @@ describe('partitionTimelineSegments · 终态段末点锚定（max(start + durat
     expect(seg.endTime!).toBeGreaterThanOrEqual(seg.startTime!);
   });
 
-  it('无 startTime 但聚合有总耗时 → 以 segStart + totalDurationMs 兜底（禁止恒 0 假象）', () => {
-    // 段内无绝对时钟，仅携带 durationMs：段起点由分段器置空，
+  it('无 startTime 但聚合有总耗时 → totalDurationMs 如实聚合（禁止恒 0 假象）', () => {
+    // 组内无绝对时钟，仅携带 durationMs：组起点由分段器置空，
     // 此时「工作 xx 时间」退化为语义标签，但不得产出负时长。
     const seg = proc([thought('t1', 4_000), tools('k1', ['read_file'])]);
     expect(seg.startTime).toBeUndefined();
     expect(seg.metrics.totalDurationMs).toBe(4_000);
   });
 
-  it('活跃段（铁律二）endTime 恒为 undefined —— 跳秒口径不被终态公式污染', () => {
+  it('活跃组 endTime 恒为 undefined —— 跳秒口径不被终态公式污染', () => {
     const t0 = 1_700_000_000_000;
     const seg = proc(
       [

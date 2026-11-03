@@ -138,13 +138,20 @@ export interface ProcessSegmentMetrics {
   hasRunning: boolean;
   /** 段内是否存在失败的工具 */
   hasError: boolean;
+  /** 段内失败的工具数量（hasError 的计数形态；组头常驻失败数与工具组头
+   * ⚠+数字角标的唯一数据源，R8 归口） */
+  errorCount: number;
   /** 段内是否存在流式内容 */
   isStreaming: boolean;
   /** 主导动作（折叠态图标与摘要排序依据） */
   leadAction: ProcessLeadAction;
 }
 
-/** 过程段（可折叠的过程块） */
+/**
+ * 过程组（可折叠的过程块）。R9 起按轮单组：一轮至多一个（id 恒为
+ * `${msgId}-proc-0`）；仅当状态通知作为物理界标切分时才顺延 proc-1……。
+ * 组内条目含思考 / 工具 / 降级为叙述行的中间正文（kind === 'text'）。
+ */
 export interface ProcessTimelineSegment {
   kind: 'process_section';
   /** 唯一稳定键，格式 `${msgId}-proc-${index}` */
@@ -170,12 +177,10 @@ export interface ProcessTimelineSegment {
    * 该字段由 `partitionTimelineSegments` 唯一裁决，禁止调用方本地重推导。
    */
   showWorkTime: boolean;
-  /** 是否具备折叠资格（由四铁律裁决，禁止调用方本地推导） */
+  /** 是否具备折叠资格（由分段器裁决，禁止调用方本地推导） */
   foldable: boolean;
   /** 默认展开态（仅作初始态参考；运行时展开态由宿主字典控制） */
   defaultExpanded: boolean;
-  /** 【铁律四】含子代理的过程段强制展开：true 时收起行为须被禁用 */
-  forceExpanded: boolean;
   /** 是否处于流式活跃执行态 */
   isLive: boolean;
 }

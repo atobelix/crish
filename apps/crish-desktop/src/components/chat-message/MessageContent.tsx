@@ -68,35 +68,38 @@ export interface MessageContentProps {
 }
 
 /**
- * 单段折叠展开态字典：`sectionId → boolean`。
+ * 过程组折叠展开态字典：`sectionId → boolean`。
  *
  * 收敛说明：历史实现使用「整条消息一个布尔」的 `searchExpandBridge`，
  * 无法表达「同一消息内多过程段各自独立展开」。此处以 section 粒度收敛，
- * 并保留 bridge 作为外部（检索命中）命令入口。
+ * 并保留 bridge 作为外部（检索命中）命令入口。R9 单组化后一轮通常只有
+ * 一个过程组键（仅状态通知切分时多组），字典机制不变。
  */
 type SectionExpandedMap = Record<string, boolean>;
 
 /* ═══════════════════════════════════════════════════════════════════════
- * R3 行内尾部窗口化（渲染整改波 1 · MessageContent 段渲染组织内）
+ * 行内尾部窗口化（R3 落地段级形态，R9 起单位改判为组）
  *
- * 背景（性能审计 P0-1）：巨型回合的单行可达约 5,000 DOM 节点，历史过程段
- * 全部真实挂载既拖慢流式帧，也让行测高/重排成本随回合长度线性增长。
- * 口径：仅当段数与估算节点数双双越过阈值时才启用——已封口、非末段、
- * 未被用户交互过的历史过程段先以等高骨架占位，进入视口预热区
+ * 背景（性能审计 P0-1）：巨型回合的单行可达约 5,000 DOM 节点，历史过程
+ * 内容全部真实挂载既拖慢流式帧，也让行测高/重排成本随回合长度线性增长。
+ * 口径（R9）：占位单位为**过程组**——整组已封口、非末位、未被用户交互过，
+ * 且组内条目数与估算节点数双双越过阈值时才启用；占位采用二段式：
+ * **组头（控制栏）常驻 + 组体等高占位**，组体占位进入视口预热区
  * （rootMargin 1200px）时由 IntersectionObserver 真实挂载（单向闩：
- * 挂载后不再回退占位）。活跃段、末段、含子代理的强制展开段永不占位。
- * 边界：本机制只改「段何时挂载」，不改 FoldableProcessSection 的
- * DOM 常驻语义（折叠段 hidden=until-found 的页内查找取舍归 D1/R10）。
- * 已知代价（诚实标注）：占位期间该段内容不进入浏览器原生 Ctrl+F 查找；
- * 检索展开命令（searchExpandBridge）会先全量挂载再展开，不受影响。
+ * 挂载后不再回退占位）。活跃组永不占位。
+ * 边界：本机制只改「组体何时挂载」，不改 FoldableProcessSection 的
+ * DOM 常驻语义（折叠组 hidden=until-found 的页内查找取舍归 D1 改判口径）。
+ * 已知代价（诚实标注）：组体占位期间其内容不进入浏览器原生 Ctrl+F 查找
+ * （组头常驻，摘要始终可见）；检索展开命令（searchExpandBridge）会先
+ * 全量挂载再展开，不受影响。
  * IntersectionObserver 不可用（如 jsdom）时整体禁用，渲染与旧行为一致。
  * ═══════════════════════════════════════════════════════════════════════ */
 
-/** 启用窗口化的最小段数（低于此规模的行直接全量挂载，零额外机制） */
-const SEGMENT_WINDOW_MIN_SEGMENTS = 16;
-/** 启用窗口化的最小估算节点数（审计实测问题行约 5,005 节点，取约半数） */
-const SEGMENT_WINDOW_MIN_NODES = 2400;
-/** 占位段进入视口外扩预热距离（px），保证滚动到达前完成真实挂载 */
+/** 启用组级窗口化的最小组内条目数（R3 段数条件的组粒度等价物） */
+const GROUP_WINDOW_MIN_ITEMS = 16;
+/** 启用组级窗口化的最小估算节点数（审计实测问题行约 5,005 节点，取约半数） */
+const GROUP_WINDOW_MIN_NODES = 2400;
+/** 占位组体进入视口外扩预热距离（px），保证滚动到达前完成真实挂载 */
 const SEGMENT_WINDOW_ROOT_MARGIN_PX = 1200;
 
 const EMPTY_SECTION_HEIGHTS: ReadonlyMap<string, number> = new Map();
@@ -112,7 +115,7 @@ function estimateToolRenderNodes(item: ToolRenderItem): number {
   return nodes;
 }
 
-/** 段估算节点数（启发式，仅用于窗口化阈值判定，不参与测高） */
+/** 段/组估算节点数（启发式，仅用于窗口化阈值判定，不参与测高） */
 function estimateSegmentNodes(seg: TimelineSegment): number {
   if (seg.kind === 'text_narrative') {
     return 20 + Math.ceil(seg.item.content.length / 100);
@@ -128,6 +131,9 @@ function estimateSegmentNodes(seg: TimelineSegment): number {
       for (const ri of item.items) {
         nodes += estimateToolRenderNodes(ri);
       }
+    } else if (item.kind === 'text') {
+      // 组内叙述行：全文 Markdown 渲染，节点密度与正文段同口径
+      nodes += 20 + Math.ceil(item.content.length / 100);
     } else if (item.kind === 'injection') {
       nodes += 10;
     } else {
@@ -137,11 +143,11 @@ function estimateSegmentNodes(seg: TimelineSegment): number {
   return nodes;
 }
 
-/** 占位骨架估算高度（px）：仅需量级接近，真实挂载后由 VSM 重测纠正 */
+/** 组体占位估算高度（px）：仅需量级接近，真实挂载后由 VSM 重测纠正 */
 function estimateProcessSectionHeightPx(seg: ProcessTimelineSegment): number {
   let px = 36;
   for (const item of seg.items) {
-    if (item.kind === 'thought') {
+    if (item.kind === 'thought' || item.kind === 'text') {
       px += 22 + Math.ceil(item.content.length / 55) * 17;
     } else if (item.kind === 'tools') {
       for (const ri of item.items) {
@@ -291,7 +297,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       [timeline]
     );
 
-    // ── 分段唯一权威：`partitionTimelineSegments`（四铁律裁决） ──
+    // ── 分段唯一权威：`partitionTimelineSegments`（R9 过程组口径） ──
     const hasStreamText = Boolean(streamText != null && streamText.length > 0);
     const rawSegments: TimelineSegment[] = useMemo(
       () =>
@@ -333,24 +339,21 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return next;
     }, [rawSegments, msg.id]);
 
-    // R3 窗口化计划：段数与估算节点数双阈值判定 + 占位高度表（口径见文件头常量区）
+    // R9 组级窗口化计划：逐组以「组内条目数 + 估算节点数」双阈值判定，
+    // 命中的组登记其组体占位高度（口径见文件头常量区）
     const windowPlan = useMemo(() => {
-      if (
-        segments.length < SEGMENT_WINDOW_MIN_SEGMENTS ||
-        typeof IntersectionObserver === 'undefined'
-      ) {
+      if (typeof IntersectionObserver === 'undefined') {
         return { engaged: false, heights: EMPTY_SECTION_HEIGHTS };
       }
-      let totalNodes = 0;
       const heights = new Map<string, number>();
       for (const seg of segments) {
-        totalNodes += estimateSegmentNodes(seg);
-        if (seg.kind === 'process_section') {
-          heights.set(seg.id, estimateProcessSectionHeightPx(seg));
-        }
+        if (seg.kind !== 'process_section') continue;
+        if (seg.items.length < GROUP_WINDOW_MIN_ITEMS) continue;
+        if (estimateSegmentNodes(seg) < GROUP_WINDOW_MIN_NODES) continue;
+        heights.set(seg.id, estimateProcessSectionHeightPx(seg));
       }
       return {
-        engaged: totalNodes >= SEGMENT_WINDOW_MIN_NODES,
+        engaged: heights.size > 0,
         heights: heights as ReadonlyMap<string, number>,
       };
     }, [segments]);
@@ -360,9 +363,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       const initial: SectionExpandedMap = {};
       for (const seg of segments) {
         if (seg.kind === 'process_section') {
-          initial[seg.id] = seg.forceExpanded
-            ? true
-            : (seg.defaultExpanded ?? true);
+          initial[seg.id] = seg.defaultExpanded ?? true;
         }
       }
       return initial;
@@ -378,7 +379,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       for (const seg of segments) {
         if (seg.kind !== 'process_section') continue;
         if (userInteractedKeysRef.current.has(seg.id)) continue;
-        const target = seg.forceExpanded ? true : (seg.defaultExpanded ?? true);
+        const target = seg.defaultExpanded ?? true;
         const currentEffective = expandedMap[seg.id] ?? seg.defaultExpanded;
         if (
           Object.prototype.hasOwnProperty.call(expandedMap, seg.id) &&
@@ -421,7 +422,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       [sessionId, msg.id, onInvalidateActual]
     );
 
-    // ── R3 窗口化挂载登记（单向闩：进入集合后永不回退占位） ──
+    // ── R9 组级窗口化挂载登记（单向闩：进入集合后永不回退占位） ──
     const mountedSectionsRef = useRef<{ msgId: string; ids: Set<string> }>({
       msgId: '',
       ids: new Set(),
@@ -505,7 +506,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         for (const seg of segments) {
           if (seg.kind !== 'process_section') continue;
           userInteractedKeysRef.current.add(seg.id);
-          // R3：检索展开必须先全量真实挂载占位段，否则展开无 DOM 可作用
+          // R9：检索展开必须先全量真实挂载占位组体，否则展开无 DOM 可作用
           if (!mountedSectionsRef.current.ids.has(seg.id)) {
             mountedSectionsRef.current.ids.add(seg.id);
             mountedAny = true;
@@ -564,18 +565,18 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       Boolean(displayMsg.thinkingTurns?.some((tt) => tt.isStreaming));
 
     /**
-     * 过程段渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）。
+     * 过程组渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）。
      *
-     * R3 回调稳定化（渲染整改波 1）：本回调的全部调用点——过程段的
-     * renderItem 与状态通知段——永远不会收到 text 条目：流式正文项只
-     * 出现在 text_narrative 段并走下方内联路径（该路径自带 D7.2/FE-INV-6
-     * 的流式注入面收窄：仅活跃尾项注入 streamingTextContent，历史项恒
-     * undefined）。旧实现把 streamText / streamingTextItem /
-     * activeStreamSlice 列入本回调依赖，对这些调用点恒为死值，却让回调
-     * 每帧重建、击穿每个 FoldableProcessSection 的 React.memo，历史段
-     * 随之每帧重渲染。现只依赖回合级稳定量：流式期间引用恒定；
-     * hasFinalAnswer 取派生布尔（整个回合至多翻转一次），不再依赖
-     * 每帧变化的正文串。
+     * R3 回调稳定化（渲染整改波 1）：流式正文项只出现在 text_narrative
+     * 段并走下方内联路径（该路径自带 D7.2/FE-INV-6 的流式注入面收窄：
+     * 仅活跃尾项注入 streamingTextContent，历史项恒 undefined）。
+     * R9 后本回调会收到组内 text 条目（叙述行）：叙述行恒为已封口的
+     * 静态文本（其后必有过程项），永不注入流式正文，故本回调对
+     * streamText / streamingTextItem 仍无依赖——旧实现把它们列入依赖
+     * 时对这些调用点恒为死值，却让回调每帧重建、击穿每个
+     * FoldableProcessSection 的 React.memo。现只依赖回合级稳定量：
+     * 流式期间引用恒定；hasFinalAnswer 取派生布尔（整个回合至多翻转
+     * 一次），不再依赖每帧变化的正文串。
      */
     const hasFinalAnswerNow = Boolean(
       displayMsg.text?.trim() || streamText?.trim()
@@ -595,6 +596,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           hasFinalAnswer={hasFinalAnswerNow}
           isStreamingText={false}
           streamingTextContent={undefined}
+          isNarration={item.kind === 'text'}
         />
       ),
       [
@@ -722,28 +724,17 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             );
           }
 
-          // 过程段
+          // 过程组
           const isExpanded = expandedMap[seg.id] ?? seg.defaultExpanded;
-          // R3 行内尾部窗口化：符合条件的历史封口段先以等高骨架占位，
-          // IntersectionObserver 在进入预热区时真实挂载（口径见文件头常量区）。
-          if (
-            windowPlan.engaged &&
+          // R9 组级窗口化（二段式）：符合条件的历史封口组组头常驻、
+          // 组体先以等高占位替代挂载，IntersectionObserver 在占位进入
+          // 预热区时真实挂载组体（口径见文件头常量区）。
+          const deferBody =
+            windowPlan.heights.has(seg.id) &&
             !seg.isLive &&
-            !seg.forceExpanded &&
             segIndex < segments.length - 1 &&
             !userInteractedKeysRef.current.has(seg.id) &&
-            !mountedSectionsRef.current.ids.has(seg.id)
-          ) {
-            return (
-              <div
-                key={seg.id}
-                ref={registerPlaceholder(seg.id)}
-                data-testid="process-section-placeholder"
-                data-section-id={seg.id}
-                style={{ height: windowPlan.heights.get(seg.id) ?? 48 }}
-              />
-            );
-          }
+            !mountedSectionsRef.current.ids.has(seg.id);
           return (
             <FoldableProcessSection
               key={seg.id}
@@ -757,7 +748,12 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               isLive={seg.isLive}
               isExpanded={isExpanded}
               isFoldable={seg.foldable}
-              forceExpanded={seg.forceExpanded}
+              deferredBodyHeight={
+                deferBody ? (windowPlan.heights.get(seg.id) ?? 48) : undefined
+              }
+              bodyPlaceholderRef={
+                deferBody ? registerPlaceholder(seg.id) : undefined
+              }
               onToggle={handleToggleSection}
               onExpand={handleExpandSection}
               renderItem={renderProcessItem}

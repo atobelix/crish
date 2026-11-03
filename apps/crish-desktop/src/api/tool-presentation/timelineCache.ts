@@ -444,7 +444,6 @@ function timelineSegmentEqual(a: TimelineSegment, b: TimelineSegment): boolean {
         a.showWorkTime !== bb.showWorkTime ||
         a.foldable !== bb.foldable ||
         a.defaultExpanded !== bb.defaultExpanded ||
-        a.forceExpanded !== bb.forceExpanded ||
         a.isLive !== bb.isLive ||
         a.items.length !== bb.items.length ||
         !metricsEqual(a.metrics, bb.metrics)

@@ -20,7 +20,11 @@ class SearchExpandBridgeImpl {
     return this.expandedMap.get(msgId) ?? defaultValue;
   }
 
-  public setExpanded(msgId: string, expanded: boolean, sessionId?: string): void {
+  public setExpanded(
+    msgId: string,
+    expanded: boolean,
+    sessionId?: string
+  ): void {
     if (!msgId) return;
     if (sessionId) {
       this.bindMessageToSession(sessionId, msgId);
@@ -38,11 +42,21 @@ class SearchExpandBridgeImpl {
   }
 
   public expandMessageProcess(msgId: string): void {
-    this.setExpanded(msgId, true);
+    if (!msgId) return;
+    // 命令语义而非状态同步：即便桥内已登记为 true 也必须重新投递。
+    // 宿主开合还可被段级键改写（用户手动收拢经 sectionId 写桥），消息级
+    // 登记值与宿主实际开合脱同步时，setExpanded 的去重短路会让展开命令
+    // 石沉大海——检索穿透在「展开过 → 手动收拢 → 再展开」序列上失效
+    // （2026-11-02 整波收口实证修复）。
+    this.expandedMap.set(msgId, true);
+    this.notify(msgId, true);
   }
 
   public collapseMessageProcess(msgId: string): void {
-    this.setExpanded(msgId, false);
+    if (!msgId) return;
+    // 与 expandMessageProcess 同口径：命令必达，不走去重短路。
+    this.expandedMap.set(msgId, false);
+    this.notify(msgId, false);
   }
 
   public getAllExpandedMessageIds(): string[] {
@@ -154,14 +168,21 @@ class SearchExpandBridgeImpl {
 
 export const searchExpandBridge = new SearchExpandBridgeImpl();
 
-export const isMessageProcessExpanded = (msgId: string, defaultVal = false): boolean =>
-  searchExpandBridge.isExpanded(msgId, defaultVal);
+export const isMessageProcessExpanded = (
+  msgId: string,
+  defaultVal = false
+): boolean => searchExpandBridge.isExpanded(msgId, defaultVal);
 
-export const setMessageProcessExpanded = (msgId: string, expanded: boolean, sessionId?: string): void =>
-  searchExpandBridge.setExpanded(msgId, expanded, sessionId);
+export const setMessageProcessExpanded = (
+  msgId: string,
+  expanded: boolean,
+  sessionId?: string
+): void => searchExpandBridge.setExpanded(msgId, expanded, sessionId);
 
-export const toggleMessageProcessExpanded = (msgId: string, defaultVal = false): void =>
-  searchExpandBridge.toggleExpanded(msgId, defaultVal);
+export const toggleMessageProcessExpanded = (
+  msgId: string,
+  defaultVal = false
+): void => searchExpandBridge.toggleExpanded(msgId, defaultVal);
 
 export const expandMessageProcess = (msgId: string): void =>
   searchExpandBridge.expandMessageProcess(msgId);
@@ -186,8 +207,10 @@ export const clearMessageProcessSubscribers = (): void =>
 export const bindMessageToSession = (sessionId: string, msgId: string): void =>
   searchExpandBridge.bindMessageToSession(sessionId, msgId);
 
-export const bindMessagesToSession = (sessionId: string, msgIds: string[]): void =>
-  searchExpandBridge.bindMessagesToSession(sessionId, msgIds);
+export const bindMessagesToSession = (
+  sessionId: string,
+  msgIds: string[]
+): void => searchExpandBridge.bindMessagesToSession(sessionId, msgIds);
 
 export const getMessageSession = (msgId: string): string | undefined =>
   searchExpandBridge.getMessageSession(msgId);
@@ -199,7 +222,10 @@ export interface VirtualScrollModelLike {
 
 export type ScrollerLike =
   | HTMLElement
-  | { scrollTo?: (opts: { top?: number; behavior?: ScrollBehavior }) => void; scrollTop?: number };
+  | {
+      scrollTo?: (opts: { top?: number; behavior?: ScrollBehavior }) => void;
+      scrollTop?: number;
+    };
 
 export function jumpToSearchHit(
   msgId: string,
@@ -215,7 +241,10 @@ export function jumpToSearchHit(
   const top = typeof vsm.getOffset === 'function' ? vsm.getOffset(index) : 0;
   if ('scrollTo' in scroller && typeof scroller.scrollTo === 'function') {
     scroller.scrollTo({ top, behavior: 'auto' });
-  } else if ('scrollTop' in scroller && typeof scroller.scrollTop === 'number') {
+  } else if (
+    'scrollTop' in scroller &&
+    typeof scroller.scrollTop === 'number'
+  ) {
     scroller.scrollTop = top;
   }
 

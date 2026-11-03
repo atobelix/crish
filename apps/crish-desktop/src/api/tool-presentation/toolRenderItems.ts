@@ -11,8 +11,11 @@ import {
   isInspectTool,
   isInterruptedTool,
   toolHasDisplayableResult,
-  toolHumanLabel,
 } from './toolCardPresenter';
+import {
+  aggregateProcessMetrics,
+  formatProcessActionsSummary,
+} from './processMetricsEngine';
 import {
   isSubagentToolName,
   type ToolRenderItem,
@@ -88,7 +91,9 @@ function isFoldableInspect(tc: MessageToolCall): boolean {
  * - 连续可折叠 inspect → 并入同一 group（原「连续 inspect 折叠」语义）；
  * - 否则同轮并行（turnId 相同 + startedAt 相距 ≤200ms）→ 并入同一 group
  *   （原渲染端 parallelGroup 重分组语义下沉投影层）。
- * group.label = `${toolHumanLabel(last)} · ${n} 步`（渲染端复活为折叠头文案）。
+ * group.label = 本组动作分布（formatProcessActionsSummary 单一来源，
+ * 与 FoldableToolGroup 组头同源同值；R8/D-6 起不再借最后一个工具的
+ * 完整标签拼组头——两级计数分工见 processMetricsEngine 组头注记）。
  */
 function canJoinToolGroup(
   buf: MessageToolCall[],
@@ -118,13 +123,22 @@ export function buildToolRenderItems(
     if (buf.length === 1) {
       out.push({ kind: 'single', tc: buf[0]! });
     } else {
-      const last = buf[buf.length - 1];
-      const n = buf.length;
+      const groupTools = [...buf];
+      const metrics = aggregateProcessMetrics([
+        {
+          kind: 'tools',
+          key: `grp-label-${groupTools[0]!.id}`,
+          items: groupTools.map((tc) => ({
+            kind: 'single' as const,
+            tc,
+          })),
+        },
+      ]);
       out.push({
         kind: 'group',
-        id: `grp-${buf![0]!.id}`,
-        tools: [...buf],
-        label: `${toolHumanLabel(last!)} · ${n} 步`,
+        id: `grp-${groupTools[0]!.id}`,
+        tools: groupTools,
+        label: formatProcessActionsSummary(metrics),
       });
     }
     buf = [];

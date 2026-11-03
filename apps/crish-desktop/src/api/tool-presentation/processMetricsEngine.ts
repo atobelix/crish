@@ -81,6 +81,7 @@ export function aggregateProcessMetrics(
   let noPathReadCount = 0;
   let hasRunning = false;
   let hasError = false;
+  let errorCount = 0;
   let isStreaming = false;
 
   const readPathSet = new Set<string>();
@@ -117,7 +118,10 @@ export function aggregateProcessMetrics(
         toolCount += 1;
 
         if (tc.status === 'running') hasRunning = true;
-        if (tc.status === 'error') hasError = true;
+        if (tc.status === 'error') {
+          hasError = true;
+          errorCount += 1;
+        }
 
         const action = classifyToolAction(tc.name);
         const target = extractToolTargetPath(tc);
@@ -168,6 +172,7 @@ export function aggregateProcessMetrics(
     totalDurationMs,
     hasRunning,
     hasError,
+    errorCount,
     isStreaming,
     leadAction: 'mixed',
   };
@@ -317,9 +322,21 @@ export function formatProcessActionsSummary(
  *   3. 后续工具段（`showWorkTime=false`）：展示调用了多少工具、分别是什么类型的描述（formatProcessActionsSummary）；
  *   4. 「已深度思考」与「工作 xx 秒」文案被彻底废除。
  *
+ * 【R8 两级组头分工】（〔同组 §3.2/§3.3〕定稿）：
+ *   - 轮次组头（本函数）= 工作时间（或动作分布）+ **失败数 + 子 agent 数**
+ *     （整组总量口径，折叠后常驻可见——含失败组自动折的可见性即靠此）；
+ *   - 工具组头（FoldableToolGroup）= 本组动作分布，只调
+ *     formatProcessActionsSummary，其失败信号走 ⚠+数字角标、不进文案。
+ *   动作分布永远只由 formatProcessActionsSummary 一处产出，本函数只做
+ *   拼装、禁止另算一份（防两级计数同义重复）。
+ *
  * @param metrics         段聚合度量
  * @param showWorkTime 是否显示工作时间区域（整轮首个过程段为 true）
  * @param elapsedMs       已计算好的耗时毫秒
+ * 【F1 · R-C】工作时间分支的时长须有计时证据：证据 = elapsedMs（起止
+ * 跨度）或 metrics.totalDurationMs（条目 durationMs 聚合，含分段器
+ * 折入的 thinkingTime）；两者皆零即无证据——只拼状态词、省略时长，
+ * 禁止渲染假「0.0 秒」。有证据时拼接口径与既往逐字一致。
  * @param isLive          是否运行中（true → 正在处理，false → 已完成）
  */
 export function formatProcessControlLabel(
@@ -328,12 +345,28 @@ export function formatProcessControlLabel(
   elapsedMs: number,
   isLive: boolean
 ): string {
-  if (showWorkTime) {
-    const duration = formatDurationLabel(elapsedMs);
-    return isLive ? `正在处理 ${duration}` : `已完成 ${duration}`;
+  // 轮次级常驻统计：失败数 + 子 agent 数（拼装规则见上方分工注记）
+  const tailStats: string[] = [];
+  if (metrics.errorCount > 0) {
+    tailStats.push(`失败 ${metrics.errorCount}`);
+  }
+  if (metrics.subagentCount > 0) {
+    tailStats.push(`子 agent ${metrics.subagentCount}`);
   }
 
-  return formatProcessActionsSummary(metrics);
+  if (showWorkTime) {
+    // 计时证据判定（R-C）：跨度与聚合任一为正即有证据；皆零则省略时长
+    const evidenceMs = elapsedMs > 0 ? elapsedMs : metrics.totalDurationMs;
+    if (evidenceMs <= 0) {
+      const head = isLive ? '正在处理' : '已完成';
+      return [head, ...tailStats].join(' · ');
+    }
+    const duration = formatDurationLabel(evidenceMs);
+    const head = isLive ? `正在处理 ${duration}` : `已完成 ${duration}`;
+    return [head, ...tailStats].join(' · ');
+  }
+
+  return [formatProcessActionsSummary(metrics), ...tailStats].join(' · ');
 }
 
 /**
