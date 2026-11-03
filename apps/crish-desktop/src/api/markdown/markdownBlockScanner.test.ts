@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { MarkdownBlockScanner } from './markdownBlockScanner';
-import { closeMarkdownDraftForRender } from './markdownDraftCloser';
 import { countTableColumns, splitTableCells } from './markdownTableLexer';
 
 describe('MarkdownBlockScanner', () => {
@@ -49,35 +48,27 @@ describe('MarkdownBlockScanner', () => {
   });
 });
 
-describe('MarkdownBlockScanner fence line groups (R5)', () => {
+describe('MarkdownBlockScanner unclosed fence (R13: no line groups)', () => {
   const bodyLines = (count: number): string[] =>
     Array.from({ length: count }, (_, i) => `const v${i} = ${i};`);
 
-  it('seals line groups of an unclosed giant fence and keeps a small draft', () => {
+  it('keeps an unclosed giant fence entirely in the draft, sealing nothing', () => {
     const scanner = new MarkdownBlockScanner();
-    scanner.appendChunk(['```ts', ...bodyLines(130)].join('\n') + '\n');
+    const text = ['```ts', ...bodyLines(130)].join('\n') + '\n';
+    scanner.appendChunk(text);
 
-    const sealed = scanner.getSealedBlocks();
-    expect(sealed).toHaveLength(2);
-    for (const group of sealed) {
-      const groupLines = group.split('\n');
-      expect(groupLines[0]).toBe('```ts');
-      expect(groupLines[groupLines.length - 1]).toBe('```');
-      expect(groupLines).toHaveLength(52);
-    }
-
-    const draft = scanner.getPendingDraft();
-    expect(draft.startsWith('```ts\n')).toBe(true);
-    expect(draft).toContain('const v129 = 129;');
-    expect(draft.split('\n').length).toBeLessThanOrEqual(32);
+    expect(scanner.getSealedBlocks()).toEqual([]);
+    // 草稿 = 整段围栏原文，逐字等于输入
+    expect(scanner.getPendingDraft()).toBe(text);
+    expect(scanner.getPendingDraft()).toContain('const v129 = 129;');
   });
 
-  it('consolidates line groups back into the verbatim fence when it closes', () => {
+  it('seals the whole fence verbatim once the closing fence arrives', () => {
     const scanner = new MarkdownBlockScanner();
     const body = bodyLines(130);
     const full = ['```ts', ...body, '```'].join('\n');
     scanner.appendChunk(['```ts', ...body].join('\n') + '\n');
-    expect(scanner.getSealedBlocks()).toHaveLength(2);
+    expect(scanner.getSealedBlocks()).toEqual([]);
 
     scanner.appendChunk('```\n\nafter');
     expect(scanner.getSealedBlocks()).toEqual([full]);
@@ -94,54 +85,12 @@ describe('MarkdownBlockScanner fence line groups (R5)', () => {
     expect(MarkdownBlockScanner.split(text)).toEqual([text]);
   });
 
-  it('does not split a medium fence below the trigger while streaming', () => {
+  it('keeps a medium unclosed fence whole in the draft while streaming', () => {
     const scanner = new MarkdownBlockScanner();
     scanner.appendChunk(['```ts', ...bodyLines(60)].join('\n') + '\n');
     expect(scanner.getSealedBlocks()).toEqual([]);
     expect(scanner.getPendingDraft()).toContain('```ts');
     expect(scanner.getPendingDraft()).toContain('const v59 = 59;');
-  });
-});
-
-describe('closeMarkdownDraftForRender', () => {
-  it('closes an unclosed fence', () => {
-    expect(closeMarkdownDraftForRender('```ts\nconst x = 1;')).toBe(
-      '```ts\nconst x = 1;\n```'
-    );
-  });
-
-  it('closes odd double dollars', () => {
-    expect(closeMarkdownDraftForRender('$$')).toBe('$$\n$$');
-  });
-
-  it('does not guess unclosed inline emphasis', () => {
-    expect(closeMarkdownDraftForRender('**bold')).toBe('**bold');
-  });
-
-  it('does not synthesize a table from a single line', () => {
-    expect(closeMarkdownDraftForRender('| A | B |')).toBe('| A | B |');
-  });
-
-  it('completes a partial table separator', () => {
-    expect(closeMarkdownDraftForRender('| A | B |\n| --- |')).toBe(
-      '| A | B |\n| --- | --- |'
-    );
-  });
-
-  it('preserves a complete table separator', () => {
-    const md = '| A | B |\n| --- | --- |';
-    expect(closeMarkdownDraftForRender(md)).toBe(md);
-  });
-
-  it('closes a partial trailing table row', () => {
-    expect(closeMarkdownDraftForRender('| A | B |\n| --- | --- |\n| 1')).toBe(
-      '| A | B |\n| --- | --- |\n| 1 |'
-    );
-  });
-
-  it('does not count double dollars inside a code fence', () => {
-    const md = '```\n$$\n```';
-    expect(closeMarkdownDraftForRender(md)).toBe(md);
   });
 });
 

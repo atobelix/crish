@@ -2,16 +2,17 @@
  * 聊天 Markdown 块。
  *
  * - 已封口块：静态调度 + 缓存，props 恒定时不重渲染；
- * - 活跃尾块：Rust 流式渲染（latest-wins），封口时保留最后流式 HTML 直到
- *   静态权威 HTML 到达，避免白屏；
+ * - 活跃尾块：先过呈现完成门（markdownCompletionGate，R13）——已完成
+ *   前缀走静态权威路径（高亮 + island 注水），未完成的结构块（未闭合
+ *   围栏 / 表格 / `$$` / HTML）整体扣留、零足迹，绝不以源码式中间态
+ *   上屏；已呈现前缀只增不减，新前缀的静态结果未到达时用上一份 HTML
+ *   桥接，避免整段闪退。聊天尾块不再走 Rust 流式渲染 + 草稿结构合成；
  * - 不再持有 timeline / rateSnapshot / virtualClosedText 等僵尸属性。
  */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
-import {
-  useMarkdownResult,
-  useStreamingMarkdownResult,
-} from '../../api/markdown/useMarkdownRender';
+import { useMarkdownResult } from '../../api/markdown/useMarkdownRender';
+import { splitDraftForPresentation } from '../../api/markdown/markdownCompletionGate';
 import { toMarkdownPlainTextFallback } from '../../api/markdown/markdownPlainTextFallback';
 import { MarkdownSurface } from '../markdown/MarkdownSurface';
 import type { Priority } from '../../workers';
@@ -37,18 +38,42 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
 }: MarkdownBlockItemProps): React.ReactElement | null {
   const isActiveTail = isStreaming && isLast && !isSealed;
 
-  const staticResult = useMarkdownResult(text, 'chat', !isActiveTail);
-  const streamResult = useStreamingMarkdownResult(text, 'chat', isActiveTail);
+  // 完成门：封口块 presentedText === text（整块呈现）；活跃尾块只呈现
+  // 已完成前缀，扣留段不进入任何渲染路径（包括纯文本回退）。
+  const presentedText = useMemo(
+    () => (isActiveTail ? splitDraftForPresentation(text).presentable : text),
+    [isActiveTail, text]
+  );
 
-  const html = isActiveTail
-    ? streamResult.html
-    : staticResult.html || streamResult.html;
-  const failed = !isActiveTail && staticResult.failed && !html;
-  const pending = !isActiveTail && staticResult.loading && !html;
+  const staticResult = useMarkdownResult(presentedText, 'chat', true);
+
+  // 桥接：已呈现前缀只增不减，当前缀扩展后新静态结果未到达时，先用
+  // 上一份 HTML 顶住（其源是当前前缀的逐字前缀，Surface 增量补丁会把
+  // 增长部分补上）；源被改写（非前缀分叉）时不桥接。
+  const bridgeRef = useRef<{ source: string; html: string }>({
+    source: '',
+    html: '',
+  });
+  useEffect(() => {
+    if (staticResult.html) {
+      bridgeRef.current = { source: presentedText, html: staticResult.html };
+    }
+  }, [presentedText, staticResult.html]);
+  const bridge = bridgeRef.current;
+  const html =
+    staticResult.html ||
+    (bridge.html && presentedText.startsWith(bridge.source) ? bridge.html : '');
+  const failed = staticResult.failed && !html;
+  const pending = staticResult.loading && !html;
   const containsTable = useMemo(() => /<table[\s>]/i.test(html), [html]);
-  const fallbackText = useMemo(() => toMarkdownPlainTextFallback(text), [text]);
+  const fallbackText = useMemo(
+    () => toMarkdownPlainTextFallback(presentedText),
+    [presentedText]
+  );
 
   if (!text) return null;
+  // 尾块被完成门整体扣留：零足迹，不留占位、不占高。
+  if (isActiveTail && presentedText.trim().length === 0) return null;
 
   if (isPurged) {
     return (
@@ -74,6 +99,9 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     : `${styles.assistantText} md-rendered md-block-sealed`;
 
   if (!html) {
+    // 活跃尾块：静态结果未到达时保持零足迹，绝不拿源码纯文本回退充数
+    // （已完成前缀的源码形态同样是中间态）；封口块沿用既有回退。
+    if (isActiveTail) return null;
     return (
       <div
         className={`${surfaceClassName} markdown-fallback-text ${className || ''}`.trim()}
@@ -94,7 +122,9 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     <MarkdownSurface
       html={html}
       variant="chat"
-      isActive={isActiveTail}
+      // 尾块呈现的也已是完成形态（完成门保证），island 正常注水；
+      // 不再有「流式抑制注水」的中间态。
+      isActive={false}
       className={`${surfaceClassName} ${className || ''}`.trim()}
       style={{ tabSize: 'var(--md-code-tab-size, 2)' }}
       dataAttributes={{
