@@ -32,6 +32,14 @@ tauri-plugin-single-instance = "2"
 # 密钥免费路径）。默认 features：rustls-tls（与壳内 rustls 0.23 ring 同栈）
 # + system-proxy + zip。命令面接线见 src/updater.rs
 tauri-plugin-updater = "2"
+# F3 窗口几何持久化（桌面端交互审计 2026-11-02）：官方 window-state 插件。
+# 只追踪主窗口（filter 按 label），StateFlags 仅 SIZE/POSITION/MAXIMIZED——
+# VISIBLE 不入旗标（显现由 window_handshake 首绘握手统一裁决，防白闪）、
+# DECORATIONS 不入（conf 的 decorations:false 恒为准）、FULLSCREEN 不在
+# 本批范围。注册与恢复后可见性钳制见 src/window_state.rs
+# 精确锁定 2.4.1：2.5 起要求 tauri ^2.12，与壳现行 tauri 2.11 /
+# webview2-com 0.38 锁定冲突（双版本 trait 不兼容）；壳升级 tauri 时再放开。
+tauri-plugin-window-state = "=2.4.1"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 window-vibrancy = "0.6.0"

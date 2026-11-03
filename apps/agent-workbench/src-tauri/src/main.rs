@@ -98,11 +98,16 @@ mod server;
 mod session_commands;
 // b6：首条助手回复后的短标题。命令面独立于 run/，避免和运行生命周期争写。
 mod session_title_commands;
+// BG5：引擎工具后台注册表的 UI 查询 / 取消口（core_* 引擎面，与
+// background/ 的 shell 进程任务域分开）。
+mod tool_background_commands;
 mod single_instance;
 // ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
 mod tauri_emitter;
 mod window_backdrop;
 mod window_handshake;
+// F3 窗口几何持久化（官方 window-state 插件注册 + 恢复后可见性钳制）
+mod window_state;
 // Win11 贴靠布局（Snap Layouts）：最大化按钮上的原生 HTMAXBUTTON 热区
 mod window_snap_overlay;
 // ACT-102：双 SQLite 并发装配（spawn_blocking + async 汇聚）
@@ -240,7 +245,12 @@ fn main() {
         // 自动更新（RUN-03/SEC-02/GAP-01）：官方 updater 插件；通道配置读
         // tauri.conf.json `plugins.updater`（endpoints/pubkey），Minisign 验签
         // 在插件内完成；命令面接线见 src/updater.rs
-        .plugin(tauri_plugin_updater::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // F3 窗口几何持久化（桌面端交互审计）：官方 window-state 插件，
+        // 只追踪主窗口、仅尺寸/位置/最大化；注册细节与恢复后钳制见
+        // window_state.rs（显现时机仍归 window_handshake，本插件不碰
+        // VISIBLE 旗标）
+        .plugin(window_state::register());
 
     // setup 序列 ⑩：MCP 调试插件（debug 默认开启，CRISH_MCP_SOCKET=0 显式关闭；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离。2026-08-21 用户裁决）。
@@ -275,6 +285,9 @@ fn main() {
 
             // ①c 原生窗口系统材质（Win11 Mica 云母 / Solid 阶梯回退）
             if let Some(main_window) = app.get_webview_window(window_handshake::MAIN_WINDOW_LABEL) {
+                // F3：插件已在 window-ready 时恢复存档几何；窗口尚未显现，
+                // 先做可见性钳制（显示器拓扑变化时防窗口落屏外，无闪烁）
+                window_state::clamp_main_window_into_view(&main_window);
                 window_backdrop::setup_window_backdrop(app, &main_window, diagnostics);
             }
 
