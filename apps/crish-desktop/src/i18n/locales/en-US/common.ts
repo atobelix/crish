@@ -79,6 +79,9 @@ export const common: CommonTranslations = {
   details: 'Details',
   copyDetail: 'Copy Details',
   copiedDetail: 'Details Copied',
+  splitResizerLabel: 'Resize split pane',
+  splitResizerValueText: '{value} pixels',
+  skipToMainContent: 'Skip to main content',
 };
 
 export default common;

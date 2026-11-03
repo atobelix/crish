@@ -1,0 +1,71 @@
+/*
+ * ui/SplitResizer 样式。
+ * 口径（用户 2026-11-02 裁决）：全站中性灰、无辉光、无激活加粗、无描边分界；
+ * 静止发丝线走 --border-subtle 令牌；手柄描边色由 JS 弹簧在 --border-color
+ * 推导的灰阶端点间插值（属性直写，不走 CSS 过渡——弹簧本身即连续过渡）。
+ */
+
+.root {
+  position: relative;
+  flex: none;
+  z-index: var(--z-resizer);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* vertical：竖直分界、调宽——根元素为宽 hitArea 的竖条，高度由布局拉伸 */
+.vertical {
+  width: var(--sr-hit, 8px);
+  align-self: stretch;
+  cursor: col-resize;
+}
+
+/* horizontal：水平分界、调高——根元素为高 hitArea 的横条，宽度由布局拉伸 */
+.horizontal {
+  height: var(--sr-hit, 8px);
+  align-self: stretch;
+  cursor: row-resize;
+}
+
+/* 焦点反馈：弹性胶囊浮现为主；键盘焦点另以中性焦点环描边兜底
+ *（--state-focus-ring = text-primary 10% 中性色，无色相、无辉光阴影，
+ * 与组件「中性灰 / 无辉光」口径及 a11y 焦点棘轮口径一致） */
+.root:focus {
+  outline: none;
+}
+
+.root:focus-visible {
+  outline: 1px solid var(--state-focus-ring);
+}
+
+/* 静止常显发丝线（rest='hairline' 时渲染） */
+.hairline {
+  position: absolute;
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+
+.vertical .hairline {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+}
+
+.horizontal .hairline {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
+/* 弹性手柄 SVG：居中于分界线，溢出可见，本体不接事件、无滤镜 */
+.handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  pointer-events: none;
+}

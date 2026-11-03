@@ -78,6 +78,9 @@ export const common: CommonTranslations = {
   details: '详情',
   copyDetail: '复制详情',
   copiedDetail: '已复制详情',
+  splitResizerLabel: '调整分栏尺寸',
+  splitResizerValueText: '当前 {value} 像素',
+  skipToMainContent: '跳转到主要内容',
 };
 
 export default common;

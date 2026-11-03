@@ -1,0 +1,45 @@
+/*
+ * ui/Divider 样式。蓝本 Select Separator：height/width 0 + border 1px
+ * var(--border-subtle)。边距两档以组件内令牌托管（迁移波次收编散件时
+ * 只许在这两档内取值，不再新增第三档）。
+ */
+
+.divider {
+  --divider-space-compact: 4px;
+  --divider-space-regular: 8px;
+  --divider-inset: 6px;
+  /* --divider-length 是 B 类运行期量：静态默认 14px 单源声明于
+   * styles/tokens-base.css，JS 写入点见 scripts/token-registry.json 登记。 */
+
+  flex: none;
+  background: transparent;
+}
+
+.horizontal {
+  height: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--divider-space-compact) 0;
+}
+
+.horizontal.regular {
+  margin-top: var(--divider-space-regular);
+  margin-bottom: var(--divider-space-regular);
+}
+
+.horizontal.inset {
+  margin-left: var(--divider-inset);
+  margin-right: var(--divider-inset);
+}
+
+.vertical {
+  width: 0;
+  height: var(--divider-length);
+  border-left: 1px solid var(--border-subtle);
+  margin: 0 var(--divider-space-compact);
+  align-self: center;
+}
+
+.vertical.regular {
+  margin-left: var(--divider-space-regular);
+  margin-right: var(--divider-space-regular);
+}
