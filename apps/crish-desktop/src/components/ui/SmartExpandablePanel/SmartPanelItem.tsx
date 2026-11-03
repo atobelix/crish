@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { MenuItem } from './types';
 import menuStyles from '../Menu/Menu.module.css';
+import { Divider } from '../Divider/Divider';
 import styles from './SmartExpandablePanel.module.css';
 import { AppIcon } from '../icons/index';
 
@@ -32,7 +33,7 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
   const [expanded, setExpanded] = useState(item.expanded ?? false);
 
   if (item.type === 'divider') {
-    return <div className={styles.divider} role="separator" />;
+    return <Divider />;
   }
 
   if (item.type === 'group' || item.type === 'sub-group') {

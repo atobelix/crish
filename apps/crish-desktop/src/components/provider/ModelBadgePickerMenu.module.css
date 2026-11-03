@@ -159,10 +159,10 @@
   font-weight: 500;
 }
 
-.modelItem:focus-visible,
 .modelItem:focus-visible {
   outline: none;
   background: var(--state-hover);
+  box-shadow: var(--focus-ring);
 }
 
 .modelName {
@@ -184,14 +184,6 @@
   text-align: center;
   font-size: var(--font-size-xs, 12px);
   color: var(--sep-text-muted, var(--text-tertiary));
-}
-
-/* 分割线 */
-.divider {
-  height: 1px;
-  background: var(--sep-divider-color);
-  margin: 2px 0;
-  border: none;
 }
 
 /* 思考强度分段控制器 */
@@ -239,7 +231,11 @@
   color: var(--text-secondary);
   cursor: pointer;
   text-align: center;
-  transition: all var(--transition-micro, 100ms ease);
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease),
+    box-shadow var(--transition-micro, 100ms ease),
+    font-weight var(--transition-micro, 100ms ease);
   user-select: none;
 }
 

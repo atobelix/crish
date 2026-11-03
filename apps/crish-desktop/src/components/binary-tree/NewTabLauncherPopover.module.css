@@ -188,13 +188,7 @@
   letter-spacing: 0.2px;
 }
 
-/* 分隔线与版块标题 */
-.divider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 4px 2px;
-}
-
+/* 版块标题（分隔线已收编至 ui/Divider 组件） */
 .sectionHeader {
   padding: 4px 8px 2px;
   font-size: 11px;

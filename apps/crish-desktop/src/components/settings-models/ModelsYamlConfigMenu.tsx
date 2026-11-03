@@ -14,7 +14,7 @@ import {
 } from '../../api/hostOpenersApi';
 import styles from './ModelsSettingsTab.module.css';
 import yamlStyles from './YamlConfigEditorModal.module.css';
-import { Button, Menu } from '@/components/ui';
+import { Button, Divider, Menu } from '@/components/ui';
 import type { SelectOptionItem } from '@/components/ui';
 import { getOpenerIcon } from '../files/FileActions';
 import { AppIcon } from '@/components/ui/icons';
@@ -211,7 +211,12 @@ export const ModelsYamlConfigMenu: React.FC<Props> = ({
             <span>{t('settings.models.yaml.openBuiltin')}</span>
           </Button>
 
-          <div className={yamlStyles.menuDivider} />
+          <Divider
+            style={{
+              marginTop: 'var(--space-1)',
+              marginBottom: 'var(--space-1)',
+            }}
+          />
           <div className={yamlStyles.menuSectionTitle}>
             {t('settings.models.yaml.externalEditors')}
           </div>
@@ -243,7 +248,12 @@ export const ModelsYamlConfigMenu: React.FC<Props> = ({
             <span>{t('settings.models.yaml.openDefault')}</span>
           </Button>
 
-          <div className={yamlStyles.menuDivider} />
+          <Divider
+            style={{
+              marginTop: 'var(--space-1)',
+              marginBottom: 'var(--space-1)',
+            }}
+          />
           <div className={yamlStyles.menuSectionTitle}>
             {t('settings.models.yaml.fileActions')}
           </div>

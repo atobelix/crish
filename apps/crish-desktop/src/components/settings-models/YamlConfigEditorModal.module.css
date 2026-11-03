@@ -76,12 +76,6 @@
   white-space: nowrap;
 }
 
-.menuDivider {
-  height: var(--hairline-width);
-  background: var(--border-subtle);
-  margin: var(--space-1) 0;
-}
-
 /* ── 弹窗内部布局 ─────────────────────────────────────────────────── */
 .modalTitleRow {
   display: flex;

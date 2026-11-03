@@ -16,7 +16,7 @@ import {
 import { listAvailableModelPickerEntries } from '../../api/modelPickerAvailability';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { openSettings } from '../../store/storeAccess';
-import { Menu, Tooltip, Button, Input } from '@/components/ui';
+import { Menu, Tooltip, Button, Input, Divider } from '@/components/ui';
 import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import {
   setSessionThinkingTitle,
@@ -374,7 +374,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
         {showThinking ? (
           <>
-            <div className={styles.divider} />
+            <Divider style={{ marginTop: 2, marginBottom: 2 }} />
             <div className={styles.advancedSection}>
               <Button
                 type="button"

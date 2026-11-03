@@ -4,6 +4,7 @@ import type {
   PositionResult,
   SubmenuPositionResult,
 } from './types';
+import { DIVIDER_COMPACT_BLOCK_SIZE_PX } from '../Divider/Divider';
 
 export class PositionEngine {
   private readonly hysteresisY: number;
@@ -309,7 +310,7 @@ export function estimateCascadeHeight(
   const list = children ?? [];
   let height = 12;
   for (const child of list) {
-    height += child.type === 'divider' ? 9 : 36;
+    height += child.type === 'divider' ? DIVIDER_COMPACT_BLOCK_SIZE_PX : 36;
   }
   return Math.max(44, Math.min(height, maxAllowed));
 }

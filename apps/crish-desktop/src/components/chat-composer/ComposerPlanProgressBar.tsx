@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './ComposerPlanProgressBar.module.css';
-import { Button, Tooltip } from '@/components/ui';
+import { Button, Divider, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 
 export interface PlanStepItem {
@@ -162,7 +162,13 @@ export const ComposerPlanProgressBar: React.FC<
           />
         </Button>
 
-        <div className={`${styles.planDividerV} plan-divider-v`} aria-hidden />
+        <Divider
+          orientation="vertical"
+          length={16}
+          className="plan-divider-v"
+          style={{ margin: 0 }}
+          aria-hidden
+        />
 
         <div
           className={`${styles.planActiveTaskBox} plan-active-task-box`}

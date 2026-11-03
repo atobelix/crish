@@ -2,6 +2,7 @@ import React from 'react';
 import type { RefObject } from 'react';
 
 import { Tooltip } from '../Tooltip/Tooltip';
+import { Divider } from '../Divider/Divider';
 import styles from './SmartExpandablePanel.module.css';
 import { AppIcon } from '../icons/index';
 
@@ -55,7 +56,7 @@ export const SmartPanelHeader: React.FC<SmartPanelHeaderProps> = ({
           </Tooltip>
         ) : null}
       </div>
-      <div className={styles.sepSearchDivider} />
+      <Divider />
     </div>
   );
 };

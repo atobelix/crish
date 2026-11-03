@@ -39,53 +39,19 @@
   -webkit-app-region: no-drag;
 }
 
+/* 浮层配方归队（AN2 / A6）：进/出场统一走共享 keyframes + popover token，
+ * 方向语义不变（top = 自下方 4px 升入、bottom = 自上方 4px 落入、closed 沿 top 向退场） */
 .popoverContent[data-state='open'][data-side='top'] {
-  animation: slashMenuEnterTop var(--duration-normal, 150ms)
-    var(--ease-emphasized) forwards;
+  animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
 }
 
 .popoverContent[data-state='open'][data-side='bottom'] {
-  animation: slashMenuEnterBottom var(--duration-normal, 150ms)
-    var(--ease-emphasized) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .popoverContent[data-state='closed'] {
-  animation: slashMenuExit var(--duration-micro, 100ms)
-    var(--ease-accelerate, cubic-bezier(0.4, 0, 1, 1)) forwards;
+  animation: crish-popover-exit-top var(--transition-popover-exit) forwards;
   pointer-events: none;
-}
-
-@keyframes slashMenuEnterTop {
-  0% {
-    opacity: 0;
-    transform: translateY(6px) scale(0.985);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes slashMenuEnterBottom {
-  0% {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.985);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes slashMenuExit {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(4px) scale(0.985);
-  }
 }
 
 .menuList {
@@ -101,12 +67,6 @@
   padding: 6px 10px 2px;
   user-select: none;
   letter-spacing: 0.02em;
-}
-
-.groupDivider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 3px 6px;
 }
 
 .menuItem {

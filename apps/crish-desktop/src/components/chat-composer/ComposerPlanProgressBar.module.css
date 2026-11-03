@@ -25,7 +25,9 @@
 .planStepList {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion);
+  /* AN1：接入折叠族同钟变量契约（根变量由消费侧设置，未设时回退共享 token） */
+  transition: grid-template-rows
+    var(--accordion-duration, var(--transition-accordion));
   background: transparent;
   border-bottom: 0px solid var(--border-subtle);
   border-radius: 0;
@@ -39,11 +41,15 @@
 
 .planStepListInner {
   overflow: hidden;
+  /* 高度分档 E1（全树唯一真无界缺口收口）：步骤列表落档4·出封顶 + 自滚；
+   * grid 展开动画仍在外层 .planStepList 上，本层只管封顶与滚动。 */
+  max-height: var(--expand-max-h-viewport);
+  overflow-y: auto;
   padding: 0 12px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  transition: padding var(--transition-accordion);
+  transition: padding var(--accordion-duration, var(--transition-accordion));
 }
 
 .planProgressBar.isExpanded .planStepListInner {
@@ -165,13 +171,6 @@
 
 .planModeBadge:hover .modeIcon {
   color: var(--text-primary);
-}
-
-.planDividerV {
-  width: 1px;
-  height: 16px;
-  background: var(--border-subtle);
-  flex-shrink: 0;
 }
 
 .planActiveTaskBox {

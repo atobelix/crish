@@ -2,6 +2,7 @@ import React from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { MenuItem, MenuGroup } from './types';
 import { SmartPanelItem } from './SmartPanelItem';
+import { Divider } from '../Divider/Divider';
 import styles from './SmartExpandablePanel.module.css';
 
 export interface SmartPanelListProps {
@@ -80,9 +81,7 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
                   />
                 ))}
               </div>
-              {enableDivider && !query && idx < items.length - 1 && (
-                <div className={styles.divider} />
-              )}
+              {enableDivider && !query && idx < items.length - 1 && <Divider />}
             </div>
           );
         }

@@ -13,7 +13,12 @@
 
 import React, { useCallback, useMemo, useState, useRef } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { Button, Tooltip, useLayerRegistration } from '@/components/ui';
+import {
+  Button,
+  Divider,
+  Tooltip,
+  useLayerRegistration,
+} from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -351,7 +356,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
             data-visible={runningSessions.length > 0}
           >
             <div className={styles.runningSectionInner}>
-              <div className={styles.divider} />
+              <Divider style={{ marginLeft: 2, marginRight: 2 }} />
               <div className={styles.sectionHeader}>
                 <span>
                   {t('workspace.launcher.running', '运行中')} (
@@ -425,7 +430,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
           {/* Section 3: 真实用户项目（仅在存在真实项目时呈现，绝无虚假假数据） */}
           {userProjects.length > 0 && (
             <>
-              <div className={styles.divider} />
+              <Divider style={{ marginLeft: 2, marginRight: 2 }} />
               <div className={styles.sectionHeader}>
                 <span>
                   {t('workspace.launcher.projects', '项目')} (
