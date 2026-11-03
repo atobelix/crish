@@ -143,16 +143,16 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
       />
     );
 
-    // 4 格 KPI
+    // 4 格 KPI（数字走全局 Intl 紧凑口径 F8：100000 → 10万，旧手写口径为 10.0 万）
     expect(screen.getByText('总 Tokens')).toBeDefined();
-    expect(screen.getByText('10.0 万')).toBeDefined();
+    expect(screen.getByText('10万')).toBeDefined();
     expect(screen.getByText('预估费用')).toBeDefined();
     expect(screen.getByText('4.70')).toBeDefined();
     expect(screen.getByText('CNY')).toBeDefined();
     expect(screen.getByText('发送消息总数')).toBeDefined();
     expect(screen.getByText('23')).toBeDefined();
     expect(screen.getByText('日均 Tokens')).toBeDefined();
-    expect(screen.getByText('5.00 万')).toBeDefined();
+    expect(screen.getByText('5万')).toBeDefined();
 
     // 洞察行：日均花费 + 结论 3 项
     expect(screen.getByText('洞察')).toBeDefined();

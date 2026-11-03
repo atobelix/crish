@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   SafeIntl,
   formatNumber,
+  formatCompactNumber,
+  formatFullNumber,
   formatDate,
   formatRelativeTime,
   formatList,
@@ -217,6 +219,33 @@ describe('SafeIntl 高级格式化工具链测试套件', () => {
         expect(res).toContain('One');
         expect(res).toContain('Two');
       }).not.toThrow();
+    });
+  });
+
+  describe('5.5 紧凑 / 完整数字口径 (formatCompactNumber / formatFullNumber)', () => {
+    it('zh 紧凑口径走 万/亿，最多 2 位小数且省略尾随 0', () => {
+      expect(formatCompactNumber(500, 'zh-CN')).toBe('500');
+      expect(formatCompactNumber(10000, 'zh-CN')).toBe('1万');
+      expect(formatCompactNumber(15800, 'zh-CN')).toBe('1.58万');
+      expect(formatCompactNumber(1589000, 'zh-CN')).toBe('158.9万');
+      expect(formatCompactNumber(123456789, 'zh-CN')).toBe('1.23亿');
+    });
+
+    it('en 紧凑口径走 K/M/B，不再出现中文单位', () => {
+      expect(formatCompactNumber(15800, 'en-US')).toBe('15.8K');
+      expect(formatCompactNumber(1234567, 'en-US')).toBe('1.23M');
+      expect(formatCompactNumber(123456789, 'en-US')).not.toContain('亿');
+    });
+
+    it('完整口径千分位分组，供 tooltip 查完整值', () => {
+      expect(formatFullNumber(1234567, 'zh-CN')).toBe('1,234,567');
+      expect(formatFullNumber(1234567, 'en-US')).toBe('1,234,567');
+      expect(formatFullNumber(0, 'zh-CN')).toBe('0');
+    });
+
+    it('SafeIntl 静态面同步暴露两个口径', () => {
+      expect(SafeIntl.formatCompactNumber(15800, 'zh-CN')).toBe('1.58万');
+      expect(SafeIntl.formatFullNumber(1234567, 'zh-CN')).toBe('1,234,567');
     });
   });
 

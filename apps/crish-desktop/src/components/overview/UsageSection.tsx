@@ -1,8 +1,9 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button } from '@/components/ui';
+import { Button, Tooltip } from '@/components/ui';
 import { ChevronDownIcon } from '../../assets/icons';
 import { AppIcon } from '@/components/ui/icons';
+import { formatCompactNumber, formatFullNumber } from '../../i18n/SafeIntl';
 
 interface UsageSectionProps {
   open: boolean;
@@ -44,15 +45,19 @@ export const UsageSection = React.memo(function UsageSection({
           <div className={styles.usageGrid}>
             <div className={styles.usageItem}>
               <span className={styles.usageLabel}>输入</span>
-              <span className={styles.usageVal}>
-                {inputTokens.toLocaleString()}
-              </span>
+              <Tooltip content={formatFullNumber(inputTokens)}>
+                <span className={styles.usageVal}>
+                  {formatCompactNumber(inputTokens)}
+                </span>
+              </Tooltip>
             </div>
             <div className={styles.usageItem}>
               <span className={styles.usageLabel}>输出</span>
-              <span className={styles.usageVal}>
-                {outputTokens.toLocaleString()}
-              </span>
+              <Tooltip content={formatFullNumber(outputTokens)}>
+                <span className={styles.usageVal}>
+                  {formatCompactNumber(outputTokens)}
+                </span>
+              </Tooltip>
             </div>
           </div>
         </div>

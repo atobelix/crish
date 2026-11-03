@@ -16,6 +16,7 @@ import { ApprovalSection } from './ApprovalSection';
 import { PlansSection } from './PlansSection';
 import { useRuntimePanelData } from './useRuntimePanelData';
 import { SessionCacheStatsPanel } from './SessionCacheStatsPanel';
+import { formatCompactNumber, formatFullNumber } from '../../i18n/SafeIntl';
 import { useCacheEventsStore } from '../../api/chat-bridge/handlers/cacheEventsStore';
 import { useSecurityAuditStore } from '../../api/chat-bridge/handlers/securityAuditStore';
 import { SecurityAuditSection } from './SecurityAuditSection';
@@ -145,15 +146,19 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
           <div className={styles.usageStats}>
             <div className={styles.statRow}>
               <span className={styles.statLabel}>输入</span>
-              <span className={styles.statValue}>
-                {tokenUsage.input.toLocaleString()}
-              </span>
+              <Tooltip content={formatFullNumber(tokenUsage.input)}>
+                <span className={styles.statValue}>
+                  {formatCompactNumber(tokenUsage.input)}
+                </span>
+              </Tooltip>
             </div>
             <div className={styles.statRow}>
               <span className={styles.statLabel}>输出</span>
-              <span className={styles.statValue}>
-                {tokenUsage.output.toLocaleString()}
-              </span>
+              <Tooltip content={formatFullNumber(tokenUsage.output)}>
+                <span className={styles.statValue}>
+                  {formatCompactNumber(tokenUsage.output)}
+                </span>
+              </Tooltip>
             </div>
             <div className={`${styles.statRow} ${styles.isTotal}`}>
               <span className={styles.statLabel}>费用</span>

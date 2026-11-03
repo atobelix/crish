@@ -1,8 +1,9 @@
 import React from 'react';
 import type { UsageHeroStats } from '../../../api/usageContracts';
 import { useI18n } from '../../../i18n';
+import { formatCompactNumber, formatFullNumber } from '../../../i18n/SafeIntl';
 import { formatCost, formatTokens } from './usageSpline';
-import { AnimatedCounter, SlotText } from '@/components/ui';
+import { AnimatedCounter, SlotText, Tooltip } from '@/components/ui';
 import styles from './UsageSummaryHero.module.css';
 
 export interface UsageSummaryHeroProps {
@@ -23,7 +24,7 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
   heroStats,
   currency = 'CNY',
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const currencySymbol = currency === 'USD' ? '$' : '¥';
 
   const insights: { label: string; value: string; code?: boolean }[] = [
@@ -56,15 +57,18 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
             {t('settings.usage.kpiTotalTokens', '总 Tokens')}
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiNumber}>
-              {/* 支持 万/亿 文本与数字无缝滚轮形变 */}
-              <SlotText
-                value={totalTokens}
-                format={formatTokens}
-                duration={0.6}
-                stagger={0.03}
-              />
-            </span>
+            {/* 紧凑呈现（全局 Intl 口径），完整值经 tooltip 可查 */}
+            <Tooltip content={formatFullNumber(totalTokens, language)}>
+              <span className={styles.kpiNumber}>
+                {/* 支持 万/亿 文本与数字无缝滚轮形变 */}
+                <SlotText
+                  value={totalTokens}
+                  format={(v) => formatTokens(v, language)}
+                  duration={0.6}
+                  stagger={0.03}
+                />
+              </span>
+            </Tooltip>
             <span className={styles.kpiUnit}>tokens</span>
           </div>
         </div>
@@ -76,7 +80,11 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
           <div className={styles.kpiValueRow}>
             <span className={styles.currencySymbol}>{currencySymbol}</span>
             <span className={styles.kpiNumber}>
-              <AnimatedCounter value={totalCost} decimals={2} locale="zh-CN" />
+              <AnimatedCounter
+                value={totalCost}
+                decimals={2}
+                locale={language}
+              />
             </span>
             <span className={styles.kpiUnit}>{currency}</span>
           </div>
@@ -87,9 +95,13 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
             {t('settings.usage.kpiTotalMessages', '发送消息总数')}
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiNumber}>
-              {heroStats.totalMessages.toLocaleString('zh-CN')}
-            </span>
+            <Tooltip
+              content={formatFullNumber(heroStats.totalMessages, language)}
+            >
+              <span className={styles.kpiNumber}>
+                {formatCompactNumber(heroStats.totalMessages, language)}
+              </span>
+            </Tooltip>
           </div>
         </div>
 
@@ -98,14 +110,18 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
             {t('settings.usage.kpiDailyAvgTokens', '日均 Tokens')}
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiNumber}>
-              <SlotText
-                value={heroStats.dailyAverageTokens}
-                format={formatTokens}
-                duration={0.6}
-                stagger={0.03}
-              />
-            </span>
+            <Tooltip
+              content={formatFullNumber(heroStats.dailyAverageTokens, language)}
+            >
+              <span className={styles.kpiNumber}>
+                <SlotText
+                  value={heroStats.dailyAverageTokens}
+                  format={(v) => formatTokens(v, language)}
+                  duration={0.6}
+                  stagger={0.03}
+                />
+              </span>
+            </Tooltip>
             <span className={styles.kpiUnit}>tokens</span>
           </div>
         </div>

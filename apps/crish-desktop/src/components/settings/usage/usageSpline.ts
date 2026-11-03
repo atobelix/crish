@@ -2,6 +2,7 @@
  * 单调三次样条插值与图表几何数学纯逻辑库（Fritsch-Carlson Monotone Cubic Spline）
  * 严格保证插值单调性，极值点处导数为 0，数学上杜绝假性下凹与向上振荡超调。
  */
+import { formatCompactNumber } from '../../../i18n/SafeIntl';
 
 export interface SplinePoint {
   x: number;
@@ -10,20 +11,14 @@ export interface SplinePoint {
 }
 
 /**
- * 格式化 Token 数（万分位缩写与千分位兜底）
+ * 格式化 Token 数：走全局紧凑口径（SafeIntl.formatCompactNumber，Intl compact，
+ * locale 跟随应用语言——旧手写口径是 zh-only，英文界面也显示 万/亿）。
+ * 非正数 / 非有限值仍归 '0'（调用面把 0 与缺失同等对待）。
+ * 完整值由调用方经 formatFullNumber 放 tooltip 可查。
  */
-export function formatTokens(v: number): string {
+export function formatTokens(v: number, locale?: string): string {
   if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return '0';
-  // 若四舍五入后达 1 亿，直接进位至亿，杜绝 "10000 万"
-  if (v >= 99_950_000) {
-    const yi = v / 100_000_000;
-    return `${yi.toFixed(1)} 亿`;
-  }
-  if (v >= 10_000) {
-    const w = v / 10_000;
-    return `${w >= 100 ? w.toFixed(0) : w >= 10 ? w.toFixed(1) : w.toFixed(2)} 万`;
-  }
-  return v.toLocaleString('zh-CN');
+  return formatCompactNumber(v, locale);
 }
 
 /**

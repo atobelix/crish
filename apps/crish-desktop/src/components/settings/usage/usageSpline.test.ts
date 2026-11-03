@@ -13,16 +13,22 @@ import {
 
 describe('usageSpline 纯数学与几何插值库', () => {
   describe('格式化与归一化守卫工具函数', () => {
-    it('formatTokens 正确格式化各数量级数值与临界进位', () => {
+    it('formatTokens 走全局 Intl 紧凑口径（F8，取代旧手写 zh-only 口径）', () => {
+      // 口径变更说明：旧实现手写 万/亿 且写死中文（英文界面也显示中文单位）；
+      // 现委托 SafeIntl.formatCompactNumber：zh 万/亿、en K/M/B，最多 2 位小数。
+      // 非正数/非有限值归 '0' 的守卫保留；完整值由调用方 tooltip 承载。
       expect(formatTokens(0)).toBe('0');
       expect(formatTokens(-10)).toBe('0');
       expect(formatTokens(500)).toBe('500');
-      expect(formatTokens(9999)).toBe('9,999');
-      expect(formatTokens(10000)).toBe('1.00 万');
-      expect(formatTokens(15800)).toBe('1.58 万');
-      expect(formatTokens(1589000)).toBe('159 万');
-      expect(formatTokens(99960000)).toBe('1.0 亿'); // 修复 10000 万临界进位
-      expect(formatTokens(123456789)).toBe('1.2 亿');
+      expect(formatTokens(9999)).toBe('9999');
+      expect(formatTokens(10000)).toBe('1万');
+      expect(formatTokens(15800)).toBe('1.58万');
+      expect(formatTokens(1589000)).toBe('158.9万');
+      expect(formatTokens(99960000)).toBe('9996万');
+      expect(formatTokens(123456789)).toBe('1.23亿');
+      // locale 跟随：英文走 K/M，不再出现中文单位
+      expect(formatTokens(15800, 'en-US')).toBe('15.8K');
+      expect(formatTokens(123456789, 'en-US')).toBe('123.46M');
     });
 
     it('formatCost 货币格式化与兜底', () => {

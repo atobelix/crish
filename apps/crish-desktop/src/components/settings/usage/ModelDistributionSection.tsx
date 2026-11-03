@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import type { UsageModelBreakdownItem } from '../../../api/usageContracts';
 import { useI18n } from '../../../i18n';
+import { formatCompactNumber, formatFullNumber } from '../../../i18n/SafeIntl';
+import { Tooltip } from '@/components/ui';
 import {
   formatCost,
   formatPercentValue,
@@ -39,7 +41,7 @@ interface DistributionRow {
 export const ModelDistributionSection: React.FC<
   ModelDistributionSectionProps
 > = ({ models, totalTokens }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   const rows = useMemo<DistributionRow[]>(() => {
     const toRow = (
@@ -161,16 +163,20 @@ export const ModelDistributionSection: React.FC<
                   </span>
                 </div>
 
-                <span className={`${styles.colNum} ${styles.numStrong}`}>
-                  {formatTokens(row.tokens)}
-                </span>
+                <Tooltip content={formatFullNumber(row.tokens, language)}>
+                  <span className={`${styles.colNum} ${styles.numStrong}`}>
+                    {formatTokens(row.tokens, language)}
+                  </span>
+                </Tooltip>
                 <span className={styles.colNum}>{formatCost(row.cost)}</span>
                 <span className={`${styles.colNum} ${styles.colCache}`}>
                   {formatPercentValue(row.cacheRatio * 100)}
                 </span>
-                <span className={`${styles.colNum} ${styles.colCalls}`}>
-                  {row.callCount.toLocaleString('zh-CN')}
-                </span>
+                <Tooltip content={formatFullNumber(row.callCount, language)}>
+                  <span className={`${styles.colNum} ${styles.colCalls}`}>
+                    {formatCompactNumber(row.callCount, language)}
+                  </span>
+                </Tooltip>
               </div>
             );
           })}

@@ -154,6 +154,34 @@ export function formatNumber(
 }
 
 /**
+ * 全局紧凑数字口径：Intl compact 表示，最多 2 位小数（尾随 0 自动省略）。
+ * zh 呈现 万/亿、en 呈现 K/M/B；locale 缺省跟随应用语言
+ * （显式入参 → 本地存储 → 默认语言，与 formatNumber 同一解析链）。
+ * 供计数 / Token / 金额量级等长数字面统一复用：界面紧凑呈现，
+ * 完整值经 formatFullNumber 放入 tooltip / 副文本可查。
+ *
+ * @param value 要格式化的数字
+ * @param locale 可选语言标识
+ */
+export function formatCompactNumber(value: number, locale?: string): string {
+  return formatNumber(
+    value,
+    { notation: 'compact', maximumFractionDigits: 2 },
+    locale
+  );
+}
+
+/**
+ * 完整数字口径：默认千分位分组，作为紧凑呈现的 tooltip / 副文本完整值来源。
+ *
+ * @param value 要格式化的数字
+ * @param locale 可选语言标识
+ */
+export function formatFullNumber(value: number, locale?: string): string {
+  return formatNumber(value, undefined, locale);
+}
+
+/**
  * 安全格式化日期时间
  *
  * @param date 日期对象、时间戳毫秒数或 ISO 字符串
@@ -307,6 +335,8 @@ export function formatList(
  */
 export class SafeIntl {
   public static formatNumber = formatNumber;
+  public static formatCompactNumber = formatCompactNumber;
+  public static formatFullNumber = formatFullNumber;
   public static formatDate = formatDate;
   public static formatRelativeTime = formatRelativeTime;
   public static formatList = formatList;
