@@ -4,7 +4,7 @@
   position: fixed;
   z-index: var(--z-dropdown);
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-panel);
   box-shadow:
     0 10px 28px -4px color-mix(in srgb, var(--shadow-color) 10%, transparent),
     0 3px 10px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
@@ -247,15 +247,10 @@
   padding: 0;
 }
 
-/* 节能与减弱动画 */
+/* 减弱动画 */
 @media (prefers-reduced-motion: reduce) {
   .content {
     animation: none;
     transition: opacity var(--duration-micro) var(--ease-standard);
   }
-}
-
-html[data-perf-tier='eco'] .content {
-  animation: none;
-  transition: none;
 }

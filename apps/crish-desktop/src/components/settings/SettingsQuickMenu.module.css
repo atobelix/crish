@@ -49,8 +49,7 @@
 .sbQuickMenu {
   z-index: var(--z-modal);
   background: var(--surface-overlay);
-  border: var(--hairline-width) solid
-    color-mix(in srgb, var(--surface-overlay) 95%, var(--text-primary) 5%);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(
     --sep-radius-outer
   ); /* 方案 A 标尺：浮层外壳圆角锁 14px，根治 -6px 极端窒息挤压 */
@@ -243,20 +242,12 @@
   margin-left: var(--space-2);
 }
 
-/* 分隔线：用于身份卡片与下方功能项的视觉分隔，对齐设置界面的发丝分割线 */
+/* 分隔线：用于身份卡片与下方功能项的视觉分隔，对齐发丝分割线 */
 .sbQuickDivider {
   margin: var(--space-1_5) var(--space-1);
   border: none;
-  border-top: var(--hairline-width) solid var(--border-subtle);
+  border-top: var(--hairline-width) solid var(--border-panel);
   padding: 0;
-}
-
-:global(html[data-theme='dark']) .sbQuickDivider {
-  border-top-color: color-mix(
-    in srgb,
-    var(--border-subtle) 90%,
-    var(--text-primary) 10%
-  );
 }
 
 /* 主题行右值 + 箭头（排序菜单行形态复刻；值文字为次级信息保留 12px） */
@@ -286,8 +277,7 @@
 
 .sbQuickSubmenu {
   background: var(--surface-overlay);
-  border: var(--hairline-width) solid
-    color-mix(in srgb, var(--surface-overlay) 95%, var(--text-primary) 5%);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--sep-radius-outer);
   box-shadow: var(--shadow-dropdown);
   padding: 8px;

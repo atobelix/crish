@@ -43,6 +43,9 @@ html[data-theme='light'] {
     var(--surface-tint-target) 100%
   );
 
+  /* 浮层面板发丝线描边：7.45% 纯中性灰基准 */
+  --border-panel: var(--border-color);
+
   /* 边缘光与三级抬升阴影（Light） */
   --edge-rim: 0 0 0 1px hsl(0 0% 0% / 0.04);
 

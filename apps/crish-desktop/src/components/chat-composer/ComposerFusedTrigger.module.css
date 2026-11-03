@@ -278,7 +278,7 @@
 .menu {
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-panel);
   border-radius: var(--radius-menu-outer, 18px);
   box-shadow: var(--shadow-dropdown);
   padding: 6px;

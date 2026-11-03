@@ -3,7 +3,7 @@
   min-width: 280px;
   max-width: 320px;
   background: var(--surface-overlay);
-  border: 1px solid var(--border-panel, var(--border-color));
+  border: 1px solid var(--border-panel);
   border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--shadow-lg);
   padding: 6px;

@@ -79,7 +79,7 @@
 
 .settingsSelectMenu {
   background: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-dropdown);
   padding: var(--space-1);

@@ -110,7 +110,7 @@
 .panel {
   width: var(--picker-width);
   padding-bottom: 12px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-panel);
   border-radius: var(--radius-md, 14px);
   background: var(--picker-fill);
   will-change: clip-path;

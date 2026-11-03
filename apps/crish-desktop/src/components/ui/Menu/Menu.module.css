@@ -27,7 +27,7 @@
 
     padding: 6px;
     border-radius: var(--radius-menu-outer);
-    border: 1px solid var(--border-panel, var(--border-subtle));
+    border: 1px solid var(--border-panel);
     background: var(--surface-overlay);
     box-shadow: var(--shadow-popover, var(--shadow-lg));
     display: flex;
@@ -61,53 +61,9 @@
     transform: scale(0.95);
   }
 
-  /* 默认向下展开 (data-side='bottom') 入场关键帧：优雅放大展开 */
-  @keyframes crish-popover-enter {
-    0% {
-      opacity: 0;
-      transform: scale(0.93) translateY(-6px);
-    }
-    100% {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  /* 向上展开 (data-side='top') 入场关键帧：从触发区向上优雅放大入场 */
-  @keyframes crish-popover-enter-top {
-    0% {
-      opacity: 0;
-      transform: scale(0.93) translateY(6px);
-    }
-    100% {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  /* 默认向下展开退场关键帧 */
-  @keyframes crish-popover-exit {
-    from {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
-    to {
-      opacity: 0;
-      transform: scale(0.95) translateY(-4px);
-    }
-  }
-
-  /* 向上展开退场关键帧 */
-  @keyframes crish-popover-exit-top {
-    from {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
-    to {
-      opacity: 0;
-      transform: scale(0.95) translateY(4px);
-    }
-  }
+  /* 进/退场关键帧统一消费共享层正典 crish-popover-enter/-top、crish-popover-exit/-top
+   * （styles/design-system.css，scale 0.97 / ∓4px）；本文件旧本地同名定义
+   * （scale 0.93 / ∓6px、exit 0.95）已于 AN3 收编删除，禁止再本地重定义。 */
 
   .menuContent[data-side='top'],
   .popup[data-side='top'] {
@@ -293,29 +249,31 @@
     align-items: center;
   }
 
-  /* 1px Hardware-Aligned Divider */
+  /* 契约发丝分割线：明亮柔和，对齐设置界面的发丝分割线规范 */
   .separator {
     height: 0;
     min-height: 0;
     border: none;
-    border-top: 1px solid var(--border-subtle);
-    margin: 3px 6px;
+    border-top: var(--hairline-width) solid var(--border-subtle);
+    margin: var(--space-1_5) var(--space-1);
     flex-shrink: 0;
     padding: 0;
   }
 
-  /* 节能与减弱动态偏好 */
+  :global(html[data-theme='dark']) .separator {
+    border-top-color: color-mix(
+      in srgb,
+      var(--border-subtle) 90%,
+      var(--text-primary) 10%
+    );
+  }
+
+  /* 减弱动态偏好 */
   @media (prefers-reduced-motion: reduce) {
     .menuContent,
     .popup {
       animation: none;
       transition: opacity var(--duration-micro) var(--ease-standard);
     }
-  }
-
-  html[data-perf-tier='eco'] .menuContent,
-  html[data-perf-tier='eco'] .popup {
-    animation: none;
-    transition: none;
   }
 }

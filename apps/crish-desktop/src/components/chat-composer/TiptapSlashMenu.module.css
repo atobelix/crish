@@ -21,8 +21,7 @@
   );
   overflow-y: auto;
   background: var(--slash-menu-bg, var(--surface-overlay));
-  border: var(--hairline-width, 1px) solid
-    var(--border-panel, var(--edge-rim, var(--border-subtle)));
+  border: var(--hairline-width, 1px) solid var(--border-panel);
   border-radius: var(--slash-radius-outer);
   padding: var(--slash-pad);
   outline: none;

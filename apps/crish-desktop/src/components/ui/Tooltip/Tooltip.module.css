@@ -86,7 +86,7 @@
   .tooltipContent,
   .content {
     background: var(--surface-overlay);
-    border: 1px solid var(--border-panel, var(--border-subtle));
+    border: 1px solid var(--border-panel);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
     padding: var(--space-1) var(--space-2_5);

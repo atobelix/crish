@@ -8,7 +8,7 @@
   .popup {
     z-index: var(--z-popover);
     background: var(--surface-overlay);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-panel);
     border-radius: var(--radius-lg, 8px);
     box-shadow: var(--shadow-popover);
     outline: none;
@@ -39,7 +39,7 @@
 
   .arrow {
     fill: var(--surface-overlay);
-    stroke: var(--border-subtle);
+    stroke: var(--border-panel);
     stroke-width: 1px;
   }
 
@@ -101,10 +101,5 @@
     .backdrop {
       transition: none;
     }
-  }
-
-  html[data-perf-tier='eco'] .popup,
-  html[data-perf-tier='eco'] .backdrop {
-    transition: none;
   }
 }

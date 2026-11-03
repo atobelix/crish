@@ -78,7 +78,7 @@
     max-width: calc(100vw - var(--space-8));
     max-height: calc(100vh - var(--space-8));
     background: var(--surface-overlay);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-panel);
     border-radius: var(--radius-2xl);
     box-shadow:
       0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),

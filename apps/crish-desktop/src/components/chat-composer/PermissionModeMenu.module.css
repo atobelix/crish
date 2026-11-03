@@ -36,8 +36,8 @@
   box-sizing: border-box;
   outline: none;
   transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+    background var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
 }
 
 .permPill::before {
@@ -88,7 +88,7 @@
   color: currentColor;
   opacity: 0.72;
   margin-left: 1px;
-  transition: transform var(--duration-normal, 150ms) var(--ease-decelerate);
+  transition: transform var(--duration-normal, 200ms) var(--ease-decelerate);
 }
 
 .permPill.isOpen .permPillChev {
@@ -107,7 +107,7 @@
   list-style: none;
   border-radius: var(--radius-menu-outer, 16px);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-panel, var(--border-color));
+  border: 1px solid var(--border-panel);
   box-shadow: var(--shadow-popover, var(--shadow-lg));
   display: flex;
   flex-direction: column;
@@ -115,16 +115,8 @@
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
-  animation: permMenuIn var(--transition-micro, 100ms ease);
-}
-
-@keyframes permMenuIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  /* 浮层配方归队（AN2 / A6）：与全域菜单同一进场（popover-enter token + 共享 keyframes） */
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .permMenuItem {
@@ -143,7 +135,7 @@
   cursor: pointer;
   text-align: left;
   outline: none;
-  transition: background-color var(--transition-micro, 100ms ease);
+  transition: background-color var(--transition-micro, 100ms ease-out);
   box-sizing: border-box;
   font-family: inherit;
   color: var(--text-primary);
@@ -163,7 +155,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: color var(--transition-micro, 100ms ease);
+  transition: color var(--transition-micro, 100ms ease-out);
 }
 
 .permMenuItem:hover .iconWrapper,
