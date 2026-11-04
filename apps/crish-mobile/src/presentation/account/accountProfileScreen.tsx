@@ -2,13 +2,9 @@
 // + 相机徽章 28；昵称 / 个性签名为外置标签字段（系统选图、裁成方形，超过 3 MB 报错）。
 // 有改动时顶栏右侧才出现「保存」；昵称为空时「保存」置灰并在昵称下提示。
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/adapters/platform/theme';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import {
@@ -21,6 +17,7 @@ import {
   type AvatarPickResult,
 } from '@/adapters/account/accountAvatarPicker';
 import { AppText, Icon } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import { AccountAvatar, AuthBar, AuthField, AuthPage } from './ui';
 import { displayNameOf } from './accountHomeScreen';
 
@@ -63,6 +60,7 @@ interface SaveActionProps {
 function SaveAction({ disabled, loading, onPress }: SaveActionProps) {
   const theme = useTheme();
   const inactive = disabled || loading;
+  const press = usePressFade();
   return (
     <Pressable
       accessibilityRole="button"
@@ -71,20 +69,33 @@ function SaveAction({ disabled, loading, onPress }: SaveActionProps) {
       disabled={inactive}
       testID="profile-save"
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.saveAction,
         {
           height: theme.size.barAction,
           paddingHorizontal: theme.space.md,
           borderRadius: theme.radius.pill,
+          // 带文字主按钮底走 actionPrimary 亮绿（用户裁决 2026-11-02 恢复，
+          // 推翻 D3 的 brandStrong 深绿填充；口径见 theme.contrast.test.ts）
           backgroundColor: disabled
             ? theme.colors.fillSubtle
-            : pressed
-              ? theme.colors.actionPrimaryPressed
-              : theme.colors.actionPrimary,
+            : theme.colors.actionPrimary,
         },
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.actionPrimaryPressed,
+          },
+          press.overlayStyle,
+        ]}
+      />
       {loading ? (
         <ActivityIndicator color={theme.colors.actionPrimaryText} />
       ) : (
@@ -184,7 +195,9 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
           ) : null
         }
       />
-      <ScrollView
+      {/* 库版键盘感知滚动：聚焦签名等下半区字段时自动滚出（键盘审计 §一 P1） */}
+      <KeyboardAwareScrollView
+        bottomOffset={theme.space.md}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
@@ -221,7 +234,6 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
               <View
                 style={[
                   styles.camera,
-                  theme.shadow.xs,
                   {
                     right: -theme.space.xxs,
                     bottom: -theme.space.xxs,
@@ -278,7 +290,7 @@ export function AccountProfileScreen({ onBack }: AccountProfileScreenProps) {
             {error}
           </AppText>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </AuthPage>
   );
 }

@@ -10,7 +10,6 @@ import {
   loginAccountWithPassword,
   logoutAccount,
   requestAccountEmailCode,
-  requestAccountPasswordChangeCode,
   revokeAccountSessionById,
   setAccountPasswordWithToken,
   continueAccountEmail,
@@ -32,11 +31,7 @@ import { AccountCodeScreen, formatCountdown } from './accountCodeScreen';
 import { AccountPasswordScreen } from './accountPasswordScreen';
 import { AccountSetPasswordScreen } from './accountSetPasswordScreen';
 import { AccountHomeScreen, displayNameOf } from './accountHomeScreen';
-import {
-  AccountSessionsScreen,
-  deviceLabelOf,
-  orderSessions,
-} from './accountSessionsScreen';
+import { AccountSessionsScreen } from './accountSessionsScreen';
 import { AccountDeleteScreen } from './accountDeleteScreen';
 import { initialOf } from './ui';
 
@@ -130,16 +125,10 @@ describe('纯函数', () => {
     expect(initialOf('  ')).toBe('?');
   });
 
-  it('orderSessions：去掉已吊销，本机置顶，其余按时间倒序', () => {
-    const ordered = orderSessions([
-      session({ id: 'old', createdAt: 1 }),
-      session({ id: 'gone', revoked: true }),
-      session({ id: 'new', createdAt: 9 }),
-      session({ id: 'me', current: true, createdAt: 5 }),
-    ]);
-    expect(ordered.map((s) => s.id)).toEqual(['me', 'new', 'old']);
-    expect(deviceLabelOf(session({ userAgent: ' ' }))).toBe('未知设备');
-  });
+  // 登录设备排序/命名口径已迁至 domain/pure/accountDeviceRows +
+  // deviceIdentity（与桌面同构），覆盖见 accountDeviceRows.test.ts 与
+  // deviceIdentity.test.ts；本文件只保留页面级行为用例（见下方
+  // AccountSessionsScreen describe）。
 });
 
 describe('WelcomeScreen', () => {
@@ -337,7 +326,6 @@ describe('AccountSetPasswordScreen', () => {
   it.each([
     ['register', '设置密码'],
     ['reset', '重置密码'],
-    ['change', '修改密码'],
   ] as const)('%s 标题为 %s', async (mode, title) => {
     const view = await renderScreen(
       <AccountSetPasswordScreen
@@ -345,7 +333,6 @@ describe('AccountSetPasswordScreen', () => {
         initialEmail="a@b.co"
         onBack={noop}
         onDone={noop}
-        onCodeSent={noop}
       />
     );
     expect(view.getByText(title)).toBeTruthy();
@@ -368,12 +355,7 @@ describe('AccountSetPasswordScreen', () => {
 
     const onDone = jest.fn();
     const view = await renderScreen(
-      <AccountSetPasswordScreen
-        mode="register"
-        onBack={noop}
-        onDone={onDone}
-        onCodeSent={noop}
-      />
+      <AccountSetPasswordScreen mode="register" onBack={noop} onDone={onDone} />
     );
     expect(view.getByText('a@b.co')).toBeTruthy();
     await fireEvent.changeText(
@@ -395,30 +377,6 @@ describe('AccountSetPasswordScreen', () => {
     );
   });
 
-  it('修改密码：收下新密码后请求改密验证码', async () => {
-    jest.mocked(requestAccountPasswordChangeCode).mockResolvedValue({
-      ok: true,
-      expiresIn: 600,
-    });
-    const onCodeSent = jest.fn();
-    const view = await renderScreen(
-      <AccountSetPasswordScreen
-        mode="change"
-        initialEmail="a@b.co"
-        onBack={noop}
-        onDone={noop}
-        onCodeSent={onCodeSent}
-      />
-    );
-    await fireEvent.changeText(
-      view.getByTestId('set-password-input'),
-      'a-strong-password'
-    );
-    await fireEvent.press(view.getByTestId('set-password-submit'));
-    await waitFor(() => expect(onCodeSent).toHaveBeenCalled());
-    expect(requestAccountPasswordChangeCode).toHaveBeenCalled();
-  });
-
   it('弱口令（连续 / 重复）不可提交', async () => {
     const view = await renderScreen(
       <AccountSetPasswordScreen
@@ -426,7 +384,6 @@ describe('AccountSetPasswordScreen', () => {
         initialEmail="a@b.co"
         onBack={noop}
         onDone={noop}
-        onCodeSent={noop}
       />
     );
     await fireEvent.changeText(
@@ -446,11 +403,13 @@ describe('AccountHomeScreen', () => {
       .mockResolvedValue([session({ id: '1' }), session({ id: '2' })]);
     jest.mocked(logoutAccount).mockResolvedValue();
     const onSignedOut = jest.fn();
+    const onChangeEmail = jest.fn();
     const view = await renderScreen(
       <AccountHomeScreen
         onBack={noop}
         onOpenProfile={noop}
         onOpenSessions={noop}
+        onChangeEmail={onChangeEmail}
         onChangePassword={noop}
         onOpenDelete={noop}
         onSignedOut={onSignedOut}
@@ -459,6 +418,10 @@ describe('AccountHomeScreen', () => {
     expect(view.getByTestId('account-name')).toHaveTextContent('小明');
     expect(view.getByText('a@b.co')).toBeTruthy();
     await waitFor(() => expect(view.getByText('2')).toBeTruthy());
+
+    // 换绑邮箱入口在修改密码上方，点击走换绑回调
+    await fireEvent.press(view.getByTestId('account-row-change-email'));
+    expect(onChangeEmail).toHaveBeenCalledTimes(1);
 
     await fireEvent.press(view.getByTestId('account-sign-out'));
     expect(view.getByText('退出登录？')).toBeTruthy();
@@ -489,6 +452,7 @@ describe('AccountHomeScreen UID 行（G6）', () => {
         onBack={noop}
         onOpenProfile={noop}
         onOpenSessions={noop}
+        onChangeEmail={noop}
         onChangePassword={noop}
         onOpenDelete={noop}
         onSignedOut={noop}
@@ -540,11 +504,14 @@ describe('AccountSessionsScreen', () => {
     jest.mocked(revokeAccountSessionById).mockResolvedValue();
     const view = await renderScreen(<AccountSessionsScreen onBack={noop} />);
     await waitFor(() => expect(view.getByText('本机')).toBeTruthy());
+    expect(view.getByText('已登录设备')).toBeTruthy();
+    expect(view.getByText('受信任设备列表')).toBeTruthy();
     expect(view.queryByTestId('account-session-revoke-me')).toBeNull();
 
+    expect(view.getByText('解绑')).toBeTruthy();
     await fireEvent.press(view.getByTestId('account-session-revoke-other'));
     expect(revokeAccountSessionById).not.toHaveBeenCalled();
-    expect(view.getByText('确认')).toBeTruthy();
+    expect(view.getByText('确认解绑')).toBeTruthy();
     await fireEvent.press(view.getByTestId('account-session-revoke-other'));
     await waitFor(() =>
       expect(revokeAccountSessionById).toHaveBeenCalledWith('other')

@@ -13,6 +13,8 @@ export { BigTitle } from './BigTitle';
 export type { BigTitleProps } from './BigTitle';
 export { CODE_LENGTH, CodeCells } from './CodeCells';
 export type { CodeCellsProps } from './CodeCells';
+export { CodeFieldRow } from './CodeFieldRow';
+export type { CodeFieldRowProps } from './CodeFieldRow';
 export { GlassBackdrop } from './GlassBackdrop';
 export type { GlassBackdropProps } from './GlassBackdrop';
 export { NavRow } from './NavRow';

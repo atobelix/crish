@@ -40,12 +40,14 @@ export function WelcomeScreen({
           testID="welcome-scan"
           onPress={onScanToConnect}
         />
+        {/* 法务正文缺口（D7 登记，2026-11-02）：用户协议 / 隐私政策正文尚未备妥，
+            此行仅作普通说明文字呈现、不作可点链接；待法务文本就绪后在此接真实协议页 */}
         <AppText
           variant="caption"
           color="textTertiary"
           style={{ ...styles.center, marginTop: theme.space.md }}
         >
-          继续即表示你同意《用户协议》与《隐私政策》
+          继续即表示你同意用户协议与隐私政策
         </AppText>
       </View>
     </AuthPage>

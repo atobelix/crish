@@ -39,7 +39,7 @@ export function AccountEmailScreen({
   return (
     <AuthPage testID="account-email-screen">
       <AuthBar onBack={onBack} />
-      <BigTitle title="登录或注册" subtitle="输入邮箱，我们会发送验证码" />
+      <BigTitle title="登录或注册" subtitle="我们会发送验证码" />
       <View
         style={{
           paddingHorizontal: theme.space.lg,

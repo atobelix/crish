@@ -1,11 +1,15 @@
 // 账号页（原型 subAccount）：透明 hero（头像 68 + 名字 16/600）+ 白色分组卡行
-// （个人资料 / 用户 UID（点击复制，资料就绪才显示）/ 登录设备 / 修改密码）；
+// （个人资料 / 用户 UID（点击复制，资料就绪才显示）/ 登录设备 / 换绑邮箱 / 修改密码）；
 // 退出登录与注销入口。邮箱行保留为 App 侧账号标识展示（原型 hero 无邮箱行，
 // 邮箱见设置账号卡/登录流程）。
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import {
   listAccountSessions,
   logoutAccount,
@@ -25,7 +29,8 @@ export interface AccountHomeScreenProps {
   onBack: () => void;
   onOpenProfile: () => void;
   onOpenSessions: () => void;
-  onChangePassword: (email: string) => void;
+  onChangeEmail: () => void;
+  onChangePassword: () => void;
   onOpenDelete: () => void;
   onSignedOut: () => void;
 }
@@ -44,6 +49,7 @@ export function AccountHomeScreen({
   onBack,
   onOpenProfile,
   onOpenSessions,
+  onChangeEmail,
   onChangePassword,
   onOpenDelete,
   onSignedOut,
@@ -55,6 +61,8 @@ export function AccountHomeScreen({
   const [sessionCount, setSessionCount] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  // 注销入口按压反馈（按压过渡统一批）
+  const deletePress = usePressFade();
 
   useEffect(() => {
     let alive = true;
@@ -157,10 +165,15 @@ export function AccountHomeScreen({
             onPress={onOpenSessions}
           />
           <NavRow
+            label="换绑邮箱"
+            testID="account-row-change-email"
+            onPress={onChangeEmail}
+          />
+          <NavRow
             label="修改密码"
             last
             testID="account-row-password"
-            onPress={() => onChangePassword(email)}
+            onPress={onChangePassword}
           />
         </View>
         <View
@@ -177,16 +190,18 @@ export function AccountHomeScreen({
             testID="account-sign-out"
             onPress={() => setSheetOpen(true)}
           />
-          <Pressable
+          <AnimatedPressable
             accessibilityRole="button"
             testID="account-delete-entry"
             onPress={onOpenDelete}
-            style={styles.center}
+            onPressIn={deletePress.onPressIn}
+            onPressOut={deletePress.onPressOut}
+            style={[styles.center, deletePress.fadeStyle]}
           >
             <AppText variant="footnote" color="textTertiary">
               注销账号
             </AppText>
-          </Pressable>
+          </AnimatedPressable>
         </View>
       </ScrollView>
       <SignOutSheet

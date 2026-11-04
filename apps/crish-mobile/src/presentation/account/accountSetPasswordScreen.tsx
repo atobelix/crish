@@ -1,6 +1,7 @@
-// 账号 v3 设置密码：注册 / 重置 / 修改三用。
-// 注册与重置在验证码通过后进入本页（先验证码、后设密码），凭 setupToken 落库并登录；
-// 修改密码在本页收下新密码后发验证码，验证码页确认时提交。
+// 账号 v3 设置密码：注册 / 重置两用。
+// 注册与重置在验证码通过后进入本页（先验证码、后设密码），凭 setupToken 落库并登录。
+// 已登录修改密码已拆为单页式 accountChangePasswordScreen（验证码与新密码同页），
+// 不再经本页与验证码页两段跳转。
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
@@ -10,7 +11,6 @@ import {
   getAccountFlowDraft,
   isValidEmail,
   normalizeEmail,
-  startPasswordChange,
 } from '@/adapters/account/accountFlow';
 import {
   evaluatePassword,
@@ -20,12 +20,11 @@ import {
 import { AppText } from '@/presentation/ui';
 import { AuthBar, AuthButton, AuthField, AuthPage, BigTitle } from './ui';
 
-export type SetPasswordMode = 'register' | 'reset' | 'change';
+export type SetPasswordMode = 'register' | 'reset';
 
 const TITLES: Record<SetPasswordMode, string> = {
   register: '设置密码',
   reset: '重置密码',
-  change: '修改密码',
 };
 
 const STRENGTH_TEXT: Record<PasswordStrength, string> = {
@@ -41,7 +40,7 @@ const REASON_TEXT: Record<PasswordRejectReason, string> = {
 };
 
 export function isSetPasswordMode(value: unknown): value is SetPasswordMode {
-  return value === 'register' || value === 'reset' || value === 'change';
+  return value === 'register' || value === 'reset';
 }
 
 export interface AccountSetPasswordScreenProps {
@@ -50,8 +49,6 @@ export interface AccountSetPasswordScreenProps {
   onBack: () => void;
   /** register / reset 完成 */
   onDone: () => void;
-  /** change 已发出验证码 */
-  onCodeSent: () => void;
 }
 
 export function AccountSetPasswordScreen({
@@ -59,15 +56,12 @@ export function AccountSetPasswordScreen({
   initialEmail = '',
   onBack,
   onDone,
-  onCodeSent,
 }: AccountSetPasswordScreenProps) {
   const theme = useTheme();
   const storeError = useAccountStore((s) => s.error);
   const draft = getAccountFlowDraft();
-  const email = normalizeEmail(
-    mode === 'change' ? initialEmail : (draft?.email ?? initialEmail)
-  );
-  const setupReady = mode === 'change' || Boolean(draft?.setupToken);
+  const email = normalizeEmail(draft?.email ?? initialEmail);
+  const setupReady = Boolean(draft?.setupToken);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,13 +81,6 @@ export function AccountSetPasswordScreen({
     if (!ready || busy) return;
     setBusy(true);
     setError(null);
-    if (mode === 'change') {
-      const result = await startPasswordChange(email, password);
-      setBusy(false);
-      if (result.kind === 'sent') onCodeSent();
-      else setError(result.message);
-      return;
-    }
     const result = await completeAccountPassword(password);
     setBusy(false);
     if (result.ok) onDone();
@@ -148,7 +135,7 @@ export function AccountSetPasswordScreen({
           ) : null}
         </View>
         <AuthButton
-          label={mode === 'change' ? '发送验证码' : '完成'}
+          label="完成"
           testID="set-password-submit"
           disabled={!ready}
           loading={busy}

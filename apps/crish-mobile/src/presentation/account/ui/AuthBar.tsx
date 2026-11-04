@@ -28,6 +28,7 @@ export function AuthBar({ title, onBack, right }: AuthBarProps) {
           <IconButton
             name="chevron-left"
             variant="floating"
+            tone="step"
             accessibilityLabel="返回"
             onPress={onBack}
             testID="auth-bar-back"

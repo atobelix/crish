@@ -1,5 +1,6 @@
-// "/account/set-password"：账号 v3 设置 / 重置 / 修改密码（先设密码，再发验证码）。
-import { router, useLocalSearchParams } from 'expo-router';
+// "/account/set-password"：账号 v3 设置 / 重置密码（验证码通过后凭 setupToken 设密）。
+// 修改密码走单页式 /account/change-password，不再经本页。
+import { useLocalSearchParams } from 'expo-router';
 import {
   AccountSetPasswordScreen,
   isSetPasswordMode,
@@ -9,6 +10,7 @@ import {
   paramOf,
 } from '@/presentation/navigation/accountNavigation';
 import { useSafeBack } from '@/presentation/navigation/useSafeBack';
+import { RequireGuest } from '@/presentation/components/auth/RequireGuest';
 
 export default function AccountSetPasswordRoute() {
   const goBack = useSafeBack();
@@ -16,17 +18,13 @@ export default function AccountSetPasswordRoute() {
   const rawMode = paramOf(params.mode);
   const mode = isSetPasswordMode(rawMode) ? rawMode : 'reset';
   return (
-    <AccountSetPasswordScreen
-      mode={mode}
-      initialEmail={paramOf(params.email)}
-      onBack={goBack}
-      onCodeSent={() =>
-        router.push({
-          pathname: '/account/code',
-          params: { next: mode === 'change' ? 'account' : 'home' },
-        })
-      }
-      onDone={() => finishAccountFlow('home')}
-    />
+    <RequireGuest>
+      <AccountSetPasswordScreen
+        mode={mode}
+        initialEmail={paramOf(params.email)}
+        onBack={goBack}
+        onDone={() => finishAccountFlow('home')}
+      />
+    </RequireGuest>
   );
 }

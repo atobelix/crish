@@ -12,12 +12,8 @@ export default function AccountHomeRoute() {
         onBack={goBack}
         onOpenProfile={() => router.push('/account/profile')}
         onOpenSessions={() => router.push('/account/sessions')}
-        onChangePassword={(email) =>
-          router.push({
-            pathname: '/account/set-password',
-            params: { mode: 'change', email },
-          })
-        }
+        onChangeEmail={() => router.push('/account/change-email')}
+        onChangePassword={() => router.push('/account/change-password')}
         onOpenDelete={() => router.push('/account/delete')}
         onSignedOut={() => router.replace('/welcome')}
       />

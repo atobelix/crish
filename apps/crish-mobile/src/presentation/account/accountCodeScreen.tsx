@@ -32,7 +32,7 @@ export function verifyWaitText(elapsedMs: number): string {
 
 export interface AccountCodeScreenProps {
   onBack: () => void;
-  /** 登录成功或改密完成 */
+  /** 登录成功 */
   onSuccess: () => void;
   /** 新账号 / 重置需要设置密码 */
   onSetPassword: (mode: 'register' | 'reset') => void;
@@ -81,7 +81,7 @@ export function AccountCodeScreen({
     setFailedMessage(null);
     const result = await confirmAccountCode(value);
     setBusy(false);
-    if (result.kind === 'signed_in' || result.kind === 'changed') {
+    if (result.kind === 'signed_in') {
       onSuccess();
       return;
     }

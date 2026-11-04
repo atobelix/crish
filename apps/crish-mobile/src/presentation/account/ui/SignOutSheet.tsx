@@ -24,7 +24,7 @@ export function SignOutSheet({
       visible={visible}
       onClose={onCancel}
       testID="sign-out-sheet"
-      maxHeightRatio={0.5}
+      size="compact"
     >
       <AppText variant="headline" color="textPrimary" style={styles.center}>
         退出登录？
