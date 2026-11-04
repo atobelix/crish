@@ -8,7 +8,7 @@
 // 降饱和向灰靠），待用户验收确认后转正；定义见 neutralBase 处注释。
 // 标记弃用的键是迁移期别名（指向新键的值），改版收尾时统一删除。
 import { Platform, useColorScheme } from 'react-native';
-import type { TextStyle, ViewStyle } from 'react-native';
+import type { TextStyle } from 'react-native';
 import { useStore } from 'zustand';
 import { settingsStore } from '@/domain/store/settingsStore';
 import type {
@@ -22,7 +22,7 @@ export interface ThemeColors {
   // 背景层
   canvas: string;
   canvasGrouped: string;
-  /** 抽屉专用底（比主屏深一档，原型 #f5f5f5；M2 抽屉消费） */
+  /** 抽屉与返回台阶盘（A2）共用台阶底（比主屏深一档，底色提升至 #f0f0f0；M2 抽屉消费） */
   canvasDrawer: string;
   surface: string;
   surfaceGrouped: string;
@@ -49,6 +49,7 @@ export interface ThemeColors {
   actionDisabled: string;
   // 品牌（只做小面积点缀）
   brand: string;
+  /** 深绿档：带文字主按钮的底色真源（白字对比 5.48:1，D3 审计修订）兼品牌点缀 */
   brandStrong: string;
   brandSoft: string;
   // 状态
@@ -66,14 +67,13 @@ export interface ThemeColors {
   infoSoft: string;
   /** 离线状态点（原型 device pip 离线档 #9ca3af；在线走 success，M8 收口补档） */
   dotOffline: string;
-  // 媒体之上 / 遮罩 / 阴影
+  // 媒体之上 / 遮罩（阴影色令牌已随去阴影裁决退役，2026-11-02)
   onMedia: string;
   onMediaDanger: string;
   /** Sheet 遮罩（原型 0.28 + blur;blur 由消费方 BlurView 承担，M4 接入） */
   scrim: string;
   /** 居中弹窗遮罩（原型 0.35 + blur，强于 scrim 一档） */
   scrimStrong: string;
-  shadow: string;
   // —— v3 输入面与玻璃 ——
   /** 输入框底色与聚焦底色（原型口径：恒白，两档同值） */
   field: string;
@@ -119,6 +119,7 @@ export interface ThemeRadius {
   lg: number;
   xl: number;
   xxl: number;
+  /** 胶囊专用（宽 > 高）；正方形圆盘禁用，圆盘圆角用 直径/2 实值 */
   pill: number;
   /** 按钮以外的小控件：输入框、行内块、工具输出块 */
   control: number;
@@ -159,6 +160,10 @@ export interface ThemeType {
   title: ThemeTextStyle;
   title2: ThemeTextStyle;
   headline: ThemeTextStyle;
+  /** Markdown h2 专用档（批 E 跨端排版收敛，2026-11-03)：与桌面
+   * markdown-typography 的 h2 18px 对齐；headline(16）是 UI 页头档、
+   * 消费面遍布全 App，不随 Markdown 口径动，故另立本档只供 MarkdownText */
+  mdHeading2: ThemeTextStyle;
   body: ThemeTextStyle;
   bodyStrong: ThemeTextStyle;
   chat: ThemeTextStyle;
@@ -175,14 +180,6 @@ export interface ThemeType {
   codeDigit: ThemeTextStyle;
   /** 顶栏小胶囊按钮文字 14/600 */
   barAction: ThemeTextStyle;
-  /** @deprecated 迁移期别名 @see largeTitle */
-  display: ThemeTextStyle;
-  /** @deprecated 迁移期别名 @see title2 */
-  heading: ThemeTextStyle;
-  /** @deprecated 迁移期别名 @see headline */
-  subhead: ThemeTextStyle;
-  /** @deprecated 迁移期别名 @see footnote */
-  meta: ThemeTextStyle;
 }
 
 export interface ThemeSize {
@@ -208,6 +205,8 @@ export interface ThemeSize {
   /** Sheet 拖拽把手 */
   sheetHandleWidth: number;
   sheetHandleHeight: number;
+  /** Sheet 关闭圆钮直径（圆角取其一半实值） */
+  sheetClose: number;
   /** 多行表单输入框最小高度 */
   inputMultilineMin: number;
   /** 账号 v3：输入框 / 验证码格高度、多行输入框高度 */
@@ -249,23 +248,17 @@ export interface ThemeLayout {
   accountPageX: number;
   /** 图标全局唯一标准线宽（24 网格） */
   iconStroke: number;
+  /** 代码块滚动视口高度封顶（批 E，2026-11-03)：介于 Cherry 192（偏紧）
+   * 与桌面 min(480px,50vh）之间取 320；头栏与容器内衬另计，总高仍 < 480 */
+  codeBlockMaxHeight: number;
+  /** markdown / 消息级图片高度封顶（批 E；Cherry 同值 320，contain 保全图） */
+  imageMaxHeight: number;
 }
 
-export interface ThemeShadow {
-  none: ViewStyle;
-  xs: ViewStyle;
-  sm: ViewStyle;
-  md: ViewStyle;
-  lg: ViewStyle;
-  /** 主卡档：抽屉打开时底层主卡的左向微阴影（原型 main-shadow α≈0.02 左向） */
-  card: ViewStyle;
-  /** Sheet 上向档：底部 Sheet 面板的上抛阴影（原型 α0.08,-10px 上向；M4 消费） */
-  sheetUp: ViewStyle;
-  /** @deprecated 迁移期别名：实为抽屉主卡阴影 @see card */
-  sheet: ViewStyle;
-  /** @deprecated 迁移期别名：圆钮 @see sm ；composer @see md */
-  floating: ViewStyle;
-}
+// 阴影体系已整体退役（2026-11-02 用户裁决）：Android 只认 elevation、由系统
+// Material 光照模型合成，灰度远重于原型 CSS 软阴影且无从调校——按钮与浮动
+// 表面改走亮度台阶区分（surfaceRaised 档）。Theme 不再有 shadow 字段，
+// 消费面零 elevation / shadow*，由 noShadow.guard.test.ts 钉住防回潮。
 
 export type Bezier = readonly [number, number, number, number];
 
@@ -281,9 +274,16 @@ export interface ThemeMotion {
     micro: number;
     snappy: number;
     fast: number;
+    /** 菜单升起（原型 dropdown-menu 0.18s emphasized；DropdownMenu /
+     * 横幅退场消费） */
+    menu: number;
     normal: number;
     sheet: number;
     settle: number;
+    /** 旋转指示周期（原型 spinner-ring-gray 1.5s 线性；ChatFlatItem 运行环） */
+    spin: number;
+    /** 光标呼吸半周期（CodeCells 验证码光标 0.4s 往返） */
+    blink: number;
     /** 抽屉开合（原型 0.35s emphasized 定时；M2 消费，替代弹簧口径） */
     drawer: number;
     /** 搜索展开 / 键盘联动（原型 0.28s emphasized 定时；M2/M3 消费） */
@@ -312,6 +312,24 @@ export interface AvatarTone {
   fg: string;
 }
 
+/** 代码高亮色板（批 E，2026-11-03)：封口代码块的词法角色色，角色划分对
+ * 齐 Cherry 的 11 角色思路（参数级借鉴），色值按本端底色（代码块底 =
+ * surfaceGrouped）自建：浅色在白底、深色在 #1c1c1c 底上均保足可读对比；
+ * comment 不入板，呈现层直用 colors.textTertiary（跟随主题文字阶梯）。
+ * 中性灰档按其推导规则 3 同法降饱和（见 neutralSyntax 注记）。 */
+export interface ThemeSyntaxPalette {
+  keyword: string;
+  string: string;
+  number: string;
+  function: string;
+  type: string;
+  constant: string;
+  property: string;
+  tag: string;
+  inserted: string;
+  deleted: string;
+}
+
 export interface Theme {
   dark: boolean;
   colors: ThemeColors;
@@ -320,28 +338,28 @@ export interface Theme {
   type: ThemeType;
   size: ThemeSize;
   layout: ThemeLayout;
-  shadow: ThemeShadow;
   motion: ThemeMotion;
   avatarTones: readonly AvatarTone[];
+  syntax: ThemeSyntaxPalette;
 }
 
 // 浅色全值 = 参考原型（reference/crish-mobile-drawer/css/variables.css 及组件稿），
 // 由 styleTokens.guard.test.ts 的原型同值 fixture 逐项锁定，改值先改原型再改此处。
 const lightBase: BaseColors = {
-  canvas: '#f9f9f9',
-  canvasGrouped: '#f9f9f9',
-  canvasDrawer: '#f5f5f5',
+  canvas: '#f4f4f4',
+  canvasGrouped: '#f4f4f4',
+  canvasDrawer: '#f0f0f0',
   surface: '#ffffff',
   surfaceGrouped: '#ffffff',
   surfaceRaised: '#ffffff',
-  fillSubtle: '#f9f9f9',
+  fillSubtle: '#f4f4f4',
   fillPressed: 'rgba(0,0,0,0.035)',
   fillSelected: 'rgba(0,0,0,0.03)',
   bubbleUser: '#171717',
   bubbleUserText: '#ffffff',
   textPrimary: '#171717',
   textSecondary: '#555555',
-  textTertiary: '#777777',
+  textTertiary: '#6e6e6e',
   textDisabled: '#aaaaaa',
   hairline: 'rgba(0,0,0,0.045)',
   borderStrong: '#e5e5e5',
@@ -366,13 +384,14 @@ const lightBase: BaseColors = {
   onMediaDanger: '#fecaca',
   scrim: 'rgba(0,0,0,0.28)',
   scrimStrong: 'rgba(0,0,0,0.35)',
-  shadow: '#000000',
   field: '#ffffff',
   fieldFocus: '#ffffff',
-  // 按下绿：原型无此值，取既有 brandStrong 深绿作同族深一档（推导值）
-  actionPrimaryPressed: '#047857',
-  glass: 'rgba(249,249,249,0.72)',
-  glassSheet: 'rgba(249,249,249,0.86)',
+  // 按下绿：原型无此值；主按钮填充恢复 actionPrimary 亮绿（用户裁决
+  // 2026-11-02，推翻 D3 的 brandStrong 深绿填充），按下档取同族深一档
+  // emerald 600（推导值）
+  actionPrimaryPressed: '#059669',
+  glass: 'rgba(244,244,244,0.72)',
+  glassSheet: 'rgba(244,244,244,0.86)',
   surfaceTranslucent: 'rgba(255,255,255,0.78)',
   surfaceTranslucentStrong: 'rgba(255,255,255,0.88)',
 };
@@ -405,7 +424,10 @@ const darkBase: BaseColors = {
   actionPrimaryText: '#ffffff',
   actionDisabled: '#202020',
   brand: '#10b981',
-  brandStrong: '#34d399',
+  // brandStrong：深绿档，保留作浅底深绿文字/点缀用途（三套同值 #047857，
+  // 作文字对浅底 ≈5.48:1）；带文字主按钮的填充已按用户裁决（2026-11-02）
+  // 恢复 actionPrimary 亮绿，不再走本档（深色按下提亮走 actionPrimaryPressed #34d399）
+  brandStrong: '#047857',
   brandSoft: '#17301f',
   // 角色修正（J1)：success 与 brand 统一（原 #3fb950 并入 #10b981)
   success: '#10b981',
@@ -425,10 +447,9 @@ const darkBase: BaseColors = {
   scrim: 'rgba(0,0,0,0.5)',
   // 推导：弹窗遮罩比 Sheet 遮罩深一档（与浅色 0.28→0.35 同关系）
   scrimStrong: 'rgba(0,0,0,0.6)',
-  shadow: '#000000',
   field: '#1b1b1b',
   fieldFocus: '#222222',
-  // 推导：按下绿取深色 brandStrong 亮绿（深底按下提亮口径）
+  // 推导：按下绿取同族亮绿（深底按下提亮口径）
   actionPrimaryPressed: '#34d399',
   glass: 'rgba(32,32,32,0.68)',
   glassSheet: 'rgba(22,22,22,0.84)',
@@ -438,8 +459,8 @@ const darkBase: BaseColors = {
 };
 
 // 纯净中性灰（裁决 J5/J8，第四档）：【整套为推导值，原型未给任何色值，待用户
-// 验收确认】。推导规则（源：原型灰阶 #171717/#555555/#777777/#aaaaaa 文字四阶、
-// #f9f9f9/#f5f5f5 底、#e5e5e5 线 + J8 彩色克制原则）：
+// 验收确认】。推导规则（源：原型灰阶 #171717/#555555/#6e6e6e/#aaaaaa 文字四阶、
+// #f4f4f4/#f0f0f0 底、#e5e5e5 线 + J8 彩色克制原则）：
 // 1) 结构层（底/面/线/文字/alpha 档/玻璃档）本就是纯中性灰（R=G=B 或纯黑
 //    alpha)，与浅色同值——本档的「纯净」与浅色共用同一灰阶骨架；
 // 2) 功能色（绿：brand/actionPrimary/success/info 蓝）全部收敛为中性墨/灰阶
@@ -450,20 +471,20 @@ const darkBase: BaseColors = {
 //    的 mode 分发，日后推导深色中性灰时在此并列新增一表即可）。
 const neutralBase: BaseColors = {
   // —— 结构层：与浅色同值（原型灰阶直给） ——
-  canvas: '#f9f9f9',
-  canvasGrouped: '#f9f9f9',
-  canvasDrawer: '#f5f5f5',
+  canvas: '#f4f4f4',
+  canvasGrouped: '#f4f4f4',
+  canvasDrawer: '#f0f0f0',
   surface: '#ffffff',
   surfaceGrouped: '#ffffff',
   surfaceRaised: '#ffffff',
-  fillSubtle: '#f9f9f9',
+  fillSubtle: '#f4f4f4',
   fillPressed: 'rgba(0,0,0,0.035)',
   fillSelected: 'rgba(0,0,0,0.03)',
   bubbleUser: '#171717',
   bubbleUserText: '#ffffff',
   textPrimary: '#171717',
   textSecondary: '#555555',
-  textTertiary: '#777777',
+  textTertiary: '#6e6e6e',
   textDisabled: '#aaaaaa',
   hairline: 'rgba(0,0,0,0.045)',
   borderStrong: '#e5e5e5',
@@ -489,7 +510,7 @@ const neutralBase: BaseColors = {
   // 琥珀：色相守原型 38° 一带，HSL 饱和 92%→68%（赭黄向灰靠；仅图形档）
   warning: '#bd8324',
   // 待审批文字档：灰棕橄榄（饱和 100%→63%)，正文对比 ≥4.5 守住
-  warningText: '#8a6d1f',
+  warningText: '#876a1e',
   warningSoft: '#f6f1e6',
   // 信息蓝退役：收敛 text-2 中性灰（语义靠图标/文案），软底纯灰
   info: '#555555',
@@ -499,16 +520,15 @@ const neutralBase: BaseColors = {
   onMedia: '#ffffff',
   // 媒体上危险字：粉红 → 微暖灰白（色相残留压至近无）
   onMediaDanger: '#e9dede',
-  // —— 遮罩/阴影/字段/玻璃：本就无色相，与浅色同值 ——
+  // —— 遮罩/字段/玻璃：本就无色相，与浅色同值 ——
   scrim: 'rgba(0,0,0,0.28)',
   scrimStrong: 'rgba(0,0,0,0.35)',
-  shadow: '#000000',
   field: '#ffffff',
   fieldFocus: '#ffffff',
   // 按下档：墨主操作按下提亮一档（沿用 App 墨主操作时代的 #2a2a2a 先例）
   actionPrimaryPressed: '#2a2a2a',
-  glass: 'rgba(249,249,249,0.72)',
-  glassSheet: 'rgba(249,249,249,0.86)',
+  glass: 'rgba(244,244,244,0.72)',
+  glassSheet: 'rgba(244,244,244,0.86)',
   surfaceTranslucent: 'rgba(255,255,255,0.78)',
   surfaceTranslucentStrong: 'rgba(255,255,255,0.88)',
 };
@@ -535,6 +555,8 @@ const radius: ThemeRadius = {
   lg: 20,
   xl: 24,
   xxl: 28,
+  // pill 仅限胶囊（宽 > 高）使用；正方形圆盘禁用——9999 与 elevation 同节点在 Android
+  // 会让填充/阴影轮廓分裂出八角（圆形按钮缺陷审计定案），圆盘圆角一律用 直径/2 实值。
   pill: 9999,
   control: 12,
   card: 20,
@@ -544,6 +566,7 @@ const radius: ThemeRadius = {
   sheetApproval: 24,
   field: 18,
   codeCell: 16,
+  // composer 卡圆角：原型 26；单行 52px 严格胶囊半圆 R=26；展开 98px 保持稳定 R=26
   composer: 26,
   menu: 18,
   dialog: 36,
@@ -605,6 +628,19 @@ function scaled(
 // 标题/名称/标签类普遍带 -0.01em 等价 letterSpacing（按字号折算取整到 0.01)。
 // bodyStrong 保留 16/600：平铺会话行标题原型即 16/600（§3.2 #17 同值项），
 // 其余误用点（抽屉名字 14/600 等）由 M2/M5 在组件侧改选 variant。
+//
+// 跨端排版口径（批 E 收敛定案，2026-11-03；与桌面 markdown-typography /
+// tokens-components 对照后的裁决全集，防再漂移）：
+// - h2：双端收敛 18/600——桌面既有值 18 为准，本端立 mdHeading2 专用档
+//   （headline 16 是 UI 页头档，不动）；h1/h3–h6 非分歧项，维持现行映射
+//   （h1 title 20、h3 bodyStrong 16、h4 chat+700、h5 footnote+700、
+//   h6 caption+700；桌面梯 22/16/15/14/13，移动标题整体克制一档为既定形态）；
+// - 正文行高比：收敛 1.55——chat 行高 21 → 21.7(= 14 × 1.55，与桌面
+//   --lh-prose 同值）；body(UI 正文）维持 21 的界面密度，不随阅读口径；
+// - 表格 cell padding：有意保留平台差异——桌面 10×14，本端横 8 / 纵 4
+//   （窄屏横滑表格的密度口径；字号双端同为 14 已收敛），不强行对齐；
+// - 段距：双端同为单边距——本端块间 gap(space.md）无 margin 概念、天然
+//   单边；桌面标题 margin 已同步改 bottom-only(tokens-components.css)。
 function buildType(
   scale: number,
   monoFamily: string,
@@ -643,6 +679,11 @@ function buildType(
     ),
     title2: scaled(title2, scale, monoFamily),
     headline: scaled(headline, scale, monoFamily),
+    mdHeading2: scaled(
+      { fontSize: 18, lineHeight: 24, fontWeight: '600', letterSpacing: -0.18 },
+      scale,
+      monoFamily
+    ),
     body: scaled(
       { fontSize: 14, lineHeight: 21, fontWeight: '400' },
       scale,
@@ -654,7 +695,8 @@ function buildType(
       monoFamily
     ),
     chat: scaled(
-      { fontSize: 14, lineHeight: 21, fontWeight: '400' },
+      // 行高 21.7 = 14 × 1.55：与桌面 markdown 正文行高比收敛（批 E，见上）
+      { fontSize: 14, lineHeight: 21.7, fontWeight: '400' },
       scale,
       monoFamily
     ),
@@ -722,10 +764,6 @@ function buildType(
       scale,
       monoFamily
     ),
-    display: scaled(largeTitle, scale, monoFamily),
-    heading: scaled(title2, scale, monoFamily),
-    subhead: scaled(headline, scale, monoFamily),
-    meta: scaled(footnote, scale, monoFamily),
   };
   return type;
 }
@@ -749,6 +787,7 @@ const size: ThemeSize = {
   dot: 8,
   sheetHandleWidth: 36,
   sheetHandleHeight: 4,
+  sheetClose: 30,
   inputMultilineMin: 96,
   field: 56,
   fieldTall: 104,
@@ -777,98 +816,52 @@ const layout: ThemeLayout = {
   accountPageX: 24,
   /** 图标全局唯一标准线宽（24 网格；原型主档 1.8，对号等例外由 Icon 按名覆盖） */
   iconStroke: 1.8,
+  codeBlockMaxHeight: 320,
+  imageMaxHeight: 320,
 };
 
-// 阴影档位（原型定版：整体比旧档弱 2–7 倍）：
-// xs/sm = 浮钮/胶囊/横幅（btn-shadow 峰值 α≈0.02–0.03)、md = 气泡/composer(α0.06)、
-// lg = 浮层通档（Sheet/菜单/弹窗/审批卡 α0.08)、card = 抽屉主卡（α≈0.02 左向）、
-// sheetUp = 底部 Sheet 上抛（α0.08,-10px)。深色保持现体系的高 α 关系（J1)，
-// 几何（方向/半径/偏移）两套共享。
-function makeShadow(
-  color: string,
-  opacity: readonly [number, number, number, number, number, number]
-): ThemeShadow {
-  const [xs, sm, md, lg, card, sheetUp] = opacity;
-  const none: ViewStyle = { shadowOpacity: 0, elevation: 0 };
-  const shadowXs: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: xs,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  };
-  const shadowSm: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: sm,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  };
-  const shadowMd: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: md,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  };
-  const shadowLg: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: lg,
-    shadowRadius: 32,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-  };
-  const shadowCard: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: card,
-    shadowRadius: 16,
-    shadowOffset: { width: -6, height: 0 },
-    elevation: 6,
-  };
-  const shadowSheetUp: ViewStyle = {
-    shadowColor: color,
-    shadowOpacity: sheetUp,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -10 },
-    elevation: 16,
-  };
-  return {
-    none,
-    xs: shadowXs,
-    sm: shadowSm,
-    md: shadowMd,
-    lg: shadowLg,
-    card: shadowCard,
-    sheetUp: shadowSheetUp,
-    sheet: shadowCard,
-    floating: shadowSm,
-  };
-}
-
-const lightShadow = makeShadow(
-  lightBase.shadow,
-  [0.02, 0.03, 0.06, 0.08, 0.02, 0.08]
-);
-const darkShadow = makeShadow(darkBase.shadow, [0.4, 0.5, 0.55, 0.6, 0.5, 0.6]);
-
+// 键盘单时钟源正典（2026-11-03 批 A 成文；源出 Cherry 深比 01-1/2 的
+// 参数级对照与本仓 M-B/M-C/M-D 落地形态，防新浮层再犯同屏多节奏）：
+// 1) 凡随键盘动的运动，只准消费 react-native-keyboard-controller 的
+//    逐帧 height/progress（KeyboardStickyView /
+//    useReanimatedKeyboardAnimation / useKeyboardHandler），禁止自配
+//    时长/曲线；离散键盘高度（useKeyboardHeight）不得驱动定位，只许
+//    用于时序门（如 Sheet 呈现交接的 settle 等待，见 ui/Sheet.tsx）。
+// 2) 聚焦触发的状态过渡预算 ≤120ms（snappy 档），须在键盘行程前
+//    1/3 内完成：本仓 composer 恒两行（用户裁决），聚焦不切换形态，
+//    此预算的现行落点是焦点/按压反馈过渡（pressFeedback 的 snappy）。
+// 3) 打字引起的输入框增高直达落值、零补间（ui/Composer.tsx 的
+//    handleContentSizeChange 现行实现）：逐字补间 = 框体追赶文字，
+//    是输入卡顿源，已废止；duration.expand 的现行消费面只有抽屉搜索
+//    展开与 Sheet 面板程式化开合等非打字节奏，不得挪回打字路径。
 // 与桌面 apps/crish-desktop/src/utils/motionTokens.ts 同值
 const motion: ThemeMotion = {
   duration: {
     micro: 100,
     snappy: 120,
     fast: 150,
+    menu: 180,
     normal: 200,
     sheet: 220,
     settle: 260,
+    spin: 1500,
+    blink: 400,
     drawer: 350,
     expand: 280,
   },
   easing: {
     standard: [0.4, 0, 0.2, 1],
     emphasized: [0.16, 1, 0.3, 1],
-    decelerate: [0, 0, 0.2, 1],
+    // decelerate 与桌面 motionTokens.EASE_DECELERATE 同值（cubic-bezier(0.2,0,0,1)
+    // 快出减速）——2026-11-02 跨端漂移比对修正：旧值 [0,0,0.2,1] 是慢起变体、
+    // 与「decelerate」语义不符；消费面仅 Toast 进出场，曲线更贴合滑入减速。
+    decelerate: [0.2, 0, 0, 1],
   },
-  enter: { duration: 150, translateY: 6 },
+  // enter = 审批浮卡进场专用档（唯一消费 ApprovalFloat，translateY 6 = 浮卡
+  // 上移进场）：原型 conv-approval-floating-popup transition transform 0.22s /
+  // opacity 0.18s（conversation-view.css）——2026-11-02 对齐原型取 transform
+  // 主导 220（旧 150 为未溯源近似值）。
+  enter: { duration: 220, translateY: 6 },
   spring: {
     snappy: { damping: 20, stiffness: 350, mass: 0.8 },
     bouncy: { damping: 15, stiffness: 200, mass: 1 },
@@ -903,12 +896,55 @@ const darkAvatarTones: readonly AvatarTone[] = [
   { bg: '#2c2c2c', fg: '#b4b4b4' },
 ];
 
+// 高亮色板三档（批 E)：浅色 = 白底（surfaceGrouped #ffffff）上的克制色
+// 阶（紫 / 深绿 / 蓝 / 赭 / 青 / 砖红，均压过 4.5:1)；深色 = #1c1c1c 底上
+// 的同色相提亮档；中性灰按其推导规则 3 降饱和向灰靠（推导值，随中性灰
+// 整档待用户验收）。
+const lightSyntax: ThemeSyntaxPalette = {
+  keyword: '#a626a4',
+  string: '#2f7d32',
+  number: '#b76b01',
+  function: '#2a5fd7',
+  type: '#0e7c86',
+  constant: '#b23a48',
+  property: '#6f42c1',
+  tag: '#22863a',
+  inserted: '#2f7d32',
+  deleted: '#cf222e',
+};
+
+const darkSyntax: ThemeSyntaxPalette = {
+  keyword: '#c792ea',
+  string: '#a8cc8c',
+  number: '#f0a35e',
+  function: '#82aaff',
+  type: '#6fd3d6',
+  constant: '#f78c9c',
+  property: '#c3a6f2',
+  tag: '#7ee0a3',
+  inserted: '#a8cc8c',
+  deleted: '#f78c9c',
+};
+
+const neutralSyntax: ThemeSyntaxPalette = {
+  keyword: '#8a5a96',
+  string: '#4a7247',
+  number: '#a06a28',
+  function: '#4a6db3',
+  type: '#3f7d84',
+  constant: '#a34a55',
+  property: '#71589c',
+  tag: '#527a54',
+  inserted: '#4a7247',
+  deleted: '#b04040',
+};
+
 function buildTheme(
   base: BaseColors,
   dark: boolean,
-  shadow: ThemeShadow,
   avatarTones: readonly AvatarTone[],
-  type: ThemeType
+  type: ThemeType,
+  syntax: ThemeSyntaxPalette
 ): Theme {
   return {
     dark,
@@ -918,36 +954,36 @@ function buildTheme(
     type,
     size,
     layout,
-    shadow,
     motion,
     avatarTones,
+    syntax,
   };
 }
 
 export const lightTheme: Theme = buildTheme(
   lightBase,
   false,
-  lightShadow,
   lightAvatarTones,
-  buildType(1, systemMonoFont)
+  buildType(1, systemMonoFont),
+  lightSyntax
 );
 
 export const darkTheme: Theme = buildTheme(
   darkBase,
   true,
-  darkShadow,
   darkAvatarTones,
-  buildType(1, systemMonoFont)
+  buildType(1, systemMonoFont),
+  darkSyntax
 );
 
-/** 纯净中性灰主题（推导档，J5/J8)：浅色语境（dark=false)，阴影/头像兜底与
+/** 纯净中性灰主题（推导档，J5/J8)：浅色语境（dark=false)，头像兜底与
  * 浅色共享——头像兜底本就是统一中性灰，正合本档定义；几何/字阶全档共享。 */
 export const neutralTheme: Theme = buildTheme(
   neutralBase,
   false,
-  lightShadow,
   lightAvatarTones,
-  buildType(1, systemMonoFont)
+  buildType(1, systemMonoFont),
+  neutralSyntax
 );
 
 /** 按 id 稳定取头像色（字符串哈希取模，同一会话恒定同色） */

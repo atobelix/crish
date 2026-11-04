@@ -9,7 +9,6 @@ html[data-theme='default'],
 html[data-theme='light'] {
   /* SmartExpandablePanel tokens (Light) */
   --sep-item-radius: var(--radius-menu-inner, 12px);
-  --sep-badge-radius: var(--radius-row);
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
   --sep-font-sans: var(
@@ -56,8 +55,6 @@ html[data-theme='light'] {
      ========================================================================= */
 
   /* 1. 顶部标签体系 (Light) */
-  --tab-top-bg: transparent;
-  --tab-top-text: var(--text-secondary);
   --tab-top-hover-bg: hsl(0 0% 100% / 0.72);
   --tab-top-hover-text: var(--text-primary);
   --tab-top-active-bg: var(--tab-active-surface, #ffffff);
@@ -65,8 +62,6 @@ html[data-theme='light'] {
   --tab-top-active-shadow: var(--shadow-lift-card);
 
   /* 2. 侧边栏项目体系 (Light) */
-  --sidebar-item-bg: transparent;
-  --sidebar-item-text: var(--text-secondary);
   --sidebar-item-hover-bg: color-mix(
     in srgb,
     var(--text-primary) 4.5%,
@@ -194,20 +189,22 @@ html[data-theme='light'] {
   --md-block-gap: 0.65em;
   --md-flow-space: 0.88em;
 
+  /* 标题边距口径（批 E 跨端收敛，2026-11-03)：只留下边距——块间距由
+     --md-block-gap / flow 统一承载，上边距归零防双倍叠加；底值沿用原档 */
   --md-h1-size: var(--font-size-title, 22px);
-  --md-h1-margin: 0.85em 0 0.36em;
+  --md-h1-margin: 0 0 0.36em;
   --md-h1-border: 1px solid var(--edge-rim);
   --md-h2-size: var(--font-size-heading, 18px);
-  --md-h2-margin: 0.75em 0 0.3em;
+  --md-h2-margin: 0 0 0.3em;
   --md-h2-border: none;
   --md-h3-size: var(--font-size-subhead, 16px);
-  --md-h3-margin: 0.65em 0 0.26em;
+  --md-h3-margin: 0 0 0.26em;
   --md-h4-size: calc(15px + var(--font-size-adjust, 0px));
-  --md-h4-margin: 0.55em 0 0.22em;
+  --md-h4-margin: 0 0 0.22em;
   --md-h5-size: calc(14px + var(--font-size-adjust, 0px));
-  --md-h5-margin: 0.45em 0 0.18em;
+  --md-h5-margin: 0 0 0.18em;
   --md-h6-size: calc(13px + var(--font-size-adjust, 0px));
-  --md-h6-margin: 0.38em 0 0.15em;
+  --md-h6-margin: 0 0 0.15em;
 
   --md-heading-color: var(--text-primary);
 
@@ -298,7 +295,6 @@ html[data-theme='light'] {
 html[data-theme='dark'] {
   /* SmartExpandablePanel tokens (Dark) */
   --sep-item-radius: var(--radius-menu-inner, 12px);
-  --sep-badge-radius: var(--radius-row);
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
   --sep-bg-item-hover: var(--state-hover);
@@ -323,8 +319,6 @@ html[data-theme='dark'] {
      ========================================================================= */
 
   /* 1. 顶部标签体系 (Dark) */
-  --tab-top-bg: transparent;
-  --tab-top-text: var(--text-secondary);
   --tab-top-hover-bg: hsl(0 0% 100% / 0.08);
   --tab-top-hover-text: var(--text-primary);
   --tab-top-active-bg: var(--surface-raised);
@@ -332,8 +326,6 @@ html[data-theme='dark'] {
   --tab-top-active-shadow: var(--shadow-lift-card);
 
   /* 2. 侧边栏项目体系 (Dark) */
-  --sidebar-item-bg: transparent;
-  --sidebar-item-text: var(--text-secondary);
   --sidebar-item-hover-bg: color-mix(
     in srgb,
     var(--text-primary) 5%,
@@ -446,20 +438,22 @@ html[data-theme='dark'] {
   --md-block-gap: 0.65em;
   --md-flow-space: 0.88em;
 
+  /* 标题边距口径（批 E 跨端收敛，2026-11-03)：只留下边距——块间距由
+     --md-block-gap / flow 统一承载，上边距归零防双倍叠加；底值沿用原档 */
   --md-h1-size: var(--font-size-title, 22px);
-  --md-h1-margin: 0.85em 0 0.36em;
+  --md-h1-margin: 0 0 0.36em;
   --md-h1-border: 1px solid var(--edge-rim);
   --md-h2-size: var(--font-size-heading, 18px);
-  --md-h2-margin: 0.75em 0 0.3em;
+  --md-h2-margin: 0 0 0.3em;
   --md-h2-border: none;
   --md-h3-size: var(--font-size-subhead, 16px);
-  --md-h3-margin: 0.65em 0 0.26em;
+  --md-h3-margin: 0 0 0.26em;
   --md-h4-size: calc(15px + var(--font-size-adjust, 0px));
-  --md-h4-margin: 0.55em 0 0.22em;
+  --md-h4-margin: 0 0 0.22em;
   --md-h5-size: calc(14px + var(--font-size-adjust, 0px));
-  --md-h5-margin: 0.45em 0 0.18em;
+  --md-h5-margin: 0 0 0.18em;
   --md-h6-size: calc(13px + var(--font-size-adjust, 0px));
-  --md-h6-margin: 0.38em 0 0.15em;
+  --md-h6-margin: 0 0 0.15em;
 
   --md-heading-color: var(--text-primary);
 
@@ -543,8 +537,6 @@ html[data-theme='dark'] {
 
   /* Usage Dashboard (Dark) */
   --usage-capsule-outer-radius: var(--radius-pill);
-  --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: var(--radius-pill);
 
   --usage-color-brand: hsl(160 84% 45%);
   --usage-color-brand-bg: hsl(160 84% 45% / 0.18);
@@ -583,8 +575,6 @@ html[data-theme='dark'] {
 /* Usage Dashboard (Light default) */
 :root {
   --usage-capsule-outer-radius: var(--radius-pill);
-  --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: var(--radius-pill);
 
   --usage-color-brand: hsl(160 84% 39%);
   --usage-color-brand-bg: hsl(160 84% 39% / 0.11);
@@ -684,37 +674,20 @@ html[data-ui-size='large'] {
 html[data-theme='default'],
 html[data-theme='light'],
 html[data-theme='dark'] {
-  --account-surface: var(--bg-card);
   --account-panel: var(--bg-secondary);
-  --account-hover: var(--state-hover);
   --account-pressed: var(--state-active);
   --account-secondary: var(--button-secondary-bg);
   --account-field: var(--surface-input);
-  --account-field-focus: color-mix(
-    in oklab,
-    var(--surface-input),
-    var(--surface-tint-target) 4%
-  );
   --account-text-1: var(--text-primary);
   --account-text-2: var(--text-secondary);
   --account-text-3: var(--text-tertiary);
   --account-text-4: var(--text-decor);
-  --account-text-disabled: var(--text-disabled);
   --account-action: var(--brand);
   --account-action-text: var(--text-on-accent);
   --account-danger: var(--color-error);
-  --account-danger-fill: var(--color-error-bg);
   --account-avatar-bg: var(--bg-secondary);
   --account-avatar-fg: var(--brand);
-  --account-scrim: var(--modal-scrim);
-  --account-scrim-solid: color-mix(
-    in srgb,
-    var(--shadow-color, #000) 25%,
-    transparent
-  );
-  --account-scrim-filter: blur(10px) saturate(120%);
   --account-radius: var(--button-radius);
-  --account-radius-dialog: var(--radius-2xl);
   --account-auth-width: 760px;
   --account-auth-height: 480px;
   --account-auth-brand-width: 280px;
@@ -736,7 +709,6 @@ html[data-theme='dark'] {
   --account-line-title: 28px;
   --account-tracking-title: -0.3px;
   --account-tracking-brand: -0.2px;
-  --account-duration-scrim: 160ms;
 }
 
 html[data-theme='dark'] {
@@ -746,12 +718,4 @@ html[data-theme='dark'] {
     var(--surface-base, #141414)
   );
   --account-avatar-fg: var(--brand);
-
-  /* 遮罩（深色） */
-  --account-scrim: var(--modal-scrim);
-  --account-scrim-solid: color-mix(
-    in srgb,
-    var(--shadow-color, #000) 55%,
-    transparent
-  );
 }

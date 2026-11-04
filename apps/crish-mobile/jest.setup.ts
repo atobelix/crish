@@ -49,6 +49,35 @@ const mockNotificationsApi = {
 
 jest.mock('expo-notifications', () => mockNotificationsApi);
 
+// expo-haptics mock（手感基建批）：jest 环境无原生触感模块——语义函数全部
+// 静默桩；触觉门面自身的映射/静默断言在 adapters/platform/haptics.test.ts
+// 以本地 jest.mock 精确哨兵覆盖。
+jest.mock('expo-haptics', () => ({
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+    Heavy: 'heavy',
+    Rigid: 'rigid',
+    Soft: 'soft',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+    Warning: 'warning',
+    Error: 'error',
+  },
+  selectionAsync: jest.fn(async () => undefined),
+  impactAsync: jest.fn(async () => undefined),
+  notificationAsync: jest.fn(async () => undefined),
+}));
+
+// react-native-keyboard-controller mock：jest 环境无原生键盘模块——用库自带
+// 的 jest 替身（组件透传为 View / ScrollView、useKeyboardState 走静态收起态），
+// 与真机保持同一导入面。避让契约的 props 级断言在
+// src/__tests__/keyboardAvoidance.guard.test.tsx 内以本地 jest.mock 哨兵覆盖。
+jest.mock('react-native-keyboard-controller', () =>
+  jest.requireActual('react-native-keyboard-controller/jest')
+);
+
 const mockSecureStoreData = new Map<string, string>();
 
 jest.mock('expo-secure-store', () => ({
@@ -105,6 +134,7 @@ jest.mock('react-native-gesture-handler', () => {
       Race: () => chainable(),
       LongPress: () => chainable(),
       Simultaneous: () => chainable(),
+      Exclusive: () => chainable(),
     },
   };
 });
@@ -153,12 +183,22 @@ jest.mock('react-native-reanimated', () => {
     // default 导出（`import Animated from 'react-native-reanimated'`）与命名
     // 导出（`import { Animated, useSharedValue } from ...`）双形态同构
     default: {
-      createAnimatedComponent: () => View,
+      // createAnimatedComponent 返回原组件（保真）：真实库保留宿主组件全部
+      // 行为（Pressable 的 disabled / 可访问性 / 事件）仅叠加动效——若替换成
+      // 裸 View 会把 disabled 语义剥掉（测试里禁用钮照样触发 onPress）且丢
+      // testID/label 查询面（按压过渡统一批 2026-11-02 修正）。
+      createAnimatedComponent: <P>(Comp: React.ComponentType<P>) => Comp,
       View: AnimatedView,
       Text: AnimatedText,
     },
     Animated: { View: AnimatedView, Text: AnimatedText },
-    useSharedValue: (initial: unknown) => ({ value: initial }),
+    useSharedValue: (initial: unknown) => {
+      // ref 持有（保真）：真实 reanimated 的 SharedValue 跨渲染保持同一引用，
+      // pressIn 写入的值在 rerender 后必须仍可读——每次渲染新建对象会把
+      // 按压进度重置为初值，usePressFade 行为测试即在此失真（2026-11-02 修正）
+      const ref = React.useRef<{ value: unknown }>({ value: initial });
+      return ref.current;
+    },
     useAnimatedStyle: (fn: () => unknown) =>
       typeof fn === 'function' ? fn() : {},
     useDerivedValue: (fn: () => unknown) => ({
@@ -237,6 +277,18 @@ jest.mock('expo-blur', () => {
   const { View } = jest.requireActual<typeof ReactNativeModule>('react-native');
   return {
     BlurView: (props: Record<string, unknown>) =>
+      React.createElement(View, props),
+  };
+});
+
+// react-native-webview mock（批 E)：jest 无原生 WebView——透传 props 的
+// View 替身，公式 / 图块宿主（WebContentBlock）的高度回传与回落断言经
+// props.onMessage 驱动（见 WebContentBlock.test.tsx)。
+jest.mock('react-native-webview', () => {
+  const React = jest.requireActual<typeof ReactModule>('react');
+  const { View } = jest.requireActual<typeof ReactNativeModule>('react-native');
+  return {
+    WebView: (props: Record<string, unknown>) =>
       React.createElement(View, props),
   };
 });

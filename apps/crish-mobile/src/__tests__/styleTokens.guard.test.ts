@@ -23,6 +23,20 @@ const SCAN_DIRS = ['app', join('src', 'presentation')];
 const ALLOWLIST: Record<string, string> = {
   // 文件相关页面与组件在本次改版中冻结（交接 §7 第 9 步）
   'src/presentation/components/files/FilePreview.tsx': '文件模块冻结',
+  // SVG 软阴影的投影规格常数（原型 --btn-shadow 的 flood 黑 + 取 alpha
+  // 形状白）：系投影规格而非主题色面，收编定案 2026-11-02；其常量值另由
+  // noShadow 守卫钉版，本文件仅豁免裸 hex / 数字圆角扫描
+  'src/presentation/ui/SoftShadow.tsx': 'SVG 阴影规格常数',
+  // 同上：容器外阴影批的浮层投影规格表（flood 黑 + 形状白，五档预设），
+  // 常量值由 noShadow 守卫的 SoftShadowSurface 钉版块看管（2026-11-02）
+  'src/presentation/ui/SoftShadowSurface.tsx': 'SVG 阴影规格常数',
+  // WebView 渲染库生成物（批 E，2026-11-03)：katex / mermaid 官方 dist
+  // 产物的字节内嵌字符串，非本仓样式消费面；来源与版本钉版见各文件头
+  // 与 scripts/generate-webview-libs.mjs，生成物勿手改
+  'src/presentation/components/blocks/webview/generated/katex.ts':
+    'WebView 库生成物',
+  'src/presentation/components/blocks/webview/generated/mermaid.ts':
+    'WebView 库生成物',
 };
 
 const RULES: { name: string; pattern: RegExp }[] = [
@@ -85,20 +99,20 @@ describe('样式 token 守卫', () => {
 // 纪律：改值先改原型（或经统筹裁决并在本表注明裁决号），再同步 theme.ts。
 // PROTOTYPE_* = 原型直给值；RETAINED_* = 原型无此项、App 保留/推导值，一并钉住防漂移。
 const PROTOTYPE_LIGHT_COLORS: Record<string, string> = {
-  canvas: '#f9f9f9',
-  canvasGrouped: '#f9f9f9',
-  canvasDrawer: '#f5f5f5',
+  canvas: '#f4f4f4',
+  canvasGrouped: '#f4f4f4',
+  canvasDrawer: '#f0f0f0',
   surface: '#ffffff',
   surfaceGrouped: '#ffffff',
   surfaceRaised: '#ffffff',
-  fillSubtle: '#f9f9f9',
+  fillSubtle: '#f4f4f4',
   fillPressed: 'rgba(0,0,0,0.035)',
   fillSelected: 'rgba(0,0,0,0.03)',
   bubbleUser: '#171717',
   bubbleUserText: '#ffffff',
   textPrimary: '#171717',
   textSecondary: '#555555',
-  textTertiary: '#777777',
+  textTertiary: '#6e6e6e',
   textDisabled: '#aaaaaa',
   hairline: 'rgba(0,0,0,0.045)',
   borderStrong: '#e5e5e5',
@@ -120,8 +134,8 @@ const PROTOTYPE_LIGHT_COLORS: Record<string, string> = {
 
 const RETAINED_LIGHT_COLORS: Record<string, string> = {
   actionPrimaryText: '#ffffff',
-  // 推导：按下绿取 brandStrong 深绿同族一档
-  actionPrimaryPressed: '#047857',
+  // 推导：按下绿取亮绿主按钮同族深一档（主填充恢复 actionPrimary，用户裁决 2026-11-02）
+  actionPrimaryPressed: '#059669',
   actionDisabled: '#ececec',
   brandStrong: '#047857',
   brandSoft: '#e7f6ec',
@@ -137,9 +151,8 @@ const RETAINED_LIGHT_COLORS: Record<string, string> = {
   infoSoft: '#e8f1fd',
   onMedia: '#ffffff',
   onMediaDanger: '#fecaca',
-  shadow: '#000000',
-  glass: 'rgba(249,249,249,0.72)',
-  glassSheet: 'rgba(249,249,249,0.86)',
+  glass: 'rgba(244,244,244,0.72)',
+  glassSheet: 'rgba(244,244,244,0.86)',
 };
 
 // 深色角色钉版（裁决 J1：原型无深色真源，只钉角色修正与推导档，防后续批次误改）
@@ -150,6 +163,8 @@ const DARK_ROLE_COLORS: Record<string, string> = {
   bubbleUserText: '#ececec',
   actionPrimary: '#10b981',
   actionPrimaryText: '#ffffff',
+  // D3 钉版：带文字主按钮底色真源与浅色同值（原推导亮绿无消费面且对比不达标）
+  brandStrong: '#047857',
   success: '#10b981',
   dotOffline: '#9ca3af',
   warning: '#e3a33b',
@@ -166,20 +181,20 @@ const DARK_ROLE_COLORS: Record<string, string> = {
 // 功能色（绿/蓝）收敛为墨/灰阶，状态色（红/琥珀）降饱和保留色相。改本表须先
 // 经统筹裁决并注明，不得与 theme.ts 单方面漂移。
 const DERIVED_NEUTRAL_COLORS: Record<string, string> = {
-  canvas: '#f9f9f9',
-  canvasGrouped: '#f9f9f9',
-  canvasDrawer: '#f5f5f5',
+  canvas: '#f4f4f4',
+  canvasGrouped: '#f4f4f4',
+  canvasDrawer: '#f0f0f0',
   surface: '#ffffff',
   surfaceGrouped: '#ffffff',
   surfaceRaised: '#ffffff',
-  fillSubtle: '#f9f9f9',
+  fillSubtle: '#f4f4f4',
   fillPressed: 'rgba(0,0,0,0.035)',
   fillSelected: 'rgba(0,0,0,0.03)',
   bubbleUser: '#171717',
   bubbleUserText: '#ffffff',
   textPrimary: '#171717',
   textSecondary: '#555555',
-  textTertiary: '#777777',
+  textTertiary: '#6e6e6e',
   textDisabled: '#aaaaaa',
   hairline: 'rgba(0,0,0,0.045)',
   borderStrong: '#e5e5e5',
@@ -201,18 +216,17 @@ const DERIVED_NEUTRAL_COLORS: Record<string, string> = {
   dangerForeground: '#ffffff',
   dangerSoft: '#f7eeee',
   warning: '#bd8324',
-  warningText: '#8a6d1f',
+  warningText: '#876a1e',
   warningSoft: '#f6f1e6',
   onMedia: '#ffffff',
   onMediaDanger: '#e9dede',
   scrim: 'rgba(0,0,0,0.28)',
   scrimStrong: 'rgba(0,0,0,0.35)',
-  shadow: '#000000',
   field: '#ffffff',
   fieldFocus: '#ffffff',
   actionPrimaryPressed: '#2a2a2a',
-  glass: 'rgba(249,249,249,0.72)',
-  glassSheet: 'rgba(249,249,249,0.86)',
+  glass: 'rgba(244,244,244,0.72)',
+  glassSheet: 'rgba(244,244,244,0.86)',
   surfaceTranslucent: 'rgba(255,255,255,0.78)',
   surfaceTranslucentStrong: 'rgba(255,255,255,0.88)',
 };
@@ -242,7 +256,6 @@ const NEUTRAL_STRUCTURAL_KEYS = [
   'onMedia',
   'scrim',
   'scrimStrong',
-  'shadow',
   'field',
   'fieldFocus',
   'glass',
@@ -284,6 +297,7 @@ describe('与原型同值（防走样 fixture)', () => {
     expect(layout.drawerParallaxOffset).toBe(-60);
     expect(size.sheetHandleWidth).toBe(36);
     expect(size.sheetHandleHeight).toBe(4);
+    // composer 圆角：原型 26；单行 52px 严格胶囊半圆 R=26；展开 98px 保持稳定 R=26
     expect(radius.composer).toBe(26);
     expect(radius.sheet).toBe(28);
     expect(radius.sheetApproval).toBe(24);
@@ -296,7 +310,9 @@ describe('与原型同值（防走样 fixture)', () => {
   it('字阶 = 14 中心制（原型逐项）', () => {
     const { type } = lightTheme;
     expect(type.body).toMatchObject({ fontSize: 14, lineHeight: 21 });
-    expect(type.chat).toMatchObject({ fontSize: 14, lineHeight: 21 });
+    // chat 行高 21.7 = 14 × 1.55：批 E 跨端排版收敛裁决（2026-11-03，
+    // 与桌面 markdown 正文 --lh-prose 对齐），body 的 UI 密度 21 不动
+    expect(type.chat).toMatchObject({ fontSize: 14, lineHeight: 21.7 });
     expect(type.callout).toMatchObject({ fontSize: 14, lineHeight: 20 });
     expect(type.headline).toMatchObject({ fontSize: 16, fontWeight: '600' });
     expect(type.title2).toMatchObject({ fontSize: 16.5, fontWeight: '600' });
@@ -314,19 +330,13 @@ describe('与原型同值（防走样 fixture)', () => {
     });
   });
 
-  it('阴影 α 与方向 = 原型定版（浅色）', () => {
-    const { shadow } = lightTheme;
-    expect(shadow.xs.shadowOpacity).toBe(0.02);
-    expect(shadow.sm.shadowOpacity).toBe(0.03);
-    expect(shadow.md.shadowOpacity).toBe(0.06);
-    expect(shadow.lg.shadowOpacity).toBe(0.08);
-    expect(shadow.card.shadowOpacity).toBe(0.02);
-    expect(shadow.card.shadowOffset?.width).toBeLessThan(0);
-    expect(shadow.sheetUp.shadowOpacity).toBe(0.08);
-    expect(shadow.sheetUp.shadowOffset?.height).toBe(-10);
-    // 别名纪律：sheet 别名即主卡档、floating 别名即 sm 档
-    expect(shadow.sheet).toBe(shadow.card);
-    expect(shadow.floating).toBe(shadow.sm);
+  it('阴影体系已退役（2026-11-02 用户裁决：去阴影、亮度台阶区分）', () => {
+    // Theme 无 shadow 字段、colors 无 shadow 色令牌（三套主题同口径）；
+    // 消费面零 elevation / shadow* 由 noShadow.guard.test.ts 源码守卫钉住
+    for (const theme of [lightTheme, darkTheme, neutralTheme]) {
+      expect('shadow' in theme).toBe(false);
+      expect('shadow' in theme.colors).toBe(false);
+    }
   });
 
   it('动效口径：emphasized 曲线与抽屉/展开时长（原型）', () => {
