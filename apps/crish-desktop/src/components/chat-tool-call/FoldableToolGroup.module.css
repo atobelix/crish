@@ -5,9 +5,15 @@
  *
  * 【统一排版纪律 · 2026-09-11 用户裁决】
  * ① 高度 24px，与 ReasoningRow 严格同构；
- * ② 默认浅色（--text-tertiary），字号 14px，字重 400；
+ * ② 默认 --text-secondary（R8/B7 组头升半档、与组内明细拉开层级，
+ *    覆盖原 --text-tertiary），字号 14px，字重 400；
  * ③ Hover 时整行（前缀图标 + 摘要文案 + 右折叠指示）统一变黑（--text-primary）；
  * ④ 展开态内部详细输出保持柔和灰阶，禁止全框加深晃动。
+ *
+ * 【D5 定版 · 2026-11-02】字号随过程内容定版为 13px（覆盖 ② 的字号部分）。
+ * 【HC1】组体为聚合滚动层：展开 = 进入受限滚动区（--tool-aggregate-max-h 封顶 +
+ * 内部滚动 + mask 边缘渐隐），不是全高展开；组内单工具视口随之降格（见
+ * ChatToolCallBlock.module.css 的组内降格规则），指针路径上只留一层纵向滚动。
  */
 
 .groupContainer {
@@ -35,10 +41,10 @@
   text-align: left;
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-normal, 400);
-  color: var(--text-tertiary);
-  transition: color var(--transition-micro, 120ms ease);
+  color: var(--text-secondary);
+  transition: color var(--transition-micro, 100ms ease);
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -64,13 +70,13 @@
 .leadIcon {
   color: var(--text-tertiary);
   flex-shrink: 0;
-  transition: color var(--transition-micro, 120ms ease);
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .summaryLabel {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
@@ -83,6 +89,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   margin-right: 2px;
   color: var(--color-error);
   user-select: none;
@@ -99,7 +106,7 @@
   color: var(--text-tertiary);
   transform: rotate(0deg);
   transition:
-    transform var(--transition-accordion),
+    transform var(--accordion-duration, var(--transition-accordion)),
     color var(--transition-micro);
   flex-shrink: 0;
   user-select: none;
@@ -127,19 +134,25 @@
   grid-template-rows: 1fr;
 }
 
+/*
+ * 组体滚动宿主（HC1）：聚合封顶 --tool-aggregate-max-h + 内部纵向滚动，
+ * 滚轮到边界链式穿透回消息列表（overscroll-behavior-y: auto，成文口径）。
+ * data-fade 四态由 useScrollFade 维护，mask 作用于内层 .scroll-fade-inner。
+ * 全局类 tool-group-scroll-host 供 ChatToolCallBlock 的组内视口降格规则定位。
+ */
 .groupBodyInner {
   min-height: 0;
-  overflow: hidden;
+  max-height: var(--tool-aggregate-max-h, min(560px, 60vh));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
   opacity: 0;
-  transform: translateY(-2px);
-  transition:
-    opacity var(--transition-accordion-fade),
-    transform var(--transition-accordion-fade);
+  /* AN1：折叠内层只保留 opacity 淡变，不再混入 translateY 位移（与 grid 同钟单轨） */
+  transition: opacity var(--transition-accordion-fade);
 }
 
 .groupBody[data-expanded='true'] .groupBodyInner {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* ───── 按钮文案单格重叠防抖架构（CSS Grid 1 / 1） ───── */
@@ -155,7 +168,8 @@
 .stackedLabel {
   grid-area: 1 / 1;
   opacity: 0;
-  filter: blur(2px);
+  /* AN1：模糊量走 --blur-* token 路线，使 eco / reduced-motion 的 token 降级可达 */
+  filter: blur(var(--blur-subtle, 2px));
   transform: translateY(-3px);
   transition:
     opacity var(--duration-fast, 150ms)
@@ -188,5 +202,17 @@
     transition: none;
     filter: none;
     transform: none;
+  }
+}
+
+/* AN4：组头形成入场（聚合形成帧淡入，与工具行同语言；不做高度
+ * 动画避免与手风琴叠播；共享 keyframes 在 design-system.css） */
+.groupEnter {
+  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groupEnter {
+    animation: none;
   }
 }

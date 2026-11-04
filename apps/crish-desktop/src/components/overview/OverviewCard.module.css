@@ -94,13 +94,13 @@
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
-  transition: color var(--transition-fast, 120ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .secH svg {
   color: var(--text-tertiary);
   flex-shrink: 0;
-  transition: color var(--transition-fast, 120ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .secH:hover,
@@ -121,8 +121,8 @@
   margin-left: auto;
   color: var(--text-faint);
   transition:
-    transform var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    transform var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
   flex-shrink: 0;
 }
 
@@ -178,8 +178,8 @@
   text-decoration: underline dashed;
   text-underline-offset: 3px;
   transition:
-    color var(--transition-fast, 120ms ease),
-    text-decoration-color var(--transition-fast, 120ms ease);
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
 
 .emptyLink:hover,
@@ -399,8 +399,8 @@ button.liveRow:hover {
   text-decoration: underline dashed;
   text-underline-offset: 3px;
   transition:
-    color var(--transition-fast, 120ms ease),
-    text-decoration-color var(--transition-fast, 120ms ease);
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
 
 .link:hover,

@@ -20,7 +20,12 @@ import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
 import { anyProviderHasKey } from '../../api/modelsCatalogLive';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
-import { openSettings, patchSession } from '../../store/storeAccess';
+import { ToolBackgroundIndicator } from './ToolBackgroundIndicator';
+import {
+  openSettings,
+  patchSession,
+  triggerSessionMessageHydrateIfNeeded,
+} from '../../store/storeAccess';
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
 import type { ChatAttachment } from '../../hooks/chat-stream';
@@ -425,6 +430,14 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       state.approvalState.handleBatchDeny
     );
 
+    // 消息水合停滞时的重试出口：重新触发当前会话的懒水合（触发器内部
+    // 有 in-flight 合并与已水合跳过守卫，重复点击无副作用）
+    const handleRetryLoadMessages = useCallback(() => {
+      if (state.activeSessionId) {
+        triggerSessionMessageHydrateIfNeeded(state.activeSessionId);
+      }
+    }, [state.activeSessionId]);
+
     const messagesGroup = React.useMemo<ChatMessageListProps['messages']>(
       () => ({
         messages: state.displayMessages,
@@ -432,6 +445,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         agents: state.agents,
         activeSessionId: state.activeSessionId || '',
         showAllMessages: state.isFiltering,
+        messagesLoading: state.messagesLoading,
+        messagesLoadStalled: state.messagesLoadStalled,
+        onRetryLoadMessages: handleRetryLoadMessages,
       }),
       [
         state.displayMessages,
@@ -439,6 +455,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         state.agents,
         state.activeSessionId,
         state.isFiltering,
+        state.messagesLoading,
+        state.messagesLoadStalled,
+        handleRetryLoadMessages,
       ]
     );
 
@@ -590,6 +609,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               </span>
             </div>
           )}
+          <ToolBackgroundIndicator sessionId={state.activeSessionId} />
           <div
             className={styles.chatDocFlow}
             data-testid="chat-doc-flow"

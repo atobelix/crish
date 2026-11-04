@@ -81,12 +81,17 @@ export function useChatEmptyKind({
 
   const messagesLoading = messagesLoadingCandidate && !hydrateTimedOut;
 
-  // 历史会话从 SQLite 水合正文期间（messagesHydrated === false 且非草稿），静默等待，严禁呈现 session-empty 幽灵闪现
+  // 历史会话从 SQLite 水合正文期间（messagesHydrated === false 且非草稿），静默等待，严禁呈现 session-empty 幽灵闪现。
+  // 批 A 口径：空态压制不再随 3s 超时释放——超时后若水合仍未完成，呈现面
+  // 改由 messagesLoadStalled 驱动（消息列表错误三态 + 重试出口），不再
+  // 静默跌落欢迎面、把「加载失败」伪装成「空会话」。
   const isLazyHydrating =
     messagesHydrated === false &&
     Boolean(activeSessionId) &&
-    !isPendingDraft(activeSessionId) &&
-    !hydrateTimedOut;
+    !isPendingDraft(activeSessionId);
+
+  // 水合停滞：懒壳水合超过等待预算（3s）仍未完成
+  const messagesLoadStalled = isLazyHydrating && hydrateTimedOut;
 
   const resolvedEmptyKind = resolveChatEmptyKind({
     hasActiveSession: Boolean(activeSessionId),
@@ -116,6 +121,7 @@ export function useChatEmptyKind({
 
   return {
     messagesLoading,
+    messagesLoadStalled,
     emptyKind,
     onEmptySurface,
     chatRegionAria,

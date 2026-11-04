@@ -38,8 +38,8 @@
   padding: 0 10px;
   border-radius: 14px 0 0 14px;
   transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 /* 仅权限 prefix 单独显示（无模型槽且无思考档位） -> 完整 14px 胶囊外角 */
@@ -82,8 +82,8 @@
   display: inline-flex;
   align-items: center;
   transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 .left :global(button.model-badge-btn)::before,
@@ -239,8 +239,8 @@
   white-space: nowrap;
   box-sizing: border-box;
   transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 .thinkBtn::before {

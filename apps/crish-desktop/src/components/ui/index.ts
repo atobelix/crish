@@ -13,6 +13,7 @@ export * from './Button/index';
 export * from './Card/index';
 export * from './ColorPicker/index';
 export * from './ConfirmDialog/index';
+export * from './ContentState/index';
 export * from './ContextMenu/index';
 export * from './Dialog/index';
 export * from './DisclosureAffordance/index';

@@ -1,0 +1,11 @@
+{
+  "exemptions": [
+    {
+      "file": "apps/crish-desktop/src/components/chat-message-row/ReasoningRow.module.css",
+      "match": "var(--transition-pulse, 2.6s ease-in-out)",
+      "reason": "AN3 登记的独立配方 crish-text-breathe：styles/design-system.css 注释成文登记其唯一消费方 ReasoningRow .textBreathe 的周期 fallback 2.6s 为自有口径（整字呼吸与扫光族不同通道，禁止合并），故不按 --transition-pulse 正典 1.6s 比对。",
+      "rule": "fallback"
+    }
+  ],
+  "note": "动效口径门禁（check-motion-tokens.mjs）的逐条豁免登记。每条必须真实命中一处违规（失效即 FAIL），只许随收敛收缩。每条登记须有成文出处。"
+}

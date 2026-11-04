@@ -57,8 +57,8 @@
   overflow: hidden;
   box-shadow: none;
   transition:
-    border-color var(--transition-fast, 120ms ease),
-    background-color var(--transition-fast, 120ms ease);
+    border-color var(--transition-fast, 150ms ease),
+    background-color var(--transition-fast, 150ms ease);
 }
 
 .fileCard:hover,

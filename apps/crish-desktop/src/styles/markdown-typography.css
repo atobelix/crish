@@ -604,7 +604,7 @@
 
 :is(.conex-markdown, .md-rendered) tbody tr:hover {
   background: var(--md-table-row-hover-bg);
-  transition: background-color var(--transition-fast, 120ms ease);
+  transition: background-color var(--transition-fast, 150ms ease);
 }
 
 @container (max-width: 540px) {
@@ -784,14 +784,22 @@
   margin: 0;
   padding: var(--space-2, 8px) 0 var(--space-2_5, 10px);
   overflow-x: auto;
+  /* HC1：正文代码块纵向封顶 + 内部滚动（DIM-02 白名单受限滚动区「代码块」）；
+   * >30 行手动折叠钮保留——封顶管高度、折叠管显隐。边缘渐隐走 scroll-fade.css
+   * 的 mask 方案（data-fade 作用于内层 <code>，由 MarkdownSurface 绑定维护）。 */
+  max-height: var(--code-block-max-h, min(480px, 50vh));
+  overflow-y: auto;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   font-family: var(--md-font-mono);
   font-size: var(--md-code-font-size);
   line-height: var(--md-code-line-height);
   tab-size: var(--md-code-tab-size);
   color: var(--md-code-fg);
   background: transparent;
-  scrollbar-width: thin;
+  /* 不写标准滚动条宽度属性（C1 · D-2 裁决）：overlay 滚动条样式表为全局
+   * 唯一 webkit 出口，容器上一旦写该属性就会关掉 webkit 伪元素细条、
+   * 露出 Windows 系统粗条；代码块滚动条与全局同走 overlay 细条。 */
 }
 
 :is(.conex-markdown, .md-rendered) .md-code-pre code {
@@ -895,16 +903,10 @@
     transparent
   );
   background-size: 200% 100%;
-  animation: md-mermaid-loading 1.2s linear infinite;
-}
-
-@keyframes md-mermaid-loading {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
+  /* 扫光归队共享定义 crish-shine-sweep（design-system.css 落位，周期经
+   * var(--transition-pulse) 驱动）；原本地同名 keyframes 已删除。 */
+  animation: crish-shine-sweep var(--transition-pulse, 1.6s ease-in-out)
+    infinite;
 }
 
 :is(.conex-markdown, .md-rendered) .md-mermaid-error {

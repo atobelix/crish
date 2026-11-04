@@ -29,8 +29,8 @@
   animation: popoverFadeIn var(--transition-popover-enter);
   pointer-events: auto;
   transition:
-    border-color var(--transition-fast, 120ms ease),
-    border-radius var(--duration-fast, 120ms) var(--ease-standard);
+    border-color var(--transition-fast, 150ms ease),
+    border-radius var(--duration-fast, 150ms) var(--ease-standard);
 }
 
 .popover:focus-within {
@@ -117,9 +117,9 @@
   box-shadow: none;
   outline: none;
   transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease),
-    transform var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
 }
 
 .actionBtn:disabled {

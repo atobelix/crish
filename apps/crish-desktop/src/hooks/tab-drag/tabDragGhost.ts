@@ -107,7 +107,7 @@ export function createCardDragOverlay(
     border: 1.5px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
     background: var(--bg-card, var(--bg-primary));
     opacity: 0.92;
-    transition: opacity 0.12s ease-out;
+    transition: opacity var(--transition-snappy);
   `;
   dragOverlay.querySelectorAll('input, textarea, button').forEach((el) => {
     if (

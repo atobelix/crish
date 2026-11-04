@@ -195,7 +195,7 @@
   min-width: 0;
   margin-bottom: var(--space-1_5);
   padding-left: var(--landing-inset-x, 20px);
-  max-height: 180px;
+  max-height: var(--expand-max-h-viewport-sm);
   overflow: visible;
   animation: composerLeadFadeIn var(--duration-accordion-fade)
     var(--ease-decelerate) forwards;
@@ -358,7 +358,7 @@
   pointer-events: none;
   border-radius: var(--radius-xl);
   box-shadow: inset 0 0 0 1px var(--border-color);
-  animation: dropOverlayFadeIn var(--duration-fast, 140ms)
+  animation: dropOverlayFadeIn var(--duration-fast, 150ms)
     var(--ease-emphasized);
 }
 

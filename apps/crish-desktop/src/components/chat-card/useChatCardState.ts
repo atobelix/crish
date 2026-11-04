@@ -125,6 +125,7 @@ export function useChatCardState({
     showModelPicker: modelPicker.showModelPicker,
     displayMessages: chatMessages.displayMessages,
     messagesLoading: chatMessages.messagesLoading,
+    messagesLoadStalled: chatMessages.messagesLoadStalled,
     emptyKind: chatMessages.emptyKind,
     onEmptySurface: chatMessages.onEmptySurface,
     chatRegionAria: chatMessages.chatRegionAria,

@@ -29,6 +29,12 @@ export interface ChatMessageListMessagesProps {
   agents: SessionAgent[];
   activeSessionId: string;
   showAllMessages?: boolean;
+  /** 会话切换 / 历史回填的水合真空窗：为 true 且 messages 为空时，列表区呈现 Loading 三态（已有消息时忽略，后台增量刷新不闪） */
+  messagesLoading?: boolean;
+  /** 水合超过等待预算仍未完成：messages 为空时列表区呈现错误三态 + 重试出口 */
+  messagesLoadStalled?: boolean;
+  /** 错误三态的重试回调（重新触发当前会话水合） */
+  onRetryLoadMessages?: () => void;
 }
 
 /** 项目选择器域（开关/变更回调收敛为单一子对象） */

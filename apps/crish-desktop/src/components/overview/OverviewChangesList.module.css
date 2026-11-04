@@ -16,7 +16,7 @@
   gap: 1px;
   width: 100%;
   box-sizing: border-box;
-  max-height: 320px;
+  max-height: var(--expand-max-h-nested);
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -51,7 +51,7 @@
   cursor: pointer;
   box-sizing: border-box;
   user-select: none;
-  transition: background-color var(--transition-fast, 120ms ease);
+  transition: background-color var(--transition-fast, 150ms ease);
 }
 
 .changesItemBtn:hover,

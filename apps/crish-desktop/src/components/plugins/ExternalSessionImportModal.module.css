@@ -95,7 +95,11 @@
   justify-content: center;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-standard);
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard),
+    box-shadow var(--duration-normal) var(--ease-standard),
+    font-weight var(--duration-normal) var(--ease-standard);
 }
 
 .filterTab:hover {
@@ -155,8 +159,8 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 8px);
   transition:
-    border-color var(--duration-normal, 150ms) var(--ease-standard),
-    background-color var(--duration-normal, 150ms) var(--ease-standard);
+    border-color var(--duration-normal, 200ms) var(--ease-standard),
+    background-color var(--duration-normal, 200ms) var(--ease-standard);
 }
 
 .sessionCard:hover {
@@ -323,7 +327,11 @@
   padding: 4px 12px;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-standard);
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard),
+    box-shadow var(--duration-normal) var(--ease-standard),
+    font-weight var(--duration-normal) var(--ease-standard);
   display: flex;
   align-items: center;
   gap: 6px;

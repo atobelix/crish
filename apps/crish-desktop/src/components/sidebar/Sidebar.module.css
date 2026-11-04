@@ -159,12 +159,12 @@
 }
 
 .toggleIconMorph[data-morphing='true'] .toggleBrandIcon {
-  animation: morphBrandToSidebarAndBack var(--duration-spring-morph, 750ms)
+  animation: morphBrandToSidebarAndBack var(--duration-spring-morph, 420ms)
     var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 
 .toggleIconMorph[data-morphing='true'] .toggleActionIcon {
-  animation: morphSidebarFromBrandAndBack var(--duration-spring-morph, 750ms)
+  animation: morphSidebarFromBrandAndBack var(--duration-spring-morph, 420ms)
     var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 

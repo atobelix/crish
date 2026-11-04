@@ -364,7 +364,7 @@
   gap: 10px;
   width: 100%;
   height: 100%;
-  transition: opacity var(--duration-fast, 0.16s) var(--ease-standard, ease);
+  transition: opacity var(--duration-fast, 150ms) var(--ease-standard, ease);
 }
 
 .iconWrapper {

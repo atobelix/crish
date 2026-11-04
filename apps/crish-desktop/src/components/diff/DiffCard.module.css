@@ -219,8 +219,8 @@
   user-select: none;
   outline: none;
   transition:
-    background-color var(--transition-fast, 120ms),
-    box-shadow var(--transition-fast, 120ms);
+    background-color var(--transition-fast, 150ms),
+    box-shadow var(--transition-fast, 150ms);
 }
 
 .fileRow:hover {
@@ -415,7 +415,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: color var(--transition-fast, 120ms);
+  transition: color var(--transition-fast, 150ms);
 }
 
 .fileNameLinkBtn:hover .fileName,
@@ -600,7 +600,7 @@
 .diffPane :global(.scrollParent),
 .diffPane .scrollParent {
   min-height: 48px;
-  max-height: min(560px, 65vh);
+  max-height: var(--expand-max-h-aggregate);
   height: auto;
   overflow-y: auto;
   overscroll-behavior: auto;
@@ -636,7 +636,7 @@
 /* 弹性视口容器 (DEL-16: 移除 380px 锁死；DEL-17: 移除滚轮劫持) */
 .scrollParent {
   min-height: 44px;
-  max-height: min(520px, 60vh);
+  max-height: var(--expand-max-h-content);
   height: auto;
   overflow-y: auto;
   overflow-x: hidden;
@@ -859,8 +859,8 @@
   background: var(--bg-card);
   cursor: pointer;
   transition:
-    border-color var(--transition-fast, 120ms),
-    background-color var(--transition-fast, 120ms);
+    border-color var(--transition-fast, 150ms),
+    background-color var(--transition-fast, 150ms);
   margin: 0;
   gap: var(--space-2, 8px);
   box-sizing: border-box;
@@ -956,8 +956,8 @@
   box-shadow: none;
   outline: none;
   transition:
-    border-color var(--transition-fast, 120ms),
-    background-color var(--transition-fast, 120ms);
+    border-color var(--transition-fast, 150ms),
+    background-color var(--transition-fast, 150ms);
 }
 
 .commitInput::placeholder {
@@ -1056,8 +1056,8 @@
   --btn-hover-overlay: var(--state-hover);
   cursor: pointer;
   transition:
-    color var(--transition-fast, 120ms),
-    background-color var(--transition-fast, 120ms);
+    color var(--transition-fast, 150ms),
+    background-color var(--transition-fast, 150ms);
 }
 
 .groupActionBtn:hover {

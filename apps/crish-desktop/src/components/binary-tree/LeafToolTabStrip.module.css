@@ -15,10 +15,10 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: var(--pane-header-height, 28px);
-  min-height: var(--pane-header-height, 28px);
-  max-height: var(--pane-header-height, 28px);
-  flex: 0 0 var(--pane-header-height, 28px);
+  height: var(--pane-header-height, 38px);
+  min-height: var(--pane-header-height, 38px);
+  max-height: var(--pane-header-height, 38px);
+  flex: 0 0 var(--pane-header-height, 38px);
   flex-shrink: 0;
   background: var(--bg-card);
   position: relative;
@@ -45,10 +45,10 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  height: var(--pane-header-height, 28px);
-  min-height: var(--pane-header-height, 28px);
-  max-height: var(--pane-header-height, 28px);
-  flex: 0 0 var(--pane-header-height, 28px);
+  height: var(--pane-header-height, 38px);
+  min-height: var(--pane-header-height, 38px);
+  max-height: var(--pane-header-height, 38px);
+  flex: 0 0 var(--pane-header-height, 38px);
   padding: 0 6px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--border-subtle);
@@ -85,15 +85,15 @@
   flex-shrink: 0;
 }
 
-/* Tab Item：高度 24px 与 6px 柔和圆角（紧凑微型高密度标签） */
+/* Tab Item：高度 28px 与 6px 柔和圆角（紧凑微型高密度标签） */
 .tab {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  height: var(--pane-tool-tab-height, 24px);
-  min-height: var(--pane-tool-tab-height, 24px);
-  max-height: var(--pane-tool-tab-height, 24px);
+  height: var(--pane-tool-tab-height, 28px);
+  min-height: var(--pane-tool-tab-height, 28px);
+  max-height: var(--pane-tool-tab-height, 28px);
   max-width: var(--tool-tab-width-max, 130px);
   min-width: 0;
   flex: 0 0 auto;
@@ -124,15 +124,16 @@
 }
 
 .tab:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
+  background: var(--tab-top-hover-bg);
+  color: var(--tab-top-hover-text, var(--text-primary));
 }
 
 .tabActive {
-  background: var(--tab-active-surface);
+  background: var(--tab-top-active-bg, var(--tab-active-surface));
   border: 1px solid transparent;
-  color: var(--text-primary);
+  color: var(--tab-top-active-text, var(--text-primary));
   font-weight: 500;
+  box-shadow: var(--tab-top-active-shadow, var(--shadow-lift-card));
 }
 
 .tabActive:hover {
@@ -317,6 +318,8 @@
   pointer-events: none;
   overflow: hidden;
   margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .hasOverflow .addBtn.pinned {
@@ -344,7 +347,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   padding-left: var(--pane-tab-gap, 3px);
   padding-right: calc(
     var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset)
@@ -354,15 +357,15 @@
   z-index: var(--z-sticky, 2);
 }
 
-/* 窗格动作按钮（分屏、最大化、关闭等）：统一 20px 规格，4px 同心圆角 */
+/* 窗格动作按钮（分屏、最大化、关闭等）：统一 26px 规格，6px 同心圆角 */
 .sideBtn,
 .paneActionBtn {
-  width: var(--pane-action-btn-size, 20px);
-  height: var(--pane-action-btn-size, 20px);
-  min-width: var(--pane-action-btn-size, 20px);
-  min-height: var(--pane-action-btn-size, 20px);
+  width: var(--pane-action-btn-size, 26px);
+  height: var(--pane-action-btn-size, 26px);
+  min-width: var(--pane-action-btn-size, 26px);
+  min-height: var(--pane-action-btn-size, 26px);
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-control, 6px);
   border: none;
   background: transparent;
   display: inline-flex;
@@ -716,7 +719,7 @@
   background-color: var(--color-success);
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--color-success) 25%, transparent);
-  animation: activePortPulse var(--transition-pulse, 2s) infinite;
+  animation: activePortPulse var(--transition-pulse, 1.6s) infinite;
 }
 
 @keyframes activePortPulse {

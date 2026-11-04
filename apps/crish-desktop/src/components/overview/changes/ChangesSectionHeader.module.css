@@ -21,7 +21,7 @@
   user-select: none;
   cursor: pointer;
   background-color: transparent;
-  transition: color var(--transition-fast, 120ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .headerRow:hover {
@@ -39,7 +39,7 @@
 .leftCluster svg {
   color: var(--text-tertiary);
   flex-shrink: 0;
-  transition: color var(--transition-fast, 120ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .headerRow:hover .leftCluster svg {
@@ -53,7 +53,7 @@
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-secondary);
-  transition: color var(--transition-fast, 120ms ease);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .headerRow:hover .titleText {
@@ -94,9 +94,9 @@
   margin-left: auto;
   color: var(--text-faint);
   transition:
-    transform var(--transition-fast, 120ms ease),
-    opacity var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    transform var(--transition-fast, 150ms ease),
+    opacity var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
   flex-shrink: 0;
 }
 

@@ -130,9 +130,12 @@
   width: 100%;
   border: none;
   margin-bottom: 6px;
+  /* AN1：顶槽折叠接入折叠族同钟变量契约（未设根变量时回退共享 token） */
   transition:
-    grid-template-rows var(--duration-fast) var(--ease-decelerate),
-    margin-bottom var(--duration-fast) var(--ease-decelerate);
+    grid-template-rows var(--accordion-duration, var(--transition-accordion))
+      var(--ease-decelerate),
+    margin-bottom var(--accordion-duration, var(--transition-accordion))
+      var(--ease-decelerate);
 }
 
 .embeddedTopSlot[data-closing='true'] {
@@ -318,8 +321,8 @@
   padding: 0;
   margin-left: 4px;
   transition:
-    color var(--transition-fast, 120ms ease),
-    background var(--transition-fast, 120ms ease);
+    color var(--transition-fast, 150ms ease),
+    background var(--transition-fast, 150ms ease);
 }
 
 .actionCircleBtn:hover,

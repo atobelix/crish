@@ -34,13 +34,13 @@
   height: var(--space-3_5);
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
-  animation: shimmer var(--transition-skeleton) infinite;
+  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
 }
 
 .skeletonCard {
   background: var(--bg-subtle);
   border-radius: var(--radius-xl);
-  animation: shimmer var(--transition-skeleton) infinite;
+  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
 }
 
 .skeletonOverview {
@@ -62,12 +62,5 @@
   }
 }
 
-@keyframes shimmer {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.85;
-  }
-}
+/* 骨架脉冲 keyframes 已归队共享定义 crish-skeleton-pulse
+   （styles/design-system.css 落位），本文件不再自带 keyframes。 */

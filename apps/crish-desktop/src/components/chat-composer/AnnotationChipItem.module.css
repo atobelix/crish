@@ -84,8 +84,8 @@
   padding: 6px 8px;
   box-sizing: border-box;
   transition:
-    background var(--transition-fast, 120ms ease),
-    border-color var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
 }
 
 .annCommentInput {
@@ -140,8 +140,8 @@
   align-items: center;
   justify-content: center;
   transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 .annCancelBtn:hover {
@@ -166,8 +166,8 @@
   align-items: center;
   justify-content: center;
   transition:
-    opacity var(--transition-fast, 120ms ease),
-    transform var(--transition-fast, 120ms ease);
+    opacity var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
 }
 
 .annSaveBtn:hover {

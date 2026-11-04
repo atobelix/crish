@@ -90,8 +90,8 @@
   border: none;
   cursor: pointer;
   transition:
-    color var(--transition-fast, 120ms ease),
-    background var(--transition-fast, 120ms ease);
+    color var(--transition-fast, 150ms ease),
+    background var(--transition-fast, 150ms ease);
 }
 
 .stopCircleBtn:hover {
@@ -111,8 +111,8 @@
   align-items: center;
   justify-content: center;
   transition:
-    color var(--transition-micro, 80ms ease),
-    background var(--transition-micro, 80ms ease);
+    color var(--transition-micro, 100ms ease),
+    background var(--transition-micro, 100ms ease);
   flex-shrink: 0;
   padding: 0;
 }
@@ -135,6 +135,12 @@
 .stop {
   background: transparent;
   color: var(--text-secondary);
+}
+
+/* X3 停止乐观态：已请求停止、等待会话退出 processing 收敛 */
+.stop[data-stop-state='stopping']:disabled {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 .stop:hover:not(:disabled) {

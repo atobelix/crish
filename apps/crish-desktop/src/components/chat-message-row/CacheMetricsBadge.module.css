@@ -20,7 +20,7 @@
   color: var(--text-tertiary);
   cursor: default;
   user-select: none;
-  transition: color var(--transition-micro, 120ms ease);
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .badge:hover {

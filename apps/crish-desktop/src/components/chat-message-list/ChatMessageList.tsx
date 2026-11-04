@@ -22,6 +22,8 @@ import {
 } from '../chat-message/narrativeRenderSlots';
 import { isContextStateCarrierMessage } from '../../store/storeAccess';
 import { onUiEvent } from '../../api/uiEvents';
+import { ContentState } from '@/components/ui';
+import { useI18n } from '../../i18n';
 
 export type {
   ChatMessageListApprovalProps,
@@ -49,7 +51,11 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     agents,
     activeSessionId,
     showAllMessages = false,
+    messagesLoading = false,
+    messagesLoadStalled = false,
+    onRetryLoadMessages,
   } = messagesProps;
+  const { t } = useI18n();
   const {
     showProjectPicker,
     onShowProjectPicker: _onShowProjectPicker,
@@ -301,10 +307,54 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   );
 
   // D（Hooks 顺序）：提前 return 必须位于全部 hooks 之后
+  if (messages.length === 0 && messagesLoading) {
+    // 真空窗（切换会话 / 首轮回填，水合未完成且无任何可显示消息）：
+    // 呈现 Loading 三态，不再空白无反馈。已有消息时不进此枝——
+    // 后台增量刷新照常渲染列表、不闪 Loading。
+    return (
+      <AppErrorBoundary
+        variant="compact"
+        title={t('chat.messageListError', '消息列表出错')}
+      >
+        <ContentState
+          kind="loading"
+          title={t('common.loading', '正在加载消息')}
+          testId="chat-message-list-loading"
+        />
+      </AppErrorBoundary>
+    );
+  }
+
+  if (messages.length === 0 && messagesLoadStalled) {
+    // 水合停滞（超等待预算仍未完成）：错误三态 + 重试出口，
+    // 不再静默跌落欢迎面、把加载失败伪装成空会话。
+    return (
+      <AppErrorBoundary
+        variant="compact"
+        title={t('chat.messageListError', '消息列表出错')}
+      >
+        <ContentState
+          kind="error"
+          title={t('chat.messagesLoadFailed', '消息加载失败')}
+          description={t(
+            'chat.messagesLoadFailedHint',
+            '消息加载未完成，可能是引擎或本地存储暂时不可用。'
+          )}
+          onRetry={onRetryLoadMessages}
+          retryLabel={t('common.retry', '重试')}
+          testId="chat-message-list-load-error"
+        />
+      </AppErrorBoundary>
+    );
+  }
+
   if (messages.length === 0) return null;
 
   return (
-    <AppErrorBoundary variant="compact" title="消息列表出错">
+    <AppErrorBoundary
+      variant="compact"
+      title={t('chat.messageListError', '消息列表出错')}
+    >
       <NarrativeRenderSlotsContext.Provider value={narrativeSlots}>
         <MessageVirtualizer
           messages={messages}

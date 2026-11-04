@@ -58,7 +58,7 @@
   /* rect 由 useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect 写 inline
    * （勿用 React style prop，否则 live resize re-render 会覆盖两侧几何）。
    * 不设 px min-width：绝对定位 % rect 的 min-size 由 useTreeResize
-   * 像素感知 clamp（MIN_CHILD_PX）保证非重叠；此处 min-width:0 让 flex
+   * 像素感知 clamp（叶子真实最小尺寸 + 子树需求）保证非重叠；此处 min-width:0 让 flex
    * 子项可收缩，overflow:hidden 防止内容画出 sibling 边界。 */
   box-sizing: border-box;
   min-width: 0;
@@ -131,14 +131,16 @@
     color var(--transition-micro);
 }
 
-.topSidePanelBtn:hover {
-  background: transparent;
+.topSidePanelBtn:hover,
+.topSidePanelBtn:global(.active):hover,
+.topSidePanelBtn[data-active='true']:hover {
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .topSidePanelBtn:global(.active),
 .topSidePanelBtn[data-active='true'] {
-  background: var(--state-active);
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -189,7 +191,8 @@
   pointer-events: none;
 }
 
-/* Sash：6px 命中 + 1px 线；hover/active 2px 品牌绿。拖时 body.tree-resizing 禁过渡。 */
+/* Sash（R2 统一口径）：8px 命中 + 1px 线；hover/active 中性灰（--border-color），
+   不加宽、无发光。手势由 useSplitResize 托管，拖拽期几何由领域会话直刷。 */
 
 .sash {
   position: absolute;
@@ -210,20 +213,29 @@
 }
 
 .sashHorizontal {
-  width: 6px;
+  width: 8px;
   cursor: col-resize;
-  transform: translateX(-3px);
+  transform: translateX(-4px);
 }
 
 .sashVertical {
-  height: 6px;
+  height: 8px;
   cursor: row-resize;
-  transform: translateY(-3px);
+  transform: translateY(-4px);
+}
+
+/* 键盘聚焦环：与统一口径一致（中性 1px 实线，静止无轮廓） */
+.sash:focus {
+  outline: none;
+}
+
+.sash:focus-visible {
+  outline: 1px solid var(--state-focus-ring);
 }
 
 /*
  * 分隔条常态不画线：相邻卡片各自的发丝边框已经形成分界，
- * 再叠一条就是三条线并排。只有 hover / 拖拽时才亮出品牌绿。
+ * 再叠一条就是三条线并排。只有 hover / 拖拽时才以中性灰亮出。
  */
 .sash::after {
   content: '';
@@ -236,32 +248,20 @@
 .sashHorizontal::after {
   top: 0;
   bottom: 0;
-  left: 2.5px;
+  left: 3.5px;
   width: 1px;
 }
 
 .sashVertical::after {
   left: 0;
   right: 0;
-  top: 2.5px;
+  top: 3.5px;
   height: 1px;
 }
 
 .sash:hover::after,
 .sash[data-active='true']::after {
-  background: var(--accent-green);
-}
-
-.sashHorizontal:hover::after,
-.sashHorizontal[data-active='true']::after {
-  width: 2px;
-  left: 2px;
-}
-
-.sashVertical:hover::after,
-.sashVertical[data-active='true']::after {
-  height: 2px;
-  top: 2px;
+  background: var(--border-color);
 }
 
 /*    Drop zone overlay                                          */
@@ -274,16 +274,16 @@
   background-color: var(--success-soft-bg-hover);
   border: none;
   transition:
-    top var(--duration-fast, 120ms)
+    top var(--duration-fast, 150ms)
       var(--ease-in-out, cubic-bezier(0.2, 0, 0, 1)),
-    left var(--duration-fast, 120ms)
+    left var(--duration-fast, 150ms)
       var(--ease-in-out, cubic-bezier(0.2, 0, 0, 1)),
-    width var(--duration-fast, 120ms)
+    width var(--duration-fast, 150ms)
       var(--ease-in-out, cubic-bezier(0.2, 0, 0, 1)),
-    height var(--duration-fast, 120ms)
+    height var(--duration-fast, 150ms)
       var(--ease-in-out, cubic-bezier(0.2, 0, 0, 1)),
     border-radius var(--duration-micro, 100ms) var(--ease-standard),
-    opacity var(--duration-micro, 80ms) var(--ease-standard);
+    opacity var(--duration-micro, 100ms) var(--ease-standard);
 }
 
 .dropOverlayFull {
@@ -414,6 +414,15 @@
 .leafDockResizer:hover::after,
 .leafDockResizer[data-dragging='true']::after {
   background: var(--border-color);
+}
+
+/* 键盘聚焦环（R4 欠项补齐）：与统一口径一致（中性 1px 实线，静止无轮廓） */
+.leafDockResizer:focus {
+  outline: none;
+}
+
+.leafDockResizer:focus-visible {
+  outline: 1px solid var(--state-focus-ring);
 }
 
 .leafDockDrawer {

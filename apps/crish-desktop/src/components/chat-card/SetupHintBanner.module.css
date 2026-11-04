@@ -76,8 +76,8 @@
   user-select: none;
   white-space: nowrap;
   transition:
-    background-color var(--transition-fast, 120ms ease),
-    border-color var(--transition-fast, 120ms ease),
+    background-color var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
     transform var(--duration-micro, 100ms) var(--ease-standard);
 }
 

@@ -47,8 +47,6 @@
 
 .rowUser {
   align-items: flex-end;
-  animation: messageRowFadeSlideIn var(--duration-fast) var(--ease-decelerate)
-    both;
 }
 
 .rowUser[data-editing='true'],
@@ -59,13 +57,26 @@
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
+}
+
+/* 入场单层化（AN2 / A7）：行级 fade-slide 是唯一入场，且只由「新消息」语义触发
+ * （data-entering 来自 useMessageRowEntrance 的时间窗 + 已播集合守卫）——
+ * 虚拟列表滚动重挂载不重播。首条消息由气泡 54px 上浮作唯一特殊入场，
+ * 此时行级动画让位，避免双层嵌套同播。 */
+.rowUser[data-entering='true'],
+.rowAssistant[data-entering='true'] {
   animation: messageRowFadeSlideIn var(--duration-fast) var(--ease-decelerate)
     both;
 }
 
+.rowUser[data-entering='true']:has(.userBubble[data-first-message='true']) {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .rowUser,
-  .rowAssistant {
+  .rowUser[data-entering='true'],
+  .rowAssistant[data-entering='true'],
+  .userBubble[data-entering='true'][data-first-message='true'] {
     animation: none;
   }
 }
@@ -171,30 +182,12 @@
     background var(--transition-fast);
 }
 
-.userBubble.userBubbleEntering,
-.userBubble[data-entering='true'] {
-  animation: userBubbleGlideUp var(--duration-accordion, 220ms)
-    var(--ease-decelerate) both;
-  will-change: transform, opacity;
-}
-
-/* 首条消息入场：从输入框原高度平滑上浮升入会话流 */
-.userBubble.userBubbleEntering[data-first-message='true'],
+/* 首条消息入场（唯一特殊入场，AN2 单层化后保留）：从输入框原高度平滑上浮升入会话流。
+ * 普通新消息的气泡第二层 glide 已取消，入场统一由行级 fade-slide 承担（见 .rowUser 段）。 */
 .userBubble[data-entering='true'][data-first-message='true'] {
   animation: userBubbleFirstMessageFloatUp var(--duration-smooth, 300ms)
     var(--ease-decelerate) both;
   will-change: transform, opacity;
-}
-
-@keyframes userBubbleGlideUp {
-  0% {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 @keyframes userBubbleFirstMessageFloatUp {
@@ -765,8 +758,8 @@ button.iconBtn,
   align-items: center;
   justify-content: center;
   transition:
-    transform var(--duration-fast, 120ms) var(--ease-standard),
-    box-shadow var(--duration-fast, 120ms) var(--ease-standard);
+    transform var(--duration-fast, 150ms) var(--ease-standard),
+    box-shadow var(--duration-fast, 150ms) var(--ease-standard);
   box-sizing: border-box;
 }
 
@@ -813,8 +806,8 @@ button.iconBtn,
   align-items: center;
   justify-content: center;
   transition:
-    transform var(--duration-fast, 120ms) var(--ease-standard),
-    box-shadow var(--duration-fast, 120ms) var(--ease-standard);
+    transform var(--duration-fast, 150ms) var(--ease-standard),
+    box-shadow var(--duration-fast, 150ms) var(--ease-standard);
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -941,8 +934,8 @@ button.iconBtn,
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 .pinResetBtn:hover {

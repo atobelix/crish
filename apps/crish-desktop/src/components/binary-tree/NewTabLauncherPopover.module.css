@@ -104,7 +104,7 @@
 
 .plusLiveDot[data-urgent='true'] {
   background: var(--accent-orange);
-  animation: urgentBlink var(--transition-pulse, 1.2s ease-in-out) infinite;
+  animation: urgentBlink var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
 @keyframes urgentBlink {
@@ -273,7 +273,7 @@
   height: 100%;
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-active) 35%, transparent);
-  animation: launcherPulse var(--transition-pulse, 1.8s) infinite
+  animation: launcherPulse var(--transition-pulse, 1.6s) infinite
     var(--ease-in-out, cubic-bezier(0.24, 0, 0.38, 1));
 }
 

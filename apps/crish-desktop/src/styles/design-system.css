@@ -148,6 +148,85 @@
   }
 }
 
+/* AN1 共享指示动效（仅定义落位；各消费点采用归 AN2）：
+ * crish-pulse-dot 以 SubagentDispatchCard 的 dispatch-dot-pulse 为本体，
+ * crish-shine-sweep 以 InFlowStatusLine 的 inflow-status-shimmer 为本体；
+ * 周期由消费方经 var(--transition-pulse) 驱动（正典 1.6s）。 */
+@keyframes crish-pulse-dot {
+  0%,
+  100% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+    box-shadow: 0 0 0 4.5px
+      color-mix(in srgb, var(--accent-color) 32%, transparent);
+  }
+}
+
+@keyframes crish-shine-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* AN3 登记的独立配方（与 crish-shine-sweep 并列、禁止合并）：
+ * crish-text-breathe 是「整段文字 opacity 呼吸」（0.75 ↔ 1），供流式思考
+ * 摘要文字表达进行中状态；crish-shine-sweep 是「渐变背景扫光」
+ * （background-position 驱动、需 background-clip:text 载体）。两者作用
+ * 通道与视觉语义不同：呼吸是整字明暗起伏，扫光是高光带横移——强行
+ * 合并会改变思考行已验收的体感，故独立登记、独立演进。
+ * 唯一消费方：ReasoningRow .textBreathe（周期经 var(--transition-pulse)
+ * 驱动，消费方 fallback 2.6s 为其自有口径）；原 ReasoningRow 本地
+ * 同名定义（旧名 sweep-shine，名实不符）已删除并正名为此。 */
+@keyframes crish-text-breathe {
+  0% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.75;
+  }
+}
+
+/* 骨架占位共享配方（批 A 归队）：crish-skeleton-pulse 是「骨架块 opacity
+ * 脉冲」（0.5 ↔ 0.85），供无渐变载体的骨架占位表达加载中状态；周期由
+ * 消费方经 var(--transition-skeleton) 驱动。首个消费方为设置域用量页
+ * 骨架（原 SettingsUsageTab 本地 @keyframes shimmer 已删除并归队至此）。
+ * 与扫光族分工：渐变扫光走 crish-shine-sweep；ChatMessageRow 本地的
+ * skeleton-shimmer 是扫光族的模块私有变体（方向相反、已 token 驱动），
+ * 登记确认保留，不并入本配方。 */
+@keyframes crish-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* AN4 共享入场（工具行 / 分派卡 / 工具组头消费）：与消息行入场
+ * messageRowFadeSlideIn 同体（opacity .6→1 + translateY 4px→0），
+ * 落共享层供跨模块按名引用。消息行模块内的同名 keyframes 为其
+ * CSS Modules 私有作用域副本（数值逐字一致），名称收敛归 AN3。 */
+@keyframes crish-row-enter {
+  from {
+    opacity: 0.6;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ==========================================================================
    5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
    ========================================================================== */

@@ -29,7 +29,9 @@
 /* 回底轻量浮钮：GPU transform 向上物理位移（对文档流 scrollHeight 贡献严格为 0），
    彻底拔除破坏性负 margin。基态 -46px；组件严格禁止位移动画；
    继承 .button 单层 ::before 物理微光，通过 --btn-hover-overlay 注入体系最浅档 --state-subtle，
-   杜绝本体直接覆写透明 background 导致的视口穿透透底问题。 */
+   杜绝本体直接覆写透明 background 导致的视口穿透透底问题。
+   A11（AN2）：显隐补最小配方——只动 opacity 的入场淡入（crish-fade-in）；
+   退场仍随条件卸载即时消失（零高度不变量下不保持挂载，无位移参与）。 */
 .chatScrollFab {
   width: 34px;
   height: 34px;
@@ -54,10 +56,11 @@
   padding: 0;
   transform: translateY(-46px);
   transition:
-    background var(--duration-fast, 120ms) var(--ease-standard),
-    border-color var(--duration-fast, 120ms) var(--ease-standard),
-    color var(--duration-fast, 120ms) var(--ease-standard);
+    background var(--duration-fast, 150ms) var(--ease-standard),
+    border-color var(--duration-fast, 150ms) var(--ease-standard),
+    color var(--duration-fast, 150ms) var(--ease-standard);
   position: relative;
+  animation: crish-fade-in var(--transition-popover-enter);
 }
 
 .chatScrollFab:hover {

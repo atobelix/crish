@@ -106,7 +106,7 @@ describe('SidebarNav 顶钮', () => {
       'utf8'
     );
     expect(navCss).toMatch(
-      /transition:\s*[\s\S]*background\s+var\(--duration-micro,\s*80ms\)\s+var\(--ease-standard\)[\s\S]*color\s+var\(--duration-micro,\s*80ms\)\s+var\(--ease-standard\)/
+      /transition:\s*[\s\S]*background\s+var\(--duration-micro,\s*100ms\)\s+var\(--ease-standard\)[\s\S]*color\s+var\(--duration-micro,\s*100ms\)\s+var\(--ease-standard\)/
     );
     expect(navCss).not.toContain('transform: scale(');
     expect(navCss).toMatch(

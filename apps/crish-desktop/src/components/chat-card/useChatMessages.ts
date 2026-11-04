@@ -21,6 +21,8 @@ export interface UseChatMessagesResult {
   agents: SessionAgent[];
   displayMessages: SessionMessage[];
   messagesLoading: boolean;
+  /** 水合超过等待预算仍未完成（懒壳会话）：列表区应呈现错误三态 + 重试 */
+  messagesLoadStalled: boolean;
   emptyKind: ReturnType<typeof useChatEmptyKind>['emptyKind'];
   onEmptySurface: boolean;
   chatRegionAria: string;
@@ -78,19 +80,24 @@ export function useChatMessages({
   );
   const displayMessages = projection.display;
 
-  const { messagesLoading, emptyKind, onEmptySurface, chatRegionAria } =
-    useChatEmptyKind({
-      activeSessionId,
-      // G5：投影后、搜索前的条数——全部不可渲染时落到 session-empty（欢迎面），不白屏
-      messageCount: projection.visibleCount,
-      displayCount: displayMessages.length,
-      localMsgFilter,
-      mainSurface,
-      messagesHydrated: messagesHydratedRaw,
-      hydratedFromEngine,
-      engineCursor,
-      engineLastRunId,
-    });
+  const {
+    messagesLoading,
+    messagesLoadStalled,
+    emptyKind,
+    onEmptySurface,
+    chatRegionAria,
+  } = useChatEmptyKind({
+    activeSessionId,
+    // G5：投影后、搜索前的条数——全部不可渲染时落到 session-empty（欢迎面），不白屏
+    messageCount: projection.visibleCount,
+    displayCount: displayMessages.length,
+    localMsgFilter,
+    mainSurface,
+    messagesHydrated: messagesHydratedRaw,
+    hydratedFromEngine,
+    engineCursor,
+    engineLastRunId,
+  });
 
   const isProcessing = useMemo(
     () => messages.some((m) => m.status === 'processing'),
@@ -102,6 +109,7 @@ export function useChatMessages({
     agents,
     displayMessages,
     messagesLoading,
+    messagesLoadStalled,
     emptyKind,
     onEmptySurface,
     chatRegionAria,

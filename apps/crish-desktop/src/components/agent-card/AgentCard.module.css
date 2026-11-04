@@ -195,7 +195,7 @@
   padding: 4px 6px 6px;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   flex-shrink: 0;
-  max-height: 180px;
+  max-height: var(--expand-max-h-viewport-sm);
   overflow-y: auto;
 }
 
@@ -665,7 +665,7 @@
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--border-subtle) 80%, transparent);
   animation: skeletonPulse var(--transition-skeleton) infinite;
-  animation-delay: var(--duration-normal, 150ms);
+  animation-delay: var(--duration-normal, 200ms);
 }
 
 .skeletonLineMedium {

@@ -215,8 +215,8 @@
   text-align: left;
   box-sizing: border-box;
   transition:
-    background-color var(--transition-fast, 120ms ease),
-    border-color var(--transition-fast, 120ms ease);
+    background-color var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
 }
 
 .scrubberTooltipHeader {
@@ -254,8 +254,8 @@
   cursor: pointer;
   color: var(--text-tertiary);
   transition:
-    background-color var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
   flex-shrink: 0;
 }
 
@@ -289,7 +289,7 @@
   padding: 4px 6px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-fast, 120ms ease);
+  transition: background-color var(--transition-fast, 150ms ease);
   box-sizing: border-box;
 }
 
@@ -325,7 +325,7 @@
   margin-top: 4px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--transition-fast, 120ms ease);
+  transition: background-color var(--transition-fast, 150ms ease);
   box-sizing: border-box;
 }
 

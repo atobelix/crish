@@ -1,0 +1,323 @@
+/*
+ * ToolCallDiffPreview 样式（差异卡片：头部统计胶囊 + 三列对齐代码行 +
+ * 平铺展开/收起 + 独立态输出封口）。
+ *
+ * 沿革：本文件原为 ModernToolCall.module.css，承载已退役的 Modern 工具
+ * 调用组件套件（ModernToolCall / Json / Terminal / Approval 四件）与差异
+ * 卡片两轨样式。2026-11-02 整波收口普查确认 Modern 套件生产零引用，
+ * 整族删除；本文件按唯一存活消费者 ToolCallDiffPreview 的类面收剪并
+ * 更名至此（gitDiff* 并行轨类一并清除）。嵌入变体经
+ * data-card-variant='embedded' 区分（宿主 ToolCallOutputPane 传入），
+ * 独立态封口口径见 HC1 契约（hc1.contract.test.ts）。
+ */
+.copiedCheckIcon {
+  color: var(--color-success, var(--brand-deep));
+}
+
+.diffStatAdd {
+  color: var(--diff-add-fg);
+}
+
+.diffStatDel {
+  color: var(--diff-del-fg);
+}
+
+/* --------------------------------------------------------------------------
+   5. 专有 Diff 差异比对卡片（简洁平铺视图、无内部第二重滚动条）
+   -------------------------------------------------------------------------- */
+
+.diffCard {
+  margin: var(--space-2, 8px) 0;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+}
+
+.diffCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--state-hover); /* 三档：层上统一叠加（原 97/3 不透明新灰） */
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-micro, 100ms ease);
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.diffCardHeader:hover {
+  background: var(
+    --state-active
+  ); /* 三档：层上统一叠加（原 94/6 不透明新灰） */
+}
+
+.diffCardHeader:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.diffFileInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.diffFileIcon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.diffFilename {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffRightSection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+.diffBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro, 11px);
+  font-weight: 600;
+}
+
+.diffActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diffCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: unset;
+  min-height: unset;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.diffCopyBtn:hover {
+  background: var(--state-hover);
+  color: var(--text-primary);
+}
+
+.diffCopyBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.diffPreviewTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: unset;
+  min-height: unset;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-micro, 11px);
+  font-family: inherit;
+  font-weight: normal;
+  color: var(--text-secondary);
+  background: var(--state-hover);
+  border: none;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.diffPreviewTag:hover {
+  background: var(--state-active);
+  color: var(--text-primary);
+}
+
+.diffPreviewTag:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.diffLinesContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg-card);
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+/*
+ * 独立态 Diff 封口（HC1）：非嵌入变体展开后不再 200 行平铺进文档流，
+ * 改同一封顶口径——单卡输出视口上限 + 内部滚动，进受限区查看。
+ * 嵌入变体（data-card-variant='embedded'）在工具输出视口内，维持平铺、
+ * 由外层视口单一滚动层封顶，不在此列（防双层滚动）。
+ */
+
+.diffCard:not([data-card-variant='embedded']) .diffLinesContainer {
+  max-height: var(--tool-viewport-output-single);
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+}
+
+.diffLineRow {
+  display: flex;
+  align-items: stretch;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  min-width: 100%;
+  width: fit-content;
+  background: var(--bg-card);
+}
+
+.diffLineRow.addition,
+.addition {
+  background-color: var(--diff-add-bg);
+}
+
+.diffLineRow.deletion,
+.deletion {
+  background-color: var(--diff-del-bg);
+}
+
+.diffGutterCol {
+  width: 36px;
+  min-width: 36px;
+  text-align: right;
+  user-select: none;
+  padding: 1px 8px 1px 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-micro, 11px);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.diffSignCol {
+  width: 16px;
+  min-width: 16px;
+  text-align: center;
+  user-select: none;
+  font-weight: 600;
+  padding: 1px 0;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.addition .diffSignCol {
+  color: var(--diff-add-fg);
+}
+
+.deletion .diffSignCol {
+  color: var(--diff-del-fg);
+}
+
+.diffLineContent {
+  margin: 0;
+  padding: 1px 10px;
+  white-space: pre;
+  overflow-x: visible;
+  flex: 1;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  word-break: normal;
+}
+
+.addition .diffLineContent {
+  color: var(--diff-add-fg);
+}
+
+.deletion .diffLineContent {
+  color: var(--diff-del-fg);
+}
+
+.diffMoreIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 12px);
+  padding: 8px 12px;
+  background: var(
+    --state-hover
+  ); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro, 11px);
+  border-top: 1px solid var(--border-subtle);
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.diffMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: unset;
+  min-height: unset;
+  padding: 3px 10px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-weight: normal;
+  font-size: var(--font-size-micro, 11px);
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.diffMoreBtn:hover {
+  background: var(--state-hover);
+  color: var(--text-primary);
+}
+
+.diffMoreBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}

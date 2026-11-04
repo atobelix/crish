@@ -250,7 +250,7 @@
   text-align: left;
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
-  transition: background var(--transition-micro, 80ms ease-out);
+  transition: background var(--transition-micro, 100ms ease-out);
 }
 
 .dropdownItem:hover {

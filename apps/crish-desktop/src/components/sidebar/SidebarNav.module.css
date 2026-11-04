@@ -35,8 +35,8 @@
   appearance: none;
   -webkit-appearance: none;
   transition:
-    background var(--duration-micro, 80ms) var(--ease-standard),
-    color var(--duration-micro, 80ms) var(--ease-standard);
+    background var(--duration-micro, 100ms) var(--ease-standard),
+    color var(--duration-micro, 100ms) var(--ease-standard);
   box-sizing: border-box;
 }
 
@@ -54,18 +54,18 @@
 }
 
 .navItem:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
+  background: var(--sidebar-item-hover-bg);
+  color: var(--sidebar-item-hover-text);
 }
 
 .navItem:hover svg {
-  color: var(--text-primary);
+  color: var(--sidebar-item-hover-text);
 }
 
 .navItem.isActive,
 .navItem.isActive:hover {
-  background: var(--state-strong);
-  color: var(--text-primary);
+  background: var(--sidebar-item-active-bg);
+  color: var(--sidebar-item-active-text);
   border-color: transparent;
 }
 

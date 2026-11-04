@@ -647,7 +647,7 @@
 }
 
 .spinning {
-  animation: spin var(--transition-spin, 1s linear) infinite;
+  animation: spin var(--transition-spin, 0.8s linear) infinite;
 }
 
 @keyframes spin {

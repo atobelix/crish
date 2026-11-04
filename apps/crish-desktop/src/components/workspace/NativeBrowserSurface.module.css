@@ -37,7 +37,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
-  animation: fadeIn var(--duration-normal, 150ms)
+  animation: fadeIn var(--duration-normal, 200ms)
     var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 

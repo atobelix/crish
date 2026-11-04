@@ -728,7 +728,8 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
                 width: `${timeoutPercent}%`,
                 borderRadius: 2,
                 background: isPaused ? 'var(--text-tertiary)' : tensionColor,
-                transition: 'width 0.1s linear, background-color 0.3s ease',
+                transition:
+                  'width var(--transition-micro), background-color var(--transition-smooth)',
               }}
             />
           </div>
