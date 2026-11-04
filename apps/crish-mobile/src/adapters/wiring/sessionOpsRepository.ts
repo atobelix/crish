@@ -8,11 +8,11 @@
 // - 响应解析复用 sessionOpsCommands.parseSessionOpsCommandResult（生成面解析器）；
 // - 错误归一化：invokeCommand 统一执行链（gatewayCommand.ts）——GatewayError
 //   透传 code/retryable → SessionOpsCommandError；解析失败/未知异常 → internal；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = ReconnectingWsClient.gateway，
-//   sessionOpsWiring 装配，对齐 modelsRepository 先例）。
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock / 同代
+//   直注；解析函数 = 生产命令域（sessionOpsWiring 传 resolveCommandGateway，
+//   每次 invoke 现取当代网关，H1 陈旧捕获根治，见 gatewayCommand 文件头口径）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from './gatewayCommand';
+import { invokeCommand, type GatewaySource } from './gatewayCommand';
 import {
   buildDeleteSessionRequest,
   buildRenameSessionRequest,
@@ -67,9 +67,9 @@ export interface SessionOpsRepository {
 
 // ── 网关实现 ──────────────────────────────────────────────────────────────
 
-/** 经 WsGateway.invoke 发送 F5 会话操作命令并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 F5 会话操作命令并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewaySessionOpsRepository implements SessionOpsRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(private readonly gatewaySource: GatewaySource) {}
 
   renameSession(params: RenameSessionParams): Promise<GenericOkResult> {
     return this.invoke('renameSession', buildRenameSessionRequest(params));
@@ -101,7 +101,7 @@ export class GatewaySessionOpsRepository implements SessionOpsRepository {
     req: SessionOpsCommandRequest
   ): Promise<SessionOpsCommandResultMap[T]> {
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       command,
       (raw) => parseSessionOpsCommandResult(command, raw),

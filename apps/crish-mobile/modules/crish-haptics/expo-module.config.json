@@ -1,0 +1,4 @@
+{
+  "android": { "modules": ["expo.modules.crishhaptics.CrishHapticsModule"] },
+  "platforms": ["android"]
+}

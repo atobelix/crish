@@ -19,7 +19,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@/assets/*": ["./assets/*"],
-      "crish-asr": ["./modules/crish-asr/src/index.ts"]
+      "crish-asr": ["./modules/crish-asr/src/index.ts"],
+      "crish-haptics": ["./modules/crish-haptics/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

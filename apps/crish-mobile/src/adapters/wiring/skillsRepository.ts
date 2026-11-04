@@ -9,11 +9,11 @@
 // - 响应解析复用 skillCommands.parseSkillCommandResult（生成面解析器）；
 // - 错误归一化：invokeCommand 统一执行链（gatewayCommand.ts）——GatewayError
 //   透传 code/retryable → SkillsCommandError；解析失败/未知异常 → internal；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = ReconnectingWsClient.gateway，
-//   skillsWiring 装配，对齐 modelsRepository 先例）。
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock / 同代
+//   直注；解析函数 = 生产命令域（skillsWiring 传 resolveCommandGateway，每次
+//   invoke 现取当代网关，H1 陈旧捕获根治，见 gatewayCommand 文件头口径）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from './gatewayCommand';
+import { invokeCommand, type GatewaySource } from './gatewayCommand';
 import {
   buildListSkillsRequest,
   parseSkillCommandResult,
@@ -51,9 +51,9 @@ export interface SkillsRepository {
 
 // ── 网关实现 ──────────────────────────────────────────────────────────────
 
-/** 经 WsGateway.invoke 发送 F6 技能命令并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 F6 技能命令并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewaySkillsRepository implements SkillsRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(private readonly gatewaySource: GatewaySource) {}
 
   listSkills(): Promise<ListSkillsResult> {
     return this.invoke('listSkills', buildListSkillsRequest());
@@ -65,7 +65,7 @@ export class GatewaySkillsRepository implements SkillsRepository {
     req: SkillCommandRequest
   ): Promise<SkillCommandResultMap[T]> {
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       command,
       (raw) => parseSkillCommandResult(command, raw),

@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- 触觉反馈：VIBRATE 权限随本模块清单合并进应用（普通权限，无需运行时请求） -->
+  <uses-permission android:name="android.permission.VIBRATE" />
+</manifest>

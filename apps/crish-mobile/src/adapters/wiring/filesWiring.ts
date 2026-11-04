@@ -3,17 +3,24 @@
 // - FilesContext = repository（命令发送）+ dirCache（目录 LRU 128 层/TTL 30s，
 //   R2UX-06-01）+ previewCache（文件预览 1MB 单条/64MB 总预算/TTL，R2UX-06-02）——
 //   缓存挂在接线层而非 store（纯逻辑在 filesCache.ts，R2-06a 已交付）；
-// - 网关来源：observationWiring 单例的 ReconnectingWsClient.gateway（M5 §4.3.1
-//   装配点）；未启动接线（getObservationWiring() null）→ getFilesContext() 返回
-//   null，VM 侧投影为「未连接」错误态（任务书四态：未接连接时显示未连接错误态）；
+// - 网关来源：仓储只持 observationWiring 的当代解析函数
+//   （resolveCommandGateway），每次 invoke 现取当前代 gateway（M5 §4.3.1
+//   连接）——context 单例跨接线换代存活，捕获网关实例会在换代后把帧发进
+//   已 disconnect 的旧 client（H1 陈旧捕获根治，见 gatewayCommand 文件头
+//   口径）；未启动接线（getObservationWiring() null）→ getFilesContext()
+//   返回 null，VM 侧投影为「未连接」错误态（任务书四态：未接连接时显示
+//   未连接错误态）；连接未 open 时 invoke 立即以 transport.closed 快速失败；
 // - 断开语义：连接断开时 WsGateway.abortAllPending 已 reject 挂起请求
 //   （transport.closed），仓库错误码透传，UI 映射「未连接」文案；
 // - 测试注入：VM 钩子接受 context 参数（缺省走单例）；resetFilesContextForTest
 //   清空单例（仅测试调用）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { getObservationWiring } from './observationWiring';
+import {
+  getObservationWiring,
+  resolveCommandGateway,
+} from './observationWiring';
 import { createContextSingleton } from './contextSingleton';
+import type { GatewaySource } from './gatewayCommand';
 import {
   GatewayFilesRepository,
   type FilesRepository,
@@ -36,9 +43,9 @@ export interface FilesContext {
   previewCache: FilePreviewCache;
 }
 
-/** 装配文件域上下文（时钟可注入便于测试；缓存容量走 filesCache 默认规格） */
+/** 装配文件域上下文（网关来源：实例直注或当代解析函数；时钟可注入便于测试；缓存容量走 filesCache 默认规格） */
 export function createFilesContext(
-  gateway: WsGateway,
+  gateway: GatewaySource,
   now?: () => number
 ): FilesContext {
   return {
@@ -48,16 +55,15 @@ export function createFilesContext(
   };
 }
 
-/** 文件域上下文单例：首次调用时从观测接线取网关装配；
- * 接线未启动 → null（VM 投影「未连接」，retry 经 observationWiring 拉起连接）。 */
+/** 文件域上下文单例：接线未启动 → null；装配后仓储持解析函数、invoke 现取当代网关
+ * （VM 投影「未连接」，retry 经 observationWiring 拉起连接）。 */
 const filesSingleton = createContextSingleton<FilesContext>(() => {
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  return createFilesContext(wiring.client.gateway);
+  if (!getObservationWiring()) return null;
+  return createFilesContext(resolveCommandGateway);
 });
 
 /**
- * 文件域上下文单例读取：首次调用时从观测接线取网关装配；
+ * 文件域上下文单例读取：首次调用时装配；
  * 接线未启动 → null（VM 投影「未连接」，retry 经 observationWiring 拉起连接）。
  */
 export function getFilesContext(): FilesContext | null {

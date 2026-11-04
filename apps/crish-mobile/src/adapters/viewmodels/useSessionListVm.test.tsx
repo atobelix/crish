@@ -1,9 +1,14 @@
-// 抽屉会话列表视图模型测试：分组、搜索、空态判定。
+// 抽屉会话列表视图模型测试：分区呈现（本地/远程互斥）、分组、搜索、
+// 空态判定。分区环境与 useDeviceStatusVm.test 同摆法（真实 store）。
 import { Pressable } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { useSessionListVm, type SessionListVm } from './useSessionListVm';
 import { sessionStore } from '@/domain/store/sessionStore';
+import { accountStore } from '@/domain/store/accountStore';
+import { connectionStore } from '@/domain/store/connectionStore';
+import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
+import type { LocalThreadMeta } from '@/domain/types/localChat';
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
   getObservationWiring: () => null,
@@ -27,6 +32,19 @@ function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
   };
 }
 
+function thread(overrides: Partial<LocalThreadMeta> = {}): LocalThreadMeta {
+  return {
+    id: 'lth-1',
+    title: '本地线程',
+    titleSource: 'derived',
+    preview: '',
+    modelRef: null,
+    createdAt: NOW - 60_000,
+    updatedAt: NOW - 60_000,
+    ...overrides,
+  };
+}
+
 let latest: SessionListVm | null = null;
 
 function Probe(): React.ReactElement {
@@ -42,16 +60,30 @@ function currentVm(): SessionListVm {
 beforeEach(() => {
   latest = null;
   sessionStore.setState({ sessions: [], selectedSessionId: null });
+  // 分区环境默认 = 本机当值（未登录 + 未连接，设备身份派生同口径）
+  connectionStore.setState({ phase: 'disconnected', lastError: null });
+  accountStore.getState().reset();
+  localChatSessionStore.setState({
+    threads: [],
+    activeThreadId: null,
+    streaming: false,
+    inactive: {},
+    hydrated: true,
+  });
 });
 
-it('无会话时 hasSessions=false，两组为空', async () => {
+it('无会话时 hasSessions=false，两组为空（默认本地分区）', async () => {
   await render(<Probe />);
+  expect(currentVm().partition).toBe('local');
+  expect(currentVm().partitionLabel).toBe('本机');
   expect(currentVm().hasSessions).toBe(false);
   expect(currentVm().today).toEqual([]);
   expect(currentVm().earlier).toEqual([]);
 });
 
-it('按天分组，搜索后只保留命中项', async () => {
+it('按天分组，搜索后只保留命中项（远端分区）', async () => {
+  // 非账号模式下链路 ready → 远端设备当值 → 远端分区
+  connectionStore.setState({ phase: 'ready' });
   sessionStore.setState({
     sessions: [
       session(),
@@ -60,6 +92,7 @@ it('按天分组，搜索后只保留命中项', async () => {
     selectedSessionId: null,
   });
   const view = await render(<Probe />);
+  expect(currentVm().partition).toBe('remote');
   expect(currentVm().today.map((s) => s.id)).toEqual(['s-1']);
   expect(currentVm().earlier.map((s) => s.id)).toEqual(['s-2']);
 
@@ -69,5 +102,32 @@ it('按天分组，搜索后只保留命中项', async () => {
   await waitFor(() => expect(currentVm().today).toEqual([]));
   expect(currentVm().query).toBe('更早');
   expect(currentVm().earlier.map((s) => s.id)).toEqual(['s-2']);
+  expect(currentVm().hasSessions).toBe(true);
+});
+
+it('分区互斥：本地分区只列本地线程，远端当值后只列远端会话', async () => {
+  sessionStore.setState({ sessions: [session()], selectedSessionId: null });
+  localChatSessionStore.setState({
+    threads: [thread()],
+    activeThreadId: null,
+    streaming: false,
+    inactive: {},
+    hydrated: true,
+  });
+  await render(<Probe />);
+  // 默认本机当值：远端会话存在也不进列表；空态按本地分区事实判定
+  expect(currentVm().partition).toBe('local');
+  expect(currentVm().partitionLabel).toBe('本机');
+  expect(currentVm().today.map((r) => r.id)).toEqual(['lth-1']);
+  expect(currentVm().today[0]?.kind).toBe('local');
+  expect(currentVm().hasSessions).toBe(true);
+
+  await act(async () => {
+    connectionStore.setState({ phase: 'ready' });
+  });
+  // 链路 ready → 远端分区：本地线程退出列表，只剩远端会话
+  expect(currentVm().partition).toBe('remote');
+  expect(currentVm().today.map((r) => r.id)).toEqual(['s-1']);
+  expect(currentVm().today[0]?.kind).toBe('remote');
   expect(currentVm().hasSessions).toBe(true);
 });

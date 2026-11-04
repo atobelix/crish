@@ -290,3 +290,56 @@ describe('持久化接口注入（写 kv 键与 JSON 编码）', () => {
     expect(settingsStore.getState().get('appearance').theme).toBe('dark');
   });
 });
+
+describe('触感偏好（haptics 组：2026-11-03 裁决，震感设置控制、默认关）', () => {
+  it('缺省值：enabled=false、strength=standard（默认关是裁决本身）', () => {
+    expect(settingsStore.getState().get('haptics')).toEqual({
+      enabled: false,
+      strength: 'standard',
+    });
+  });
+
+  it('update 往返：两字段独立更新、互不影响', () => {
+    const st = settingsStore.getState();
+    st.update('haptics', { enabled: true });
+    expect(settingsStore.getState().get('haptics').enabled).toBe(true);
+    expect(settingsStore.getState().get('haptics').strength).toBe('standard');
+    st.update('haptics', { strength: 'strong' });
+    const haptics = settingsStore.getState().get('haptics');
+    expect(haptics.strength).toBe('strong');
+    expect(haptics.enabled).toBe(true); // 未提及保留
+  });
+
+  it('持久化往返：update 落盘 settings.haptics → 重置 → hydrate 恢复', async () => {
+    const persist = makePersist();
+    settingsStore
+      .getState()
+      .update('haptics', { enabled: true, strength: 'light' }, persist);
+    await Promise.resolve();
+    expect(persist.set).toHaveBeenCalledWith(
+      'settings.haptics',
+      JSON.stringify({ enabled: true, strength: 'light' })
+    );
+    resetStore();
+    expect(settingsStore.getState().get('haptics').enabled).toBe(false);
+    await settingsStore.getState().hydrate(persist);
+    expect(settingsStore.getState().get('haptics')).toEqual({
+      enabled: true,
+      strength: 'light',
+    });
+  });
+
+  it('旧存档回归：haptics 组上线前的存档无此键，水合后补默认关', async () => {
+    const persist = makePersist({
+      [settingsGroupKey('appearance')]: encodeSettingsGroup({
+        theme: 'dark',
+      }),
+    });
+    await settingsStore.getState().hydrate(persist);
+    expect(settingsStore.getState().get('haptics')).toEqual({
+      enabled: false,
+      strength: 'standard',
+    });
+    expect(settingsStore.getState().get('appearance').theme).toBe('dark');
+  });
+});

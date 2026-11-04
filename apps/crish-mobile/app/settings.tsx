@@ -20,8 +20,9 @@ export default function SettingsScreen() {
       onOpenTheme={() => router.push('/settings-theme')}
       onOpenFont={() => router.push('/settings-font')}
       onOpenNotification={() => router.push('/settings-notification')}
+      onOpenVoice={() => router.push('/settings-voice')}
+      onOpenHaptics={() => router.push('/settings-haptics')}
       onOpenScan={() => router.push('/pair/scan')}
-      onOpenLocalChat={() => router.push('/local-chat')}
       onOpenLocalProviders={() => router.push('/settings-local-providers')}
       onConfirmRemove={onConfirmRemove}
     />

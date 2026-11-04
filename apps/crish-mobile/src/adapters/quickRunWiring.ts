@@ -5,15 +5,22 @@
 // - 错误归一化：GatewayError（transport.closed / cmd.timeout / 服务端 error 帧）
 //   → RunTaskCommandError{code, message, retryable}，UI 层按 RUN_TASK_ERROR_TEXT
 //   映射人话文案（M6 §11.3 错误码表）；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = observationWiring 单例网关，
-//   对齐 filesWiring.getFilesContext 先例）；未装配 → getQuickRunContext() null，
-//   VM 投影「未连接」禁用态（任务书：未连接显示未连接禁用）。
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock；解析
+//   函数 = 生产（单例传 resolveCommandGateway，每次 invoke 现取当代网关，
+//   H1 陈旧捕获根治，见 gatewayCommand 文件头口径）；未装配 →
+//   getQuickRunContext() null，VM 投影「未连接」禁用态（任务书：未连接
+//   显示未连接禁用）；连接未 open 时 invoke 立即以 transport.closed 失败。
 //
 // 纪律：本文件为新增文件，不改动 src/domain、src/network、src/adapters/wiring。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from '@/adapters/wiring/gatewayCommand';
-import { getObservationWiring } from '@/adapters/wiring/observationWiring';
+import {
+  invokeCommand,
+  type GatewaySource,
+} from '@/adapters/wiring/gatewayCommand';
+import {
+  getObservationWiring,
+  resolveCommandGateway,
+} from '@/adapters/wiring/observationWiring';
 import { createContextSingleton } from '@/adapters/wiring/contextSingleton';
 import {
   buildRunTaskRequest,
@@ -69,14 +76,14 @@ export interface RunTaskRepository {
   runTask(params: RunTaskParams): Promise<RunTaskResult>;
 }
 
-/** 经 WsGateway.invoke 发送 remote.runTask 并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 remote.runTask 并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewayRunTaskRepository implements RunTaskRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(private readonly gatewaySource: GatewaySource) {}
 
   async runTask(params: RunTaskParams): Promise<RunTaskResult> {
     const req = buildRunTaskRequest(params);
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       'runTask',
       (raw) => parseSessionCommandResult('runTask', raw),
@@ -93,16 +100,15 @@ export interface QuickRunContext {
   repository: RunTaskRepository;
 }
 
-/** 快速操作上下文单例：首次调用从观测接线取网关装配；
- * 接线未启动 → null（VM 投影「未连接」禁用态）。 */
+/** 快速操作上下文单例：接线未启动 → null；装配后仓储持解析函数、invoke 现取当代网关
+ * （VM 投影「未连接」禁用态）。 */
 const quickRunSingleton = createContextSingleton<QuickRunContext>(() => {
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  return { repository: new GatewayRunTaskRepository(wiring.client.gateway) };
+  if (!getObservationWiring()) return null;
+  return { repository: new GatewayRunTaskRepository(resolveCommandGateway) };
 });
 
 /**
- * 快速操作上下文单例读取：首次调用从观测接线取网关装配；
+ * 快速操作上下文单例读取：首次调用装配；
  * 接线未启动 → null（VM 投影「未连接」禁用态）。
  */
 export function getQuickRunContext(): QuickRunContext | null {

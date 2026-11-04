@@ -8,11 +8,11 @@
 // - 错误归一化：invokeCommand 统一执行链（gatewayCommand.ts）——GatewayError 透传
 //   code/retryable → FilesCommandError；解析失败/未知异常 → internal
 //   （F4 附录 B 映射面在 UI 层）；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = ReconnectingWsClient.gateway，
-//   observationWiring 装配，对齐 FeedBridge 先例 feedBridge.ts:40-47）。
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock / 同代
+//   直注；解析函数 = 生产命令域（filesWiring 传 resolveCommandGateway，每次
+//   invoke 现取当代网关，H1 陈旧捕获根治，见 gatewayCommand 文件头口径）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from './gatewayCommand';
+import { invokeCommand, type GatewaySource } from './gatewayCommand';
 import {
   buildListDirRequest,
   buildReadFileRequest,
@@ -69,9 +69,9 @@ export interface FilesRepository {
 
 // ── 网关实现 ──────────────────────────────────────────────────────────────
 
-/** 经 WsGateway.invoke 发送 F4 命令并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 F4 命令并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewayFilesRepository implements FilesRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(private readonly gatewaySource: GatewaySource) {}
 
   listDir(params: ListDirParams): Promise<ListDirResult> {
     return this.invoke('listDir', buildListDirRequest(params));
@@ -97,7 +97,7 @@ export class GatewayFilesRepository implements FilesRepository {
     req: FileCommandRequest
   ): Promise<FileCommandResultMap[T]> {
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       command,
       (raw) => parseFileCommandResult(command, raw),

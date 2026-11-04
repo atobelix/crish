@@ -19,6 +19,8 @@ module.exports = {
     // 本地原生模块 crish-asr（modules/ 下的 Expo 本地模块，Metro 侧由
     // autolinking 解析；jest 需显式映射到其 TS 门面）
     '^crish-asr$': '<rootDir>/modules/crish-asr/src/index.ts',
+    // 本地原生模块 crish-haptics（同 crish-asr 口径：jest 映射到其 TS 门面）
+    '^crish-haptics$': '<rootDir>/modules/crish-haptics/src/index.ts',
     // 依 npm workspace 的 Node 解析顺序定位 React：不同版本时使用 mobile 自己的副本，
     // 与根目录版本相同并被 npm 提升时则使用根副本；三条映射始终来自同一个 package。
     '^react$': require.resolve('react'),

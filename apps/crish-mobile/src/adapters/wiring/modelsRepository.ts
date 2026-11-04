@@ -7,11 +7,11 @@
 // - 响应解析复用 modelCommands.parseModelCommandResult（生成面解析器）；
 // - 错误归一化：invokeCommand 统一执行链（gatewayCommand.ts）——GatewayError
 //   透传 code/retryable → ModelsCommandError；解析失败/未知异常 → internal；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = ReconnectingWsClient.gateway，
-//   modelsWiring 装配，对齐 filesRepository 先例）。
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock / 同代
+//   直注；解析函数 = 生产命令域（modelsWiring 传 resolveCommandGateway，每次
+//   invoke 现取当代网关，H1 陈旧捕获根治，见 gatewayCommand 文件头口径）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from './gatewayCommand';
+import { invokeCommand, type GatewaySource } from './gatewayCommand';
 import {
   buildListModelsRequest,
   buildSetActiveModelRequest,
@@ -45,6 +45,9 @@ export class ModelsCommandError extends Error {
 /** 未知错误兜底码（解析失败 / 非 GatewayError 异常） */
 export const MODELS_ERROR_INTERNAL = 'internal';
 
+/** 模型命令默认超时（ms；默认 5s，防命令面超时卡顿） */
+export const DEFAULT_MODELS_TIMEOUT_MS = 5000;
+
 // ── 仓库接口（注入 mock 面；VM/接线层只依赖接口不依赖实现） ────────────────
 
 export interface ModelsRepository {
@@ -56,9 +59,12 @@ export interface ModelsRepository {
 
 // ── 网关实现 ──────────────────────────────────────────────────────────────
 
-/** 经 WsGateway.invoke 发送 F6 模型命令并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 F6 模型命令并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewayModelsRepository implements ModelsRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(
+    private readonly gatewaySource: GatewaySource,
+    private readonly timeoutMs: number = DEFAULT_MODELS_TIMEOUT_MS
+  ) {}
 
   listModels(): Promise<ListModelsResult> {
     return this.invoke('listModels', buildListModelsRequest());
@@ -74,12 +80,13 @@ export class GatewayModelsRepository implements ModelsRepository {
     req: ModelCommandRequest
   ): Promise<ModelCommandResultMap[T]> {
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       command,
       (raw) => parseModelCommandResult(command, raw),
       (code, message, retryable) =>
-        new ModelsCommandError(code, message, retryable)
+        new ModelsCommandError(code, message, retryable),
+      this.timeoutMs
     );
   }
 }

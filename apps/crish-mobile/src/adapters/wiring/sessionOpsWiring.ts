@@ -3,14 +3,21 @@
 // - SessionOpsContext = repository（会话操作命令发送）+ monitor（导出
 //   Markdown 的事件回读面，C03 readSessionEvents）两面：操作命令无本地
 //   缓存语义（真源在桌面宿主会话存储，每次操作后以宿主回读对账）；
-// - 网关来源：observationWiring 单例的 ReconnectingWsClient.gateway（与
-//   监控/模型域同一连接）；接线未启动（getObservationWiring() null）→
-//   getSessionOpsContext() 返回 null，VM 侧投影为「未连接」态；
+// - 网关来源：两仓储只持 observationWiring 的当代解析函数
+//   （resolveCommandGateway），每次 invoke 现取当前代 gateway（与监控/
+//   模型域同一连接）——context 单例跨接线换代存活，捕获网关实例会在换代
+//   后把帧发进已 disconnect 的旧 client（H1 陈旧捕获根治，见
+//   gatewayCommand 文件头口径）；接线未启动（getObservationWiring()
+//   null）→ getSessionOpsContext() 返回 null，VM 侧投影为「未连接」态；
+//   连接未 open 时 invoke 立即以 transport.closed 快速失败；
 // - 测试注入：resetSessionOpsContextForTest 清空单例（仅测试调用）。
 
-import { WsGateway } from '@/network/WsGateway';
-import { getObservationWiring } from './observationWiring';
+import {
+  getObservationWiring,
+  resolveCommandGateway,
+} from './observationWiring';
 import { createContextSingleton } from './contextSingleton';
+import type { GatewaySource } from './gatewayCommand';
 import {
   GatewaySessionOpsRepository,
   type SessionOpsRepository,
@@ -27,23 +34,24 @@ export interface SessionOpsContext {
   monitor: MonitorRepository;
 }
 
-/** 装配会话操作域上下文 */
-export function createSessionOpsContext(gateway: WsGateway): SessionOpsContext {
+/** 装配会话操作域上下文（网关来源：实例直注或当代解析函数） */
+export function createSessionOpsContext(
+  gateway: GatewaySource
+): SessionOpsContext {
   return {
     repository: new GatewaySessionOpsRepository(gateway),
     monitor: new GatewayMonitorRepository(gateway),
   };
 }
 
-/** 会话操作域上下文单例：首次调用时从观测接线取网关装配；接线未启动 → null */
+/** 会话操作域上下文单例：接线未启动 → null；装配后仓储持解析函数、invoke 现取当代网关 */
 const sessionOpsSingleton = createContextSingleton<SessionOpsContext>(() => {
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  return createSessionOpsContext(wiring.client.gateway);
+  if (!getObservationWiring()) return null;
+  return createSessionOpsContext(resolveCommandGateway);
 });
 
 /**
- * 会话操作域上下文单例读取：首次调用时从观测接线取网关装配；
+ * 会话操作域上下文单例读取：首次调用时装配；
  * 接线未启动 → null（VM 投影「未连接」，连接由观测接线统一拉起）。
  */
 export function getSessionOpsContext(): SessionOpsContext | null {

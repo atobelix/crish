@@ -1,5 +1,8 @@
 // 监控域仓库：会话索引 / 会话事件 / run 事件的唯一发送与解析入口。
-import type { WsGateway } from '@/network/WsGateway';
+// 网关来源构造注入（GatewaySource）：实例 = 同代直注（observationWiring 为
+// FeedBridge 装配时传当代 gateway）；解析函数 = sessionOps 命令域单例传
+// resolveCommandGateway、每次 invoke 现取当代（H1 陈旧捕获根治，见
+// gatewayCommand 文件头口径）。
 import type {
   EventPageParams,
   EventPageResult,
@@ -15,7 +18,10 @@ import {
   type MonitorCommandName,
   type MonitorCommandResultMap,
 } from '@/domain/repositories/monitorCommands';
-import { invokeCommand } from '@/adapters/wiring/gatewayCommand';
+import {
+  invokeCommand,
+  type GatewaySource,
+} from '@/adapters/wiring/gatewayCommand';
 
 export class MonitorCommandError extends Error {
   readonly code: string;
@@ -34,8 +40,13 @@ export interface MonitorRepository {
   readRunEvents(params: RunEventsParams): Promise<EventPageResult>;
 }
 
+export const DEFAULT_MONITOR_TIMEOUT_MS = 5000;
+
 export class GatewayMonitorRepository implements MonitorRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(
+    private readonly gatewaySource: GatewaySource,
+    private readonly timeoutMs: number = DEFAULT_MONITOR_TIMEOUT_MS
+  ) {}
 
   listSessions(params?: ListSessionsParams): Promise<ListSessionsResult> {
     return this.invoke('listSessions', buildListSessionsRequest(params));
@@ -57,12 +68,13 @@ export class GatewayMonitorRepository implements MonitorRepository {
     req: { kind: string; body: unknown }
   ): Promise<MonitorCommandResultMap[T]> {
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       command,
       (raw) => parseMonitorCommandResult(command, raw),
       (code, message, retryable) =>
-        new MonitorCommandError(code, message, retryable)
+        new MonitorCommandError(code, message, retryable),
+      this.timeoutMs
     );
   }
 }

@@ -33,6 +33,10 @@ function makeVm(overrides: Partial<SettingsVm> = {}): SettingsVm {
     setFontScale: jest.fn(),
     monoFont: 'system',
     setMonoFont: jest.fn(),
+    hapticsEnabled: false,
+    hapticsStrength: 'standard',
+    setHapticsEnabled: jest.fn(),
+    setHapticsStrength: jest.fn(),
     notifyMasterOn: true,
     notifyScenes: {
       message: true,
@@ -72,7 +76,7 @@ describe('SettingsFontView', () => {
     expect(view.getByText('Fira Code')).toBeTruthy();
     // 预览：正文样本 + 配对码数字（Q1 即时预览 / Q2 codeDigit）
     expect(
-      view.getByText('这段文字使用当前字号显示，切换上方选项会立即生效。')
+      view.getByText('清晨的阳光落在窗台上，新的一天才刚刚开始。')
     ).toBeTruthy();
     expect(view.getByText('483920')).toBeTruthy();
   });

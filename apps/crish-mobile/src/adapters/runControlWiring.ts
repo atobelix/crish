@@ -10,18 +10,25 @@
 //   → RunControlCommandError{code, message, retryable}，UI 层按
 //   RUN_CONTROL_ERROR_TEXT 映射人话文案（M6 §11.3 错误码表；runControl 错误码面：
 //   cmd.not_found / cmd.invalid / cmd.denied，M6 §4.4.2）；
-// - 注入模式：gateway 实例构造注入（测试 mock；生产 = observationWiring 单例网关，
-//   对齐 quickRunWiring.getQuickRunContext 先例）；未装配 → getRunControlContext()
-//   null，VM 投影「未连接」禁用态；
+// - 注入模式：网关来源构造注入（GatewaySource）——实例 = 测试 mock；解析
+//   函数 = 生产（单例传 resolveCommandGateway，每次 invoke 现取当代网关，
+//   H1 陈旧捕获根治，见 gatewayCommand 文件头口径）；未装配 →
+//   getRunControlContext() null，VM 投影「未连接」禁用态；连接未 open 时
+//   invoke 立即以 transport.closed 失败；
 // - permissionMode 约束（R2-07 B4）：runControl 参数面无 permissionMode 字段，
 //   授权面 = 配对/连接层能力申报（D5 §3.5）；桌面侧对远程控制恒按 ask 降级执行
 //   （apply_remote_mode，D5 §4.6.1），本接线不申报权限位、UI 不提供权限选项。
 //
 // 纪律：本文件为新增文件，不改动 src/domain、src/network、src/adapters/wiring。
 
-import { WsGateway } from '@/network/WsGateway';
-import { invokeCommand } from '@/adapters/wiring/gatewayCommand';
-import { getObservationWiring } from '@/adapters/wiring/observationWiring';
+import {
+  invokeCommand,
+  type GatewaySource,
+} from '@/adapters/wiring/gatewayCommand';
+import {
+  getObservationWiring,
+  resolveCommandGateway,
+} from '@/adapters/wiring/observationWiring';
 import { createContextSingleton } from '@/adapters/wiring/contextSingleton';
 import {
   buildRunControlRequest,
@@ -86,14 +93,14 @@ export interface RunControlRepository {
   cancelRun(params: CancelRunParams): Promise<CancelRunResult>;
 }
 
-/** 经 WsGateway.invoke 发送 remote.* 并解析响应（注入 gateway，测试可注入假网关） */
+/** 经 WsGateway.invoke 发送 remote.* 并解析响应（注入网关来源，测试可注入假网关） */
 export class GatewayRunControlRepository implements RunControlRepository {
-  constructor(private readonly gateway: WsGateway) {}
+  constructor(private readonly gatewaySource: GatewaySource) {}
 
   async runControl(params: RunControlParams): Promise<RunControlResult> {
     const req = buildRunControlRequest(params);
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       'runControl',
       (raw) => parseSessionCommandResult('runControl', raw),
@@ -105,7 +112,7 @@ export class GatewayRunControlRepository implements RunControlRepository {
   async cancelRun(params: CancelRunParams): Promise<CancelRunResult> {
     const req = buildCancelRunRequest(params);
     return invokeCommand(
-      this.gateway,
+      this.gatewaySource,
       req,
       'cancelRun',
       (raw) => parseSessionCommandResult('cancelRun', raw),
@@ -122,18 +129,17 @@ export interface RunControlContext {
   repository: RunControlRepository;
 }
 
-/** run 控制上下文单例：首次调用从观测接线取网关装配；
- * 接线未启动 → null（VM 投影「未连接」禁用态）。 */
+/** run 控制上下文单例：接线未启动 → null；装配后仓储持解析函数、invoke 现取当代网关
+ * （VM 投影「未连接」禁用态）。 */
 const runControlSingleton = createContextSingleton<RunControlContext>(() => {
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
+  if (!getObservationWiring()) return null;
   return {
-    repository: new GatewayRunControlRepository(wiring.client.gateway),
+    repository: new GatewayRunControlRepository(resolveCommandGateway),
   };
 });
 
 /**
- * run 控制上下文单例读取：首次调用从观测接线取网关装配；
+ * run 控制上下文单例读取：首次调用装配；
  * 接线未启动 → null（VM 投影「未连接」禁用态）。
  */
 export function getRunControlContext(): RunControlContext | null {

@@ -1,0 +1,14 @@
+{
+  "description": "Crish 触觉反馈本地模块（VibrationEffect 短脉冲桥：能力查询 / 单次脉冲 / 波形）",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "name": "crish-haptics",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "sideEffects": false,
+  "types": "src/index.ts",
+  "version": "1.0.0"
+}

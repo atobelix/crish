@@ -10,6 +10,7 @@ import { authStore } from '@/domain/store/authStore';
 import { settingsStore } from '@/domain/store/settingsStore';
 import type {
   FontScale,
+  HapticsStrength,
   MonoFont,
   ThemeMode,
   NotifyScene,
@@ -38,6 +39,11 @@ export interface SettingsVm {
   /** 等宽字体（W-A 字体设置） */
   monoFont: MonoFont;
   setMonoFont: (font: MonoFont) => void;
+  /** 震动反馈（2026-11-03 裁决：设置控制、默认关；门面唯一消费面） */
+  hapticsEnabled: boolean;
+  hapticsStrength: HapticsStrength;
+  setHapticsEnabled: (value: boolean) => void;
+  setHapticsStrength: (strength: HapticsStrength) => void;
   notifyMasterOn: boolean;
   notifyScenes: Readonly<Record<NotifyScene, boolean>>;
   notifyPermission: NotificationPermissionStatus;
@@ -68,6 +74,7 @@ export function useSettingsVm(
   const fontScale = useSettingsStore((s) => s.groups.appearance.fontScale);
   const monoFont = useSettingsStore((s) => s.groups.appearance.monoFont);
   const notifyPrefs = useSettingsStore((s) => s.groups.notification);
+  const hapticsPrefs = useSettingsStore((s) => s.groups.haptics);
   const permissionStatus = useNotificationPermission();
   const host = useAuthStore((s) => s.host);
   const port = useAuthStore((s) => s.port);
@@ -82,6 +89,14 @@ export function useSettingsVm(
 
   const changeMonoFont = useCallback((font: MonoFont) => {
     settingsStore.getState().update('appearance', { monoFont: font });
+  }, []);
+
+  const setHapticsEnabled = useCallback((value: boolean) => {
+    settingsStore.getState().update('haptics', { enabled: value });
+  }, []);
+
+  const setHapticsStrength = useCallback((strength: HapticsStrength) => {
+    settingsStore.getState().update('haptics', { strength });
   }, []);
 
   const setNotifyMasterOn = useCallback((value: boolean) => {
@@ -116,6 +131,10 @@ export function useSettingsVm(
     setFontScale: changeFontScale,
     monoFont,
     setMonoFont: changeMonoFont,
+    hapticsEnabled: hapticsPrefs.enabled,
+    hapticsStrength: hapticsPrefs.strength,
+    setHapticsEnabled,
+    setHapticsStrength,
     notifyMasterOn: notifyPrefs.masterOn,
     notifyScenes: notifyPrefs.sceneFlags,
     notifyPermission: permissionStatus,

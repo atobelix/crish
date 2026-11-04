@@ -1,7 +1,10 @@
 // 设置（原型 settings-screen 移植）：账号白卡 + 图标分组卡 + 退出登录胶囊。
 // 子面板 = 独立路由页（/settings-theme、/settings-notification），右侧滑入。
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+// 按压反馈（按压过渡统一批，2026-11-02）：账号卡/退出胶囊缩放 1→motion.pressScale
+// 走 120ms 过渡；退出胶囊底色 dangerSoft 为叠层过渡（不再瞬时换色）。
+import { useEffect, useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { useTheme, THEME_MODE_LABELS } from '@/adapters/platform/theme';
@@ -14,13 +17,20 @@ import {
   ListRow,
   Screen,
 } from '@/presentation/ui';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import { FONT_SCALE_LABELS } from './SettingsFontView';
+import { HAPTICS_STRENGTH_LABELS } from './SettingsHapticsView';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { useLocalChatStore } from '@/adapters/hooks/useAppStore';
 import { resolveActiveSelection } from '@/domain/pure/localChatProtocol';
 import { logoutAccount } from '@/adapters/account/accountService';
 import { AccountAvatar } from '@/presentation/account/ui';
 import { ConnectionHelpSheet } from '@/presentation/components/status/ConnectionHelpSheet';
+import { asrModelManager } from '@/adapters/asr/modelManager';
+import { voiceInputService } from '@/adapters/asr/voiceInputService';
 
 export interface SettingsScreenViewProps {
   vm: SettingsVm;
@@ -32,9 +42,16 @@ export interface SettingsScreenViewProps {
   onOpenNotification: () => void;
   onOpenScan: () => void;
   onConfirmRemove: () => void | Promise<void>;
-  /** 本地助手（手机本地供应商直连，与远程宿主模型无关）；两入口齐备才渲染该组 */
-  onOpenLocalChat?: () => void;
+  /**
+   * 本地供应商配置入口（手机本地供应商直连，与远程宿主模型无关）。
+   * CON-2：设置里只留「配置」——本地对话的入口已摘除（对话的家在主页
+   * hub 与抽屉，不在设置组里）；供应商/密钥等管理面仍归设置。
+   */
   onOpenLocalProviders?: () => void;
+  /** 语音输入子页入口（端侧 ASR 状态与模型管理，归设置） */
+  onOpenVoice?: () => void;
+  /** 震动反馈子页入口（开关 + 强度，2026-11-03 裁决：震感归设置控制） */
+  onOpenHaptics?: () => void;
 }
 
 export default function SettingsScreenView({
@@ -47,8 +64,9 @@ export default function SettingsScreenView({
   onOpenNotification,
   onOpenScan,
   onConfirmRemove,
-  onOpenLocalChat,
   onOpenLocalProviders,
+  onOpenVoice,
+  onOpenHaptics,
 }: SettingsScreenViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -66,6 +84,9 @@ export default function SettingsScreenView({
     '登录 Crish 账号';
   // 主题行值文案走 THEME_MODE_LABELS 单一真源（四档全对，含纯净中性灰）
   const themeLabel = THEME_MODE_LABELS[vm.themeMode];
+  // 按压反馈（按压过渡统一批）：账号卡与退出胶囊的缩放/叠层进度
+  const accountPress = usePressFade();
+  const logoutPress = usePressFade();
   // 本地助手摘要：当前供应商名（无当前选择但已有配置→诚实标注；无配置→未配置）
   const localConfig = useLocalChatStore((s) => s.config);
   const localSelection = resolveActiveSelection(localConfig);
@@ -75,6 +96,31 @@ export default function SettingsScreenView({
       : Object.keys(localConfig.providers).length > 0
         ? '未选当前供应商'
         : '未配置';
+  // 语音行摘要：模型就绪态（check 是尺寸+标记的廉价读，进页异步补齐）
+  const [voiceSummary, setVoiceSummary] = useState('');
+  useEffect(() => {
+    if (!onOpenVoice) return;
+    if (!voiceInputService.isAvailable()) {
+      setVoiceSummary('不支持');
+      return;
+    }
+    let alive = true;
+    void asrModelManager()
+      .check()
+      .then((state) => {
+        if (!alive) return;
+        setVoiceSummary(
+          state.kind === 'ready'
+            ? '已就绪'
+            : state.kind === 'error'
+              ? '下载失败'
+              : '未下载'
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [onOpenVoice]);
 
   return (
     <Screen style={{ backgroundColor: theme.colors.canvasGrouped }}>
@@ -89,12 +135,14 @@ export default function SettingsScreenView({
         }}
       >
         {/* 账号卡：头像 + 昵称 + 右箭头（原型 settings-account-card） */}
-        <Pressable
+        <AnimatedPressable
           testID="settings-account"
           accessibilityRole="button"
           accessibilityLabel={loggedIn ? accountName : '登录 Crish 账号'}
           onPress={onOpenAccount}
-          style={({ pressed }) => [
+          onPressIn={accountPress.onPressIn}
+          onPressOut={accountPress.onPressOut}
+          style={[
             styles.accountCard,
             {
               borderRadius: theme.radius.card,
@@ -102,8 +150,8 @@ export default function SettingsScreenView({
               paddingVertical: theme.space.lg,
               paddingHorizontal: theme.space.lg + 2,
               gap: theme.space.md + 2,
-              transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
             },
+            accountPress.pressScaleStyle,
           ]}
         >
           {loggedIn ? (
@@ -140,18 +188,13 @@ export default function SettingsScreenView({
             >
               {loggedIn ? accountName : '登录 Crish 账号'}
             </AppText>
-            {!loggedIn ? (
-              <AppText variant="footnote" color="textTertiary">
-                登录后自动发现电脑并远程连接
-              </AppText>
-            ) : null}
           </View>
           <Icon
             name="chevron-right"
             size={theme.size.iconSmall - 2}
             color={theme.colors.textTertiary}
           />
-        </Pressable>
+        </AnimatedPressable>
 
         <SettingsGroup label="连接">
           <ListRow
@@ -192,7 +235,7 @@ export default function SettingsScreenView({
           />
           <ListRow
             title="字体与字号"
-            leading={<RowIcon name="sort" />}
+            leading={<RowIcon name="text-font" />}
             trailing={
               <AppText variant="footnote" color="textTertiary">
                 {FONT_SCALE_LABELS[vm.fontScale]}
@@ -211,26 +254,53 @@ export default function SettingsScreenView({
             }
             showChevron
             onPress={onOpenNotification}
-            divider={false}
+            divider={Boolean(onOpenVoice) || Boolean(onOpenHaptics)}
           />
+          {onOpenVoice ? (
+            <ListRow
+              title="语音输入"
+              leading={<RowIcon name="audio-wave" />}
+              trailing={
+                <AppText variant="footnote" color="textTertiary">
+                  {voiceSummary}
+                </AppText>
+              }
+              showChevron
+              onPress={onOpenVoice}
+              divider={Boolean(onOpenHaptics)}
+            />
+          ) : null}
+          {onOpenHaptics ? (
+            <ListRow
+              title="震动反馈"
+              leading={<RowIcon name="vibrate" />}
+              trailing={
+                <AppText variant="footnote" color="textTertiary">
+                  {vm.hapticsEnabled
+                    ? HAPTICS_STRENGTH_LABELS[vm.hapticsStrength]
+                    : '已关闭'}
+                </AppText>
+              }
+              showChevron
+              onPress={onOpenHaptics}
+              divider={false}
+            />
+          ) : null}
         </SettingsGroup>
 
-        {onOpenLocalChat && onOpenLocalProviders ? (
+        {onOpenLocalProviders ? (
           <SettingsGroup label="本地助手">
+            {/* CON-2 摘行：「本地对话」入口已移除（对话归主页 hub/抽屉）；
+                本组只留供应商配置，当前选择摘要随行呈现 */}
             <ListRow
-              title="本地对话"
-              leading={<RowIcon name="zap" />}
+              title="供应商配置"
+              leading={<RowIcon name="settings" />}
               trailing={
                 <AppText variant="footnote" color="textTertiary">
                   {localSummary}
                 </AppText>
               }
               showChevron
-              onPress={onOpenLocalChat}
-            />
-            <ListRow
-              title="供应商配置"
-              leading={<RowIcon name="settings" />}
               onPress={onOpenLocalProviders}
               divider={false}
             />
@@ -252,26 +322,37 @@ export default function SettingsScreenView({
 
         {/* 退出当前账号：白底红字胶囊（原型 settings-logout-btn） */}
         {loggedIn ? (
-          <Pressable
+          <AnimatedPressable
             testID="settings-logout"
             accessibilityRole="button"
             accessibilityLabel="退出当前账号"
             onPress={() => {
               void logoutAccount();
             }}
-            style={({ pressed }) => [
+            onPressIn={logoutPress.onPressIn}
+            onPressOut={logoutPress.onPressOut}
+            style={[
               styles.logout,
               {
                 height: theme.size.touchLarge,
                 borderRadius: theme.radius.pill,
-                backgroundColor: pressed
-                  ? theme.colors.dangerSoft
-                  : theme.colors.surfaceGrouped,
+                backgroundColor: theme.colors.surfaceGrouped,
                 gap: theme.space.sm,
-                transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
               },
+              logoutPress.pressScaleStyle,
             ]}
           >
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  borderRadius: theme.radius.pill,
+                  backgroundColor: theme.colors.dangerSoft,
+                },
+                logoutPress.overlayStyle,
+              ]}
+            />
             <Icon
               name="logout"
               size={theme.size.iconSmall + 1}
@@ -280,7 +361,7 @@ export default function SettingsScreenView({
             <AppText variant="body" color="danger" style={styles.logoutText}>
               退出当前账号
             </AppText>
-          </Pressable>
+          </AnimatedPressable>
         ) : null}
 
         <SettingsGroup label={null}>

@@ -9,6 +9,8 @@
 // - 测试注入：startObservationWiring 接受 factory/gateway 覆盖，单测可 mock 连接。
 import { ReconnectingWsClient } from '@/network/ReconnectingWsClient';
 import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
+import { PEER_WAIT_MS } from '@/network/RelaySocket';
+import { REQUEST_TIMEOUT_MS } from '@/adapters/account/accountConstants';
 import { WsGateway } from '@/network/WsGateway';
 import { resolveWsUrl, engineTlsEnabled } from '@/network/EndpointResolver';
 import { authStore } from '@/domain/store/authStore';
@@ -34,6 +36,15 @@ export interface ObservationWiringOptions {
   listSessions?: ListSessionsRepository;
   /** 监控仓库（缺省 = 基于同一 gateway 的 GatewayMonitorRepository） */
   monitor?: MonitorRepository;
+  /** 握手看门狗覆盖（透传 ReconnectingWsClient；缺省 8s，relay 装配点注入放大值） */
+  connectTimeoutMs?: number;
+  /** 连续重连失败上限覆盖（透传 ReconnectingWsClient；缺省 5，relay 装配点注入放大值） */
+  maxRetries?: number;
+  /**
+   * 接线属主设备（M7 盖章穿线，透传 FeedBridge）：账号模式 = 目标
+   * deviceId；配对模式缺省由 authStore.desktopId 补齐（ensure 路径）。
+   */
+  ownerDeviceId?: string;
 }
 
 export interface ObservationWiring {
@@ -58,11 +69,18 @@ export function startObservationWiring(
   opts: ObservationWiringOptions
 ): ObservationWiring {
   const gateway = opts.gateway ?? new WsGateway({ msgIdPrefix: 'mob' });
-  const monitor = opts.monitor ?? new GatewayMonitorRepository(gateway);
+  let clientRef: ReconnectingWsClient | null = null;
+  const monitorGatewaySource = (): WsGateway | null => {
+    if (clientRef && clientRef.phase !== 'open') return null;
+    return gateway;
+  };
+  const monitor =
+    opts.monitor ?? new GatewayMonitorRepository(monitorGatewaySource);
   const bridge = new FeedBridge({
     gateway,
     monitor,
     ...(opts.listSessions ? { listSessions: opts.listSessions } : {}),
+    ...(opts.ownerDeviceId ? { ownerDeviceId: opts.ownerDeviceId } : {}),
   });
   bridge.attach();
   // 终端面接线并挂（与 FeedBridge 同构：events.push → terminalStore 镜像 + 配对生命周期全清）
@@ -89,6 +107,10 @@ export function startObservationWiring(
     url: opts.url,
     ...(opts.token !== undefined ? { token: opts.token } : {}),
     ...(opts.factory ? { factory: opts.factory } : {}),
+    ...(opts.connectTimeoutMs !== undefined
+      ? { connectTimeoutMs: opts.connectTimeoutMs }
+      : {}),
+    ...(opts.maxRetries !== undefined ? { maxRetries: opts.maxRetries } : {}),
     gateway,
     onPhaseChange: (phase: WsPhase) => {
       bridge.handlePhaseChange(phase);
@@ -101,6 +123,7 @@ export function startObservationWiring(
       }
     },
   });
+  clientRef = client;
   return {
     client,
     bridge,
@@ -159,7 +182,15 @@ export function ensureObservationWiring(
     if (sameUrl && sameToken) return singleton;
     disposeObservationWiring();
   }
-  singleton = startObservationWiring({ ...opts, url });
+  // 配对模式属主补齐（M7）：显式未给时以已配对桌面 id 为接线属主，
+  // 与 appRuntime 的数据面盖章同键，帧写入才可被盖章校验放行。
+  const ownerDeviceId =
+    opts.ownerDeviceId ?? authStore.getState().desktopId ?? undefined;
+  singleton = startObservationWiring({
+    ...opts,
+    url,
+    ...(ownerDeviceId ? { ownerDeviceId } : {}),
+  });
   singleton.client.connect();
   return singleton;
 }
@@ -169,19 +200,58 @@ export function getObservationWiring(): ObservationWiring | null {
   return singleton;
 }
 
+/**
+ * 命令域当代网关解析（H1 陈旧捕获根治的规范访问器）：接线存在且 client
+ * 相位为 open → 当前代 gateway；否则 null。六命令域（models / skills /
+ * files / sessionOps / quickRun / runControl）的仓储经 invokeCommand 在
+ * 每次 invoke 时调用本解析器现取网关——命令域 context 单例跨接线换代
+ * 存活，若捕获装配代 gateway，换代后帧会被发进已 disconnect 的旧 client
+ * （其发送闭包静默吞帧），pending 无人 abort、满 10s 才以 cmd.timeout
+ * 失败且进程内永不自愈。本解析器与 approvalWiring 的 ensure 时现取同源
+ * （getObservationWiring()?.client.gateway），并额外要求 open 相位：
+ * 未 open（connecting / reconnecting / dead）返回 null，由 invokeCommand
+ * 立即以 transport.closed 快速失败，不让帧在半开连接上干等超时。
+ */
+export function resolveCommandGateway(): WsGateway | null {
+  if (!singleton) return null;
+  if (singleton.client.phase !== 'open') return null;
+  return singleton.client.gateway;
+}
+
 /** 账户远程接线：用 relay 适配器替换局域网直连单例。
  *
  * `url` 仅作诊断标识；实际连接由 `factory`（RelaySocket）在每次重连时申请
  * 新票据并等待 host online。调用方负责在账号登出/目标切换时 dispose。
  */
+/**
+ * relay 场景握手看门狗（CON-1 三层预算对齐）：RelaySocket 的一次握手 =
+ * 票据 HTTP（≤ REQUEST_TIMEOUT_MS 25s）+ 等 host peer 在线（≤ PEER_WAIT_MS
+ * 20s），看门狗必须覆盖全程（45s）。缺省 8s 看门狗会从工厂返回 socket 起
+ * 算，在票据还没回来时就关掉 socket 记一次失败——弱网下 5 次重试被三层
+ * 预算互相掐断、约 1–2 分钟耗尽进 dead（审计 A.4）。
+ */
+export const RELAY_CONNECT_TIMEOUT_MS = REQUEST_TIMEOUT_MS + PEER_WAIT_MS;
+
+/**
+ * relay 场景重试上限（默认 5 → 10）：配合 15s discovery 心跳的 dead 复活
+ * （syncAccountRemote 在资格成立且接线 dead 时触发 connect），弱网下不
+ * 轻易进入 dead 终态（审计 A.6）。
+ */
+export const RELAY_MAX_RETRIES = 10;
+
 export function ensureRelayObservationWiring(opts: {
   url: string;
   factory: WebSocketFactory;
+  /** 接线属主设备（M7）：账号模式调用方传目标 deviceId */
+  ownerDeviceId?: string;
 }): ObservationWiring {
   if (singleton) disposeObservationWiring();
   singleton = startObservationWiring({
     url: opts.url,
     factory: opts.factory,
+    connectTimeoutMs: RELAY_CONNECT_TIMEOUT_MS,
+    maxRetries: RELAY_MAX_RETRIES,
+    ...(opts.ownerDeviceId ? { ownerDeviceId: opts.ownerDeviceId } : {}),
   });
   singleton.client.connect();
   return singleton;

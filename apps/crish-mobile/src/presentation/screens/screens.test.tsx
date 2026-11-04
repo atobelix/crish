@@ -156,8 +156,10 @@ describe('SessionDetailScreen', () => {
     expect(view.getByText('正在执行 · src/a.ts')).toBeTruthy();
     await fireEvent.press(view.getByTestId('tool-run-t-1'));
     expect(onOpenTools).toHaveBeenCalledWith('t-1');
-    // 悬浮头栏：返回与会话选项入口
-    expect(view.getByTestId('session-back')).toBeTruthy();
+    // 悬浮头栏：抽屉钮与会话选项入口（U1 顶栏定型：返回钮已删位，
+    // 左钮 = 汉堡开抽屉 session-drawer；session-back 不得再出现）
+    expect(view.getByTestId('session-drawer')).toBeTruthy();
+    expect(view.queryByTestId('session-back')).toBeNull();
     expect(view.getByTestId('session-more')).toBeTruthy();
     expect(view.getByTestId('session-composer')).toBeTruthy();
   });
@@ -309,6 +311,10 @@ describe('Files / Settings / Pairing', () => {
       setFontScale: jest.fn(),
       monoFont: 'system',
       setMonoFont: jest.fn(),
+      hapticsEnabled: false,
+      hapticsStrength: 'standard',
+      setHapticsEnabled: jest.fn(),
+      setHapticsStrength: jest.fn(),
       notifyMasterOn: true,
       notifyScenes: {
         message: true,
