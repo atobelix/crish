@@ -56,6 +56,12 @@
   user-select: none;
 }
 
+/* 数字字形不进 DOM 文本（textContent / 复制 / 页内搜索只认 srOnly） */
+.sizer::before,
+.glyph::before {
+  content: attr(data-digit);
+}
+
 .glyph {
   position: absolute;
   inset: var(--feather) 0;

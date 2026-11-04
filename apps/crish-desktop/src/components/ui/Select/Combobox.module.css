@@ -101,6 +101,15 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
+  transition:
+    transform var(--transition-micro),
+    color var(--transition-micro);
+  will-change: transform;
+}
+
+.comboboxWrapper[data-state='open'] .chevron,
+.comboboxWrapper.open .chevron {
+  transform: rotate(180deg);
 }
 
 /* 多选 Chips 容器 */

@@ -1,6 +1,6 @@
 import React, { forwardRef, useCallback, useRef } from 'react';
 import { useComboboxContext } from './ComboboxRoot';
-import { ChevronUpDownIcon, ClearIcon } from './internal/SelectIcons';
+import { ChevronDownIcon, ClearIcon } from './internal/SelectIcons';
 import type { ComboboxInputProps } from './types';
 import styles from './Combobox.module.css';
 
@@ -83,7 +83,8 @@ export const ComboboxInput = forwardRef<HTMLInputElement, ComboboxInputProps>(
           }
         } else if (e.key === 'Enter') {
           if (ctx.open) {
-            const targetIndex = ctx.highlightedIndex >= 0 ? ctx.highlightedIndex : 0;
+            const targetIndex =
+              ctx.highlightedIndex >= 0 ? ctx.highlightedIndex : 0;
             const target = ctx.items[targetIndex];
             if (target && !target.disabled) {
               e.preventDefault();
@@ -138,7 +139,9 @@ export const ComboboxInput = forwardRef<HTMLInputElement, ComboboxInputProps>(
     return (
       <div
         ref={(el) => {
-          (ctx.triggerRef as React.MutableRefObject<HTMLElement | null>).current = el;
+          (
+            ctx.triggerRef as React.MutableRefObject<HTMLElement | null>
+          ).current = el;
         }}
         className={wrapperClass}
         data-slot="combobox-input-wrapper"
@@ -146,7 +149,9 @@ export const ComboboxInput = forwardRef<HTMLInputElement, ComboboxInputProps>(
         {startSlot && <span className={styles.startSlot}>{startSlot}</span>}
         <input
           ref={(el) => {
-            (ctx.inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+            (
+              ctx.inputRef as React.MutableRefObject<HTMLInputElement | null>
+            ).current = el;
             if (typeof forwardedRef === 'function') forwardedRef(el);
             else if (forwardedRef) forwardedRef.current = el;
           }}
@@ -186,7 +191,7 @@ export const ComboboxInput = forwardRef<HTMLInputElement, ComboboxInputProps>(
         {endSlot && <span className={styles.endSlot}>{endSlot}</span>}
         {icon && (
           <span className={styles.chevron} aria-hidden="true">
-            {typeof icon === 'boolean' ? <ChevronUpDownIcon size={14} /> : icon}
+            {typeof icon === 'boolean' ? <ChevronDownIcon size={14} /> : icon}
           </span>
         )}
       </div>

@@ -123,10 +123,16 @@
   transition:
     transform var(--transition-micro),
     color var(--transition-micro);
+  will-change: transform;
 }
 
 .trigger:hover:not(:disabled) .chevron {
   color: var(--text-secondary);
+}
+
+.trigger.open .chevron,
+.trigger[data-state='open'] .chevron {
+  transform: rotate(180deg);
 }
 
 .clearBtn {
@@ -385,15 +391,10 @@
   padding: 0;
 }
 
-/* 节能与减弱动画 */
+/* 减弱动画 */
 @media (prefers-reduced-motion: reduce) {
   .content {
     animation: none;
     transition: opacity var(--duration-micro) var(--ease-standard);
   }
-}
-
-html[data-perf-tier='eco'] .content {
-  animation: none;
-  transition: none;
 }

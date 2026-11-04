@@ -271,7 +271,7 @@
   display: none;
 }
 
-/* ── 8. 减弱动画兜底 (Reduced Motion & Eco Tier) ── */
+/* ── 8. 减弱动画兜底 (Reduced Motion) ── */
 @media (prefers-reduced-motion: reduce) {
   .indicator,
   .triggerInner,
@@ -279,11 +279,4 @@
     transition-duration: 0ms;
     animation-duration: 0ms;
   }
-}
-
-html[data-perf-tier='eco'] .indicator,
-html[data-perf-tier='eco'] .triggerInner,
-html[data-perf-tier='eco'] .content {
-  transition-duration: 0ms;
-  animation-duration: 0ms;
 }

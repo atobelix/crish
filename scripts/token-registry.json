@@ -204,16 +204,6 @@
       "staticDefault": null
     },
     {
-      "name": "--flow-output-max",
-      "writer": "apps/crish-desktop/src/extensions/conversation-flow/ThinkingBlock.tsx",
-      "writerExtra": [
-        "apps/crish-desktop/src/extensions/conversation-flow/ActionRow.tsx",
-        "apps/crish-desktop/src/extensions/conversation-flow/SubagentBlock.tsx"
-      ],
-      "consumer": "apps/crish-desktop/src/extensions/conversation-flow/narrative.module.css",
-      "staticDefault": "600px"
-    },
-    {
       "name": "--toast-index",
       "writer": "apps/crish-desktop/src/components/overlay/ToastCard.tsx",
       "consumer": "apps/crish-desktop/src/components/overlay/ToastStackModern.module.css",
@@ -432,6 +422,27 @@
       "writer": "apps/crish-desktop/src/services/token-runtime/injectRootTokens.ts",
       "consumer": "apps/crish-desktop/src/styles/tokens.css（--scrollbar-button-right-active: var(--user-scrollbar-button-right-active, 静态 SVG)）",
       "note": "T-BLK-07b 参数化（2026-10-20）：JS 只写该 --user-* 运行期参数，A 类视觉值由 tokens.css 消费点 var(--user-*, 静态兜底) 派生；静态默认不以独立声明承载，而由消费点 fallback 承载（故 staticDefault 留空）。 ::-webkit-scrollbar-button 伪元素仅支持 background 白名单属性（无 mask），SVG 序列化保留在 JS：finalFg 纯透传 + 固定 opacity，零颜色计算。"
+    },
+    {
+      "name": "--accordion-duration",
+      "writer": "apps/crish-desktop/src/utils/motionTokens.ts",
+      "consumer": "折叠族 CSS（ReasoningRow / FoldableProcessSection / FoldableToolGroup / ChatToolCallBlock / narrative / ChatComposer 等 *.module.css 的 transition 简写位）",
+      "staticDefault": "var(--duration-accordion) var(--ease-decelerate)",
+      "note": "AN1 同钟：唯一写者 = motionTokens.accordionDurationStyle（calcAccordionDuration 算出物理时长后经此注入各折叠组件根元素内联样式）；静态默认与消费方既有 fallback var(--transition-accordion) 展开同构，未注入时行为不变。2026-11-02 整波收口补登记并收敛单写者（此前 4 文件 5 写点未登记，token-ssot b_class_drift / a_class_multi_writer 命中）。"
+    },
+    {
+      "name": "--reveal-delay",
+      "writer": "apps/crish-desktop/src/components/chat-tool-call/CompactToolRow.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-tool-call/ChatToolCallBlock.module.css（.toolRowEnter 入场动画延迟）",
+      "staticDefault": "0ms",
+      "note": "AN4 工具行入场交错延迟：序号 × 50ms、总延时封顶 300ms，由行组件按序号注入内联样式；静态默认 0ms 与消费方 fallback var(--reveal-delay, 0ms) 一致。2026-11-02 整波收口补登记。"
+    },
+    {
+      "name": "--divider-length",
+      "writer": "apps/crish-desktop/src/components/ui/Divider/Divider.tsx",
+      "consumer": "apps/crish-desktop/src/components/ui/Divider/Divider.module.css",
+      "staticDefault": "14px",
+      "note": "指南波 Divider/SplitResizer 原语的运行期量：分隔线可见长度由组件写入根元素内联样式；静态默认 14px 单源声明于 styles/tokens-base.css（收口时自 Divider.module.css 组件作用域迁入，遵 token 单源口径）。2026-11-02 整波收口补登记（此前只写未登记，token-ssot b_class_drift 命中）。"
     }
   ],
   "componentIslands": [
@@ -511,6 +522,22 @@
         "apps/crish-desktop/src/components/settings/SettingsRulesTab.module.css"
       ],
       "note": "2026-09-12 定性：ui/Dialog 的宽度配置通道（Dialog 消费 var(--dialog-width)，各对话框按自身布局覆写；值不同属有意）。--dialog-z 已随死定义清退移除（值恒等于兜底 var(--z-modal)）。"
+    },
+    {
+      "family": "--md-code-inline-*",
+      "owner": "apps/crish-desktop/src/styles/tokens-components.css",
+      "documentedOverrides": [
+        "apps/crish-desktop/src/components/chat-message/MessageContent.module.css"
+      ],
+      "note": "2026-11-02 整波收口登记：markdown 内联代码的主题化变量族，全局默认由 tokens-components.css 单源定义；消息面（MessageContent）在自身作用域内有意覆写为扁平形态（透明底 / 链接色 / 零内距 / 零圆角），markdown 渲染规则统一经变量取值、覆写仅在该作用域生效——合法上下文主题化，非双源。新增覆写方须登记到 documentedOverrides。"
+    },
+    {
+      "family": "--accent-color",
+      "owner": "apps/crish-desktop/src/styles/tokens-palette.css",
+      "documentedOverrides": [
+        "apps/crish-desktop/src/components/chat-card/ApprovalDock.module.css"
+      ],
+      "note": "2026-11-02 整波收口登记：--accent-color 全局默认在 tokens-palette.css；AN2 共享脉冲 crish-pulse-dot 的光环色取此变量，审批警示点在点元素作用域内将其收敛为 --accent-orange（定义处已注），属按场景覆写的主题化用法；--accent-orange 本身仍单源不变。新增覆写方须登记到 documentedOverrides。"
     }
   ],
   "sizeTiers": [

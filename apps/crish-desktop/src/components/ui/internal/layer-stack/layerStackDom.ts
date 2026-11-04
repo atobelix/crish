@@ -284,6 +284,10 @@ export function scanLayersForOutsidePointer(
     });
     if (isInsideDescendants) continue;
 
+    if (layer.isDismissIgnoredTarget && layer.isDismissIgnoredTarget(target)) {
+      continue;
+    }
+
     layersToDismiss.push(layer);
   }
 
@@ -455,6 +459,9 @@ export class LayerStackPointerTracker {
 
     if (layersToDismiss.length > 0 && layersToDismiss[0]) {
       const topLayer = layersToDismiss[0];
+      if (topLayer.onPointerDownOutside?.(event) === true) {
+        return;
+      }
       this.dismissedByPointer = createDismissedByPointerSnapshot(
         event.pointerId,
         topLayer.id,

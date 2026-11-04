@@ -24,7 +24,6 @@ vi.mock('../../api/markdown/useMarkdownRender', () => {
   });
   return {
     useMarkdownResult: (markdown: string) => result(markdown),
-    useStreamingMarkdownResult: (markdown: string) => result(markdown),
     useMarkdownPrewarm: vi.fn(),
   };
 });
@@ -178,9 +177,12 @@ describe('SessionPreviewPane', () => {
 
     // Thinking process in details
     expect(screen.getByLabelText('思考过程')).toBeDefined();
+    // AN1 后思考行折叠态头部摘要行（reasoning-summary-markup）与展开体
+    // 同文呈现：同一句思考文本出现两次（摘要预览 + 详情正文），
+    // 故以 AllBy 断言双份存在，不再用单数 getByText。
     expect(
-      screen.getByText('I will respond politely to the greeting.')
-    ).toBeDefined();
+      screen.getAllByText('I will respond politely to the greeting.')
+    ).toHaveLength(2);
 
     // Redundant external tool cards must NOT be displayed in clean preview
     expect(screen.queryByText('已读取 1 个文件')).toBeNull();

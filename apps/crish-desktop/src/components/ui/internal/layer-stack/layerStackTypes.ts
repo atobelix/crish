@@ -65,6 +65,10 @@ export interface LayerRegistration {
    * @returns true 表示拦截外点关闭
    */
   onPointerDownOutside?: (event: PointerEvent) => boolean | void;
+  /**
+   * 自定义外点豁免谓词：若返回 true，判定目标属于该浮层内部合法交互区，不作外点退栈
+   */
+  isDismissIgnoredTarget?: (target: Node) => boolean;
   /** 注册时间戳（用于稳定排序与 Trace 审计） */
   mountedAt: number;
 }

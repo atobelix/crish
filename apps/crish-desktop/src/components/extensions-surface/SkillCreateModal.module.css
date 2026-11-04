@@ -9,7 +9,7 @@
   width: var(--dialog-width);
   border-radius: var(--radius-xl, 12px);
   background: var(--bg-card);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: var(--hairline-width, 1px) solid var(--border-panel);
   box-shadow: 0 20px 48px -12px
     color-mix(in srgb, var(--shadow-color) 16%, transparent);
 }
@@ -36,7 +36,7 @@
 
 .methodCard {
   background: var(--bg-secondary);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: var(--hairline-width, 1px) solid var(--border-panel);
   border-radius: var(--radius-xl, 12px);
   padding: var(--space-3_5, 14px) var(--space-4, 16px);
   display: flex;

@@ -99,9 +99,11 @@ function Glyph({
       className={styles.glyph}
       style={{ y, opacity, filter, visibility }}
       aria-hidden="true"
-    >
-      {digit}
-    </m.span>
+      // 数字字形走 CSS ::before + attr() 绘制，不进 DOM 文本：
+      // 否则 0~9 十个字形会污染 textContent / 复制 / Ctrl+F，
+      // 可读文本只由 srOnly 一处承担（见 AnimatedCounter.module.css）。
+      data-digit={digit}
+    />
   );
 }
 
@@ -176,7 +178,7 @@ function Column({
       transition={reduceMotion ? { duration: 0 } : SPRING_MORPH}
     >
       {/* 隐藏的 Sizer 撑开布局盒，保证零回流 */}
-      <span className={styles.sizer}>0</span>
+      <span className={styles.sizer} data-digit="0" />
       {DIGITS.map((item) => (
         <Glyph key={item} position={position} digit={item} />
       ))}
@@ -198,7 +200,7 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
   style,
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useSafeInView(ref, { once: true, amount: 0.6 });
+  const inView = useSafeInView(ref, { once: true, amount: 0.1 });
   const reduceMotion = Boolean(useReducedMotion()) || disabled;
 
   // 挂载流式节流守卫

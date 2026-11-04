@@ -47,6 +47,7 @@ export const ICON_NAMES = [
   'corner-left-up',
   'cpu',
   'dashboard',
+  'dark-mode',
   'delete',
   'dollar',
   'download',

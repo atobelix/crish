@@ -536,9 +536,10 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
       expect(css).not.toMatch(/cubic-bezier\([^)]*[1-9]\.\d{2,}/);
     });
 
-    it('包含减弱动态偏好（prefers-reduced-motion: reduce）与 Eco Tier 完备降级适配', () => {
+    it('包含减弱动态偏好（prefers-reduced-motion: reduce）完备降级适配，且 Eco Tier 不介入动效', () => {
       expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
-      expect(css).toMatch(/html\[data-perf-tier='eco'\]/);
+      // X1 解耦口径：eco 只是性能档，减动效只走系统设置通道
+      expect(css).not.toMatch(/html\[data-perf-tier='eco'\]/);
       expect(css).toMatch(/animation:\s*none/);
       expect(css).toMatch(/transition-duration:\s*0ms/);
     });

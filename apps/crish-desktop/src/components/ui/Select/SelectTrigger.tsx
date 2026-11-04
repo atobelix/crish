@@ -1,6 +1,6 @@
 import React, { forwardRef, useCallback } from 'react';
 import { useSelectContext } from './selectContext';
-import { ChevronUpDownIcon } from './internal/SelectIcons';
+import { ChevronDownIcon } from './internal/SelectIcons';
 import { SelectClearButton } from './SelectClearButton';
 import type { SelectTriggerProps } from './types';
 import styles from './SelectTrigger.module.css';
@@ -44,10 +44,19 @@ export const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
         if (e.defaultPrevented || disabled) return;
 
         if (!ctx.open) {
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === ' ' || e.key === 'Enter') {
+          if (
+            e.key === 'ArrowDown' ||
+            e.key === 'ArrowUp' ||
+            e.key === ' ' ||
+            e.key === 'Enter'
+          ) {
             e.preventDefault();
             ctx.setOpen(true);
-          } else if ((e.key === 'Backspace' || e.key === 'Delete') && isClearable && hasValue) {
+          } else if (
+            (e.key === 'Backspace' || e.key === 'Delete') &&
+            isClearable &&
+            hasValue
+          ) {
             e.preventDefault();
             ctx.clear(e);
           }
@@ -71,9 +80,7 @@ export const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
           if (enabledIndices.length > 0) {
             const currentPos = enabledIndices.indexOf(ctx.highlightedIndex);
             const prevPos =
-              currentPos <= 0
-                ? enabledIndices.length - 1
-                : currentPos - 1;
+              currentPos <= 0 ? enabledIndices.length - 1 : currentPos - 1;
             ctx.setHighlightedIndex(enabledIndices[prevPos]!);
           }
         } else if (e.key === 'Home') {
@@ -97,7 +104,11 @@ export const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
         } else if (e.key === 'Escape') {
           e.preventDefault();
           ctx.setOpen(false);
-        } else if ((e.key === 'Backspace' || e.key === 'Delete') && isClearable && hasValue) {
+        } else if (
+          (e.key === 'Backspace' || e.key === 'Delete') &&
+          isClearable &&
+          hasValue
+        ) {
           e.preventDefault();
           ctx.clear(e);
         }
@@ -129,7 +140,9 @@ export const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
     return (
       <button
         ref={(el) => {
-          (ctx.triggerRef as React.MutableRefObject<HTMLElement | null>).current = el;
+          (
+            ctx.triggerRef as React.MutableRefObject<HTMLElement | null>
+          ).current = el;
           if (typeof forwardedRef === 'function') forwardedRef(el);
           else if (forwardedRef) forwardedRef.current = el;
         }}
@@ -157,7 +170,7 @@ export const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(
         )}
         {endSlot && <span className={styles.endSlot}>{endSlot}</span>}
         <span className={styles.chevron} aria-hidden="true">
-          <ChevronUpDownIcon size={ctx.size === 'lg' ? 16 : 14} />
+          <ChevronDownIcon size={ctx.size === 'lg' ? 16 : 14} />
         </span>
       </button>
     );

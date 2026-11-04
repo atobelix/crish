@@ -12,7 +12,7 @@
  * - 纯净状态锁门闩（hasInteracted），保证首屏绝对 Zero-FOUC；
  * - 3 档严格对称尺寸（sm: 28x16, md: 36x20, lg: 44x24，上下左右四向均等 2px 留白）；
  * - 支持 loading 加载锁定态与 label 关联；
- * - 补齐 html[data-perf-tier='eco'] 节能降级与 IME 输入法防穿透；
+ * - 补齐减弱动态偏好（prefers-reduced-motion）兜底与 IME 输入法防穿透；
  * - 严格遵循 AGENTS.md §13 焦点环规范与 §14 现代色彩空间。
  */
 import React, {

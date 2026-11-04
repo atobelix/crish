@@ -126,10 +126,16 @@
   transition:
     transform var(--transition-micro),
     color var(--transition-micro);
+  will-change: transform;
 }
 
 .trigger:hover:not(:disabled) .chevron {
   color: var(--text-secondary);
+}
+
+.trigger.open .chevron,
+.trigger[data-state='open'] .chevron {
+  transform: rotate(180deg);
 }
 
 .clearBtn {

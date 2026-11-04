@@ -48,6 +48,7 @@ export type {
 
 // ── 内部图标与高亮算法 ──
 export {
+  ChevronDownIcon,
   ChevronUpDownIcon,
   CheckIcon,
   ClearIcon,

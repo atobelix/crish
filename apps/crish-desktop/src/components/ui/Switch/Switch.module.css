@@ -292,7 +292,7 @@
     }
   }
 
-  /* --- 减弱动态偏好（Reduced Motion）与 Eco Tier 节能降级 --- */
+  /* --- 减弱动态偏好（Reduced Motion） --- */
   @media (prefers-reduced-motion: reduce) {
     .track,
     .thumb,
@@ -322,38 +322,5 @@
       transform: translateY(-50%) translateX(0);
       width: var(--thumb-d);
     }
-  }
-
-  html[data-perf-tier='eco'] .track,
-  html[data-perf-tier='eco'] .thumb,
-  html[data-perf-tier='eco'] .spinner,
-  html[data-perf-tier='eco'] .label {
-    transition-duration: 0ms;
-    animation-duration: 0ms;
-    animation: none;
-  }
-
-  html[data-perf-tier='eco'] .thumb::before,
-  html[data-perf-tier='eco'] .track .thumb::before,
-  html[data-perf-tier='eco'] .track.hasInteracted .thumb::before,
-  html[data-perf-tier='eco']
-    .track.hasInteracted[data-state='checked']
-    .thumb::before,
-  html[data-perf-tier='eco']
-    .track.hasInteracted[data-state='unchecked']
-    .thumb::before {
-    transition-duration: 0ms;
-    animation: none;
-    transform: scale(1, 1);
-  }
-
-  html[data-perf-tier='eco'] .track[data-state='checked'] .thumb {
-    transform: translateY(-50%) translateX(var(--thumb-travel));
-    width: var(--thumb-d);
-  }
-
-  html[data-perf-tier='eco'] .track[data-state='unchecked'] .thumb {
-    transform: translateY(-50%) translateX(0);
-    width: var(--thumb-d);
   }
 }

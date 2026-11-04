@@ -76,6 +76,8 @@ export function useLayerRegistration(
         layerRef.current.onEscapeKeyDown?.(e),
       onPointerDownOutside: (e: PointerEvent) =>
         layerRef.current.onPointerDownOutside?.(e),
+      isDismissIgnoredTarget: (target: Node) =>
+        layerRef.current.isDismissIgnoredTarget?.(target) ?? false,
     });
 
     return unregister;

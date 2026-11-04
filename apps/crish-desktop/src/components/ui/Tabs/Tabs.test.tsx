@@ -345,6 +345,7 @@ describe('ui/Tabs', () => {
       'color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)'
     );
     expect(CSS_SRC).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(CSS_SRC).toContain("html[data-perf-tier='eco']");
+    // X1 解耦口径：减动效只认系统设置，CSS 不得再有 eco 性能档降级规则
+    expect(CSS_SRC).not.toContain("html[data-perf-tier='eco']");
   });
 });
