@@ -85,10 +85,23 @@ fn security_audit(decision: SecurityAuditDecision, tool_call_id: Option<&str>) -
 
 fn payload_digest(biz_key: &str, digest: Option<&str>, detail: Option<&str>) -> PayloadDigest {
     PayloadDigest {
+        subject: None,
         session_id: "s-7".to_string(),
         biz_key: biz_key.to_string(),
         digest: digest.map(str::to_string),
         detail: detail.map(str::to_string),
+    }
+}
+
+fn payload_digest_with_subject(
+    biz_key: &str,
+    subject: Option<&str>,
+    digest: Option<&str>,
+    detail: Option<&str>,
+) -> PayloadDigest {
+    PayloadDigest {
+        subject: subject.map(str::to_string),
+        ..payload_digest(biz_key, digest, detail)
     }
 }
 

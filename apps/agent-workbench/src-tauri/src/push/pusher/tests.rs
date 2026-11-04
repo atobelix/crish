@@ -56,6 +56,7 @@ fn decision(deliver: bool) -> PushDecision {
         severity: SceneId::RunFailed.level().severity(),
         dedupe_key: "run-terminal:run-42".to_string(),
         payload: PayloadDigest {
+            subject: None,
             session_id: "s-7".to_string(),
             biz_key: "run-42".to_string(),
             digest: Some("provider 401".to_string()),

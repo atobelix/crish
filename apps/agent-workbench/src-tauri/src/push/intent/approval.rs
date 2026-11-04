@@ -23,6 +23,7 @@ pub(super) fn approval_intent(event: &AgentEvent) -> Option<PushIntent> {
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Approval,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: request.tool_call_id.clone(),
                     digest: Some(request.summary.clone()),
@@ -54,6 +55,7 @@ pub(super) fn approval_intent(event: &AgentEvent) -> Option<PushIntent> {
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Approval,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: tool_call_id.clone(),
                     digest: None,

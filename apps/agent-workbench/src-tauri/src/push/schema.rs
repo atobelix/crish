@@ -264,6 +264,7 @@ mod tests {
             severity: scene.level().severity(),
             dedupe_key: format!("{}:run-42", super::scene_event_type(scene)),
             payload: PayloadDigest {
+                subject: None,
                 session_id: "s-7".to_string(),
                 biz_key: "run-42".to_string(),
                 digest: Some("provider 401".to_string()),

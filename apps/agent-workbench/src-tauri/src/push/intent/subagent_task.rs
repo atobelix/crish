@@ -28,6 +28,7 @@ pub(super) fn subagent_task_intent(
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Subagent,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: subagent_id.clone(),
                     digest: summary.clone(),
@@ -44,6 +45,7 @@ pub(super) fn subagent_task_intent(
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Subagent,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: subagent_id.clone(),
                     digest: summary.clone(),
@@ -58,6 +60,7 @@ pub(super) fn subagent_task_intent(
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Subagent,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: subagent_id.clone(),
                     digest: summary.clone(),
@@ -85,6 +88,9 @@ pub(super) fn subagent_task_intent(
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Task,
                 payload: PayloadDigest {
+                    // 任务名 = 命令原文（事件现成字段）；终态场景的
+                    // subject 由决策引擎的事件流观察缓存同源注入
+                    subject: Some(command.clone()),
                     session_id: session_id.clone(),
                     biz_key: task_id.clone(),
                     digest: Some(command.clone()),
@@ -107,6 +113,7 @@ pub(super) fn subagent_task_intent(
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Task,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: task_id.clone(),
                 digest: None,
@@ -128,6 +135,7 @@ pub(super) fn subagent_task_intent(
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Task,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: task_id.clone(),
                 digest: Some(format!("{silence_ms}")),
@@ -150,6 +158,7 @@ pub(super) fn subagent_task_intent(
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Task,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: task_id.clone(),
                 // 日志尾部末行作正文素材（全量 tail 由 copy/任务详情消费）
@@ -179,6 +188,7 @@ pub(super) fn subagent_task_intent(
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Task,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: task_id.clone(),
                     digest: diagnostics.clone(),

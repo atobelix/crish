@@ -25,16 +25,16 @@
 //! | --- | --- | --- |
 //! | S1 审批请求 | Crish 需要你的批准 | `{toolName}：{summary}` |
 //! | S2 审批过期 | 审批已过期 | `审批（{toolCallId}）等待超时，已自动拒绝` |
-//! | S3 run 完成 | 任务已完成 | `任务 {runId} 已完成` |
-//! | S4 run 失败 | 任务运行失败 | `{runId}：{error}` |
-//! | S5 run 取消 | 任务已取消 | `任务 {runId} 已被取消` |
-//! | S6 子代理完成 | 子代理已完成 | `子代理（{id}）已完成：成功[——{summary}]` |
-//! | S7 子代理失败 | 子代理失败 | `子代理（{id}）失败[——{summary}]` |
+//! | S3 run 完成 | 任务已完成 | `「{subject}」已完成`（无 subject 回落 `任务已完成`） |
+//! | S4 run 失败 | 任务运行失败 | `「{subject}」运行失败：{error}`（无 subject 只带 error，再无则标题语义兜底） |
+//! | S5 run 取消 | 任务已取消 | `「{subject}」已被取消`（无 subject 回落 `任务已被取消`） |
+//! | S6 子代理完成 | 子代理已完成 | `子代理已完成[——{summary}]` |
+//! | S7 子代理失败 | 子代理失败 | `子代理失败[——{summary}]` |
 //! | S8a 任务启动 | 后台任务已启动 | `{command}` |
-//! | S8b 任务完成 | 任务已完成 | `任务 {taskId} 已完成[，{exit code N}]` |
-//! | S8c 任务卡死 | 任务疑似卡死 | `任务 {taskId} 疑似卡死（{N} 秒无输出）` |
-//! | S8d 任务失败 | 后台任务异常退出 | `任务 {taskId} 异常退出（exit code N）` |
-//! | S8e 任务终止 | 任务已终止 | `任务 {taskId} 已被终止` |
+//! | S8b 任务完成 | 任务已完成 | `「{command}」已完成[，{exit code N}]`（无命令回落 `任务已完成[，…]`） |
+//! | S8c 任务卡死 | 任务疑似卡死 | `「{command}」疑似卡死（{N} 秒无输出）`（无命令回落无名形态） |
+//! | S8d 任务失败 | 后台任务异常退出 | `「{command}」异常退出（exit code N）[: {tail 末行}]`（无命令回落无名形态） |
+//! | S8e 任务终止 | 任务已终止 | `「{command}」已被终止`（无命令回落 `任务已被终止`） |
 //! | S9a 定时器 | 定时器提醒 | `{prompt}（定时器 {id} 已到期）` |
 //! | S9b cron | 定时器提醒 | `{prompt}（cron {id} 第 {n} 次触发）` |
 //! | S10a 运行异常 | 运行异常 | `{error}` |
@@ -57,6 +57,18 @@ pub use night_summary::{
 };
 use scene_en::{render_body_en, render_title_en};
 use scene_zh::{render_body_zh, render_title_zh};
+
+/// subject（会话标题/任务命令原文）展示钳制：命令原文可达数百字，
+/// 通知正文只取前 60 字 + 省略号（标题型 subject 短，不受影响）。
+/// 引号形态由各语言渲染层决定（zh「」/ en ""）。
+pub(super) fn clip_subject(subject: &str) -> String {
+    if subject.chars().count() > 60 {
+        let head: String = subject.chars().take(60).collect();
+        format!("{head}…")
+    } else {
+        subject.to_string()
+    }
+}
 
 /// 渲染产物（title/body；[crate::push::schema::PushMessage::with_copy] 入参）
 #[derive(Debug, Clone, PartialEq, Eq)]

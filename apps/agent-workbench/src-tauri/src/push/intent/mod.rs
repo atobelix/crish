@@ -53,13 +53,21 @@ pub struct ApprovalPushRef {
 ///
 /// - `digest`：正文主体文本（prompt/error/command/reason/概述等，长度
 ///   截断与模板渲染由 copy 层负责）；
-/// - `detail`：次级文本（S1 工具名、S8d 退出码等，可空）。
+/// - `detail`：次级文本（S1 工具名、S8d 退出码等，可空）；
+/// - `subject`：人类可识别名（会话标题 / 任务命令原文；2026-11-03
+///   托盘/通知批新增）——copy 层文案以它为先，缺失时回落无标识文案，
+///   **禁止以裸 biz_key（runId/taskId）充当正文主体**。填充面：任务
+///   族由决策引擎的事件流观察缓存（task-started 的 command）注入，
+///   run 族事件本身不携带会话标题（标题在会话记录侧独立生成），
+///   恒为 None 走无标识回落。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PayloadDigest {
     /// 场景所属会话
     pub session_id: String,
     /// 主业务键（toolCallId/runId/taskId/timerId/cronId/subagentId 等）
     pub biz_key: String,
+    /// 人类可识别名（会话标题/任务名；可空 = copy 层无标识回落）
+    pub subject: Option<String>,
     /// 正文主体文本（可空 = 由 copy 层按场景渲染）
     pub digest: Option<String>,
     /// 次级文本（可空）
@@ -236,7 +244,9 @@ pub fn push_intent_with_kill_source(
         | AgentEvent::RecoveryRetryAttempted { .. }
         | AgentEvent::ProviderRequestAnchored { .. }
         // R1 撤回域（会话内截断事件，不产生推送意图——撤回由前端投影重放呈现）
-        | AgentEvent::TimelineTruncate { .. } => None,
+        | AgentEvent::TimelineTruncate { .. }
+        | AgentEvent::ToolBackgrounded { .. }
+        | AgentEvent::ToolSettled { .. } => None,
     }
 }
 

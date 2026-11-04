@@ -80,6 +80,7 @@ fn push_and_mark(dispatcher: &PushDispatcher, device_key: &str) {
         severity: SceneId::RunFailed.level().severity(),
         dedupe_key: format!("run-terminal:{device_key}:failed"),
         payload: PayloadDigest {
+            subject: None,
             session_id: "s-7".to_string(),
             biz_key: device_key.to_string(),
             digest: Some("provider 401".to_string()),
@@ -314,6 +315,7 @@ fn notification_mapping_covers_message_fields() {
             severity: PushSeverity::Critical,
             dedupe_key: "run-terminal:run-42:failed".to_string(),
             payload: PayloadDigest {
+                subject: None,
                 session_id: "s-7".to_string(),
                 biz_key: "run-42".to_string(),
                 digest: Some("provider 401".to_string()),
@@ -360,6 +362,7 @@ fn notification_mapping_falls_back_without_copy() {
             severity: PushSeverity::Critical,
             dedupe_key: "approval-requested:tc-9f3a".to_string(),
             payload: PayloadDigest {
+                subject: None,
                 session_id: "s-7".to_string(),
                 biz_key: "tc-9f3a".to_string(),
                 digest: Some("执行部署脚本".to_string()),

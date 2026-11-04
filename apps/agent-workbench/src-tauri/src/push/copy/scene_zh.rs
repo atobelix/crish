@@ -1,7 +1,18 @@
 //! 中文场景文案：标题 / 正文 / 审计操作中文展示名（自 push/copy.rs 原样搬迁）
+//
+// 2026-11-03 托盘/通知批文案口径：人类可识别名（subject）优先，
+// **禁止裸 runId/taskId 单独作正文**——S3/S4/S5/S6/S7/S8b/S8c/S8d/S8e
+// 全部改名优先形态，subject 缺失时回落无标识文案（审批 S1/S2 保持
+// 现行达标形态不动）。
 
+use crate::push::copy::clip_subject;
 use crate::push::intent::PayloadDigest;
 use crate::push::scenes::SceneId;
+
+/// subject → 「name」展示形态（钳制后加中文引号）
+fn subject_label_zh(subject: &str) -> String {
+    format!("「{}」", clip_subject(subject))
+}
 
 pub(super) fn render_title_zh(scene: SceneId) -> String {
     match scene {
@@ -35,43 +46,76 @@ pub(super) fn render_body_zh(scene: SceneId, payload: &PayloadDigest) -> String 
         SceneId::ApprovalExpired => {
             format!("审批（{}）等待超时，已自动拒绝", payload.biz_key)
         }
-        SceneId::RunCompleted => format!("任务 {} 已完成", payload.biz_key),
-        SceneId::RunFailed => format!(
-            "{}：{}",
-            payload.biz_key,
-            payload.digest.as_deref().unwrap_or_default()
-        ),
-        SceneId::RunCancelled => format!("任务 {} 已被取消", payload.biz_key),
+        SceneId::RunCompleted => match payload.subject.as_deref() {
+            Some(subject) => format!("{}已完成", subject_label_zh(subject)),
+            None => "任务已完成".to_string(),
+        },
+        SceneId::RunFailed => {
+            let error = payload.digest.as_deref().unwrap_or_default();
+            match (payload.subject.as_deref(), error.is_empty()) {
+                (Some(subject), false) => {
+                    format!("{}运行失败：{error}", subject_label_zh(subject))
+                }
+                (Some(subject), true) => format!("{}运行失败", subject_label_zh(subject)),
+                (None, false) => error.to_string(),
+                (None, true) => "任务运行失败".to_string(),
+            }
+        }
+        SceneId::RunCancelled => match payload.subject.as_deref() {
+            Some(subject) => format!("{}已被取消", subject_label_zh(subject)),
+            None => "任务已被取消".to_string(),
+        },
         SceneId::SubagentCompleted => {
-            let mut body = format!("子代理（{}）已完成：成功", payload.biz_key);
+            let mut body = "子代理已完成".to_string();
             if let Some(summary) = payload.digest.as_deref() {
                 body.push_str(&format!("——{summary}"));
             }
             body
         }
         SceneId::SubagentFailed => {
-            let mut body = format!("子代理（{}）失败", payload.biz_key);
+            let mut body = "子代理失败".to_string();
             if let Some(summary) = payload.digest.as_deref() {
                 body.push_str(&format!("——{summary}"));
             }
             body
         }
         SceneId::TaskStarted => payload.digest.clone().unwrap_or_default(),
-        SceneId::TaskCompleted => match payload.detail.as_deref() {
-            Some(detail) => format!("任务 {} 已完成，{detail}", payload.biz_key),
-            None => format!("任务 {} 已完成", payload.biz_key),
+        SceneId::TaskCompleted => {
+            let head = match payload.subject.as_deref() {
+                Some(subject) => format!("{}已完成", subject_label_zh(subject)),
+                None => "任务已完成".to_string(),
+            };
+            match payload.detail.as_deref() {
+                Some(detail) => format!("{head}，{detail}"),
+                None => head,
+            }
+        }
+        SceneId::TaskSuspicious => {
+            let secs = payload.digest.as_deref().unwrap_or_default();
+            match payload.subject.as_deref() {
+                Some(subject) => {
+                    format!("{}疑似卡死（{secs} 秒无输出）", subject_label_zh(subject))
+                }
+                None => format!("任务疑似卡死（{secs} 秒无输出）"),
+            }
+        }
+        SceneId::TaskFailed => {
+            let detail = payload.detail.as_deref().unwrap_or("exit code 未知");
+            let mut body = match payload.subject.as_deref() {
+                Some(subject) => format!("{}异常退出（{detail}）", subject_label_zh(subject)),
+                None => format!("任务异常退出（{detail}）"),
+            };
+            if let Some(tail) = payload.digest.as_deref() {
+                if !tail.is_empty() {
+                    body.push_str(&format!("：{tail}"));
+                }
+            }
+            body
+        }
+        SceneId::TaskKilled => match payload.subject.as_deref() {
+            Some(subject) => format!("{}已被终止", subject_label_zh(subject)),
+            None => "任务已被终止".to_string(),
         },
-        SceneId::TaskSuspicious => format!(
-            "任务 {} 疑似卡死（{} 秒无输出）",
-            payload.biz_key,
-            payload.digest.as_deref().unwrap_or_default()
-        ),
-        SceneId::TaskFailed => format!(
-            "任务 {} 异常退出（{}）",
-            payload.biz_key,
-            payload.detail.as_deref().unwrap_or("exit code 未知")
-        ),
-        SceneId::TaskKilled => format!("任务 {} 已被终止", payload.biz_key),
         SceneId::TimerFired => format!(
             "{}（定时器 {} 已到期）",
             payload.digest.as_deref().unwrap_or_default(),

@@ -21,12 +21,16 @@
     "core:window:allow-set-size",
     "core:window:allow-set-position",
     "core:window:allow-is-maximized",
+    "core:window:allow-is-focused",
+    "core:window:allow-is-visible",
+    "core:window:allow-is-minimized",
     "core:window:allow-toggle-maximize",
     "core:webview:default",
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
+    "notification:default",
     "mcp:default"
   ]
 }

@@ -22,7 +22,9 @@ fn s2_approval_expired_copy() {
     assert_eq!(copy.body, "审批（tc-9f3a）等待超时，已自动拒绝");
 }
 
-/// S3/S4/S5 run 终态：样例对齐（S4 正文 = `{runId}：{error}`）
+/// S3/S4/S5 run 终态（2026-11-03 文案修订：人类可识别名优先，禁止
+/// 裸 runId 作正文——D7 §3.3.13 样例的 `{runId}` 形态自本批起废止；
+/// run 事件不携带会话标题，subject 恒缺失时回落无标识文案）
 #[test]
 fn s3_s4_s5_run_terminal_copy() {
     assert_copy(
@@ -30,25 +32,47 @@ fn s3_s4_s5_run_terminal_copy() {
         None,
         None,
         "任务已完成",
-        "任务 run-42 已完成",
+        "任务已完成",
     );
     assert_copy(
         SceneId::RunFailed,
         Some("provider 返回 401，API 密钥可能已失效"),
         None,
         "任务运行失败",
-        "run-42：provider 返回 401，API 密钥可能已失效",
+        "provider 返回 401，API 密钥可能已失效",
     );
     assert_copy(
         SceneId::RunCancelled,
         None,
         None,
         "任务已取消",
-        "任务 run-42 已被取消",
+        "任务已被取消",
     );
+    // subject 存在（会话标题）：名称在前
+    let copy = render_copy(
+        SceneId::RunCompleted,
+        &payload_with_subject("run-42", Some("修复登录问题"), None, None),
+    );
+    assert_eq!(copy.body, "「修复登录问题」已完成");
+    let copy = render_copy(
+        SceneId::RunFailed,
+        &payload_with_subject(
+            "run-42",
+            Some("修复登录问题"),
+            Some("provider 返回 401"),
+            None,
+        ),
+    );
+    assert_eq!(copy.body, "「修复登录问题」运行失败：provider 返回 401");
+    let copy = render_copy(
+        SceneId::RunCancelled,
+        &payload_with_subject("run-42", Some("修复登录问题"), None, None),
+    );
+    assert_eq!(copy.body, "「修复登录问题」已被取消");
 }
 
-/// S6/S7 子代理终态：样例对齐（role 不在载荷降级省略；summary 存在追加）
+/// S6/S7 子代理终态（2026-11-03 修订：不再嵌裸 subagentId；
+/// summary 即人类可识别内容，存在则追加）
 #[test]
 fn s6_s7_subagent_copy() {
     let copy = render_copy(
@@ -56,21 +80,23 @@ fn s6_s7_subagent_copy() {
         &payload("sa-3", Some("已产出缺口分析 5 页"), None),
     );
     assert_eq!(copy.title, "子代理已完成");
-    assert_eq!(copy.body, "子代理（sa-3）已完成：成功——已产出缺口分析 5 页");
+    assert_eq!(copy.body, "子代理已完成——已产出缺口分析 5 页");
 
     let copy = render_copy(
         SceneId::SubagentFailed,
         &payload("sa-4", Some("工具执行超时"), None),
     );
     assert_eq!(copy.title, "子代理失败");
-    assert_eq!(copy.body, "子代理（sa-4）失败——工具执行超时");
+    assert_eq!(copy.body, "子代理失败——工具执行超时");
 
-    // summary 缺失：不残留空拼接
+    // summary 缺失：不残留空拼接、不回落裸 id
     let copy = render_copy(SceneId::SubagentCompleted, &payload("sa-5", None, None));
-    assert_eq!(copy.body, "子代理（sa-5）已完成：成功");
+    assert_eq!(copy.body, "子代理已完成");
 }
 
-/// S8 任务域：S8c 样例逐字对齐（「任务 t-12 疑似卡死（120 秒无输出）」）
+/// S8 任务域（2026-11-03 修订：命令原文 subject 在前，禁止裸 taskId
+/// 作正文；subject 缺失回落无标识文案。D7 §3.3.13 的 `{taskId}` 样例
+/// 形态自本批起废止）
 #[test]
 fn s8_task_domain_copy() {
     assert_copy(
@@ -85,28 +111,51 @@ fn s8_task_domain_copy() {
         None,
         Some("exit code 0"),
         "任务已完成",
-        "任务 run-42 已完成，exit code 0",
+        "任务已完成，exit code 0",
     );
     let copy = render_copy(SceneId::TaskSuspicious, &payload("t-12", Some("120"), None));
     assert_eq!(copy.title, "任务疑似卡死");
-    assert_eq!(
-        copy.body, "任务 t-12 疑似卡死（120 秒无输出）",
-        "D7 §3.3.13 S8c 样例逐字对齐"
-    );
+    assert_eq!(copy.body, "任务疑似卡死（120 秒无输出）");
     assert_copy(
         SceneId::TaskFailed,
         Some("构建报错"),
         Some("exit code 1"),
         "后台任务异常退出",
-        "任务 run-42 异常退出（exit code 1）",
+        "任务异常退出（exit code 1）：构建报错",
     );
     assert_copy(
         SceneId::TaskKilled,
         None,
         None,
         "任务已终止",
-        "任务 run-42 已被终止",
+        "任务已被终止",
     );
+    // subject 存在（命令原文，引擎事件流缓存注入）：名称在前
+    let copy = render_copy(
+        SceneId::TaskCompleted,
+        &payload_with_subject("t-12", Some("npm run build"), None, Some("exit code 0")),
+    );
+    assert_eq!(copy.body, "「npm run build」已完成，exit code 0");
+    let copy = render_copy(
+        SceneId::TaskSuspicious,
+        &payload_with_subject("t-12", Some("npm run build"), Some("120"), None),
+    );
+    assert_eq!(copy.body, "「npm run build」疑似卡死（120 秒无输出）");
+    let copy = render_copy(
+        SceneId::TaskFailed,
+        &payload_with_subject(
+            "t-12",
+            Some("npm run build"),
+            Some("构建报错"),
+            Some("exit code 1"),
+        ),
+    );
+    assert_eq!(copy.body, "「npm run build」异常退出（exit code 1）：构建报错");
+    let copy = render_copy(
+        SceneId::TaskKilled,
+        &payload_with_subject("t-12", Some("npm run build"), None, None),
+    );
+    assert_eq!(copy.body, "「npm run build」已被终止");
 }
 
 /// S9 定时器/cron：样例对齐（S9a 逐字；S9b 第 n 次触发取自 iteration）
@@ -256,12 +305,47 @@ fn message_with_copy_fills_title_body_keeps_fields() {
     };
     let message = message_with_copy(&decision, "push-000001".to_string(), 1, T0);
     assert_eq!(message.title.as_deref(), Some("任务运行失败"));
-    assert_eq!(message.body.as_deref(), Some("run-42：provider 401"));
+    assert_eq!(message.body.as_deref(), Some("provider 401"));
     assert_eq!(message.event_type, "run-terminal", "其余字段不变");
     assert_eq!(message.dedupe_key, "run-terminal:run-42:failed");
     assert_eq!(message.target.params["runId"], "run-42");
     // serde wire：title/body 出现（不再缺省跳过）
     let json = serde_json::to_value(&message).expect("可序列化");
     assert_eq!(json["title"], "任务运行失败");
-    assert_eq!(json["body"], "run-42：provider 401");
+    assert_eq!(json["body"], "provider 401");
+}
+
+/// 红线回归（2026-11-03 文案口径）：受修订场景在 subject 缺失时，
+/// 正文不得包含裸 biz_key（runId/taskId/subagentId）；subject 超长
+/// 时按 60 字钳制 + 省略号（命令原文防刷屏）
+#[test]
+fn no_bare_biz_key_in_body_and_subject_clipped() {
+    for scene in [
+        SceneId::RunCompleted,
+        SceneId::RunFailed,
+        SceneId::RunCancelled,
+        SceneId::SubagentCompleted,
+        SceneId::SubagentFailed,
+        SceneId::TaskCompleted,
+        SceneId::TaskSuspicious,
+        SceneId::TaskFailed,
+        SceneId::TaskKilled,
+    ] {
+        let copy = render_copy(scene, &payload("secret-key-42", Some("内容"), Some("exit code 1")));
+        assert!(
+            !copy.body.contains("secret-key-42"),
+            "场景 {scene:?} 正文泄漏裸 biz_key：{}",
+            copy.body
+        );
+    }
+    let long_command = "x".repeat(100);
+    let copy = render_copy(
+        SceneId::TaskCompleted,
+        &payload_with_subject("t-1", Some(&long_command), None, None),
+    );
+    assert!(
+        copy.body.chars().count() <= 70 && copy.body.contains('…'),
+        "subject 应被钳制：{}",
+        copy.body
+    );
 }

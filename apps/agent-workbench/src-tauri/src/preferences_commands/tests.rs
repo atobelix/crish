@@ -29,12 +29,12 @@ async fn test_unknown_key_returns_invalid_input() {
         "unknown_foo_bar".to_string(),
         json!("some_value"),
         state.clone(),
-    )
+    app.handle().clone())
     .await
     .unwrap_err();
     assert!(matches!(err_set, CoreError::InvalidInput(_)));
 
-    let err_del = prefs_delete("unknown_foo_bar".to_string(), state.clone())
+    let err_del = prefs_delete("unknown_foo_bar".to_string(), state.clone(), app.handle().clone())
         .await
         .unwrap_err();
     assert!(matches!(err_del, CoreError::InvalidInput(_)));
@@ -50,12 +50,12 @@ async fn test_empty_key_returns_invalid_input() {
         .unwrap_err();
     assert!(matches!(err_get, CoreError::InvalidInput(_)));
 
-    let err_set = prefs_set("   ".to_string(), json!("val"), state.clone())
+    let err_set = prefs_set("   ".to_string(), json!("val"), state.clone(), app.handle().clone())
         .await
         .unwrap_err();
     assert!(matches!(err_set, CoreError::InvalidInput(_)));
 
-    let err_del = prefs_delete("".to_string(), state.clone())
+    let err_del = prefs_delete("".to_string(), state.clone(), app.handle().clone())
         .await
         .unwrap_err();
     assert!(matches!(err_del, CoreError::InvalidInput(_)));
@@ -67,12 +67,12 @@ async fn test_invalid_value_format_returns_invalid_input() {
     let state = app.state::<SharedDb>();
 
     // crish_theme 必须是非空字符串
-    let err1 = prefs_set("crish_theme".to_string(), json!(123), state.clone())
+    let err1 = prefs_set("crish_theme".to_string(), json!(123), state.clone(), app.handle().clone())
         .await
         .unwrap_err();
     assert!(matches!(err1, CoreError::InvalidInput(_)));
 
-    let err1_empty = prefs_set("crish_theme".to_string(), json!("   "), state.clone())
+    let err1_empty = prefs_set("crish_theme".to_string(), json!("   "), state.clone(), app.handle().clone())
         .await
         .unwrap_err();
     assert!(matches!(err1_empty, CoreError::InvalidInput(_)));
@@ -82,7 +82,7 @@ async fn test_invalid_value_format_returns_invalid_input() {
         "crish_sidebar_width".to_string(),
         json!("not_a_number"),
         state.clone(),
-    )
+    app.handle().clone())
     .await
     .unwrap_err();
     assert!(matches!(err2, CoreError::InvalidInput(_)));
@@ -92,7 +92,7 @@ async fn test_invalid_value_format_returns_invalid_input() {
         "crish_theme_brightness_vibrant".to_string(),
         json!("maybe"),
         state.clone(),
-    )
+    app.handle().clone())
     .await
     .unwrap_err();
     assert!(matches!(err3, CoreError::InvalidInput(_)));
@@ -102,7 +102,7 @@ async fn test_invalid_value_format_returns_invalid_input() {
         "crish:files-list-ratio".to_string(),
         json!(2.5),
         state.clone(),
-    )
+    app.handle().clone())
     .await
     .unwrap_err();
     assert!(matches!(err4, CoreError::InvalidInput(_)));
@@ -114,7 +114,7 @@ async fn test_prefs_crud_roundtrip_deepequal() {
     let state = app.state::<SharedDb>();
 
     // 写入 theme 字符串
-    prefs_set("crish_theme".to_string(), json!("dark"), state.clone())
+    prefs_set("crish_theme".to_string(), json!("dark"), state.clone(), app.handle().clone())
         .await
         .expect("set crish_theme");
     let theme_val = prefs_get(Some("crish_theme".to_string()), state.clone())
@@ -123,7 +123,7 @@ async fn test_prefs_crud_roundtrip_deepequal() {
     assert_eq!(theme_val, json!("dark"));
 
     // 写入数值
-    prefs_set("crish_sidebar_width".to_string(), json!(260), state.clone())
+    prefs_set("crish_sidebar_width".to_string(), json!(260), state.clone(), app.handle().clone())
         .await
         .expect("set sidebar width");
     let width_val = prefs_get(Some("crish_sidebar_width".to_string()), state.clone())
@@ -136,7 +136,7 @@ async fn test_prefs_crud_roundtrip_deepequal() {
         "crish:file-viewer-word-wrap".to_string(),
         json!(true),
         state.clone(),
-    )
+    app.handle().clone())
     .await
     .expect("set word wrap");
     let wrap_val = prefs_get(
@@ -152,7 +152,7 @@ async fn test_prefs_crud_roundtrip_deepequal() {
         "codeFont": "JetBrains Mono",
         "uiFont": "Inter"
     });
-    prefs_set("crish_fonts".to_string(), font_pref.clone(), state.clone())
+    prefs_set("crish_fonts".to_string(), font_pref.clone(), state.clone(), app.handle().clone())
         .await
         .expect("set crish_fonts");
     let fonts_val = prefs_get(Some("crish_fonts".to_string()), state.clone())
@@ -169,7 +169,7 @@ async fn test_prefs_crud_roundtrip_deepequal() {
     assert_eq!(obj.get("crish_fonts"), Some(&font_pref));
 
     // 删除已有 key
-    let deleted = prefs_delete("crish_theme".to_string(), state.clone())
+    let deleted = prefs_delete("crish_theme".to_string(), state.clone(), app.handle().clone())
         .await
         .expect("delete crish_theme");
     assert!(deleted);
@@ -181,8 +181,63 @@ async fn test_prefs_crud_roundtrip_deepequal() {
     assert_eq!(theme_after_delete, Value::Null);
 
     // 重复删除返回 false
-    let deleted_again = prefs_delete("crish_theme".to_string(), state.clone())
+    let deleted_again = prefs_delete("crish_theme".to_string(), state.clone(), app.handle().clone())
         .await
         .expect("delete again");
     assert!(!deleted_again);
+}
+
+/// 托盘/通知批 + 托盘完整档（2026-11-03）契约：七新键全部在白名单
+/// 内、布尔校验（bool 与布尔字符串可，数字拒绝）、set/get 往返与
+/// delete 回落
+#[tokio::test]
+async fn shell_behavior_keys_contract() {
+    let app = make_test_app();
+    let state = app.state::<SharedDb>();
+
+    for key in [
+        "tray_enabled",
+        "close_to_tray",
+        "keep_awake_during_tasks",
+        "desktop_notifications_enabled",
+        "notify_on_task_done",
+        "autostart_enabled",
+        "start_minimized",
+    ] {
+        assert!(is_known_preference_key(key), "{key} 必须在白名单内");
+        assert!(
+            validate_preference_value(key, &json!(true)).is_ok(),
+            "{key} 接受 bool"
+        );
+        assert!(
+            validate_preference_value(key, &json!("false")).is_ok(),
+            "{key} 接受布尔字符串"
+        );
+        assert!(
+            validate_preference_value(key, &json!(42)).is_err(),
+            "{key} 拒绝数字"
+        );
+
+        // 往返：写 false → 读回 false；删除后读回 Null（前端回落默认）
+        prefs_set(
+            key.to_string(),
+            json!(false),
+            state.clone(),
+            app.handle().clone(),
+        )
+        .await
+        .expect("set 必须成功");
+        let got = prefs_get(Some(key.to_string()), state.clone())
+            .await
+            .expect("get 必须成功");
+        assert_eq!(got, json!(false), "{key} 往返读回");
+        let deleted = prefs_delete(key.to_string(), state.clone(), app.handle().clone())
+            .await
+            .expect("delete 必须成功");
+        assert!(deleted, "{key} 删除应命中");
+        let after = prefs_get(Some(key.to_string()), state.clone())
+            .await
+            .expect("get 必须成功");
+        assert_eq!(after, serde_json::Value::Null, "{key} 删除后回落");
+    }
 }

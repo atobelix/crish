@@ -38,6 +38,7 @@ fn notification(level: PushLevel, token: &str) -> VendorNotification {
         Some("session:s-7".to_string()),
         "approval",
         PayloadDigest {
+            subject: None,
             session_id: "s-7".to_string(),
             biz_key: "tc-9f3a".to_string(),
             digest: Some("执行部署脚本".to_string()),
@@ -160,6 +161,7 @@ fn payload_truncates_long_text() {
         None,
         "run",
         PayloadDigest {
+            subject: None,
             session_id: "s".to_string(),
             biz_key: "run-1".to_string(),
             digest: Some(long),

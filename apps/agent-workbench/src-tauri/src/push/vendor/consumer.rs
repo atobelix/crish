@@ -152,6 +152,7 @@ pub fn notification_from_pending(
         collapse_key: message.collapse_key.clone(),
         channel_id: message.channel_id.clone(),
         digest: PayloadDigest {
+            subject: None,
             session_id: message.target.session_id.clone().unwrap_or_default(),
             biz_key: biz_key_from_target(&message.target.params)
                 .unwrap_or_else(|| message.dedupe_key.clone()),

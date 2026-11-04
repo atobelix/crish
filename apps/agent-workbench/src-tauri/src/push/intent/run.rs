@@ -24,6 +24,7 @@ pub(super) fn run_terminal_intent(event: &AgentEvent) -> Option<PushIntent> {
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Session,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: run_id.clone(),
                     digest: None,
@@ -38,6 +39,7 @@ pub(super) fn run_terminal_intent(event: &AgentEvent) -> Option<PushIntent> {
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Session,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: run_id.clone(),
                     digest: error.clone(),
@@ -52,6 +54,7 @@ pub(super) fn run_terminal_intent(event: &AgentEvent) -> Option<PushIntent> {
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Session,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key: run_id.clone(),
                     digest: None,

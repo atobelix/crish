@@ -23,6 +23,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
             collapse_key: format!("timer:{timer_id}"),
             target: PushTargetScreen::Timer,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: timer_id.clone(),
                 digest: Some(prompt.clone()),
@@ -47,6 +48,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
             collapse_key: format!("cron:{cron_id}"),
             target: PushTargetScreen::Timer,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: cron_id.clone(),
                 digest: Some(prompt.clone()),
@@ -68,6 +70,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Session,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: ctx.envelope_run_id.clone().unwrap_or_default(),
                 digest: Some(error.clone()),
@@ -89,6 +92,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Session,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: ctx.envelope_run_id.clone().unwrap_or_default(),
                 digest: Some(reason.clone()),
@@ -125,6 +129,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
                 collapse_key: format!("session:{session_id}"),
                 target: PushTargetScreen::Audit,
                 payload: PayloadDigest {
+                    subject: None,
                     session_id: session_id.clone(),
                     biz_key,
                     digest: Some(format!("{:?}", operation)),
@@ -150,6 +155,7 @@ pub(super) fn system_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<P
             collapse_key: format!("session:{session_id}"),
             target: PushTargetScreen::Session,
             payload: PayloadDigest {
+                subject: None,
                 session_id: session_id.clone(),
                 biz_key: ctx.envelope_run_id.clone().unwrap_or_default(),
                 digest: Some(format!("{missed_tokens}")),

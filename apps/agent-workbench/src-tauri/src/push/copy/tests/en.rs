@@ -27,7 +27,8 @@ fn s2_approval_expired_copy_en() {
     );
 }
 
-/// S3/S4/S5 run 终态（英文）
+/// S3/S4/S5 run 终态（英文；2026-11-03 修订与中文同口径：
+/// subject 优先、无 subject 不带裸 runId）
 #[test]
 fn s3_s4_s5_run_terminal_copy_en() {
     assert_copy_en(
@@ -35,25 +36,42 @@ fn s3_s4_s5_run_terminal_copy_en() {
         None,
         None,
         "Run Completed",
-        "Run run-42 completed successfully",
+        "Task completed",
     );
     assert_copy_en(
         SceneId::RunFailed,
         Some("provider returned 401, API key expired"),
         None,
         "Run Failed",
-        "run-42: provider returned 401, API key expired",
+        "provider returned 401, API key expired",
     );
     assert_copy_en(
         SceneId::RunCancelled,
         None,
         None,
         "Run Cancelled",
-        "Run run-42 has been cancelled",
+        "Task has been cancelled",
     );
+    let copy = render_copy_with_locale(
+        SceneId::RunCompleted,
+        &payload_with_subject("run-42", Some("Fix login issue"), None, None),
+        Some("en-US"),
+    );
+    assert_eq!(copy.body, "\"Fix login issue\" completed");
+    let copy = render_copy_with_locale(
+        SceneId::RunFailed,
+        &payload_with_subject(
+            "run-42",
+            Some("Fix login issue"),
+            Some("provider returned 401"),
+            None,
+        ),
+        Some("en-US"),
+    );
+    assert_eq!(copy.body, "\"Fix login issue\" failed: provider returned 401");
 }
 
-/// S6/S7 子代理终态（英文）
+/// S6/S7 子代理终态（英文；2026-11-03 修订：不嵌裸 subagentId）
 #[test]
 fn s6_s7_subagent_copy_en() {
     let copy = render_copy_with_locale(
@@ -64,7 +82,7 @@ fn s6_s7_subagent_copy_en() {
     assert_eq!(copy.title, "Subagent Completed");
     assert_eq!(
         copy.body,
-        "Subagent (sa-3) completed successfully - 5 pages gap analysis produced"
+        "Subagent completed - 5 pages gap analysis produced"
     );
 
     let copy = render_copy_with_locale(
@@ -73,10 +91,7 @@ fn s6_s7_subagent_copy_en() {
         Some("en-US"),
     );
     assert_eq!(copy.title, "Subagent Failed");
-    assert_eq!(
-        copy.body,
-        "Subagent (sa-4) failed - Tool execution timed out"
-    );
+    assert_eq!(copy.body, "Subagent failed - Tool execution timed out");
 
     // summary 缺失
     let copy = render_copy_with_locale(
@@ -84,10 +99,10 @@ fn s6_s7_subagent_copy_en() {
         &payload("sa-5", None, None),
         Some("en-US"),
     );
-    assert_eq!(copy.body, "Subagent (sa-5) completed successfully");
+    assert_eq!(copy.body, "Subagent completed");
 }
 
-/// S8 任务域（英文）
+/// S8 任务域（英文；2026-11-03 修订：subject 命令原文在前）
 #[test]
 fn s8_task_domain_copy_en() {
     assert_copy_en(
@@ -102,7 +117,7 @@ fn s8_task_domain_copy_en() {
         None,
         Some("exit code 0"),
         "Task Completed",
-        "Task run-42 completed, exit code 0",
+        "Task completed, exit code 0",
     );
     let copy = render_copy_with_locale(
         SceneId::TaskSuspicious,
@@ -112,7 +127,7 @@ fn s8_task_domain_copy_en() {
     assert_eq!(copy.title, "Task Suspected Stalled");
     assert_eq!(
         copy.body,
-        "Task t-12 suspected stalled (no output for 120s)"
+        "Task suspected stalled (no output for 120s)"
     );
 
     assert_copy_en(
@@ -120,14 +135,35 @@ fn s8_task_domain_copy_en() {
         Some("build error"),
         Some("exit code 1"),
         "Background Task Failed",
-        "Task run-42 exited abnormally (exit code 1)",
+        "Task exited abnormally (exit code 1): build error",
     );
     assert_copy_en(
         SceneId::TaskKilled,
         None,
         None,
         "Task Terminated",
-        "Task run-42 has been terminated",
+        "Task has been terminated",
+    );
+    // subject 存在：名称在前
+    let copy = render_copy_with_locale(
+        SceneId::TaskCompleted,
+        &payload_with_subject("t-12", Some("npm run build"), None, Some("exit code 0")),
+        Some("en-US"),
+    );
+    assert_eq!(copy.body, "\"npm run build\" completed, exit code 0");
+    let copy = render_copy_with_locale(
+        SceneId::TaskFailed,
+        &payload_with_subject(
+            "t-12",
+            Some("npm run build"),
+            Some("build error"),
+            Some("exit code 1"),
+        ),
+        Some("en-US"),
+    );
+    assert_eq!(
+        copy.body,
+        "\"npm run build\" exited abnormally (exit code 1): build error"
     );
 }
 
@@ -307,13 +343,13 @@ fn render_copy_for_device_respects_device_preferred_language() {
 
     let copy_en = render_copy_for_device(SceneId::RunCompleted, &p, &en_device);
     assert_eq!(copy_en.title, "Run Completed");
-    assert_eq!(copy_en.body, "Run run-42 completed successfully");
+    assert_eq!(copy_en.body, "Task completed");
 
     let copy_zh = render_copy_for_device(SceneId::RunCompleted, &p, &zh_device);
     assert_eq!(copy_zh.title, "任务已完成");
-    assert_eq!(copy_zh.body, "任务 run-42 已完成");
+    assert_eq!(copy_zh.body, "任务已完成");
 
     let copy_def = render_copy_for_device(SceneId::RunCompleted, &p, &def_device);
     assert_eq!(copy_def.title, "任务已完成");
-    assert_eq!(copy_def.body, "任务 run-42 已完成");
+    assert_eq!(copy_def.body, "任务已完成");
 }

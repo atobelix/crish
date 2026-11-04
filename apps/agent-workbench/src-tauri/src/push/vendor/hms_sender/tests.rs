@@ -23,6 +23,7 @@ fn notification(token: &str) -> VendorNotification {
         Some("session:s-7".to_string()),
         "approval".to_string(),
         PayloadDigest {
+            subject: None,
             session_id: "s-7".to_string(),
             biz_key: "tc-9f3a".to_string(),
             digest: Some("执行部署脚本".to_string()),

@@ -9,10 +9,23 @@ const T0: u64 = 1_784_078_400_000;
 /// 场景 + 载荷 → 期望文案（D7 §3.3 明细 / §3.3.13 样例逐条对齐）
 fn payload(biz_key: &str, digest: Option<&str>, detail: Option<&str>) -> PayloadDigest {
     PayloadDigest {
+        subject: None,
         session_id: "s-7".to_string(),
         biz_key: biz_key.to_string(),
         digest: digest.map(str::to_string),
         detail: detail.map(str::to_string),
+    }
+}
+
+fn payload_with_subject(
+    biz_key: &str,
+    subject: Option<&str>,
+    digest: Option<&str>,
+    detail: Option<&str>,
+) -> PayloadDigest {
+    PayloadDigest {
+        subject: subject.map(str::to_string),
+        ..payload(biz_key, digest, detail)
     }
 }
 

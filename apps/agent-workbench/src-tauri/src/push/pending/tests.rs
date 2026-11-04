@@ -18,6 +18,7 @@ fn approval_decision(tool_call_id: &str) -> PushDecision {
         severity: SceneId::ApprovalRequested.level().severity(),
         dedupe_key: format!("approval-requested:{tool_call_id}"),
         payload: PayloadDigest {
+            subject: None,
             session_id: "s-7".to_string(),
             biz_key: tool_call_id.to_string(),
             digest: Some("执行部署脚本".to_string()),
@@ -192,6 +193,7 @@ fn approval_id_for_derivation() {
             severity: SceneId::RunFailed.level().severity(),
             dedupe_key: "run-terminal:run-42:failed".to_string(),
             payload: PayloadDigest {
+                subject: None,
                 session_id: "s-7".to_string(),
                 biz_key: "run-42".to_string(),
                 digest: Some("provider 401".to_string()),

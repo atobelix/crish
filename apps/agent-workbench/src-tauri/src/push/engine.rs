@@ -41,6 +41,17 @@ use super::PushLevel;
 
 pub use super::engine_types::*;
 
+/// 任务事件流观察条目（task-started 登记，任务终态即清）
+///
+/// - `owner_run_id`：S8e kill 来源判定（task → run → 终止来源）；
+/// - `command`：终态推送文案的人类可识别名来源（终态事件本身不携带
+///   命令原文，经本缓存补齐为 PayloadDigest.subject）。
+#[derive(Debug, Clone)]
+struct TaskTrace {
+    owner_run_id: String,
+    command: String,
+}
+
 /// 决策引擎（管线状态机：防洪背压 → 去重 → 合并 → 静默 → 节流；时钟注入可测）
 pub struct PushDecisionEngine {
     dedupe: DedupeState,
@@ -54,8 +65,10 @@ pub struct PushDecisionEngine {
     flood_drop_total: u64,
     /// run-terminal(failed) 时刻表（runId → epoch ms；S10a 双推抑制）
     run_failed_at: std::collections::HashMap<String, u64>,
-    /// S8e 事件流观察（R3-01a 补强）：task_id → 归属 run（task-started 登记，ISSUE-14 有界）
-    task_owner_run: std::collections::HashMap<String, String>,
+    /// S8e 事件流观察（R3-01a 补强）：task_id → 任务追踪条目（归属 run +
+    /// 命令原文，task-started 登记，ISSUE-14 有界）；命令原文供终态
+    /// 推送文案的人类可识别名（PayloadDigest.subject，2026-11-03 批）
+    task_owner_run: std::collections::HashMap<String, TaskTrace>,
     /// task_owner_run 的 FIFO 插入序队列（超容量淘汰最旧条目）
     task_owner_order: std::collections::VecDeque<String>,
     /// S8e 事件流观察（R3-01a 补强）：run_id → (终止来源, 记录时刻)（run-terminal 登记，ISSUE-14 有界）
@@ -106,16 +119,21 @@ impl PushDecisionEngine {
         now_ms: u64,
     ) -> Vec<PushDecision> {
         // S8e 事件流观察（R3-01a 补强 & ISSUE-14 有界清理）：
-        // task-started 登记任务归属 run；task 终态即时释放；run-terminal 登记 run 终止来源
+        // task-started 登记任务追踪条目；task 终态即时释放；run-terminal 登记 run 终止来源
+        // 本事件任务的命令原文（终态文案 subject 注入用；终态即清缓存，
+        // 须在 remove 前捕获）
+        let mut event_task_subject: Option<String> = None;
         match event {
             AgentEvent::TaskStarted {
                 task_id,
                 owner_run_id,
+                command,
                 ..
             } => {
-                self.record_task_owner(task_id.clone(), owner_run_id.clone());
+                self.record_task_owner(task_id.clone(), owner_run_id.clone(), command.clone());
             }
             AgentEvent::TaskCompleted { task_id, .. } | AgentEvent::TaskFailed { task_id, .. } => {
+                event_task_subject = self.task_command(task_id);
                 self.remove_task_owner(task_id);
             }
             AgentEvent::RunTerminal {
@@ -143,21 +161,41 @@ impl PushDecisionEngine {
         // S8e：task-killed 来源注入（task → 归属 run → 终止来源；消费后即清理 task_owner_run）
         let kill_source = match event {
             AgentEvent::TaskKilled { task_id, .. } => {
-                let source = self
-                    .task_owner_run
-                    .get(task_id)
-                    .and_then(|run_id| self.run_term_source.get(run_id))
+                let trace = self.task_owner_run.get(task_id);
+                let source = trace
+                    .and_then(|t| self.run_term_source.get(&t.owner_run_id))
                     .map(|(src, _)| *src);
+                event_task_subject = trace.map(|t| t.command.clone());
                 self.remove_task_owner(task_id);
                 source
             }
             _ => None,
         };
 
-        let Some(intent) = super::intent::push_intent_with_kill_source(event, ctx, kill_source)
+        let Some(mut intent) =
+            super::intent::push_intent_with_kill_source(event, ctx, kill_source)
         else {
             return Vec::new();
         };
+
+        // 文案 subject 注入（2026-11-03 托盘/通知批）：任务终态事件本身
+        // 不携带命令原文，由事件流观察缓存在此补齐——终态用 decide
+        // 头部捕获值（缓存已清），TaskSuspicious 时任务仍在运行直接查
+        if intent.payload.subject.is_none() {
+            match intent.scene {
+                SceneId::TaskCompleted | SceneId::TaskFailed | SceneId::TaskKilled => {
+                    if let Some(command) = event_task_subject.take() {
+                        intent.payload.subject = Some(command);
+                    }
+                }
+                SceneId::TaskSuspicious => {
+                    if let Some(command) = self.task_command(&intent.payload.biz_key) {
+                        intent.payload.subject = Some(command);
+                    }
+                }
+                _ => {}
+            }
+        }
 
         // 0. 极端高频广播防洪背压护栏（ISSUE-12）：
         // 在进入同步去重（可能涉及 SQLite 锁/落盘）和合并桶分配前，执行 O(1) 滑动窗口限频，
@@ -497,7 +535,12 @@ impl PushDecisionEngine {
             .retain(|_, at| now_ms.saturating_sub(*at) < S10A_SUPPRESS_MS);
     }
 
-    fn record_task_owner(&mut self, task_id: String, owner_run_id: String) {
+    /// 查任务追踪条目中的命令原文（文案 subject 注入面）
+    fn task_command(&self, task_id: &str) -> Option<String> {
+        self.task_owner_run.get(task_id).map(|t| t.command.clone())
+    }
+
+    fn record_task_owner(&mut self, task_id: String, owner_run_id: String, command: String) {
         if !self.task_owner_run.contains_key(&task_id) {
             while self.task_owner_run.len() >= MAX_TRACKED_TASK_OWNERS {
                 let Some(oldest) = self.task_owner_order.pop_front() else {
@@ -509,7 +552,13 @@ impl PushDecisionEngine {
             }
             self.task_owner_order.push_back(task_id.clone());
         }
-        self.task_owner_run.insert(task_id, owner_run_id);
+        self.task_owner_run.insert(
+            task_id,
+            TaskTrace {
+                owner_run_id,
+                command,
+            },
+        );
         if self.task_owner_order.len() > MAX_TRACKED_TASK_OWNERS * 2 {
             self.task_owner_order
                 .retain(|id| self.task_owner_run.contains_key(id));

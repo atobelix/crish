@@ -115,6 +115,14 @@ mod db_setup;
 // sched / subagent_spawner / timers 已下沉 `conex-run` crate
 // （conex_run::{sched, subagent_spawner, timers}；壳层无独立 mod 声明）。
 mod system_power;
+// 托盘/通知批（2026-11-03）：power = 防休眠守卫（PE-03 摘除注册后复活，
+// 仅平台实现 + 计数守卫，无命令面）；tray = 系统托盘/关窗拦截/壳行为
+// 状态；keep_awake_feed = 事件面计数喂数（Emitter 装饰器）；
+// autostart = 开机自启 Run 键同步（托盘完整档续建）
+mod power;
+mod tray;
+mod keep_awake_feed;
+mod autostart;
 // 自动更新命令面（RUN-03/SEC-02/GAP-01：检查/下载/安装/重启四段命令 +
 // workbench_apply_update 一次编排；模块头登记链路与用户裁决 §3.4-3 出处）
 mod updater;
@@ -232,6 +240,12 @@ fn main() {
         Arc::new(std::sync::Mutex::new(ServerLifecycle::default()));
     let setup_lifecycle = Arc::clone(&server_lifecycle);
     let exit_lifecycle = Arc::clone(&server_lifecycle);
+    // 防休眠守卫（进程级单例，托盘/通知批）：setup 装配计数喂数与
+    // prefs 同步面，RunEvent::Exit 兜底 force_clear；原 Arc 随 main
+    // 结束释放（Drop 通知守卫线程关停）
+    let keep_awake_guard = power::KeepAwakeGuard::new();
+    let setup_guard = Arc::clone(&keep_awake_guard);
+    let exit_guard = Arc::clone(&keep_awake_guard);
 
     // G-2 单实例锁（R1-09）：官方插件必须**最先**注册——插件 setup 在
     // build() 阶段执行，第二实例在此即 cleanup + exit(0)，不会走到 run()
@@ -250,7 +264,13 @@ fn main() {
         // 只追踪主窗口、仅尺寸/位置/最大化；注册细节与恢复后钳制见
         // window_state.rs（显现时机仍归 window_handshake，本插件不碰
         // VISIBLE 旗标）
-        .plugin(window_state::register());
+        .plugin(window_state::register())
+        // 桌面 OS 通知（托盘/通知批）：官方 notification 插件；前端
+        // @tauri-apps/plugin-notification 消费，授权面见 capabilities
+        .plugin(tauri_plugin_notification::init())
+        // 关窗拦截：仅主窗口 CloseRequested，进托盘裁决见
+        // tray::handle_window_event（close_to_tray / tray_enabled）
+        .on_window_event(tray::handle_window_event);
 
     // setup 序列 ⑩：MCP 调试插件（debug 默认开启，CRISH_MCP_SOCKET=0 显式关闭；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离。2026-08-21 用户裁决）。
@@ -425,6 +445,92 @@ fn main() {
             // ⑥ 状态诊断已在 ①b 前置 manage（与 CoreRunState 共享同一实例）；
             //    此处不再重复 manage（Tauri manage 同类型重复注入会 panic）。
 
+            // 托盘 + 防休眠装配（2026-11-03 托盘/通知批）：prefs 预载
+            // （DB 已就绪）→ 壳行为状态（Rust 侧镜像，见 tray.rs）+
+            // 守卫开关同步 + 状态托管 + 托盘构建（总开关关时不建）。
+            // 计数喂数经事件桥与 ComputerSlot 两处 Emitter 装饰器接入
+            // （见下 bridge / computer_slot 接线与 keep_awake_feed.rs）。
+            let shell_behavior = {
+                let db = shared_db.local_db();
+                let read_bool_or = |key: &str, default: bool| -> bool {
+                    db.get_preference(key)
+                        .ok()
+                        .flatten()
+                        .and_then(|row| tray::parse_pref_bool(&row.value))
+                        .unwrap_or(default)
+                };
+                tray::ShellBehaviorState::new(
+                    read_bool_or("tray_enabled", true),
+                    read_bool_or("close_to_tray", true),
+                    read_bool_or("keep_awake_during_tasks", true),
+                    read_bool_or("autostart_enabled", false),
+                    read_bool_or("start_minimized", false),
+                )
+            };
+            setup_guard.set_enabled(shell_behavior.keep_awake_enabled());
+            let tray_enabled = shell_behavior.tray_enabled();
+            let autostart_enabled = shell_behavior.autostart_enabled();
+            let start_minimized = shell_behavior.start_minimized();
+            app.manage(shell_behavior);
+            app.manage(tray::TrayState::new());
+            app.manage(tray::TrayMenuState::<tauri::Wry>::new());
+            app.manage(Arc::clone(&setup_guard));
+            if tray_enabled {
+                if let Err(error) = tray::build_tray(&app_handle) {
+                    tracing::warn!(
+                        target: "tray",
+                        error = %error,
+                        "系统托盘构建失败（不阻断启动）"
+                    );
+                }
+            }
+
+            // 托盘完整档（2026-11-03）：开机自启启动对账——注册表
+            // Run 键与偏好对齐（开：缺失/路径过期重写；关：残留且
+            // 指向本 exe 才删）。失败不阻断启动（记 warn，下次对账）。
+            match autostart::sync_to_preference(autostart_enabled) {
+                Ok(action) => {
+                    tracing::debug!(
+                        target: "tray",
+                        action = ?action,
+                        enabled = autostart_enabled,
+                        "开机自启启动对账完成"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "tray",
+                        error = %error,
+                        "开机自启启动对账失败（不阻断启动）"
+                    );
+                }
+            }
+            // 启动静默：仅托盘总开关开启时置抑制（关则无托盘可恢复，
+            // 抑制会让窗口无处可达——记 warn 并按正常启动显示）
+            if start_minimized {
+                if tray_enabled {
+                    handshake.set_suppress_initial_reveal(true);
+                    tracing::info!(
+                        target: "tray",
+                        "启动静默已置位：主窗口保持托盘驻留，等待用户恢复"
+                    );
+                } else {
+                    tracing::warn!(
+                        target: "tray",
+                        "start_minimized 已开但托盘总开关关闭，忽略启动静默（防窗口不可达）"
+                    );
+                }
+            }
+            // 托盘计数刷新接线：守卫工作单元数变化 → 重算两计数刷
+            // 菜单状态行（待审批数在刷新时一并从 CoreRunState 现算；
+            // 多拍版收敛审批登记/移除与事件流的时序错位，见 tray.rs）
+            {
+                let listener_handle = app_handle.clone();
+                setup_guard.set_count_listener(Arc::new(move |_work_count| {
+                    tray::refresh_status_counts_deferred(&listener_handle);
+                }));
+            }
+
             // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）——R3-02
             // 推送装配（D7 §9.2 方案 a）：PushAwareEmitter 装饰内层发射器
             // （转发原通道不变 + 旁路 push-core 决策与双轨分发——在线 WS
@@ -448,8 +554,20 @@ fn main() {
             ));
             let bridge = EventBridge::new(
                 "workbench-run-event",
-                // 桥上行（bin Emitter for lib PushAwareEmitter）在 push_wiring.rs
-                Arc::clone(&push_aware) as Arc<dyn Emitter>,
+                // 桥上行（bin Emitter for lib PushAwareEmitter）在 push_wiring.rs；
+                // 最外层包防休眠喂数装饰器（事件面计数 → KeepAwakeGuard，
+                // 见 keep_awake_feed.rs）——先转发后观察，投递语义不变；
+                // 完整档加托盘状态钩子：审批挂起/消解事件 → 托盘计数重算
+                Arc::new(
+                    keep_awake_feed::KeepAwakeFeedEmitter::new(
+                        Arc::clone(&push_aware) as Arc<dyn Emitter>,
+                        Arc::clone(&setup_guard),
+                    )
+                    .with_status_hook(Arc::new({
+                        let hook_handle = app_handle.clone();
+                        move || tray::refresh_status_counts_deferred(&hook_handle)
+                    })),
+                ) as Arc<dyn Emitter>,
             );
 
             // 快照存储（B4.3：主文件 + .prev 备份双文件模型）
@@ -534,7 +652,12 @@ fn main() {
             {
                 let computer_slot = engine_host.computer_slot();
                 app.manage(Arc::clone(&computer_slot));
-                computer_slot.attach_emitter(Arc::new(TauriEmitter::new(app_handle.clone())));
+                computer_slot.attach_emitter(Arc::new(
+                    keep_awake_feed::ComputerAwakeFeedEmitter::new(
+                        Arc::new(TauriEmitter::new(app_handle.clone())),
+                        Arc::clone(&setup_guard),
+                    ),
+                ));
             }
 
             // 浏览器槽托管给 Tauri State（browser_commands 命令访问面）
@@ -887,6 +1010,9 @@ fn main() {
             // restore_failed 已置位）——防「0 会话半水合快照」覆盖主快照
             // 导致会话树分支历史永久丢失；跳过时 snapshot_last_error 可观测。
             if let tauri::RunEvent::Exit = event {
+                // 防休眠兜底清除：守卫线程随进程退出本会失效，此处在
+                // 退出链最先显式清一次（托盘/通知批）
+                exit_guard.force_clear();
                 // 本地服务优雅关停（D2 §5.3：先停服务再存快照；客户端收到
                 // 服务端关闭信号，避免误判断线重试风暴）。句柄经生命周期
                 // 槽取得——rebind 重建后句柄已更新，同样覆盖

@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json.workspace = true
 # protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）；
 # test：壳测试（tauri::test 依赖，PE-11 测试策略）
-tauri = { workspace = true, features = ["protocol-asset", "unstable", "test"] }
+tauri = { workspace = true, features = ["protocol-asset", "unstable", "test", "tray-icon"] }
 tauri-plugin-dialog = "2"
 # 对话框授权需要持久化；fs 插件为 scope 提供注册点，但 capability 未授予前端 fs 命令权限。
 tauri-plugin-fs = "2"
@@ -40,6 +40,10 @@ tauri-plugin-updater = "2"
 # 精确锁定 2.4.1：2.5 起要求 tauri ^2.12，与壳现行 tauri 2.11 /
 # webview2-com 0.38 锁定冲突（双版本 trait 不兼容）；壳升级 tauri 时再放开。
 tauri-plugin-window-state = "=2.4.1"
+# 桌面 OS 通知（托盘/通知批 2026-11-03）：官方 notification 插件；
+# builder 注册见 main.rs，授权见 capabilities/default.json，前端经
+# @tauri-apps/plugin-notification 发送（DesktopNotificationService）
+tauri-plugin-notification = "2"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 window-vibrancy = "0.6.0"

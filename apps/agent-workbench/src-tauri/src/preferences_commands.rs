@@ -68,6 +68,17 @@ pub const KNOWN_PREFERENCE_KEYS: &[&str] = &[
     "app_mode",
     "product_shell",
     "show_engine_settings",
+    // ── 托盘/通知批（2026-11-03）：壳行为与桌面通知偏好（前端
+    // preferencesSchema.ts 同批 1:1 新增；Rust 侧镜像见 tray.rs）──
+    "tray_enabled",
+    "close_to_tray",
+    "keep_awake_during_tasks",
+    "desktop_notifications_enabled",
+    "notify_on_task_done",
+    // ── 托盘完整档（2026-11-03）：开机自启 / 启动静默（默认关；
+    // 自启同步见 autostart.rs，静默消费见 window_handshake）──
+    "autostart_enabled",
+    "start_minimized",
 ];
 
 /// 语义键 → 旧版存储键（读取回退链）。
@@ -237,7 +248,14 @@ pub fn validate_preference_value(key: &str, value: &Value) -> Result<(), CoreErr
         | "tab_mode_enabled"
         | "file_viewer_word_wrap"
         | "product_shell"
-        | "show_engine_settings" => {
+        | "show_engine_settings"
+        | "tray_enabled"
+        | "close_to_tray"
+        | "keep_awake_during_tasks"
+        | "desktop_notifications_enabled"
+        | "notify_on_task_done"
+        | "autostart_enabled"
+        | "start_minimized" => {
             if value.is_boolean() {
                 Ok(())
             } else if let Some(s) = value.as_str() {
@@ -370,10 +388,11 @@ pub async fn prefs_get(
 
 /// 写入或更新偏好。
 #[tauri::command]
-pub async fn prefs_set(
+pub async fn prefs_set<R: tauri::Runtime>(
     key: String,
     value: Value,
     db_state: State<'_, SharedDb>,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), CoreError> {
     if key.trim().is_empty() {
         return Err(CoreError::invalid_input("preference key must not be empty"));
@@ -384,6 +403,11 @@ pub async fn prefs_set(
         )));
     }
     validate_preference_value(&key, &value)?;
+
+    // 托盘/通知批：壳行为键（tray_enabled / close_to_tray /
+    // keep_awake_during_tasks）写后需同步 Rust 侧镜像——先捕获钩子入参
+    let hook_key = key.clone();
+    let hook_bool = crate::tray::preference_value_bool(&value);
 
     let db = db_state.inner().local_db();
     let serialized = serde_json::to_string(&value)
@@ -396,12 +420,17 @@ pub async fn prefs_set(
         .map_err(|e| CoreError::Internal(format!("prefs_set join: {e}")))?
         .map_err(|e| CoreError::Internal(format!("prefs_set db: {}: {}", e.kind, e.message)))?;
 
+    crate::tray::on_preference_changed(&app, &hook_key, hook_bool);
     Ok(())
 }
 
 /// 删除指定偏好 key。
 #[tauri::command]
-pub async fn prefs_delete(key: String, db_state: State<'_, SharedDb>) -> Result<bool, CoreError> {
+pub async fn prefs_delete<R: tauri::Runtime>(
+    key: String,
+    db_state: State<'_, SharedDb>,
+    app: tauri::AppHandle<R>,
+) -> Result<bool, CoreError> {
     if key.trim().is_empty() {
         return Err(CoreError::invalid_input("preference key must not be empty"));
     }
@@ -410,6 +439,8 @@ pub async fn prefs_delete(key: String, db_state: State<'_, SharedDb>) -> Result<
             "unknown preference key: {key}"
         )));
     }
+    // 托盘/通知批：删除 = 回落默认，钩子需在 key 被闭包移走前捕获
+    let hook_key = key.clone();
     let db = db_state.inner().local_db();
     let deleted = tokio::task::spawn_blocking(move || -> Result<bool, DbFailure> {
         // 删除回退：同时清除语义键行与旧版别名键行，
@@ -426,6 +457,8 @@ pub async fn prefs_delete(key: String, db_state: State<'_, SharedDb>) -> Result<
     .map_err(|e| CoreError::Internal(format!("prefs_delete join: {e}")))?
     .map_err(|e| CoreError::Internal(format!("prefs_delete db: {}: {}", e.kind, e.message)))?;
 
+    // 删除回落默认值：同步 Rust 侧壳行为镜像（value=None → 默认全开）
+    crate::tray::on_preference_changed(&app, &hook_key, None);
     Ok(deleted)
 }
 

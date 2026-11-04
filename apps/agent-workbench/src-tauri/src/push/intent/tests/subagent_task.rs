@@ -316,7 +316,13 @@ fn s8a_s8d_task_full_fields() {
             PushTargetScreen::Task,
             "task-started:t-1",
             "session:s-7",
-            payload_digest("t-1", Some("npm run build"), None),
+            // S8a：subject = 命令原文（文案人类可识别名，事件现成字段）
+            payload_digest_with_subject(
+                "t-1",
+                Some("npm run build"),
+                Some("npm run build"),
+                None,
+            ),
         ))
     );
 

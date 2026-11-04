@@ -102,9 +102,10 @@ pub(crate) fn on_second_instance<R: tauri::Runtime>(
     );
 
     // 窗口前置 + 任务栏闪烁：禁止裸 show（visible:false 首绘握手竞态，
-    // audits/05 §3.13-15）——统一经 window_handshake::reveal_for_second_launch
-    // 与前端握手 / 看门狗共用 WINDOW_REVEALED CAS 门闩。
-    crate::window_handshake::reveal_for_second_launch(app);
+    // audits/05 §3.13-15）——统一经 tray::restore_main_window（托盘隐藏态
+    // 由其亲自 show；其余态委托 window_handshake::reveal_for_second_launch
+    // 与前端握手 / 看门狗共用 WINDOW_REVEALED CAS 门闩）。
+    crate::tray::restore_main_window(app, crate::tray::RestoreSource::SecondLaunch);
 
     // 前端契约事件（载荷形状由 build_second_launch_payload 测试锁定）
     if let Err(error) = app.emit(EVENT_SECOND_LAUNCH, build_second_launch_payload(args, cwd)) {

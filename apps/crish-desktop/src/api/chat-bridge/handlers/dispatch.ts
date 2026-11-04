@@ -14,6 +14,7 @@ import type {
 import type { HandlerEnv } from './handlerEnv';
 import { getSessionStoreState } from '../../../store/sessionStore';
 import { emitUiEvent } from '../../../api/uiEvents';
+import { observeBridgeEventForNotification } from '../../../services/desktopNotificationObserver';
 import { invalidateEditObjects } from '../editSessionConsumer';
 import { logger } from '../../../services/LoggerService';
 import {
@@ -24,6 +25,8 @@ import {
 import {
   onToolStart,
   onToolEnd,
+  onToolBackgrounded,
+  onToolSettled,
   onToolBatchStart,
   onToolBatchEnd,
 } from './toolHandlers';
@@ -207,6 +210,9 @@ export const engineDispatchTable: {
   'message-end': onMessageEnd,
   'tool-start': onToolStart,
   'tool-end': onToolEnd,
+  // BG3 后台结果回注（toolHandlers store 直写：迟到回填不绑活跃流）
+  'tool-backgrounded': onToolBackgrounded,
+  'tool-settled': onToolSettled,
   'tool-batch-start': onToolBatchStart,
   'tool-batch-end': onToolBatchEnd,
   'context-compression-start': onContextCompressionStart,
@@ -286,6 +292,9 @@ export function dispatchEvent(
   env: HandlerEnv,
   envelope: EngineEnvelope<EngineEventType> | LegacyEnvelope
 ): void {
+  // 桌面 OS 通知旁路观察（2026-11-03 托盘/通知批）：全部事件的唯一
+  // 汇聚点在此——观察器只读信封、异常自吞，绝不影响分发本身
+  observeBridgeEventForNotification(envelope);
   if (envelope.kind !== 'engine') {
     legacyDispatchTable[envelope.type](env, envelope);
     return;

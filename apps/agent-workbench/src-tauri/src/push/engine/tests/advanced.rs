@@ -426,3 +426,30 @@ fn task_owner_and_run_source_eviction_remains_strictly_bounded() {
     assert_eq!(engine.run_term_source.len(), 0);
     assert_eq!(engine.run_term_order.len(), 0);
 }
+
+/// 文案 subject 注入（2026-11-03 托盘/通知批）：task-started 的命令
+/// 原文经事件流观察缓存补齐到终态决策的 PayloadDigest.subject
+/// （终态事件本身不携带 command；文案层据此人类可识别名优先）
+#[test]
+fn task_terminal_subject_injected_from_started_command() {
+    let mut engine = PushDecisionEngine::default();
+    engine.decide(&task_started("t-9", "run-42"), &ctx(), T0);
+    let completed = AgentEvent::TaskCompleted {
+        session_id: "s-7".to_string(),
+        task_id: "t-9".to_string(),
+        exit_code: 0,
+        duration_ms: 1_000,
+        line_count: 3,
+    };
+    let out = engine.decide(&completed, &ctx(), T0 + 1_000);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].scene, SceneId::TaskCompleted);
+    assert_eq!(out[0].payload.subject.as_deref(), Some("cargo build"));
+
+    // 无 task-started 观察（进程中途接入事件流）：subject 保持 None，
+    // 文案层回落无标识形态（不编造）
+    let mut fresh = PushDecisionEngine::default();
+    let out = fresh.decide(&completed, &ctx(), T0);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].payload.subject, None);
+}

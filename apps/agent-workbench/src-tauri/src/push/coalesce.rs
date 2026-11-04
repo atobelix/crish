@@ -372,6 +372,7 @@ mod tests {
             suspicious_key: None,
             arrived_at_ms: at,
             digest: PayloadDigest {
+                subject: None,
                 session_id: session.to_string(),
                 biz_key: group.to_string(),
                 digest: None,

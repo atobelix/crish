@@ -44,6 +44,11 @@ pub struct WindowHandshakeState {
     db_ready: AtomicBool,
     /// db_ready 置位通知
     db_notify: tokio::sync::Notify,
+    /// 启动静默抑制（托盘完整档 prefs `start_minimized`）：setup 在
+    /// 托盘总开关开启时置位——首次 reveal 路径（前端握手 / 看门狗）
+    /// 命中即跳过显现且**不置 shown**，窗口保持托盘驻留；仅用户主动
+    /// 恢复（托盘/二次启动经 tray::restore_main_window）可消费解除
+    suppress_initial_reveal: AtomicBool,
 }
 
 impl WindowHandshakeState {
@@ -53,7 +58,24 @@ impl WindowHandshakeState {
             shown: AtomicBool::new(false),
             db_ready: AtomicBool::new(false),
             db_notify: tokio::sync::Notify::new(),
+            suppress_initial_reveal: AtomicBool::new(false),
         }
+    }
+
+    /// 置位/清除启动静默抑制（setup 预载 prefs 后调用一次）。
+    pub fn set_suppress_initial_reveal(&self, suppress: bool) {
+        self.suppress_initial_reveal.store(suppress, Ordering::Release);
+    }
+
+    /// 当前是否处于启动静默抑制（首次 reveal 应跳过显现）。
+    pub fn is_initial_reveal_suppressed(&self) -> bool {
+        self.suppress_initial_reveal.load(Ordering::Acquire)
+    }
+
+    /// 消费启动静默抑制（用户主动恢复路径专用）：返回此前是否处于
+    /// 抑制态；消费后首次 reveal 回归常态（经 CAS 正式首显）。
+    pub fn consume_suppress_initial_reveal(&self) -> bool {
+        self.suppress_initial_reveal.swap(false, Ordering::AcqRel)
     }
 
     /// 窗口是否已显现。
@@ -97,12 +119,23 @@ impl Default for WindowHandshakeState {
 }
 
 /// 原子显现窗口：CAS 门闩保证仅一次真实 show/focus。
+///
+/// 启动静默抑制中 → 跳过显现（不置 `shown` 门闩，用户恢复时经
+/// [reveal_after_start_minimized] 消费抑制后回到本路径正式首显）。
 fn reveal_window_internal(
     window: &WebviewWindow,
-    shown: &AtomicBool,
+    state: &WindowHandshakeState,
     source: &'static str,
 ) -> Result<(), String> {
-    if shown.swap(true, Ordering::AcqRel) {
+    if state.is_initial_reveal_suppressed() {
+        tracing::info!(
+            target: "window",
+            source = source,
+            "启动静默（start_minimized）生效：跳过首次显现，窗口保持托盘驻留"
+        );
+        return Ok(());
+    }
+    if state.shown.swap(true, Ordering::AcqRel) {
         // 已显现：幂等快速返回
         return Ok(());
     }
@@ -135,7 +168,7 @@ fn reveal_via_app(app_handle: &AppHandle, source: &'static str) -> Result<(), St
     let window = app_handle
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(|| "main window not found".to_string())?;
-    reveal_window_internal(&window, &state.shown, source)
+    reveal_window_internal(&window, &state, source)
 }
 
 /// 前端骨架屏首帧渲染完成后的握手命令（wire 名: `workbench_window_ready`）。
@@ -179,7 +212,7 @@ pub async fn workbench_window_ready(
         true,
         Some("frontend_handshake_received".into()),
     );
-    reveal_window_internal(&window, &state.shown, "frontend_handshake").map_err(map_internal_string)
+    reveal_window_internal(&window, &state, "frontend_handshake").map_err(map_internal_string)
 }
 
 /// second-launch 统一显现入口：禁止裸调 `window.show()`。
@@ -222,6 +255,58 @@ pub fn reveal_for_second_launch<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let _ = app; // 窗口门闩处理完毕；事件由调用方发射
 }
 
+/// 启动静默的用户恢复显现（tray::restore_main_window 专用）：
+///
+/// 抑制未置位 → 返回 false（调用方走常态恢复路径）；置位 → 消费
+/// 抑制并经 CAS 门闩正式首显（`shown` 在此置位，此后握手/看门狗/
+/// second-launch 全部回归常态语义），返回 true。
+pub fn reveal_after_start_minimized<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    let Some(state) = app.try_state::<Arc<WindowHandshakeState>>() else {
+        return false;
+    };
+    if !state.consume_suppress_initial_reveal() {
+        return false;
+    }
+    // 泛型 Runtime 与 reveal_window_internal 的 Wry 特化解耦（与
+    // reveal_for_second_launch 同款）：直接走状态 CAS 显现
+    match app.get_webview_window(MAIN_WINDOW_LABEL) {
+        Some(window) => {
+            if state.shown.swap(true, Ordering::AcqRel) {
+                // 竞态下握手已首显（抑制消费与握手到达并发）：仅前置
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            } else {
+                if let Err(error) = window.show() {
+                    tracing::error!(
+                        target: "window",
+                        error = %error,
+                        "启动静默恢复显现失败（show）"
+                    );
+                }
+                if let Err(error) = window.set_focus() {
+                    tracing::error!(
+                        target: "window",
+                        error = %error,
+                        "启动静默恢复显现失败（focus）"
+                    );
+                }
+                tracing::info!(
+                    target: "window",
+                    source = "user_restore_start_minimized",
+                    "原生主窗口已安全显现 (启动静默恢复)"
+                );
+            }
+        }
+        None => {
+            tracing::warn!(
+                target: "window",
+                "启动静默恢复时主窗口未就绪"
+            );
+        }
+    }
+    true
+}
+
 /// 1000ms 原生兜底看门狗：前端未握手时强制显现并记 ERROR 诊断。
 pub fn spawn_window_guard_dog(app_handle: AppHandle, timeout: Duration) {
     tauri::async_runtime::spawn(async move {
@@ -233,6 +318,19 @@ pub fn spawn_window_guard_dog(app_handle: AppHandle, timeout: Duration) {
             .unwrap_or(true); // 无状态视为已处理，不再强行 show
 
         if !revealed {
+            // 启动静默：未显现是预期态（非握手故障），不记 ERROR、
+            // 不兜底显现——窗口等用户从托盘恢复
+            let suppressed = app_handle
+                .try_state::<Arc<WindowHandshakeState>>()
+                .map(|s| s.is_initial_reveal_suppressed())
+                .unwrap_or(false);
+            if suppressed {
+                tracing::info!(
+                    target: "window",
+                    "启动静默生效：看门狗跳过兜底显现"
+                );
+                return;
+            }
             tracing::error!(
                 target: "window",
                 timeout_ms = timeout.as_millis(),
@@ -304,6 +402,24 @@ mod tests {
         let state = WindowHandshakeState::new();
         state.mark_db_ready();
         assert!(state.wait_db_ready(Duration::from_millis(1)).await);
+    }
+
+    /// 启动静默抑制：置位后 reveal 跳过判定成立；消费一次性
+    /// （二次消费返回 false，恢复路径据此分流常态）。
+    #[test]
+    fn suppress_initial_reveal_flag_semantics() {
+        let state = WindowHandshakeState::new();
+        assert!(!state.is_initial_reveal_suppressed());
+        assert!(!state.consume_suppress_initial_reveal(), "未置位消费为 false");
+
+        state.set_suppress_initial_reveal(true);
+        assert!(state.is_initial_reveal_suppressed());
+        assert!(state.consume_suppress_initial_reveal(), "首次消费为 true");
+        assert!(!state.is_initial_reveal_suppressed());
+        assert!(!state.consume_suppress_initial_reveal(), "消费后回归常态");
+
+        state.set_suppress_initial_reveal(false);
+        assert!(!state.is_initial_reveal_suppressed());
     }
 
     /// 命令注册名契约：函数路径存在（编译期 generate_handler 绑定）。

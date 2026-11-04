@@ -24,18 +24,27 @@ import {
   SettingsRow,
   SettingsSection,
 } from './SettingsUI';
-import { Button, Input, Switch, Tooltip } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
+import {
+  SettingsShellPrefsSections,
+  type ShellPrefKey,
+} from './SettingsShellPrefsSections';
+import { SettingsDataBackupSection } from './SettingsDataBackupSection';
+import { SettingsOnboardingSection } from './SettingsOnboardingSection';
 import {
   normalizeSendShortcut,
   persistSendShortcut,
 } from '../../store/storeAccess';
 import { telemetry } from '../../services/TelemetryService';
 import {
+  getPreference,
+  setPreference,
+} from '../../api/preferences/preferencesClient';
+import {
   setShowOnboardingOnStartup,
   shouldShowFirstRunWizard,
-  WIZARD_STEP_META,
   type WizardStep,
 } from '../firstRunWizardLib';
 import {
@@ -69,6 +78,68 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   // 「启动时恢复上次工作台」自外观页迁入：真源在 hydrateWorkspaceShell（本地存储 + settings.ui）
   const [restoreLastWorkspace, setRestoreLastWorkspaceState] = useState(() =>
     readRestoreLastWorkspace()
+  );
+
+  // ── 托盘/通知批（2026-11-03）：「窗口与启动」「通知」两分区走 prefs
+  // SSOT（preferencesClient），不经 clientApi Settings——状态独立加载，
+  // 读失败时整组分区缺席（诚实缺席，不渲染假默认值）──
+  const [shellPrefs, setShellPrefs] = useState<Record<
+    ShellPrefKey,
+    boolean
+  > | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [
+          trayEnabled,
+          closeToTray,
+          keepAwake,
+          notifMaster,
+          notifDone,
+          autostartEnabled,
+          startMinimized,
+        ] = await Promise.all([
+          getPreference('tray_enabled'),
+          getPreference('close_to_tray'),
+          getPreference('keep_awake_during_tasks'),
+          getPreference('desktop_notifications_enabled'),
+          getPreference('notify_on_task_done'),
+          getPreference('autostart_enabled'),
+          getPreference('start_minimized'),
+        ]);
+        if (!cancelled) {
+          setShellPrefs({
+            tray_enabled: trayEnabled,
+            close_to_tray: closeToTray,
+            keep_awake_during_tasks: keepAwake,
+            desktop_notifications_enabled: notifMaster,
+            notify_on_task_done: notifDone,
+            autostart_enabled: autostartEnabled,
+            start_minimized: startMinimized,
+          });
+        }
+      } catch {
+        // 读取失败保持 null：两分区不渲染（见上方注释）
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleShellPrefToggle = useCallback(
+    async (key: ShellPrefKey, next: boolean) => {
+      setShellPrefs((prev) => (prev ? { ...prev, [key]: next } : prev));
+      try {
+        await setPreference(key, next);
+      } catch (err) {
+        setShellPrefs((prev) => (prev ? { ...prev, [key]: !next } : prev));
+        showToast(t('settings.personalize.saveFailed', { error: String(err) }));
+      }
+    },
+    [showToast, t]
   );
 
   // ── 设置备份（自账号页「数据」分区迁入）：导出 / 导入全部设置 ──
@@ -473,66 +544,14 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
         ready={ready}
       />
       {ready ? (
-        <SettingsSection title={t('settings.personalize.dataBackupSection')}>
-          <SettingsCard>
-            <SettingsRow
-              title={t('settings.personalize.exportImportAllSettings')}
-              desc={t('settings.personalize.exportImportDesc')}
-              control={
-                <>
-                  <Tooltip
-                    content={
-                      exporting
-                        ? t('settings.personalize.exporting')
-                        : t('settings.personalize.exportBackup')
-                    }
-                    delayShow={300}
-                  >
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={exporting}
-                      onClick={() => void handleExportSettings()}
-                    >
-                      {exporting
-                        ? t('settings.personalize.exportingShort')
-                        : t('settings.personalize.exportBtn')}
-                    </Button>
-                  </Tooltip>
-                  <Tooltip
-                    content={
-                      importing
-                        ? t('settings.personalize.importing')
-                        : t('settings.personalize.importBackup')
-                    }
-                    delayShow={300}
-                  >
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={importing}
-                      onClick={handleImportSettings}
-                    >
-                      {importing
-                        ? t('settings.personalize.importingShort')
-                        : t('settings.personalize.importBtn')}
-                    </Button>
-                  </Tooltip>
-                  <Input
-                    bare
-                    ref={importFileInputRef}
-                    type="file"
-                    accept="application/json,.json"
-                    style={{ display: 'none' }}
-                    onChange={handleImportFileChange}
-                  />
-                </>
-              }
-            />
-          </SettingsCard>
-        </SettingsSection>
+        <SettingsDataBackupSection
+          exporting={exporting}
+          importing={importing}
+          onExport={handleExportSettings}
+          onImport={handleImportSettings}
+          fileInputRef={importFileInputRef}
+          onFileChange={handleImportFileChange}
+        />
       ) : null}
       <SettingsSchemaRenderer
         schema={personalizeSchema.slice(2)}
@@ -540,65 +559,17 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
         onSave={handleSave}
         ready={ready}
       />
-      <SettingsSection title={t('settings.personalize.onboardingSection')}>
-        <SettingsCard>
-          <SettingsRow
-            title={t('settings.personalize.showOnboardingTitle')}
-            control={
-              <Switch
-                aria-label={t('settings.personalize.showOnboardingTitle')}
-                checked={showOnboardingOnStartup}
-                onCheckedChange={handleToggleOnboardingOnStartup}
-              />
-            }
-          />
-          <SettingsRow
-            title={t('settings.personalize.openWizardTitle')}
-            control={
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  handleOpenFirstRunWizard(0);
-                }}
-              >
-                {t('settings.personalize.openWizardBtn')}
-              </Button>
-            }
-          />
-          <SettingsRow
-            vertical
-            title={t('settings.personalize.previewStepsTitle')}
-            control={
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 'var(--space-2)',
-                  marginTop: 'var(--space-1_5)',
-                }}
-                role="group"
-                aria-label={t('settings.personalize.previewStepsAria')}
-              >
-                {WIZARD_STEP_META.map((stepMeta) => (
-                  <Button
-                    key={stepMeta.id}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      handleOpenFirstRunWizard(stepMeta.id);
-                    }}
-                  >
-                    {`${stepMeta.id + 1}. ${t(`settings.personalize.wizardStep${stepMeta.id}`)}`}
-                  </Button>
-                ))}
-              </div>
-            }
-          />
-        </SettingsCard>
-      </SettingsSection>
+      {shellPrefs ? (
+        <SettingsShellPrefsSections
+          shellPrefs={shellPrefs}
+          onToggle={handleShellPrefToggle}
+        />
+      ) : null}
+      <SettingsOnboardingSection
+        showOnboardingOnStartup={showOnboardingOnStartup}
+        onToggleOnboarding={handleToggleOnboardingOnStartup}
+        onOpenWizard={handleOpenFirstRunWizard}
+      />
     </SettingsPage>
   );
 };

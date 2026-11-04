@@ -98,7 +98,7 @@ fn message_with_copy_locale_fills_title_body() {
     let msg_en =
         message_with_copy_locale(&decision, "push-000002".to_string(), 2, T0, Some("en-US"));
     assert_eq!(msg_en.title.as_deref(), Some("Run Failed"));
-    assert_eq!(msg_en.body.as_deref(), Some("run-42: provider 401"));
+    assert_eq!(msg_en.body.as_deref(), Some("provider 401"));
 
     // 英文 device
     let en_device =
@@ -106,5 +106,5 @@ fn message_with_copy_locale_fills_title_body() {
     let msg_dev =
         message_with_copy_for_device(&decision, "push-000003".to_string(), 3, T0, &en_device);
     assert_eq!(msg_dev.title.as_deref(), Some("Run Failed"));
-    assert_eq!(msg_dev.body.as_deref(), Some("run-42: provider 401"));
+    assert_eq!(msg_dev.body.as_deref(), Some("provider 401"));
 }

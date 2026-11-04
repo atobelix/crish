@@ -231,25 +231,35 @@ export const settingsPartMain = {
     'Do not disable certificate verification in production environments',
   'network.timeout': 'Connection Timeout (seconds)',
   'network.maxRetries': 'Max Retry Attempts on Failure',
-  'notification.title': 'Notifications & Alerts',
-  'notification.desc':
-    'Configure desktop banners, mobile push notifications, and quiet hours',
   'notification.desktopGroup': 'Desktop Banners',
   'notification.enableDesktop': 'Enable System Desktop Notifications',
   'notification.enableDesktopDesc':
     'Show notifications when background tasks complete or fail',
   'notification.notifyOnTaskDone': 'Task Completion Alerts',
+  'notification.notifyOnTaskDoneDesc':
+    'Notify when runs, subagents, or background tasks finish',
   'notification.notifyOnApproval': 'Urgent Alerts for Pending Approvals',
-  'notification.soundAlert': 'Notification Chime',
-  'notification.quietHoursGroup': 'Quiet Hours',
-  'notification.enableQuietHours': 'Enable Quiet Hours Mode',
-  'notification.enableQuietHoursDesc':
-    'Silence notifications during specified hours and summarize in morning digest',
-  'notification.quietStart': 'Quiet Hours Start',
-  'notification.quietEnd': 'Quiet Hours End',
-  'notification.devicesGroup': 'Paired Push Devices',
-  'notification.registeredCount': '{count} paired mobile devices',
-  'notification.deviceUnregister': 'Unpair Device',
+  'notification.alwaysOnFailure': 'Always Alert on Task Failure',
+  'notification.alwaysOnFailureDesc':
+    'Failures, runtime errors, and background task failures always notify and cannot be turned off',
+  'notification.alwaysOnApprovalDesc':
+    'Pending tool approvals always notify and cannot be turned off',
+  'windowStartup.title': 'Window & Startup',
+  'windowStartup.trayEnabled': 'Keep in System Tray',
+  'windowStartup.trayEnabledDesc':
+    'When off, the tray icon is removed and closing the window quits the app',
+  'windowStartup.closeToTray': 'Hide to Tray on Close',
+  'windowStartup.closeToTrayDesc':
+    'Clicking the close button keeps the app running in the background; restore it from the tray icon',
+  'windowStartup.keepAwake': 'Keep Awake During Tasks',
+  'windowStartup.keepAwakeDesc':
+    'Prevent system sleep while tasks run; the display stays on only for computer-use tasks',
+  'windowStartup.autostart': 'Launch at Login',
+  'windowStartup.autostartDesc':
+    'Automatically start Crish when you sign in to Windows',
+  'windowStartup.startMinimized': 'Start Minimized to Tray',
+  'windowStartup.startMinimizedDesc':
+    'Do not show the main window at launch; run only in the system tray (requires Keep in System Tray)',
   'privacy.title': 'Privacy & Telemetry',
   'privacy.desc':
     'Manage crash reports, local data retention, and history cleanup',

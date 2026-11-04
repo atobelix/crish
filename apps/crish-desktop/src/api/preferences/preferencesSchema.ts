@@ -36,11 +36,27 @@ export interface PreferencesMap {
   show_engine_settings: boolean;
   /** 首条助手回复后是否请求模型生成不超过 12 字的会话标题。 */
   aiSessionTitle: boolean;
+  /** 系统托盘总开关（关 → 不建托盘且 close_to_tray 失效）。 */
+  tray_enabled: boolean;
+  /** 关闭主窗口时隐藏到系统托盘（而非退出）。 */
+  close_to_tray: boolean;
+  /** 任务运行期间防休眠（系统不睡；屏幕常亮仅电脑操作任务）。 */
+  keep_awake_during_tasks: boolean;
+  /** 桌面 OS 通知总开关（一票否决全体分类）。 */
+  desktop_notifications_enabled: boolean;
+  /** 任务完成类 OS 通知开关（失败/审批必达，不受此开关影响）。 */
+  notify_on_task_done: boolean;
+  /** 开机自启（登录 Windows 时自动启动；选择加入，默认关）。 */
+  autostart_enabled: boolean;
+  /** 启动时最小化到托盘（不显示主窗口；需托盘总开关开启）。 */
+  start_minimized: boolean;
 }
 
 export type PreferenceKey = keyof PreferencesMap;
 
-export interface PreferenceSchemaEntry<K extends PreferenceKey = PreferenceKey> {
+export interface PreferenceSchemaEntry<
+  K extends PreferenceKey = PreferenceKey,
+> {
   key: K;
   type: 'string' | 'number' | 'boolean' | 'object';
   defaultValue: PreferencesMap[K];
@@ -80,7 +96,15 @@ export const PREFERENCES_SCHEMA: {
     key: 'theme',
     type: 'string',
     defaultValue: 'default',
-    allowedValues: ['default', 'dark', 'light', 'oled', 'sepia', 'cyberpunk', 'nord'] as const,
+    allowedValues: [
+      'default',
+      'dark',
+      'light',
+      'oled',
+      'sepia',
+      'cyberpunk',
+      'nord',
+    ] as const,
     description: '界面外观主色彩模式',
   },
   theme_skin: {
@@ -105,14 +129,16 @@ export const PREFERENCES_SCHEMA: {
     key: 'font_size_adjust',
     type: 'number',
     defaultValue: 0,
-    validate: (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= -10 && v <= 20,
+    validate: (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= -10 && v <= 20,
     description: '界面字体大小微调步长（px）',
   },
   theme_brightness_adjust: {
     key: 'theme_brightness_adjust',
     type: 'number',
     defaultValue: 0,
-    validate: (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= -100 && v <= 100,
+    validate: (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= -100 && v <= 100,
     description: '界面全局亮度增益',
   },
   theme_brightness_vibrant: {
@@ -151,7 +177,8 @@ export const PREFERENCES_SCHEMA: {
     key: 'sidebar_width',
     type: 'number',
     defaultValue: 260,
-    validate: (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 160 && v <= 800,
+    validate: (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 160 && v <= 800,
     description: '主侧边栏展开宽度（px）',
   },
   tab_mode_enabled: {
@@ -200,7 +227,13 @@ export const PREFERENCES_SCHEMA: {
     key: 'app_mode',
     type: 'string',
     defaultValue: 'developer',
-    allowedValues: ['developer', 'minimal', 'architect', 'normal', 'demo'] as const,
+    allowedValues: [
+      'developer',
+      'minimal',
+      'architect',
+      'normal',
+      'demo',
+    ] as const,
     description: '工作台产品工作模式',
   },
   product_shell: {
@@ -220,6 +253,49 @@ export const PREFERENCES_SCHEMA: {
     type: 'boolean',
     defaultValue: true,
     description: '是否允许用模型为会话自动生成不超过 12 字的标题',
+  },
+  tray_enabled: {
+    key: 'tray_enabled',
+    type: 'boolean',
+    defaultValue: true,
+    description: '系统托盘总开关（关时托盘不驻留，关闭窗口恢复退出语义）',
+  },
+  close_to_tray: {
+    key: 'close_to_tray',
+    type: 'boolean',
+    defaultValue: true,
+    description: '关闭主窗口时隐藏到系统托盘（托盘总开关关闭时不生效）',
+  },
+  keep_awake_during_tasks: {
+    key: 'keep_awake_during_tasks',
+    type: 'boolean',
+    defaultValue: true,
+    description: '任务运行期间保持系统唤醒（屏幕常亮仅限电脑操作任务）',
+  },
+  desktop_notifications_enabled: {
+    key: 'desktop_notifications_enabled',
+    type: 'boolean',
+    defaultValue: true,
+    description: '桌面 OS 通知总开关（关闭时全部分类都不发送）',
+  },
+  notify_on_task_done: {
+    key: 'notify_on_task_done',
+    type: 'boolean',
+    defaultValue: true,
+    description: '任务完成时发送 OS 通知（失败与审批通知始终发送）',
+  },
+  autostart_enabled: {
+    key: 'autostart_enabled',
+    type: 'boolean',
+    defaultValue: false,
+    description: '登录 Windows 时自动启动 Crish（写入当前用户 Run 键）',
+  },
+  start_minimized: {
+    key: 'start_minimized',
+    type: 'boolean',
+    defaultValue: false,
+    description:
+      '启动时不显示主窗口、仅在系统托盘驻留（托盘总开关关闭时不生效）',
   },
 };
 
