@@ -63,7 +63,9 @@ export const DEVICE_EVENTS = [
   {"id":54,"type":"recovery-acknowledged","strategy":"redacted","realtime":{"push":true,"backpressure":"delta"},"sync":false,"pushLevel":"none"},
   {"id":55,"type":"recovery-retry-attempted","strategy":"redacted","realtime":{"push":true,"backpressure":"delta"},"sync":false,"pushLevel":"none"},
   {"id":56,"type":"provider-request-anchored","strategy":"redacted","realtime":{"push":true,"backpressure":"delta"},"sync":false,"pushLevel":"none"},
-  {"id":57,"type":"timeline-truncate","strategy":"transparent","realtime":{"push":true,"backpressure":"critical"},"sync":false,"pushLevel":"none"}
+  {"id":57,"type":"timeline-truncate","strategy":"transparent","realtime":{"push":true,"backpressure":"critical"},"sync":false,"pushLevel":"none"},
+  {"id":58,"type":"tool-backgrounded","strategy":"tuple","realtime":{"push":true,"backpressure":"critical"},"sync":false,"pushLevel":"none"},
+  {"id":59,"type":"tool-settled","strategy":"tuple","realtime":{"push":true,"backpressure":"critical"},"sync":false,"pushLevel":"none"}
 ] as const;
 export type DeviceEvent = (typeof DEVICE_EVENTS)[number];
 export type DeviceEventType = DeviceEvent["type"];
@@ -71,5 +73,5 @@ export type DeviceEventType = DeviceEvent["type"];
 export const EVENT_SYNC_ELIGIBLE = ["agent-start","agent-end","turn-start","turn-end","message-end","tool-start","tool-end","context-compression-start","context-compression-end","approval-requested","approval-resolved","run-terminal","security-audit","subagent-started","subagent-ended","task-started","task-completed","task-failed","task-killed"] as const;
 export type EventSyncEligibleType = (typeof EVENT_SYNC_ELIGIBLE)[number];
 
-export const EVENT_STRATEGY_COUNTS = {"transparent":15,"tuple":10,"redacted":32} as const;
+export const EVENT_STRATEGY_COUNTS = {"transparent":15,"tuple":12,"redacted":32} as const;
 

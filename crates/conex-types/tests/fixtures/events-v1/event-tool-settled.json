@@ -1,0 +1,14 @@
+{
+  "callId": "tc-1",
+  "result": {
+    "durationMs": 61000,
+    "id": "tc-1",
+    "isError": false,
+    "output": { "text": "文件内容" },
+    "toolName": "read_file"
+  },
+  "sessionId": "s1",
+  "status": "ok",
+  "toolName": "read_file",
+  "type": "tool-settled"
+}

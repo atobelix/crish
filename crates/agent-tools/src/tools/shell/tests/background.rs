@@ -429,12 +429,7 @@ impl BackgroundTaskManager for RetainingBackgroundManager {
             }
         };
         if task.killed {
-            let code = task
-                .child
-                .try_wait()
-                .ok()
-                .flatten()
-                .and_then(|s| s.code());
+            let code = task.child.try_wait().ok().flatten().and_then(|s| s.code());
             self.tasks.lock().unwrap().insert(task_id.to_string(), task);
             return Ok(KillResult::AlreadyExited {
                 task_id: task_id.to_string(),
@@ -571,10 +566,7 @@ async fn sync_small_timeout_ms_keeps_contract_timeout() {
     let ctx = bg_ctx(&ws, &manager);
     let t = tool();
     let out = t
-        .execute(
-            &ctx,
-            json!({ "command": sleep_cmd(10), "timeoutMs": 800 }),
-        )
+        .execute(&ctx, json!({ "command": sleep_cmd(10), "timeoutMs": 800 }))
         .await
         .unwrap();
     assert_eq!(

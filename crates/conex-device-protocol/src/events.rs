@@ -20,7 +20,11 @@
 //!   2026-08-16 统一输入流收敛战役 T1a/T1b：新增撤回域事件 timeline-truncate
 //!   （57 → 58，Critical 必达透传）——跨端策略分组 T 15 / R 33 / U 10；
 //!   同日战役 R1：tool-update 死契约删除（58 → 57）——跨端策略分组
-//!   T 15 / R 32 / U 10。
+//!   T 15 / R 32 / U 10；
+//!   2026-11-02 BG3 后台结果回注：新增 tool-backgrounded / tool-settled
+//!   （57 → 59）——跨端策略未裁决，两事件先行按未登记变体的网关默认登记
+//!   fail-closed 元组兜底——跨端策略分组 T 15 / R 32 / U 12；策略裁决与
+//!   移动端消费归 MOB 批次。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,10 +50,12 @@ pub enum EventRedactStrategy {
 /// 2026-08-11 D8 登记恢复域 + goal 域 8 变体后为 49 变体分组 14/24/11；
 /// 2026-08-14 D-03 契约窗口后为 57 变体分组 14/33/10；
 /// 2026-08-16 T1a/T1b 新增 timeline-truncate 后为 58 变体分组 15/33/10；
-/// R1 tool-update 死契约删除后为 57 变体分组 15/32/10）
+/// R1 tool-update 死契约删除后为 57 变体分组 15/32/10；
+/// 2026-11-02 BG3 新增 tool-backgrounded / tool-settled 后为 59 变体
+/// 分组 15/32/12（两事件 fail-closed 元组兜底，策略裁决归 MOB 批次））
 ///
 /// 与 `AgentEvent` 变体逐一匹配（缺 arm 编译报错），未登记的未来变体在
-/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 57 变体）。
+/// 网关层按 fail-closed 元组兜底（本函数覆盖既有 59 变体）。
 pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     match event {
         // T 透明透传（14）：agent-start/end、turn-start/end、压缩 start/end、
@@ -118,11 +124,14 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::RecoveryRetryAttempted { .. }
         | AgentEvent::ProviderRequestAnchored { .. } => EventRedactStrategy::Redacted,
 
-        // U 元组下发（10）：message-start、tool-batch-start/end、
+        // U 元组下发（12）：message-start、tool-batch-start/end、
         // provider-diagnostic、runtime-steering、
         // checkpoint-created/restored、task-heartbeat、timer-cancelled、
         // goal-continuation-decided（prompt 为续轮注入文本，任务级内容——
-        // fail-closed 元组兜底，对齐 runtime-steering；D8 登记）
+        // fail-closed 元组兜底，对齐 runtime-steering；D8 登记）、
+        // tool-backgrounded / tool-settled（BG3 登记：跨端策略未裁决，
+        // 先行 fail-closed 元组兜底——result 含工具输出正文，不出网；
+        // 策略裁决与移动端消费归 MOB 批次）
         AgentEvent::MessageStart { .. }
         | AgentEvent::ToolBatchStart { .. }
         | AgentEvent::ToolBatchEnd { .. }
@@ -132,14 +141,18 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::CheckpointRestored { .. }
         | AgentEvent::TaskHeartbeat { .. }
         | AgentEvent::TimerCancelled { .. }
-        | AgentEvent::GoalContinuationDecided { .. } => EventRedactStrategy::Tuple,
+        | AgentEvent::GoalContinuationDecided { .. }
+        | AgentEvent::ToolBackgrounded { .. }
+        | AgentEvent::ToolSettled { .. } => EventRedactStrategy::Tuple,
     }
 }
 
-/// 同步面白名单（M6 §5.0：57 变体中 19 类参与 `events.resume` / C03 续传；
-/// 38 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
+/// 同步面白名单（M6 §5.0：59 变体中 19 类参与 `events.resume` / C03 续传；
+/// 40 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
 /// 实时面或补取命令覆盖；D8 登记新增 8 事件均不入白名单；D-03 九观测事件
-/// 同为 Delta 可丢级不入白名单；R1 tool-update 死契约删除后 20 → 19 类）
+/// 同为 Delta 可丢级不入白名单；R1 tool-update 死契约删除后 20 → 19 类；
+/// BG3 两事件（tool-backgrounded / tool-settled）为桥直发实时轨事件，
+/// 本轮不入白名单——同步面补链随 MOB 策略裁决一并处理）
 pub const SYNC_ELIGIBLE_TYPES: [&str; 19] = [
     "agent-start",
     "agent-end",

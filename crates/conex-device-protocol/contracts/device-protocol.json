@@ -3979,6 +3979,28 @@
       "pushNote": "T1b 统一输入流收敛战役补链；R1 撤回语义关键事件（Critical 必达），会话内时间线截断，进 feed 非系统通知；sync 白名单为 Rust SYNC_ELIGIBLE_TYPES（v1 不含本事件，同步面补链归 R1 消费轮）",
       "consumption": "F3 S（时间线在 boundarySeq 处截断；下游投影重放至 boundary），R1 撤回重放基准",
       "redact": "Critical 必达会话内事件，透传不裁剪（R1 主控裁决；boundarySeq/runId/reason/targetMessageId/timestamp 全量下发，无正文敏感字段——事件跨端策略按 Rust event_cross_strategy=Transparent 同判）"
+    },
+    {
+      "id": 58,
+      "type": "tool-backgrounded",
+      "strategy": "tuple",
+      "realtime": { "push": true, "backpressure": "critical" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "BG3 登记（2026-11-02）：跨端策略未裁决，先行 fail-closed 元组兜底（对齐未登记变体网关默认）；移动端消费与策略裁决归 MOB 批次；sync 白名单不增",
+      "consumption": "桌面 chat-bridge toolHandlers 消费（卡片转后台数据标记）；移动端本轮不消费",
+      "redact": "fail-closed 元组（type/sequence/sessionId/schemaVersion + redacted:true）"
+    },
+    {
+      "id": 59,
+      "type": "tool-settled",
+      "strategy": "tuple",
+      "realtime": { "push": true, "backpressure": "critical" },
+      "sync": false,
+      "pushLevel": "none",
+      "pushNote": "BG3 登记（2026-11-02）：跨端策略未裁决，先行 fail-closed 元组兜底（result 含工具输出正文，不出网）；移动端消费与策略裁决归 MOB 批次；sync 白名单不增",
+      "consumption": "桌面 chat-bridge toolHandlers 消费（以 result 原位替换占位信封结果）；移动端本轮不消费",
+      "redact": "fail-closed 元组（type/sequence/sessionId/schemaVersion + redacted:true）"
     }
   ],
   "stream": {

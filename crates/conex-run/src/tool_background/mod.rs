@@ -16,21 +16,35 @@
 //!   内存替身）——终态结果按 callId 可查，未落定清单是冷启动
 //!   合成的原料。
 //!
+//! BG3 在此之上落结果回注三面：[events]（发射接缝 + 结果同构
+//! 转换）、[bridge_sink]（引擎 EventBridge 实时轨直发 + tool-wake
+//! 扇出的生产 sink）、[registry::ToolBackgroundRegistry::
+//! synthesize_outcome_unknown]（冷启动落盘合成）；唤醒消费者本体
+//! 在 crate 根 [crate::tool_wake_consumer]（与 TaskEventConsumer
+//! 并列）。
+//!
 //! 与 shell 的进程后台注册表（`agent_tools::background` +
 //! 壳层 BackgroundTaskManager）并列、互不冒充：那边托管子进程，
 //! 这边托管进程内工具执行 future；模型侧查询工具也相应分开
 //! （`background_task` 对进程任务、`tool_task` 对本注册表）。
 
+pub mod bridge_sink;
+pub mod events;
 pub mod host;
 pub mod registry;
 pub mod store;
 
+pub use bridge_sink::ToolBackgroundBridgeSink;
+pub use events::{
+    cancelled_tool_batch_result, outcome_unknown_tool_batch_result, settled_status_of,
+    tool_batch_result_from_classified, ToolBackgroundCallSummary, ToolBackgroundEventSink,
+};
 pub use host::RegistryBackgroundHost;
 
 pub use registry::{
     NewToolBackgroundTask, RegisterOutcome, Registration, ToolBackgroundCounts,
-    ToolBackgroundRegistry, ToolBackgroundWriteClaim, MAX_RUNNING_GLOBAL, MAX_RUNNING_PER_SESSION,
-    MAX_SETTLED_RETAINED,
+    ToolBackgroundRegistry, ToolBackgroundWriteClaim, CANCELLED_NOTE, MAX_RUNNING_GLOBAL,
+    MAX_RUNNING_PER_SESSION, MAX_SETTLED_RETAINED, OUTCOME_UNKNOWN_NOTE,
 };
 pub use store::{
     InMemoryToolBackgroundStore, SessionMetaToolBackgroundStore, ToolBackgroundRecord,

@@ -74,6 +74,9 @@ export type SubagentEndStatus = (typeof SUBAGENT_END_STATUS_VALUES)[number];
 export const TIMELINE_TRUNCATE_REASON_VALUES = ["user-requested","error-rollback"] as const;
 export type TimelineTruncateReason = (typeof TIMELINE_TRUNCATE_REASON_VALUES)[number];
 
+export const TOOL_SETTLED_STATUS_VALUES = ["ok","error","cancelled","outcome-unknown"] as const;
+export type ToolSettledStatus = (typeof TOOL_SETTLED_STATUS_VALUES)[number];
+
 export const AGENT_MESSAGE_METADATA_KIND_VALUES = ["steering","nudge","diagnostic","context-state","injection","tool-promise-recovery","goal-continue"] as const;
 export type AgentMessageMetadataKind = (typeof AGENT_MESSAGE_METADATA_KIND_VALUES)[number];
 

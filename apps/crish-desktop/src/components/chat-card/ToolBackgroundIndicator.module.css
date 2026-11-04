@@ -1,0 +1,72 @@
+/* BG5 工具后台指示：ChatCard 头部浮层（半透明 + 模糊，按浮动元素口径） */
+.root {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 30;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  /* G-04 收敛：药丸全圆角仅限白名单（Switch/Avatar），浮动指示胶囊
+   * 改走同心几何标尺最大档 --radius-xl（16px ≥ 胶囊半高，视觉仍为胶囊形） */
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background-color var(--transition-micro, 100ms ease);
+}
+
+.pill:hover {
+  background: var(--state-hover);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 6px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-panel);
+  box-shadow: var(--shadow-lift-raised);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.elapsed {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}

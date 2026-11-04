@@ -8,9 +8,7 @@
 use super::super::*;
 use super::fixture::*;
 use crate::safe_point::AbortSignal;
-use crate::tool_events::{
-    ToolBackgroundAdmission, ToolBackgroundHost, ToolBackgroundRegistration,
-};
+use crate::tool_events::{ToolBackgroundAdmission, ToolBackgroundHost, ToolBackgroundRegistration};
 use agent_tools::context::AbortToken;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use conex_types::tool::ToolConcurrency;
@@ -394,9 +392,8 @@ async fn detach_releases_permit_sibling_not_starved() {
         call("e1", "echo", ToolConcurrency::Parallel),
     ];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     // 只推进 300ms：批必须在此窗口内整批收口（慢工具若占住 permit，
     // echo 要等 10s，批不可能完成）
@@ -456,9 +453,8 @@ async fn no_time_cap_after_detach_virtual_clock() {
     let opts = bg_options(&host); // timeout = 60s（现行硬超时原值）
     let calls = vec![call("c1", "bgslow", ToolConcurrency::Sequential)];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(60)).await;
     let out = handle.await.unwrap();
@@ -491,7 +487,7 @@ async fn dedup_hit_points_at_inflight_entry() {
     let (tool, started, _finished) = BgSlowTool::new("bgslow", Some(50), 10_000);
     let host = FakeHost::new();
     let exec = Arc::new(ToolExecutor::new(registry_with(vec![
-        tool as Arc<dyn Tool>
+        tool as Arc<dyn Tool>,
     ])));
     let opts = bg_options(&host);
     let calls = vec![arg_call("c1", "bgslow", "same")];
@@ -538,9 +534,8 @@ async fn queued_unit_waits_for_admission() {
     let opts = bg_options(&host);
     let calls = vec![call("c1", "bgslow", ToolConcurrency::Sequential)];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(60)).await;
     let out = handle.await.unwrap();
@@ -576,9 +571,8 @@ async fn ineligible_tool_never_detaches() {
     opts.timeout = Duration::from_millis(50);
     let calls = vec![call("c1", "slow", ToolConcurrency::Sequential)];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(100)).await;
     let out = handle.await.unwrap();
@@ -597,9 +591,8 @@ async fn eligible_tool_without_host_uses_legacy_timeout() {
     };
     let calls = vec![call("c1", "bgslow", ToolConcurrency::Sequential)];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(200)).await;
     let out = handle.await.unwrap();
@@ -617,9 +610,8 @@ async fn threshold_zero_falls_back_to_global_default() {
     opts.background_after_default = Duration::from_millis(30);
     let calls = vec![call("c1", "bgslow", ToolConcurrency::Sequential)];
     let ctx = exec_ctx();
-    let handle = tokio::spawn(async move {
-        exec.execute_batch(&calls, &ctx, None, &opts, None).await
-    });
+    let handle =
+        tokio::spawn(async move { exec.execute_batch(&calls, &ctx, None, &opts, None).await });
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(20)).await;
     tokio::task::yield_now().await;

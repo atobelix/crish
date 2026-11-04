@@ -25,6 +25,22 @@ pub enum TimelineTruncateReason {
     ErrorRollback,
 }
 
+/// 后台工具落定终态（`tool-settled.status`，事件域 tool；wire kebab-case；
+/// 与工具后台注册表终态子集 1:1：SettledOk / SettledErr / Cancelled /
+/// OutcomeUnknown）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolSettledStatus {
+    /// 工具成功落定
+    Ok,
+    /// 工具失败落定
+    Error,
+    /// 被取消（级联取消 / 会话关闭 / 显式取消）
+    Cancelled,
+    /// 结果未知（进程退出或执行句柄丢失，冷启动合成）
+    OutcomeUnknown,
+}
+
 /// 审计操作类别（`security-audit.operation`，wire kebab-case）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

@@ -28,7 +28,6 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use agent_tools::context::AbortToken;
 use agent_tools::tools::tool_task::{
@@ -40,7 +39,14 @@ use session_loop::tool_events::ClassifiedToolResult;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
+use super::events::ToolBackgroundCallSummary;
 use super::store::{ToolBackgroundRecord, ToolBackgroundStore};
+
+/// 取消终态的人读留痕（条目 note / 结果视图文案 / BG3 合成结果
+/// 文案同源，禁止第二处字面量）
+pub const CANCELLED_NOTE: &str = "后台工具调用已取消";
+/// 结果未知终态的人读留痕（同上）
+pub const OUTCOME_UNKNOWN_NOTE: &str = "进程退出或执行句柄丢失，工具结果未知";
 
 /// 每会话并发上限（对齐批内并行 DEFAULT_MAX_PARALLEL = 4）
 pub const MAX_RUNNING_PER_SESSION: usize = 4;
@@ -603,7 +609,7 @@ impl ToolBackgroundRegistry {
                     call_id,
                     ToolTaskState::Cancelled,
                     now_ms,
-                    Some("后台工具调用已取消".to_string()),
+                    Some(CANCELLED_NOTE.to_string()),
                 );
                 records.push(inner.entries[call_id].record());
                 for admitted in inner.admit(now_ms) {
@@ -661,7 +667,7 @@ impl ToolBackgroundRegistry {
                     call_id,
                     ToolTaskState::OutcomeUnknown,
                     now_ms,
-                    Some("进程退出或执行句柄丢失，工具结果未知".to_string()),
+                    Some(OUTCOME_UNKNOWN_NOTE.to_string()),
                 );
                 records.push(inner.entries[call_id].record());
                 for admitted in inner.admit(now_ms) {
@@ -781,6 +787,21 @@ impl ToolBackgroundRegistry {
         inner.session_running(session_id)
     }
 
+    /// 指定会话的未落定条目快照（BG5 UI 指示数据源）：Queued / Running
+    /// 条目按登记序返回（状态快照口径同 [Self::status]）；终态条目不入
+    /// ——其呈现由 settled 回注驱动，不在指示面重复表达。
+    pub fn session_snapshot(&self, session_id: &str, now_ms: u64) -> Vec<ToolTaskStatus> {
+        let inner = self.inner.lock().unwrap();
+        let mut out: Vec<ToolTaskStatus> = inner
+            .entries
+            .values()
+            .filter(|e| e.session_id == session_id && !e.is_terminal())
+            .map(|e| e.snapshot(now_ms))
+            .collect();
+        out.sort_by_key(|s| s.queued_at_ms);
+        out
+    }
+
     /// 落盘侧未落定记录（冷启动合成原料，BG3 消费：新进程的注册表
     /// 是空的，未落定清单只能来自落盘层）
     pub fn persisted_unsettled(
@@ -789,20 +810,132 @@ impl ToolBackgroundRegistry {
     ) -> Result<Vec<ToolBackgroundRecord>, super::store::ToolBackgroundStoreError> {
         self.store.list_unsettled(session_id)
     }
-}
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    /// 条目身份摘要（进程内条目；BG3 宿主在 settle / wait_admitted
+    /// 发射点取 session/tool 归属用——状态快照不带 session_id）
+    pub fn entry_summary(&self, call_id: &str) -> Option<ToolBackgroundCallSummary> {
+        let inner = self.inner.lock().unwrap();
+        inner.entries.get(call_id).map(|e| ToolBackgroundCallSummary {
+            session_id: e.session_id.clone(),
+            call_id: e.call_id.clone(),
+            tool_name: e.tool_name.clone(),
+        })
+    }
+
+    /// 指定 run 的全部未落定条目摘要（BG3 cancel_run_and_notify 在
+    /// 批量取消**之前**取证——取消后条目虽留存，仍以迁移前快照为准）
+    pub fn unsettled_summaries_for_run(
+        &self,
+        run_id: &str,
+    ) -> Vec<ToolBackgroundCallSummary> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .entries
+            .values()
+            .filter(|e| !e.is_terminal() && e.run_id.as_deref() == Some(run_id))
+            .map(|e| ToolBackgroundCallSummary {
+                session_id: e.session_id.clone(),
+                call_id: e.call_id.clone(),
+                tool_name: e.tool_name.clone(),
+            })
+            .collect()
+    }
+
+    /// 指定会话的全部未落定条目摘要（BG3 close_session_and_notify
+    /// 在会话收口**之前**取证——close_session 会移除条目并清除落盘
+    /// 记录，事后无从查起）
+    pub fn unsettled_summaries_for_session(
+        &self,
+        session_id: &str,
+    ) -> Vec<ToolBackgroundCallSummary> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .entries
+            .values()
+            .filter(|e| !e.is_terminal() && e.session_id == session_id)
+            .map(|e| ToolBackgroundCallSummary {
+                session_id: e.session_id.clone(),
+                call_id: e.call_id.clone(),
+                tool_name: e.tool_name.clone(),
+            })
+            .collect()
+    }
+
+    /// 冷启动合成（BG3）：把指定会话落盘侧的未落定记录逐条合成
+    /// OutcomeUnknown 终态并写回落盘层，返回合成后的终态记录
+    /// （供调用方逐条发射 tool-settled(outcome-unknown) + tool-wake）。
+    ///
+    /// 机制说明：新进程的注册表内存为空，[Self::mark_outcome_unknown]
+    /// 只作用于进程内条目、对落盘-only 记录无能为力——本方法是其
+    /// 落盘对应物（可观察语义一致：终态 OutcomeUnknown + 同一留痕
+    /// 文案 + settled_at 落定时刻）；同进程内尚有活条目的记录
+    /// （句柄丢失等进程内异常路径）则改走 mark_outcome_unknown 原路。
+    pub fn synthesize_outcome_unknown(
+        &self,
+        session_id: &str,
+        now_ms: u64,
+    ) -> Vec<ToolBackgroundRecord> {
+        let unsettled = match self.persisted_unsettled(session_id) {
+            Ok(records) => records,
+            Err(e) => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    error = %e,
+                    "冷启动合成读取未落定记录失败（跳过本会话）"
+                );
+                return Vec::new();
+            }
+        };
+        let mut synthesized = Vec::new();
+        for mut record in unsettled {
+            let has_live_entry = {
+                let inner = self.inner.lock().unwrap();
+                inner.entries.contains_key(&record.call_id)
+            };
+            if has_live_entry {
+                if self.mark_outcome_unknown(&record.call_id, now_ms) {
+                    match self.store.get_record(&record.call_id) {
+                        Ok(Some(fresh)) => synthesized.push(fresh),
+                        _ => {
+                            tracing::warn!(
+                                call_id = %record.call_id,
+                                "冷启动合成后回读终态记录失败（事件发射跳过）"
+                            );
+                        }
+                    }
+                }
+                continue;
+            }
+            record.state = ToolTaskState::OutcomeUnknown;
+            record.output = None;
+            record.error_code = None;
+            record.error_message = Some(OUTCOME_UNKNOWN_NOTE.to_string());
+            record.settled_at_ms = Some(now_ms);
+            if record.duration_ms.is_none() {
+                record.duration_ms = record
+                    .started_at_ms
+                    .map(|start| now_ms.saturating_sub(start));
+            }
+            match self.store.put_record(&record) {
+                Ok(()) => synthesized.push(record),
+                Err(e) => {
+                    tracing::warn!(
+                        call_id = %record.call_id,
+                        error = %e,
+                        "冷启动合成写回终态记录失败（事件发射跳过）"
+                    );
+                }
+            }
+        }
+        synthesized
+    }
 }
 
 #[async_trait]
 impl ToolBackgroundQuery for ToolBackgroundRegistry {
     async fn status(&self, call_id: &str) -> Option<ToolTaskStatus> {
         // 展示口径：运行中任务的已运行时长以真实时钟计算
-        ToolBackgroundRegistry::status(self, call_id, now_ms())
+        ToolBackgroundRegistry::status(self, call_id, conex_shared::time::now_millis())
     }
 
     async fn result(&self, call_id: &str) -> Option<ToolTaskResult> {
@@ -1239,5 +1372,32 @@ mod tests {
         // 落盘为终态（冷启动清单不再含它）
         assert!(store.get_record("c1").unwrap().unwrap().is_terminal());
         assert!(!reg.mark_outcome_unknown("c1", 600));
+    }
+
+    /// 会话快照（BG5）：只含本会话未落定条目、按登记序；终态与
+    /// 他会话条目不入；Running 条目的耗时随 now_ms 推进。
+    #[test]
+    fn session_snapshot_lists_only_inflight_of_session_in_order() {
+        let (reg, _store) = registry();
+        reg.register(req("c1", "s1", 1_000));
+        reg.register(req("c2", "s1", 2_000));
+        reg.register(req("c3", "s2", 1_500));
+        assert!(reg.settle("c2", ok_result("c2"), 3_000));
+
+        let snap = reg.session_snapshot("s1", 6_000);
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].call_id, "c1");
+        assert_eq!(snap[0].state, ToolTaskState::Running);
+        assert_eq!(snap[0].duration_ms, Some(5_000));
+
+        let snap2 = reg.session_snapshot("s2", 6_000);
+        assert_eq!(snap2.len(), 1);
+        assert_eq!(snap2[0].call_id, "c3");
+
+        assert!(reg.session_snapshot("s-none", 6_000).is_empty());
+
+        // 取消后即出快照
+        assert!(reg.cancel("c1", 7_000));
+        assert!(reg.session_snapshot("s1", 7_000).is_empty());
     }
 }

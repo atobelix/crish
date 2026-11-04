@@ -77,4 +77,6 @@ engine_event_type_names! {
     RecoveryRetryAttempted => "recovery-retry-attempted",
     ProviderRequestAnchored => "provider-request-anchored",
     TimelineTruncate => "timeline-truncate",
+    ToolBackgrounded => "tool-backgrounded",
+    ToolSettled => "tool-settled",
 }

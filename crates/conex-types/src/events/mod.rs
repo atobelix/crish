@@ -31,10 +31,10 @@ pub use types::{
     ApprovalDecision, BackpressureLevel, DropClass, EventPolicy, MissAttribution,
     PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
     SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus, SubagentEventKind,
-    SubagentEventPayload, TimelineTruncateReason, ToolMetadata, TurnUsage,
+    SubagentEventPayload, TimelineTruncateReason, ToolMetadata, ToolSettledStatus, TurnUsage,
 };
 
-/// 57 种域事件（tagged enum，双端契约唯一事实源）。
+/// 59 种域事件（tagged enum，双端契约唯一事实源）。
 ///
 /// 变体顺序即注册表编号；每个变体的 wire 名与字段语义见注册表。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -577,5 +577,32 @@ pub enum AgentEvent {
         /// 被撤回的 user 消息稳定 id
         target_message_id: String,
         timestamp: String,
+    },
+
+    // BG3 后台结果回注（2026-11-02 渲染整改波 4）：工具转后台 / 落定两
+    // 事件由 conex-run 经引擎 EventBridge 实时轨直发（无 run 归属帧），
+    // 不经 session-loop 批收口；字段集以注册表为准。
+    #[serde(rename = "tool-backgrounded", rename_all = "camelCase")]
+    ToolBackgrounded {
+        session_id: String,
+        /// 工具调用 id（与 tool-start 的 call.id 同一）
+        call_id: String,
+        tool_name: String,
+        /// detach 时刻已运行时长（ms；注册表口径，BG2 占位信封
+        /// elapsedMs 的宿主侧同源值）
+        elapsed_ms: u64,
+    },
+    #[serde(rename = "tool-settled", rename_all = "camelCase")]
+    ToolSettled {
+        session_id: String,
+        /// 工具调用 id（与 tool-backgrounded / 占位 tool-end 的
+        /// result.id 同一）
+        call_id: String,
+        tool_name: String,
+        /// 落定终态（注册表终态子集 1:1）
+        status: ToolSettledStatus,
+        /// 终态结果（与 tool-end 的 result 同类型同构：消费侧以其原位
+        /// 替换占位信封结果）
+        result: ToolBatchResult,
     },
 }

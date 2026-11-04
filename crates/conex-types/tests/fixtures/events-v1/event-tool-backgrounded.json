@@ -1,0 +1,7 @@
+{
+  "callId": "tc-1",
+  "elapsedMs": 20000,
+  "sessionId": "s1",
+  "toolName": "read_file",
+  "type": "tool-backgrounded"
+}
