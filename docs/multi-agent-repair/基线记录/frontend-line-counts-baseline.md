@@ -109,6 +109,22 @@
 - 复跑 `node scripts/check-line-counts.mjs --all`：**exit 0（0 VIOLATION / 0 WARNING /
   0 HARD BLOCK / 63 BASELINE = 62 + 1 新登记）**。
 
+
+## 2026-11-03 整波收口处置登记（Phase 1 门禁裁决）
+
+> 处置口径同 G-03d：真实超限走拆分，未拆分的小幅漂移按路径精确登记（未跑 `--all`）。
+> 本轮拆分（不登记、实测回落）：MessageVirtualizer.tsx 750 → 686 以下（R12b 尾部缓冲
+> 三段 effect 抽出为 messageVirtualizerTailBuffer.ts）；messageVirtualizerScrollState.ts
+> 526 → 510 以下（滚动计划纯函数抽出为 messageVirtualizerScrollPlan.ts）；
+> SettingsPersonalizeTab.tsx 754 → 571 以下（窗口与启动/通知、数据与备份、新手引导
+> 三分区抽出为独立组件）；desktopNotificationObserver.ts 410 → 400 以下（文案解析
+> 抽出为 desktopNotificationText.ts，新文件未入基线）。
+> 本轮登记（小幅漂移再冻结）：ApprovalAskCard.tsx 649 → 650（+1）、ChatCard.tsx
+> 604 → 619（渲染波呈现增量）、MessageContent.tsx 618 → 620（批 B +2）、
+> settingsParts.ts（en 582 → 583 / zh 550 → 551，设置批字典各 +1）、
+> sessionSharedHelpers.messageMerge.ts 369 → 376、store/types.ts 379 → 380（批 B +1）。
+> 登记 != 拆分完成：上述文件后续结构轮拆分回落后以 `--update` 自动移除/收紧。
+
 <!-- BASELINE_START -->
 apps/crish-desktop/src/api/VirtualScrollManager.ts 409
 apps/crish-desktop/src/api/clientApiNormalize.ts 355
@@ -140,11 +156,11 @@ apps/crish-desktop/src/api/workflow-api/workflowDraft.ts 346
 apps/crish-desktop/src/api/workflow-api/workflowScheduler.ts 448
 apps/crish-desktop/src/api/workspaceFsApi.ts 342
 apps/crish-desktop/src/app/UnifiedAppHydrationCoordinator.ts 477
-apps/crish-desktop/src/components/agent-card/ApprovalAskCard.tsx 649
-apps/crish-desktop/src/components/binary-tree/DockResizeSash.tsx 489
+apps/crish-desktop/src/components/agent-card/ApprovalAskCard.tsx 650
+apps/crish-desktop/src/components/binary-tree/DockResizeSash.tsx 495
 apps/crish-desktop/src/components/binary-tree/NewTabLauncherPopover.tsx 432
 apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx 457
-apps/crish-desktop/src/components/chat-card/ChatCard.tsx 604
+apps/crish-desktop/src/components/chat-card/ChatCard.tsx 619
 apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 472
 apps/crish-desktop/src/components/chat-card/useChatHandlers.ts 468
 apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 443
@@ -154,7 +170,7 @@ apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 686
 apps/crish-desktop/src/components/chat-message-list/messageVirtualizerScrollState.ts 510
 apps/crish-desktop/src/components/chat-message-row/ChatUserMessageRow.tsx 468
 apps/crish-desktop/src/components/chat-message-row/PinActionWithPicker.tsx 458
-apps/crish-desktop/src/components/chat-message/MessageContent.tsx 618
+apps/crish-desktop/src/components/chat-message/MessageContent.tsx 620
 apps/crish-desktop/src/components/chat-tool-call/toolExpansionState.ts 441
 apps/crish-desktop/src/components/chat-tool-call/toolHeaderPresentation.ts 518
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
@@ -163,7 +179,7 @@ apps/crish-desktop/src/components/diff/useDiffData.ts 426
 apps/crish-desktop/src/components/extensions-surface/ExternalSessionsWorkbench.tsx 497
 apps/crish-desktop/src/components/files/FileBreadcrumb.tsx 515
 apps/crish-desktop/src/components/files/FileViewerCard.tsx 426
-apps/crish-desktop/src/components/files/FilesCard.tsx 567
+apps/crish-desktop/src/components/files/FilesCard.tsx 572
 apps/crish-desktop/src/components/note-paper/useNoteTextPersistence.ts 454
 apps/crish-desktop/src/components/plugins/ExternalSessionImportModal.tsx 559
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 481
@@ -189,8 +205,8 @@ apps/crish-desktop/src/components/ui/Menu/Menu.tsx 592
 apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 656
 apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 478
 apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 464
-apps/crish-desktop/src/components/ui/SplitResizer/SplitResizer.tsx 446
-apps/crish-desktop/src/components/ui/SplitResizer/elasticHandle.ts 430
+apps/crish-desktop/src/components/ui/SplitResizer/SplitResizer.tsx 458
+apps/crish-desktop/src/components/ui/SplitResizer/elasticHandle.ts 492
 apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 427
 apps/crish-desktop/src/components/ui/internal/positioner/geometry.ts 502
 apps/crish-desktop/src/components/ui/internal/roving-focus/useRovingFocus.ts 438
@@ -201,8 +217,8 @@ apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts 377
 apps/crish-desktop/src/hooks/useFileNavigation.ts 373
 apps/crish-desktop/src/hooks/useSplitResize.ts 405
 apps/crish-desktop/src/hooks/useVirtualScroll.ts 401
-apps/crish-desktop/src/i18n/locales/en-US/settingsParts.ts 582
-apps/crish-desktop/src/i18n/locales/zh-CN/settingsParts.ts 550
+apps/crish-desktop/src/i18n/locales/en-US/settingsParts.ts 583
+apps/crish-desktop/src/i18n/locales/zh-CN/settingsParts.ts 551
 apps/crish-desktop/src/services/ShortcutService.ts 362
 apps/crish-desktop/src/services/toast/ToastStore.ts 363
 apps/crish-desktop/src/services/token-runtime/skinPaintPlan.ts 391
@@ -214,10 +230,10 @@ apps/crish-desktop/src/store/layout-tree/sessionTabModel.ts 431
 apps/crish-desktop/src/store/sessionAgentActions.ts 389
 apps/crish-desktop/src/store/sessionCrudActions.ts 369
 apps/crish-desktop/src/store/sessionMessageActionsTools.ts 343
-apps/crish-desktop/src/store/sessionSharedHelpers.messageMerge.ts 369
+apps/crish-desktop/src/store/sessionSharedHelpers.messageMerge.ts 376
 apps/crish-desktop/src/store/store-persistence.ts 348
 apps/crish-desktop/src/store/streamRunCompletion.ts 351
-apps/crish-desktop/src/store/types.ts 379
+apps/crish-desktop/src/store/types.ts 380
 apps/crish-desktop/src/utils/error-translation.ts 380
 apps/crish-desktop/src/utils/ptyWriteGate.ts 384
 apps/crish-desktop/src/workers/worker-pool.ts 492

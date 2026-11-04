@@ -195,6 +195,7 @@ jobs:
       - run: node scripts/check-icon-ssot.mjs
       - run: node scripts/check-input-guardrails.mjs
       - run: node scripts/check-motion-strict.mjs
+      - run: node scripts/check-motion-tokens.mjs
       - run: node scripts/check-usage-ssot.mjs
       - run: node scripts/check-layout-geometry.mjs
       - run: node scripts/check-layout-tokens.mjs

@@ -205,10 +205,10 @@
       "source": "template"
     },
     {
-      "file": "apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx",
+      "file": "apps/crish-desktop/src/components/settings/SettingsOnboardingSection.tsx",
       "id": "settings-wizard-step",
       "keyPattern": "^settings\\.personalize\\.wizardStep",
-      "reason": "机制例外：模板 settings.personalize.wizardStep${stepMeta.id} 的值域为 WizardStep id（0–3），词典键 settings.personalize.wizardStep0..3 双语齐备（收口实测），按序号拼键无法静态枚举。",
+      "reason": "机制例外：模板 settings.personalize.wizardStep${stepMeta.id} 的值域为 WizardStep id（0–3），词典键 settings.personalize.wizardStep0..3 双语齐备（收口实测），按序号拼键无法静态枚举。（2026-11-03 收口：该段随 SettingsPersonalizeTab 行数拆分迁入 SettingsOnboardingSection.tsx，机制与值域不变，豁免随迁。）",
       "source": "template"
     },
     {

@@ -36,7 +36,7 @@
  *     b. **JS `setProperty` 写入**：CSS 给未初始化默认、JS 按用户偏好覆盖，
  *        属有意的双源设计（`--bg-paper` / `--shell-inset-bg` /
  *        `--accent-*-light-adaptive`），只算定义不算消费会误判成死令牌。
- * - 外部注入白名单 `EXTERNALLY_INJECTED`（当前仅 Radix 浮层两项）不计入指标，
+ * - 外部注入白名单 `EXTERNALLY_INJECTED`（Radix 浮层三项 + useSplitResize live 变量两项）不计入指标，
  *   但单独报数；新增条目须注明注入方，名单刻意保持最小。
  *
  * 不做的判定（明确划出，避免误解为已覆盖）：
@@ -137,6 +137,11 @@ const EXTERNALLY_INJECTED = new Set([
   '--radix-popover-content-available-height',
   '--radix-popover-content-transform-origin',
   '--radix-popover-trigger-width',
+  // useSplitResize 运行时经 setProperty 在目标元素上注入的 live 变量：
+  // 变量名是 hook 参数（默认 --split-resizer-live；测试专用 --test-live），
+  // 由调用方 CSS 消费，参数化变量名无法在本仓 CSS 中预定义。
+  '--split-resizer-live',
+  '--test-live',
 ]);
 
 /**

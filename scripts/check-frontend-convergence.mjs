@@ -942,7 +942,9 @@ function runRule15_EnterKeyImeGuard() {
 
 /**
  * Rule 16 (G-16): S7 文案单点（FINAL-PLAN §2.1）
- * 生产代码中 S7 域文案字面量只允许出现在 api/userFacingErrors.ts（DOMAIN_MESSAGES SSOT）；
+ * 生产代码中 S7 域文案字面量只允许出现在 api/failureTaxonomy.ts
+ * （FAILURE_FAMILIES['session-busy'].guidanceZh——2026-11-03 批 C 起失败分类表
+ * 为错误文案单点，userFacingErrors.ts 的 DOMAIN_MESSAGES.S7 即派生自该条目）；
  * 其它位置必须经 DOMAIN_MESSAGES.S7 / isLegacyDomainNoticeThought 引用。测试文件豁免。
  */
 function runRule16_S7CopySingleSource() {
@@ -954,10 +956,11 @@ function runRule16_S7CopySingleSource() {
   );
   for (const file of files) {
     if (toPosix(file).endsWith('/api/userFacingErrors.ts')) continue;
+    if (toPosix(file).endsWith('/api/failureTaxonomy.ts')) continue;
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((lineText, idx) => {
       if (lineText.includes(S7_LITERAL)) {
-        report(16, 'G-16', file, idx + 1, 'S7 文案字面量只能定义在 api/userFacingErrors.ts（引用 DOMAIN_MESSAGES.S7）！');
+        report(16, 'G-16', file, idx + 1, 'S7 文案字面量只能定义在 api/failureTaxonomy.ts（FAILURE_FAMILIES session-busy），经 DOMAIN_MESSAGES.S7 消费！');
       }
     });
   }

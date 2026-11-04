@@ -10,7 +10,8 @@
 import { createServer } from 'node:net';
 import { execSync } from 'node:child_process';
 
-const TARGET_PORTS = [5174, 4000];
+const cliPorts = process.argv.slice(2).map(Number).filter((n) => !isNaN(n) && n > 0);
+const TARGET_PORTS = cliPorts.length > 0 ? cliPorts : [5174, 4000];
 const SAFE_PROCESS_NAMES = ['node', 'node.exe', 'crish-agent-workbench', 'crish-agent-workbench.exe', 'vite'];
 
 async function isPortInUse(port) {
