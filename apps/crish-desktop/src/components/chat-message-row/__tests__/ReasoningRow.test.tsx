@@ -724,7 +724,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
 
       // 24px containment 的落定判据 = 槽位 hidden 在位（data-collapsing 已退役）
       expect(cssContent).toMatch(
-        /:not\(\[data-expanded='true'\]\):has\(>\s*\.reasoningExpandGrid\s*>\s*\.reasoningExpandSlot\[hidden\]\)/
+        /:not\(\[data-expanded='true'\]\):has\(\s*>\s*\.reasoningExpandGrid\s*>\s*\.reasoningExpandSlot\[hidden\]\s*\)/
       );
       expect(cssContent).not.toContain('data-collapsing');
 

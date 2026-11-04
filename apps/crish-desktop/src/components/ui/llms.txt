@@ -1,6 +1,6 @@
 # Conex UI Primitives — Machine-Readable Contract (llms.txt)
 # Generated automatically by scripts/generate-ui-contracts.mjs. DO NOT EDIT DIRECTLY.
-# Last Updated: 2026-11-03
+# Last Updated: 2026-11-04
 
 ## Quick Index
 - Button: import { Button, type ButtonProps } from '@/components/ui'
@@ -51,6 +51,7 @@
 - ComboboxList: import { ComboboxList, type ComboboxListProps } from '@/components/ui'
 - ComboboxRoot: import { ComboboxRoot, type ComboboxRootProps } from '@/components/ui'
 - ComboboxSeparator: import { ComboboxSeparator, type ComboboxSeparatorProps } from '@/components/ui'
+- ContentState: import { ContentState, type ContentStateProps } from '@/components/ui'
 - ContextMenuCheckboxItem: import { ContextMenuCheckboxItem, type ContextMenuCheckboxItemProps } from '@/components/ui'
 - ContextMenuGroup: import { ContextMenuGroup } from '@/components/ui'
 - ContextMenuItem: import { ContextMenuItem, type ContextMenuItemProps } from '@/components/ui'
@@ -78,6 +79,7 @@
 - DialogTrigger: import { DialogTrigger, type DialogTriggerProps } from '@/components/ui'
 - DialogViewport: import { DialogViewport, type DialogViewportProps } from '@/components/ui'
 - Divider: import { Divider, type DividerProps } from '@/components/ui'
+- ElasticSplitHandle: import { ElasticSplitHandle, type ElasticSplitHandleProps } from '@/components/ui'
 - FieldControl: import { FieldControl } from '@/components/ui'
 - FieldDescription: import { FieldDescription } from '@/components/ui'
 - FieldError: import { FieldError } from '@/components/ui'
@@ -114,6 +116,7 @@
 - MenuRadioItem: import { MenuRadioItem } from '@/components/ui'
 - MenuSeparator: import { MenuSeparator } from '@/components/ui'
 - MenuSubmenuTrigger: import { MenuSubmenuTrigger } from '@/components/ui'
+- NumericText: import { NumericText, type NumericTextProps } from '@/components/ui'
 - PencilIcon: import { PencilIcon, type PencilIconProps } from '@/components/ui'
 - PinIcon: import { PinIcon, type PinIconProps } from '@/components/ui'
 - PinOffIcon: import { PinOffIcon, type PinOffIconProps } from '@/components/ui'
@@ -874,7 +877,7 @@ Description: ui/ContextMenu —— 全应用唯一的上下文菜单实现（Bas
 | :--- | :--- | :--- | :--- | :--- |
 | open | `boolean` | - | Yes | 受控打开态（调用方状态即唯一真源，基座不会自行翻转） |
 | onOpenChange | `(open: boolean) => void` | - | No | 打开态变更回调；基座的锚点误报关闭（点在触发元素上等）会被吞掉，不透传 |
-| anchor | `\| { x: number; y: number } \| HTMLElement \| React.RefObject<HTMLElement \| null>` | - | No | 定位锚点：右键坐标点 / 触发元素 / 元素 Ref |
+| anchor | `{ x: number; y: number } \| HTMLElement \| React.RefObject<HTMLElement \| null>` | - | No | 定位锚点：右键坐标点 / 触发元素 / 元素 Ref |
 | anchorElement | `HTMLElement \| null` | - | No | 锚点为坐标点时，关联的触发元素（行/按钮节点）： 用于 LayerStack 外点豁免与关闭后焦点还原。 |
 | side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | 弹出方向（默认 bottom；碰撞时 Base UI 自动翻转） |
 | align | `'start' \| 'center' \| 'end'` | - | No | - |
@@ -1625,6 +1628,33 @@ export function Example() {
 
 ---
 
+## Component: ContentState
+Path: apps/crish-desktop/src/components/ui/ContentState/ContentState.tsx
+Description: apps/crish-desktop/src/components/ui/ContentState/ContentState.tsx ui/ContentState 统一三态呈现（批 A · Cherry 深比 06-1）：把散落各面的 加载 / 错误 / 空三态收敛为一个入口，口径三条钉死：
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| kind | `'loading' \| 'error' \| 'empty'` | - | Yes | - |
+| title | `string` | - | Yes | 主文案：loading 的状态文案 / error 与 empty 的标题 |
+| description | `string` | - | No | 副文案：error 的原因说明 / empty 的补充说明（loading 一般不传） |
+| onRetry | `() => void` | - | No | error 态重试回调；提供时渲染重试按钮 |
+| retryLabel | `string` | - | No | 重试按钮文案（默认取字典 common.retry） |
+| action | `React.ReactNode` | - | No | empty 态可选行动槽（调用方自定义行动，如跳转按钮） |
+| className | `string` | - | No | - |
+| testId | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ContentState } from '@/components/ui';
+
+export function Example() {
+  return <ContentState />;
+}
+```
+
+---
+
 ## Component: ContextMenuCheckboxItem
 Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
 Description: ui/ContextMenu —— 全应用唯一的上下文菜单实现（Base UI 收敛版） 收敛裁决（2026-11-02 右键菜单收敛批）： - 与 ui/Menu 共用同一套引擎：@base-ui/react/menu 原语 + LayerStack 浮层中枢
@@ -2200,6 +2230,31 @@ import { Divider } from '@/components/ui';
 
 export function Example() {
   return <Divider />;
+}
+```
+
+---
+
+## Component: ElasticSplitHandle
+Path: apps/crish-desktop/src/components/ui/SplitResizer/ElasticSplitHandle.tsx
+Description: apps/crish-desktop/src/components/ui/SplitResizer/ElasticSplitHandle.tsx 弹性手柄呈现组件（纯 SVG + 贝塞尔曲线，挂载于任意分栏/分界线上）。 统一契约：
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| orientation | `'vertical' \| 'horizontal'` | - | Yes | 分割线方向：vertical = 竖向线调宽；horizontal = 横向线调高 |
+| isDragging | `boolean` | false | No | 是否正在拖拽 |
+| collapsed | `boolean` | false | No | 是否处于折叠区 |
+| isHovered | `boolean` | - | No | 外部指定的悬停态（若不传则自动监听父元素 hover） |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ElasticSplitHandle } from '@/components/ui';
+
+export function Example() {
+  return <ElasticSplitHandle />;
 }
 ```
 
@@ -2953,6 +3008,28 @@ export function Example() {
 
 ---
 
+## Component: NumericText
+Path: apps/crish-desktop/src/components/ui/AnimatedCounter/NumericText.tsx
+Description: NumericText：文案内的数字自动变成里程表滚轮，其余字符原样输出。 文案的 SSOT 仍在各自的格式化函数里（processMetricsEngine / toolHeaderPresentation），本组件只负责「把文案里的数字动起来」， 不重写文案、不另算数值。数字段按出现序固定 key，文案中数值变化时 对应滚轮原地滚动而不是重挂载。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| text | `string` | - | Yes | 已格式化好的整句文案（如 `24 项`、`+32`、`已搜索 2 次`、`1.2s`） |
+| animateOnView | `boolean` | true | No | 首次挂载是否从 0 滚到目标值（实况到达用；历史内容直出终值） |
+| className | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { NumericText } from '@/components/ui';
+
+export function Example() {
+  return <NumericText />;
+}
+```
+
+---
+
 ## Component: PencilIcon
 Path: apps/crish-desktop/src/components/ui/animated-icons/PencilIcon.tsx
 Description: PencilIcon UI 原子交互基元。
@@ -3665,15 +3742,16 @@ Description: apps/crish-desktop/src/components/ui/SplitResizer/SplitResizer.tsx 
 | min | `number` | - | Yes | - |
 | max | `number` | - | Yes | - |
 | onCommit | `(value: number) => void` | - | Yes | - |
-| orientation | `SplitResizeOrientation` | - | No | 分界线方向：vertical = 竖线调宽（默认）；horizontal = 横线调高 |
+| orientation | `'vertical' \| 'horizontal'` | - | No | 分界线方向：vertical = 竖线调宽（默认）；horizontal = 横线调高 |
 | axisSign | `1 \| -1` | - | No | 轴向符号：-1 = 指针沿轴正向移动时尺寸减小（被调面板在分界线另一侧） |
 | rest | `'hidden' \| 'hairline'` | - | No | 静止呈现：hidden = 靠相邻表面分界（默认）；hairline = 1px 常显 --border-subtle |
 | hitArea | `number` | - | No | 热区宽（px，默认 8） |
 | step | `number` | - | No | - |
 | largeStep | `number` | - | No | - |
-| commitMode | `SplitResizeCommitMode` | - | No | - |
+| commitMode | `'release' \| 'live'` | - | No | - |
 | collapseBelow | `number` | - | No | - |
 | onCollapse | `() => void` | - | No | - |
+| liveCollapse | `boolean` | - | No | 实时折叠（默认关，透传 useSplitResize）：开启后拖过 collapseBelow 时呈现尺寸在拖拽流中即由弹簧收至 0（面板当场收起）、拖回即恢复， 折叠提交仍在松手时经 onCollapse 落定。仅对「拖到边即收起」语义的 面板开启（如主侧边栏，用户 2026-11-03 裁决）；其余分栏保持松手判定。 |
 | defaultValue | `number` | - | No | 双击复位目标（px） |
 | onReset | `() => void` | - | No | - |
 | onLiveChange | `(value: number) => void` | - | No | rAF 节流的钳制后实时值（调用方自行绘制面板时使用） |
@@ -3685,6 +3763,8 @@ Description: apps/crish-desktop/src/components/ui/SplitResizer/SplitResizer.tsx 
 | springs | `Partial<Record<ElasticSpringKey, Partial<SpringConfig>>>` | - | No | 弹簧参数覆盖 |
 | reducedMotion | `boolean` | - | No | 减动效覆盖；默认跟随系统 prefers-reduced-motion |
 | disabled | `boolean` | - | No | - |
+| onDragStateChange | `(dragging: boolean) => void` | - | No | 拖拽开始 / 结束（含 Esc 取消与中断兜底）时透传，与引擎内部状态机同点 触发；供调用方挂域侧副作用（如全局 body 类、遮罩）。键盘 / 双击的 程序化提交不经过此回调（走 onCommit）。 |
+| onRest | `() => void` | - | No | 呈现引擎进入静止且 live 变量已撤下时触发：拖拽回弹收尾、悬停淡出、 程序化设定收敛、挂载后首帧均可能触发，语义为「呈现循环停转」通知—— 调用方应做幂等收束（如移除手势期全局类），不得假设它只跟随拖拽。 |
 
 ### Verified Code Example
 ```tsx
