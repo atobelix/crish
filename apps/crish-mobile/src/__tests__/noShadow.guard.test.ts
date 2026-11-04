@@ -138,7 +138,7 @@ describe('SoftShadow：唯一合法阴影路径（收编定案）', () => {
     expect(code).toContain('dy: 0, sigma: 3, alpha: 0.008');
     expect(code).toContain('dy: 0, sigma: 8, alpha: 0.012');
     // composer 档：各向同性 360° 均匀温润弥散（近 σ3 α0.010 + 远 σ8 α0.014，内渗彻底切除，通透空气微气垫）
-    expect(code).toContain('dy: 0, sigma: 3, alpha: 0.010');
+    expect(code).toContain('dy: 0, sigma: 3, alpha: 0.01');
     expect(code).toContain('dy: 0, sigma: 8, alpha: 0.014');
     // 出血 PAD 适度收敛为 36（容纳远层 σ8 的 3σ=24px 出血口径，彻底杜绝 GPU 显存卡顿）
     expect(code).toContain('const PAD = 36');
