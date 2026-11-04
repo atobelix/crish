@@ -1,144 +1,423 @@
-// 轻量 Toast：操作结果反馈；半透明墨色胶囊悬浮在顶部（原型 toast-pill），2.5s 自动消失。
-// 原型数值：底 rgba(23,23,23,0.9)、字 12.5/500、padding 6/14、阴影 0 4px 12px α0.15、无图标；
-// 进出场 = 0.2s 内 opacity + top 8px 滑移（RN Animated 手动驱动，曲线走 decelerate）。
-// displayMs 走 theme.motion.toast 单一真源。
+// 增强型应用内 Actionable Toast 悬浮胶囊（方案 06 落地）：
+// - 支持消息提示与多态反馈（info / success / warning / danger / error）；
+// - 支持 Action 交互按钮（如“重试”、“查看详情”）；
+// - 支持关闭按钮与无障碍（accessibilityRole="button" 与 dismissLabel）；
+// - 纯深色精致墨色药丸悬浮（原型 rgba(23,23,23,0.92)），平滑滑入淡出；
+// - 支持 top（安全区下悬浮）与 bottom（吸附软键盘 KeyboardStickyView 避让）；
+// - 浮层阴影（2026-11-02 裁定）：所有阴影走 SoftShadowSurface toast 档软阴影；
+// - 减动效（feelInfra 守卫）：系统 Reduce Motion 开启时位移塌缩为 0，仅 opacity 淡化。
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/adapters/platform/theme';
+import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import AppText from './AppText';
+import { Icon, type IconName } from './Icon';
+import { SoftShadowSurface } from './SoftShadowSurface';
 
-export type ToastTone = 'success' | 'error' | 'info';
+export type ToastTone = 'info' | 'success' | 'warning' | 'error' | 'danger';
+export type ToastPlacement = 'top' | 'bottom';
 
-interface ToastState {
+export interface ToastAction {
+  /** 动作按钮文字 */
+  label: string;
+  /** 点击回调 */
+  onPress: () => void;
+  /** 按钮样式变体，primary 高亮，subtle 弱化 */
+  variant?: 'primary' | 'subtle';
+}
+
+export interface ToastOptions {
+  /** 提示消息正文 */
   message: string;
-  tone: ToastTone;
+  /** 标题（可选，适用于复合卡片 Toast） */
+  title?: string;
+  /** 色调变体 */
+  tone?: ToastTone;
+  /** 展示时长（毫秒，默认 2500ms；带 action 时默认 5000ms） */
+  durationMs?: number;
+  /** 弹出位置：top 悬浮于安全区下；bottom 吸附在软键盘/底部栏上方 */
+  placement?: ToastPlacement;
+  /** 底部偏移量（例如输入框高度，用于 bottom placement） */
+  bottomOffset?: number;
+  /** 可操作动作按钮列表 */
+  actions?: readonly ToastAction[];
+  /** 是否允许手动点击关闭按钮 */
+  dismissible?: boolean;
+  /** 点击关闭按钮无障碍文案 */
+  dismissLabel?: string;
 }
 
-interface ToastContextValue {
-  showToast: (message: string, tone?: ToastTone) => void;
+export interface ToastController {
+  /** 呼出 Toast（支持配置对象或纯文本），返回条目唯一 id */
+  show: (options: ToastOptions | string, tone?: ToastTone) => string;
+  /** 兼容历史接口 showToast(message, tone) */
+  showToast: (message: string, tone?: ToastTone) => string;
+  /** 手动关闭指定或当前 Toast */
+  hide: (id?: string) => void;
+  /** 清空当前所有 Toast */
+  clear: () => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContext = createContext<ToastController | null>(null);
 
-/** 原型 toast-pill 进出滑移量（top 56 → 64）与时长 */
+/** 原型 toast-pill 进出滑移量与时长 */
 const SLIDE_PX = 8;
-const ANIM_MS = 200;
+/** 进出场时长 = theme.motion.duration.normal（批 A 字面量收编：
+ * 原本地 ANIM_MS=200 与 token 同值两套，已并轨到 token 单源） */
+
+interface ActiveToastItem {
+  id: string;
+  options: ToastOptions;
+}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const [toast, setToast] = useState<ToastState | null>(null);
+
+  const [activeToast, setActiveToast] = useState<ActiveToastItem | null>(null);
+  const activeToastRef = useRef<ActiveToastItem | null>(null);
+  activeToastRef.current = activeToast;
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 展示序号：退出动画完成时只清属于自己的那条（连发新条时旧退出不得误清）
   const showSeq = useRef(0);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-SLIDE_PX)).current;
 
-  const animateTo = useCallback(
-    (visible: boolean, onDone?: () => void) => {
+  const clearTimer = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, []);
+
+  const animateHide = useCallback(
+    (targetId?: string, onDone?: () => void) => {
+      if (targetId && activeToastRef.current?.id !== targetId) return;
+      if (!activeToastRef.current) return;
+      clearTimer();
+      const curSeq = showSeq.current;
+      const isBottom = activeToastRef.current.options.placement === 'bottom';
+      const targetTranslate = reduceMotion
+        ? 0
+        : isBottom
+          ? SLIDE_PX
+          : -SLIDE_PX;
+
       Animated.parallel([
         Animated.timing(opacity, {
-          toValue: visible ? 1 : 0,
-          duration: ANIM_MS,
+          toValue: 0,
+          duration: theme.motion.duration.normal,
           easing: Easing.bezier(...theme.motion.easing.decelerate),
           useNativeDriver: true,
         }),
         Animated.timing(translateY, {
-          toValue: visible ? 0 : -SLIDE_PX,
-          duration: ANIM_MS,
+          toValue: targetTranslate,
+          duration: theme.motion.duration.normal,
           easing: Easing.bezier(...theme.motion.easing.decelerate),
           useNativeDriver: true,
         }),
       ]).start(({ finished }) => {
-        if (finished) onDone?.();
+        if (finished && showSeq.current === curSeq) {
+          setActiveToast(null);
+          onDone?.();
+        }
       });
     },
-    [opacity, translateY, theme.motion.easing.decelerate]
+    [
+      clearTimer,
+      opacity,
+      translateY,
+      reduceMotion,
+      theme.motion.easing.decelerate,
+    ]
+  );
+
+  const show = useCallback(
+    (input: ToastOptions | string, toneOverride?: ToastTone): string => {
+      clearTimer();
+      showSeq.current += 1;
+      const seq = showSeq.current;
+      const id = `toast_${seq}`;
+
+      const options: ToastOptions =
+        typeof input === 'string'
+          ? { message: input, tone: toneOverride ?? 'info' }
+          : { ...input, tone: input.tone ?? toneOverride ?? 'info' };
+
+      const isBottom = options.placement === 'bottom';
+      const initialTranslate = reduceMotion
+        ? 0
+        : isBottom
+          ? SLIDE_PX
+          : -SLIDE_PX;
+
+      opacity.setValue(0);
+      translateY.setValue(initialTranslate);
+
+      setActiveToast({ id, options });
+
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: theme.motion.duration.normal,
+          easing: Easing.bezier(...theme.motion.easing.decelerate),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: theme.motion.duration.normal,
+          easing: Easing.bezier(...theme.motion.easing.decelerate),
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      const duration =
+        options.durationMs ??
+        (options.actions && options.actions.length > 0
+          ? 5000
+          : theme.motion.toast.displayMs);
+
+      if (duration > 0 && duration < Infinity) {
+        timer.current = setTimeout(() => {
+          animateHide(id);
+        }, duration);
+      }
+
+      return id;
+    },
+    [
+      clearTimer,
+      opacity,
+      translateY,
+      reduceMotion,
+      theme.motion.easing.decelerate,
+      theme.motion.toast.displayMs,
+      animateHide,
+    ]
   );
 
   const showToast = useCallback(
-    (message: string, tone: ToastTone = 'info') => {
-      if (timer.current) clearTimeout(timer.current);
-      showSeq.current += 1;
-      const seq = showSeq.current;
-      setToast({ message, tone });
-      timer.current = setTimeout(() => {
-        animateTo(false, () => {
-          if (showSeq.current === seq) setToast(null);
-        });
-        timer.current = null;
-      }, theme.motion.toast.displayMs);
+    (message: string, tone?: ToastTone): string => {
+      return show(message, tone);
     },
-    [animateTo, theme.motion.toast.displayMs]
+    [show]
   );
 
-  useEffect(() => {
-    if (toast) {
-      opacity.setValue(0);
-      translateY.setValue(-SLIDE_PX);
-      animateTo(true);
-    }
-  }, [toast, animateTo, opacity, translateY]);
+  const hide = useCallback(
+    (id?: string) => {
+      animateHide(id);
+    },
+    [animateHide]
+  );
+
+  const clear = useCallback(() => {
+    clearTimer();
+    setActiveToast(null);
+  }, [clearTimer]);
 
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
+      clearTimer();
     },
-    []
+    [clearTimer]
   );
 
-  return (
-    <ToastContext.Provider value={{ showToast }}>
-      {children}
-      {toast ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.host,
-            {
-              // 顶部安全区下方悬浮（原型为状态栏下 56→64，本端锚安全区保持一致手感）
-              top: insets.top + theme.space.xl,
-              borderRadius: theme.radius.pill,
-              // 原型 toast-pill：padding 6/14、无 minHeight
-              paddingVertical: 6,
-              paddingHorizontal: 14,
-              // 墨色元素两主题同值（原型 rgba(23,23,23,0.9)），不随主操作绿/主题墨档走
-              backgroundColor: 'rgba(23,23,23,0.9)',
-              shadowColor: theme.colors.shadow,
-              shadowOpacity: 0.15,
-              // 原型阴影半径 12 与 shadow.sm 档同值（守卫禁数字圆角半径，走 theme 表达式）
-              shadowRadius: theme.shadow.sm.shadowRadius,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 6,
-              opacity,
-              transform: [{ translateY }],
-            },
-          ]}
+  const controller = useMemo<ToastController>(
+    () => ({
+      show,
+      showToast,
+      hide,
+      clear,
+    }),
+    [show, showToast, hide, clear]
+  );
+
+  const renderToastContent = () => {
+    if (!activeToast) return null;
+    const { options, id } = activeToast;
+    const tone = options.tone ?? 'info';
+    const isBottom = options.placement === 'bottom';
+    const hasActions = Boolean(options.actions && options.actions.length > 0);
+    const hasTitle = Boolean(options.title);
+    const isDismissible = options.dismissible ?? (hasActions || hasTitle);
+
+    const toneIcon: IconName =
+      tone === 'success'
+        ? 'check'
+        : tone === 'warning'
+          ? 'alert-circle'
+          : tone === 'danger' || tone === 'error'
+            ? 'alert-circle'
+            : 'info';
+
+    const toneColor =
+      tone === 'success'
+        ? theme.colors.success
+        : tone === 'warning'
+          ? theme.colors.warning
+          : tone === 'danger' || tone === 'error'
+            ? theme.colors.danger
+            : theme.colors.info;
+
+    const toastCard = (
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.host,
+          isBottom
+            ? {
+                bottom:
+                  (options.bottomOffset ?? 0) + insets.bottom + theme.space.md,
+              }
+            : {
+                top: insets.top + theme.space.lg,
+              },
+          {
+            opacity,
+            transform: [{ translateY }],
+          },
+        ]}
+      >
+        <SoftShadowSurface
+          preset="toast"
+          borderRadius={hasActions ? theme.radius.card : theme.radius.pill}
+          fill="rgba(23, 23, 23, 0.92)"
+          fillStyle={{
+            borderRadius: hasActions ? theme.radius.card : theme.radius.pill,
+            paddingVertical: hasActions ? theme.space.sm : theme.space.xs + 2,
+            paddingHorizontal: theme.space.md + 2,
+          }}
         >
-          <AppText
-            variant="caption"
-            color="onMedia"
-            numberOfLines={2}
-            style={[styles.text, styles.messageText]}
-          >
-            {toast.message}
-          </AppText>
-        </Animated.View>
-      ) : null}
+          <View style={styles.headerRow}>
+            <Icon
+              name={toneIcon}
+              size={theme.size.iconSmall}
+              color={toneColor}
+            />
+            <View style={styles.textColumn}>
+              {options.title ? (
+                <AppText
+                  variant="caption"
+                  color="onMedia"
+                  numberOfLines={1}
+                  style={styles.titleText}
+                >
+                  {options.title}
+                </AppText>
+              ) : null}
+              <AppText
+                variant="caption"
+                color="onMedia"
+                numberOfLines={3}
+                style={[styles.text, styles.messageText]}
+              >
+                {options.message}
+              </AppText>
+            </View>
+
+            {isDismissible ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={options.dismissLabel ?? '关闭通知'}
+                onPress={() => animateHide(id)}
+                hitSlop={theme.space.sm}
+                style={styles.closeBtn}
+              >
+                <Icon
+                  name="x"
+                  size={theme.size.iconSmall}
+                  color="rgba(255, 255, 255, 0.6)"
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {hasActions ? (
+            <View
+              style={[
+                styles.actionsRow,
+                {
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: 'rgba(255, 255, 255, 0.15)',
+                  marginTop: theme.space.xs + 2,
+                  paddingTop: theme.space.xs + 2,
+                  gap: theme.space.sm,
+                },
+              ]}
+            >
+              {options.actions!.map((action, idx) => (
+                <Pressable
+                  key={idx}
+                  accessibilityRole="button"
+                  accessibilityLabel={action.label}
+                  onPress={() => {
+                    animateHide(id);
+                    action.onPress();
+                  }}
+                  style={[
+                    styles.actionBtn,
+                    {
+                      borderRadius: theme.radius.sm,
+                      paddingHorizontal: theme.space.sm + 2,
+                      paddingVertical: theme.space.xxs + 1,
+                      backgroundColor:
+                        action.variant === 'subtle'
+                          ? 'transparent'
+                          : 'rgba(255, 255, 255, 0.18)',
+                    },
+                  ]}
+                >
+                  <AppText
+                    variant="caption"
+                    color="onMedia"
+                    style={styles.actionText}
+                  >
+                    {action.label}
+                  </AppText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </SoftShadowSurface>
+      </Animated.View>
+    );
+
+    if (isBottom) {
+      return (
+        <KeyboardStickyView
+          pointerEvents="box-none"
+          offset={{ opened: insets.bottom }}
+          style={StyleSheet.absoluteFill}
+        >
+          {toastCard}
+        </KeyboardStickyView>
+      );
+    }
+
+    return toastCard;
+  };
+
+  return (
+    <ToastContext.Provider value={controller}>
+      {children}
+      {renderToastContent()}
     </ToastContext.Provider>
   );
 }
 
-export function useToast(): ToastContextValue {
+export function useToast(): ToastController {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used within ToastProvider');
   return ctx;
@@ -148,16 +427,42 @@ const styles = StyleSheet.create({
   host: {
     position: 'absolute',
     alignSelf: 'center',
-    maxWidth: '86%',
+    maxWidth: '92%',
+    zIndex: 9999,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  textColumn: {
+    flexShrink: 1,
+  },
+  titleText: {
+    fontWeight: '600',
+    marginBottom: 2,
   },
   text: {
     flexShrink: 1,
   },
-  // 原型 toast-pill 字重 500（caption variant 为 400，就地收值）
   messageText: {
     fontWeight: '500',
+  },
+  closeBtn: {
+    padding: 2,
+    marginLeft: 4,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  actionBtn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionText: {
+    fontWeight: '600',
   },
 });
 

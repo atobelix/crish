@@ -1,6 +1,9 @@
 // 主屏平铺会话行（原型 chat-flat-item）：无卡片外壳、无阴影；
 // 首行 = 标题 + 状态（灰环转动 / 橙点+待审批 / 绿点）+ 右上时间；次行 = 摘要单行省略；
 // 行间大间距 + 若有若无虚线分隔（末行无）。
+// 按压过渡（手感基建批，改善项 11）：整行按压 opacity 0.6 不再瞬时跳变，
+// 改走 120ms（duration.snappy）过渡（内容包一层 Animated.View 承载，
+// Pressable 本体只保留间距/分隔线几何）。
 import { memo, useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -31,7 +34,11 @@ function RunRing() {
   const theme = useTheme();
   const rotation = useSharedValue(0);
   useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 1500 }), -1, false);
+    rotation.value = withRepeat(
+      withTiming(360, { duration: theme.motion.duration.spin }),
+      -1,
+      false
+    );
   }, [rotation]);
   const style = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
@@ -84,6 +91,11 @@ export const ChatFlatItem = memo(function ChatFlatItem({
     session.updatedAt ?? session.receivedAtMs,
     nowMs
   );
+  // 按压进度：整行 opacity 向 0.6 过渡（120ms），语义与原瞬时 pressed 一致
+  const pressProgress = useSharedValue(0);
+  const contentFadeStyle = useAnimatedStyle(() => ({
+    opacity: 1 - 0.4 * pressProgress.value,
+  }));
   return (
     <Pressable
       testID={`chat-item-${session.id}`}
@@ -97,68 +109,79 @@ export const ChatFlatItem = memo(function ChatFlatItem({
       }`}
       onPress={() => onPress(session.id)}
       onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
-      style={({ pressed }) => [
+      onPressIn={() => {
+        pressProgress.value = withTiming(1, {
+          duration: theme.motion.duration.snappy,
+        });
+      }}
+      onPressOut={() => {
+        pressProgress.value = withTiming(0, {
+          duration: theme.motion.duration.snappy,
+        });
+      }}
+      style={[
         {
-          gap: theme.space.xs + 2,
           paddingBottom: theme.space.xl,
           borderBottomColor: theme.colors.hairline,
         },
         !isLast && styles.divider,
-        pressed && { opacity: 0.6 },
       ]}
     >
-      <View style={[styles.header, { gap: theme.space.sm }]}>
-        <View style={[styles.titleGroup, { gap: theme.space.sm }]}>
-          <AppText variant="bodyStrong" numberOfLines={1}>
-            {session.title?.trim() || '未命名会话'}
-          </AppText>
-          {status === 'running' ? <RunRing /> : null}
-          {status === 'pending' ? (
-            <View
-              testID="chat-item-pending"
-              style={[styles.badge, { gap: theme.space.xs + 1 }]}
-            >
-              <Badge dot tone="warning" dotSize={6.5} />
-              <AppText
-                variant="caption"
-                color="textTertiary"
-                style={{
-                  // 原型徽标文字 10.5/400（自 caption 派生，同抽屉会话行口径）
-                  fontSize: theme.type.caption.fontSize - 2,
-                  lineHeight: theme.type.caption.lineHeight - 2,
-                }}
+      <Animated.View style={[{ gap: theme.space.xs + 2 }, contentFadeStyle]}>
+        <View style={[styles.header, { gap: theme.space.sm }]}>
+          <View style={[styles.titleGroup, { gap: theme.space.sm }]}>
+            <AppText variant="bodyStrong" numberOfLines={1}>
+              {session.title?.trim() || '未命名会话'}
+            </AppText>
+            {status === 'running' ? <RunRing /> : null}
+            {status === 'pending' ? (
+              <View
+                testID="chat-item-pending"
+                style={[styles.badge, { gap: theme.space.xs + 1 }]}
               >
-                待审批
-              </AppText>
-            </View>
-          ) : null}
-          {status === 'done' ? <Badge dot tone="accent" dotSize={7} /> : null}
+                <Badge dot tone="warning" dotSize={6.5} />
+                <AppText
+                  variant="caption"
+                  color="textTertiary"
+                  style={{
+                    // 原型徽标文字 10.5/400（自 caption 派生，同抽屉会话行口径）
+                    fontSize: theme.type.caption.fontSize - 2,
+                    lineHeight: theme.type.caption.lineHeight - 2,
+                  }}
+                >
+                  待审批
+                </AppText>
+              </View>
+            ) : null}
+            {status === 'done' ? <Badge dot tone="accent" dotSize={7} /> : null}
+          </View>
+          <AppText variant="caption" color="textTertiary">
+            {time}
+          </AppText>
         </View>
-        <AppText variant="caption" color="textTertiary">
-          {time}
-        </AppText>
-      </View>
-      {snippet ? (
-        <AppText
-          variant="footnote"
-          color="textSecondary"
-          numberOfLines={1}
-          style={{
-            // 原型摘要 13.5/400、行高 1.45（≈20），自 footnote 派生
-            fontSize: theme.type.footnote.fontSize + 0.5,
-            lineHeight: theme.type.footnote.lineHeight + 2,
-          }}
-        >
-          {snippet}
-        </AppText>
-      ) : null}
+        {snippet ? (
+          <AppText
+            variant="footnote"
+            color="textSecondary"
+            numberOfLines={1}
+            style={{
+              // 原型摘要 13.5/400、行高 1.45（≈20），自 footnote 派生
+              fontSize: theme.type.footnote.fontSize + 0.5,
+              lineHeight: theme.type.footnote.lineHeight + 2,
+            }}
+          >
+            {snippet}
+          </AppText>
+        ) : null}
+      </Animated.View>
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   divider: {
-    borderBottomWidth: 1,
+    // 发丝线口径（2026-11-02 分割线裁决：更浅更细）
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
   },
   header: {

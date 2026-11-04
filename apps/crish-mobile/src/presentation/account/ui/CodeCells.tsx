@@ -43,8 +43,8 @@ export function CodeCells({
   useEffect(() => {
     caretOpacity.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 400 }),
-        withTiming(0.15, { duration: 400 })
+        withTiming(1, { duration: theme.motion.duration.blink }),
+        withTiming(0.15, { duration: theme.motion.duration.blink })
       ),
       -1
     );
