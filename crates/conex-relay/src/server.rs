@@ -168,6 +168,16 @@ fn send_best_effort(state: &AppState, tx: &mpsc::Sender<OutboundFrame>, frame: S
     }
 }
 
+/// 日志标识脱敏：account_id / device_id / room_key 等标识一律只记其
+/// SHA-256 的前 8 位十六进制标签（`h:xxxxxxxx`）——足够运维跨行关联同一
+/// 账号 / 设备 / 房间，又不让标识原文进日志。票据原文与帧内容严禁入日志，
+/// 本函数也不接受这类入参。仅用于连接级事件（join/leave/签票），不在帧
+/// 转发热路径上。
+fn id_tag(id: &str) -> String {
+    let digest = hex::encode(Sha256::digest(id.as_bytes()));
+    format!("h:{}", &digest[..8])
+}
+
 fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     let value = headers
         .get(axum::http::header::AUTHORIZATION)
@@ -284,6 +294,16 @@ fn issue_ticket(state: &AppState, claims: TicketClaims) -> Result<Json<TicketRes
             error.to_string(),
         )
     })?;
+    // 签发留痕（host/client 两路共用此漏斗）：只记角色与脱敏标识，
+    // 票据原文严禁入日志。
+    tracing::info!(
+        target: "relay",
+        role = claims.role.as_str(),
+        account = %id_tag(&claims.account_id),
+        device = %id_tag(&claims.device_id),
+        exp = claims.exp,
+        "ticket issued"
+    );
     Ok(Json(TicketResponse {
         ticket,
         relay_url: state.config.public_relay_url.clone(),
@@ -457,16 +477,26 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
             return;
         }
     };
+    let joined_at_ms = now_millis();
     tracing::info!(
         target: "relay",
         role = claims.role.as_str(),
-        device = %claims.device_id,
-        room = %joined.room_key,
+        account = %id_tag(&claims.account_id),
+        device = %id_tag(&claims.device_id),
+        room = %id_tag(&joined.room_key),
         conn = joined.conn_id,
         "peer joined"
     );
 
     if let Some(replaced) = joined.replaced {
+        tracing::info!(
+            target: "relay",
+            role = claims.role.as_str(),
+            room = %id_tag(&joined.room_key),
+            conn = joined.conn_id,
+            replaced_conn = replaced.conn_id,
+            "peer replaced"
+        );
         let error = json!({
             "type": "relay.error",
             "code": "replaced",
@@ -597,9 +627,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, claims: TicketCl
     tracing::info!(
         target: "relay",
         role = claims.role.as_str(),
-        device = %claims.device_id,
-        room = %joined.room_key,
+        account = %id_tag(&claims.account_id),
+        device = %id_tag(&claims.device_id),
+        room = %id_tag(&joined.room_key),
         conn = joined.conn_id,
+        lived_ms = now_millis().saturating_sub(joined_at_ms),
         "peer left"
     );
 }
@@ -844,6 +876,19 @@ mod tests {
         assert!(limiter.allow("k".to_string(), 2, Duration::from_secs(60)));
         assert!(limiter.allow("k".to_string(), 2, Duration::from_secs(60)));
         assert!(!limiter.allow("k".to_string(), 2, Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn id_tag_redacts_and_is_stable() {
+        // 日志脱敏烟测：标签不含原文、同入参稳定、异入参相异，
+        // 且空 / 短标识不 panic（日志路径鲁棒性）。
+        let tag = id_tag("acc-secret-1234");
+        assert!(tag.starts_with("h:"));
+        assert!(!tag.contains("acc-secret-1234"));
+        assert_eq!(tag, id_tag("acc-secret-1234"));
+        assert_ne!(tag, id_tag("acc-other-9999"));
+        let _ = id_tag("");
+        let _ = id_tag("a");
     }
 
     #[test]
