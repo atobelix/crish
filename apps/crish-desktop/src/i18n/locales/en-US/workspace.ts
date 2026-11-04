@@ -152,6 +152,17 @@ export const workspace: WorkspaceTranslations = {
     'Open tools from the left chat or toolbar to split and collaborate here',
   'dock.collapseSidePanel': 'Collapse right dock',
   'dock.expandSidePanel': 'Expand right dock',
+  'dock.launcherSearchOrUrl': 'Search or enter a URL',
+  'dock.toolReview': 'Review',
+  'dock.toolOpenFile': 'Open File',
+  'dock.subagents': 'Subagents',
+  'dock.backgroundTasks': 'Background Tasks',
+  'dock.seeAll': 'See all',
+  'dock.collapseList': 'Show less',
+  'dock.stopSubagent': 'Stop Subagent',
+  'dock.noSubagents': 'No subagents',
+  'dock.noBackgroundTasks': 'No background tasks',
+  'dock.runningCount': '{count} running',
 
   // ── Leaf panel container (TreeLeafPanel) ─────────────────────────────────
   'leaf.panelRegionLabel': '{title} panel',

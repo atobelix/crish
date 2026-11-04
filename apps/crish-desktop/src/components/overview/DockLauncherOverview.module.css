@@ -1,0 +1,396 @@
+/**
+ * apps/crish-desktop/src/components/overview/DockLauncherOverview.module.css
+ * 动态增量推荐/总览微型启动器样式模块
+ *
+ * 规范遵循：
+ * - 严守 AGENTS.md §13：输入框与按钮禁用厚重 box-shadow，聚焦态采用不超过 10% 混入的柔软边框；
+ * - 严守 AGENTS.md §14：现代 CSS 语法与严格 Token SSOT（零硬编码色值，纯 Token 引用）；
+ * - 最小化布局（.isMinimal）：垂直水平完全居中，轻盈无扰；
+ * - 动态扩展态：靠顶排列，自然平滑纵向滚动。
+ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--bg-card);
+  transition: padding var(--duration-fast, 150ms) ease;
+}
+
+/* 零动态信息时的最简微型居中模式 */
+.container.isMinimal {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4, 16px);
+  overflow: hidden;
+}
+
+/* 包含增量动态数据时的自然顶端流式滚动模式 */
+.container:not(.isMinimal) {
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--space-6, 24px) var(--space-4, 16px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 内容主约束容器 */
+.contentWrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 440px;
+  gap: var(--space-4, 16px);
+  box-sizing: border-box;
+}
+
+/* ── 顶部搜索 / URL 地址栏 ── */
+.searchForm {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+  padding: 0 14px;
+  box-sizing: border-box;
+  gap: var(--space-2, 8px);
+  box-shadow: none;
+  transition:
+    border-color var(--duration-fast, 150ms) ease,
+    background-color var(--duration-fast, 150ms) ease;
+}
+
+/* 焦点态软对比度控制：严格 <= 10% 混入，严禁黑粗边与厚重阴影 */
+.searchBar:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 94%,
+    var(--text-primary) 6%
+  );
+  box-shadow: none;
+}
+
+.searchIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--line-height-base, 1.5);
+  padding: 6px 0;
+  box-shadow: none;
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ── 核心工具垂直入口列表 ── */
+.coreToolsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  width: 100%;
+}
+
+.toolItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2_5, 10px);
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast, 150ms) ease,
+    color var(--duration-fast, 150ms) ease;
+}
+
+/* 悬停柔和微灰胶囊背景高亮 */
+.toolItem:hover {
+  background: var(--state-hover);
+}
+
+.toolItem:focus-visible {
+  outline: none;
+  background: color-mix(
+    in srgb,
+    var(--surface-base) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+.toolIcon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: color var(--duration-fast, 150ms) ease;
+}
+
+.toolItem:hover .toolIcon {
+  color: var(--text-primary);
+}
+
+.toolLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 增量动态区块（子智能体与后台任务） ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: var(--space-1_5, 6px);
+  padding-top: var(--space-2, 8px);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  min-height: 24px;
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.sectionTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 600);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* 圆角数字徽标 pill */
+.badgePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(
+    in srgb,
+    var(--surface-base) 90%,
+    var(--text-primary) 10%
+  );
+  color: var(--text-secondary);
+  box-sizing: border-box;
+}
+
+/* 查看全部 / 收起 切换按钮 */
+.seeAllBtn {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 11px);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  transition:
+    color var(--duration-fast, 150ms) ease,
+    background-color var(--duration-fast, 150ms) ease;
+}
+
+.seeAllBtn:hover {
+  color: var(--text-primary);
+  background: var(--state-hover);
+}
+
+.itemList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 通用行胶囊项目 */
+.rowItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  gap: var(--space-2, 8px);
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: background-color var(--duration-fast, 150ms) ease;
+  position: relative;
+}
+
+.rowItem:hover {
+  background: var(--state-hover);
+}
+
+.rowItem:focus-visible {
+  outline: none;
+  background: color-mix(
+    in srgb,
+    var(--surface-base) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+/* 状态指示点与图标 */
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* running 脉冲动画 */
+.dotRunning {
+  background: var(--accent-green);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-green) 25%, transparent);
+  animation: pulseDot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.15);
+  }
+}
+
+.dotCompleted {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-green);
+}
+
+.dotFailed {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-red);
+}
+
+.dotStopped {
+  background: var(--text-decor);
+}
+
+.taskIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.rowItem:hover .taskIcon {
+  color: var(--text-secondary);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.rowTitle {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 终止子智能体按钮（悬浮显式呈现） */
+.killBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition:
+    opacity var(--duration-fast, 150ms) ease,
+    color var(--duration-fast, 150ms) ease,
+    background-color var(--duration-fast, 150ms) ease;
+}
+
+.rowItem:hover .killBtn,
+.killBtn:focus-visible {
+  opacity: 1;
+}
+
+.killBtn:hover {
+  color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}

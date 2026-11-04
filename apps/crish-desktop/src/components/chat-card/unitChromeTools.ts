@@ -1,17 +1,11 @@
 /**
- * 会话工具清单（总览 / 文件 / 差异 / 终端 / 笔记）。
+ * 会话工具清单（文件 / 差异 / 终端 / 笔记）。
  * 对话顶快捷行与坞头共用；双表面可以，不能只留坞头。
  */
 
 import type { IconName } from '@/components/ui/icons';
 
 export const UNIT_TOOL_PANELS = [
-  {
-    id: 'overview',
-    label: '打开总览',
-    testId: 'chat-open-overview',
-    iconName: 'dashboard' as IconName,
-  },
   {
     id: 'files',
     label: '打开文件',

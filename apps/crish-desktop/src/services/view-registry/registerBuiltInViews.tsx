@@ -1,4 +1,3 @@
-
 import type React from 'react';
 import { viewRegistry } from './ViewRegistry';
 import type { ViewRenderContext } from './ViewTypes';
@@ -76,12 +75,12 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
     component: factories['preview']?.() ?? fallbackComponent,
   });
 
-  // 4. 总览面板 (Tool)
+  // 4. 总览面板 (Auxiliary - 降级为辅助分类，不再作为常规工具标签出现于加号菜单)
   viewRegistry.registerView({
     id: 'overview',
     title: '总览',
     icon: 'dashboard',
-    category: 'tool',
+    category: 'auxiliary',
     component: factories['overview']?.() ?? fallbackComponent,
   });
 

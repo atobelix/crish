@@ -7,6 +7,7 @@ import type { RightToolDockState } from '../../store/layout-tree/sessionTabModel
 import {
   createDefaultDockTree,
   createToolTab,
+  isDockTreeEmpty,
   openToolInDock,
   splitDockLeaf,
   type DockLeaf,
@@ -183,7 +184,7 @@ describe('DockSplitWorkspace 坞内分屏总调度容器架构测试 (Phase 2)',
       );
       expect(workspaceEl).toBeInTheDocument();
       expect(workspaceEl?.getAttribute('data-empty')).toBe('true');
-      expect(screen.getByText('暂无打开的工具窗格')).toBeInTheDocument();
+      expect(screen.getByLabelText('工作区微型启动器')).toBeInTheDocument();
       expect(screen.queryByTestId(/dock-pane-/)).toBeNull();
       expect(screen.queryByTestId(/dock-sash-/)).toBeNull();
     });
@@ -376,7 +377,7 @@ describe('DockSplitWorkspace 坞内分屏总调度容器架构测试 (Phase 2)',
       expect((nextTree.root as DockLeaf).activeTabId).toBe(secondTabId);
     });
 
-    it('onCloseTab: 关闭终端标签时销毁 ConPTY 进程，全部关闭后自动折叠 collapsed=true', () => {
+    it('onCloseTab: 关闭终端标签时销毁 ConPTY 进程，全部关闭后保持空态展示推荐总览启动器（不强制折叠）', () => {
       const onUpdateDock = vi.fn();
       const dock: RightToolDockState = {
         collapsed: false,
@@ -404,7 +405,8 @@ describe('DockSplitWorkspace 坞内分屏总调度容器架构测试 (Phase 2)',
       );
       expect(onUpdateDock).toHaveBeenCalledTimes(1);
       const patch = onUpdateDock.mock.calls[0][0];
-      expect(patch.collapsed).toBe(true);
+      expect(patch.collapsed).toBeUndefined();
+      expect(isDockTreeEmpty(patch.tree)).toBe(true);
     });
 
     it('onAddTab: 在指定叶片中添加新工具', () => {

@@ -39,9 +39,7 @@ import { flattenDockTree, type FlatDockLeaf } from './flattenDockTree';
 import { DockPane } from './DockPane';
 import { DockResizeSash } from './DockResizeSash';
 import { DockTabDragProvider } from './dockTabDragContext';
-import { Button } from '@/components/ui/Button';
-import { AppIcon } from '@/components/ui/icons';
-import { useI18n } from '../../i18n';
+import { DockLauncherOverview } from '../overview/DockLauncherOverview';
 import styles from './BinaryTreeWorkspace.module.css';
 import dockStyles from './DockSplitWorkspace.module.css';
 
@@ -69,7 +67,6 @@ export const DockSplitWorkspace: React.FC<DockSplitWorkspaceProps> = React.memo(
     onToggleMaximize,
     onUpdateDock,
   }) => {
-    const { t } = useI18n();
     const workspaceRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -176,22 +173,23 @@ export const DockSplitWorkspace: React.FC<DockSplitWorkspaceProps> = React.memo(
           }
         }
 
-        const patch: { collapsed?: boolean; tree?: DockTree } = {
-          tree: nextTree,
-          ...(isDockTreeEmpty(nextTree) ? { collapsed: true } : {}),
-        };
-        commitDock(patch);
+        commitDock({ tree: nextTree });
       },
       [tree, soloLeafId, sessionId, commitDock]
     );
 
     // 3. 打开新工具标签
     const handleAddTab = useCallback(
-      (targetLeafId: string, viewId: ToolViewId) => {
+      (
+        targetLeafId: string,
+        viewId: ToolViewId,
+        params?: Record<string, unknown>
+      ) => {
         if (!tree) return;
         const { tree: nextTree } = openToolInDock(tree, {
           targetLeafId: targetLeafId || undefined,
           viewId,
+          params,
         });
         commitDock({ tree: nextTree, collapsed: false });
       },
@@ -332,7 +330,7 @@ export const DockSplitWorkspace: React.FC<DockSplitWorkspaceProps> = React.memo(
       [commitDock]
     );
 
-    // ── 空态渲染 ──────────────────────────────────────────────────────
+    // ── 空态渲染：展示无标签行（No Tab Strip）的动态增量推荐/总览启动器 ────────────
     if (!tree || isDockTreeEmpty(tree) || flattened.leaves.length === 0) {
       return (
         <div
@@ -345,48 +343,12 @@ export const DockSplitWorkspace: React.FC<DockSplitWorkspaceProps> = React.memo(
             className={styles.emptyState}
             data-testid="dock-workspace-empty-state"
           >
-            <div className={dockStyles.emptyContainer}>
-              <div className={dockStyles.emptyTitle}>
-                {t('workspace.dock.workspaceEmptyTitle')}
-              </div>
-              <div className={dockStyles.emptyDesc}>
-                {t('workspace.dock.workspaceEmptyDesc')}
-              </div>
-              <div className={dockStyles.emptyActionGrid}>
-                <Button
-                  variant="unstyled"
-                  className={dockStyles.emptyActionBtn}
-                  onClick={() => handleAddTab('', 'terminal')}
-                >
-                  <AppIcon name="terminal" size={13} aria-hidden />
-                  <span>{t('workspace.dock.toolTerminal')}</span>
-                </Button>
-                <Button
-                  variant="unstyled"
-                  className={dockStyles.emptyActionBtn}
-                  onClick={() => handleAddTab('', 'preview')}
-                >
-                  <AppIcon name="globe" size={13} aria-hidden />
-                  <span>{t('workspace.dock.toolPreview')}</span>
-                </Button>
-                <Button
-                  variant="unstyled"
-                  className={dockStyles.emptyActionBtn}
-                  onClick={() => handleAddTab('', 'files')}
-                >
-                  <AppIcon name="folder" size={13} aria-hidden />
-                  <span>{t('workspace.dock.toolFiles')}</span>
-                </Button>
-                <Button
-                  variant="unstyled"
-                  className={dockStyles.emptyActionBtn}
-                  onClick={() => handleAddTab('', 'diff')}
-                >
-                  <AppIcon name="code" size={13} aria-hidden />
-                  <span>{t('workspace.dock.toolDiff')}</span>
-                </Button>
-              </div>
-            </div>
+            <DockLauncherOverview
+              sessionId={sessionId}
+              onOpenTool={(viewId, params) =>
+                handleAddTab('', viewId as ToolViewId, params)
+              }
+            />
           </div>
         </div>
       );

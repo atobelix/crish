@@ -35,10 +35,7 @@ import {
   useSessionStore,
   useLayoutTreeStore,
   isPendingDraft,
-  isDockTreeEmpty,
   findSpatialNode,
-  createDefaultDockTree,
-  openToolInDock,
   type DockLeaf,
 } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -121,8 +118,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       isChatSurface &&
       !isLeafDraft &&
       !isStandaloneTab &&
-      dock.collapsed !== true &&
-      Boolean(dock.tree && !isDockTreeEmpty(dock.tree));
+      dock.collapsed !== true;
 
     const [isMaximized, setIsMaximized] = useState(false);
 
@@ -235,16 +231,8 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         updateLeafDock(leaf.id, { collapsed: true });
         return;
       }
-      const currentTree = dock.tree ?? createDefaultDockTree();
-      if (isDockTreeEmpty(currentTree)) {
-        const { tree: nextTree } = openToolInDock(currentTree, {
-          viewId: 'overview',
-        });
-        updateLeafDock(leaf.id, { collapsed: false, tree: nextTree });
-      } else {
-        updateLeafDock(leaf.id, { collapsed: false });
-      }
-    }, [dockOpen, isChatSurface, isStandaloneTab, leaf.id, dock.tree]);
+      updateLeafDock(leaf.id, { collapsed: false });
+    }, [dockOpen, isChatSurface, isStandaloneTab, leaf.id]);
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),

@@ -128,6 +128,17 @@ export const workspace: WorkspaceTranslations = {
   'dock.workspaceEmptyDesc': '在左侧会话或工具栏中打开工具以在此处分屏协同',
   'dock.collapseSidePanel': '收起右侧工具栏',
   'dock.expandSidePanel': '展开右侧工具栏',
+  'dock.launcherSearchOrUrl': '搜索或输入网址...',
+  'dock.toolReview': '审阅',
+  'dock.toolOpenFile': '打开文件',
+  'dock.subagents': '子智能体',
+  'dock.backgroundTasks': '后台任务',
+  'dock.seeAll': '查看全部',
+  'dock.collapseList': '收起',
+  'dock.stopSubagent': '终止子智能体',
+  'dock.noSubagents': '暂无子智能体',
+  'dock.noBackgroundTasks': '暂无后台任务',
+  'dock.runningCount': '{count} 个运行中',
 
   // ── 叶子面板容器 (TreeLeafPanel) ─────────────────────────────────────────
   'leaf.panelRegionLabel': '{title} 面板',

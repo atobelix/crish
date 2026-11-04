@@ -391,7 +391,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
   });
 
-  it('关闭最后一个标签时，触发 updateLeafDock 将 collapsed 置为 true', async () => {
+  it('关闭最后一个标签时，保持右坞展开以展示无标签行的推荐总览界面', async () => {
     act(() => {
       useLayoutStore.setState({ chatMainSurface: 'chat' });
     });
@@ -427,8 +427,9 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
 
     expect(updateLeafDockSpy).toHaveBeenCalledWith(
       'chat-leaf-close-last',
-      expect.objectContaining({ collapsed: true })
+      expect.objectContaining({ tree: expect.anything() })
     );
+    expect(updateLeafDockSpy.mock.calls[0][1].collapsed).toBeUndefined();
   });
 
   it('在 tabModeEnabled 模式下，已打开的多个 Dock 标签保持 Keep-Alive 常驻保活，仅通过 display 切换显隐', async () => {
@@ -552,7 +553,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     ).toBe(true);
   });
 
-  it('点击展开右侧工具栏按钮时，若 dock 为空树则自动装填 overview 视图并展开', async () => {
+  it('点击展开右侧工具栏按钮时，若 dock 为空树则展开并呈现推荐总览界面（不挂载 overview 标签）', async () => {
     const leaf = makeChatLeaf({
       id: 'dock-toggle-leaf',
       sessionId: 'session-toggle-dock',
@@ -589,9 +590,9 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
         currentLeaf?.tabs?.find((t) => t.tabId === currentLeaf.activeTabId)
           ?.dock ?? currentLeaf?.dock;
       expect(activeDock?.collapsed).toBe(false);
-      expect(activeDock?.tree).not.toBeNull();
+      // 空树展开时不强行挂载 overview 标签，保持空态呈现推荐总览界面
       if (activeDock && activeDock.tree) {
-        expect(isDockTreeEmpty(activeDock.tree)).toBe(false);
+        expect(isDockTreeEmpty(activeDock.tree)).toBe(true);
       }
     });
   });
