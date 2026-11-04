@@ -1,5 +1,7 @@
 // 本地存储 schema（Z0 R2-13 / M5 §5.2；v2 收敛为 3 张生效表；v3 增本地线程两表；
-// v4 给 local_threads 增 title_source 列，见 V4_THREAD_TITLE_SOURCE_SQL）
+// v4 给 local_threads 增 title_source 列，见 V4_THREAD_TITLE_SOURCE_SQL；
+// v5 给 local_messages 增 attachments_json 列，见 V5_MESSAGE_ATTACHMENTS_SQL；
+// v6 给 local_messages 增 5 个搜索与工具 JSON 列，见 V6_MESSAGE_TOOLS_AND_SEARCH_SQL）
 // 纪律（M5 §1.2 规则 2）：存储层不得 import 网络层；与 src/network 互不可见。
 // 迁移纪律（M5 §5.4）：已发布迁移 SQL 禁止修改，新需求走 v2+；本文件只追加表定义。
 
@@ -20,7 +22,7 @@
  */
 
 /** 当前 schema 版本（PRAGMA user_version 目标值） */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 /** 全部生效表名（供测试与工具使用） */
 export const TABLES = [
@@ -210,4 +212,29 @@ export const V3_LOCAL_THREADS_SQL: readonly string[] = [
  */
 export const V4_THREAD_TITLE_SOURCE_SQL: readonly string[] = [
   `ALTER TABLE local_threads ADD COLUMN title_source TEXT NOT NULL DEFAULT 'derived'`,
+];
+
+/**
+ * v5 迁移 SQL（本地对话附件接线）：local_messages 增 attachments_json 列——
+ * 只存随用户消息真以 image_url 结构化下发的图片附件 JSON（组装形态
+ * ComposerAttachment 的落存子集，供后续轮次回放图片 part）；文本/文件
+ * 附件的全部信息已组装进 content，不在此重复落存。NULL = 无图片附件
+ * （存量行天然如此）。本列只存图片数据，不存任何凭据形态。
+ */
+export const V5_MESSAGE_ATTACHMENTS_SQL: readonly string[] = [
+  `ALTER TABLE local_messages ADD COLUMN attachments_json TEXT`,
+];
+
+/**
+ * v6 迁移 SQL（网页搜索与沙箱工具体系集成）：
+ * 给 local_messages 增加工具调用、工具结果、引用来源、搜索状态及服务端诊断 5 个 JSON 列。
+ * 存量行天然为 NULL（与 attachments_json 保持同一优雅口径），零数据损毁风险。
+ * 纯存元数据与文本，绝对严禁任何 API Key 或敏感 Token 落入本列！
+ */
+export const V6_MESSAGE_TOOLS_AND_SEARCH_SQL: readonly string[] = [
+  `ALTER TABLE local_messages ADD COLUMN tool_calls_json TEXT DEFAULT NULL`,
+  `ALTER TABLE local_messages ADD COLUMN tool_results_json TEXT DEFAULT NULL`,
+  `ALTER TABLE local_messages ADD COLUMN citations_json TEXT DEFAULT NULL`,
+  `ALTER TABLE local_messages ADD COLUMN search_state_json TEXT DEFAULT NULL`,
+  `ALTER TABLE local_messages ADD COLUMN server_diagnostics_json TEXT DEFAULT NULL`,
 ];

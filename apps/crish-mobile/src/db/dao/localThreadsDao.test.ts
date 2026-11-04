@@ -4,7 +4,11 @@
 import { MemorySqlDriver } from '../driver';
 import { migrateIfNeeded } from '../db';
 import { V3_LOCAL_THREADS_SQL, V4_THREAD_TITLE_SOURCE_SQL } from '../schema';
-import { SqlLocalThreadsDao, type LocalThreadsDao } from './localThreadsDao';
+import {
+  SqlLocalThreadsDao,
+  rowToLocalMessage,
+  type LocalThreadsDao,
+} from './localThreadsDao';
 import type {
   LocalChatMessage,
   LocalThreadMeta,
@@ -167,5 +171,63 @@ describe('SqlLocalThreadsDao', () => {
         expect(key).not.toMatch(/api_?key|secret/i);
       }
     }
+  });
+});
+
+describe('SqlLocalThreadsDao · 图片附件落存（v5 attachments_json）', () => {
+  it('带图片附件的消息 save → listMessages 往返一致', async () => {
+    const { dao } = await freshDao();
+    await dao.upsertThread(meta({ id: 't1' }));
+    const withImage = msg({
+      id: 'm1',
+      content: '看图\n\n[附件]\n[图片附件: cat.png]',
+      attachments: [
+        {
+          id: 'a1',
+          name: 'cat.png',
+          kind: 'image',
+          dataUrl: 'data:image/png;base64,QUJD',
+          sizeBytes: 3,
+          mime: 'image/png',
+        },
+      ],
+    });
+    await dao.saveMessage('t1', 0, withImage);
+    const back = await dao.listMessages('t1');
+    expect(back).toHaveLength(1);
+    expect(back[0]?.attachments).toEqual(withImage.attachments);
+    expect(back[0]?.content).toBe(withImage.content);
+  });
+
+  it('无附件消息读回不带 attachments 键（NULL 不写出）', async () => {
+    const { dao } = await freshDao();
+    await dao.upsertThread(meta({ id: 't1' }));
+    await dao.saveMessage('t1', 0, msg({ id: 'm1' }));
+    const back = await dao.listMessages('t1');
+    expect(back[0]).not.toHaveProperty('attachments');
+  });
+
+  it('attachments_json 损坏/异形 → 读侧收敛为无附件（不抛）', () => {
+    const base = {
+      id: 'm1',
+      thread_id: 't1',
+      seq: 0,
+      role: 'user',
+      content: 'x',
+      stopped: 0,
+      tool_call_count: null,
+    };
+    expect(
+      rowToLocalMessage({ ...base, attachments_json: '{not-json' })
+    ).not.toHaveProperty('attachments');
+    expect(
+      rowToLocalMessage({
+        ...base,
+        attachments_json: JSON.stringify([
+          { kind: 'text', text: '不应混入' },
+          { kind: 'image', dataUrl: '' },
+        ]),
+      })
+    ).not.toHaveProperty('attachments');
   });
 });

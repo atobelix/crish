@@ -119,7 +119,7 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
     configureSqlitePersistence(null);
   });
 
-  it('装配链：open → pragma → user_version → migrate → configure → hydrate（顺序 + v4 生效 5 表）', async () => {
+  it('装配链：open → pragma → user_version → migrate → configure → hydrate（顺序 + v6 生效 5 表）', async () => {
     const open = jest.fn(async (name: string) => {
       calls.push('open');
       expect(name).toBe(MOBILE_DB_NAME);
@@ -128,9 +128,10 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     const result = await ensureDatabaseForApp({ open });
 
-    expect(result).toEqual({ ok: true, version: 4 });
+    expect(result).toEqual({ ok: true, version: 6 });
     // 真实迁移全链路：v1 建 8 表 → v2 清理幽灵表 → v3 增本地线程两表，
-    // → v4 给 local_threads 加 title_source 列，最终 5 张生效表
+    // → v4 给 local_threads 加 title_source 列 → v5 给 local_messages
+    // 加 attachments_json 列 → v6 给 local_messages 增 5 个工具与搜索 JSON 列，最终 5 张生效表
     const tables = driver.listTables();
     expect(tables).toEqual([
       'approval_queue',
@@ -156,7 +157,7 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     expect(jest.mocked(openDatabaseAsync)).toHaveBeenCalledWith(MOBILE_DB_NAME);
     expect(result.ok).toBe(true);
-    expect(result.version).toBe(4);
+    expect(result.version).toBe(6);
     expect(settingsStore.getState().hydrated).toBe(true);
     expect(notificationStore.getState().hydrated).toBe(true);
   });

@@ -161,3 +161,32 @@ export type { FeedFilter } from './event-filter';
 
 // 脱敏（R4 批次5 下沉：桌面/移动端共用单实现，正则规范与 Rust redact.rs 对齐）
 export { redactSecrets, redactDeep, maskSecretLast4 } from './redact';
+
+// ── 网络安全门禁（SSRF 对齐 Rust ip_class.rs） ──
+export {
+  validateSafeWebUrl,
+  isIpv4Reserved,
+  isIpv6Reserved,
+  isLoopbackIp,
+  isLocalHostname,
+  isBlockedHostSuffix,
+  parseIpv4,
+  parseIpv6,
+  ipv6ToV4Mapped,
+} from './network/ssrfGuard';
+export type {
+  SafeUrlCheckOptions,
+  SafeUrlCheckResult,
+} from './network/ssrfGuard';
+
+// ── 正文引用角标解析器 ──
+export {
+  parseMessageCitations,
+  isCitationSegment,
+} from './citation/citationParser';
+export type {
+  TextSegment,
+  CitationSegment,
+  MessageContentSegment,
+  ParseMessageCitationsResult,
+} from './citation/citationParser';

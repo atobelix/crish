@@ -128,7 +128,9 @@ describe('迁移：v3 → v4（本地线程标题来源列，U4）', () => {
       ['t2', '另一线程', '', null, null, 300, 400]
     );
 
-    await expect(migrateIfNeeded(db)).resolves.toBe(4);
+    // 迁移器恒升到最新版（v5 起含 local_messages 附件列）；本用例的
+    // v4 语义由下方 title_source 断言钉住，版本数随迁移数组演进
+    await expect(migrateIfNeeded(db)).resolves.toBe(LATEST_VERSION);
     expect(db.rowCount('local_threads')).toBe(2);
     const rows = await db.getAll<{
       id: string;

@@ -171,11 +171,7 @@ export type {
   CrishErrorCategory,
   CrishErrorDomain,
 } from './errors';
-export {
-  CRISH_ERROR_DOMAINS,
-  domainOf,
-  isCrishErrorCode,
-} from './errors';
+export { CRISH_ERROR_DOMAINS, domainOf, isCrishErrorCode } from './errors';
 export type { CrishResult } from './errors/result';
 export {
   ok,
@@ -377,3 +373,6 @@ export * from './generated/device/stream';
 export * from './generated/device/errors';
 export * from './generated/device/capabilities';
 export * from './generated/device/parser';
+
+// Web 搜索与引文领域契约（W1-1 / 05-跨端架构对齐）
+export * from './web-search';
