@@ -1,4 +1,4 @@
-﻿# i18n 源码硬编码中文门禁基线
+# i18n 源码硬编码中文门禁基线
 
 > 由 `node scripts/check-i18n-hardcoded.mjs --update-baseline` 自动生成/收紧。
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → PASS。存量按战役波次单调递减收敛。
@@ -10,7 +10,20 @@
 > 执行权限改名与 keywords 校对补词。按数据豁免登记于此：该文件计数只许随上述数据增减同步调整，
 > 禁止借此引入任何展示文案硬编码；展示文案一律进双语字典。
 
+> 例外登记（2026-11-03，整波收口 Phase 1 门禁裁决）：以下四类均为数据/诊断而非展示文案，
+> 按既有机制登记，计数只许随其数据本体增减同步调整，禁止借此引入展示文案硬编码：
+> ① `apps/crish-desktop/src/api/failureTaxonomy.ts`（51）——失败分类双语数据表（titleZh/titleEn/
+> guidanceZh/guidanceEn），与 userFacingErrors.ts（19）同类：错误文案单点数据表，消费方按语言取列；
+> ② `apps/crish-desktop/src/services/DesktopNotificationService.ts`（6）与
+> `apps/crish-desktop/src/services/desktopNotificationObserver.ts`（3）——仅 logger 诊断串；
+> 通知标题/正文一律走字典（批 C 已钉死）；③ `apps/crish-desktop/src/api/chat-bridge/ApprovalHandler.ts`（2）
+> ——runId 缺失的内部诊断抛错串（含命令名与 toolCallId 插值，不作展示文案）；
+> ④ `apps/crish-desktop/src/api/preferences/preferencesSchema.ts`（20 → 27）——偏好项 description
+> 元数据（非渲染文案，设置 UI 标签走字典），增量 7 条为托盘/通知批新增偏好项的同类元数据。
+
 <!-- BASELINE_START -->
+apps/crish-desktop/src/components/account/deviceIdentity.ts 91
+apps/crish-desktop/src/api/chat-bridge/ApprovalHandler.ts 2
 apps/crish-desktop/src/api/chat-bridge/handlers/approvalHandlers.ts 1
 apps/crish-desktop/src/App.tsx 8
 apps/crish-desktop/src/api/StreamRenderBuffer.ts 1
@@ -43,6 +56,7 @@ apps/crish-desktop/src/api/directFetchBridge.ts 5
 apps/crish-desktop/src/api/doctorReport.ts 28
 apps/crish-desktop/src/api/engineStatus.ts 3
 apps/crish-desktop/src/api/extensionCatalog.ts 2
+apps/crish-desktop/src/api/failureTaxonomy.ts 51
 apps/crish-desktop/src/api/fileAnnotations.ts 8
 apps/crish-desktop/src/api/fixtures/markdown-parity-cases.ts 2
 apps/crish-desktop/src/api/followUpSuggestions.ts 20
@@ -95,7 +109,7 @@ apps/crish-desktop/src/api/openDirectoryDialog.ts 2
 apps/crish-desktop/src/api/openFileDialog.ts 1
 apps/crish-desktop/src/api/permissionModes.ts 9
 apps/crish-desktop/src/api/pickWorkspaceFolder.ts 1
-apps/crish-desktop/src/api/preferences/preferencesSchema.ts 20
+apps/crish-desktop/src/api/preferences/preferencesSchema.ts 27
 apps/crish-desktop/src/api/previewBrowserStore.ts 2
 apps/crish-desktop/src/api/probeIncremental.ts 2
 apps/crish-desktop/src/api/projectStore.ts 7
@@ -545,6 +559,8 @@ apps/crish-desktop/src/prompts/modes/codeReview.ts 4
 apps/crish-desktop/src/prompts/modes/goalMode.ts 3
 apps/crish-desktop/src/prompts/modes/grillMe.ts 3
 apps/crish-desktop/src/prompts/modes/workflowAssistant.ts 4
+apps/crish-desktop/src/services/DesktopNotificationService.ts 6
+apps/crish-desktop/src/services/desktopNotificationObserver.ts 3
 apps/crish-desktop/src/services/FailoverReason.ts 8
 apps/crish-desktop/src/services/ShortcutRegistry.ts 40
 apps/crish-desktop/src/services/TokenRuntimeController.ts 1

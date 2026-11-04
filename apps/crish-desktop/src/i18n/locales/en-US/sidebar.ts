@@ -56,6 +56,7 @@ export const sidebar: Record<string, string> = {
   updateAvailable: 'New version available',
   newVersionHint: 'New version available indicator',
   footerAriaLabel: 'Sidebar footer',
+  resizeAriaLabel: 'Resize sidebar',
   updateTooltip: 'New version available, click to install update',
   installUpdate: 'Install update',
   updateButton: 'Update',

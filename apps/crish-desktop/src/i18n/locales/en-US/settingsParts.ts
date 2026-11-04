@@ -118,7 +118,7 @@ export const settingsPartRest = {
   'tabs.models': 'Models',
   'tabs.plugins': 'Extensions',
   'tabs.usage': 'Usage',
-  'tabs.devices': 'Devices',
+  'tabs.devices': 'Device management',
   'tabs.loginDevices': 'Signed-in devices',
   'tabs.schedule': 'Schedule',
   'tabs.rules': 'Rules',
@@ -202,7 +202,8 @@ export const settingsPartRest = {
   'archive.deleteAllConfirmBtn': 'Delete All',
 
   // ── 20. Multi-Device & Pairing (devices.*) ──
-  'devices.pageTitle': 'Devices',
+  'devices.pageTitle': 'Device Management',
+  'devices.allowRemoteControl': 'Allow Remote Control',
   'devices.deviceRevoked':
     'Device revoked (token invalidated and disconnected)',
   'devices.revokeFailed':

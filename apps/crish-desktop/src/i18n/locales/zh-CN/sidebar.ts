@@ -55,6 +55,7 @@ export const sidebar: Record<string, string> = {
   updateAvailable: '有新版本可用',
   newVersionHint: '新版本可用提示',
   footerAriaLabel: '侧栏底栏',
+  resizeAriaLabel: '调整侧栏宽度',
   updateTooltip: '有新版本，点击安装更新',
   installUpdate: '安装更新',
   updateButton: '更新',

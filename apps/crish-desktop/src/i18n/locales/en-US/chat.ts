@@ -14,6 +14,10 @@ export const chat: ChatTranslations = {
   clearHistory: 'Clear History',
   prompts: 'Prompts',
   welcome: 'Welcome',
+  messagesLoadFailed: 'Failed to load messages',
+  messagesLoadFailedHint:
+    'Loading did not complete. The engine or local storage may be temporarily unavailable.',
+  messageListError: 'Message list error',
   quickActions: 'Quick Actions',
   importChat: 'Import Chat',
   newProject: 'New Project',
@@ -39,6 +43,9 @@ export const chat: ChatTranslations = {
   'composer.stop.forceConfirmDesc':
     'Force cancel will immediately abort model and tool execution. Incomplete progress may be lost. Are you sure you want to force cancel?',
   'composer.stop.forceConfirmBtn': 'Confirm Force Cancel',
+  'composer.stop.stopping': 'Stopping…',
+  'composer.stop.stoppingTimeout':
+    'Stop did not take effect. Controls restored — retry or force cancel.',
   'composer.thinkingStatus': 'Thinking...',
   'composer.dropOverlayTitle': 'Drop files here',
   'composer.dropOverlaySubtitle':
@@ -159,7 +166,7 @@ export const chat: ChatTranslations = {
   'thinking.durationMs': 'Thought for {duration}ms',
   'thinking.durationSec': 'Thought for {duration}s',
   'thinking.durationMin': 'Thought for {duration}m',
-  'thinking.durationShort': 'Thought {duration}s',
+  'thinking.durationShort': 'Thought for {duration}',
   'thinking.expand': 'Expand thinking process',
   'thinking.collapse': 'Collapse thinking process',
   'thinking.copyChain': 'Copy thinking process',
@@ -222,6 +229,7 @@ export const chat: ChatTranslations = {
   'message.unpin': 'Unpin message',
   'message.sendToNote': 'Send to Note',
   'message.sentToNote': 'Sent to Note',
+  'message.turnStopped': 'Stopped',
   'emptyState.noSessionTitle': 'No Active Session',
   'emptyState.noSessionSubtitle':
     'Select a session from the sidebar or click New Session to begin',
@@ -279,9 +287,9 @@ export const chat: ChatTranslations = {
   'agentCard.locateInFlow': 'Locate in conversation',
   'agentCard.locateInFlowAria': 'Locate dispatch card in conversation',
   // ── In-flow dispatch card (SubagentDispatchCard) ──
-  'agentCard.dispatch.statusWorking': 'Working',
-  'agentCard.dispatch.statusWorkingSec': 'Working {sec}s',
-  'agentCard.dispatch.statusReady': 'Ready',
+  'agentCard.dispatch.statusWorking': 'Running',
+  'agentCard.dispatch.statusWorkingSec': 'Running {duration}',
+  'agentCard.dispatch.statusReady': 'Completed',
   'agentCard.dispatch.statusFailed': 'Failed',
   'agentCard.dispatch.statusStopped': 'Stopped',
   'agentCard.dispatch.statusIdle': 'Idle',

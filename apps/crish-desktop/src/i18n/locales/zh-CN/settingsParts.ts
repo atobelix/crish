@@ -115,7 +115,7 @@ export const settingsPartRest = {
   'tabs.models': '模型',
   'tabs.plugins': '扩展',
   'tabs.usage': '用量',
-  'tabs.devices': '多端互通',
+  'tabs.devices': '设备管理',
   'tabs.loginDevices': '登录设备',
   'tabs.schedule': '定时任务',
   'tabs.rules': '规则',
@@ -197,7 +197,8 @@ export const settingsPartRest = {
   'archive.deleteAllConfirmBtn': '全部删除',
 
   // ── 20. 多端互通与设备管理 (devices.*) ──
-  'devices.pageTitle': '多端互通',
+  'devices.pageTitle': '设备管理',
+  'devices.allowRemoteControl': '允许远程控制',
   'devices.deviceRevoked': '设备已撤销（令牌失效并已断开）',
   'devices.revokeFailed': '撤销失败：设备不存在或已撤销',
   'devices.pairingModeSection': '配对模式',

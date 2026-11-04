@@ -85,6 +85,17 @@ export const tools: Record<string, string> = {
   'action.note': 'Operate {count} note blocks',
   'action.tool': 'Call {count} tools',
   'action.withDuration': '{action} · Took {duration}',
+  // Tool background (BG5) and tool-row presentation copy
+  // (dictionary-ized by the 2026-11-02 wave-closing i18n adjudication)
+  'background.queued': 'Queued',
+  'background.runningFor': 'Running for {duration}',
+  'background.pillLabel': 'Background {count}',
+  'background.pillAria': '{count} tools running in the background',
+  'background.listAria': 'Background tools',
+  'background.cancel': 'Cancel',
+  'background.cancelling': 'Cancelling…',
+  'background.rowStatus': '{status} · running for {duration}',
+  'toolRow.viewDiffInPanel': 'View diff in the side panel',
 };
 
 export default tools;

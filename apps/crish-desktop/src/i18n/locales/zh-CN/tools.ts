@@ -82,6 +82,16 @@ export const tools: Record<string, string> = {
   'action.note': '操作 {count} 个笔记区块',
   'action.tool': '调用 {count} 个工具',
   'action.withDuration': '{action} · 耗时 {duration}',
+  // 工具后台（BG5）与工具行呈现文案（2026-11-02 整波收口 i18n 裁定词典化）
+  'background.queued': '排队中',
+  'background.runningFor': '已运行 {duration}',
+  'background.pillLabel': '后台中 {count}',
+  'background.pillAria': '后台中 {count} 个工具',
+  'background.listAria': '后台工具列表',
+  'background.cancel': '取消',
+  'background.cancelling': '取消中…',
+  'background.rowStatus': '{status} · 已运行 {duration}',
+  'toolRow.viewDiffInPanel': '在右侧面板查看差异',
 };
 
 export default tools;
