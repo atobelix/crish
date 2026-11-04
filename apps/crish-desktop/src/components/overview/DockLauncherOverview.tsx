@@ -3,10 +3,10 @@
  * 动态增量推荐/总览微型启动器（Dock Launcher Overview）
  *
  * 核心特性：
- * 1. 顶部 URL / 搜索引擎智能胶囊输入栏；
- * 2. 核心工具垂直入口（审阅、打开文件、终端、浏览器）；
- * 3. 增量动态信息（子智能体、后台与实时任务）按需自适应展开；
- * 4. 零动态信息时优雅垂直居中微型布局（.isMinimal）；
+ * 1. 顶部 URL / 搜索引擎智能胶囊输入栏（36px 高、18px 完美椭圆圆角，支持 URL 导航与工具/任务关键词即时过滤）；
+ * 2. 软件全功能工具入口矩阵（审阅、打开文件、终端、浏览器、运行时、协作体、编排图、笔记及动态注册视图），带多语言 i18n；
+ * 3. 严格会话绑定的动态增量信息（当前会话的子智能体、当前会话生成的后台任务与定时器，杜绝跨会话或全局工作流渗透）；
+ * 4. 零动态信息时优雅垂直居中微型布局（.isMinimal），纯粹呈现输入框与功能选项；
  * 5. 严守 AGENTS.md §12（自定义 Tooltip 规范）、§13（克制无重阴影/柔软对比度焦点态）与 §14（现代 CSS 语法与 Token）。
  */
 
@@ -14,19 +14,22 @@ import React, { useState, useMemo, useCallback } from 'react';
 import type { ToolViewId } from '../../store/layout-tree';
 import { useI18n } from '../../i18n';
 import { AppIcon } from '../ui/icons';
+import type { IconName } from '../ui/icons';
 import { Tooltip, Button, Input } from '@/components/ui';
-import {
-  useSessionAgents,
-  useSessionField,
-  selectSessions,
-} from '../../store/storeAccess';
+import { useSessionAgents } from '../../store/storeAccess';
 import { useEngineState } from '../../hooks/useEngineState';
-import { useOverviewState } from './useOverviewState';
+import { viewRegistry } from '../../services/view-registry';
 import { mapSubagentRoleWireName } from '../../api/tool-presentation/agentRoleLabel';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { killSubagent } from '../../api/subagentRecoveryApi';
-import { formatElapsed, formatBgTaskMeta } from './helpers';
-import { scheduleLabel } from '../../api/workflowApi';
+import {
+  openBackgroundTaskInTerminal,
+  getBackgroundTaskOutput,
+  BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+  BACKGROUND_TASK_STATE_LABELS,
+  type BackgroundTaskInfo,
+} from '../../api/backgroundTasksApi';
+import { formatElapsed } from './helpers';
 import type { SessionAgent } from '../../store/types';
 import styles from './DockLauncherOverview.module.css';
 
@@ -85,12 +88,77 @@ function getAgentDisplayName(agent: SessionAgent): string {
   return agent.id;
 }
 
-interface UnifiedTaskItem {
+/** 软件全量内置工具定义（规范排序与多语言回退） */
+interface CanonicalToolConfig {
   id: string;
-  icon: 'terminal' | 'clock' | 'play-circle';
+  defaultIcon: IconName;
+  i18nKey: string;
+  fallbackLabel: string;
+}
+
+const CANONICAL_TOOLS: CanonicalToolConfig[] = [
+  {
+    id: 'diff',
+    defaultIcon: 'git-branch',
+    i18nKey: 'workspace.dock.toolReview',
+    fallbackLabel: 'Review',
+  },
+  {
+    id: 'files',
+    defaultIcon: 'folder-tree',
+    i18nKey: 'workspace.dock.toolOpenFile',
+    fallbackLabel: 'Open File',
+  },
+  {
+    id: 'terminal',
+    defaultIcon: 'terminal',
+    i18nKey: 'workspace.dock.toolTerminal',
+    fallbackLabel: 'Terminal',
+  },
+  {
+    id: 'preview',
+    defaultIcon: 'globe',
+    i18nKey: 'workspace.dock.toolPreview',
+    fallbackLabel: 'Browser',
+  },
+  {
+    id: 'runtime',
+    defaultIcon: 'play-circle',
+    i18nKey: 'workspace.dock.toolRuntime',
+    fallbackLabel: 'Runtime',
+  },
+  {
+    id: 'agent',
+    defaultIcon: 'bot',
+    i18nKey: 'workspace.dock.toolAgent',
+    fallbackLabel: 'Agents',
+  },
+  {
+    id: 'flow-dag',
+    defaultIcon: 'workflow',
+    i18nKey: 'workspace.dock.toolFlowDag',
+    fallbackLabel: 'Flow DAG',
+  },
+  {
+    id: 'note',
+    defaultIcon: 'notebook-pen',
+    i18nKey: 'workspace.dock.toolNote',
+    fallbackLabel: 'Notes',
+  },
+];
+
+interface DisplayToolItem {
+  id: string;
+  icon: IconName;
+  label: string;
+}
+
+interface SessionTaskItem {
+  id: string;
+  icon: IconName;
   title: string;
   meta?: string;
-  onClick: () => void;
+  rawTask: BackgroundTaskInfo;
 }
 
 export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
@@ -104,19 +172,100 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
     const [showAllAgents, setShowAllAgents] = useState(false);
     const [showAllTasks, setShowAllTasks] = useState(false);
 
-    // 会话子智能体
+    // 1. 会话专属子智能体（仅当前会话）
     const agents = useSessionAgents(sessionId || '');
 
-    // 引擎状态与总览状态
-    const sessions = useSessionField(selectSessions);
+    // 2. 引擎状态：严格限定为当前会话专属的后台任务
     const ds = useEngineState();
-    const { liveTasks, openBgTask, focusSession } = useOverviewState(
-      sessions,
-      ds.activeRuns,
-      (id: string) => onOpenTool(id)
-    );
 
-    // 排序子智能体：运行中排首位，随后按启动时刻降序
+    // 3. 动态聚合软件工具列表（内置规范项 + viewRegistry 中注册的所有额外工具）
+    const allTools = useMemo<DisplayToolItem[]>(() => {
+      const registeredViews = viewRegistry.getToolViews();
+      const items: DisplayToolItem[] = [];
+      const handled = new Set<string>();
+
+      // 优先按规范排序加入
+      for (const def of CANONICAL_TOOLS) {
+        handled.add(def.id);
+        const iconName = viewRegistry.getIcon(def.id) || def.defaultIcon;
+        const localizedLabel = t(def.i18nKey, def.fallbackLabel);
+        items.push({
+          id: def.id,
+          icon: iconName,
+          label: localizedLabel,
+        });
+      }
+
+      // 追加 viewRegistry 中动态注册的其他工具视图
+      for (const v of registeredViews) {
+        if (!handled.has(v.id)) {
+          handled.add(v.id);
+          items.push({
+            id: v.id,
+            icon: viewRegistry.getIcon(v.id) || ('tool' as IconName),
+            label: viewRegistry.getTitle(v.id),
+          });
+        }
+      }
+
+      return items;
+    }, [t]);
+
+    // 4. 严格将会话后台任务限定在当前对话内（排除全局工作流与非本会话的任务）
+    const sessionTasks = useMemo<SessionTaskItem[]>(() => {
+      if (!sessionId || sessionId.startsWith('__pending')) {
+        return [];
+      }
+
+      const tasks = (ds.bgTasks || []).filter((bt) => {
+        return Boolean(bt.sessionId && bt.sessionId === sessionId);
+      });
+
+      return tasks.map((bt) => {
+        const isTimer =
+          Boolean(bt.command?.includes('timer')) ||
+          Boolean(bt.label?.includes('timer')) ||
+          Boolean(bt.command?.includes('schedule'));
+
+        const icon: IconName = isTimer ? 'clock' : 'terminal';
+
+        let title =
+          bt.label ||
+          bt.command ||
+          t('workspace.dock.backgroundTasks', '后台任务');
+        if (bt.command && !isTimer) {
+          title = bt.command.startsWith('Run ')
+            ? bt.command
+            : `Run ${bt.command}`;
+        }
+
+        let meta = '';
+        if (bt.state === 'running') {
+          if (bt.durationMs) {
+            meta = formatElapsed(Math.round(bt.durationMs / 1000));
+          } else if (bt.startedAt) {
+            meta = formatElapsed(
+              Math.max(0, Math.round((Date.now() - bt.startedAt) / 1000))
+            );
+          } else {
+            meta = t('chat.agentCard.dispatch.statusWorking', '运行中');
+          }
+        } else {
+          meta =
+            BACKGROUND_TASK_STATE_LABELS[bt.state] || String(bt.state || '');
+        }
+
+        return {
+          id: bt.id,
+          icon,
+          title,
+          meta,
+          rawTask: bt,
+        };
+      });
+    }, [ds.bgTasks, sessionId, t]);
+
+    // 5. 排序子智能体：运行中排首位，随后按启动时刻降序
     const sortedAgents = useMemo(() => {
       return [...agents].sort((a, b) => {
         const ar = a.status === 'running' ? 0 : 1;
@@ -126,75 +275,88 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
       });
     }, [agents]);
 
-    // 汇总后台与实时活动任务
-    const allTaskItems = useMemo<UnifiedTaskItem[]>(() => {
-      const items: UnifiedTaskItem[] = [];
+    // 6. 搜索过滤（支持即时过滤工具列表、子智能体与后台任务）
+    const trimmedQuery = searchQuery.trim().toLowerCase();
 
-      // 1. 实时活动任务 (liveTasks)
-      for (const lt of liveTasks) {
-        items.push({
-          id: `live-${lt.id}`,
-          icon: 'play-circle',
-          title: lt.taskName,
-          meta: formatElapsed(lt.elapsedSeconds),
-          onClick: () => {
-            if (lt.sessionId) {
-              focusSession(lt.sessionId);
-            }
-          },
-        });
-      }
+    const filteredTools = useMemo(() => {
+      if (!trimmedQuery) return allTools;
+      return allTools.filter(
+        (tool) =>
+          tool.label.toLowerCase().includes(trimmedQuery) ||
+          tool.id.toLowerCase().includes(trimmedQuery)
+      );
+    }, [allTools, trimmedQuery]);
 
-      // 2. 常驻后台任务 (bgTasks)
-      for (const bt of ds.bgTasks) {
-        items.push({
-          id: `bg-${bt.id}`,
-          icon: 'terminal',
-          title:
-            bt.label ||
-            bt.command ||
-            t('workspace.dock.backgroundTasks', '后台任务'),
-          meta: bt.command
-            ? `Run ${bt.command}`
-            : formatBgTaskMeta({ state: bt.state, command: bt.command }),
-          onClick: () => {
-            openBgTask(bt);
-          },
-        });
-      }
+    const filteredAgents = useMemo(() => {
+      if (!trimmedQuery) return sortedAgents;
+      return sortedAgents.filter(
+        (agent) =>
+          getAgentDisplayName(agent).toLowerCase().includes(trimmedQuery) ||
+          agent.id.toLowerCase().includes(trimmedQuery)
+      );
+    }, [sortedAgents, trimmedQuery]);
 
-      // 3. 计划任务 (workflows)
-      for (const wf of ds.workflows || []) {
-        items.push({
-          id: `wf-${wf.id}`,
-          icon: 'clock',
-          title: wf.name,
-          meta: scheduleLabel(wf.schedule),
-          onClick: () => {},
-        });
-      }
+    const filteredTasks = useMemo(() => {
+      if (!trimmedQuery) return sessionTasks;
+      return sessionTasks.filter(
+        (task) =>
+          task.title.toLowerCase().includes(trimmedQuery) ||
+          (task.meta && task.meta.toLowerCase().includes(trimmedQuery))
+      );
+    }, [sessionTasks, trimmedQuery]);
 
-      return items;
-    }, [liveTasks, ds.bgTasks, ds.workflows, focusSession, openBgTask, t]);
+    // 7. 零动态信息时判定为微型居中模式（无会话子智能体且无会话后台任务）
+    const isMinimal = agents.length === 0 && sessionTasks.length === 0;
 
-    // 零动态数据最小化展示态
-    const isMinimal = agents.length === 0 && allTaskItems.length === 0;
-
-    // 搜索或 URL 提交处理
+    // 8. 搜索框回车提交：若精准匹配某工具则直接开启；若为 URL 或检索词则在浏览器内打开
     const handleSearchSubmit = useCallback(
       (e?: React.FormEvent) => {
         e?.preventDefault();
         const trimmed = searchQuery.trim();
         if (!trimmed) return;
+
+        // 若用户输入精准匹配了某一工具名称，直接导航至该工具
+        const matchedTool = allTools.find(
+          (tool) =>
+            tool.label.toLowerCase() === trimmed.toLowerCase() ||
+            tool.id.toLowerCase() === trimmed.toLowerCase()
+        );
+        if (matchedTool) {
+          onOpenTool(matchedTool.id);
+          return;
+        }
+
         const url = resolveSearchOrUrl(trimmed);
         if (url) {
           onOpenTool('preview', { url });
         }
       },
-      [searchQuery, onOpenTool]
+      [searchQuery, allTools, onOpenTool]
     );
 
-    // 终止子智能体
+    // 9. 打开后台任务在终端中回显
+    const handleOpenTask = useCallback(
+      async (task: BackgroundTaskInfo) => {
+        try {
+          const out = await getBackgroundTaskOutput(task.id);
+          const text = out || BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER;
+          openBackgroundTaskInTerminal(
+            task.label || task.command || task.id,
+            text
+          );
+          onOpenTool('terminal', { taskId: task.id });
+        } catch {
+          openBackgroundTaskInTerminal(
+            task.label || task.command || task.id,
+            BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER
+          );
+          onOpenTool('terminal', { taskId: task.id });
+        }
+      },
+      [onOpenTool]
+    );
+
+    // 10. 终止子智能体
     const handleKillSubagent = useCallback(
       async (agentId: string, parentSession?: string) => {
         try {
@@ -209,49 +371,22 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
       [sessionId]
     );
 
-    // 核心工具列表定义
-    const coreTools = useMemo(
-      () => [
-        {
-          id: 'diff',
-          icon: 'git-branch' as const,
-          label: t('workspace.dock.toolReview', '审阅'),
-        },
-        {
-          id: 'files',
-          icon: 'folder-tree' as const,
-          label: t('workspace.dock.toolOpenFile', '打开文件'),
-        },
-        {
-          id: 'terminal',
-          icon: 'terminal' as const,
-          label: t('workspace.dock.toolTerminal', '终端'),
-        },
-        {
-          id: 'preview',
-          icon: 'globe' as const,
-          label: t('workspace.dock.toolPreview', '浏览器'),
-        },
-      ],
-      [t]
-    );
-
     const displayedAgents = showAllAgents
-      ? sortedAgents
-      : sortedAgents.slice(0, 5);
+      ? filteredAgents
+      : filteredAgents.slice(0, 5);
 
     const displayedTasks = showAllTasks
-      ? allTaskItems
-      : allTaskItems.slice(0, 5);
+      ? filteredTasks
+      : filteredTasks.slice(0, 5);
 
     return (
       <div
         className={`${styles.container} ${isMinimal ? styles.isMinimal : ''} ${className || ''}`}
         role="region"
-        aria-label="Dock Launcher Overview"
+        aria-label={t('workspace.dock.launcherAriaLabel', '工作区微型启动器')}
       >
         <div className={styles.contentWrapper}>
-          {/* 顶部搜索 / URL 地址栏 */}
+          {/* 顶部搜索 / URL 胶囊地址栏 */}
           <form className={styles.searchForm} onSubmit={handleSearchSubmit}>
             <div className={styles.searchBar}>
               <AppIcon
@@ -277,9 +412,9 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
             </div>
           </form>
 
-          {/* 核心工具列表 */}
+          {/* 核心与扩展工具列表 */}
           <div className={styles.coreToolsList}>
-            {coreTools.map((tool) => (
+            {filteredTools.map((tool) => (
               <Button
                 key={tool.id}
                 type="button"
@@ -298,8 +433,8 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
             ))}
           </div>
 
-          {/* 增量动态信息：子智能体 */}
-          {agents.length > 0 && (
+          {/* 增量动态信息：当前会话子智能体（仅在有智能体时呈现） */}
+          {filteredAgents.length > 0 && (
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div className={styles.sectionTitleRow}>
@@ -308,7 +443,7 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
                   </span>
                   <span className={styles.badgePill}>{agents.length}</span>
                 </div>
-                {agents.length > 5 && (
+                {filteredAgents.length > 5 && (
                   <Button
                     type="button"
                     variant="unstyled"
@@ -414,7 +549,11 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
                               );
                             }}
                           >
-                            <AppIcon name="x-octagon" size={13} aria-hidden />
+                            <AppIcon
+                              name="minus-circle"
+                              size={13}
+                              aria-hidden
+                            />
                           </Button>
                         </Tooltip>
                       )}
@@ -425,8 +564,8 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
             </div>
           )}
 
-          {/* 增量动态信息：后台与实时任务 */}
-          {allTaskItems.length > 0 && (
+          {/* 增量动态信息：当前会话后台任务（仅在当前会话存在后台任务时呈现） */}
+          {filteredTasks.length > 0 && (
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div className={styles.sectionTitleRow}>
@@ -434,10 +573,10 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
                     {t('workspace.dock.backgroundTasks', '后台任务')}
                   </span>
                   <span className={styles.badgePill}>
-                    {allTaskItems.length}
+                    {sessionTasks.length}
                   </span>
                 </div>
-                {allTaskItems.length > 5 && (
+                {filteredTasks.length > 5 && (
                   <Button
                     type="button"
                     variant="unstyled"
@@ -458,7 +597,7 @@ export const DockLauncherOverview: React.FC<DockLauncherOverviewProps> =
                     type="button"
                     variant="unstyled"
                     className={styles.rowItem}
-                    onClick={task.onClick}
+                    onClick={() => handleOpenTask(task.rawTask)}
                   >
                     <AppIcon
                       name={task.icon}
