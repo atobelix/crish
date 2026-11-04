@@ -22,7 +22,7 @@ import {
   buildSessionTimeline,
   formatClock,
 } from '@/presentation/timeline/buildTimeline';
-import type { DisplayBlock } from '@/presentation/timeline/groupToolRuns';
+import type { TimelineRow } from '@/presentation/timeline/insertTimeSeparators';
 import { TimelineView } from '@/presentation/timeline/TimelineView';
 import {
   AppHeader,
@@ -48,7 +48,7 @@ export default function RunDetailScreen({
   const theme = useTheme();
   const windows = useEventStore((s) => s.windows);
   const [follow, setFollow] = useState(true);
-  const listRef = useRef<FlatList<DisplayBlock> | null>(null);
+  const listRef = useRef<FlatList<TimelineRow> | null>(null);
 
   const entries = useMemo(() => entriesOfRun(windows, runId), [windows, runId]);
   const status = useMemo(

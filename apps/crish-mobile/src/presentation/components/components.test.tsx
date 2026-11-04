@@ -343,7 +343,7 @@ describe('ConnectionBanner / TimelineView', () => {
     );
     expect(view.getByText('正文')).toBeTruthy();
     // 连续工具调用在对话里只剩一行摘要，详情进工具抽屉
-    expect(view.getByText('使用了 1 个工具')).toBeTruthy();
+    expect(view.getByText('使用了 1 个工具 · 1 秒')).toBeTruthy();
     expect(view.queryByText('done')).toBeNull();
     await fireEvent.press(view.getByTestId('tool-run-t-1'));
     expect(onOpenTools).toHaveBeenCalledWith('t-1');

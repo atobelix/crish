@@ -2,10 +2,13 @@
 // N05 裁定：文字已含语义（扳手/上箭头属装饰删除）；执行中状态用 8px 静态色点
 // （PulseDot 呼吸脉冲违 U8，已物理删除）。
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import { toolBlockSummary } from './buildTimeline';
 import type { ToolRunBlock } from './groupToolRuns';
+import { useMinResidencyText } from './useActivityLabel';
 
 export interface ToolSummaryRowProps {
   run: ToolRunBlock;
@@ -18,12 +21,22 @@ function runningLabel(run: ToolRunBlock): string {
   return `正在执行 · ${detail}`;
 }
 
+/** 封口组头：工具数 + 组总时长（durationMs 数据不全时只报工具数，不拼时长） */
+function sealedLabel(run: ToolRunBlock): string {
+  const base = `使用了 ${run.tools.length} 个工具`;
+  if (run.durationMs === undefined) return base;
+  const seconds = Math.max(1, Math.round(run.durationMs / 1000));
+  return `${base} · ${seconds} 秒`;
+}
+
 export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
   const theme = useTheme();
   const running = run.running > 0;
-  const label = running
-    ? runningLabel(run)
-    : `使用了 ${run.tools.length} 个工具`;
+  const press = usePressFade();
+  // 活动文案最短驻留（批 B）：执行中逐工具切换的文案经 ≥1200ms 驻留
+  // 整形防闪变；封口瞬间 active=false 直通终态文案（含组总时长）。
+  const rawLabel = running ? runningLabel(run) : sealedLabel(run);
+  const label = useMinResidencyText(rawLabel, running);
   return (
     <Pressable
       testID={`tool-run-${run.id}`}
@@ -33,19 +46,30 @@ export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
       }
       disabled={!onOpen}
       onPress={() => onOpen?.(run.id)}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.row,
         {
           minHeight: theme.size.summaryRow,
           paddingHorizontal: theme.space.md,
           gap: theme.space.sm,
           borderRadius: theme.radius.pill,
-          backgroundColor: pressed
-            ? theme.colors.fillPressed
-            : theme.colors.fillSubtle,
+          backgroundColor: theme.colors.fillSubtle,
         },
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.fillPressed,
+          },
+          press.overlayStyle,
+        ]}
+      />
       {running ? (
         <View
           testID="tool-run-status-dot"

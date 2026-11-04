@@ -67,3 +67,60 @@ describe('groupToolRuns', () => {
     expect(out[1]?.kind).toBe('toolRun');
   });
 });
+
+describe('groupToolRuns 组总时长（批 B）', () => {
+  function timedTool(
+    id: string,
+    atMs: number,
+    endedAtMs?: number,
+    status: ToolBlock['status'] = 'done'
+  ): ToolBlock {
+    return {
+      kind: 'tool',
+      id,
+      toolName: 'read_file',
+      summary: id,
+      status,
+      output: '',
+      atMs,
+      ...(endedAtMs !== undefined ? { endedAtMs } : {}),
+    };
+  }
+
+  it('封口且成员都有结束时刻 → durationMs = 最晚结束 − 组首开始', () => {
+    const out = groupToolRuns([
+      timedTool('a', 1000, 3000),
+      timedTool('b', 2000, 9500),
+    ]);
+    const run = out[0];
+    if (run?.kind !== 'toolRun') throw new Error('应为 toolRun');
+    expect(run.durationMs).toBe(8500);
+  });
+
+  it('任一成员缺 endedAtMs → 整组无 durationMs（不拼部分数据）', () => {
+    const out = groupToolRuns([
+      timedTool('a', 1000, 3000),
+      timedTool('b', 2000),
+    ]);
+    const run = out[0];
+    if (run?.kind !== 'toolRun') throw new Error('应为 toolRun');
+    expect(run.durationMs).toBeUndefined();
+  });
+
+  it('运行中组无 durationMs（未封口不报时长）', () => {
+    const out = groupToolRuns([
+      timedTool('a', 1000, 3000),
+      timedTool('b', 2000, undefined, 'running'),
+    ]);
+    const run = out[0];
+    if (run?.kind !== 'toolRun') throw new Error('应为 toolRun');
+    expect(run.durationMs).toBeUndefined();
+  });
+
+  it('时长不为负（结束早于开始的异常数据归零）', () => {
+    const out = groupToolRuns([timedTool('a', 5000, 4000)]);
+    const run = out[0];
+    if (run?.kind !== 'toolRun') throw new Error('应为 toolRun');
+    expect(run.durationMs).toBe(0);
+  });
+});

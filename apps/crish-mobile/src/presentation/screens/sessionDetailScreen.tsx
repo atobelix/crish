@@ -1,43 +1,28 @@
-// 会话页（原型 conversation-screen 移植）：
-// - 消息流全屏滚动，上下边缘羽化（EdgeFade），头栏/输入框通透悬浮其上；
-// - 悬浮头栏 = 返回白圆钮 + 标题胶囊 + 更多（下拉菜单：运行详情/终端输出/工具调用）；
-// - 审批统一交给全局 ApprovalFloat（悬浮于输入框上方）；
-//   本会话有待审批时 Composer 锁定（原型 approval-locked：输入禁用、占位不换文，
-//   锁定以容器实心 + 工具图标变淡的形态表达）。
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// 统一对话屏（移动界面统一方案 §2.1）：ConversationScreen 只按引擎
+// 能力面渲染——消息流全屏滚动、上下边缘羽化（EdgeFade）、头栏/输入框
+// 通透悬浮其上；引擎差异（远端会话 / 本地线程）全部在适配层，界面零分叉。
+// 本文件同时保留远端宿主 SessionDetailScreen（构造远端引擎 → 统一屏），
+// 既有路由与测试入口不变；本地宿主在 (main)/thread 路由（U2）。
+// 审批统一交给全局 ApprovalFloat（悬浮于输入框上方）；引擎声明
+// composer.locked 时 Composer 锁定（原型 approval-locked：输入禁用、
+// 占位不换文，锁定以容器实心 + 工具图标变淡的形态表达）。
+import { useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/adapters/platform/theme';
-import { useSessionStore } from '@/adapters/hooks/useAppStore';
-import { sessionStore } from '@/domain/store/sessionStore';
-import { useSessionComposer } from '@/adapters/viewmodels/useSessionComposer';
-import { useComposerContextVm } from '@/adapters/viewmodels/useComposerContextVm';
-import { useSkillsVm } from '@/adapters/viewmodels/useSkillsVm';
-import { useComposerAttachments } from '@/adapters/viewmodels/useComposerAttachments';
-import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
-import { ensureSessionHistory } from '@/adapters/runtime/appRuntime';
-import {
-  buildSessionTimeline,
-  type TimelineBlock,
-} from '@/presentation/timeline/buildTimeline';
-import type { DisplayBlock } from '@/presentation/timeline/groupToolRuns';
+import type { TimelineRow } from '@/presentation/timeline/insertTimeSeparators';
 import { TimelineView } from '@/presentation/timeline/TimelineView';
+import { ConversationHeader } from '@/presentation/components/chat/SessionHeader';
+import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
+import type { ConversationEngine } from '@/adapters/conversation/types';
+import { useTimelineBottomInset } from '@/presentation/timeline/useTimelineBottomInset';
+import { useRemoteConversationEngine } from '@/adapters/conversation/useRemoteConversationEngine';
 import {
-  latestRunIdOf,
-  useSessionWindow,
-} from '@/presentation/timeline/useSessionWindow';
-import { SessionHeader } from '@/presentation/components/chat/SessionHeader';
-import {
-  AttachmentStrip,
-  ATTACHMENT_STRIP_HEIGHT,
-} from '@/presentation/components/chat/AttachmentStrip';
-import { AttachmentSheet } from '@/presentation/components/chat/AttachmentSheet';
-import { ModelSheet } from '@/presentation/components/chat/ModelSheet';
-import { SkillsSheet } from '@/presentation/components/chat/SkillsSheet';
-import { useSessionOpsController } from '@/presentation/components/sessions/useSessionOpsController';
-import { PermissionModeSheet } from '@/presentation/components/chat/PermissionModeSheet';
-import { WorkspaceSheet } from '@/presentation/components/files/WorkspaceSheet';
-import { useSafeBack } from '@/presentation/navigation/useSafeBack';
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import {
   AppText,
   Composer,
@@ -45,259 +30,101 @@ import {
   EdgeFade,
   Screen,
   ScrollToBottomButton,
-  useToast,
+  SoftShadowSurface,
 } from '@/presentation/ui';
 
-export interface SessionDetailScreenProps {
-  sessionId: string;
-  onOpenRun?: (runId: string) => void;
-  onOpenTerminal?: (runId: string) => void;
-  /** 打开工具抽屉；focusId 为某组首个工具 id */
+export interface ConversationScreenProps {
+  engine: ConversationEngine;
+  /** 时间线跟随态（宿主持有：滚动跟随是屏幕 UI 态，两引擎共用） */
+  follow: boolean;
+  onFollowChange: (following: boolean) => void;
+  /** 打开工具抽屉（宿主导航面；本地引擎无工具行，不传） */
   onOpenTools?: (focusId?: string) => void;
 }
 
-export default function SessionDetailScreen({
-  sessionId,
-  onOpenRun,
-  onOpenTerminal,
+export function ConversationScreen({
+  engine,
+  follow,
+  onFollowChange,
   onOpenTools,
-}: SessionDetailScreenProps) {
+}: ConversationScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const goBack = useSafeBack();
-  const window = useSessionWindow(sessionId);
-  const summary = useSessionStore((s) =>
-    s.sessions.find((item) => item.id === sessionId)
-  );
-  const [follow, setFollow] = useState(true);
+  const router = useRouter();
+  const openDrawer = useOpenDrawer();
   const [menuOpen, setMenuOpen] = useState(false);
-  // 会话操作（G3）：··· 菜单直达改名/置顶/归档/导出/删除；删本会话后返回
-  const sessionOps = useSessionOpsController({
-    onSessionDeleted: (deletedId) => {
-      if (deletedId === sessionId) goBack();
-    },
-  });
-  // Composer 上下文（G1）：快捷条项目/权限 + 展开行模型钮（与主屏同一数据面）
-  const composerCtx = useComposerContextVm();
-  // 技能目录（G7）：附件面板入口计数 + SkillsSheet 数据面（只读）
-  const skillsVm = useSkillsVm();
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [permissionOpen, setPermissionOpen] = useState(false);
-  const [modelOpen, setModelOpen] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
-  const listRef = useRef<FlatList<DisplayBlock> | null>(null);
-  const [localPrompts, setLocalPrompts] = useState<
-    { id: string; text: string; atMs: number }[]
-  >([]);
+  // 停止生成 pill 按压反馈（按压过渡统一批口径）
+  const stopPress = usePressFade();
+  const listRef = useRef<FlatList<TimelineRow> | null>(null);
 
-  const composer = useSessionComposer(sessionId, (prompt, runId) => {
-    setLocalPrompts((current) => [
-      ...current,
-      { id: `local-${runId}`, text: prompt, atMs: Date.now() },
-    ]);
-  });
-
-  const { showToast } = useToast();
-  // 已选附件（G5b）：发送成功清空、失败保留（清空只发生在成功回执后）
-  const attachments = useComposerAttachments({ notify: showToast });
-  const hasAttachments = attachments.attachments.length > 0;
-  // 富提交（G5b）：组装 + 预检在 VM；成功后清空已选区
-  const submitRich = useCallback(
-    (rawText: string) => {
-      void composer
-        .submitWithAttachments(
-          rawText,
-          attachments.attachments,
-          composerCtx.activeModelVisionSupported
-        )
-        .then((ok) => {
-          if (ok) attachments.clear();
-        });
-    },
-    [composer, attachments, composerCtx.activeModelVisionSupported]
-  );
-  // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交；
-  // G5b：有已选附件时语音文本走富路径一并发出（附件不滞留）
-  const voice = useVoiceInput({
-    onFillText: composer.setPrompt,
-    onSubmitText: (text) => {
-      if (attachments.attachments.length > 0) {
-        submitRich(text);
-      } else {
-        void composer.submitText(text);
-      }
-    },
-    notify: showToast,
-  });
-
-  const currentRunId = latestRunIdOf(
-    window.entries,
-    summary?.engineLastRunId ?? null
-  );
-
-  const blocks = useMemo(() => {
-    const base = buildSessionTimeline(window.entries);
-    const prompts = localPrompts.map<TimelineBlock>((prompt) => ({
-      kind: 'message',
-      id: prompt.id,
-      role: 'user',
-      text: prompt.text,
-      streaming: false,
-      atMs: prompt.atMs,
-    }));
-    if (prompts.length === 0) return base;
-    return [...base, ...prompts].sort((a, b) => a.atMs - b.atMs);
-  }, [window.entries, localPrompts]);
-  const hasTools = blocks.some((block) => block.kind === 'tool');
-
-  useEffect(() => {
-    ensureSessionHistory(sessionId);
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (follow && window.lastSeq > 0) {
-      sessionStore.getState().markRead(sessionId, window.lastSeq);
-    }
-  }, [follow, sessionId, window.lastSeq]);
-
-  const handleSent = useCallback(() => {
-    setFollow(true);
-  }, []);
-
-  useEffect(() => {
-    if (composer.feedback.kind === 'success') handleSent();
-  }, [composer.feedback.kind, handleSent]);
-
-  // 原型 approval-locked：本会话待审批未决时锁定输入（占位文案保持不变）
-  const approvalLocked = (summary?.pendingApprovalCount ?? 0) > 0;
-  const editable = composer.connected && !composer.busy && !approvalLocked;
-
-  // 悬浮 Composer 区高度估算（羽化与回到底部按钮的偏移基准）；
-  // G1 起含快捷条高度（胶囊 22 + 下距 5，随 Composer 一体悬浮）；
-  // G5b：已选附件条呈现时再叠其高度
-  const composerBlockHeight =
-    theme.size.composerMin +
-    27 +
-    theme.space.xl +
-    Math.max(insets.bottom, theme.space.sm) +
-    (hasAttachments ? ATTACHMENT_STRIP_HEIGHT : 0);
-
-  const menuEntries = useMemo(
-    () => [
-      ...(currentRunId && onOpenRun
-        ? [
-            {
-              key: 'run',
-              label: '运行详情',
-              icon: 'eye' as const,
-              onPress: () => onOpenRun(currentRunId),
-            },
-          ]
-        : []),
-      ...(currentRunId && onOpenTerminal
-        ? [
-            {
-              key: 'terminal',
-              label: '终端输出',
-              icon: 'terminal' as const,
-              onPress: () => onOpenTerminal(currentRunId),
-            },
-          ]
-        : []),
-      ...(hasTools && onOpenTools
-        ? [
-            {
-              key: 'tools',
-              label: '工具调用',
-              icon: 'folder' as const,
-              onPress: () => onOpenTools(),
-            },
-          ]
-        : []),
-      // 会话操作（G3：与抽屉/主屏行操作同一命令面；删除走确认弹窗）
-      ...(summary
-        ? [
-            {
-              key: 'pin',
-              label: summary.isPinned ? '取消置顶' : '置顶会话',
-              onPress: () => sessionOps.togglePin(summary),
-            },
-            {
-              key: 'rename',
-              label: '重命名',
-              onPress: () => sessionOps.renameSession(summary),
-            },
-            {
-              key: 'archive',
-              label: summary.isArchived ? '取消归档' : '归档会话',
-              onPress: () => sessionOps.toggleArchive(summary),
-            },
-            {
-              key: 'export',
-              label: '导出 Markdown',
-              onPress: () => sessionOps.exportSession(summary),
-            },
-            { key: 'ops-divider', divider: true as const },
-            {
-              key: 'delete',
-              label: '删除会话',
-              danger: true,
-              onPress: () => sessionOps.deleteSession(summary),
-            },
-          ]
-        : []),
-    ],
-    [
-      currentRunId,
-      hasTools,
-      onOpenRun,
-      onOpenTerminal,
-      onOpenTools,
-      summary,
-      sessionOps,
-    ]
-  );
+  // 悬浮 Composer 占高与时间线底部避让推导：
+  // 由 useTimelineBottomInset 单一真源管理——实测优先、刚性拦截 <= 0 的初次挂载无效帧、
+  // 并以 Composer 实际两行高（98px）/ 单行高（52px）+ 快捷条 + 安全区 + 附件条进行精确物理保底。
+  // 保证尾部消息在键盘未激活与激活时，距输入框顶部均保持 16~24px 的舒适空隙（2026-11-03 修复）。
+  const { timelineBottomInset, floatingHeight, handleOverlayLayout } =
+    useTimelineBottomInset({
+      bottomSafeArea: insets.bottom,
+      hasContextBar: Boolean(engine.composer.contextBar),
+      hasModelControl: Boolean(engine.composer.modelControl),
+      hasAttachments: Boolean(engine.composer.hasAttachments),
+      hasError: Boolean(engine.error),
+      isBusyWithStop: Boolean(engine.busy && engine.stop),
+      gap: theme.space.xl,
+    });
 
   return (
     <Screen>
       {/* 全屏消息流（头栏与 Composer 均悬浮其上） */}
       <TimelineView
-        blocks={blocks}
+        blocks={engine.blocks}
         follow={follow}
-        onFollowChange={setFollow}
+        onFollowChange={onFollowChange}
         listRef={listRef}
         onOpenTools={onOpenTools}
+        emptyTitle={engine.emptyState.title}
+        emptyActionLabel={engine.emptyState.actionLabel}
+        onEmptyAction={engine.emptyState.onAction}
         headerClearance={insets.top + theme.size.header + theme.space.lg}
+        bottomInset={timelineBottomInset}
+        busy={engine.busy}
+        anchorKey={`${engine.kind}:${engine.id}`}
+        readyCover
       />
 
-      {/* 上下羽化：内容临近边缘渐隐（含头栏/输入框背后的过渡区） */}
+      {/* 上下羽化：内容临近边缘渐隐（含头栏/输入框背后的过渡区；
+          底部 EdgeFade 高度严格对齐 floatingHeight，严禁越界进入
+          timelineBottomInset 的 gap 呼吸区，保证最后一条消息完整可见） */}
       <EdgeFade
         side="top"
         height={insets.top + theme.size.header + theme.space.lg}
       />
-      <EdgeFade side="bottom" height={composerBlockHeight + theme.space.xl} />
+      <EdgeFade side="bottom" height={Math.max(0, floatingHeight)} />
 
-      {/* 悬浮头栏（通透，无底色） */}
-      <SessionHeader
-        title={summary?.title?.trim() || '会话'}
-        onBack={goBack}
+      {/* 悬浮头栏（通透，无底色）：汉堡开抽屉 + 标题胶囊 + 新建 + 更多 */}
+      <ConversationHeader
+        title={engine.title ?? '会话'}
+        onOpenDrawer={openDrawer}
+        onNewConversation={() => router.navigate('/')}
         onMore={() => setMenuOpen(true)}
       />
 
       {!follow ? (
         <ScrollToBottomButton
-          bottomOffset={composerBlockHeight + theme.space.section}
+          bottomOffset={floatingHeight + theme.space.section}
+          followKeyboard
           onPress={() => {
             listRef.current?.scrollToEnd({ animated: true });
-            setFollow(true);
+            onFollowChange(true);
           }}
           testID="session-back-to-bottom"
         />
       ) : null}
 
-      {/* 悬浮 Composer（透明底，白胶囊直接浮于滚动层上方） */}
-      <View
+      {/* 悬浮 Composer（透明底，白胶囊直接浮于滚动层上方）；
+          KeyboardStickyView 承载：键盘动画期间逐帧贴键盘顶缘同步升降
+          （WindowInsetsAnimationCompat），动画过程与结果同源同帧 */}
+      <KeyboardStickyView
+        onLayout={handleOverlayLayout}
         style={[
           styles.composerArea,
           {
@@ -307,145 +134,141 @@ export default function SessionDetailScreen({
           },
         ]}
       >
-        {composer.feedback.kind === 'error' ? (
-          <AppText
-            variant="caption"
-            color="danger"
-            style={{ paddingHorizontal: theme.space.lg }}
+        {engine.error ? (
+          // 常驻错误条（与语音错误条同形态：dangerSoft 底、无阴影、
+          // 文案占满整行，detail 续行呈现；关闭独立成行置于右端，
+          // 不把文本压成窄列——横幅排版裁决 2026-11-02）。远端错误
+          // 只有 message 时同一形态退化为单行文案。
+          <View
+            testID="session-error"
+            style={[
+              styles.errorBar,
+              {
+                backgroundColor: theme.colors.dangerSoft,
+                borderRadius: theme.radius.menu,
+                paddingHorizontal: theme.space.md,
+                paddingVertical: theme.space.sm,
+                marginBottom: theme.space.sm,
+              },
+            ]}
           >
-            {composer.feedback.message}
-          </AppText>
+            <AppText variant="footnote" color="danger">
+              {engine.error.message}
+              {engine.error.detail ? `\n${engine.error.detail}` : ''}
+            </AppText>
+            {engine.error.onDismiss ? (
+              <AppText
+                variant="footnote"
+                color="textSecondary"
+                onPress={engine.error.onDismiss}
+                style={styles.errorDismiss}
+              >
+                关闭
+              </AppText>
+            ) : null}
+          </View>
         ) : null}
-        <AttachmentStrip
-          attachments={attachments.attachments}
-          onRemove={attachments.remove}
-          testID="session-attachment-strip"
-        />
+        {engine.busy && engine.stop ? (
+          // 停止生成（能力驱动：引擎声明 stop 且生成中才在场；
+          // 未声明的引擎不渲染——不造假钮）
+          <AnimatedPressable
+            testID="session-stop"
+            accessibilityRole="button"
+            accessibilityLabel="停止生成"
+            onPress={engine.stop}
+            onPressIn={stopPress.onPressIn}
+            onPressOut={stopPress.onPressOut}
+            style={[
+              styles.stopPill,
+              {
+                marginBottom: theme.space.sm,
+              },
+              stopPress.fadeStyle,
+            ]}
+          >
+            <SoftShadowSurface
+              preset="button"
+              borderRadius={theme.radius.pill}
+              fill={theme.colors.surfaceGrouped}
+              fillStyle={{
+                paddingHorizontal: theme.space.lg,
+                paddingVertical: theme.space.sm,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <AppText variant="footnote" color="textPrimary">
+                停止生成
+              </AppText>
+            </SoftShadowSurface>
+          </AnimatedPressable>
+        ) : null}
+        {engine.renderComposerLead ? engine.renderComposerLead() : null}
         <Composer
           testID="session-composer"
-          placeholder={composer.connected ? '回复助手或发送指令…' : '未连接'}
-          value={composer.prompt}
-          onChangeText={composer.setPrompt}
-          onSubmit={() => {
-            if (hasAttachments) submitRich(composer.prompt);
-            else void composer.submit();
-          }}
-          canSubmit={
-            (composer.canSubmit ||
-              (composer.connected && !composer.busy && hasAttachments)) &&
-            !approvalLocked
-          }
-          editable={editable}
-          locked={approvalLocked}
+          placeholder={engine.composer.placeholder}
+          value={engine.composer.prompt}
+          onChangeText={engine.composer.setPrompt}
+          onSubmit={engine.composer.submit}
+          canSubmit={engine.composer.canSubmit}
+          editable={engine.composer.editable}
+          locked={engine.composer.locked}
           maxLength={4096}
-          voice={voice}
-          onAttachPress={() => setAttachOpen(true)}
-          hasAttachments={hasAttachments}
-          contextBar={{
-            workspaceLabel: composerCtx.workspaceLabel,
-            permissionLabel: composerCtx.permissionLabel,
-            onWorkspacePress: () => {
-              composerCtx.openWorkspaceList();
-              setWorkspaceOpen(true);
-            },
-            onPermissionPress: () => setPermissionOpen(true),
-          }}
-          model={{
-            label: composerCtx.modelLabel,
-            onPress: () => {
-              composerCtx.openModelList();
-              setModelOpen(true);
-            },
-          }}
+          voice={engine.composer.voice}
+          onAttachPress={engine.composer.onAttachPress}
+          hasAttachments={engine.composer.hasAttachments}
+          contextBar={engine.composer.contextBar}
+          model={engine.composer.modelControl}
         />
-      </View>
+      </KeyboardStickyView>
 
-      {/* 会话选项下拉：真实能力（运行详情 / 终端输出 / 工具调用） */}
+      {/* 更多菜单（引擎组装条目；远端 = 运行/终端/工具 + 会话操作） */}
       <DropdownMenu
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         top={insets.top + theme.size.header + theme.space.md}
         right={theme.space.md}
         testID="session-menu"
-        entries={menuEntries}
+        entries={engine.menuEntries}
       />
 
-      {/* 项目选择 Sheet（G1：复用文件页 WorkspaceSheet 数据面） */}
-      <WorkspaceSheet
-        visible={workspaceOpen}
-        onClose={() => setWorkspaceOpen(false)}
-        workspaces={composerCtx.workspaces ?? []}
-        status={composerCtx.workspacesStatus}
-        activeRoot={composerCtx.activeWorkspaceRoot ?? ''}
-        switching={composerCtx.switchingWorkspace}
-        onSelect={(root) => {
-          composerCtx.selectWorkspace(root);
-          setWorkspaceOpen(false);
-        }}
-        onRetry={composerCtx.retryWorkspaces}
-      />
-
-      {/* 权限模式 Sheet（G1：桌面三档对齐，选择即持久化） */}
-      <PermissionModeSheet
-        visible={permissionOpen}
-        onClose={() => setPermissionOpen(false)}
-        value={composerCtx.permissionMode}
-        onSelect={(mode) => {
-          composerCtx.setPermissionMode(mode);
-          setPermissionOpen(false);
-        }}
-        testID="session-permission-sheet"
-      />
-
-      {/* 模型选择 Sheet（G2：真实列表 + 全局默认切换，桌面同一真源） */}
-      <ModelSheet
-        visible={modelOpen}
-        onClose={() => setModelOpen(false)}
-        connected={composerCtx.connected}
-        models={composerCtx.models}
-        status={composerCtx.modelsStatus}
-        activeModelId={composerCtx.activeModelId}
-        switching={composerCtx.switchingModel}
-        errorCode={composerCtx.modelsError}
-        onSelectModel={(providerId, modelId) => {
-          void composerCtx.selectModel(providerId, modelId).then((ok) => {
-            if (ok) setModelOpen(false);
-          });
-        }}
-        onRetry={composerCtx.retryModels}
-        testID="session-model-sheet"
-      />
-
-      {/* 附件面板（G5b：拍照/相册/文件三入口，选取即处理） */}
-      <AttachmentSheet
-        visible={attachOpen}
-        onClose={() => setAttachOpen(false)}
-        onTakePhoto={attachments.pickFromCamera}
-        onPickImage={attachments.pickFromLibrary}
-        onPickFile={attachments.pickFromFiles}
-        skillsCount={skillsVm.skillsCount}
-        onOpenSkills={() => {
-          skillsVm.openList();
-          setSkillsOpen(true);
-        }}
-        testID="session-attachment-sheet"
-      />
-
-      {/* 技能目录 Sheet（G7：宿主技能发现只读浏览，桌面同一真源） */}
-      <SkillsSheet
-        visible={skillsOpen}
-        onClose={() => setSkillsOpen(false)}
-        connected={skillsVm.connected}
-        skills={skillsVm.skills}
-        status={skillsVm.status}
-        errorCode={skillsVm.errorCode}
-        onRetry={skillsVm.retry}
-        testID="session-skills-sheet"
-      />
-
-      {/* 会话操作层（G3：改名弹窗 + 删除确认；本页无行 Sheet 入口） */}
-      {sessionOps.layer}
+      {/* 引擎专属浮层宿主（远端 = 五种 Sheet + 会话操作层） */}
+      {engine.renderSheets()}
     </Screen>
+  );
+}
+
+export interface SessionDetailScreenProps {
+  sessionId: string;
+  onOpenRun?: (runId: string) => void;
+  onOpenTerminal?: (runId: string) => void;
+  /** 打开工具抽屉；focusId 为某组首个工具 id */
+  onOpenTools?: (focusId?: string) => void;
+}
+
+/** 远端宿主：构造远端引擎并托管时间线跟随态，渲染统一对话屏 */
+export default function SessionDetailScreen({
+  sessionId,
+  onOpenRun,
+  onOpenTerminal,
+  onOpenTools,
+}: SessionDetailScreenProps) {
+  const [follow, setFollow] = useState(true);
+  const handleSent = useCallback(() => {
+    setFollow(true);
+  }, []);
+  const engine = useRemoteConversationEngine(
+    sessionId,
+    { onOpenRun, onOpenTerminal, onOpenTools },
+    { follow, onSendSuccess: handleSent }
+  );
+  return (
+    <ConversationScreen
+      engine={engine}
+      follow={follow}
+      onFollowChange={setFollow}
+      onOpenTools={onOpenTools}
+    />
   );
 }
 
@@ -456,4 +279,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
+  // 列布局：文案整行 + 关闭行（见错误条呈现处裁决注释）
+  errorBar: { gap: 4 },
+  errorDismiss: { alignSelf: 'flex-end' },
+  stopPill: { alignSelf: 'center' },
 });
