@@ -74,6 +74,9 @@ impl CommandPathInspector {
     /// 返回值改为 `Result`：正则编译失败（内部缺陷）以工具错误上抛，
     /// 绝不 panic；调用方 `inspect` 直接 `?` 传播。
     pub fn extract_absolute_paths(command_line: &str) -> Result<Vec<PathBuf>, ToolError> {
+        let masked_cmd = mask_search_patterns(command_line);
+        let cmd_ref = masked_cmd.as_str();
+
         static WIN_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(
                 r#"(?i)(?:\A|[^a-zA-Z0-9_./\\-])([a-zA-Z]:(?:[\\/][^\s"'`=,;()<>{}\r\n*?|]*)?)"#,
@@ -83,8 +86,11 @@ impl CommandPathInspector {
         static QUOTED_WIN_PATH_REGEX: CompiledRegex =
             LazyLock::new(|| Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#));
 
-        static UNIX_PATH_REGEX: CompiledRegex =
-            LazyLock::new(|| Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*)"#));
+        static UNIX_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
+            Regex::new(
+                r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*/?)(?:\z|[\s"'`=,;()<>{}\r\n|])"#,
+            )
+        });
 
         static QUOTED_UNIX_PATH_REGEX: CompiledRegex =
             LazyLock::new(|| Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#));
@@ -110,7 +116,7 @@ impl CommandPathInspector {
 
         // 0. 引号包裹路径（支持空格，如 "C:/Program Files/..."）
         for cap in
-            compiled_regex(&QUOTED_WIN_PATH_REGEX, "QUOTED_WIN_PATH")?.captures_iter(command_line)
+            compiled_regex(&QUOTED_WIN_PATH_REGEX, "QUOTED_WIN_PATH")?.captures_iter(cmd_ref)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -123,7 +129,7 @@ impl CommandPathInspector {
             }
         }
         for cap in
-            compiled_regex(&QUOTED_UNIX_PATH_REGEX, "QUOTED_UNIX_PATH")?.captures_iter(command_line)
+            compiled_regex(&QUOTED_UNIX_PATH_REGEX, "QUOTED_UNIX_PATH")?.captures_iter(cmd_ref)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -136,7 +142,7 @@ impl CommandPathInspector {
             }
         }
         for cap in
-            compiled_regex(&QUOTED_UNC_PATH_REGEX, "QUOTED_UNC_PATH")?.captures_iter(command_line)
+            compiled_regex(&QUOTED_UNC_PATH_REGEX, "QUOTED_UNC_PATH")?.captures_iter(cmd_ref)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -149,7 +155,7 @@ impl CommandPathInspector {
             }
         }
         for cap in
-            compiled_regex(&QUOTED_HOME_PATH_REGEX, "QUOTED_HOME_PATH")?.captures_iter(command_line)
+            compiled_regex(&QUOTED_HOME_PATH_REGEX, "QUOTED_HOME_PATH")?.captures_iter(cmd_ref)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -163,7 +169,7 @@ impl CommandPathInspector {
         }
 
         // 1. Windows 盘符路径
-        for cap in compiled_regex(&WIN_PATH_REGEX, "WIN_PATH")?.captures_iter(command_line) {
+        for cap in compiled_regex(&WIN_PATH_REGEX, "WIN_PATH")?.captures_iter(cmd_ref) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -175,21 +181,31 @@ impl CommandPathInspector {
             }
         }
 
-        // 2. Unix 绝对路径
-        for cap in compiled_regex(&UNIX_PATH_REGEX, "UNIX_PATH")?.captures_iter(command_line) {
-            if let Some(m) = cap.get(1) {
-                let s = clean_path_candidate(m.as_str());
-                if is_valid_unix_path(&s) {
-                    let pb = PathBuf::from(s);
-                    if !paths.contains(&pb) {
-                        paths.push(pb);
+        // 2. Unix 绝对路径（带尾部定界符断言，向前递进 group 1 结尾以避免吞并紧邻路径）
+        let unix_re = compiled_regex(&UNIX_PATH_REGEX, "UNIX_PATH")?;
+        let mut search_from = 0;
+        while search_from < cmd_ref.len() {
+            if let Some(cap) = unix_re.captures(&cmd_ref[search_from..]) {
+                if let Some(m) = cap.get(1) {
+                    let s = clean_path_candidate(m.as_str());
+                    if is_valid_unix_path(&s) {
+                        let pb = PathBuf::from(s);
+                        if !paths.contains(&pb) {
+                            paths.push(pb);
+                        }
                     }
+                    let advance = m.end().max(1);
+                    search_from += advance;
+                } else {
+                    break;
                 }
+            } else {
+                break;
             }
         }
 
         // 3. 独立根路径 /
-        if compiled_regex(&STANDALONE_ROOT_REGEX, "STANDALONE_ROOT")?.is_match(command_line) {
+        if compiled_regex(&STANDALONE_ROOT_REGEX, "STANDALONE_ROOT")?.is_match(cmd_ref) {
             let root = PathBuf::from("/");
             if !paths.contains(&root) {
                 paths.push(root);
@@ -197,7 +213,7 @@ impl CommandPathInspector {
         }
 
         // 4. UNC 路径
-        for cap in compiled_regex(&UNC_PATH_REGEX, "UNC_PATH")?.captures_iter(command_line) {
+        for cap in compiled_regex(&UNC_PATH_REGEX, "UNC_PATH")?.captures_iter(cmd_ref) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -210,7 +226,7 @@ impl CommandPathInspector {
         }
 
         // 5. 家目录路径 (~/...)
-        for cap in compiled_regex(&HOME_PATH_REGEX, "HOME_PATH")?.captures_iter(command_line) {
+        for cap in compiled_regex(&HOME_PATH_REGEX, "HOME_PATH")?.captures_iter(cmd_ref) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -391,13 +407,23 @@ fn clean_path_candidate(raw: &str) -> String {
 }
 
 fn is_valid_unix_path(s: &str) -> bool {
-    if !s.starts_with('/') {
+    let trimmed = s.trim();
+    if !trimmed.starts_with('/') {
         return false;
     }
-    if s[1..].contains('/') {
+    // 纯根路径或仅由点和斜杠组成的相对遍历段（如 /、/.、/..、/./、/../）非普通 Unix 绝对路径
+    let stripped = trimmed.trim_matches('/');
+    if stripped.is_empty() || stripped == "." || stripped == ".." {
+        return false;
+    }
+    let segments: Vec<&str> = stripped.split('/').filter(|seg| !seg.is_empty()).collect();
+    if segments.is_empty() || segments.iter().all(|seg| *seg == "." || *seg == "..") {
+        return false;
+    }
+    if segments.len() > 1 {
         return true;
     }
-    let rest = &s[1..];
+    let rest = segments[0];
     // 单字符且为 ASCII 字母视作 Windows 盘符（如 /c），不是 Unix 路径
     if rest.len() == 1 && matches!(rest.chars().next(), Some(ch) if ch.is_ascii_alphabetic()) {
         return false;
@@ -421,7 +447,339 @@ fn is_valid_unix_path(s: &str) -> bool {
     if KNOWN_UNIX_DIRS.contains(&rest.to_ascii_lowercase().as_str()) {
         return true;
     }
-    rest.contains('.') || rest.len() > 2
+    // 杜绝纯点序列（如 .、..、...）或相对目录符作为有效路径
+    if rest.chars().all(|c| c == '.') {
+        return false;
+    }
+    // 允许隐藏文件（如 /.config）或带后缀文件名（如 /app.js），严禁以点结尾的未闭合片段
+    if rest.starts_with('.') && rest.len() > 1 {
+        return true;
+    }
+    if rest.contains('.') {
+        return !rest.ends_with('.');
+    }
+    rest.len() > 2
+}
+
+#[derive(Debug, Clone)]
+struct CmdToken {
+    text: String,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone)]
+struct CmdSegment {
+    tokens: Vec<CmdToken>,
+}
+
+fn tokenize_segments_with_spans(line: &str) -> Vec<CmdSegment> {
+    let mut segments = Vec::new();
+    let mut cur_tokens = Vec::new();
+    let mut cur_text = String::new();
+    let mut token_start: Option<usize> = None;
+    let mut chars = line.char_indices().peekable();
+    let mut quote: Option<char> = None;
+
+    while let Some((idx, c)) = chars.next() {
+        if quote == Some('\'') {
+            cur_text.push(c);
+            if c == '\'' {
+                quote = None;
+            }
+            continue;
+        }
+
+        if quote == Some('"') {
+            if c == '\\' {
+                let after_drive = cur_text.len() >= 2
+                    && cur_text.as_bytes()[cur_text.len() - 2].is_ascii_alphabetic()
+                    && cur_text.as_bytes()[cur_text.len() - 1] == b':';
+                if !after_drive {
+                    if let Some(&(_, next_c)) = chars.peek() {
+                        if next_c == '"' || next_c == '\\' || next_c == '`' || next_c == '$' {
+                            chars.next();
+                            cur_text.push(next_c);
+                            continue;
+                        }
+                    }
+                }
+                cur_text.push(c);
+                continue;
+            }
+            if c == '"' {
+                quote = None;
+            } else {
+                cur_text.push(c);
+            }
+            continue;
+        }
+
+        if c == '\\' {
+            if token_start.is_none() {
+                token_start = Some(idx);
+            }
+            if let Some((_, next_c)) = chars.next() {
+                cur_text.push(next_c);
+            }
+            continue;
+        }
+
+        match c {
+            '\'' | '"' => {
+                if token_start.is_none() {
+                    token_start = Some(idx);
+                }
+                quote = Some(c);
+            }
+            ';' | '|' => {
+                if let Some(start) = token_start.take() {
+                    cur_tokens.push(CmdToken {
+                        text: std::mem::take(&mut cur_text),
+                        start,
+                        end: idx,
+                    });
+                }
+                if !cur_tokens.is_empty() {
+                    segments.push(CmdSegment {
+                        tokens: std::mem::take(&mut cur_tokens),
+                    });
+                }
+            }
+            '&' => {
+                if chars.peek().map(|(_, ch)| *ch) == Some('&') {
+                    chars.next();
+                    if let Some(start) = token_start.take() {
+                        cur_tokens.push(CmdToken {
+                            text: std::mem::take(&mut cur_text),
+                            start,
+                            end: idx,
+                        });
+                    }
+                    if !cur_tokens.is_empty() {
+                        segments.push(CmdSegment {
+                            tokens: std::mem::take(&mut cur_tokens),
+                        });
+                    }
+                } else {
+                    if token_start.is_none() {
+                        token_start = Some(idx);
+                    }
+                    cur_text.push(c);
+                }
+            }
+            '\n' | '\r' => {
+                if let Some(start) = token_start.take() {
+                    cur_tokens.push(CmdToken {
+                        text: std::mem::take(&mut cur_text),
+                        start,
+                        end: idx,
+                    });
+                }
+                if !cur_tokens.is_empty() {
+                    segments.push(CmdSegment {
+                        tokens: std::mem::take(&mut cur_tokens),
+                    });
+                }
+            }
+            c if c.is_whitespace() => {
+                if let Some(start) = token_start.take() {
+                    cur_tokens.push(CmdToken {
+                        text: std::mem::take(&mut cur_text),
+                        start,
+                        end: idx,
+                    });
+                }
+            }
+            _ => {
+                if token_start.is_none() {
+                    token_start = Some(idx);
+                }
+                cur_text.push(c);
+            }
+        }
+    }
+
+    if let Some(start) = token_start.take() {
+        cur_tokens.push(CmdToken {
+            text: cur_text,
+            start,
+            end: line.len(),
+        });
+    }
+    if !cur_tokens.is_empty() {
+        segments.push(CmdSegment { tokens: cur_tokens });
+    }
+
+    segments
+}
+
+fn normalize_cmd_name(token: &str) -> String {
+    let trimmed = token.trim();
+    let name = trimmed.trim_matches(['"', '\'']);
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let stem = if base.to_ascii_lowercase().ends_with(".exe") && base.len() > 4 {
+        &base[..base.len() - 4]
+    } else {
+        base
+    };
+    stem.to_ascii_lowercase()
+}
+
+fn flag_takes_value(prog: &str, flag: &str) -> bool {
+    match prog {
+        "git" => matches!(
+            flag,
+            "-f" | "-m" | "-C" | "-B" | "-A" | "-O" | "--max-count" | "--context" | "--threads" | "--open-files-in-pager"
+        ),
+        "grep" | "egrep" | "fgrep" => matches!(
+            flag,
+            "-f" | "-m" | "-C" | "-B" | "-A" | "-d" | "-D" | "--file" | "--max-count" | "--context" | "--directories" | "--devices" | "--exclude" | "--include" | "--exclude-dir"
+        ),
+        "rg" => matches!(
+            flag,
+            "-t" | "-T" | "-g" | "-m" | "-C" | "-B" | "-A" | "-r" | "-d" | "-f" | "-E" | "-j" | "--type" | "--type-not" | "--glob" | "--max-count" | "--context" | "--replace" | "--max-depth" | "--file" | "--encoding" | "--sort" | "--sortr" | "--threads" | "--field-context-separator" | "--field-match-separator" | "--path-separator"
+        ),
+        "ag" => matches!(
+            flag,
+            "-G" | "-g" | "-m" | "-A" | "-B" | "-C" | "--ignore" | "--ignore-dir"
+        ),
+        _ => false,
+    }
+}
+
+/// 在进行路径提取前，遮蔽文本检索类命令（grep, git grep, rg, ag, findstr 等）的搜索 pattern 参数位，
+/// 避免将正则表达式内部的字符类（如 \.\.?/.*useSplitResize）或模式字符串（如 "/etc/passwd"）误提取为文件系统路径。
+fn mask_search_patterns(command_line: &str) -> String {
+    let segments = tokenize_segments_with_spans(command_line);
+    let mut pattern_spans: Vec<(usize, usize)> = Vec::new();
+
+    for seg in segments {
+        if seg.tokens.is_empty() {
+            continue;
+        }
+
+        let prog = normalize_cmd_name(&seg.tokens[0].text);
+        let (effective_prog, args_tokens) = if prog == "git" {
+            // Find subcommand after git
+            let mut sub_idx = 1;
+            while sub_idx < seg.tokens.len() {
+                let text = &seg.tokens[sub_idx].text;
+                if text == "-C" || text == "-c" || text == "--git-dir" || text == "--work-tree" {
+                    sub_idx += 2;
+                    continue;
+                }
+                if text.starts_with('-') {
+                    sub_idx += 1;
+                    continue;
+                }
+                break;
+            }
+            if sub_idx < seg.tokens.len() && seg.tokens[sub_idx].text.to_ascii_lowercase() == "grep" {
+                ("git-grep", &seg.tokens[sub_idx + 1..])
+            } else {
+                continue;
+            }
+        } else if matches!(prog.as_str(), "grep" | "egrep" | "fgrep" | "rg" | "ag" | "ack" | "findstr") {
+            (prog.as_str(), &seg.tokens[1..])
+        } else {
+            continue;
+        };
+
+        if effective_prog == "findstr" {
+            let mut found_c_or_r = false;
+            let mut idx = 0;
+            while idx < args_tokens.len() {
+                let tok = &args_tokens[idx];
+                let upper = tok.text.to_ascii_uppercase();
+                if upper.starts_with("/C:") || upper.starts_with("/R:") {
+                    found_c_or_r = true;
+                    pattern_spans.push((tok.start, tok.end));
+                } else if upper == "/C" || upper == "/R" {
+                    found_c_or_r = true;
+                    if idx + 1 < args_tokens.len() {
+                        let next_tok = &args_tokens[idx + 1];
+                        pattern_spans.push((next_tok.start, next_tok.end));
+                        idx += 1;
+                    }
+                }
+                idx += 1;
+            }
+            if !found_c_or_r {
+                // First non-flag argument is pattern
+                for tok in args_tokens {
+                    if !tok.text.starts_with('/') && !tok.text.starts_with('-') {
+                        pattern_spans.push((tok.start, tok.end));
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        // For grep, git-grep, rg, ag, ack:
+        let tool_name = if effective_prog == "git-grep" { "git" } else { effective_prog };
+        let mut explicit_pattern = false;
+        let mut idx = 0;
+        while idx < args_tokens.len() {
+            let tok = &args_tokens[idx];
+            if tok.text == "-e" || tok.text == "--regexp" {
+                explicit_pattern = true;
+                if idx + 1 < args_tokens.len() {
+                    let pat_tok = &args_tokens[idx + 1];
+                    pattern_spans.push((pat_tok.start, pat_tok.end));
+                    idx += 2;
+                    continue;
+                }
+            } else if tok.text.starts_with("-e") && tok.text.len() > 2 {
+                explicit_pattern = true;
+                pattern_spans.push((tok.start, tok.end));
+            } else if tok.text.starts_with("--regexp=") {
+                explicit_pattern = true;
+                pattern_spans.push((tok.start, tok.end));
+            }
+            idx += 1;
+        }
+
+        if !explicit_pattern {
+            // First positional argument is the pattern
+            idx = 0;
+            while idx < args_tokens.len() {
+                let tok = &args_tokens[idx];
+                if tok.text == "--" {
+                    break;
+                }
+                if tok.text.starts_with('-') {
+                    if flag_takes_value(tool_name, &tok.text) && !tok.text.contains('=') {
+                        // Short flag (len == 2) takes next arg as value
+                        if tok.text.len() == 2 {
+                            idx += 2;
+                            continue;
+                        }
+                    }
+                    idx += 1;
+                    continue;
+                }
+                // First positional argument!
+                pattern_spans.push((tok.start, tok.end));
+                break;
+            }
+        }
+    }
+
+    if pattern_spans.is_empty() {
+        return command_line.to_string();
+    }
+
+    let mut bytes = command_line.as_bytes().to_vec();
+    for (start, end) in pattern_spans {
+        let s = start.min(bytes.len());
+        let e = end.min(bytes.len());
+        for b in &mut bytes[s..e] {
+            *b = b' ';
+        }
+    }
+    String::from_utf8(bytes).unwrap_or_else(|_| command_line.to_string())
 }
 
 #[cfg(test)]
@@ -453,5 +811,70 @@ mod tests {
         let root = std::env::temp_dir();
         let result = CommandPathInspector::inspect("cat /tmp/readme.txt", &root);
         assert!(result.is_ok(), "只读非关键路径不阻断");
+    }
+
+    #[test]
+    fn regression_user_trigger_git_grep_not_blocked() {
+        let root = std::env::temp_dir();
+        let cmd = r#"git grep -n -E "hooks/useSplitResize|from ['\"]\.\.?/.*useSplitResize" -- ':!apps/crish-desktop/src/components/ui/SplitResizer/*'"#;
+        let result = CommandPathInspector::inspect(cmd, &root);
+        assert!(
+            result.is_ok(),
+            "现场故障回归：git grep 中的 \\.\\.?/.*useSplitResize 严禁误报为 /. 敏感路径：{result:?}"
+        );
+    }
+
+    #[test]
+    fn search_pattern_containing_system_path_not_blocked() {
+        let root = std::env::temp_dir();
+        for cmd in [
+            r#"rg "/etc/passwd" src/"#,
+            r#"grep "/etc/passwd" src/"#,
+            r#"git grep "/etc/passwd" src/"#,
+            r#"grep -e "/bin/sh" file.txt"#,
+            r#"findstr /c:"/etc/hosts" hosts.txt"#,
+        ] {
+            let result = CommandPathInspector::inspect(cmd, &root);
+            assert!(
+                result.is_ok(),
+                "搜索 pattern 中的敏感路径特征严禁被误判为文件访问：{cmd} -> {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn search_target_file_critical_path_is_still_blocked() {
+        let root = std::env::temp_dir();
+        for cmd in [
+            r#"grep "foo" /etc/passwd"#,
+            r#"rg "foo" /etc/passwd"#,
+            r#"git grep "foo" -- /etc/passwd"#,
+        ] {
+            let result = CommandPathInspector::inspect(cmd, &root);
+            assert!(
+                result.is_err(),
+                "作为搜索目标文件的系统敏感路径必须拦截：{cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn unix_path_validation_rejects_bare_dots() {
+        assert!(!is_valid_unix_path("/."));
+        assert!(!is_valid_unix_path("/.."));
+        assert!(!is_valid_unix_path("/"));
+        assert!(!is_valid_unix_path("/./"));
+        assert!(!is_valid_unix_path("/./.."));
+        assert!(!is_valid_unix_path("/..."));
+        assert!(is_valid_unix_path("/.config"));
+        assert!(is_valid_unix_path("/app.js"));
+        assert!(is_valid_unix_path("/etc/passwd"));
+    }
+
+    #[test]
+    fn consecutive_unix_paths_extracted() {
+        let paths = CommandPathInspector::extract_absolute_paths("cp /tmp/file1 /tmp/file2").unwrap();
+        assert!(paths.contains(&PathBuf::from("/tmp/file1")));
+        assert!(paths.contains(&PathBuf::from("/tmp/file2")));
     }
 }

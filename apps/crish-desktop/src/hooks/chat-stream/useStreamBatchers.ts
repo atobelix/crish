@@ -63,10 +63,10 @@ function createThinkingBatcher(): ThinkingBatcher {
       );
     },
     {
-      intervalMs: 48,
+      intervalMs: 32,
       merge: (a, b) => a + b,
-      // 待刷 delta 累计 4000 字符强制 flush（与旧 maxBufferedChars 同口径）
-      maxBufferedSize: 4000,
+      // 人本化速度域平滑节流：累计 200 字符强制 flush，消除大块突发刷屏
+      maxBufferedSize: 200,
     }
   );
   const batcher: ThinkingBatcher = {
@@ -155,7 +155,7 @@ export function useStreamBatchers(): StreamBatcherRefs {
             : {}),
         });
       },
-      { intervalMs: 48, merge: mergeToolCallPatch }
+      { intervalMs: 32, merge: mergeToolCallPatch }
     );
     registerStreamBatcher(batcher as StreamValueBatcher<unknown>);
     toolBatcherRef.current = batcher;

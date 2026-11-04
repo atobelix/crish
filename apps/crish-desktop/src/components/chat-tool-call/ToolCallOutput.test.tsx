@@ -80,6 +80,27 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         'cargo test --workspace'
       );
     });
+
+    it('复制按钮语义分流：Shell 侧显示「复制命令」，常规入参表显示「复制入参」', () => {
+      const { unmount } = render(
+        <ToolCallInputPane
+          toolId="t-shell-copy-lbl"
+          name="run_command"
+          argumentsStr={JSON.stringify({ CommandLine: 'npm test' })}
+        />
+      );
+      expect(screen.getByRole('button', { name: '复制命令' })).toBeDefined();
+      unmount();
+
+      render(
+        <ToolCallInputPane
+          toolId="t-args-copy-lbl"
+          name="generic_tool"
+          argumentsStr={JSON.stringify({ query: 'hello' })}
+        />
+      );
+      expect(screen.getByRole('button', { name: '复制入参' })).toBeDefined();
+    });
   });
 
   describe('2. ToolCallOutputPane 输出区测试', () => {
@@ -123,6 +144,38 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       );
 
       expect(screen.getByText('（无输出）')).toBeDefined();
+    });
+
+    it('非单卡模式且普通成功无元数据时，不渲染独立 header，消除垂直空白并改用右上角悬浮「复制输出」', () => {
+      const { container } = render(
+        <ToolCallOutputPane
+          toolId="t-out-no-header"
+          output="plain output without meta"
+          status="success"
+          isSingleCard={false}
+        />
+      );
+
+      // 不应渲染独立的 header 行，消除突兀空白
+      expect(container.querySelector('header')).toBeNull();
+      // 但浮动操作区应有明确的「复制输出」按钮
+      expect(screen.getByRole('button', { name: '复制输出' })).toBeDefined();
+    });
+
+    it('有耗时元数据时渲染 Header 并在右侧渲染「复制输出」按钮', () => {
+      const { container } = render(
+        <ToolCallOutputPane
+          toolId="t-out-with-header"
+          output="result with duration"
+          status="success"
+          durationStr="0.5s"
+          isSingleCard={false}
+        />
+      );
+
+      expect(container.querySelector('header')).not.toBeNull();
+      expect(screen.getByText(/0.5s/)).toBeDefined();
+      expect(screen.getByRole('button', { name: '复制输出' })).toBeDefined();
     });
 
     it('具有 diffs 时应仅渲染 diff 预览，不重复输出 raw diff 文本', () => {

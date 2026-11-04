@@ -199,12 +199,16 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
     expect(label).toBe('已完成 12.0 秒');
   });
 
-  it('首个过程段（紧跟用户消息下方）承载整轮工作时间（2026-09-11 用户裁决）', () => {
-    const msg: SessionMessage = {
+  it('首个过程段项数 ≥ 2 时承载整轮工作时间（2026-09-11 用户裁决），单项穿透无外层工作时间', () => {
+    // 1. 项数 ≥ 2（思考 + 工具）：首个过程组承载整轮工作时间
+    const multiMsg: SessionMessage = {
       id: 'm-chain-3',
       sender: 'assistant',
       timestamp: T0,
       text: '正文',
+      toolCalls: [
+        toolCall('tc-1', T0 + 1_000, { status: 'success', durationMs: 1_000 }),
+      ],
       blocks: [
         {
           type: 'thought',
@@ -212,15 +216,44 @@ describe('节点 6 · 软收口全链路物证（收口 → 落盘 → 归一 �
           content: '只在心里想了一下',
           turnIndex: 0,
           startTime: T0,
-          durationMs: 2_000,
+          durationMs: 1_000,
         },
+        blockTool('tc-1', T0 + 1_000),
         { type: 'text', content: '正文', turnIndex: 0, startTime: T0 + 2_000 },
       ],
     } as SessionMessage;
 
-    const { seg, label } = runChain(msg);
+    const { seg, label } = runChain(multiMsg);
     expect(seg.showWorkTime).toBe(true);
     expect(label).toBe('已完成 2.0 秒');
+
+    // 2. 单工具原子单项组：穿透直出，无外层工作时间（showWorkTime=false，defaultExpanded=true）
+    const singleToolMsg: SessionMessage = {
+      id: 'm-chain-single-tool',
+      sender: 'assistant',
+      timestamp: T0,
+      text: '正文',
+      toolCalls: [
+        toolCall('tc-single', T0, { status: 'success', durationMs: 2_000 }),
+      ],
+      blocks: [
+        blockTool('tc-single', T0),
+        { type: 'text', content: '正文', turnIndex: 0, startTime: T0 + 2_000 },
+      ],
+    } as SessionMessage;
+
+    const singleSegs = partitionTimelineSegments(
+      singleToolMsg.id,
+      buildAssistantTimeline(singleToolMsg),
+      false,
+      false
+    );
+    const singleProc = singleSegs.find(
+      (s) => s.kind === 'process_section'
+    ) as any;
+    expect(singleProc).toBeDefined();
+    expect(singleProc.showWorkTime).toBe(false);
+    expect(singleProc.defaultExpanded).toBe(true);
   });
 
   it('R9 单组：正文后工具入同一过程组（正文降级叙述行），组头承载整轮工作时间；动作摘要口径不变（2026-09-11 用户裁决）', () => {

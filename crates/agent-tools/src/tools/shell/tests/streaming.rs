@@ -36,13 +36,22 @@ async fn shell_streaming_preserves_sync_semantics() {
         "stream-out-abc",
         "stdout 与改造前逐字节一致"
     );
-    // stderr 断言用包含而非逐字节：Windows PowerShell 5.1 首启会在
-    // stderr 混入 CLIXML 进度记录（"正在准备首次使用模块"），改造前后
-    // 行为一致（wait_with_output 同样收集），非流式化回归
+    // 严格断言：通过源头静默与执行层解码清洗，CLIXML 进度与协议垃圾被彻底消除
+    let stderr_str = out["stderr"].as_str().unwrap().trim();
     assert!(
-        out["stderr"].as_str().unwrap().contains("stream-err-xyz"),
-        "stderr 必须包含预期输出：{}",
-        out["stderr"].as_str().unwrap()
+        !stderr_str.contains("#< CLIXML"),
+        "stderr 绝不得包含 CLIXML 协议垃圾：{}",
+        stderr_str
+    );
+    assert!(
+        !stderr_str.contains("<Objs Version="),
+        "stderr 绝不得包含 Objs 节点：{}",
+        stderr_str
+    );
+    assert_eq!(
+        stderr_str,
+        "stream-err-xyz",
+        "stderr 必须纯净且与预期输出逐字节一致"
     );
     assert!(out["text"].as_str().unwrap().contains("stream-out-abc"));
     assert!(out["text"].as_str().unwrap().contains("(exit 7)"));
@@ -304,4 +313,46 @@ async fn stream_non_sync_mode_falls_back_to_execute() {
         );
     }
     assert!(out.get("taskId").is_none(), "窗口内完成不得产生 taskId");
+}
+
+#[test]
+fn test_clean_clixml_stream_pure_progress_is_completely_stripped() {
+    let raw = "\
+#< CLIXML\r\n\
+<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">\
+<Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T></TN>\
+<MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>Preparing modules for first use.</AV><AI>0</AI>\
+<Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>";
+    let cleaned = super::super::shell_output::clean_clixml_stream(raw);
+    assert_eq!(cleaned, "");
+}
+
+#[test]
+fn test_clean_clixml_stream_decodes_real_error_and_restores_escapes() {
+    let raw = "\
+#< CLIXML\r\n\
+<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">\
+<Obj S=\"progress\" RefId=\"0\"><MS><PR N=\"Record\"><AV>Preparing modules</AV></PR></MS></Obj>\
+<S S=\"Error\">Get-Content : 找不到路径“C:\\test.txt”_x000D__x000A_</S>\
+<S S=\"Error\">所在位置 行:1 字符: 1_x000D__x000A_</S>\
+</Objs>";
+    let cleaned = super::super::shell_output::clean_clixml_stream(raw);
+    assert!(!cleaned.contains("#< CLIXML"));
+    assert!(!cleaned.contains("<Objs"));
+    assert!(cleaned.contains("Get-Content : 找不到路径“C:\\test.txt”"));
+    assert!(cleaned.contains("所在位置 行:1 字符: 1"));
+}
+
+#[test]
+fn test_clean_clixml_stream_mixed_normal_stderr_and_clixml() {
+    let raw = "prefix-err\n#< CLIXML\r\n<Objs Version=\"1.1.0.1\"><Obj S=\"progress\"><PR N=\"Record\"><AV>Prep</AV></PR></Obj></Objs>\nsuffix-err";
+    let cleaned = super::super::shell_output::clean_clixml_stream(raw);
+    assert_eq!(cleaned, "prefix-err\nsuffix-err");
+}
+
+#[test]
+fn test_clean_clixml_stream_leading_whitespace_and_xml_entities() {
+    let raw = "   #< CLIXML\r\n<Objs Version=\"1.1.0.1\"><S S=\"Error\">&lt;error&amp;warn&gt;_x0020_msg_x000D__x000A_</S></Objs>";
+    let cleaned = super::super::shell_output::clean_clixml_stream(raw);
+    assert_eq!(cleaned, "<error&warn> msg");
 }

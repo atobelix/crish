@@ -67,6 +67,10 @@ pub(crate) fn build_windows_powershell_script(user_command: &str) -> String {
         "$OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
         "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
         "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
+        // 关键流式静默控制：彻底压制模块自动发现与 cmdlet 进度向 stderr 泄漏
+        "$ProgressPreference='SilentlyContinue'",
+        "$WarningPreference='Continue'",
+        "$InformationPreference='SilentlyContinue'",
         "$env:PYTHONUTF8='1'",
         "$env:PYTHONIOENCODING='utf-8'",
         // T-AB-03：PAGER=cat——防交互式分页器（git log 等）挂起等待输入

@@ -209,9 +209,9 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         if (!next) {
           triggerViewportRecovery();
         }
-        const currentHeight =
-          innerRef.current?.getBoundingClientRect().height ?? 0;
-        const dur = calcAccordionDuration(currentHeight, next);
+        // 杜绝同步强读未清洁布局 DOM（Layout Thrashing）：改用纯数学条目估高，封顶 280px
+        const estimatedHeight = Math.min(280, Math.max(80, items.length * 48));
+        const dur = calcAccordionDuration(estimatedHeight, next);
         setTransitionDuration(dur);
         onInvalidate?.();
         return next;

@@ -189,6 +189,13 @@
   box-sizing: border-box;
 }
 
+.diffFadeInner {
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  width: fit-content;
+}
+
 /*
  * 独立态 Diff 封口（HC1）：非嵌入变体展开后不再 200 行平铺进文档流，
  * 改同一封顶口径——单卡输出视口上限 + 内部滚动，进受限区查看。

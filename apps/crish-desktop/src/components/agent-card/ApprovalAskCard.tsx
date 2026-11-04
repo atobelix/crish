@@ -18,7 +18,7 @@ import React, {
 } from 'react';
 
 import styles from './ApprovalAskCard.module.css';
-import { Tooltip } from '@/components/ui';
+import { ScrollFadeRegion, Tooltip } from '@/components/ui';
 import {
   approvalRiskBadgeLabel,
   approvalRiskKindLabel,
@@ -558,9 +558,15 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
 
       {hasCmd ? (
         <div className={styles.approvalCardCmdWrap}>
-          <code className={styles.approvalCardCmd} aria-label="将执行">
+          <ScrollFadeRegion
+            className={styles.approvalCardCmd}
+            innerClassName={styles.approvalCardCmdInner}
+            innerAs="pre"
+            fadeSize="sm"
+            aria-label="command"
+          >
             {cmd}
-          </code>
+          </ScrollFadeRegion>
         </div>
       ) : null}
 

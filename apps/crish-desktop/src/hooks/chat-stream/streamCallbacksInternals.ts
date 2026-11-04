@@ -13,7 +13,7 @@ import type {
   MessageToolApprovalMeta,
   MessageToolCall,
 } from '../../store/types';
-import { getStreamTool } from '../../store/streamingStore';
+import { getStreamText, getStreamTool } from '../../store/streamingStore';
 import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   streamToolBatchKey,
@@ -176,7 +176,7 @@ export function createToolPatchQueue(opts: {
     assistantMsgId,
     toolNames,
     assertLive,
-    readStreamedFullText,
+    readStreamedFullText: _readStreamedFullText,
     toolBatcher,
   } = opts;
   const queueToolCallPatch = (
@@ -207,10 +207,15 @@ export function createToolPatchQueue(opts: {
     status: 'running' | 'pending_approval',
     approvalMeta?: MessageToolApprovalMeta
   ) => {
-    // 物理因果时序保全：在工具启动前，若存在流式思考与正文，立即提交至 sessionStore，
-    // 确保思考块与前置正文块必然处于该工具块之前，锁定因果时序
+    // 物理因果时序保全与平滑衔接：在工具启动前，若存在流式思考与正文，立即提交当前已平滑显现的快照，
+    // 杜绝暴力同步 Flush 整段未经打字节流的全文，维持平滑涌现
     snapshotStreamThinkingToSession(sid, assistantMsgId);
-    snapshotStreamTextToSession(sid, assistantMsgId, readStreamedFullText());
+    const visibleStreamText = getStreamText(sid, assistantMsgId);
+    snapshotStreamTextToSession(
+      sid,
+      assistantMsgId,
+      visibleStreamText || undefined
+    );
     toolNames[toolId] = name;
     const patch: StreamToolCallPatch = {
       id: toolId,

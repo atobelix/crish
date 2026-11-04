@@ -668,6 +668,45 @@ describe('R2：vs 身份稳定 / actualTick 按需递增 / onScroll 同步提交
     expect(result.current.visibleRange).not.toBe(rangeBefore);
   });
 
+  it('手风琴动画锁（Accordion Motion Lock）：锁定期内闭锁 actualTick 刷新，落定解锁后批量提交', () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({
+        ids: ['item1', 'item2'],
+        itemCount: 2,
+        fallbackHeight: 100,
+      })
+    );
+
+    const initialTotalHeight = result.current.totalHeight;
+    const initialVs = result.current;
+
+    // 获取动画锁（模拟手风琴 250ms 展开动效播放中）
+    let releaseLock!: () => void;
+    act(() => {
+      releaseLock = result.current.manager.acquireAccordionMotionLock(500);
+    });
+    expect(result.current.manager.isAccordionMotionLocked()).toBe(true);
+
+    // 动画期间 ResizeObserver 频繁测高传入高度形变（例如 100 -> 350）
+    act(() => {
+      result.current.setActual('item1', 350);
+    });
+
+    // 闭锁保护生效：vs 引用未被 actualTick 重建，totalHeight 保持原状
+    expect(result.current).toBe(initialVs);
+    expect(result.current.totalHeight).toBe(initialTotalHeight);
+
+    // 动画播放落定（transitionend 触发 releaseLock）
+    act(() => {
+      releaseLock();
+    });
+
+    // 解锁后批量提交单次几何更新
+    expect(result.current.manager.isAccordionMotionLocked()).toBe(false);
+    expect(result.current.totalHeight).toBe(450);
+    expect(result.current).not.toBe(initialVs);
+  });
+
   it('onScroll 同步提交：每事件即时落定最新位置（W3-3 同步不变量），同值事件不触发重渲染', () => {
     // 波1收口裁决：原「前沿立即 + rAF 尾随合并」使尾随值帧末才落定，窗口/purge
     // 决策在一帧内读到旧位置，违反 W3-3 同步不变量（domPurge 契约回归），已改回

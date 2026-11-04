@@ -173,6 +173,8 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       shouldReplace,
       handleToggle,
       rowRef,
+      isAccordionAnimating,
+      handleAccordionTransitionEnd,
     } = useToolExpansionState({
       tc,
       prevTc: effectivePrevTc,
@@ -446,14 +448,27 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
         {canToggle ? (
           <div
             className={`${styles.toolBody}${isOpen ? ' ' + styles.expanded : ''}`}
+            onTransitionEnd={handleAccordionTransitionEnd}
           >
             <div className={styles.toolBodyInner}>
-              <ToolCallOutput
-                tc={tc}
-                bodyId={bodyId}
-                onOpenDiff={onOpenDiff}
-                onOpenTerminal={onOpenTerminal}
-              />
+              {isOpen ? (
+                isAccordionAnimating ? (
+                  <div
+                    className={styles.toolSkeletonPlaceholder}
+                    data-testid={`tool-skeleton-${tc.id}`}
+                  >
+                    <div className={styles.toolSkeletonLine} />
+                    <div className={styles.toolSkeletonLineShort} />
+                  </div>
+                ) : (
+                  <ToolCallOutput
+                    tc={tc}
+                    bodyId={bodyId}
+                    onOpenDiff={onOpenDiff}
+                    onOpenTerminal={onOpenTerminal}
+                  />
+                )
+              ) : null}
             </div>
           </div>
         ) : null}

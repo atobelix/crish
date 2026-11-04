@@ -82,7 +82,7 @@
   overflow: hidden;
   user-select: none;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
   color: var(--text-tertiary);
   text-align: left;
@@ -138,11 +138,11 @@
  * 否则与工具调用行产生「花了、字体偏小」的视觉割裂。
  * 颜色改为 `inherit`：交由 .reasoningRow 的状态机统一驱动
  *   （默认 tertiary → 悬停 primary → 活跃 secondary）。
- * 【D5 定版 · 2026-11-02】字号随折叠/过程内容定版为 13px（覆盖上款字号部分）。
+ * 【统一 14px · 2026-11-04 用户裁决】过程区字号统一调整为 14px，推翻 D5 13px 试验。
  */
 .reasoningLabel {
   font-weight: var(--font-weight-normal);
-  font-size: 13px;
+  font-size: 14px;
   color: inherit;
   flex-shrink: 0;
   pointer-events: none;
@@ -155,7 +155,7 @@
   overflow: hidden;
   flex: 1 1 auto;
   color: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
   white-space: nowrap;
 }
@@ -165,7 +165,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 14px;
   color: inherit;
 }
 
@@ -249,7 +249,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-normal);
   color: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -306,7 +306,7 @@
   width: 100%;
   box-sizing: border-box;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.65;
   user-select: text;
   overflow: visible;

@@ -90,6 +90,12 @@ describe('NumericText 组件', () => {
     expect(container.textContent).toContain(' 项');
   });
 
+  it('缺省状态下 animateOnView 为 false，直接静态直出目标数值', () => {
+    const { getByText } = render(<NumericText text="100 篇" />);
+    // 首帧直接输出完整目标值 100，不经历从 0 滚动的延迟
+    expect(getByText('100')).toBeDefined();
+  });
+
   it('数值变化时同序数字段原地更新（不重挂载整句）', () => {
     const { container, rerender } = render(<NumericText text="已搜索 2 次" />);
     const root = container.firstElementChild;

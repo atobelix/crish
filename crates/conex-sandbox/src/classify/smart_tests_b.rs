@@ -98,6 +98,8 @@ fn git_mutation_matrix() {
         "git config user.name",
         "git config --get user.name",
         "git stash",
+        "git grep useCallback .",
+        "git grep -n -E \"hooks/useSplitResize\"",
     ];
     for cmd in read_only {
         assert!(
@@ -129,7 +131,13 @@ fn git_mutation_matrix() {
 
 #[test]
 fn pure_read_only_boundary() {
-    for cmd in ["cat a.txt", "ls -la", "git status", "find . -name x"] {
+    for cmd in [
+        "cat a.txt",
+        "ls -la",
+        "git status",
+        "find . -name x",
+        "git grep useCallback .",
+    ] {
         assert!(
             is_segment_pure_read_only(&segment(cmd)),
             "应判为严格只读：{cmd}"

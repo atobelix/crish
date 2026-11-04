@@ -6,68 +6,116 @@
 * 必然露色差边缘；mask 只消费 alpha 通道，与底色无关，亮/暗主题零适配。
 * mask 加在内层而非宿主本体：滚动条绘制在宿主本体上，不受淡化、全程可见。
 *
-* 宿主 data-fade 由 useScrollFade 四态状态机维护
-* （none=不可滚 / bottom=在顶只显底部 / both=中间上下都显 / top=在底只显顶部），
-* 状态切换不做过渡——滚动中的离散翻转带时长会产生拖影，此为定案口径。
+* 宿主 data-fade 由 useScrollFade 状态机维护（none=不可滚 / both=可滚状态上下对称渐隐，
+* 同时兼容兼容性态 bottom/top 保持柔和双向渐隐过渡）。
 *
-* 沿用侧栏会话列表先例的三阶语言（全透明 → 0.45 中站 → 全不透明），
-* 带高 --tool-fade-size（28px）；双端渐变以单条 gradient 合成，
+* 升级定案：废除 3 阶折线陡坡，全面升级为 5 阶非线性平滑 Ease 渐隐曲线
+* （0% -> 8% -> 35% -> 75% -> 95% -> 100%），基准带高 --tool-fade-size（默认 40px）；
+* 只要处于限高滚动视口，上下端部均呈现可见且柔和的不透明度渐变，
+* 彻底消除首行/末行文字直接横切撞墙的生硬感。双端渐变以单条 gradient 合成，
 * 不用 mask-composite（规避 WebView2 合成兼容风险，视觉等价）。
 */
 
+/*
+ * 滚动渐隐状态判定与挂载架构：
+ * 宿主 data-fade 由 useScrollFade 四态状态机维护：
+ * - none: 不可滚，无渐隐；
+ * - bottom: 在顶（scrollTop <= 2），顶端 100% 实色不遮挡首行，底端呈现平滑渐隐；
+ * - both: 滚动中，顶端与底端双向呈现 40px 5 阶非线性 Ease 平滑渐隐；
+ * - top: 在底（到底部），底端 100% 实色不遮挡末行，顶端呈现平滑渐隐。
+ *
+ * 核心挂载位置纠偏（2026-11-04 用户现场反馈闭环）：
+ * mask-image 作用于具有 overflow-y: auto / scroll 的宿主视口本体（[data-slot='scroll-fade-region'] 与 .md-code-pre），
+ * 确保蒙版坐标系恒定锁定于可视窗口上下边缘，杜绝蒙版随内层内容滚动漂移移出视口的缺陷；
+ * 内层 .scroll-fade-inner 保持自然流动，不挂载移动 mask。
+ */
+
+[data-slot='scroll-fade-region'][data-fade='bottom'],
 [data-fade='bottom'] > .scroll-fade-inner {
   -webkit-mask-image: linear-gradient(
     to bottom,
     #000 0,
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     #000 0,
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
 }
 
+[data-slot='scroll-fade-region'][data-fade='top'],
 [data-fade='top'] > .scroll-fade-inner {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
     #000 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
     #000 100%
   );
 }
 
+[data-slot='scroll-fade-region'][data-fade='both'],
 [data-fade='both'] > .scroll-fade-inner {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
+}
+
+/* 当宿主 [data-slot='scroll-fade-region'] 已应用视口 mask 时，内层取消 mask 避免重复叠加与滚动移出 */
+[data-slot='scroll-fade-region'] > .scroll-fade-inner {
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
 }
 
 /*
@@ -78,15 +126,21 @@
   -webkit-mask-image: linear-gradient(
     to bottom,
     #000 0,
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     #000 0,
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
 }
@@ -95,15 +149,21 @@
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
     #000 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
     #000 100%
   );
 }
@@ -112,19 +172,108 @@
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
-    #000 var(--tool-fade-size, 28px),
-    #000 calc(100% - var(--tool-fade-size, 28px)),
-    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
     transparent 100%
   );
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-pre[data-fade='top'] > code {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size-sm, 28px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size-sm, 28px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size-sm, 28px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size-sm, 28px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size-sm, 28px) * 0.25),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size-sm, 28px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size-sm, 28px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size-sm, 28px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size-sm, 28px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size-sm, 28px) * 0.25),
+    transparent 100%
+  );
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-pre[data-fade='both'] > code {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.08) calc(var(--tool-fade-size, 40px) * 0.25),
+    rgba(0, 0, 0, 0.35) calc(var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.75) calc(var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.95) calc(var(--tool-fade-size, 40px) * 0.9),
+    #000 var(--tool-fade-size, 40px),
+    #000 calc(100% - var(--tool-fade-size, 40px)),
+    rgba(0, 0, 0, 0.95) calc(100% - var(--tool-fade-size, 40px) * 0.9),
+    rgba(0, 0, 0, 0.75) calc(100% - var(--tool-fade-size, 40px) * 0.75),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--tool-fade-size, 40px) * 0.5),
+    rgba(0, 0, 0, 0.08) calc(100% - var(--tool-fade-size, 40px) * 0.25),
+    transparent 100%
+  );
+}
+
+/*
+* 上下安全内边距呼吸槽：防止 mask 渐隐直接蚕食首行或末行文字核心高度。
+* 当宿主带 data-safe-padding="true" 或内层带 .scroll-fade-safe-padding 时生效。
+*/
+.scroll-fade-inner.scroll-fade-safe-padding,
+[data-slot='scroll-fade-region'][data-safe-padding='true']
+  > .scroll-fade-inner {
+  padding-top: 6px;
+  padding-bottom: 8px;
 }

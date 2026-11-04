@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  HUMAN_STREAMING_PACING,
   pickRevealCutEnd,
   revealPacingProfile,
   revealRateCharsPerSec,
@@ -24,6 +25,7 @@ describe('速度域常数（R11 / AN4 共建契约，改值须两案共同裁决
     expect(TEXT_REVEAL_PACING.targetLagMinChars).toBe(80);
     expect(TEXT_REVEAL_PACING.targetLagMaxChars).toBe(700);
     expect(TEXT_REVEAL_PACING.finishSnapChars).toBe(300);
+    expect(TEXT_REVEAL_PACING.finishDrainSeconds).toBe(0.7);
   });
 
   it('思考档：同策略异参数——目标滞后 0.5s、封顶 3600 / 6800，其余与正文共享', () => {
@@ -39,6 +41,19 @@ describe('速度域常数（R11 / AN4 共建契约，改值须两案共同裁决
     expect(revealPacingProfile('thinking')).toBe(THINKING_REVEAL_PACING);
     expect(revealPacingProfile('text')).toBe(TEXT_REVEAL_PACING);
   });
+
+  it('人性化速度域：稳态 80 / 追赶 200 / 单帧硬顶 6 / 啮合门槛 12', () => {
+    expect(HUMAN_STREAMING_PACING.steadyCapCharsPerSec).toBe(80);
+    expect(HUMAN_STREAMING_PACING.catchUpCapCharsPerSec).toBe(200);
+    expect(HUMAN_STREAMING_PACING.frameHardCapChars).toBe(6);
+    expect(HUMAN_STREAMING_PACING.engageThresholdChars).toBe(12);
+    expect(HUMAN_STREAMING_PACING.targetLagSeconds).toBe(0.35);
+    expect(HUMAN_STREAMING_PACING.targetLagMinChars).toBe(10);
+    expect(HUMAN_STREAMING_PACING.targetLagMaxChars).toBe(100);
+    expect(HUMAN_STREAMING_PACING.finishSnapChars).toBe(20);
+    expect(HUMAN_STREAMING_PACING.finishDrainSeconds).toBe(0.4);
+    expect(revealPacingProfile('human')).toBe(HUMAN_STREAMING_PACING);
+  });
 });
 
 describe('targetLagChars', () => {
@@ -49,6 +64,12 @@ describe('targetLagChars', () => {
     expect(targetLagChars(TEXT_REVEAL_PACING, 2_000)).toBe(700);
     expect(targetLagChars(TEXT_REVEAL_PACING, 99_999)).toBe(700);
     expect(targetLagChars(THINKING_REVEAL_PACING, 1_000)).toBe(500);
+  });
+
+  it('人性化配置 targetLagChars', () => {
+    expect(targetLagChars(HUMAN_STREAMING_PACING, 0)).toBe(10);
+    expect(targetLagChars(HUMAN_STREAMING_PACING, 100)).toBe(35);
+    expect(targetLagChars(HUMAN_STREAMING_PACING, 1_000)).toBe(100);
   });
 });
 
@@ -70,13 +91,10 @@ describe('revealRateCharsPerSec', () => {
   });
 
   it('滞后越过追赶门槛（2600）后启用追赶封顶 5200', () => {
-    // 修正速率（≈7278）高于两档各自的追赶封顶 → 封顶值即结果
     expect(revealRateCharsPerSec(TEXT_REVEAL_PACING, 2_500, 5_000)).toBe(5_200);
-    // 同输入下思考档走自己的追赶封顶
     expect(revealRateCharsPerSec(THINKING_REVEAL_PACING, 2_500, 5_000)).toBe(
       6_800
     );
-    // 未饱和时返回修正速率本身（思考档 600/5000：600 + (5000−300)/0.9）
     expect(
       revealRateCharsPerSec(THINKING_REVEAL_PACING, 600, 5_000)
     ).toBeCloseTo(5_822.22, 1);
@@ -85,6 +103,11 @@ describe('revealRateCharsPerSec', () => {
   it('防饥饿下限：EWMA 与比例修正都趋零时，有滞后也保底 30 字/s', () => {
     expect(revealRateCharsPerSec(TEXT_REVEAL_PACING, 0, 10)).toBe(30);
     expect(revealRateCharsPerSec(TEXT_REVEAL_PACING, 50, 10)).toBe(30);
+  });
+
+  it('人性化配置 revealRateCharsPerSec 保底 25 字/s 且封顶 200 字/s', () => {
+    expect(revealRateCharsPerSec(HUMAN_STREAMING_PACING, 0, 10)).toBe(25);
+    expect(revealRateCharsPerSec(HUMAN_STREAMING_PACING, 100, 500)).toBe(200);
   });
 });
 

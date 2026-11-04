@@ -60,7 +60,7 @@ const SHARED_PACING: SharedPacingConstants = {
   ewmaTauSeconds: 0.4,
 };
 
-/** 正文显现参数（R11 定案起始值，由回放夹具指标裁决微调） */
+/** 正文显现参数（R11 定案基线值） */
 export const TEXT_REVEAL_PACING: RevealPacingProfile = {
   ...SHARED_PACING,
   targetLagSeconds: 0.35,
@@ -79,11 +79,33 @@ export const THINKING_REVEAL_PACING: RevealPacingProfile = {
   catchUpCapCharsPerSec: 6_800,
 };
 
-export type RevealPacingProfileName = 'text' | 'thinking';
+/**
+ * 人性化速度域（Human-Scale Streaming Pacing）：
+ * 啮合起涌门槛收紧至 12 字（半句话即可平滑涌现），稳态速率降为 60~80 字/s（单帧硬顶 4~6 字/帧），
+ * 消除 2600 字/s 的瞬时闪现与大块刷屏。
+ */
+export const HUMAN_STREAMING_PACING: RevealPacingProfile = {
+  engageThresholdChars: 12,
+  targetLagMinChars: 10,
+  targetLagMaxChars: 100,
+  gainSeconds: 0.9,
+  catchUpLagThresholdChars: 160,
+  frameHardCapChars: 6,
+  minRateCharsPerSec: 25,
+  finishSnapChars: 20,
+  finishDrainSeconds: 0.4,
+  ewmaTauSeconds: 0.4,
+  targetLagSeconds: 0.35,
+  steadyCapCharsPerSec: 80,
+  catchUpCapCharsPerSec: 200,
+};
+
+export type RevealPacingProfileName = 'text' | 'thinking' | 'human';
 
 export function revealPacingProfile(
   name: RevealPacingProfileName
 ): RevealPacingProfile {
+  if (name === 'human') return HUMAN_STREAMING_PACING;
   return name === 'thinking' ? THINKING_REVEAL_PACING : TEXT_REVEAL_PACING;
 }
 

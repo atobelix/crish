@@ -45,7 +45,7 @@
   width: 14px;
   height: 14px;
   margin-left: var(--space-1_5, 6px);
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 1;
   color: var(--text-tertiary);
   transform: rotate(0deg);
@@ -58,7 +58,7 @@
 }
 
 .summaryLabel {
-  font-size: var(--font-size-xs, 12px);
+  font-size: 14px;
   line-height: 1.2;
   color: inherit;
   overflow: hidden;

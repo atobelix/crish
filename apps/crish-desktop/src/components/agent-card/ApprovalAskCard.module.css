@@ -160,6 +160,17 @@
   overflow: auto;
 }
 
+.approvalCardCmdInner {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: transparent;
+}
+
 .approvalCardNote {
   display: flex;
   flex-direction: column;

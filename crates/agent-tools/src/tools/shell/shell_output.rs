@@ -243,7 +243,8 @@ pub(crate) fn build_sync_result(
     // T-AB-01：窗口内完成 = 输出与改造前逐字节一致（未截断时全量字节）；
     // 截断时结果展示有界预览（头/尾 24KB），全量字节仅用于落盘
     let (stdout, trunc_out) = acc_out.preview_text(max_output_bytes);
-    let (stderr, trunc_err) = acc_err.preview_text(max_output_bytes);
+    let (raw_stderr, trunc_err) = acc_err.preview_text(max_output_bytes);
+    let stderr = clean_clixml_stream(&raw_stderr);
     let truncated = trunc_out || trunc_err;
 
     // T-AB-03：截断落盘（best-effort）——log_root 为 None 或写盘失败 → 仅
@@ -397,4 +398,214 @@ pub(crate) fn format_command_result(
     } else {
         output
     }
+}
+
+/// 解码 CLIXML 转义并提取真实错误内容（丢弃进度流垃圾）
+pub(crate) fn clean_clixml_stream(raw: &str) -> String {
+    if !raw.contains("#<") && !raw.contains("<Objs Version=") && !raw.contains("CLIXML") {
+        return raw.to_string();
+    }
+
+    let mut result = String::new();
+    let mut remaining = raw;
+
+    while !remaining.is_empty() {
+        let clixml_start = find_clixml_start(remaining);
+        match clixml_start {
+            Some(start_idx) => {
+                let prefix = &remaining[..start_idx];
+                if !prefix.is_empty() {
+                    let p_trim = prefix.trim();
+                    if !p_trim.is_empty() {
+                        if !result.is_empty() {
+                            result.push('\n');
+                        }
+                        result.push_str(p_trim);
+                    }
+                }
+
+                let clixml_slice = &remaining[start_idx..];
+                let (clixml_content, next_remaining) = match clixml_slice.find("</Objs>") {
+                    Some(end_pos) => {
+                        let end_idx = end_pos + "</Objs>".len();
+                        (&clixml_slice[..end_idx], &clixml_slice[end_idx..])
+                    }
+                    None => (clixml_slice, ""),
+                };
+
+                let decoded = decode_clixml_payload(clixml_content);
+                let d_trim = decoded.trim();
+                if !d_trim.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str(d_trim);
+                }
+
+                remaining = next_remaining;
+            }
+            None => {
+                let s_trim = remaining.trim();
+                if !s_trim.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str(s_trim);
+                }
+                break;
+            }
+        }
+    }
+
+    result
+}
+
+fn find_clixml_start(s: &str) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    let mut idx = 0;
+    while let Some(pos) = s[idx..].find("#<") {
+        let abs_pos = idx + pos;
+        let rest = &s[abs_pos + 2..];
+        let trimmed = rest.trim_start();
+        if trimmed.starts_with("CLIXML") {
+            best = Some(abs_pos);
+            break;
+        }
+        idx = abs_pos + 2;
+    }
+    if let Some(pos) = s.find("<Objs Version=") {
+        match best {
+            Some(b) => {
+                if pos < b {
+                    best = Some(pos);
+                }
+            }
+            None => {
+                best = Some(pos);
+            }
+        }
+    }
+    best
+}
+
+fn decode_clixml_payload(clixml: &str) -> String {
+    let stripped = strip_progress_objects(clixml);
+    let mut out = String::new();
+    let mut idx = 0;
+    let bytes = stripped.as_bytes();
+    let len = bytes.len();
+
+    while idx < len {
+        if let Some(s_pos) = stripped[idx..].find("<S") {
+            let tag_start = idx + s_pos;
+            let after_s = tag_start + 2;
+            if after_s < len && (bytes[after_s] == b' ' || bytes[after_s] == b'>') {
+                if let Some(tag_end_rel) = stripped[after_s..].find('>') {
+                    let tag_end = after_s + tag_end_rel;
+                    let tag_header = &stripped[tag_start..=tag_end];
+                    if let Some(close_rel) = stripped[tag_end + 1..].find("</S>") {
+                        let content_start = tag_end + 1;
+                        let content_end = content_start + close_rel;
+                        let content = &stripped[content_start..content_end];
+
+                        if !tag_header.contains("progress") {
+                            let unescaped_xml = decode_xml_entities(content);
+                            let decoded = decode_hex_escapes(&unescaped_xml);
+                            out.push_str(&decoded);
+                        }
+                        idx = content_end + "</S>".len();
+                        continue;
+                    }
+                }
+            }
+            idx = tag_start + 2;
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+fn strip_progress_objects(xml: &str) -> String {
+    let mut cleaned = String::with_capacity(xml.len());
+    let mut remaining = xml;
+    while let Some(pos) = remaining.find("<Obj ") {
+        cleaned.push_str(&remaining[..pos]);
+        let obj_slice = &remaining[pos..];
+        if let Some(tag_end) = obj_slice.find('>') {
+            let tag_header = &obj_slice[..=tag_end];
+            if tag_header.contains("progress") {
+                if let Some(close_pos) = obj_slice.find("</Obj>") {
+                    remaining = &obj_slice[close_pos + "</Obj>".len()..];
+                    continue;
+                }
+            }
+        }
+        cleaned.push_str(&obj_slice[..5]); // "<Obj "
+        remaining = &obj_slice[5..];
+    }
+    cleaned.push_str(remaining);
+
+    let mut pr_cleaned = String::with_capacity(cleaned.len());
+    let mut pr_remaining = cleaned.as_str();
+    while let Some(pos) = pr_remaining.find("<PR") {
+        pr_cleaned.push_str(&pr_remaining[..pos]);
+        let pr_slice = &pr_remaining[pos..];
+        if let Some(close_pos) = pr_slice.find("</PR>") {
+            pr_remaining = &pr_slice[close_pos + "</PR>".len()..];
+            continue;
+        }
+        pr_cleaned.push_str(&pr_slice[..3]);
+        pr_remaining = &pr_slice[3..];
+    }
+    pr_cleaned.push_str(pr_remaining);
+    pr_cleaned
+}
+
+fn decode_xml_entities(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+fn decode_hex_escapes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        if i + 7 <= len && bytes[i] == b'_' && bytes[i + 1] == b'x' && bytes[i + 6] == b'_' {
+            let hex_str = &s[i + 2..i + 6];
+            if let Ok(code) = u16::from_str_radix(hex_str, 16) {
+                // 处理 UTF-16 代理对：_xD83D__xDE00_
+                if (0xd800..=0xdbff).contains(&code)
+                    && i + 14 <= len
+                    && &bytes[i + 7..i + 9] == b"_x"
+                    && bytes[i + 13] == b'_'
+                {
+                    let next_hex = &s[i + 9..i + 13];
+                    if let Ok(low_code) = u16::from_str_radix(next_hex, 16) {
+                        if (0xdc00..=0xdfff).contains(&low_code) {
+                            if let Some(Ok(c)) = char::decode_utf16([code, low_code]).next() {
+                                out.push(c);
+                                i += 14;
+                                continue;
+                            }
+                        }
+                    }
+                }
+                if let Some(c) = char::from_u32(code as u32) {
+                    out.push(c);
+                    i += 7;
+                    continue;
+                }
+            }
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
 }

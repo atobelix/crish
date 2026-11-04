@@ -193,58 +193,67 @@ export function useVirtualScroll(
   const actualRafRef = useRef<number | null>(null);
 
   /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
-  const flushActualMeasurements = useCallback(() => {
-    // R2：写入前几何快照——收口时与写入后快照比较，净零变化不递增 actualTick
-    const geometryBefore = computeGeometrySnapshot();
-    let estimatesChanged = false;
-    let deltaAbove = 0;
-    const curStartIdx = renderedRangeRef.current.startIndex;
+  const flushActualMeasurements = useCallback(
+    (force = false) => {
+      // 手风琴动画锁保护：处于折叠/展开过渡期间且非强制刷新时，阻断 actualTick 重渲染
+      if (!force && manager.isAccordionMotionLocked()) {
+        return;
+      }
+      // R2：写入前几何快照——收口时与写入后快照比较，净零变化不递增 actualTick
+      const geometryBefore = computeGeometrySnapshot();
+      let estimatesChanged = false;
+      let deltaAbove = 0;
+      const curStartIdx = renderedRangeRef.current.startIndex;
 
-    if (pendingEstimatesRef.current.size > 0) {
-      const list: Array<{ id: string; height: number }> = [];
-      for (const [id, height] of pendingEstimatesRef.current) {
-        list.push({ id, height });
+      if (pendingEstimatesRef.current.size > 0) {
+        const list: Array<{ id: string; height: number }> = [];
+        for (const [id, height] of pendingEstimatesRef.current) {
+          list.push({ id, height });
+        }
+        pendingEstimatesRef.current.clear();
+        if (manager.preloadEstimates(list)) {
+          estimatesChanged = true;
+        }
       }
-      pendingEstimatesRef.current.clear();
-      if (manager.preloadEstimates(list)) {
-        estimatesChanged = true;
-      }
-    }
 
-    let anyChanged = false;
-    for (const [msgId, h] of pendingActualRef.current) {
-      const oldActual = manager.getActualHeight(msgId);
-      const oldHeight = oldActual ?? manager.getHeight(msgId);
-      const delta = h - oldHeight;
-      const changed = manager.setActual(msgId, h);
-      if (changed) anyChanged = true;
-      const idx = manager.getIndex(msgId);
-      if (idx !== undefined && idx < curStartIdx) {
-        deltaAbove += delta;
+      let anyChanged = false;
+      for (const [msgId, h] of pendingActualRef.current) {
+        const oldActual = manager.getActualHeight(msgId);
+        const oldHeight = oldActual ?? manager.getHeight(msgId);
+        const delta = h - oldHeight;
+        const changed = manager.setActual(msgId, h);
+        if (changed) anyChanged = true;
+        const idx = manager.getIndex(msgId);
+        if (idx !== undefined && idx < curStartIdx) {
+          deltaAbove += delta;
+        }
       }
-    }
-    pendingActualRef.current.clear();
+      pendingActualRef.current.clear();
 
-    if (deltaAbove !== 0 && containerRef.current) {
-      const el = containerRef.current;
-      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-      const isNearBottom = maxScroll - el.scrollTop <= NEAR_BOTTOM_EPSILON_PX;
-      if (!isNearBottom && el.scrollTop > 0) {
-        el.scrollTop += deltaAbove;
-        latestScrollTopRef.current = el.scrollTop;
-        applyScrollTop(el.scrollTop);
+      if (deltaAbove !== 0 && containerRef.current) {
+        const el = containerRef.current;
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+        const isNearBottom = maxScroll - el.scrollTop <= NEAR_BOTTOM_EPSILON_PX;
+        if (!isNearBottom && el.scrollTop > 0) {
+          el.scrollTop += deltaAbove;
+          latestScrollTopRef.current = el.scrollTop;
+          applyScrollTop(el.scrollTop);
+        }
       }
-    }
 
-    // 只要模型变了就刷新占位。只改树、不改渲染高度，会在下一次切标签时跳几个像素。
-    // R2：但递增 actualTick 的判据收紧为「窗口/总高计算结果实际变化」——
-    // 等量补偿、窗外不计入项等净零变化不再触发 MessageVirtualizer 整窗重算。
-    if (anyChanged || estimatesChanged) {
-      if (!isSameGeometrySnapshot(geometryBefore, computeGeometrySnapshot())) {
-        setActualTick((t) => t + 1);
+      // 只要模型变了就刷新占位。只改树、不改渲染高度，会在下一次切标签时跳几个像素。
+      // R2：但递增 actualTick 的判据收紧为「窗口/总高计算结果实际变化」——
+      // 等量补偿、窗外不计入项等净零变化不再触发 MessageVirtualizer 整窗重算。
+      if (anyChanged || estimatesChanged) {
+        if (
+          !isSameGeometrySnapshot(geometryBefore, computeGeometrySnapshot())
+        ) {
+          setActualTick((t) => t + 1);
+        }
       }
-    }
-  }, [applyScrollTop, computeGeometrySnapshot, manager]);
+    },
+    [applyScrollTop, computeGeometrySnapshot, manager]
+  );
 
   const {
     gestureActiveRef,
@@ -286,10 +295,10 @@ export function useVirtualScroll(
     if (actualRafRef.current != null) return;
     actualRafRef.current = requestAnimationFrame(() => {
       actualRafRef.current = null;
-      if (gestureActiveRef.current) return;
+      if (gestureActiveRef.current || manager.isAccordionMotionLocked()) return;
       flushActualMeasurements();
     });
-  }, [flushActualMeasurements, gestureActiveRef]);
+  }, [flushActualMeasurements, gestureActiveRef, manager]);
 
   const flushPendingGeometry = useCallback(() => {
     resetGestureState();
@@ -297,8 +306,20 @@ export function useVirtualScroll(
       cancelAnimationFrame(actualRafRef.current);
       actualRafRef.current = null;
     }
-    flushActualMeasurements();
+    flushActualMeasurements(true);
   }, [flushActualMeasurements, resetGestureState]);
+
+  // 手风琴动画落定后触发单次批量提交几何更新
+  useEffect(() => {
+    return manager.onAccordionUnlock(() => {
+      if (
+        pendingActualRef.current.size > 0 ||
+        pendingEstimatesRef.current.size > 0
+      ) {
+        flushActualMeasurements(true);
+      }
+    });
+  }, [manager, flushActualMeasurements]);
 
   useEffect(() => {
     return () => {
@@ -392,7 +413,7 @@ export function useVirtualScroll(
         return;
       }
       pendingActualRef.current.set(id, height);
-      if (!gestureActiveRef.current) {
+      if (!gestureActiveRef.current && !manager.isAccordionMotionLocked()) {
         scheduleActualFlush();
       }
     },

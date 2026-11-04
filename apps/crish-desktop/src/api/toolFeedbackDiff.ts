@@ -7,6 +7,49 @@
 
 import type { DiffChange, FileDiff } from '../store/layoutStore';
 
+/**
+ * 解码 CLIXML 转义并提取真实错误/输出，剥除纯进度噪音（前导空白容错 + 错误解码）
+ */
+export function cleanClixml(raw: string): string {
+  if (
+    !raw.includes('#<') &&
+    !raw.includes('<Objs Version=') &&
+    !raw.includes('CLIXML')
+  ) {
+    return raw;
+  }
+  const clixmlBlockRegex =
+    /(?:^[ \t]*#<\s*CLIXML[\r\n]*|<Objs\s+Version=["']1\.1\.0\.1["'][^>]*>)[\s\S]*?(?:<\/Objs>|$)/gim;
+
+  return raw.replace(clixmlBlockRegex, (match) => {
+    let stripped = match.replace(
+      /<Obj\s+S=["']progress["'][\s\S]*?<\/Obj>/gi,
+      ''
+    );
+    stripped = stripped.replace(/<PR\s+N=["']Record["'][\s\S]*?<\/PR>/gi, '');
+
+    const stringNodes = [];
+    const sRegex =
+      /<S(?:\s+S=["'](?:Error|warning|Warning|verbose|debug|information)["'])?[^>]*>([\s\S]*?)<\/S>/gi;
+    let sMatch;
+    while ((sMatch = sRegex.exec(stripped)) !== null) {
+      let nodeContent: string = sMatch[1] ?? '';
+      nodeContent = nodeContent
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, '&');
+      nodeContent = nodeContent.replace(/_x([0-9a-fA-F]{4})_/g, (_, hex) => {
+        const code = parseInt(hex, 16);
+        return String.fromCharCode(code);
+      });
+      stringNodes.push(nodeContent);
+    }
+    return stringNodes.join('');
+  });
+}
+
 /** 对话里展示的工具输出：只留命令结果，剥系统/元数据噪音 */
 export function sanitizeToolDisplayOutput(raw: string): string {
   if (!raw) return '';
@@ -38,9 +81,9 @@ export function sanitizeToolDisplayOutput(raw: string): string {
   text = text.replace(/^Stderr:\s*$/gim, '');
   text = text.replace(/^STDERR:\s*$/gim, '');
   text = text.replace(/^STDOUT:\s*$/gim, '');
-  // PowerShell CLIXML / 进度噪音
-  text = text.replace(/^#<\s*CLIXML[\s\S]*$/gim, '');
-  text = text.replace(/^Preparing modules for first use\..*$/gim, '');
+  // PowerShell CLIXML / 进度噪音（带前导空白容错与真实错误解码）
+  text = cleanClixml(text);
+  text = text.replace(/^[ \t]*Preparing modules for first use\..*$/gim, '');
   // 通用「系统提示」包装行
   text = text.replace(/^\[(?:system|runtime|engine|daemon)\]\s*.*$/gim, '');
   text = text.replace(/^系统提示[：:].*$/gim, '');
@@ -78,14 +121,16 @@ export function looksLikeDirectoryListing(text: string): boolean {
   const t = text.replace(/\r\n/g, '\n');
   // PowerShell Get-ChildItem / Format-Table
   if (/\bMode\s+LastWriteTime\s+Length\s+Name\b/i.test(t)) return true;
-  if (/^\s*Directory:\s+\S+/m.test(t) && /\b[d-][a\-hsr]{4,5}\b/.test(t)) return true;
+  if (/^\s*Directory:\s+\S+/m.test(t) && /\b[d-][a\-hsr]{4,5}\b/.test(t))
+    return true;
   // cmd.exe `dir`
   if (/\bDirectory of\s+/i.test(t) && /<DIR>/i.test(t)) return true;
   // Unix `ls -l` / `ls -la`
-  if (/^total\s+\d+\s*$/m.test(t) && /^[d\-l][rwxsStT-]{9}\s/m.test(t)) return true;
+  if (/^total\s+\d+\s*$/m.test(t) && /^[d\-l][rwxsStT-]{9}\s/m.test(t))
+    return true;
   // 表头被截掉：≥2 行 PowerShell Mode + 日期（避免单行误伤）
   const psModes = t.match(
-    /^[d-][a\-hsr]{4,5}\s+\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}/gm,
+    /^[d-][a\-hsr]{4,5}\s+\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}/gm
   );
   if (psModes && psModes.length >= 2) return true;
   // 多行 Unix 权限（无 total 行时）
@@ -169,7 +214,8 @@ export function parseUnifiedDiffs(text: string): FileDiff[] {
     const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/);
     if (plusFile && plusFile[1] !== '/dev/null') {
       if (!currentPath) currentPath = plusFile[1]!;
-      else if (currentPath.startsWith('a/') || currentPath === '/dev/null') currentPath = plusFile[1]!;
+      else if (currentPath.startsWith('a/') || currentPath === '/dev/null')
+        currentPath = plusFile[1]!;
       continue;
     }
     const minusFile = line.match(/^--- (?:a\/)?(.+)$/);
@@ -193,7 +239,10 @@ export function parseUnifiedDiffs(text: string): FileDiff[] {
       changes.push({ type: 'deletion', content: line.slice(1) });
       inHunk = true;
     } else if (inHunk && (line.startsWith(' ') || line === '')) {
-      changes.push({ type: 'normal', content: line.startsWith(' ') ? line.slice(1) : line });
+      changes.push({
+        type: 'normal',
+        content: line.startsWith(' ') ? line.slice(1) : line,
+      });
     }
   }
   flush();
@@ -201,14 +250,20 @@ export function parseUnifiedDiffs(text: string): FileDiff[] {
   // 无 git 头则不猜测：Windows 目录列表 d----- 会误伤
   if (files.length === 0) {
     const hasGitMarker = lines.some(
-      (l) => l.startsWith('diff --git ') || /^@@\s+-\d/.test(l),
+      (l) => l.startsWith('diff --git ') || /^@@\s+-\d/.test(l)
     );
     if (!hasGitMarker) return [];
-    const plusCount = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
-    const minusCount = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+    const plusCount = lines.filter(
+      (l) => l.startsWith('+') && !l.startsWith('+++')
+    ).length;
+    const minusCount = lines.filter(
+      (l) => l.startsWith('-') && !l.startsWith('---')
+    ).length;
     if (plusCount + minusCount >= 3) {
       const pathHint =
-        lines.find((l) => l.startsWith('+++ '))?.replace(/^\+\+\+ (?:b\/)?/, '') ||
+        lines
+          .find((l) => l.startsWith('+++ '))
+          ?.replace(/^\+\+\+ (?:b\/)?/, '') ||
         lines.find((l) => l.startsWith('--- '))?.replace(/^--- (?:a\/)?/, '') ||
         '变更';
       files.push({
@@ -268,7 +323,9 @@ export function pathFromToolArgs(args: string): string | null {
     }
   }
   // path=... 或纯路径
-  const m = args.match(/(?:^|[\s,"'])([A-Za-z]:[\\/][^\s"']+|(?:\.\/|\/)?[\w./\\-]+\.\w{1,8})/);
+  const m = args.match(
+    /(?:^|[\s,"'])([A-Za-z]:[\\/][^\s"']+|(?:\.\/|\/)?[\w./\\-]+\.\w{1,8})/
+  );
   if (m?.[1]) return m[1];
   const first = args.trim().split(/\s+/)[0];
   if (first && (/[\\/]/.test(first) || /\.\w+$/.test(first))) return first;
@@ -306,8 +363,12 @@ export function fileDiffFromEditArgs(args: string): FileDiff | null {
     const delLines = oldStr ? oldStr.replace(/\r\n/g, '\n').split('\n') : [];
     const addLines = newStr ? newStr.replace(/\r\n/g, '\n').split('\n') : [];
     const changes: DiffChange[] = [
-      ...delLines.slice(0, 200).map((c) => ({ type: 'deletion' as const, content: c })),
-      ...addLines.slice(0, 200).map((c) => ({ type: 'addition' as const, content: c })),
+      ...delLines
+        .slice(0, 200)
+        .map((c) => ({ type: 'deletion' as const, content: c })),
+      ...addLines
+        .slice(0, 200)
+        .map((c) => ({ type: 'addition' as const, content: c })),
     ];
     if (!changes.length) return null;
     return {
@@ -325,7 +386,9 @@ export function fileDiffFromEditArgs(args: string): FileDiff | null {
       filePath: path,
       additions: lines.length,
       deletions: 0,
-      changes: lines.slice(0, 400).map((c) => ({ type: 'addition' as const, content: c })),
+      changes: lines
+        .slice(0, 400)
+        .map((c) => ({ type: 'addition' as const, content: c })),
     };
   }
 
@@ -337,7 +400,7 @@ export function fileDiffFromEditArgs(args: string): FileDiff | null {
  * 结构化 diffs 也走此关，避免引擎脏数据误开变更面板。
  */
 export function filterPublishableFileDiffs(
-  files: FileDiff[] | undefined | null,
+  files: FileDiff[] | undefined | null
 ): FileDiff[] {
   if (!files?.length) return [];
   return files.filter((f) => {
@@ -345,8 +408,15 @@ export function filterPublishableFileDiffs(
     // 与 isSafeApplyPath 对齐的轻量拒绝（避免 toolFeedback ↔ applyFileDiff 循环依赖）
     const p = f.filePath.trim();
     if (p.includes('\0')) return false;
-    if (p === '变更' || p === '文件' || p === 'unknown' || p === 'untitled') return false;
-    if (p.replace(/\\/g, '/').split('/').some((seg) => seg === '..')) return false;
+    if (p === '变更' || p === '文件' || p === 'unknown' || p === 'untitled')
+      return false;
+    if (
+      p
+        .replace(/\\/g, '/')
+        .split('/')
+        .some((seg) => seg === '..')
+    )
+      return false;
     const changes = f.changes || [];
     if (changes.length > 0) return true;
     if ((f.additions || 0) > 0 || (f.deletions || 0) > 0) return true;
@@ -401,7 +471,10 @@ export function resolveToolDiffs(opts: {
     if (!path) return [];
     const preview = sanitizeToolDisplayOutput(out).trim();
     // 成功但无内容时仍记一笔路径，便于总览「改了哪些文件」
-    if (!preview || /^(完成|OK|ok|success|写入成功|已写入|已保存)$/i.test(preview)) {
+    if (
+      !preview ||
+      /^(完成|OK|ok|success|写入成功|已写入|已保存)$/i.test(preview)
+    ) {
       return filterPublishableFileDiffs([
         {
           filePath: path,

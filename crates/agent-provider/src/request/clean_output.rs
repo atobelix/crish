@@ -101,14 +101,232 @@ fn strip_control_bytes(input: &str) -> String {
     String::from_utf8(kept).expect("剥离仅移除 ASCII 控制字节，UTF-8 合法性保持")
 }
 
-/// R1-R6 清洗管线（顺序固定：R1 → R2 → R3 → R4 → R6 → R5）
+/// R0：PowerShell CLIXML 协议垃圾清洗与真实错误还原
+fn clean_clixml_output(raw: &str) -> String {
+    if !raw.contains("#<") && !raw.contains("<Objs Version=") && !raw.contains("CLIXML") {
+        return raw.to_string();
+    }
+
+    let mut result = String::new();
+    let mut remaining = raw;
+
+    while !remaining.is_empty() {
+        let clixml_start = find_clixml_start(remaining);
+        match clixml_start {
+            Some(start_idx) => {
+                let prefix = &remaining[..start_idx];
+                if !prefix.is_empty() {
+                    let p_trim = prefix.trim();
+                    if !p_trim.is_empty() {
+                        if !result.is_empty() {
+                            result.push('\n');
+                        }
+                        result.push_str(p_trim);
+                    }
+                }
+
+                let clixml_slice = &remaining[start_idx..];
+                let (clixml_content, next_remaining) = match clixml_slice.find("</Objs>") {
+                    Some(end_pos) => {
+                        let end_idx = end_pos + "</Objs>".len();
+                        (&clixml_slice[..end_idx], &clixml_slice[end_idx..])
+                    }
+                    None => (clixml_slice, ""),
+                };
+
+                let decoded = decode_clixml_payload(clixml_content);
+                let d_trim = decoded.trim();
+                if !d_trim.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str(d_trim);
+                }
+
+                remaining = next_remaining;
+            }
+            None => {
+                let s_trim = remaining.trim();
+                if !s_trim.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str(s_trim);
+                }
+                break;
+            }
+        }
+    }
+
+    result
+}
+
+fn find_clixml_start(s: &str) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    let mut idx = 0;
+    while let Some(pos) = s[idx..].find("#<") {
+        let abs_pos = idx + pos;
+        let rest = &s[abs_pos + 2..];
+        let trimmed = rest.trim_start();
+        if trimmed.starts_with("CLIXML") {
+            best = Some(abs_pos);
+            break;
+        }
+        idx = abs_pos + 2;
+    }
+    if let Some(pos) = s.find("<Objs Version=") {
+        match best {
+            Some(b) => {
+                if pos < b {
+                    best = Some(pos);
+                }
+            }
+            None => {
+                best = Some(pos);
+            }
+        }
+    }
+    best
+}
+
+fn decode_clixml_payload(clixml: &str) -> String {
+    let stripped = strip_progress_objects(clixml);
+    let mut out = String::new();
+    let mut idx = 0;
+    let bytes = stripped.as_bytes();
+    let len = bytes.len();
+
+    while idx < len {
+        if let Some(s_pos) = stripped[idx..].find("<S") {
+            let tag_start = idx + s_pos;
+            let after_s = tag_start + 2;
+            if after_s < len && (bytes[after_s] == b' ' || bytes[after_s] == b'>') {
+                if let Some(tag_end_rel) = stripped[after_s..].find('>') {
+                    let tag_end = after_s + tag_end_rel;
+                    let tag_header = &stripped[tag_start..=tag_end];
+                    if let Some(close_rel) = stripped[tag_end + 1..].find("</S>") {
+                        let content_start = tag_end + 1;
+                        let content_end = content_start + close_rel;
+                        let content = &stripped[content_start..content_end];
+
+                        if !tag_header.contains("progress") {
+                            let unescaped_xml = decode_xml_entities(content);
+                            let decoded = decode_hex_escapes(&unescaped_xml);
+                            out.push_str(&decoded);
+                        }
+                        idx = content_end + "</S>".len();
+                        continue;
+                    }
+                }
+            }
+            idx = tag_start + 2;
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+fn strip_progress_objects(xml: &str) -> String {
+    let mut cleaned = String::with_capacity(xml.len());
+    let mut remaining = xml;
+    while let Some(pos) = remaining.find("<Obj ") {
+        cleaned.push_str(&remaining[..pos]);
+        let obj_slice = &remaining[pos..];
+        if let Some(tag_end) = obj_slice.find('>') {
+            let tag_header = &obj_slice[..=tag_end];
+            if tag_header.contains("progress") {
+                if let Some(close_pos) = obj_slice.find("</Obj>") {
+                    remaining = &obj_slice[close_pos + "</Obj>".len()..];
+                    continue;
+                }
+            }
+        }
+        cleaned.push_str(&obj_slice[..5]);
+        remaining = &obj_slice[5..];
+    }
+    cleaned.push_str(remaining);
+
+    let mut pr_cleaned = String::with_capacity(cleaned.len());
+    let mut pr_remaining = cleaned.as_str();
+    while let Some(pos) = pr_remaining.find("<PR") {
+        pr_cleaned.push_str(&pr_remaining[..pos]);
+        let pr_slice = &pr_remaining[pos..];
+        if let Some(close_pos) = pr_slice.find("</PR>") {
+            pr_remaining = &pr_slice[close_pos + "</PR>".len()..];
+            continue;
+        }
+        pr_cleaned.push_str(&pr_slice[..3]);
+        pr_remaining = &pr_slice[3..];
+    }
+    pr_cleaned.push_str(pr_remaining);
+    pr_cleaned
+}
+
+fn decode_xml_entities(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+fn decode_hex_escapes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        if i + 7 <= len && bytes[i] == b'_' && bytes[i + 1] == b'x' && bytes[i + 6] == b'_' {
+            let hex_str = &s[i + 2..i + 6];
+            if let Ok(code) = u16::from_str_radix(hex_str, 16) {
+                // 处理 UTF-16 代理对：_xD83D__xDE00_
+                if (0xd800..=0xdbff).contains(&code)
+                    && i + 14 <= len
+                    && &bytes[i + 7..i + 9] == b"_x"
+                    && bytes[i + 13] == b'_'
+                {
+                    let next_hex = &s[i + 9..i + 13];
+                    if let Ok(low_code) = u16::from_str_radix(next_hex, 16) {
+                        if (0xdc00..=0xdfff).contains(&low_code) {
+                            if let Some(Ok(c)) = char::decode_utf16([code, low_code]).next() {
+                                out.push(c);
+                                i += 14;
+                                continue;
+                            }
+                        }
+                    }
+                }
+                if let Some(c) = char::from_u32(code as u32) {
+                    out.push(c);
+                    i += 7;
+                    continue;
+                }
+            }
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// R0-R6 清洗管线（顺序固定：R0 → R1 → R2 → R3 → R4 → R6 → R5）
 ///
-/// 顺序理由：R3 先于 R4（空行先合并，避免被当作重复行折叠）；
+/// 顺序理由：R0 先于 R1（CLIXML 解码展开真实错误并丢弃进度流垃圾，还原为
+/// 纯文本后再进行 ANSI 与行处理）；R3 先于 R4（空行先合并，避免被当作重复行折叠）；
 /// R6 先于 R5（JSON 压缩后再截断——已截断的 JSON 不再被二次压缩，
 /// 保证幂等；截断发生在最外层，避免半截 JSON 被重复折叠）。
 pub fn clean_output(raw: &str, opts: &CleanupOptions) -> String {
+    // R0：PowerShell CLIXML 协议垃圾清洗与真实错误还原
+    let raw = if raw.contains("#<") || raw.contains("<Objs Version=") || raw.contains("CLIXML") {
+        clean_clixml_output(raw)
+    } else {
+        raw.to_string()
+    };
+
     // R1：ANSI/控制字符剥离
-    let stripped = strip_control_bytes(raw);
+    let stripped = strip_control_bytes(&raw);
 
     // R2：行尾空白（str::lines 已剔除 \r，此处兜底空格/Tab）
     let mut lines: Vec<String> = Vec::new();
@@ -324,5 +542,42 @@ mod tests {
         // \x1b[2J (erase display), \x1b[1;1H (cursor home), \x1b[?25h (show cursor), \x1b[10C (cursor forward)
         let raw = "prefix\x1b[2Jmid\x1b[1;1H\x1b[?25h\x1b[10Csuffix";
         assert_eq!(clean(raw), "prefixmidsuffix");
+    }
+
+    #[test]
+    fn strips_pure_clixml_progress_noise() {
+        let raw = "\
+#< CLIXML\r\n\
+<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">\
+<Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T></TN>\
+<MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>Preparing modules for first use.</AV><AI>0</AI>\
+<Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>";
+        assert_eq!(clean(raw), "");
+        assert_idempotent(raw);
+    }
+
+    #[test]
+    fn decodes_clixml_error_and_restores_escapes() {
+        let raw = "\
+#< CLIXML\r\n\
+<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">\
+<Obj S=\"progress\" RefId=\"0\"><MS><PR N=\"Record\"><AV>Preparing modules</AV></PR></MS></Obj>\
+<S S=\"Error\">Get-Content : 找不到路径 &lt;test.txt&gt;_x000D__x000A_</S>\
+<S S=\"Error\">所在位置 行:1 字符: 1_x000D__x000A_</S>\
+</Objs>";
+        let cleaned = clean(raw);
+        assert!(!cleaned.contains("#< CLIXML"));
+        assert!(!cleaned.contains("<Objs"));
+        assert!(cleaned.contains("Get-Content : 找不到路径 <test.txt>"));
+        assert!(cleaned.contains("所在位置 行:1 字符: 1"));
+        assert_idempotent(raw);
+    }
+
+    #[test]
+    fn handles_mixed_clixml_and_normal_output() {
+        let raw = "stdout before\n#< CLIXML\r\n<Objs Version=\"1.1.0.1\"><Obj S=\"progress\"><PR N=\"Record\"><AV>Preparing</AV></PR></Obj></Objs>\nstdout after";
+        let cleaned = clean(raw);
+        assert_eq!(cleaned, "stdout before\nstdout after");
+        assert_idempotent(raw);
     }
 }

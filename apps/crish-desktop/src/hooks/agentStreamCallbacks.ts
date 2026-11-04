@@ -197,7 +197,7 @@ export function buildAgentStreamCallbacks(
           structuredDiffs: diffs,
         });
         tc.status = 'success';
-        tc.output = displayOut || output || '完成';
+        tc.output = displayOut.trim() ? displayOut : '完成';
         if (resolved.length) tc.diffs = resolved;
       });
       if (valid()) publishToolDiffs(resolved);
@@ -207,7 +207,8 @@ export function buildAgentStreamCallbacks(
         const tc = m.toolCalls?.find((t) => t.id === toolId);
         if (tc) {
           tc.status = 'error';
-          tc.output = sanitizeToolDisplayOutput(err || '') || err || '失败';
+          const cleanErr = sanitizeToolDisplayOutput(err || '');
+          tc.output = cleanErr.trim() ? cleanErr : '失败';
         }
       }),
     onToolPendingApproval: (

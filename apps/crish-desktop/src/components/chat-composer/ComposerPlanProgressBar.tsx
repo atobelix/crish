@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './ComposerPlanProgressBar.module.css';
-import { Button, Divider, Tooltip } from '@/components/ui';
+import { Button, Divider, ScrollFadeRegion, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 
 export interface PlanStepItem {
@@ -113,7 +113,11 @@ export const ComposerPlanProgressBar: React.FC<
     >
       {/* Upward Step Drawer List */}
       <div className={`${styles.planStepList} plan-step-list`}>
-        <div className={`${styles.planStepListInner} plan-step-list-inner`}>
+        <ScrollFadeRegion
+          className={`${styles.planStepListInner} plan-step-list-inner`}
+          innerClassName={styles.planStepListFadeInner}
+          active={isExpanded}
+        >
           {steps.map((step, idx) => {
             const isCompleted = step.status === 'completed';
             const isActive = step.status === 'active';
@@ -141,7 +145,7 @@ export const ComposerPlanProgressBar: React.FC<
               </div>
             );
           })}
-        </div>
+        </ScrollFadeRegion>
       </div>
 
       {/* Single-Line Anchored Hub */}

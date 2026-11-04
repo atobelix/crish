@@ -10,7 +10,7 @@
  * ③ Hover 时整行（前缀图标 + 摘要文案 + 右折叠指示）统一变黑（--text-primary）；
  * ④ 展开态内部详细输出保持柔和灰阶，禁止全框加深晃动。
  *
- * 【D5 定版 · 2026-11-02】字号随过程内容定版为 13px（覆盖 ② 的字号部分）。
+ * 【统一 14px · 2026-11-04 用户裁决】过程区字号统一调整为 14px，推翻 D5 13px 试验。
  * 【HC1】组体为聚合滚动层：展开 = 进入受限滚动区（--tool-aggregate-max-h 封顶 +
  * 内部滚动 + mask 边缘渐隐），不是全高展开；组内单工具视口随之降格（见
  * ChatToolCallBlock.module.css 的组内降格规则），指针路径上只留一层纵向滚动。
@@ -41,7 +41,7 @@
   text-align: left;
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-secondary);
   transition: color var(--transition-micro, 100ms ease);
@@ -76,7 +76,7 @@
 .summaryLabel {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
@@ -142,7 +142,7 @@
  */
 .groupBodyInner {
   min-height: 0;
-  max-height: var(--tool-aggregate-max-h, min(560px, 60vh));
+  max-height: var(--tool-aggregate-max-h, min(280px, 35vh));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: auto;

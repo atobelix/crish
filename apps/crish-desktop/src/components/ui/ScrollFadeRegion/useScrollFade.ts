@@ -31,11 +31,17 @@ export interface ScrollMetrics {
   clientHeight: number;
 }
 
-/** 四态判定（纯函数）：1px 容差吸收亚像素取整。 */
+/**
+ * 滚动渐隐状态判定（纯函数）：
+ * - 不可滚（scrollHeight - clientHeight <= 1）→ 'none'
+ * - 在顶（scrollTop <= 2）→ 'bottom'（顶端 100% 实色不遮挡首行，底部展示平滑渐隐）
+ * - 在底（scrollTop + clientHeight >= scrollHeight - 2）→ 'top'（底部 100% 实色不遮挡末行，顶端展示平滑渐隐）
+ * - 滚动中（其他）→ 'both'（顶端与底端均展示平滑 Ease 渐变，内容穿行两端自然淡入淡出）
+ */
 export function computeScrollFadeState(m: ScrollMetrics): ScrollFadeState {
   if (m.scrollHeight - m.clientHeight <= 1) return 'none';
-  if (m.scrollTop <= 1) return 'bottom';
-  if (m.scrollTop + m.clientHeight >= m.scrollHeight - 1) return 'top';
+  if (m.scrollTop <= 2) return 'bottom';
+  if (m.scrollTop + m.clientHeight >= m.scrollHeight - 2) return 'top';
   return 'both';
 }
 

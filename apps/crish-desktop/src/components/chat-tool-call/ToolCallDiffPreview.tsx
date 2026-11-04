@@ -6,7 +6,12 @@ import {
   useDiffHighlightMap,
   type DiffHighlightItem,
 } from '../../api/codeHighlightBatch';
-import { Button, NumericText, Tooltip } from '@/components/ui';
+import {
+  Button,
+  NumericText,
+  ScrollFadeRegion,
+  Tooltip,
+} from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
@@ -166,7 +171,10 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
       </div>
 
       {/* 简洁平铺视图：行号对齐 + 符号列 + 语法高亮代码列 */}
-      <div className={styles.diffLinesContainer}>
+      <ScrollFadeRegion
+        className={styles.diffLinesContainer}
+        innerClassName={styles.diffFadeInner}
+      >
         {displayedChanges.map((change, i) => {
           const sign =
             change.type === 'addition'
@@ -253,7 +261,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
             )}
           </div>
         )}
-      </div>
+      </ScrollFadeRegion>
     </div>
   );
 };

@@ -1,9 +1,9 @@
 /**
  * HC1 契约钉（用户 2026-11-02 裁决）：
- * 1) 高度 token 精确值与各滚动宿主的 token 引用——聚合上限 min(560px, 60vh)、
- *    代码/思考 min(480px, 50vh)、单工具视口 180/380/520 只收编 token 不改值；
+ * 1) 高度 token 精确值与各滚动宿主的 token 引用——聚合上限 min(280px, 35vh)、
+ *    代码 min(240px, 30vh)、思考 min(200px, 25vh)、工具视口 180px 统一封顶；
  * 2) 组内双层滚动降级在位；键值行不再自带嵌套滚动（L-3）；
- * 3) 折叠/流程内容 13px 定版（D5，用户验收口径，永久生效非试行）；
+ * 3) 折叠/流程内容 14px 统一（2026-11-04 用户裁决）；
  * 4) V2 gap A 案：工具行间距 3px 走 token；
  * 5) 行头去重（D-1～D-4）纯函数断言：单权威文本源、动词表单源、
  *    兜底参数禁止原始 JSON（键名 + 类型占位）。
@@ -44,13 +44,16 @@ function standaloneBody(css: string, cls: string): string {
 describe('HC1 · 高度 token 与宿主引用', () => {
   const tokens = read('styles/tokens-base.css');
 
-  it('档位正典精确值（高度分档定案）', () => {
-    expect(tokens).toContain('--expand-max-h-aggregate: min(560px, 60vh);');
-    expect(tokens).toContain('--expand-max-h-content: min(480px, 50vh);');
-    expect(tokens).toContain('--expand-max-h-nested: min(360px, 40vh);');
-    expect(tokens).toContain('--expand-max-h-viewport: 380px;');
+  it('档位正典精确值（高度分档定案 · 2026-11-04 减半收敛）', () => {
+    expect(tokens).toContain('--expand-max-h-aggregate: min(280px, 35vh);');
+    expect(tokens).toContain('--expand-max-h-content: min(240px, 30vh);');
+    expect(tokens).toContain('--expand-max-h-nested: min(200px, 25vh);');
+    expect(tokens).toContain('--expand-max-h-viewport: 180px;');
     expect(tokens).toContain('--expand-max-h-viewport-sm: 180px;');
-    expect(tokens).toContain('--tool-fade-size: 28px;');
+    expect(tokens).toContain('--tool-fade-size: 40px;');
+    expect(tokens).toContain('--tool-fade-size-sm: 28px;');
+    expect(tokens).toContain('--tool-fade-size-lg: 52px;');
+    expect(tokens).toContain('--tool-fade-feather: 6px;');
     expect(tokens).toContain('--tool-row-gap: 3px;');
   });
 
@@ -62,7 +65,7 @@ describe('HC1 · 高度 token 与宿主引用', () => {
       '--tool-viewport-output: var(--expand-max-h-viewport);'
     );
     expect(tokens).toContain(
-      '--tool-viewport-output-single: var(--expand-max-h-content);'
+      '--tool-viewport-output-single: var(--expand-max-h-viewport);'
     );
     expect(tokens).toContain(
       '--tool-aggregate-max-h: var(--expand-max-h-aggregate);'
@@ -122,17 +125,11 @@ describe('HC1 · 高度 token 与宿主引用', () => {
     expect(body).toContain('overflow-y: auto');
   });
 
-  it('组内视口降级：组滚动层接管后工具视口不再自带上限/滚动', () => {
+  it('组内视口高度封顶受控（2026-11-04 用户裁决）：纠正高度暴走，禁止取消限高', () => {
     const css = read('components/chat-tool-call/ChatToolCallBlock.module.css');
-    expect(css).toContain(
-      ':global(.tool-group-scroll-host) .toolSectionContent'
+    expect(css).not.toMatch(
+      /:global\(\.tool-group-scroll-host\)\s+\.toolSectionContent\s*\{[^}]*max-height:\s*none/
     );
-    const body = ruleBody(
-      css,
-      /:global\(\.tool-group-scroll-host\) \.toolSectionContent/
-    );
-    expect(body).toContain('max-height: none');
-    expect(body).toContain('overflow-y: visible');
   });
 
   it('键值行不再自带嵌套滚动（L-3），长值随外层视口滚动', () => {
@@ -162,8 +159,8 @@ describe('HC1 · 高度 token 与宿主引用', () => {
   });
 });
 
-describe('HC1 · 13px 定版与 V2 gap（D5）', () => {
-  it('工具行文本族 13px', () => {
+describe('HC1 · 14px 统一排版与 V2 gap（2026-11-04 用户裁决）', () => {
+  it('工具行文本族 14px', () => {
     const css = read('components/chat-tool-call/ChatToolCallBlock.module.css');
     for (const cls of [
       '.toolRowHead',
@@ -171,25 +168,25 @@ describe('HC1 · 13px 定版与 V2 gap（D5）', () => {
       '.toolActionText',
       '.toolParamText',
     ]) {
-      expect(standaloneBody(css, cls)).toContain('font-size: 13px');
+      expect(standaloneBody(css, cls)).toContain('font-size: 14px');
     }
   });
 
-  it('组头/段头/思考行 13px', () => {
+  it('组头/段头/思考行 14px', () => {
     const group = read(
       'components/chat-tool-call/FoldableToolGroup.module.css'
     );
-    expect(ruleBody(group, /\.groupHeader/)).toContain('font-size: 13px');
+    expect(ruleBody(group, /\.groupHeader/)).toContain('font-size: 14px');
     const section = read(
       'components/chat-message/FoldableProcessSection.module.css'
     );
-    expect(ruleBody(section, /\.summaryLabel/)).toContain('font-size: 13px');
+    expect(ruleBody(section, /\.summaryLabel/)).toContain('font-size: 14px');
     const reasoning = read(
       'components/chat-message-row/ReasoningRow.module.css'
     );
-    expect(ruleBody(reasoning, /\.reasoningRow/)).toContain('font-size: 13px');
+    expect(ruleBody(reasoning, /\.reasoningRow/)).toContain('font-size: 14px');
     expect(ruleBody(reasoning, /\.reasoningContent/)).toContain(
-      'font-size: 13px'
+      'font-size: 14px'
     );
   });
 
@@ -238,6 +235,18 @@ describe('HC1 · TSX 接线（F1 组件化：组件契约 + 宿主存在断言�
     expect(surface).toContain('bindScrollFadesIn');
   });
 
+  it('限高视口补齐接入（E7 渐隐强化）：DiffCard、审批卡命令视口、计划步骤列表经 ScrollFadeRegion 接入', () => {
+    const diff = read('components/chat-tool-call/ToolCallDiffPreview.tsx');
+    expect(diff).toContain('ScrollFadeRegion');
+    expect(diff).toContain('diffFadeInner');
+    const approval = read('components/agent-card/ApprovalAskCard.tsx');
+    expect(approval).toContain('ScrollFadeRegion');
+    expect(approval).toContain('fadeSize="sm"');
+    const plan = read('components/chat-composer/ComposerPlanProgressBar.tsx');
+    expect(plan).toContain('ScrollFadeRegion');
+    expect(plan).toContain('active={isExpanded}');
+  });
+
   it('负向断言：已迁移宿主不得绕开组件直用状态机或手写 fade 内层', () => {
     for (const rel of [
       'components/chat-tool-call/FoldableToolGroup.tsx',
@@ -245,6 +254,9 @@ describe('HC1 · TSX 接线（F1 组件化：组件契约 + 宿主存在断言�
       'components/chat-tool-call/ToolCallOutputPane.tsx',
       'components/chat-message-row/ReasoningRow.tsx',
       'components/chat-message/FoldableProcessSection.tsx',
+      'components/chat-tool-call/ToolCallDiffPreview.tsx',
+      'components/agent-card/ApprovalAskCard.tsx',
+      'components/chat-composer/ComposerPlanProgressBar.tsx',
     ]) {
       const tsx = read(rel);
       expect(tsx).not.toContain('useScrollFade');
@@ -446,18 +458,18 @@ describe('T1 · 行头链接正典（D1–D5）与展开体微整（D7）+ 骑�
     return cssText.slice(open + 1, close);
   }
 
-  it('D2（复裁）：.toolPathLink 着链接色，hover 只变文字色——无背景、无 Button 叠加层、无下划线', () => {
+  it('D2（复裁）：.toolPathLink 着链接色，hover 呈现虚线下划线与文字色——无背景、无 Button 叠加层', () => {
     const base = standaloneBody(css, '.toolPathLink');
     expect(base).toContain('color: var(--color-link)');
     expect(base).toContain('background: transparent');
-    expect(base).toContain('transition: color');
+    expect(base).toContain('transition:');
     // Button hover 底色走 ::before 叠加层：必须把叠加层变量归零才真正无背景
     expect(base).toContain('--btn-hover-overlay: transparent');
     expect(base).toContain('--btn-active-overlay: transparent');
     const hover = ruleBody(css, /\.toolPathLink:hover/);
     expect(hover).toContain('color: var(--color-link-hover)');
     expect(hover).toContain('background: transparent');
-    expect(hover).not.toContain('text-decoration');
+    expect(hover).toContain('text-decoration: underline dashed');
     expect(hover).not.toContain('--state-hover');
   });
 

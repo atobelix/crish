@@ -31,10 +31,10 @@
  * | 流式尾部组（仍生长） | true | true | true |
  * | 已封口组（终态 / 答复前封口 / 注入切分封口） | true | false | false |
  * | 无组头组（见下） | true | true | 同上 |
- * 「无组头组」= 渲染层不挂控制栏的组：仅单思考组（组头即思考行
- * 本身，2026-09-11 特例，思考行自有终态折叠）。无组头组不参与组级
- * 自动折——折了就没有一行可见的头，内容等于消失；其组内条目以条目
- * 级默认治理（思考行终态自折）。【F1 · R-A 修订（2026-11-02）】状态
+ * 「无组头组」= 渲染层不挂控制栏的组：原子单项组（单思考组由思考行
+ * 本身承载，单工具组由 CompactToolRow 自带行头承载，避免双层手风琴套娃）。
+ * 无组头组不参与组级自动折——折了就没有一行可见的头，内容等于消失；
+ * 其组内条目以条目级默认治理（思考行终态自折、工具行详情自折）。【F1 · R-A 修订（2026-11-02）】状态
  * 通知切分出的非首组（showWorkTime=false）原与单思考同列无组头组
  * （R8 裁决），现按用户裁决 (3)「正常只显示正文」补轻量组头：文案
  * 走 formatProcessControlLabel 的非 showWorkTime 分支（动作分布
@@ -185,15 +185,18 @@ export function partitionTimelineSegments(
     const foldable = true;
     const isLive = isTail && isTurnLive;
     // 组头（控制栏）是否由渲染层挂载：与 FoldableProcessSection 的
-    // omitOuterControlBar 判定同构（仅单思考特例 → 无组头）。
-    // 【F1 · R-A】非首组（状态通知切分）同挂轻量组头并参与组级自动折，
-    // hasGroupHeader 不再要求 groupIndex === 0；无组头组只剩单思考
-    // 特例（组头即思考行本身），保持展开默认、由条目级治理。
-    const isSingleThoughtGroup =
-      metrics.thoughtCount === 1 &&
-      metrics.toolCount === 0 &&
-      metrics.subagentCount === 0;
-    const hasGroupHeader = !isSingleThoughtGroup;
+    // omitOuterControlBar 判定同构（原子单项组：单思考或单工具 → 无外层控制栏，完全穿透）。
+    // 单思考组由 ReasoningRow 自带 24px 独立折叠栏，单工具组由 CompactToolRow
+    // （ToolCallHeader）自带 24px 独立行头与折叠展开，外层彻底消除双层折叠套娃。
+    // 无组头组保持展开默认（defaultExpanded = true），由条目自身治理折叠。
+    const isAtomicSingleGroup =
+      (metrics.thoughtCount === 1 &&
+        metrics.toolCount === 0 &&
+        metrics.subagentCount === 0) ||
+      (metrics.thoughtCount === 0 &&
+        metrics.toolCount === 1 &&
+        metrics.subagentCount === 0);
+    const hasGroupHeader = !isAtomicSingleGroup;
     const defaultExpanded = isLive || !hasGroupHeader;
 
     // 组起止时间戳
@@ -264,7 +267,8 @@ export function partitionTimelineSegments(
       metrics,
       startTime: segStart,
       endTime: segEnd,
-      showWorkTime: isFirstGroup,
+      showWorkTime:
+        isFirstGroup && metrics.thoughtCount + metrics.toolCount >= 2,
       foldable,
       defaultExpanded,
       isLive,

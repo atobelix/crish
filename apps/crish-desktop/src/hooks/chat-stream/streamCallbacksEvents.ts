@@ -214,7 +214,7 @@ export function handleToolSuccess(opts: {
     id: toolId,
     ...(name ? { name } : {}),
     status: 'success',
-    output: displayOut || output || '完成',
+    output: displayOut.trim() ? displayOut : '完成',
     diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(startedAt !== undefined ? { startedAt } : {}),
@@ -266,7 +266,7 @@ export function handleToolError(opts: {
   const toolPatch: StreamToolCallPatch = {
     id: toolId,
     status: 'error',
-    output: clean || error || '失败',
+    output: clean.trim() ? clean : '失败',
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(startedAt !== undefined ? { startedAt } : {}),
   };

@@ -64,6 +64,42 @@ describe('ScrollFadeRegion · 结构契约', () => {
     const inner = host.firstElementChild as HTMLElement;
     expect(inner.dataset.testid).toBeUndefined();
   });
+
+  it('fadeSize 档位注入 --tool-fade-size 变量与 data-fade-size', () => {
+    const { container: cSm } = render(
+      <ScrollFadeRegion fadeSize="sm">内容</ScrollFadeRegion>
+    );
+    const hostSm = cSm.firstElementChild as HTMLElement;
+    expect(hostSm.dataset.fadeSize).toBe('sm');
+    expect(hostSm.style.getPropertyValue('--tool-fade-size')).toContain(
+      'var(--tool-fade-size-sm'
+    );
+
+    const { container: cLg } = render(
+      <ScrollFadeRegion fadeSize="lg">内容</ScrollFadeRegion>
+    );
+    const hostLg = cLg.firstElementChild as HTMLElement;
+    expect(hostLg.dataset.fadeSize).toBe('lg');
+    expect(hostLg.style.getPropertyValue('--tool-fade-size')).toContain(
+      'var(--tool-fade-size-lg'
+    );
+
+    const { container: cDef } = render(
+      <ScrollFadeRegion fadeSize="default">内容</ScrollFadeRegion>
+    );
+    const hostDef = cDef.firstElementChild as HTMLElement;
+    expect(hostDef.dataset.fadeSize).toBeUndefined();
+  });
+
+  it('safePadding={true} 注入 safe-padding 类名与 data-safe-padding 属性', () => {
+    const { container } = render(
+      <ScrollFadeRegion safePadding>内容</ScrollFadeRegion>
+    );
+    const host = container.firstElementChild as HTMLElement;
+    expect(host.dataset.safePadding).toBe('true');
+    const inner = host.firstElementChild as HTMLElement;
+    expect(inner.classList.contains('scroll-fade-safe-padding')).toBe(true);
+  });
 });
 
 describe('ScrollFadeRegion · 状态机接线', () => {
@@ -78,7 +114,7 @@ describe('ScrollFadeRegion · 状态机接线', () => {
     });
   };
 
-  it('active=true：状态机挂载，滚动后 data-fade 按四态维护', async () => {
+  it('active=true：状态机挂载，在顶为 bottom，滚动后切 both 与 top', async () => {
     const { container } = render(
       <ScrollFadeRegion style={{ overflowY: 'auto' }}>x</ScrollFadeRegion>
     );
@@ -88,6 +124,12 @@ describe('ScrollFadeRegion · 状态机接线', () => {
     host.dispatchEvent(new Event('scroll'));
     await flushRaf();
     expect(host.dataset.fade).toBe('bottom');
+
+    host.scrollTop = 150;
+    host.dispatchEvent(new Event('scroll'));
+    await flushRaf();
+    expect(host.dataset.fade).toBe('both');
+
     host.scrollTop = 300;
     host.dispatchEvent(new Event('scroll'));
     await flushRaf();

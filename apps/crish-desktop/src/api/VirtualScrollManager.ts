@@ -62,6 +62,10 @@ export class VirtualScrollManager {
   /** 全局流式吸附锁：在 Run 处于 processing 期间强制吸底，免疫历史折叠坍塌 */
   private stickToBottomLock = false;
 
+  /** 手风琴过渡动画锁计数（>0 表示处于展开/折叠动画播放期，闭锁 actualTick 刷新） */
+  private accordionMotionLockCount = 0;
+  private accordionUnlockListeners = new Set<() => void>();
+
   /** 所属作用域信息 (W2-5 / VULN-04) */
   private paneId: string | null = null;
   private sessionId: string | null = null;
@@ -296,6 +300,68 @@ export class VirtualScrollManager {
 
   public isStickToBottomLocked(): boolean {
     return this.stickToBottomLock;
+  }
+
+  /** 是否处于手风琴动画锁保护期 */
+  public isAccordionMotionLocked(): boolean {
+    return this.accordionMotionLockCount > 0;
+  }
+
+  /** 设置手风琴动画锁状态 */
+  public setAccordionMotionLock(locked: boolean): void {
+    if (locked) {
+      this.accordionMotionLockCount++;
+    } else {
+      const wasLocked = this.accordionMotionLockCount > 0;
+      this.accordionMotionLockCount = Math.max(
+        0,
+        this.accordionMotionLockCount - 1
+      );
+      if (wasLocked && this.accordionMotionLockCount === 0) {
+        this.notifyAccordionUnlock();
+      }
+    }
+  }
+
+  /**
+   * 获取手风琴动画锁，返回释放回调。
+   * 包含安全超时保护（默认 350ms），确保即便动画 transitionend 丢失也不会永久死锁。
+   */
+  public acquireAccordionMotionLock(timeoutMs = 350): () => void {
+    this.setAccordionMotionLock(true);
+    let released = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const release = () => {
+      if (released) return;
+      released = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      this.setAccordionMotionLock(false);
+    };
+    if (typeof setTimeout !== 'undefined') {
+      timer = setTimeout(release, timeoutMs);
+    }
+    return release;
+  }
+
+  /** 订阅动画锁释放事件（动画落定后触发单次批量刷新） */
+  public onAccordionUnlock(listener: () => void): () => void {
+    this.accordionUnlockListeners.add(listener);
+    return () => {
+      this.accordionUnlockListeners.delete(listener);
+    };
+  }
+
+  private notifyAccordionUnlock(): void {
+    for (const listener of this.accordionUnlockListeners) {
+      try {
+        listener();
+      } catch {
+        // 容错吸收
+      }
+    }
   }
 
   public estimateHeight(msg: SessionMessage): number {

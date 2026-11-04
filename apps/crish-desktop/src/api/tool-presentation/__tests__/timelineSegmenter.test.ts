@@ -252,12 +252,17 @@ describe('partitionTimelineSegments · 默认开合（R8 · 〔同组 §3.3〕�
     expect(seg.defaultExpanded).toBe(false);
   });
 
-  it('终态纯工具且 toolCount < 2 → foldable=true, defaultExpanded=false（单工具组有组头，同口径折）', () => {
+  it('终态纯工具且 toolCount < 2 → foldable=true, defaultExpanded=true（单工具穿透无组头，由工具行自折）', () => {
     const items: AssistantTimelineItem[] = [tools('k1', ['read_file'])];
     const segs = partitionTimelineSegments('m1', items, false, false);
-    const seg = segs[0] as { foldable: boolean; defaultExpanded: boolean };
+    const seg = segs[0] as {
+      foldable: boolean;
+      defaultExpanded: boolean;
+      showWorkTime: boolean;
+    };
     expect(seg.foldable).toBe(true);
-    expect(seg.defaultExpanded).toBe(false);
+    expect(seg.defaultExpanded).toBe(true);
+    expect(seg.showWorkTime).toBe(false);
   });
 
   it('终态纯思考（单条）→ defaultExpanded=true（单思考特例：无组头、思考行自有终态折叠）', () => {
@@ -425,10 +430,11 @@ describe('partitionTimelineSegments · 工作时间唯一位置（2026-09-11 用
     return seg;
   }
 
-  it('首个过程组（紧跟用户消息下方）→ showWorkTime=true（整轮唯一工作时间）', () => {
-    // 无论是单一思考、单一工具、还是混合，首个过程组均承载整轮工作时间
-    expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(true);
-    expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(true);
+  it('首个过程组（紧跟用户消息下方）→ 过程项和 ≥ 2 时 showWorkTime=true（2026-09-11 铁律），单项穿透为 false', () => {
+    // 单思考 / 单工具：总项数 < 2，工作时间不承载于外层组头（落实 2026-09-11 用户裁决与原子单项穿透）
+    expect(capsuleOf([thought('t1', 1000)])?.showWorkTime).toBe(false);
+    expect(capsuleOf([tools('k1', ['read_file'])])?.showWorkTime).toBe(false);
+    // 思考 + 工具 或 多工具：项数 ≥ 2，首个过程组承载整轮工作时间
     expect(
       capsuleOf([thought('t1'), tools('k1', ['read_file'])])?.showWorkTime
     ).toBe(true);
@@ -485,16 +491,17 @@ describe('partitionTimelineSegments · 工作时间唯一位置（2026-09-11 用
   });
 
   it('工作时间与思考时间解耦：工作时间承载整轮吐字完成耗时，思考时间保留内部思考耗时（2026-09-12 用户裁决）', () => {
-    // 场景：思考耗时 15 秒（内部思考耗时），整轮从用户发消息到吐字完成总计 54 秒
+    // 场景：思考耗时 15 秒（内部思考耗时）+ 工具执行，整轮从用户发消息到吐字完成总计 54 秒
     const thItem: TimelineThoughtItem = {
       ...thought('t1', 15_000),
       startTime: 10_000,
     };
+    const toolItem = tools('k1', ['read_file']);
     const textItem = text('ans', '这是吐字完成的最终回复正文');
 
     const segs = partitionTimelineSegments(
       'msg-decouple',
-      [thItem, textItem],
+      [thItem, toolItem, textItem],
       false,
       false,
       {
@@ -570,12 +577,26 @@ describe('partitionTimelineSegments · 段边界与空输入', () => {
       'process_section',
       'text_narrative',
     ]);
-    // R8 §3.3 + F1 · R-A：首组（工作时间控制栏）终态默认折叠；注入
-    // 后的组补轻量组头（非工作时间文案分支），同口径参与组级折——
-    // 终态默认折叠，重开入口即该轻量组头，不再平铺整段过程内容
+    // R8 §3.3 + F1 · R-A：首组（工作时间控制栏，项数 ≥ 2）终态默认折叠；注入
+    // 后的组若为原子单工具组则穿透直出（defaultExpanded=true，无组头，由单行自折）；
+    // 多工具组则补轻量组头同口径终态折。
     const first = segs[0] as { foldable: boolean; defaultExpanded: boolean };
     expect(first.foldable).toBe(true);
     expect(first.defaultExpanded).toBe(false);
+    const third = segs[2] as { foldable: boolean; defaultExpanded: boolean };
+    expect(third.foldable).toBe(true);
+    expect(third.defaultExpanded).toBe(true);
+  });
+
+  it('注入项切分后后续组为多工具时：补轻量组头、终态默认折叠（defaultExpanded=false）', () => {
+    const items: AssistantTimelineItem[] = [
+      thought('t1'),
+      tools('k1', ['read_file', 'grep_search']),
+      injection('i1'),
+      tools('k2', ['run_command', 'view_file']),
+      text('x1'),
+    ];
+    const segs = partitionTimelineSegments('m1', items, false, false);
     const third = segs[2] as { foldable: boolean; defaultExpanded: boolean };
     expect(third.foldable).toBe(true);
     expect(third.defaultExpanded).toBe(false);

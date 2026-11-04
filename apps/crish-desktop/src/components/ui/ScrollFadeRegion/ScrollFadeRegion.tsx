@@ -31,8 +31,13 @@ import React, { forwardRef, useRef } from 'react';
 import { useScrollFade } from './useScrollFade';
 import { useMergedRefs } from '../utils/mergeRefs';
 
-/** 渐隐带高档位：v1 只开放 'default'（= var(--tool-fade-size)，28px）。扩档须与高度分档方案一并定名定值，禁止裸数值。 */
-export type ScrollFadeSize = 'default';
+/**
+ * 渐隐带高档位：
+ * - default: 标准视口 40px (--tool-fade-size)
+ * - sm: 微型视口 28px (--tool-fade-size-sm，如审批卡片、命令单行等 ≤100px 容器)
+ * - lg: 巨型聚合视口 52px (--tool-fade-size-lg，如工具大组、过程段体 ≥560px 容器)
+ */
+export type ScrollFadeSize = 'default' | 'sm' | 'lg';
 
 export interface ScrollFadeRegionProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
@@ -44,8 +49,18 @@ export interface ScrollFadeRegionProps extends React.HTMLAttributes<HTMLDivEleme
   innerClassName?: string;
   /** 内层元素标签；默认 'div'，'pre' 承接 shell 命令视口的语义元素本体情形 */
   innerAs?: 'div' | 'pre';
-  /** 渐隐带高档位；v1 仅 'default'（token --tool-fade-size 治理，本组件不写数值） */
+  /**
+   * 渐隐带高档位：
+   * - 'default'：标准视口 40px（--tool-fade-size token 治理）
+   * - 'sm'：微型视口 28px（--tool-fade-size-sm token 治理）
+   * - 'lg'：巨型聚合视口 52px（--tool-fade-size-lg token 治理）
+   */
   fadeSize?: ScrollFadeSize;
+  /**
+   * 是否注入上下 6px/8px 安全内边距呼吸槽（padding: 6px 0 8px 0），
+   * 防止 mask 渐隐直接蚕食首行或末行文字核心高度；默认 false（由各容器按需开启）。
+   */
+  safePadding?: boolean;
   /**
    * 内层元素的 animationend。动画类挂在内层时（如 AN4 输出整块淡入的
    * 收起信号，useToolOutputReveal 的 handleFadeEnd 带 target 检查），
@@ -65,7 +80,9 @@ export const ScrollFadeRegion = forwardRef<
     innerClassName,
     innerAs = 'div',
     fadeSize = 'default',
+    safePadding = false,
     onInnerAnimationEnd,
+    style,
     children,
     ...rest
   },
@@ -76,20 +93,38 @@ export const ScrollFadeRegion = forwardRef<
   // ref 转发到宿主元素：宿主 ref 的既有消费方（测高 / 滚动跟随）无感迁移
   const hostRef = useMergedRefs(ownHostRef, ref);
 
-  const innerClassNames = ['scroll-fade-inner', innerClassName ?? '']
+  const innerClassNames = [
+    'scroll-fade-inner',
+    safePadding ? 'scroll-fade-safe-padding' : '',
+    innerClassName ?? '',
+  ]
+    .filter(Boolean)
     .join(' ')
     .trim();
 
-  // fadeSize v1 仅 'default'：带高由 --tool-fade-size token 本身治理，
-  // 组件不覆写 CSS 变量；未来档位在此经宿主 style 注入变量实现。
-  void fadeSize;
+  // 尺寸档位：经宿主 style 注入 --tool-fade-size CSS 变量
+  const sizeStyle: React.CSSProperties =
+    fadeSize === 'sm'
+      ? ({
+          '--tool-fade-size': 'var(--tool-fade-size-sm, 28px)',
+        } as React.CSSProperties)
+      : fadeSize === 'lg'
+        ? ({
+            '--tool-fade-size': 'var(--tool-fade-size-lg, 52px)',
+          } as React.CSSProperties)
+        : {};
+
+  const mergedStyle = style ? { ...sizeStyle, ...style } : sizeStyle;
 
   return (
     <div
       {...rest}
       ref={hostRef}
       data-slot="scroll-fade-region"
+      data-fade-size={fadeSize !== 'default' ? fadeSize : undefined}
+      data-safe-padding={safePadding ? 'true' : undefined}
       className={className}
+      style={Object.keys(mergedStyle).length > 0 ? mergedStyle : undefined}
     >
       {innerAs === 'pre' ? (
         <pre className={innerClassNames} onAnimationEnd={onInnerAnimationEnd}>

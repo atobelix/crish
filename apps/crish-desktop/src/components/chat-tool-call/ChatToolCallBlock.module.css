@@ -7,8 +7,8 @@
  *    字号统一 14px（原 11px/12px/13px 混排且偏小）；
  * ③ 语义色（错误 / 差异增删）保留，不计入「统一浅色」范畴。
  *
- * 【D5 定版 · 2026-11-02 用户裁决，覆盖上款 ② 的字号部分】
- * 折叠/过程内容字号降一档至 13px（试行后用户验收「还说得过去」转定版，非试行）；
+ * 【统一 14px · 2026-11-04 用户裁决，覆盖上款 ② 的字号部分】
+ * 过程区字号统一调整为 14px，推翻 D5 13px 试验；
  * 过程行间加 --tool-row-gap 呼吸（V2 A 案），24px 行高同构不变。
  */
 .toolStack {
@@ -22,7 +22,7 @@
   border: none;
   background: transparent;
   box-shadow: none;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .toolStack > .toolRow + .toolRow {
@@ -110,7 +110,7 @@
   max-height: 24px;
   line-height: 24px;
   box-sizing: border-box;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
   overflow: hidden;
   white-space: nowrap;
@@ -237,7 +237,7 @@
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-tertiary);
@@ -246,7 +246,7 @@
 }
 
 .toolActionText {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-tertiary);
   flex-shrink: 0;
@@ -259,6 +259,7 @@
  * 仅额外允许单行省略收缩——长意图不挤掉右侧的动作词与命令参数。
  */
 .toolHumanText {
+  font-size: 14px;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -267,7 +268,7 @@
 .dotSeparator {
   margin: 0 4px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 14px;
   user-select: none;
   flex-shrink: 0;
 }
@@ -316,7 +317,7 @@
 
 .toolParamText {
   font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -333,8 +334,8 @@
  */
 
 .toolErrorParamText {
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-family: var(--font-sans, inherit);
+  font-size: 14px;
   color: var(--color-error);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -345,7 +346,7 @@
 }
 
 .toolSecondaryMetaInline {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -361,7 +362,7 @@
 .diffStatsInline,
 .diffStatsBtn {
   font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-size: 14px;
   margin-left: 4px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -417,7 +418,7 @@
 }
 
 .toolSecondaryMeta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -461,6 +462,8 @@
   padding: 0;
   border: none;
   overflow: hidden;
+  contain: layout paint;
+  will-change: grid-template-rows;
   transition: grid-template-rows
     var(--accordion-duration, var(--transition-accordion));
 }
@@ -483,10 +486,46 @@
   opacity: 1;
 }
 
+/* Phase 1 轻量骨架：手风琴动效过渡期间占位，杜绝高亮与重型 DOM 阻塞主线程 */
+.toolSkeletonPlaceholder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 52px;
+  contain: content;
+}
+
+.toolSkeletonLine {
+  height: 12px;
+  width: 85%;
+  border-radius: 4px;
+  background: var(--bg-hover, hsl(210 20% 95% / 0.6));
+  animation: toolSkeletonPulse 1.2s ease-in-out infinite;
+}
+
+.toolSkeletonLineShort {
+  height: 12px;
+  width: 55%;
+  border-radius: 4px;
+  background: var(--bg-hover, hsl(210 20% 95% / 0.6));
+  animation: toolSkeletonPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes toolSkeletonPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 /* Duration display */
 .duration {
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-tertiary);
   margin-left: auto;
   flex-shrink: 0;
@@ -561,6 +600,7 @@
   gap: 0;
   padding: 0;
   background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   margin: 2px 0 4px 0;
   box-sizing: border-box;
@@ -584,6 +624,7 @@
   overflow: hidden;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
   /* D7：横向 18px 与行头文本基线对齐（图标槽 12 + gap 6），上下维持 */
   padding: 4px 18px 6px;
 }
@@ -595,6 +636,18 @@
  */
 .toolSectionInput {
   border-bottom: none;
+}
+
+/*
+ * 多段卡片输出面板：顶部贯穿发丝分割线；
+ * 单卡模式（DEC-GREP-OMIT: grep/read_file 等）无输入区，切除上边框。
+ */
+.toolSectionOutput {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.toolResultBodySingle .toolSectionOutput {
+  border-top: none;
 }
 
 .toolSection.isErrorSection {
@@ -658,15 +711,45 @@
   gap: 4px;
 }
 
-/* 单卡模式右上角悬浮操作（彻底杜绝空白行独立占位） */
+/* 右上角悬浮快捷操作（hover 呈现 + 渐变遮罩，彻底杜绝空白行独立占位） */
 .toolFloatingActions {
   position: absolute;
-  top: 8px;
-  right: 12px;
+  top: 4px;
+  right: 18px;
   z-index: 5;
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast, 150ms ease);
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--surface-raised) 24px,
+    var(--surface-raised) 100%
+  );
+  padding-left: 28px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.toolSection:hover .toolFloatingActions,
+.toolSection:focus-within .toolFloatingActions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.toolFloatingActions .toolSectionActionBtn {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.toolFloatingActions .toolSectionActionBtn:hover {
+  color: var(--text-primary);
+  background: var(--state-hover);
+  border-color: transparent;
 }
 
 .toolSectionActionBtn {
@@ -706,7 +789,7 @@
  * 边缘渐隐走全局 scroll-fade.css 的 mask 方案（data-fade 四态作用于内容内层）。
  */
 .toolSectionContent {
-  padding: 0;
+  padding: 6px 0 8px 0; /* 垂直 6px/8px 呼吸槽，使 mask 渐隐不直接蚕食首行文字核心高度 */
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
@@ -721,33 +804,11 @@
 }
 
 .toolSectionOutput .toolSectionContent {
-  max-height: var(--tool-viewport-output, 380px);
+  max-height: var(--tool-viewport-output, 180px);
 }
 
 .toolResultBodySingle .toolSectionOutput .toolSectionContent {
   max-height: var(--tool-viewport-output-single, var(--expand-max-h-content));
-}
-
-/*
- * 滚动层级唯一化（HC1）：组体（.tool-group-scroll-host）成为滚动层后，
- * 组内单工具展开体的视口降格为普通流式高度——禁止「组滚筒里套输出滚筒」的
- * 双层嵌套（指针路径上只许一层纵向滚动）。独立（不在组内）工具不受影响。
- */
-:global(.tool-group-scroll-host) .toolSectionContent {
-  max-height: none;
-  overflow-y: visible;
-}
-
-:global(.tool-group-scroll-host)
-  .toolResultBodySingle
-  .toolSectionOutput
-  .toolSectionContent {
-  max-height: none;
-}
-
-:global(.tool-group-scroll-host) .toolShellCmdViewport {
-  max-height: none;
-  overflow-y: visible;
 }
 
 .embeddedDiffCard[data-card-variant='embedded'] {
@@ -757,9 +818,9 @@
   background: transparent;
 }
 
-/* CLI Shell     */
+/* CLI Shell（统一水平 18px 内边距，确保命令行首字与输出内容严格对齐） */
 .toolSectionShellSingleLine {
-  padding: 4px 0;
+  padding: 6px 18px;
 }
 
 .terminalSingleLineRow {
@@ -768,6 +829,7 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
+  min-height: 24px;
 }
 
 .terminalLineEndSlot {
@@ -851,13 +913,17 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: var(--font-size-micro, 11px);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.5;
 }
 
 .toolKeyCell {
   min-width: 90px;
   color: var(--text-tertiary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium, 500);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
   flex-shrink: 0;
 }
 
@@ -865,6 +931,8 @@
   flex: 1;
   min-width: 0;
   color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
 }
 
 /*
@@ -885,6 +953,8 @@
 .toolValText {
   white-space: pre-wrap;
   word-break: break-all;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
 }
 
 /* 苹果风极简文件卡片（file_stat） */
@@ -904,7 +974,7 @@
 }
 
 .fileStatTitle {
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
@@ -1177,12 +1247,25 @@
   text-decoration: none;
   border-radius: var(--radius-xs);
   font-weight: var(--font-weight-normal);
-  transition: color var(--transition-fast, 150ms ease);
+  transition:
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
 
 .toolPathLink:hover {
   color: var(--color-link-hover);
   background: transparent;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-link-hover);
+}
+
+.toolPathLink:focus-visible {
+  color: var(--color-link-hover);
+  background: transparent;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-link-hover);
 }
 
 .toolResultImages {

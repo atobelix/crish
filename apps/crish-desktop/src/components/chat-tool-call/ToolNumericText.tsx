@@ -8,28 +8,36 @@
  */
 import React from 'react';
 import { NumericText } from '@/components/ui';
-import { isRevealDegraded } from './toolRevealState';
+import { isLiveEventTimestamp, isRevealDegraded } from './toolRevealState';
 
 export interface ToolNumericTextProps {
   text: string;
   /** 到达事件时间戳（工具行 = completedAt ?? startedAt） */
   eventTs?: number | undefined;
-  /** 显式控制是否滚入（缺省为 true 随入场滚入） */
+  /** 显式控制是否允许入场滚入（缺省为 false，克制动效） */
   animateOnView?: boolean;
   className?: string;
 }
 
 export const ToolNumericText: React.FC<ToolNumericTextProps> = ({
   text,
-  eventTs: _eventTs,
-  animateOnView = true,
+  eventTs,
+  animateOnView = false,
   className,
 }) => {
+  // 严谨门控：必须同时满足（显式开启 + 未降级 + 时间戳落在实况窗口内）才允许从 0 滚入
+  const shouldAnimate =
+    animateOnView &&
+    !isRevealDegraded() &&
+    (eventTs !== undefined ? isLiveEventTimestamp(eventTs, Date.now()) : false);
+
   return (
     <NumericText
       text={text}
-      animateOnView={animateOnView && !isRevealDegraded()}
+      animateOnView={shouldAnimate}
       className={className}
     />
   );
 };
+
+export default ToolNumericText;

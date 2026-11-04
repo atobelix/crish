@@ -34,11 +34,14 @@ const SPRING_MORPH = {
 /** 环境安全的视口可见性 Hook（防御 SSR / JSDOM 下缺少 IntersectionObserver 的断裂） */
 function useSafeInView(
   ref: React.RefObject<Element | null>,
-  options: { once?: boolean; amount?: number }
+  options: { once?: boolean; amount?: number; enabled?: boolean }
 ): boolean {
-  const [isInView, setIsInView] = useState(false);
+  const enabled = options.enabled ?? true;
+  // 禁用视口监听时（如 animateOnView=false 纯静态模式），首帧直接视为在视口内，避免产生异步延迟与闪烁
+  const [isInView, setIsInView] = useState(!enabled);
 
   useEffect(() => {
+    if (!enabled) return;
     if (typeof IntersectionObserver === 'undefined') {
       setIsInView(true);
       return;
@@ -62,9 +65,9 @@ function useSafeInView(
 
     observer.observe(element);
     return () => observer.disconnect();
-  }, [ref, options.once, options.amount]);
+  }, [ref, options.once, options.amount, enabled]);
 
-  return isInView;
+  return enabled ? isInView : true;
 }
 
 /** 单个数字字形：负责 0~9 的物理垂直位移与亚像素渲染保护 */
@@ -129,6 +132,8 @@ function Column({
   reduceMotion: boolean;
   enableOdometer: boolean;
 }) {
+  // 当 armed 为 false 时（即 animateOnView=false 纯静态模式或视口已就绪），
+  // 初始物理位置与内部状态直接锚定在目标 digit 上，避免首帧为 0 的闪烁或跳变
   const position = useMotionValue(armed ? 0 : digit);
   const wheel = useRef({
     digit: armed ? 0 : digit,
@@ -138,6 +143,7 @@ function Column({
 
   useEffect(() => {
     const state = wheel.current;
+    // 关键守卫：如果 armed 处于预备态，或者当前停靠数位已对齐目标数位，坚决不派发任何动画控制器
     if (armed || state.digit === digit) {
       if (!armed) state.revealed = true;
       return;
@@ -200,7 +206,11 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
   style,
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useSafeInView(ref, { once: true, amount: 0.1 });
+  const inView = useSafeInView(ref, {
+    once: true,
+    amount: 0.1,
+    enabled: animateOnView,
+  });
   const reduceMotion = Boolean(useReducedMotion()) || disabled;
 
   // 挂载流式节流守卫

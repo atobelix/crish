@@ -20,13 +20,13 @@ function mockMetrics(): ProcessSegmentMetrics {
   return {
     thoughtCount: 0,
     thoughtDurationMs: 0,
-    toolCount: 1,
+    toolCount: 2,
     subagentCount: 0,
     searchCount: 0,
     commandCount: 0,
-    readFilesCount: 1,
+    readFilesCount: 2,
     editFilesCount: 0,
-    readPaths: ['src/index.ts'],
+    readPaths: ['src/index.ts', 'src/util.ts'],
     editPaths: [],
     injectionCount: 0,
     totalDurationMs: 0,
@@ -393,17 +393,53 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     ).toBeInTheDocument();
   });
 
-  it('单工具调用段（命令行）→ 展示「已运行 N 条命令」', () => {
+  it('单工具段 → 物理切除外层控制栏（直接直出工具槽位，标记 data-single-tool 且绝不渲染外层控制栏）', () => {
+    cleanup();
+    render(
+      <FoldableProcessSection
+        msgId="msg-single-tool"
+        sectionId="msg-single-tool-proc-0"
+        items={[]}
+        metrics={{
+          ...mockMetrics(),
+          toolCount: 1,
+          thoughtCount: 0,
+          subagentCount: 0,
+          readFilesCount: 1,
+          readPaths: ['src/index.ts'],
+        }}
+        startTime={1_700_000_000_000}
+        endTime={1_700_000_002_000}
+        showWorkTime={false}
+        isLive={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={vi.fn()}
+        onExpand={vi.fn()}
+        renderItem={() => <div data-testid="tool-content">read_file</div>}
+      />
+    );
+    // 负向断言：控制栏节点必须彻底切除（杜绝外层控制栏双层套娃）
+    expect(
+      screen.queryByTestId('process-toggle-msg-single-tool-proc-0')
+    ).toBeNull();
+    // 正向断言：内容槽位常驻渲染，且标记 data-single-tool
+    const slot = screen.getByTestId('process-slot-msg-single-tool-proc-0');
+    expect(slot).toBeInTheDocument();
+    expect(slot.closest('[data-single-tool="true"]')).not.toBeNull();
+  });
+
+  it('多工具调用段（命令行）→ 展示「已运行 N 条命令」', () => {
     const bar = renderBar({
       showWorkTime: false,
       metrics: {
-        toolCount: 1,
+        toolCount: 2,
         thoughtCount: 0,
         readFilesCount: 0,
-        commandCount: 1,
+        commandCount: 2,
       },
     });
-    expect(bar.textContent).toContain('已运行 1 条命令');
+    expect(bar.textContent).toContain('已运行 2 条命令');
   });
 
   it('工作时间段（showWorkTime=true）不得渲染前缀图标，工具描述段（showWorkTime=false）渲染主导图标', () => {
@@ -415,8 +451,8 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     const barWithTools = renderBar({
       showWorkTime: false,
       metrics: {
-        toolCount: 1,
-        commandCount: 1,
+        toolCount: 2,
+        commandCount: 2,
         readFilesCount: 0,
         leadAction: 'command',
       },
@@ -481,11 +517,12 @@ describe('FoldableProcessSection.module.css 契约', () => {
     expect(hover).not.toMatch(/border/);
   });
 
-  it('控制栏文案与思考 / 工具行同构：13px、字重 400、继承色、严禁裸 Hex（D5 定版 · 2026-11-02）', () => {
+  it('控制栏文案与思考 / 工具行同构：14px、字重 400、继承色、严禁裸 Hex（2026-11-04 用户裁决）', () => {
     const block = css.match(/\.summaryLabel\s*\{[^}]*\}/)?.[0] ?? '';
     expect(block).not.toBe('');
-    expect(block).toMatch(/font-size:\s*13px/);
+    expect(block).toMatch(/font-size:\s*14px/);
     expect(block).not.toMatch(/font-size:\s*var\(--font-size-(xs|micro|xxs)/);
+    expect(block).not.toMatch(/font-size:\s*13px/);
     expect(block).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(block).not.toMatch(/font-weight:\s*(500|600|700)/);
     expect(block).toMatch(/color:\s*inherit/);

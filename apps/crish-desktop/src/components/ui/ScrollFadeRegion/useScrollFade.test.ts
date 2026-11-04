@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachScrollFade, computeScrollFadeState } from './useScrollFade';
 
-describe('computeScrollFadeState · 四态判定', () => {
+describe('computeScrollFadeState · 滚动渐隐状态判定', () => {
   it('不可滚（内容未超出，含 1px 容差）→ none', () => {
     expect(
       computeScrollFadeState({
@@ -25,7 +25,7 @@ describe('computeScrollFadeState · 四态判定', () => {
     ).toBe('none');
   });
 
-  it('在顶 → bottom（仅底部渐隐）', () => {
+  it('在顶 → bottom（顶端 100% 实色不遮挡首行，底部渐隐）', () => {
     expect(
       computeScrollFadeState({
         scrollTop: 0,
@@ -45,7 +45,7 @@ describe('computeScrollFadeState · 四态判定', () => {
     ).toBe('both');
   });
 
-  it('在底 → top（仅顶部渐隐）', () => {
+  it('在底 → top（底端 100% 实色不遮挡末行，顶端渐隐）', () => {
     expect(
       computeScrollFadeState({
         scrollTop: 300,
@@ -84,11 +84,16 @@ describe('attachScrollFade · 挂载行为', () => {
     hosts.splice(0).forEach((el) => el.remove());
   });
 
-  it('初始在顶写 bottom，滚动到底写 top，detach 后冻结', async () => {
+  it('可滚宿主挂载后在顶为 bottom，滚动后切 both 与 top，detach 后状态清理', async () => {
     const el = makeHost();
     const detach = attachScrollFade(el);
     await flushRaf();
     expect(el.dataset.fade).toBe('bottom');
+
+    el.scrollTop = 150;
+    el.dispatchEvent(new Event('scroll'));
+    await flushRaf();
+    expect(el.dataset.fade).toBe('both');
 
     el.scrollTop = 300;
     el.dispatchEvent(new Event('scroll'));

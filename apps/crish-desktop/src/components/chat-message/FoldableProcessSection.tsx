@@ -305,9 +305,14 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
       if (!nextExpanded) {
         triggerViewportRecovery();
       }
-      const currentHeight =
-        innerRef.current?.getBoundingClientRect().height ?? 0;
-      setTransitionDuration(calcAccordionDuration(currentHeight, nextExpanded));
+      // 杜绝同步强读未清洁布局 DOM（Layout Thrashing）：改用纯数学条目估高，封顶 280px
+      const estimatedHeight = Math.min(
+        280,
+        Math.max(100, (items?.length ?? 1) * 44)
+      );
+      setTransitionDuration(
+        calcAccordionDuration(estimatedHeight, nextExpanded)
+      );
       onToggle(sectionId, nextExpanded);
     }, [onToggle, sectionId, expanded, triggerViewportRecovery]);
 
@@ -342,14 +347,16 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
       metrics.thoughtCount === 1 &&
       metrics.toolCount === 0 &&
       metrics.subagentCount === 0;
+    const isSingleTool =
+      metrics.toolCount === 1 &&
+      metrics.thoughtCount === 0 &&
+      metrics.subagentCount === 0;
 
-    // 单思考组（子项已由 ReasoningRow 自带 24px 独立折叠栏）直接渲染
-    // 内容槽位，避免双层摘要折叠栏。
-    // 【F1 · R-A】非首组（showWorkTime=false）不再省略控制栏：补轻量
-    // 组头（主导图标 + 动作分布文案，即 formatProcessControlLabel 的
-    // 非工作时间分支），与首组同口径可折可重开；分段器 hasGroupHeader
-    // 判定与此同构（无组头组只剩单思考特例）。
-    const omitOuterControlBar = isSingleThought;
+    // 原子单项组（单思考组由 ReasoningRow 自带 24px 独立折叠栏，单工具组由
+    // CompactToolRow 自带 24px 独立行头与折叠栏）直接渲染内容槽位，完全卸载
+    // 外层控制栏，彻底消除双层折叠套娃。
+    // 分段器 hasGroupHeader 判定与此同构（原子单项组穿透豁免）。
+    const omitOuterControlBar = isSingleThought || isSingleTool;
 
     if (omitOuterControlBar) {
       return (
@@ -358,6 +365,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           className={`${styles.section} ${className}`}
           data-process-segment={sectionId}
           data-single-thought={isSingleThought ? 'true' : undefined}
+          data-single-tool={isSingleTool ? 'true' : undefined}
           data-foldable={isFoldable ? 'true' : 'false'}
           data-expanded={expanded ? 'true' : 'false'}
           style={accordionDurationStyle(transitionDuration)}
@@ -409,9 +417,12 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
         >
           {!showWorkTime && <SectionLeadIcon metrics={metrics} />}
           <span className={styles.summaryLabel}>
-            {/* 运行中 100ms 跳秒：tenths 位永远在换，滚轮会成一团糊，直出文本；
-                落定后的终值才走数字滚轮 */}
-            {isLive ? summaryText : <NumericText text={summaryText} />}
+            {/* 运行中跳秒直出纯文本；落定终态走 NumericText，显式禁止从 0 重滚（animateOnView=false），直接定格 */}
+            {isLive ? (
+              summaryText
+            ) : (
+              <NumericText text={summaryText} animateOnView={false} />
+            )}
           </span>
           {controlInteractive ? (
             <span

@@ -20,7 +20,8 @@ use tokio::time::Duration;
 
 use super::shell_invoke::{build_shell_invocation, decode_console_bytes, ShellMode};
 use super::shell_output::{
-    build_sync_result, build_timeout_result, stream_until_deadline, OutputAccumulator, StreamEnd,
+    build_sync_result, build_timeout_result, clean_clixml_stream, stream_until_deadline,
+    OutputAccumulator, StreamEnd,
 };
 use super::PreparedCommand;
 
@@ -867,20 +868,44 @@ fn push_chunk(r: &mut RunningState, chunk: &[u8], is_err: bool) -> Option<ToolSt
     } else {
         r.acc_out.append(chunk, now_ms);
     }
-    if r.budget_exceeded {
-        return None;
-    }
-    if r.cum_bytes + chunk.len() > r.max_output_bytes {
-        r.budget_exceeded = true;
-        return None;
-    }
-    r.cum_bytes += chunk.len();
+
     let text = if is_err {
-        format!("[stderr] {}", decode_console_bytes(chunk))
+        let raw_err = decode_console_bytes(chunk);
+        let cleaned = clean_clixml_stream(&raw_err);
+        if is_clixml_noise(&raw_err) && cleaned.trim().is_empty() {
+            return None;
+        }
+        let display = if !cleaned.trim().is_empty() && cleaned != raw_err {
+            cleaned
+        } else {
+            raw_err
+        };
+        format!("[stderr] {display}")
     } else {
         decode_console_bytes(chunk)
     };
+
+    if r.budget_exceeded {
+        return None;
+    }
+    if r.cum_bytes + text.len() > r.max_output_bytes {
+        r.budget_exceeded = true;
+        return None;
+    }
+    r.cum_bytes += text.len();
+
     Some(ToolStreamItem::Progress(ToolProgress::Text { text }))
+}
+
+fn is_clixml_noise(s: &str) -> bool {
+    s.contains("#<")
+        || s.contains("CLIXML")
+        || s.contains("<Objs Version=")
+        || s.contains("<Obj S=\"progress\"")
+        || s.contains("<Obj S='progress'")
+        || s.contains("</Objs>")
+        || s.contains("<PR N=\"Record\">")
+        || s.contains("Preparing modules for first use.")
 }
 
 /// 读取一个可用数据块（fill_buf → consume）：返回 (块内容, 是否 EOF)。

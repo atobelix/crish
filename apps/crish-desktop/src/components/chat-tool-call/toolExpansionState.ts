@@ -418,6 +418,10 @@ export interface UseToolExpansionStateResult {
   rowRef: React.RefObject<HTMLDivElement | null>;
   capturePreAction: () => PreActionAnchor | null;
   restorePreAction: () => void;
+  /** 两阶段分相调度：是否处于手风琴动效展开期（动效期仅渲染轻量骨架） */
+  isAccordionAnimating: boolean;
+  /** 手风琴过渡动画结束回调（落定后水合重型组件并提交单次测高） */
+  handleAccordionTransitionEnd: () => void;
 }
 
 /**
@@ -459,6 +463,40 @@ export function useToolExpansionState({
   );
   const isFlipping = flipPhase === 'flipping';
 
+  // 两阶段分相调度优化（Phase Separation）：手风琴动画期（约 250ms）仅渲染轻量骨架，动画落定后水合重型组件
+  const [isAccordionAnimating, setIsAccordionAnimating] = useState(false);
+  const animLockReleaseRef = useRef<(() => void) | null>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const settleAccordionAnimation = useCallback(() => {
+    if (animTimerRef.current !== null) {
+      clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
+    setIsAccordionAnimating(false);
+    if (animLockReleaseRef.current) {
+      animLockReleaseRef.current();
+      animLockReleaseRef.current = null;
+    }
+  }, []);
+
+  const handleAccordionTransitionEnd = useCallback(() => {
+    settleAccordionAnimation();
+  }, [settleAccordionAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (animTimerRef.current !== null) {
+        clearTimeout(animTimerRef.current);
+        animTimerRef.current = null;
+      }
+      if (animLockReleaseRef.current) {
+        animLockReleaseRef.current();
+        animLockReleaseRef.current = null;
+      }
+    };
+  }, []);
+
   // 当判定原地替换生效时，触发原地指示动效计时器（AN4：150ms 交叉淡化窗）
   useEffect(() => {
     if (!shouldReplace) {
@@ -474,10 +512,16 @@ export function useToolExpansionState({
     return () => clearTimeout(timer);
   }, [shouldReplace, tc.id]);
 
-  // 获取有效的滚动宿主与 VSM
+  // 获取有效的滚动宿主与 VSM（增加宿主元素引用缓存，避免每次渲染深搜 DOM 树并调用 getComputedStyle）
+  const cachedScrollerRef = useRef<HTMLElement | null>(null);
   const getScroller = useCallback((): HTMLElement | null => {
     if (scrollerRef?.current) return scrollerRef.current;
-    return findScrollContainer(rowRef.current);
+    if (cachedScrollerRef.current && cachedScrollerRef.current.isConnected) {
+      return cachedScrollerRef.current;
+    }
+    const found = findScrollContainer(rowRef.current);
+    cachedScrollerRef.current = found;
+    return found;
   }, [scrollerRef]);
 
   const fallbackVsmRef = useRef<VirtualScrollManager | null>(null);
@@ -553,7 +597,7 @@ export function useToolExpansionState({
     pendingSnapshotRef.current = null;
   }, [getScroller, getVsm, tc.id, isOpen, onDisplacementRecorded]);
 
-  // 展开切换事件包装：防抖 + 预锚定快照
+  // 展开切换事件包装：防抖 + 预锚定快照 + 动画锁与分相调度
   const handleToggle = useCallback(
     (toolId: string, currentOpen: boolean) => {
       const now = Date.now();
@@ -562,16 +606,45 @@ export function useToolExpansionState({
       }
       lastActionTimeRef.current = now;
 
+      // 锁定虚拟滚动 actualTick，避免过渡动画期间 ResizeObserver 狂刷重渲染
+      const activeVsm = getVsm();
+      if (animLockReleaseRef.current) {
+        animLockReleaseRef.current();
+      }
+      animLockReleaseRef.current = activeVsm.acquireAccordionMotionLock(350);
+
+      if (!currentOpen) {
+        // 展开动作：启动 Phase 1 轻量骨架期，260ms 后或 transitionend 落定转 Phase 2 水合
+        setIsAccordionAnimating(true);
+        if (animTimerRef.current !== null) {
+          clearTimeout(animTimerRef.current);
+        }
+        animTimerRef.current = setTimeout(() => {
+          settleAccordionAnimation();
+        }, 260);
+      } else {
+        // 折叠动作
+        setIsAccordionAnimating(false);
+      }
+
       capturePreAction();
       onToggleTool(toolId, currentOpen);
     },
-    [capturePreAction, onToggleTool, debounceMs]
+    [
+      capturePreAction,
+      onToggleTool,
+      debounceMs,
+      getVsm,
+      settleAccordionAnimation,
+    ]
   );
 
-  // 在 DOM 形变渲染完成前应用视口锚点补偿
+  // 在 DOM 形变渲染完成前应用视口锚点补偿（仅当存在未提交快照时执行，消除无依赖重排）
   useLayoutEffect(() => {
-    restorePreAction();
-  });
+    if (pendingSnapshotRef.current !== null) {
+      restorePreAction();
+    }
+  }, [isOpen, restorePreAction]);
 
   return {
     isOpen,
@@ -586,5 +659,7 @@ export function useToolExpansionState({
     rowRef,
     capturePreAction,
     restorePreAction,
+    isAccordionAnimating,
+    handleAccordionTransitionEnd,
   };
 }

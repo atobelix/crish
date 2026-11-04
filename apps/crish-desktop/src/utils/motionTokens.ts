@@ -276,16 +276,19 @@ export function calcAccordionDuration(
   height: number,
   isOpening: boolean
 ): number {
-  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
+  const safeHeight = Math.min(
+    280,
+    Math.max(0, Number.isFinite(height) ? height : 0)
+  );
 
   if (isOpening) {
-    // 展开：180ms 起步，上限 480ms
-    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(480, Math.max(180, raw)));
+    // 展开：160ms 起步，280px 上限下收敛至 220ms（保持 150~220ms 灵动无迟钝）
+    const raw = 160 + 50 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(220, Math.max(150, raw)));
   } else {
-    // 收起：150ms 起步，上限 350ms（收起动作要求更为干净敏捷）
-    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(350, Math.max(150, raw)));
+    // 收起：150ms 起步，上限 200ms（收起动作更为干净利落）
+    const raw = 150 + 40 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(200, Math.max(150, raw)));
   }
 }
 

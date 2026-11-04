@@ -193,4 +193,20 @@ describe('scroll-fade.css · mask 渐隐（无覆盖层）', () => {
     const noComments = css().replace(/\/\*[\s\S]*?\*\//g, '');
     expect(noComments).not.toMatch(/background\s*:/);
   });
+
+  it('E7：5 阶非线性平滑 Ease 渐隐曲线与上下双向渐隐（废除 0.45 陡坡）', () => {
+    const content = css();
+    // 5 阶非线性平滑节点
+    expect(content).toContain('rgba(0, 0, 0, 0.08)');
+    expect(content).toContain('rgba(0, 0, 0, 0.35)');
+    expect(content).toContain('rgba(0, 0, 0, 0.75)');
+    expect(content).toContain('rgba(0, 0, 0, 0.95)');
+    // 默认带高扩展至 40px，首尾柔和渐变带高 28px
+    expect(content).toContain('--tool-fade-size, 40px');
+    expect(content).toContain('--tool-fade-size-sm, 28px');
+    // 负向断言：绝不出现旧 3 阶折线 0.45 陡坡
+    expect(content).not.toContain('0.45');
+    // 安全呼吸槽支持
+    expect(content).toContain('.scroll-fade-safe-padding');
+  });
 });

@@ -79,12 +79,12 @@
  * 【统一排版纪律 · 2026-09-11 用户裁决】
  * 控制栏文案与思考行 / 工具行严格同构：14px、字重 400、默认浅色。
  * 严禁此处再出现 12px / 500 字重 / --text-primary 的「花」样式。
- * 【D5 定版 · 2026-11-02】字号随过程内容定版为 13px（覆盖上款字号部分）。
+ * 【统一 14px · 2026-11-04 用户裁决】过程区字号统一调整为 14px，推翻 D5 13px 试验。
  */
 .summaryLabel {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
   line-height: 1.2;
   color: inherit;
@@ -101,7 +101,7 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  font-size: var(--font-size-sm, 13px);
+  font-size: 14px;
   line-height: 1;
   color: var(--text-tertiary);
   transform: rotate(0deg);
@@ -144,7 +144,7 @@
  */
 .sectionBodyInner {
   min-height: 0;
-  max-height: var(--tool-aggregate-max-h, min(560px, 60vh));
+  max-height: var(--tool-aggregate-max-h, min(280px, 35vh));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: auto;

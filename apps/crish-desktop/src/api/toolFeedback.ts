@@ -38,6 +38,7 @@ export {
   filterPublishableFileDiffs,
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
+  cleanClixml,
 } from './toolFeedbackDiff';
 // 分类 / 截断 / 反馈组装辅助
 export {

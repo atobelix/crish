@@ -260,6 +260,7 @@ pub(crate) fn is_segment_pure_read_only(seg: &Segment) -> bool {
             | "tag"
             | "remote"
             | "config"
+            | "grep"
     )
 }
 
@@ -301,6 +302,7 @@ fn is_segment_safe(seg: &Segment) -> bool {
                     | "version"
                     | "help"
                     | "config"
+                    | "grep"
             ) {
                 return true;
             }

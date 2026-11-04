@@ -1243,4 +1243,37 @@ describe('Stage 03 终案融合最先进单轨架构单元测试断言 (VS-U01 /
     expect(vsm.findIndexAtOffset(360)).toBe(3);
     expect(vsm.findIndexAtOffset(500)).toBe(4);
   });
+
+  it('手风琴动画锁（Accordion Motion Lock）：计数管理、自动释放与解除事件派发', () => {
+    const vsm = new VirtualScrollManager(100);
+    expect(vsm.isAccordionMotionLocked()).toBe(false);
+
+    let unlockNotified = 0;
+    const unsubscribe = vsm.onAccordionUnlock(() => {
+      unlockNotified++;
+    });
+
+    const release1 = vsm.acquireAccordionMotionLock(500);
+    expect(vsm.isAccordionMotionLocked()).toBe(true);
+
+    const release2 = vsm.acquireAccordionMotionLock(500);
+    expect(vsm.isAccordionMotionLocked()).toBe(true);
+
+    // 释放第一个锁，仍然保持锁定
+    release1();
+    expect(vsm.isAccordionMotionLocked()).toBe(true);
+    expect(unlockNotified).toBe(0);
+
+    // 释放第二个锁，完全解除锁定并触发通知
+    release2();
+    expect(vsm.isAccordionMotionLocked()).toBe(false);
+    expect(unlockNotified).toBe(1);
+
+    // 幂等释放不重复计数
+    release2();
+    expect(vsm.isAccordionMotionLocked()).toBe(false);
+    expect(unlockNotified).toBe(1);
+
+    unsubscribe();
+  });
 });

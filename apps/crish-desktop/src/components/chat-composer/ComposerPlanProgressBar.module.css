@@ -52,6 +52,13 @@
   transition: padding var(--accordion-duration, var(--transition-accordion));
 }
 
+.planStepListFadeInner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
 .planProgressBar.isExpanded .planStepListInner {
   padding: 10px 14px 4px 14px;
 }

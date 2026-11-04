@@ -18,6 +18,7 @@ import {
   resolveToolDiffs,
   safeTruncateChars,
   sanitizeToolDisplayOutput,
+  cleanClixml,
   truncateToolFeedbackOutput,
 } from './toolFeedback';
 import { collectMessageDiffs } from './diffPanelHelpers';
@@ -31,18 +32,23 @@ describe('looksLikeDirectoryListing', () => {
           'Mode                 LastWriteTime         Length Name',
           '----                 -------------         ------ ----',
           'd-----        2026/7/16     10:00                apps',
-        ].join('\n'),
-      ),
+        ].join('\n')
+      )
     ).toBe(true);
     expect(
       looksLikeDirectoryListing(
-        [' Directory of C:\\foo', '01/01/2026  10:00 AM    <DIR>          apps'].join('\n'),
-      ),
+        [
+          ' Directory of C:\\foo',
+          '01/01/2026  10:00 AM    <DIR>          apps',
+        ].join('\n')
+      )
     ).toBe(true);
     expect(
       looksLikeDirectoryListing(
-        ['total 12', 'drwxr-xr-x  2 user user 4096 Jul 16 10:00 apps'].join('\n'),
-      ),
+        ['total 12', 'drwxr-xr-x  2 user user 4096 Jul 16 10:00 apps'].join(
+          '\n'
+        )
+      )
     ).toBe(true);
     expect(looksLikeDirectoryListing('hello\nworld')).toBe(false);
   });
@@ -54,8 +60,8 @@ describe('looksLikeDirectoryListing', () => {
           'd-----        2026/7/16     10:00                apps',
           'd-----        2026/7/16     10:00                packages',
           '-a----        2026/7/16     10:00           1234 package.json',
-        ].join('\n'),
-      ),
+        ].join('\n')
+      )
     ).toBe(true);
     expect(
       looksLikeDirectoryListing(
@@ -63,8 +69,8 @@ describe('looksLikeDirectoryListing', () => {
           '07/16/2026  10:00 AM    <DIR>          apps',
           '07/16/2026  10:00 AM    <DIR>          packages',
           '07/16/2026  10:00 AM             1234 package.json',
-        ].join('\n'),
-      ),
+        ].join('\n')
+      )
     ).toBe(true);
     // 真· unified diff 不应被误判
     expect(
@@ -76,8 +82,8 @@ describe('looksLikeDirectoryListing', () => {
           '@@ -1 +1 @@',
           '-old',
           '+new',
-        ].join('\n'),
-      ),
+        ].join('\n')
+      )
     ).toBe(false);
   });
 });
@@ -98,7 +104,7 @@ describe('resolveToolDiffs shell safety', () => {
         name: 'run_terminal_command',
         args: JSON.stringify({ command: 'Get-ChildItem' }),
         output: out,
-      }),
+      })
     ).toEqual([]);
   });
 
@@ -114,7 +120,7 @@ describe('resolveToolDiffs shell safety', () => {
         name: 'shell',
         args: JSON.stringify({ command: 'dir' }),
         output: cmdDir,
-      }),
+      })
     ).toEqual([]);
 
     const lsLa = [
@@ -127,7 +133,7 @@ describe('resolveToolDiffs shell safety', () => {
         name: 'bash',
         args: JSON.stringify({ command: 'ls -la' }),
         output: lsLa,
-      }),
+      })
     ).toEqual([]);
   });
 
@@ -193,7 +199,7 @@ describe('fileDiffFromEditArgs', () => {
         path: 'apps/x/src/a.ts',
         old_string: 'const a = 1',
         new_string: 'const a = 2',
-      }),
+      })
     );
     expect(d?.filePath).toBe('apps/x/src/a.ts');
     expect(d?.deletions).toBe(1);
@@ -205,7 +211,7 @@ describe('fileDiffFromEditArgs', () => {
       JSON.stringify({
         target_file: 'README.md',
         content: 'hello\nworld',
-      }),
+      })
     );
     expect(d?.filePath).toBe('README.md');
     expect(d?.additions).toBe(2);
@@ -268,7 +274,7 @@ describe('tool name helpers', () => {
           deletions: 0,
           changes: [{ type: 'addition', content: 'x' }],
         },
-      ]).map((f) => f.filePath),
+      ]).map((f) => f.filePath)
     ).toEqual(['src/ok.ts']);
   });
 
@@ -278,7 +284,7 @@ describe('tool name helpers', () => {
         name: 'write_file',
         args: JSON.stringify({ content: 'hello' }),
         output: 'OK',
-      }),
+      })
     ).toEqual([]);
   });
 
@@ -300,7 +306,7 @@ describe('tool name helpers', () => {
             changes: [{ type: 'addition', content: 'y' }],
           },
         ],
-      }).map((f) => f.filePath),
+      }).map((f) => f.filePath)
     ).toEqual(['good.ts']);
   });
 });
@@ -479,7 +485,10 @@ describe('collectMessageDiffs (change overview path)', () => {
     };
     const files = collectMessageDiffs(msg);
     const byPath = Object.fromEntries(files.map((f) => [f.filePath, f]));
-    expect(Object.keys(byPath).sort()).toEqual(['src/other.ts', 'src/shared.ts']);
+    expect(Object.keys(byPath).sort()).toEqual([
+      'src/other.ts',
+      'src/shared.ts',
+    ]);
     // 同路径两次 edit：additions/deletions 累加
     expect(byPath['src/shared.ts']!.additions).toBe(1 + 2);
     expect(byPath['src/shared.ts']!.deletions).toBe(1 + 1);
@@ -497,7 +506,7 @@ describe('classifyToolOutcome paths', () => {
         output: 'OK',
         stderr: '',
         exitCode: 0,
-      }),
+      })
     ).toBe('success');
     // 空白 stderr 不得升为 partial
     expect(
@@ -505,20 +514,22 @@ describe('classifyToolOutcome paths', () => {
         status: 'success',
         output: 'done',
         stderr: '  \n\t  ',
-      }),
+      })
     ).toBe('success');
   });
 
   it('classifies error from status or non-zero exit', () => {
-    expect(classifyToolOutcome({ status: 'error', output: 'boom' })).toBe('error');
-    expect(classifyToolOutcome({ status: 'success', exitCode: 1, output: 'fail' })).toBe(
-      'error',
+    expect(classifyToolOutcome({ status: 'error', output: 'boom' })).toBe(
+      'error'
     );
+    expect(
+      classifyToolOutcome({ status: 'success', exitCode: 1, output: 'fail' })
+    ).toBe('error');
     expect(
       classifyToolOutcome({
         status: 'success',
         output: 'Exit code: 2\nSomething broke',
-      }),
+      })
     ).toBe('error');
   });
 
@@ -528,36 +539,38 @@ describe('classifyToolOutcome paths', () => {
         status: 'success',
         output: 'wrote file',
         stderr: 'warning: deprecated API',
-      }),
+      })
     ).toBe('partial');
     expect(
       classifyToolOutcome({
         status: 'success',
         output: '…',
         truncated: true,
-      }),
+      })
     ).toBe('partial');
     expect(
       classifyToolOutcome({
         status: 'success',
         output: '部分完成：3/5 文件',
-      }),
+      })
     ).toBe('partial');
   });
 
   it('classifies cancelled from flag or cancel text (overrides error)', () => {
-    expect(classifyToolOutcome({ cancelled: true, status: 'error' })).toBe('cancelled');
+    expect(classifyToolOutcome({ cancelled: true, status: 'error' })).toBe(
+      'cancelled'
+    );
     expect(
       classifyToolOutcome({
         status: 'error',
         output: 'cancelled by user',
-      }),
+      })
     ).toBe('cancelled');
     expect(
       classifyToolOutcome({
         status: 'error',
         output: '用户取消了操作',
-      }),
+      })
     ).toBe('cancelled');
     expect(isCancelledToolSignal({ cancelled: true })).toBe(true);
     expect(isCancelledToolSignal({ output: '上次会话中断' })).toBe(true);
@@ -584,9 +597,9 @@ describe('formatToolFeedbackMessage + truncate', () => {
     expect(formatToolFeedbackMessage('running')).toBe('执行中…');
     expect(formatToolFeedbackMessage('pending')).toBe('待确认');
     expect(formatToolFeedbackMessage('cancelled')).toBe('已取消');
-    expect(formatToolFeedbackMessage('success', { name: 'run_terminal_command' })).toBe(
-      '命令已完成',
-    );
+    expect(
+      formatToolFeedbackMessage('success', { name: 'run_terminal_command' })
+    ).toBe('命令已完成');
     expect(
       formatToolFeedbackMessage('success', {
         name: 'search_replace',
@@ -598,17 +611,17 @@ describe('formatToolFeedbackMessage + truncate', () => {
             changes: [{ type: 'addition', content: 'x' }],
           },
         ],
-      }),
+      })
     ).toBe('文件已更新');
     expect(formatToolFeedbackMessage('partial', { stderr: 'warn' })).toBe(
-      '完成，但有警告输出',
+      '完成，但有警告输出'
     );
     expect(formatToolFeedbackMessage('partial', { truncated: true })).toBe(
-      '结果已截断（部分输出）',
+      '结果已截断（部分输出）'
     );
-    expect(formatToolFeedbackMessage('error', { exitCode: 7, output: '' })).toBe(
-      '执行失败（退出码 7）',
-    );
+    expect(
+      formatToolFeedbackMessage('error', { exitCode: 7, output: '' })
+    ).toBe('执行失败（退出码 7）');
   });
 
   it('truncates large output with Chinese ellipsis; preserves short CJK', () => {
@@ -619,7 +632,10 @@ describe('formatToolFeedbackMessage + truncate', () => {
     expect(r.text).toContain('共 50 行');
 
     const wide = '中'.repeat(100);
-    const r2 = truncateToolFeedbackOutput(wide, { maxChars: 20, maxLines: 100 });
+    const r2 = truncateToolFeedbackOutput(wide, {
+      maxChars: 20,
+      maxLines: 100,
+    });
     expect(r2.truncated).toBe(true);
     expect(r2.text.endsWith('…（已截断）')).toBe(true);
     // 不切断代理对：emoji 整码点
@@ -628,7 +644,9 @@ describe('formatToolFeedbackMessage + truncate', () => {
 
   it('sanitize strips metadata including empty Stderr header', () => {
     const cleaned = sanitizeToolDisplayOutput(
-      ['hello', 'Exit code: 0', 'Wall time: 1ms', 'Stderr:', '', 'world'].join('\n'),
+      ['hello', 'Exit code: 0', 'Wall time: 1ms', 'Stderr:', '', 'world'].join(
+        '\n'
+      )
     );
     expect(cleaned).not.toMatch(/Exit code/);
     expect(cleaned).not.toMatch(/Wall time/);
@@ -645,12 +663,44 @@ describe('formatToolFeedbackMessage + truncate', () => {
         '[system] skip me',
         'real output line',
         'Working directory: C:\\tmp',
-      ].join('\n'),
+      ].join('\n')
     );
     expect(cleaned).toBe('real output line');
     expect(cleaned).not.toMatch(/checkpoint/i);
     expect(cleaned).not.toMatch(/系统提示/);
     expect(cleaned).not.toMatch(/Working directory/);
+  });
+  it('cleanClixml strips pure progress noise with leading whitespace', () => {
+    const raw = `  #< CLIXML
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>`;
+    const cleaned = cleanClixml(raw);
+    expect(cleaned).toBe('');
+    expect(sanitizeToolDisplayOutput(raw)).toBe('');
+  });
+
+  it('cleanClixml decodes error records and unescapes XML and hex control characters', () => {
+    const raw = `#< CLIXML
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><MS><PR N="Record"><AV>Preparing modules</AV></PR></MS></Obj><S S="Error">Get-Content : 找不到路径_x000D__x000A_</S><S S="Error">所在位置 行:1_x000D__x000A_</S></Objs>`;
+    const cleaned = cleanClixml(raw);
+    expect(cleaned).toBe('Get-Content : 找不到路径\r\n所在位置 行:1\r\n');
+    expect(sanitizeToolDisplayOutput(raw)).toContain(
+      'Get-Content : 找不到路径'
+    );
+    expect(sanitizeToolDisplayOutput(raw)).not.toContain('#< CLIXML');
+    expect(sanitizeToolDisplayOutput(raw)).not.toContain('<Objs');
+  });
+
+  it('sanitizeToolDisplayOutput preserves normal output before and after CLIXML', () => {
+    const raw = [
+      'Normal stdout before',
+      '#< CLIXML',
+      '<Objs Version="1.1.0.1"><Obj S="progress"><PR N="Record"><AV>Preparing</AV></PR></Obj></Objs>',
+      'Normal stdout after',
+    ].join('\n');
+    const cleaned = sanitizeToolDisplayOutput(raw);
+    expect(cleaned).toContain('Normal stdout before');
+    expect(cleaned).toContain('Normal stdout after');
+    expect(cleaned).not.toContain('#< CLIXML');
   });
 });
 
@@ -678,27 +728,35 @@ describe('diff / undo hints + buildToolFeedback', () => {
           deletions: 0,
           changes: [{ type: 'addition', content: 'z' }],
         },
-      ]),
+      ])
     ).toBe('+3 −1 · 2 个文件');
   });
 
   it('undo hint only for edit-like success/partial with publishable diffs', () => {
     expect(
-      buildToolUndoHint({ kind: 'success', name: 'search_replace', diffs: [oneDiff] }),
+      buildToolUndoHint({
+        kind: 'success',
+        name: 'search_replace',
+        diffs: [oneDiff],
+      })
     ).toMatch(/撤销/);
     expect(
       buildToolUndoHint({
         kind: 'success',
         name: 'run_terminal_command',
         diffs: [oneDiff],
-      }),
+      })
     ).toBe(null);
     expect(
-      buildToolUndoHint({ kind: 'error', name: 'search_replace', diffs: [oneDiff] }),
+      buildToolUndoHint({
+        kind: 'error',
+        name: 'search_replace',
+        diffs: [oneDiff],
+      })
     ).toBe(null);
-    expect(buildToolUndoHint({ kind: 'success', name: 'search_replace', diffs: [] })).toBe(
-      null,
-    );
+    expect(
+      buildToolUndoHint({ kind: 'success', name: 'search_replace', diffs: [] })
+    ).toBe(null);
   });
 
   it('buildToolFeedback: success never toastable; wires message/detail/hints', () => {
@@ -771,7 +829,11 @@ describe('diff / undo hints + buildToolFeedback', () => {
   });
 
   it('pathFromToolArgs reads file_path / targetFile', () => {
-    expect(pathFromToolArgs(JSON.stringify({ file_path: 'src/x.ts' }))).toBe('src/x.ts');
-    expect(pathFromToolArgs(JSON.stringify({ targetFile: 'a/b.md' }))).toBe('a/b.md');
+    expect(pathFromToolArgs(JSON.stringify({ file_path: 'src/x.ts' }))).toBe(
+      'src/x.ts'
+    );
+    expect(pathFromToolArgs(JSON.stringify({ targetFile: 'a/b.md' }))).toBe(
+      'a/b.md'
+    );
   });
 });

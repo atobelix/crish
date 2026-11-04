@@ -134,12 +134,14 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
     completedAt,
   });
 
-  // 仅在非单卡模式（有“输出”标签）或存在明确状态标记（执行失败/执行中）时才渲染独立 header 行
+  // 紧缩 showHeader 判定：非单卡模式仅在存在实质状态标签（错误/执行中）、元数据（耗时/行数等）或截断下载时才渲染独立 Header
   const showHeader = useMemo(() => {
     if (isError || isRunning) return true;
-    if (!isSingleCard) return true;
+    if (!isSingleCard) {
+      return Boolean(metaExtra || durationStr || isTruncated);
+    }
     return false;
-  }, [isError, isRunning, isSingleCard]);
+  }, [isError, isRunning, isSingleCard, metaExtra, durationStr, isTruncated]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -220,17 +222,16 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                     )
                   }
                 >
-                  {copied ? '已复制' : '复制'}
+                  {copied ? '已复制' : '复制输出'}
                 </Button>
               </Tooltip>
             ) : null}
           </div>
         </header>
-      ) : isSingleCard &&
-        !fileStat &&
-        !emptyBody &&
+      ) : !emptyBody &&
         formattedOutput &&
-        !hasDiffs ? (
+        !hasDiffs &&
+        (!fileStat || !isSingleCard) ? (
         <div className={styles.toolFloatingActions}>
           {isTruncated ? (
             <Tooltip content="下载完整日志文件 (.log)">
@@ -265,7 +266,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 )
               }
             >
-              {copied ? '已复制' : '复制'}
+              {copied ? '已复制' : '复制输出'}
             </Button>
           </Tooltip>
         </div>

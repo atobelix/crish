@@ -139,7 +139,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
                   )
                 }
               >
-                {copied ? '已复制' : '复制'}
+                {copied ? '已复制' : '复制命令'}
               </Button>
             </Tooltip>
           </div>
@@ -154,58 +154,51 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
       aria-label="工具输入参数"
       data-tool-id={toolId}
     >
-      <header className={styles.toolSectionHeader}>
-        <div className={styles.toolSectionTitleGroup} />
-        <div className={styles.toolSectionActions}>
-          {hasProps ? (
-            <Tooltip
-              content={
-                viewMode === 'formatted' ? '查看原始 JSON' : '查看结构化表'
-              }
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.toolSectionActionBtn}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setViewMode((m) => (m === 'formatted' ? 'raw' : 'formatted'));
-                }}
-                icon={
-                  viewMode === 'formatted' ? (
-                    <AppIcon name="code" size={12} />
-                  ) : (
-                    <AppIcon name="align-left" size={12} />
-                  )
-                }
-              />
-            </Tooltip>
-          ) : null}
-          <Tooltip content={copied ? '已复制！' : '复制入参 JSON'}>
+      <div className={styles.toolFloatingActions}>
+        {hasProps ? (
+          <Tooltip
+            content={
+              viewMode === 'formatted' ? '查看原始 JSON' : '查看结构化表'
+            }
+          >
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className={styles.toolSectionActionBtn}
-              onClick={handleCopy}
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewMode((m) => (m === 'formatted' ? 'raw' : 'formatted'));
+              }}
               icon={
-                copied ? (
-                  <AppIcon
-                    name="check"
-                    size={12}
-                    className={styles.copiedIcon}
-                  />
+                viewMode === 'formatted' ? (
+                  <AppIcon name="code" size={12} />
                 ) : (
-                  <AppIcon name="copy" size={12} />
+                  <AppIcon name="align-left" size={12} />
                 )
               }
-            >
-              {copied ? '已复制' : '复制'}
-            </Button>
+            />
           </Tooltip>
-        </div>
-      </header>
+        ) : null}
+        <Tooltip content={copied ? '已复制！' : '复制入参 JSON'}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={styles.toolSectionActionBtn}
+            onClick={handleCopy}
+            icon={
+              copied ? (
+                <AppIcon name="check" size={12} className={styles.copiedIcon} />
+              ) : (
+                <AppIcon name="copy" size={12} />
+              )
+            }
+          >
+            {copied ? '已复制' : '复制入参'}
+          </Button>
+        </Tooltip>
+      </div>
 
       <ScrollFadeRegion className={styles.toolSectionContent}>
         {viewMode === 'raw' || !hasProps ? (

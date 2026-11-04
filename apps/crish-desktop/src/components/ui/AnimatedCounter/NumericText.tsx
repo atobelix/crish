@@ -52,7 +52,11 @@ export function splitNumericText(text: string): NumericSegment[] {
 export interface NumericTextProps {
   /** 已格式化好的整句文案（如 `24 项`、`+32`、`已搜索 2 次`、`1.2s`） */
   text: string;
-  /** 首次挂载是否从 0 滚到目标值（实况到达用；历史内容直出终值） */
+  /**
+   * 首次挂载是否从 0 滚到目标值。
+   * 【设计原则】缺省为 false！静态展示与展开查看一律首帧直出终值。
+   * 仅在明确处于实况流到达且调用方显式声明时才允许传入 true。
+   */
   animateOnView?: boolean;
   className?: string;
 }
@@ -67,7 +71,7 @@ export interface NumericTextProps {
  */
 export const NumericText: React.FC<NumericTextProps> = ({
   text,
-  animateOnView = true,
+  animateOnView = false,
   className,
 }) => {
   const segments = splitNumericText(text);

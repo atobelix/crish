@@ -22,6 +22,21 @@ pub(crate) fn split_segments(line: &str) -> Vec<String> {
             continue;
         }
         if let Some(q) = quote {
+            if q == '"' && c == '\\' {
+                let after_drive = current.len() >= 2
+                    && current.as_bytes()[current.len() - 2].is_ascii_alphabetic()
+                    && current.as_bytes()[current.len() - 1] == b':';
+                if !after_drive {
+                    if let Some(&next_c) = chars.peek() {
+                        if next_c == '"' || next_c == '\\' {
+                            chars.next();
+                            current.push(c);
+                            current.push(next_c);
+                            continue;
+                        }
+                    }
+                }
+            }
             current.push(c);
             if c == q {
                 quote = None;
@@ -98,6 +113,25 @@ pub(crate) fn split_command_args_normalized(segment: &str) -> (String, Vec<Strin
         }
 
         if quote == Some('"') {
+            if c == '\\' {
+                let after_drive = current.len() >= 2
+                    && current.as_bytes()[current.len() - 2].is_ascii_alphabetic()
+                    && current.as_bytes()[current.len() - 1] == b':';
+                if !after_drive {
+                    if let Some(&next_c) = chars.peek() {
+                        if next_c == '"' || next_c == '\\' || next_c == '`' || next_c == '$' {
+                            chars.next();
+                            current.push(next_c);
+                            started = true;
+                            continue;
+                        }
+                    }
+                }
+                current.push(c);
+                started = true;
+                continue;
+            }
+
             if c == '"' {
                 quote = None;
             } else if c == '`' {
@@ -229,5 +263,32 @@ mod tests {
             split_segments("sleep 1 & echo x"),
             vec!["sleep 1".to_string(), "echo x".to_string()]
         );
+    }
+
+    #[test]
+    fn escaped_quotes_inside_double_quotes_not_prematurely_closed() {
+        use super::split_command_args_normalized;
+
+        assert_eq!(
+            split_segments(r#"echo "hello; \"world\"" | grep test"#),
+            vec![
+                r#"echo "hello; \"world\"""#.to_string(),
+                "grep test".to_string(),
+            ]
+        );
+
+        let (cmd, args) = split_command_args_normalized(
+            r#"git grep -n -E "hooks/useSplitResize|from ['\"]\.\.?/.*useSplitResize" -- ':!apps/*'"#,
+        );
+        assert_eq!(cmd, "git");
+        assert_eq!(args[0], "grep");
+        assert_eq!(args[1], "-n");
+        assert_eq!(args[2], "-E");
+        assert_eq!(
+            args[3],
+            r#"hooks/useSplitResize|from ['"]\.\.?/.*useSplitResize"#
+        );
+        assert_eq!(args[4], "--");
+        assert_eq!(args[5], ":!apps/*");
     }
 }

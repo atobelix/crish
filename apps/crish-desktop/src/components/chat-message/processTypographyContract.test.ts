@@ -13,8 +13,8 @@
  *   ④ 「工具调用容器里面的元素颜色文字粗细也不一样，花了字体还偏小」
  *      → 字重恒 400（--font-weight-normal），字号恒 14px，禁止 12px / 11px 回流。
  *
- * 【D5 定版修订 · 2026-11-02 用户裁决】过程区字号由 14px 定版为 13px
- * （试行后用户验收「还说得过去」转永久生效），覆盖上款 ②④ 的字号部分；
+ * 【统一 14px 修订 · 2026-11-04 用户裁决】过程区字号统一调整为 14px
+ * （推翻 D5 13px 试验，消除文字偏小看不清痛点，工具输出结果保持小号）；
  * 行高 24px、字重 400、默认浅色、零发丝线等其余条款不变。下文断言已同步。
  *
  * 本文件只做「源码级负向断言 + 正向契约断言」，不渲染组件——
@@ -54,12 +54,12 @@ const contentCss = readCss(CHAT_MESSAGE, 'MessageContent.module.css');
  * 一、思考行（ReasoningRow）基线
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('思考行排版基线', () => {
-  it('行容器：24px 行高 / 13px 字号（D5 定版） / 默认浅色（--text-tertiary）', () => {
+  it('行容器：24px 行高 / 14px 字号（2026-11-04 用户裁决） / 默认浅色（--text-tertiary）', () => {
     const b = block(reasoningCss, '.reasoningRow');
     expect(b).not.toBe('');
     expect(b).toMatch(/height:\s*24px/);
     expect(b).toMatch(/line-height:\s*24px/);
-    expect(b).toMatch(/font-size:\s*13px/);
+    expect(b).toMatch(/font-size:\s*14px/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
     expect(b).toMatch(/padding:\s*0/);
   });
@@ -67,7 +67,7 @@ describe('思考行排版基线', () => {
   it('语义标签「思考」：字重 400 + 颜色继承行状态机，严禁独立硬编码', () => {
     const b = block(reasoningCss, '.reasoningLabel');
     expect(b).not.toBe('');
-    expect(b).toMatch(/font-size:\s*13px/);
+    expect(b).toMatch(/font-size:\s*14px/);
     expect(b).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(b).toMatch(/color:\s*inherit/);
   });
@@ -88,12 +88,12 @@ describe('思考行排版基线', () => {
  * 二、工具调用行（ChatToolCallBlock）与思考行同构
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('工具调用行与思考行同构', () => {
-  it('行头：24px 行高 / 13px 字号（D5 定版） / 字重 400 / 默认浅色，与思考行完全一致', () => {
+  it('行头：24px 行高 / 14px 字号（2026-11-04 用户裁决） / 字重 400 / 默认浅色，与思考行完全一致', () => {
     const b = block(toolCss, '.toolRowHead');
     expect(b).not.toBe('');
     expect(b).toMatch(/height:\s*24px/);
     expect(b).toMatch(/line-height:\s*24px/);
-    expect(b).toMatch(/font-size:\s*13px/);
+    expect(b).toMatch(/font-size:\s*14px/);
     expect(b).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
     expect(b).toMatch(/padding:\s*0/);
@@ -106,7 +106,7 @@ describe('工具调用行与思考行同构', () => {
     expect(b).not.toMatch(/color:\s*var\(--text-secondary\)/);
   });
 
-  it('工具行内所有文本元素字号统一为 13px（D5 定版）', () => {
+  it('工具行内所有文本元素字号统一为 14px（2026-11-04 用户裁决）', () => {
     for (const sel of [
       '.toolRowSummary',
       '.toolActionText',
@@ -117,11 +117,11 @@ describe('工具调用行与思考行同构', () => {
     ]) {
       const b = block(toolCss, sel);
       expect(b, `${sel} 声明块必须存在`).not.toBe('');
-      expect(b, `${sel} 字号必须为 13px`).toMatch(/font-size:\s*13px/);
+      expect(b, `${sel} 字号必须为 14px`).toMatch(/font-size:\s*14px/);
     }
   });
 
-  it('负向断言：工具行内不得回潮小字号 token（12px / 11px / 10px）', () => {
+  it('负向断言：工具行内不得回潮小字号（13px / 12px / 11px / 10px）', () => {
     for (const sel of [
       '.toolRowSummary',
       '.toolActionText',
@@ -135,7 +135,7 @@ describe('工具调用行与思考行同构', () => {
         /font-size:\s*var\(--font-size-(xs|micro|xxs)/
       );
       expect(b, `${sel} 不得使用小字号字面量`).not.toMatch(
-        /font-size:\s*(9|10|11|12)px/
+        /font-size:\s*(9|10|11|12|13)px/
       );
     }
   });
@@ -193,11 +193,11 @@ describe('过程区零发丝分割线（用户裁决 · 2026-09-11）', () => {
  * 四、折叠控制栏文案与过程行同构
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('折叠控制栏文案同构', () => {
-  it('控制栏默认浅色，文案 13px / 字重 400 / 继承色（D5 定版）', () => {
+  it('控制栏默认浅色，文案 14px / 字重 400 / 继承色（2026-11-04 用户裁决）', () => {
     const bar = block(foldCss, '.controlBar');
     expect(bar).toMatch(/color:\s*var\(--text-tertiary\)/);
     const label = block(foldCss, '.summaryLabel');
-    expect(label).toMatch(/font-size:\s*13px/);
+    expect(label).toMatch(/font-size:\s*14px/);
     expect(label).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(label).toMatch(/color:\s*inherit/);
   });
@@ -205,7 +205,7 @@ describe('折叠控制栏文案同构', () => {
   it('负向断言：控制栏文案不得回潮小字号与重字重', () => {
     const label = block(foldCss, '.summaryLabel');
     expect(label).not.toMatch(/font-size:\s*var\(--font-size-(xs|micro|xxs)/);
-    expect(label).not.toMatch(/font-size:\s*(9|10|11|12)px/);
+    expect(label).not.toMatch(/font-size:\s*(9|10|11|12|13)px/);
     expect(label).not.toMatch(/font-weight:\s*(500|600|700)/);
   });
 });
