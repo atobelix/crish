@@ -1,27 +1,105 @@
 // 本地对话协议纯函数层（jest 直测，无 IO）：
 // 与桌面 crates/agent-provider 的 wire 口径逐项对齐——
 // - 端点归一：request/wire_protocol.rs 的 build_endpoint_url（openai/chat 轨）；
-// - 请求体：request/build/build_chat.rs 的 compactObject 口径（只写已设字段，
-//   本地对话不声明 tools / 不带思考与缓存方言字段）；
+// - 请求体：request/build/build_chat.rs 的 compactObject 口径（只写已设字段）；
 // - 鉴权头：crates/conex-run engine_provider/headers.rs（chat 轨
 //   Authorization: Bearer <key>，key 为空不发头；供应商声明头本地无对应面）；
 // - SSE 解析：events/stream.rs + parse/chat/chat_core.rs（data: 帧、
 //   choices[0].delta.content、delta.tool_calls 增量、finish_reason、[DONE]）；
-// - 错误分类：error.rs classify_provider_error 的优先级子集（见 classifyHttpError）。
-import type {
-  LocalChatError,
-  LocalChatErrorKind,
-  LocalChatMessage,
-  LocalModelsConfig,
-  LocalProviderDraft,
-  LocalProviderSpec,
-  ProviderDraftIssue,
+// - 错误分类：error.rs classify_provider_error 的优先级子集（见 classifyHttpError）；
+// - 思考方言：对齐桌面 dialect.rs 与 thinking_format，支持 OpenAI / DeepSeek / Anthropic / Qwen 等；
+// - 草稿无损往返：草稿携带完整 LocalModelSpec[]，消除模型能力抹平与顺序副作用。
+import {
+  emptyLocalModelsConfig,
+  type LocalChatError,
+  type LocalChatErrorKind,
+  type LocalChatMessage,
+  type LocalModelRef,
+  type LocalModelSpec,
+  type LocalModelsConfig,
+  type LocalProviderDraft,
+  type LocalProviderSpec,
+  type LocalThinkingFormat,
+  type LocalThinkingTier,
+  type LocalVendorKey,
+  type LocalWireToolCall,
+  type ProviderDraftIssue,
+  type ResolvedSelection,
 } from '../types/localChat';
 import { markdownPreviewText } from './markdown/plainText';
 
-/** 本地对话系统提示（定位：纯对话助手，无工具执行能力——与请求不声明 tools 一致） */
+/** 本地对话系统提示（定位：通用智能助手，当未启用外部工具时的纯文字对话指引） */
 export const LOCAL_CHAT_SYSTEM_PROMPT =
-  '你是 Crish 手机本地助手。只能进行文字对话：你没有可调用的工具，也无法访问用户的电脑、文件或网络服务；被要求执行操作时，请说明这一点并给出可行的文字建议。回答简洁、直接。';
+  '你是 Crish 手机本地助手。当前未启用外部工具，请使用已有知识与上下文进行文字对话。回答简洁、直接。';
+
+export interface SystemPromptContext {
+  /** 当前客户端本地时间 ISO 字符串或本地格式 */
+  nowIsoString?: string;
+  /** 本地时区名（例如 "Asia/Shanghai"） */
+  timeZone?: string;
+  /** 网络状态描述（例如 "WiFi", "Cellular", "Offline"） */
+  networkKind?: string;
+  /** 已启用的工具摘要列表（若为空则退化为纯文本助手） */
+  enabledTools?: ReadonlyArray<{ name: string; description: string }>;
+}
+
+export function buildLocalChatSystemPrompt(
+  context?: SystemPromptContext
+): string {
+  const parts: string[] = [];
+
+  // 1. 核心定位
+  parts.push(
+    '你是 Crish 手机端本地智能助理。你具备高度自主的问题解决能力，在用户提问时根据需要直接利用端侧工具获取信息或执行计算。回答保持专业、严谨、排版清晰。'
+  );
+
+  // 2. 环境与时间感知
+  const now = context?.nowIsoString ?? new Date().toISOString();
+  const tz =
+    context?.timeZone ??
+    (typeof Intl !== 'undefined'
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : 'UTC');
+  const net = context?.networkKind
+    ? `，网络环境：${context.networkKind}。`
+    : '。';
+  parts.push(`当前设备时间：${now}，时区：${tz}${net}`);
+
+  // 3. 工具使用规范
+  if (context?.enabledTools && context.enabledTools.length > 0) {
+    const toolListStr = context.enabledTools
+      .map((t) => `- ${t.name}: ${t.description}`)
+      .join('\n');
+    parts.push(
+      `你可以使用以下端侧工具来辅助完成任务：\n${toolListStr}\n` +
+        '工具调用准则：\n' +
+        '1. 遇到需要即时信息、新闻事实、精确数学计算、日期推算、格式转换时，优先调用对应工具，不要凭空编造；\n' +
+        '2. 如果无需工具即可确切回答的问题（如通识知识、语言润色），直接作答，不要发起非必要的工具调用；\n' +
+        '3. 支持单轮内发起多个工具调用（例如同时搜索多个关键词或并行获取多个网页）。'
+    );
+
+    // 4. 联网搜索与引用规范
+    const hasWeb = context.enabledTools.some(
+      (t) => t.name === 'web_search' || t.name === 'web_fetch'
+    );
+    if (hasWeb) {
+      parts.push(
+        '【引用格式规范】：当你根据 web_search 或 web_fetch 的结果作答时，引用的事实必须使用 [cite:id] 格式紧跟在陈述后（id 必须与工具返回结果中的 id 完全一致，例如 [cite:3f2a-1]）。禁止自行发明不存在的引用标识。'
+      );
+    }
+
+    // 5. 错误熔断与自愈
+    parts.push(
+      '【容错与熔断纪律】：若工具调用返回错误或未查到结果，绝对禁止在下一轮使用相同的参数再次盲目重试！你应该向用户解释获取信息失败的原因，并基于已有知识和上下文尽可能给出有价值的分析。'
+    );
+  } else {
+    parts.push(
+      '当前未启用任何外部工具。请直接使用已有知识与上下文进行文字对话，回答简洁直接。'
+    );
+  }
+
+  return parts.join('\n\n');
+}
 
 /** 供应商在本机 SecureStore 的凭据引用（桌面 apiKeyRef 的移动端对应形态） */
 export function apiKeyRefFor(providerId: string): string {
@@ -83,35 +161,185 @@ export function buildJsonHeaders(
   return headers;
 }
 
-/** wire 消息（OpenAI 形态：role + 纯文本 content；system 在首位由调用方拼装） */
-export interface LocalWireMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+/** OpenAI 形 content part（本地线形子集，与桌面 multimodal 输出同构） */
+export type LocalWireContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail: 'auto' } };
+
+/** 动态工具集声明（对齐 OpenAI Function Calling Wire 格式） */
+export interface LocalWireTool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>; // JSON Schema
+    strict?: boolean;
+  };
+  [key: string]: unknown;
+}
+
+/** wire 消息（OpenAI 形态：role + content + tool_calls / tool_call_id） */
+export type LocalWireMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | LocalWireContentPart[] }
+  | {
+      role: 'assistant';
+      content: string | null;
+      tool_calls?: LocalWireToolCall[];
+    }
+  | {
+      role: 'tool';
+      tool_call_id: string;
+      content: string;
+    };
+
+/**
+ * 时序安全守卫：检查末尾或中间是否存在孤立的 assistant(tool_calls) 尚未收到 tool 响应。
+ * 若存在（例如应用异常退出后重连），自动合成 mock tool 响应，防止 API 400。
+ */
+export function repairOrphanedToolCalls(messages: LocalWireMessage[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (
+      msg &&
+      msg.role === 'assistant' &&
+      'tool_calls' in msg &&
+      Array.isArray(msg.tool_calls) &&
+      msg.tool_calls.length > 0
+    ) {
+      const expectedIds = new Set(msg.tool_calls.map((tc) => tc.id));
+      let j = i + 1;
+      while (j < messages.length && messages[j]?.role === 'tool') {
+        const toolMsg = messages[j] as {
+          role: 'tool';
+          tool_call_id: string;
+          content: string;
+        };
+        expectedIds.delete(toolMsg.tool_call_id);
+        j++;
+      }
+      if (expectedIds.size > 0) {
+        for (const missingId of expectedIds) {
+          messages.splice(j, 0, {
+            role: 'tool',
+            tool_call_id: missingId,
+            content: JSON.stringify({
+              error: 'Tool execution was cancelled or interrupted',
+            }),
+          });
+          j++;
+        }
+      }
+    }
+  }
 }
 
 /**
  * 组装出站消息序列：系统提示恒在首（本地助手定位），随后是会话多轮上下文
- * （跳过流式占位与空消息）。纯附件/工具形态不存在于本地对话。
+ * （跳过流式占位与空消息）。
+ * - 允许 assistant 携带 tool_calls（即便正文 content === '' 也绝不丢弃）；
+ * - 允许出站列表中包含 role: 'tool' 消息；
+ * - 图片附件按 fail-closed 口径回放：消息落存了真下发的图片附件且模型具备视觉能力时组为 parts。
  */
 export function buildWireMessages(
-  history: readonly LocalChatMessage[]
+  history: readonly LocalChatMessage[],
+  options:
+    | {
+        visionSupported?: boolean;
+        systemPrompt?: string;
+      }
+    | boolean = false
 ): LocalWireMessage[] {
-  const out: LocalWireMessage[] = [
-    { role: 'system', content: LOCAL_CHAT_SYSTEM_PROMPT },
-  ];
-  for (const m of history) {
+  const opts =
+    typeof options === 'boolean' ? { visionSupported: options } : options;
+  const systemPrompt = opts.systemPrompt ?? LOCAL_CHAT_SYSTEM_PROMPT;
+  const out: LocalWireMessage[] = [{ role: 'system', content: systemPrompt }];
+
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i]!;
     if (m.streaming) continue;
-    if (m.role !== 'user' && m.role !== 'assistant') continue;
-    if (m.content.trim() === '') continue;
-    out.push({ role: m.role, content: m.content });
+    if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool')
+      continue;
+
+    // 1. 处理用户消息（含图片视觉回放）
+    if (m.role === 'user') {
+      if (
+        m.content.trim() === '' &&
+        (!m.attachments || m.attachments.length === 0)
+      ) {
+        continue;
+      }
+      if (opts.visionSupported && m.attachments?.length) {
+        const parts: LocalWireContentPart[] = [
+          { type: 'text', text: m.content },
+        ];
+        for (const a of m.attachments) {
+          if (a.kind === 'image' && a.dataUrl) {
+            parts.push({
+              type: 'image_url',
+              image_url: { url: a.dataUrl, detail: 'auto' },
+            });
+          }
+        }
+        if (parts.length > 1) {
+          out.push({ role: 'user', content: parts });
+          continue;
+        }
+      }
+      out.push({ role: 'user', content: m.content });
+      continue;
+    }
+
+    // 2. 处理助手消息（支持纯文本或带 tool_calls）
+    if (m.role === 'assistant') {
+      const hasToolCalls = Array.isArray(m.toolCalls) && m.toolCalls.length > 0;
+      if (!hasToolCalls && m.content.trim() === '') {
+        continue; // 既无文字又无工具调用的空消息不发
+      }
+
+      if (hasToolCalls) {
+        out.push({
+          role: 'assistant',
+          content: m.content || null,
+          tool_calls: m.toolCalls!.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: {
+              name: (tc.name || tc.function?.name || '') as string,
+              arguments: (tc.arguments ||
+                tc.function?.arguments ||
+                '') as string,
+            },
+          })),
+        });
+      } else {
+        out.push({ role: 'assistant', content: m.content });
+      }
+      continue;
+    }
+
+    // 3. 处理工具响应消息
+    if (m.role === 'tool' && m.toolCallId) {
+      out.push({
+        role: 'tool',
+        tool_call_id: m.toolCallId,
+        content: m.content || '',
+      });
+      continue;
+    }
   }
+
+  // 4. 时序安全兜底：自动补齐孤立的 tool_calls
+  repairOrphanedToolCalls(out);
+
   return out;
 }
 
 /**
  * Chat Completions 请求体（compactObject：只写已设字段）：
- * { model, messages, stream }；stream=false 时不写 stream 键以外的任何流式
- * 字段；本地对话永不写 tools/tool_choice（请求侧不给工具执行面）。
+ * { model, messages, stream }；
+ * 扩展支持 tools / tool_choice（tools 存在且非空时合规序列化进请求体）；
+ * 可选融入思考推理方言（OpenAI reasoning_effort、DeepSeek thinking 等）。
  */
 export function buildChatRequestBody(input: {
   model: string;
@@ -119,14 +347,67 @@ export function buildChatRequestBody(input: {
   stream: boolean;
   maxTokens?: number;
   temperature?: number;
+  thinkingFormat?: LocalThinkingFormat;
+  thinkingTier?: LocalThinkingTier;
+  tools?: readonly unknown[];
+  toolChoice?: unknown;
+  tool_choice?: unknown;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
-    messages: input.messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: input.messages.map((m) => {
+      if (m.role === 'tool') {
+        return {
+          role: 'tool',
+          tool_call_id: m.tool_call_id,
+          content: m.content,
+        };
+      }
+      if (m.role === 'assistant' && 'tool_calls' in m && m.tool_calls) {
+        return {
+          role: 'assistant',
+          content: m.content,
+          tool_calls: m.tool_calls,
+        };
+      }
+      return {
+        role: m.role,
+        content:
+          typeof m.content === 'string'
+            ? m.content
+            : (m.content ?? []).map((part) =>
+                part.type === 'text'
+                  ? { type: 'text' as const, text: part.text }
+                  : {
+                      type: 'image_url' as const,
+                      image_url: {
+                        url: part.image_url.url,
+                        detail: part.image_url.detail,
+                      },
+                    }
+              ),
+      };
+    }),
     stream: input.stream,
   };
+
   if (input.maxTokens !== undefined) body.max_tokens = input.maxTokens;
   if (input.temperature !== undefined) body.temperature = input.temperature;
+
+  // 严格 compactObject 口径：tools 存在且非空时才写入 tools 与 tool_choice
+  if (input.tools && input.tools.length > 0) {
+    body.tools = input.tools;
+    body.tool_choice = input.toolChoice ?? input.tool_choice ?? 'auto';
+  }
+
+  if (input.thinkingTier !== undefined) {
+    const patch = buildThinkingRequestBodyPatch({
+      format: input.thinkingFormat,
+      tier: input.thinkingTier,
+    });
+    Object.assign(body, patch);
+  }
+
   return body;
 }
 
@@ -217,33 +498,124 @@ export function mergeModelIds(
   return out;
 }
 
-/** 草稿校验（保存前置；问题码由 UI 映射文案） */
-export function validateProviderDraft(
-  draft: LocalProviderDraft
-): ProviderDraftIssue[] {
-  const issues: ProviderDraftIssue[] = [];
-  if (draft.name.trim() === '' && draft.baseUrl.trim() === '') {
-    issues.push('nameEmpty');
-  }
-  const base = draft.baseUrl.trim();
-  if (base === '') {
-    issues.push('baseUrlEmpty');
-  } else if (!isHttpUrl(base)) {
-    issues.push('baseUrlInvalid');
-  }
-  const models = mergeModelIds(draft.modelIds, []);
-  const fallback = draft.defaultModelId.trim();
-  if (models.length === 0 && fallback === '') issues.push('modelEmpty');
-  return issues;
-}
-
-function isHttpUrl(raw: string): boolean {
+/**
+ * 校验 HTTP / HTTPS URL 字符串合法性
+ */
+export function isHttpUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
     return url.protocol === 'http:' || url.protocol === 'https:';
   } catch {
     return false;
   }
+}
+
+/**
+ * 草稿校验纯函数（保存前置守卫）
+ * 覆盖根配置、默认模型存在性以及每个模型的容量与价格合法性。
+ */
+export function validateProviderDraft(
+  draft: LocalProviderDraft
+): ProviderDraftIssue[] {
+  const issues: ProviderDraftIssue[] = [];
+
+  // 1. 基础字段非空与合法性
+  if (draft.name.trim() === '' && draft.baseUrl.trim() === '') {
+    issues.push('nameEmpty');
+  }
+
+  const base = draft.baseUrl.trim();
+  if (base === '') {
+    issues.push('baseUrlEmpty');
+  } else if (!isHttpUrl(base)) {
+    issues.push('baseUrlInvalid');
+  }
+
+  // 2. 模型清单非空与唯一性
+  const models: LocalModelSpec[] = Array.isArray(draft.models)
+    ? draft.models
+    : Array.isArray(draft.modelIds)
+      ? draft.modelIds.map((id: string) => ({ id, enabled: true }))
+      : [];
+
+  const fallback = draft.defaultModelId ? draft.defaultModelId.trim() : '';
+
+  // 现代草稿（明确传了 models 数组）：若为空则直接报错
+  if (Array.isArray(draft.models) && draft.models.length === 0) {
+    issues.push('modelsEmpty');
+    issues.push('modelEmpty');
+    return issues;
+  }
+  // 兼容草稿：模型为空且无默认兜底
+  if (!Array.isArray(draft.models) && models.length === 0 && fallback === '') {
+    issues.push('modelsEmpty');
+    issues.push('modelEmpty');
+    return issues;
+  }
+
+  const seenIds = new Set<string>();
+  let hasDuplicate = false;
+  for (const m of models) {
+    const id = typeof m.id === 'string' ? m.id.trim() : '';
+    if (id === '' || seenIds.has(id)) {
+      hasDuplicate = true;
+    }
+    if (id !== '') {
+      seenIds.add(id);
+    }
+
+    // 3. 模型规格数值合法性校验
+    if (
+      m.contextWindow !== undefined &&
+      (!Number.isInteger(m.contextWindow) || m.contextWindow <= 0)
+    ) {
+      if (!issues.includes('invalidContextWindow')) {
+        issues.push('invalidContextWindow');
+      }
+    }
+    if (
+      m.maxOutputTokens !== undefined &&
+      (!Number.isInteger(m.maxOutputTokens) || m.maxOutputTokens <= 0)
+    ) {
+      if (!issues.includes('invalidMaxOutputTokens')) {
+        issues.push('invalidMaxOutputTokens');
+      }
+    }
+    if (
+      m.contextWindow !== undefined &&
+      m.maxOutputTokens !== undefined &&
+      m.maxOutputTokens > m.contextWindow
+    ) {
+      if (!issues.includes('outputExceedsContext')) {
+        issues.push('outputExceedsContext');
+      }
+    }
+    if (m.pricing) {
+      const inputPrice = m.pricing.inputPricePerMillion ?? m.pricing.input;
+      const outputPrice = m.pricing.outputPricePerMillion ?? m.pricing.output;
+      if (
+        (inputPrice !== undefined && inputPrice < 0) ||
+        (outputPrice !== undefined && outputPrice < 0) ||
+        (m.pricing.cacheRead !== undefined && m.pricing.cacheRead < 0) ||
+        (m.pricing.cacheWrite !== undefined && m.pricing.cacheWrite < 0)
+      ) {
+        if (!issues.includes('invalidPricing')) {
+          issues.push('invalidPricing');
+        }
+      }
+    }
+  }
+
+  if (hasDuplicate) {
+    issues.push('duplicateModelId');
+  }
+
+  // 4. 默认模型必须有效存在于清单中（若清单非空且填了默认模型）
+  if (fallback !== '' && models.length > 0 && !seenIds.has(fallback)) {
+    issues.push('defaultModelMissing');
+  }
+
+  return issues;
 }
 
 /** 由 Base URL 主机名派生展示名（名称留空时的兜底，与桌面「用户声明优先」一致） */
@@ -255,28 +627,114 @@ export function deriveProviderName(baseUrl: string): string {
   }
 }
 
-/** 草稿 → 配置条目（apiKeyRef 由 store 层在写密钥时补齐；此处只组装非密字段） */
-export function providerSpecFromDraft(
-  draft: LocalProviderDraft
-): LocalProviderSpec {
-  const modelIds = mergeModelIds(draft.modelIds, []);
-  const fallback = draft.defaultModelId.trim();
-  const models =
-    fallback !== '' && !modelIds.includes(fallback)
-      ? [fallback, ...modelIds]
-      : modelIds;
-  const name = draft.name.trim();
+/**
+ * 从既有配置实体或厂商预置构建完整草稿（编辑入口）
+ */
+export function createProviderDraft(
+  spec?: LocalProviderSpec | null,
+  vendorFallback: LocalVendorKey = 'custom'
+): LocalProviderDraft {
+  if (!spec) {
+    return {
+      vendor: vendorFallback,
+      name: '',
+      baseUrl: '',
+      apiKey: '',
+      defaultModelId: '',
+      models: [],
+      modelIds: [],
+    };
+  }
+
+  const models = Array.isArray(spec.models)
+    ? spec.models.map((m) => ({ ...m }))
+    : [];
+
   return {
-    displayName: name !== '' ? name : deriveProviderName(draft.baseUrl),
-    baseUrl: normalizeBaseUrl(draft.baseUrl),
-    protocol: 'openai/chat',
-    stream: true,
-    enabled: true,
-    models: models.map((id) => ({ id, enabled: true })),
+    vendor: spec.vendor ?? vendorFallback,
+    name: spec.displayName ?? '',
+    baseUrl: spec.baseUrl ?? '',
+    apiKey: '', // 密钥永不回填到草稿明文
+    defaultModelId: spec.defaultModelId ?? spec.models[0]?.id ?? '',
+    models,
+    modelIds: models.map((m) => m.id),
   };
 }
 
-/** 供应商的默认模型：活动选择优先，其次清单首个启用模型 */
+/**
+ * 从草稿组装持久化规格（保存入口）
+ * 彻底保留既有模型的各项高级能力规格，100% 无损落盘
+ */
+export function providerSpecFromDraft(
+  draft: LocalProviderDraft,
+  existingSpec?: LocalProviderSpec
+): LocalProviderSpec {
+  const name = draft.name.trim();
+
+  // 优先取 models 全量规格；若无则容错兼容旧版 modelIds
+  let rawModels: LocalModelSpec[];
+  if (Array.isArray(draft.models) && draft.models.length > 0) {
+    rawModels = draft.models;
+  } else if (Array.isArray(draft.modelIds) && draft.modelIds.length > 0) {
+    const fallback = draft.defaultModelId.trim();
+    const modelIds = mergeModelIds(draft.modelIds, []);
+    const merged =
+      fallback !== '' && !modelIds.includes(fallback)
+        ? [fallback, ...modelIds]
+        : modelIds;
+    rawModels = merged.map((id) => ({ id, enabled: true }));
+  } else if (Array.isArray(draft.models)) {
+    rawModels = draft.models;
+  } else {
+    rawModels = [];
+  }
+
+  const defId =
+    draft.defaultModelId.trim() ||
+    rawModels[0]?.id ||
+    existingSpec?.defaultModelId;
+
+  const cleanedModels: LocalModelSpec[] = rawModels.map((m) => ({
+    ...m,
+    id: m.id.trim(),
+    enabled: m.enabled !== false,
+  }));
+
+  const spec: LocalProviderSpec = {
+    protocol: 'openai/chat',
+    stream: existingSpec?.stream ?? true,
+    enabled: existingSpec?.enabled ?? true,
+    displayName: name !== '' ? name : deriveProviderName(draft.baseUrl),
+    baseUrl: normalizeBaseUrl(draft.baseUrl),
+    models: cleanedModels,
+  };
+
+  if (draft.vendor !== undefined || existingSpec?.vendor !== undefined) {
+    spec.vendor = draft.vendor ?? existingSpec?.vendor;
+  }
+  if (defId) {
+    spec.defaultModelId = defId;
+  }
+  if (existingSpec?.order !== undefined) {
+    spec.order = existingSpec.order;
+  }
+  if (existingSpec?.compat !== undefined) {
+    spec.compat = existingSpec.compat;
+  }
+  if (existingSpec?.latencyMs !== undefined) {
+    spec.latencyMs = existingSpec.latencyMs;
+  }
+  if (existingSpec?.latencyUpdatedAt !== undefined) {
+    spec.latencyUpdatedAt = existingSpec.latencyUpdatedAt;
+  }
+  if (existingSpec?.apiKeyRef !== undefined) {
+    spec.apiKeyRef = existingSpec.apiKeyRef;
+  }
+
+  return spec;
+}
+
+/** 供应商的默认模型：活动选择优先，其次为显式 defaultModelId，最后为清单首个启用模型 */
 export function providerDefaultModelId(
   config: LocalModelsConfig,
   providerId: string
@@ -289,16 +747,21 @@ export function providerDefaultModelId(
   ) {
     return config.activeModel.modelId;
   }
+  if (
+    typeof provider.defaultModelId === 'string' &&
+    provider.defaultModelId.trim() !== '' &&
+    provider.models.some((m) => m.id === provider.defaultModelId)
+  ) {
+    return provider.defaultModelId;
+  }
   const first = provider.models.find((m) => m.enabled !== false);
   return first?.id ?? provider.models[0]?.id ?? null;
 }
 
 /** 当前生效的供应商 + 模型（无完整选择时返回 null，UI 走未配置态） */
-export function resolveActiveSelection(config: LocalModelsConfig): {
-  providerId: string;
-  provider: LocalProviderSpec;
-  modelId: string;
-} | null {
+export function resolveActiveSelection(
+  config: LocalModelsConfig
+): ResolvedSelection | null {
   const active = config.activeModel;
   if (active) {
     const provider = config.providers[active.providerId];
@@ -309,13 +772,290 @@ export function resolveActiveSelection(config: LocalModelsConfig): {
           providerId: active.providerId,
           provider,
           modelId: active.modelId,
+          model,
         };
       }
     }
   }
-  // 活动选择失效时不擅自替代（桌面归一同口径：失效选择清空）——返回 null 由
-  // UI 引导用户重选；但仅一位供应商且模型唯一时也不自动选（诚实口径）。
   return null;
+}
+
+/**
+ * 本地模型视觉能力判定（本地链的模态真源 = 模型 spec 的 modalities）：
+ * input 模态含 'image' 才为 true；模型条目不存在、未声明 modalities
+ * 或声明里没有 'image' 一律 false——fail-closed：能力未知不直发图片，
+ * 由组装层降级为元数据文本（domain/pure/attachments 的 buildRunPayload）。
+ */
+export function localModelVisionSupported(
+  provider: LocalProviderSpec,
+  modelId: string
+): boolean {
+  const spec = provider.models.find((m) => m.id === modelId);
+  return spec?.modalities?.input.includes('image') ?? false;
+}
+
+// ── 思考档位抽象与跨端方言映射（ThinkingFormat 编译） ──
+
+/**
+ * 判定模型与供应商最终生效的思考推理方言（纯函数，fail-closed）。
+ *
+ * 优先级梯队：
+ * 1. 模型级显式覆盖：model?.compat?.thinkingFormat
+ * 2. 供应商级显式覆盖：provider.compat?.thinkingFormat
+ * 3. 厂商 / 模型特征推断：
+ *    - provider.vendor === 'deepseek' 或 model.id 包含 'deepseek' / 'r1' -> 'deepseek'
+ *    - provider.vendor === 'anthropic' 或 model.id 包含 'claude' -> 'anthropic'
+ *    - provider.vendor === 'google' 或 model.id 包含 'gemini' -> 'gemini'
+ *    - model.id 包含 'qwen' -> 'qwen'
+ *    - model.id 包含 'glm' -> 'zai'
+ *    - provider.vendor === 'openai' 或 model.id 包含 'gpt' / 'o1' / 'o3' -> 'openai'
+ * 4. 兜底：'openai'（标准 openai/chat 协议默认）。
+ */
+export function resolveEffectiveThinkingFormat(
+  provider: Pick<
+    LocalProviderSpec,
+    'vendor' | 'displayName' | 'baseUrl' | 'compat'
+  > & { protocol?: string },
+  model?: Pick<LocalModelSpec, 'id' | 'compat'> | null
+): LocalThinkingFormat {
+  // 优先级 1：模型级显式覆盖
+  if (model?.compat?.thinkingFormat) {
+    return model.compat.thinkingFormat;
+  }
+
+  // 优先级 2：供应商级显式覆盖
+  if (provider.compat?.thinkingFormat) {
+    return provider.compat.thinkingFormat;
+  }
+
+  // 优先级 3：厂商 / 模型特征推断
+  const mid = (model?.id ?? '').toLowerCase();
+  const vendor = provider.vendor;
+
+  if (vendor === 'deepseek' || mid.includes('deepseek') || mid.includes('r1')) {
+    return 'deepseek';
+  }
+
+  if (vendor === 'anthropic' || mid.includes('claude')) {
+    return 'anthropic';
+  }
+
+  if (vendor === 'google' || mid.includes('gemini')) {
+    return 'gemini';
+  }
+
+  if (mid.includes('qwen')) {
+    return 'qwen';
+  }
+
+  if (mid.includes('glm')) {
+    return 'zai';
+  }
+
+  if (
+    vendor === 'openai' ||
+    mid.includes('gpt') ||
+    mid.includes('o1') ||
+    mid.includes('o3')
+  ) {
+    return 'openai';
+  }
+
+  // 兜底：'openai'（标准 openai/chat 协议默认）
+  return 'openai';
+}
+
+/**
+ * 将任意外部/原型输入的档位字串归一化为标准 LocalThinkingTier
+ * 规则：
+ * - 'ultra' 归一为 'max'（顶级档位映射为最高上限）
+ * - 'x-high' / 'x_high' 归一为 'xhigh'
+ * - 'disabled' / 'none' / 'false' 归一为 'off'
+ * - 非法输入回退为 'off'
+ */
+export function normalizeThinkingTier(raw: unknown): LocalThinkingTier {
+  if (typeof raw !== 'string') return 'off';
+  const s = raw.trim().toLowerCase();
+  switch (s) {
+    case 'off':
+    case 'none':
+    case 'disabled':
+    case 'false':
+      return 'off';
+    case 'minimal':
+      return 'minimal';
+    case 'low':
+      return 'low';
+    case 'medium':
+    case 'auto':
+      return 'medium';
+    case 'high':
+      return 'high';
+    case 'xhigh':
+    case 'x-high':
+    case 'x_high':
+      return 'xhigh';
+    case 'max':
+    case 'ultra':
+      return 'max';
+    default:
+      return 'off';
+  }
+}
+
+export interface ThinkingBuildInput {
+  format?: LocalThinkingFormat;
+  tier: LocalThinkingTier;
+}
+
+/**
+ * 根据方言与思考档位编译请求体补丁（纯函数，fail-closed）
+ * 支持对象调用 { format, tier } 或双参数调用 (tier, format)
+ */
+export function buildThinkingRequestBodyPatch(
+  tierOrInput: LocalThinkingTier | ThinkingBuildInput,
+  formatArg?: LocalThinkingFormat | string
+): Record<string, unknown> {
+  let format: LocalThinkingFormat | undefined;
+  let tier: LocalThinkingTier;
+
+  if (typeof tierOrInput === 'object' && tierOrInput !== null) {
+    format = tierOrInput.format;
+    tier = tierOrInput.tier;
+  } else {
+    tier = tierOrInput;
+    format = formatArg as LocalThinkingFormat | undefined;
+  }
+
+  if (!format || tier === 'off') {
+    if (format === 'deepseek') return { thinking: { type: 'disabled' } };
+    if (format === 'qwen') return { enable_thinking: false };
+    return {};
+  }
+
+  switch (format) {
+    case 'openai': {
+      let effort = 'medium';
+      if (tier === 'minimal' || tier === 'low') effort = 'low';
+      else if (tier === 'high' || tier === 'xhigh' || tier === 'max')
+        effort = 'high';
+      return { reasoning_effort: effort };
+    }
+    case 'deepseek':
+      return { thinking: { type: 'enabled' } };
+    case 'qwen':
+      return { enable_thinking: true };
+    case 'zai':
+      return { thinking: { type: 'enable' } };
+    case 'anthropic': {
+      const budgetMap: Record<LocalThinkingTier, number> = {
+        off: 0,
+        minimal: 1024,
+        low: 2048,
+        medium: 8192,
+        high: 16384,
+        xhigh: 32768,
+        max: 64000,
+      };
+      return {
+        thinking: {
+          type: 'enabled',
+          budget_tokens: budgetMap[tier] ?? 8192,
+        },
+      };
+    }
+    case 'gemini':
+      return {
+        thinkingConfig: {
+          thinkingLevel: tier === 'low' || tier === 'minimal' ? 'low' : 'high',
+        },
+      };
+    default:
+      return {};
+  }
+}
+
+/**
+ * 配置解码纯函数（支持从持久化 JSON / 对象中容错解码出包含全量规格的模型配置）
+ * 非法输入回退为空配置，活动模型若指向不存在的供应商或模型则清空为 null
+ */
+export function decodeLocalModelsConfig(raw: unknown): LocalModelsConfig {
+  if (raw === null || raw === undefined) return emptyLocalModelsConfig();
+  let parsed: unknown;
+  if (typeof raw === 'string') {
+    if (raw.trim() === '') return emptyLocalModelsConfig();
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return emptyLocalModelsConfig();
+    }
+  } else if (typeof raw === 'object') {
+    parsed = raw;
+  } else {
+    return emptyLocalModelsConfig();
+  }
+
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    typeof (parsed as Partial<LocalModelsConfig>).providers !== 'object' ||
+    (parsed as Partial<LocalModelsConfig>).providers === null
+  ) {
+    return emptyLocalModelsConfig();
+  }
+
+  const pObj = (parsed as { providers: Record<string, unknown> }).providers;
+  const providers: Record<string, LocalProviderSpec> = {};
+
+  for (const [id, spec] of Object.entries(pObj)) {
+    if (spec === null || typeof spec !== 'object') continue;
+    const s = spec as LocalProviderSpec;
+
+    // 容错清洗模型列表，保留完整能力规格字段
+    const cleanedModels: LocalModelSpec[] = Array.isArray(s.models)
+      ? s.models
+          .filter(
+            (m): m is LocalModelSpec =>
+              m !== null &&
+              typeof m === 'object' &&
+              typeof m.id === 'string' &&
+              m.id.trim() !== ''
+          )
+          .map((m) => ({
+            ...m,
+            id: m.id.trim(),
+            enabled: m.enabled !== false,
+          }))
+      : [];
+
+    providers[id] = {
+      ...s,
+      protocol: 'openai/chat',
+      defaultModelId:
+        typeof s.defaultModelId === 'string' && s.defaultModelId.trim() !== ''
+          ? s.defaultModelId.trim()
+          : cleanedModels[0]?.id,
+      models: cleanedModels,
+    };
+  }
+
+  const activeCandidate = (parsed as { activeModel?: unknown }).activeModel;
+  let active: LocalModelRef | null = null;
+  if (
+    activeCandidate !== null &&
+    typeof activeCandidate === 'object' &&
+    typeof (activeCandidate as { providerId?: unknown }).providerId ===
+      'string' &&
+    typeof (activeCandidate as { modelId?: unknown }).modelId === 'string'
+  ) {
+    const pId = (activeCandidate as { providerId: string }).providerId;
+    const mId = (activeCandidate as { modelId: string }).modelId;
+    if (providers[pId]?.models.some((m) => m.id === mId)) {
+      active = { providerId: pId, modelId: mId };
+    }
+  }
+
+  return { version: 2, providers, activeModel: active };
 }
 
 // ── SSE 流式解析（桌面 events/stream.rs + parse/chat 口径的 TS 形态） ──
@@ -385,23 +1125,39 @@ function parseSseFrame(frame: string): SseEvent | null {
   return { type: 'data', data };
 }
 
+/** 流式分片增量结构（对齐 OpenAI tool_calls delta 增量） */
+export interface LocalToolCallChunkDelta {
+  index: number;
+  id?: string;
+  name?: string;
+  argumentsDelta?: string;
+}
+
 /** 单个 chat-completions 流式块的解析产物 */
 export interface ChatChunkDelta {
   /** 正文增量（delta.content） */
   contentDelta: string;
   /** 思考增量（reasoning_content 等五级探测链命中其一；本地仅作活动信号不展示） */
   reasoningDelta: string;
-  /** 本块新出现的 tool_call 名称（按 index 聚合，名称常只在首块出现） */
+  /** 本 chunk 包含的流式工具分片 */
+  toolCallDeltas: LocalToolCallChunkDelta[];
+  /** 本块新出现的 tool_call 名称（按 index 聚合，兼容旧版） */
   toolCallNames: string[];
   /** 结束原因（finish_reason，非空即终块） */
   finishReason: string | null;
 }
 
+export {
+  StreamingToolCallAccumulator,
+  type AccumulatedToolCall,
+} from './webSearch/streamingToolCallAccumulator';
+
 /**
  * 解析一个 SSE data 负载（chat-completions chunk JSON）：
  * 对齐桌面 parse/chat/chat_core.rs——delta 可缺失、message 兜底（非流式
- * 形态混入流式时取 message.content / message.tool_calls）、tool_calls 只
- * 记录名称计数（本地永不执行）。非法 JSON / 无 choice → null（跳过该帧）。
+ * 形态混入流式时取 message.content / message.tool_calls）。
+ * 提取完整的 tool_calls 分片（index, id, name, argumentsDelta）。
+ * 非法 JSON / 无 choice → null（跳过该帧）。
  */
 export function applyChatChunk(data: string): ChatChunkDelta | null {
   let json: unknown;
@@ -417,6 +1173,7 @@ export function applyChatChunk(data: string): ChatChunkDelta | null {
   const out: ChatChunkDelta = {
     contentDelta: '',
     reasoningDelta: '',
+    toolCallDeltas: [],
     toolCallNames: [],
     finishReason:
       typeof choice.finish_reason === 'string' ? choice.finish_reason : null,
@@ -441,11 +1198,36 @@ export function applyChatChunk(data: string): ChatChunkDelta | null {
     }
     const toolCalls = source.tool_calls;
     if (Array.isArray(toolCalls)) {
-      for (const raw of toolCalls) {
+      for (let i = 0; i < toolCalls.length; i++) {
+        const raw = toolCalls[i];
         const call = asRecord(raw);
-        const fn = call ? asRecord(call.function) : null;
-        const name = fn?.name;
-        out.toolCallNames.push(typeof name === 'string' ? name : '');
+        if (!call) continue;
+        const index = typeof call.index === 'number' ? call.index : i;
+        const id = typeof call.id === 'string' ? call.id : undefined;
+        const fn = asRecord(call.function);
+        const name =
+          fn && typeof fn.name === 'string'
+            ? fn.name
+            : typeof call.name === 'string'
+              ? call.name
+              : undefined;
+        const argsDelta =
+          fn && typeof fn.arguments === 'string'
+            ? fn.arguments
+            : typeof call.arguments === 'string'
+              ? call.arguments
+              : undefined;
+
+        out.toolCallDeltas.push({
+          index,
+          id,
+          name,
+          argumentsDelta: argsDelta,
+        });
+
+        if (name) {
+          out.toolCallNames.push(name);
+        }
       }
     }
   }

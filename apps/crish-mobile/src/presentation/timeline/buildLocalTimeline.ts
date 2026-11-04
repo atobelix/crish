@@ -25,6 +25,15 @@
 import type { LocalChatMessage } from '@/domain/types/localChat';
 import type { TimelineBlock } from './buildTimeline';
 
+declare module '@/domain/types/localChat' {
+  interface LocalChatMessage {
+    reasoning?: string;
+    isThinking?: boolean;
+    thought?: string;
+    reasoningContent?: string;
+  }
+}
+
 interface LocalMessageBlocks {
   id: string;
   role: LocalChatMessage['role'];
@@ -38,20 +47,20 @@ interface LocalMessageBlocks {
 }
 
 const localBlocksCache = new WeakMap<LocalChatMessage, LocalMessageBlocks>();
+export const _localBlocksCacheForTest = localBlocksCache;
 
 function blocksForLocalMessage(message: LocalChatMessage): TimelineBlock[] {
   const streaming = message.streaming === true;
   const stopped = message.stopped === true;
-  const msgRec = message as unknown as Record<string, unknown>;
   const reasoning =
-    typeof msgRec['reasoning'] === 'string'
-      ? (msgRec['reasoning'] as string)
-      : typeof msgRec['thought'] === 'string'
-        ? (msgRec['thought'] as string)
-        : typeof msgRec['reasoningContent'] === 'string'
-          ? (msgRec['reasoningContent'] as string)
+    typeof message.reasoning === 'string'
+      ? message.reasoning
+      : typeof message.thought === 'string'
+        ? message.thought
+        : typeof message.reasoningContent === 'string'
+          ? message.reasoningContent
           : '';
-  const isThinking = msgRec['isThinking'] === true;
+  const isThinking = message.isThinking === true;
   const cached = localBlocksCache.get(message);
   if (
     cached &&
@@ -67,7 +76,7 @@ function blocksForLocalMessage(message: LocalChatMessage): TimelineBlock[] {
     return cached.blocks;
   }
   const blocks: TimelineBlock[] = [];
-  if (message.role !== 'system') {
+  if (message.role === 'user' || message.role === 'assistant') {
     // 思考内容映射为专属 ReasoningBlock（位于正文之前，支持 isThinking 占位与正文解封）
     if (reasoning.trim() !== '' || isThinking) {
       blocks.push({

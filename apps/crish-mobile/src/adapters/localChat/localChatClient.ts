@@ -6,9 +6,10 @@
 // onprogress 增量读取 responseText（原生网络栈分块回调），配合
 // domain/pure 的 SseFrameBuffer 分帧，是 RN 生态的通行 SSE 手法。
 // 传输面以接口注入（StreamTransport / JsonFetch），jest 用假传输验链路；
-// 非流式调用（模型列表 / 连通性自检）走普通 fetch（JSON 全文即可）。
+// 非流式调用（模型列表 / 连通性自检 / Ping 探测）走普通 fetch（JSON 全文即可）。
 import {
   SseFrameBuffer,
+  StreamingToolCallAccumulator,
   applyChatChunk,
   buildChatCompletionsUrl,
   buildChatHeaders,
@@ -17,6 +18,7 @@ import {
   buildModelsUrl,
   classifyHttpError,
   networkError,
+  normalizeBaseUrl,
   parseModelsList,
   streamInterruptedError,
   withErrorMessage,
@@ -25,7 +27,15 @@ import {
 import type {
   LocalChatError,
   LocalConnectivityResult,
+  LocalThinkingFormat,
+  LocalThinkingTier,
 } from '@/domain/types/localChat';
+import {
+  PROVIDER_PRESETS,
+  detectVendorKey,
+  type LocalModelSpec,
+  type LocalVendorKey,
+} from './providerPresets';
 
 // ── 传输注入面 ──
 
@@ -59,7 +69,7 @@ export type StreamTransport = (
   handlers: StreamHandlers
 ) => StreamHandle;
 
-/** JSON 请求注入面（模型列表 / 自检）：返回状态码与文本，网络失败抛错 */
+/** JSON 请求注入面（模型列表 / 自检 / Ping）：返回状态码与文本，网络失败抛错 */
 export type JsonFetch = (
   url: string,
   init: {
@@ -80,37 +90,43 @@ export const xhrStreamTransport: StreamTransport = (req, handlers) => {
     settled = true;
     fn();
   };
-  xhr.open('POST', req.url, true);
-  for (const [name, value] of Object.entries(req.headers)) {
-    xhr.setRequestHeader(name, value);
-  }
-  xhr.onprogress = () => {
-    const text = xhr.responseText ?? '';
-    if (text.length > lastIndex) {
-      const slice = text.slice(lastIndex);
-      lastIndex = text.length;
-      handlers.onChunk(slice);
+  try {
+    xhr.open('POST', req.url, true);
+    for (const [name, value] of Object.entries(req.headers)) {
+      xhr.setRequestHeader(name, value);
     }
-  };
-  xhr.onreadystatechange = () => {
-    if (xhr.readyState !== 4 || settled) return;
-    const text = xhr.responseText ?? '';
-    if (xhr.status >= 200 && xhr.status < 300) {
+    xhr.onprogress = () => {
+      const text = xhr.responseText ?? '';
       if (text.length > lastIndex) {
         const slice = text.slice(lastIndex);
         lastIndex = text.length;
         handlers.onChunk(slice);
       }
-      done(() => handlers.onDone());
-    } else if (xhr.status === 0) {
-      done(() => handlers.onNetworkError());
-    } else {
-      const retryAfter = parseRetryAfter(xhr.getResponseHeader('Retry-After'));
-      done(() => handlers.onHttpError(xhr.status, text, retryAfter));
-    }
-  };
-  xhr.onerror = () => done(() => handlers.onNetworkError());
-  xhr.send(req.body);
+    };
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4 || settled) return;
+      const text = xhr.responseText ?? '';
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (text.length > lastIndex) {
+          const slice = text.slice(lastIndex);
+          lastIndex = text.length;
+          handlers.onChunk(slice);
+        }
+        done(() => handlers.onDone());
+      } else if (xhr.status === 0) {
+        done(() => handlers.onNetworkError());
+      } else {
+        const retryAfter = parseRetryAfter(
+          xhr.getResponseHeader('Retry-After')
+        );
+        done(() => handlers.onHttpError(xhr.status, text, retryAfter));
+      }
+    };
+    xhr.onerror = () => done(() => handlers.onNetworkError());
+    xhr.send(req.body);
+  } catch {
+    done(() => handlers.onNetworkError());
+  }
   return {
     abort: () => {
       settled = true;
@@ -147,6 +163,219 @@ function parseRetryAfter(raw: string | null): number | undefined {
   return undefined;
 }
 
+// ── 模型列表解析与注水管道 ──
+
+export interface RawModelItem {
+  id: string;
+  name?: string;
+  created?: number;
+  ownedBy?: string;
+}
+
+/**
+ * 鲁棒解析各类供应商 /models 响应体：
+ * 兼容标准 OpenAI { data: [...] }、平铺数组 [{ id }]、Ollama { models: [...] }、纯字符串数组。
+ * 纯函数，去重保序，自动过滤非法与空 ID。
+ */
+export function parseModelsListRobust(json: unknown): RawModelItem[] {
+  if (json === null || typeof json !== 'object') return [];
+
+  const seen = new Set<string>();
+  const out: RawModelItem[] = [];
+
+  const add = (
+    id: unknown,
+    extra?: { name?: unknown; created?: unknown; ownedBy?: unknown }
+  ) => {
+    if (typeof id !== 'string') return;
+    const trimmed = id.trim();
+    if (trimmed === '' || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push({
+      id: trimmed,
+      name:
+        typeof extra?.name === 'string' && extra.name.trim() !== ''
+          ? extra.name.trim()
+          : undefined,
+      created: typeof extra?.created === 'number' ? extra.created : undefined,
+      ownedBy: typeof extra?.ownedBy === 'string' ? extra.ownedBy : undefined,
+    });
+  };
+
+  // 1. 标准 OpenAI: { data: [...] }
+  if (Array.isArray((json as { data?: unknown }).data)) {
+    for (const item of (json as { data: unknown[] }).data) {
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        add(obj.id ?? obj.name, {
+          name: obj.name ?? obj.id,
+          created: obj.created,
+          ownedBy: obj.owned_by ?? obj.ownedBy,
+        });
+      } else {
+        add(item);
+      }
+    }
+    return out;
+  }
+
+  // 2. Ollama 原生 /api/tags: { models: [...] }
+  if (Array.isArray((json as { models?: unknown }).models)) {
+    for (const item of (json as { models: unknown[] }).models) {
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        add(obj.name ?? obj.model ?? obj.id, {
+          name: obj.name ?? obj.model ?? obj.id,
+        });
+      } else {
+        add(item);
+      }
+    }
+    return out;
+  }
+
+  // 3. 直接平铺数组: [{ id }, ...] 或 ["model-a", "model-b"]
+  if (Array.isArray(json)) {
+    for (const item of json) {
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        add(obj.id ?? obj.name, {
+          name: obj.name ?? obj.id,
+        });
+      } else {
+        add(item);
+      }
+    }
+    return out;
+  }
+
+  return out;
+}
+
+/**
+ * 模型规格注水（Hydration）：
+ * 1. 优先从已知预置字典（PROVIDER_PRESETS）中继承完整规格；
+ * 2. 对未知在线模型，结合 ID 命名特征启发式推导（reasoner/r1 推导 thinking；vision/4o 推导视觉；128k/64k 推导上下文）。
+ */
+export function hydrateModelSpec(
+  raw: string | RawModelItem,
+  vendorHint?: LocalVendorKey
+): LocalModelSpec {
+  const rawId = typeof raw === 'string' ? raw.trim() : raw.id.trim();
+  const rawName = typeof raw === 'object' ? raw.name : undefined;
+
+  // 1. 查找已知预置字典匹配模板
+  if (vendorHint && PROVIDER_PRESETS[vendorHint]) {
+    const match = PROVIDER_PRESETS[vendorHint].recommendedModels.find(
+      (m) => m.id.toLowerCase() === rawId.toLowerCase()
+    );
+    if (match) {
+      return {
+        ...match,
+        displayName: match.displayName ?? rawName ?? rawId,
+        enabled: true,
+      };
+    }
+  }
+
+  for (const preset of Object.values(PROVIDER_PRESETS)) {
+    const match = preset.recommendedModels.find(
+      (m) => m.id.toLowerCase() === rawId.toLowerCase()
+    );
+    if (match) {
+      return {
+        ...match,
+        displayName: match.displayName ?? rawName ?? rawId,
+        enabled: true,
+      };
+    }
+  }
+
+  // 2. 启发式推断未知在线模型规格
+  const lower = rawId.toLowerCase();
+  const isReasoner = /reasoner|r1|o1|o3|thinking/i.test(lower);
+  const hasVision = /vision|4o|vl|florence|image/i.test(lower);
+  const isCode = /coder|code/i.test(lower);
+
+  let contextWindow = 131072;
+  if (/2m/i.test(lower)) {
+    contextWindow = 2097152;
+  } else if (/1m/i.test(lower)) {
+    contextWindow = 1048576;
+  } else if (/200k/i.test(lower)) {
+    contextWindow = 200000;
+  } else if (/128k/i.test(lower)) {
+    contextWindow = 131072;
+  } else if (/64k/i.test(lower)) {
+    contextWindow = 65536;
+  } else if (/32k/i.test(lower)) {
+    contextWindow = 32768;
+  } else if (/16k/i.test(lower)) {
+    contextWindow = 16384;
+  } else if (/8k/i.test(lower)) {
+    contextWindow = 8192;
+  }
+
+  const maxOutputTokens = Math.min(contextWindow, 8192);
+
+  const tags: string[] = [];
+  if (isReasoner) tags.push('深度推理');
+  if (hasVision) tags.push('Vision');
+  if (isCode) tags.push('代码专用');
+  if (tags.length === 0) tags.push('通用对话');
+
+  return {
+    id: rawId,
+    displayName: rawName ?? rawId,
+    enabled: true,
+    contextWindow,
+    maxOutputTokens,
+    modalities: {
+      input: hasVision ? ['text', 'image', 'file'] : ['text', 'file'],
+      output: ['text'],
+    },
+    thinking: isReasoner
+      ? {
+          supported: true,
+          availableTiers: ['high'],
+          defaultTier: 'high',
+        }
+      : {
+          supported: false,
+          availableTiers: ['off'],
+          defaultTier: 'off',
+        },
+    tags,
+  };
+}
+
+// ── 测速与探测契约 ──
+
+export interface ProviderPingInput {
+  baseUrl: string;
+  apiKey?: string | null;
+  /** 测速超时限制（默认 5000ms） */
+  timeoutMs?: number;
+  /** 厂商标识提示（可选） */
+  vendor?: LocalVendorKey;
+}
+
+export interface ProviderPingResult {
+  ok: boolean;
+  latencyMs: number;
+  error: LocalChatError | null;
+  models?: LocalModelSpec[];
+  status?: number;
+}
+
+export interface FetchProviderModelsInput {
+  baseUrl: string;
+  apiKey?: string | null;
+  vendor?: LocalVendorKey;
+  /** 拉取超时限制（默认 8000ms） */
+  timeoutMs?: number;
+}
+
 // ── 客户端 ──
 
 export interface LocalChatClientDeps {
@@ -175,18 +404,33 @@ export interface StreamChatInput {
   apiKey: string | null;
   model: string;
   messages: readonly LocalWireMessage[];
+  /** 动态工具声明列表（可选） */
+  tools?: readonly unknown[];
+  /** 工具选择策略（可选） */
+  toolChoice?: any;
+  tool_choice?: any;
+  thinkingFormat?: LocalThinkingFormat;
+  thinkingTier?: LocalThinkingTier;
+  maxTokens?: number;
+  temperature?: number;
 }
 
 export interface StreamChatCallbacks {
   /** 正文增量（逐块回调，UI 追加渲染） */
   onTextDelta: (delta: string) => void;
+  /** 思考增量回调（可选） */
+  onReasoningDelta?: (delta: string) => void;
   /** 活动信号（收到任意块，含纯思考块；供 UI 保持生成态） */
   onActivity?: () => void;
-  /** 正常结束：全文 + 结束原因 + tool_calls 名称数（永不执行，仅计数） */
+  /** 当流中检测并聚合出完整的工具调用时触发 */
+  onToolCallsDetected?: (toolCalls: any[]) => void;
+  /** 正常结束：全文 + 结束原因 + 工具调用清单 + 思考内容 */
   onComplete: (result: {
     content: string;
     finishReason: string | null;
     toolCallCount: number;
+    toolCalls?: any[];
+    reasoning?: string;
   }) => void;
   /** 失败（分类错误，message 已补齐） */
   onError: (error: LocalChatError) => void;
@@ -211,6 +455,208 @@ export interface LocalChatClient {
     apiKey: string | null;
     model: string;
   }) => Promise<LocalConnectivityResult>;
+  /**
+   * 供应商轻量端点即时测速（Ping）：
+   * 专供向导第 1 步与卡片测速，零 Token 消耗、超快响应、鉴权一并验证。
+   */
+  pingProviderEndpoint: (
+    input: ProviderPingInput
+  ) => Promise<ProviderPingResult>;
+  /**
+   * 鲁棒模型拉取：
+   * 兼容 OpenAI 与 Ollama 格式，结合预置模板或启发式规则做规格注水，失败容错降级。
+   */
+  fetchProviderModelsRobust: (
+    input: FetchProviderModelsInput
+  ) => Promise<LocalModelSpec[]>;
+}
+
+async function executePingProviderEndpoint(
+  input: ProviderPingInput,
+  jsonFetch: JsonFetch
+): Promise<ProviderPingResult> {
+  const started =
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 5000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const getLatency = () =>
+    Math.max(
+      1,
+      Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) -
+          started
+      )
+    );
+
+  try {
+    const url = buildModelsUrl(input.baseUrl);
+    const res = await jsonFetch(url, {
+      method: 'GET',
+      headers: buildJsonHeaders(input.apiKey ?? null),
+      signal: controller.signal,
+    });
+
+    const latencyMs = getLatency();
+
+    // 1. GET /models 正常响应 2xx
+    if (res.status >= 200 && res.status < 300) {
+      let models: LocalModelSpec[] = [];
+      try {
+        const json = JSON.parse(res.text) as unknown;
+        const rawItems = parseModelsListRobust(json);
+        const vendor = input.vendor ?? detectVendorKey(input.baseUrl);
+        models = rawItems.map((item) => hydrateModelSpec(item, vendor));
+      } catch {
+        // 模型列表 JSON 解析失败，但连通性正常
+      }
+      return {
+        ok: true,
+        latencyMs,
+        status: res.status,
+        error: null,
+        models,
+      };
+    }
+
+    // 2. 404/405 端点未开放 /models：优雅降级到 GET 根路径连通性探测
+    if (res.status === 404 || res.status === 405) {
+      try {
+        const rootUrl = normalizeBaseUrl(input.baseUrl);
+        const fallbackRes = await jsonFetch(rootUrl, {
+          method: 'GET',
+          headers: buildJsonHeaders(input.apiKey ?? null),
+          signal: controller.signal,
+        });
+        const fallbackLatency = getLatency();
+        if (fallbackRes.status < 500) {
+          return {
+            ok: true,
+            latencyMs: fallbackLatency,
+            status: fallbackRes.status,
+            error: null,
+            models: [],
+          };
+        }
+      } catch {
+        // fallback 探测失败，继续向下进入常规错误分类
+      }
+    }
+
+    // 3. 其它 HTTP 错误（401/403 鉴权失败、5xx 服务端错误等）
+    return {
+      ok: false,
+      latencyMs,
+      status: res.status,
+      error: withErrorMessage(
+        classifyHttpError(res.status, res.text, res.retryAfterSec)
+      ),
+    };
+  } catch {
+    // 网络层异常（超时 abort 或断网）
+    return {
+      ok: false,
+      latencyMs: getLatency(),
+      error: withErrorMessage(networkError()),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function executeFetchProviderModelsRobust(
+  input: FetchProviderModelsInput,
+  jsonFetch: JsonFetch
+): Promise<LocalModelSpec[]> {
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 8000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const vendor = input.vendor ?? detectVendorKey(input.baseUrl);
+
+  try {
+    const url = buildModelsUrl(input.baseUrl);
+    let resText: string | null = null;
+
+    try {
+      const res = await jsonFetch(url, {
+        method: 'GET',
+        headers: buildJsonHeaders(input.apiKey ?? null),
+        signal: controller.signal,
+      });
+
+      if (res.status >= 200 && res.status < 300) {
+        resText = res.text;
+      } else if (
+        (res.status === 404 || res.status === 405) &&
+        (vendor === 'ollama' || input.baseUrl.includes('11434'))
+      ) {
+        // Ollama 原生 /api/tags 兼容回退
+        try {
+          const tagsUrl = `${normalizeBaseUrl(input.baseUrl)}/api/tags`;
+          const tagsRes = await jsonFetch(tagsUrl, {
+            method: 'GET',
+            headers: buildJsonHeaders(input.apiKey ?? null),
+            signal: controller.signal,
+          });
+          if (tagsRes.status >= 200 && tagsRes.status < 300) {
+            resText = tagsRes.text;
+          }
+        } catch {
+          // Ollama tags 回退失败
+        }
+      }
+    } catch {
+      // 网络请求失败
+    }
+
+    if (resText !== null) {
+      try {
+        const json = JSON.parse(resText) as unknown;
+        const rawItems = parseModelsListRobust(json);
+        if (rawItems.length > 0) {
+          return rawItems.map((item) => hydrateModelSpec(item, vendor));
+        }
+      } catch {
+        // JSON 解析失败
+      }
+    }
+  } catch {
+    // 整体异常保护
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // 失败时容错降级：返回当前供应商的预置推荐模型列表，绝不抛出不可恢复的硬崩溃
+  const preset = PROVIDER_PRESETS[vendor] ?? PROVIDER_PRESETS.custom;
+  if (
+    preset &&
+    preset.recommendedModels &&
+    preset.recommendedModels.length > 0
+  ) {
+    return [...preset.recommendedModels];
+  }
+
+  return [];
+}
+
+/** 独立函数形式即时测速（Ping）探测 */
+export async function pingProviderEndpoint(
+  input: ProviderPingInput,
+  deps: LocalChatClientDeps = {}
+): Promise<ProviderPingResult> {
+  const jsonFetch = deps.jsonFetch ?? defaultJsonFetch;
+  return executePingProviderEndpoint(input, jsonFetch);
+}
+
+/** 独立函数形式鲁棒模型拉取 */
+export async function fetchProviderModelsRobust(
+  input: FetchProviderModelsInput,
+  deps: LocalChatClientDeps = {}
+): Promise<LocalModelSpec[]> {
+  const jsonFetch = deps.jsonFetch ?? defaultJsonFetch;
+  return executeFetchProviderModelsRobust(input, jsonFetch);
 }
 
 export function createLocalChatClient(
@@ -229,10 +675,18 @@ export function createLocalChatClient(
           model: input.model,
           messages: input.messages,
           stream: true,
+          tools: input.tools,
+          toolChoice: input.toolChoice ?? input.tool_choice,
+          thinkingFormat: input.thinkingFormat,
+          thinkingTier: input.thinkingTier,
+          maxTokens: input.maxTokens,
+          temperature: input.temperature,
         })
       );
       const buffer = new SseFrameBuffer();
+      const accumulator = new StreamingToolCallAccumulator();
       let content = '';
+      let reasoning = '';
       let finishReason: string | null = null;
       let toolCallCount = 0;
       let finished = false;
@@ -240,7 +694,19 @@ export function createLocalChatClient(
       const finishOk = () => {
         if (finished) return;
         finished = true;
-        callbacks.onComplete({ content, finishReason, toolCallCount });
+        const toolCalls = accumulator.hasToolCalls()
+          ? accumulator.finalize()
+          : [];
+        if (toolCalls.length > 0) {
+          callbacks.onToolCallsDetected?.(toolCalls);
+        }
+        callbacks.onComplete({
+          content,
+          finishReason,
+          toolCallCount: Math.max(toolCallCount, toolCalls.length),
+          toolCalls,
+          reasoning: reasoning || undefined,
+        });
       };
       const finishErr = (error: LocalChatError) => {
         if (finished) return;
@@ -258,6 +724,13 @@ export function createLocalChatClient(
           if (delta.contentDelta !== '') {
             content += delta.contentDelta;
             callbacks.onTextDelta(delta.contentDelta);
+          }
+          if (delta.reasoningDelta && delta.reasoningDelta !== '') {
+            reasoning += delta.reasoningDelta;
+            callbacks.onReasoningDelta?.(delta.reasoningDelta);
+          }
+          if (delta.toolCallDeltas && delta.toolCallDeltas.length > 0) {
+            accumulator.pushDeltas(delta.toolCallDeltas);
           }
           if (delta.toolCallNames.length > 0) {
             toolCallCount += delta.toolCallNames.length;
@@ -286,6 +759,13 @@ export function createLocalChatClient(
                   if (delta.contentDelta !== '') {
                     content += delta.contentDelta;
                     callbacks.onTextDelta(delta.contentDelta);
+                  }
+                  if (delta.reasoningDelta && delta.reasoningDelta !== '') {
+                    reasoning += delta.reasoningDelta;
+                    callbacks.onReasoningDelta?.(delta.reasoningDelta);
+                  }
+                  if (delta.toolCallDeltas && delta.toolCallDeltas.length > 0) {
+                    accumulator.pushDeltas(delta.toolCallDeltas);
                   }
                   if (delta.toolCallNames.length > 0) {
                     toolCallCount += delta.toolCallNames.length;
@@ -428,6 +908,14 @@ export function createLocalChatClient(
       } finally {
         clearTimeout(timer);
       }
+    },
+
+    pingProviderEndpoint(input) {
+      return executePingProviderEndpoint(input, jsonFetch);
+    },
+
+    fetchProviderModelsRobust(input) {
+      return executeFetchProviderModelsRobust(input, jsonFetch);
     },
   };
 }

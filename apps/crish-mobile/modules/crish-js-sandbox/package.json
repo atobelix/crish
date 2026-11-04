@@ -1,0 +1,14 @@
+{
+  "name": "crish-js-sandbox",
+  "version": "0.1.0",
+  "description": "Crish QuickJS 隔离沙箱原生模块（多线程 / 内存限制 / 超时熔断 / 日志捕获）",
+  "main": "index.ts",
+  "types": "index.ts",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

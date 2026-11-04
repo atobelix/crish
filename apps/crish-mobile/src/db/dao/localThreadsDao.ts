@@ -41,6 +41,18 @@ export interface LocalToolCall {
   completedAt?: number;
   /** 错误信息（status === 'error' 时非空） */
   error?: string;
+  /** 工具名称快捷别名 */
+  name?: string;
+  /** 入参字符串快捷别名 */
+  arguments?: string;
+  /** 解析后的参数对象（容错） */
+  parsedArgs?: Record<string, unknown>;
+  /** 兼容执行状态枚举 */
+  state?: 'pending' | 'executing' | 'success' | 'failed' | 'denied';
+  /** 执行输出结果 */
+  result?: string;
+  /** 耗时（ms） */
+  durationMs?: number;
 }
 
 /** 工具执行结果规范 */

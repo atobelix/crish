@@ -1,0 +1,4 @@
+# Android CMake & Gradle build outputs
+.cxx/
+build/
+.ninja_*

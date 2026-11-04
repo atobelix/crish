@@ -107,6 +107,7 @@ export interface LocalChatSessionState {
   appendUser: (message: LocalChatMessage, threadId?: string) => void;
   beginAssistant: (message: LocalChatMessage, threadId?: string) => void;
   appendAssistantDelta: (id: string, delta: string) => void;
+  appendAssistantReasoningDelta: (id: string, delta: string) => void;
   finishAssistant: (id: string, patch?: Partial<LocalChatMessage>) => void;
   setError: (error: LocalChatError | null, threadId?: string) => void;
   setStreaming: (streaming: boolean, threadId?: string) => void;
@@ -637,6 +638,18 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
         });
       },
 
+      appendAssistantReasoningDelta: (id, delta) => {
+        set((s) => {
+          const located = locateMessage(s, id);
+          if (!located) return;
+          const target = located.runtime.messages[located.index];
+          if (target) {
+            target.reasoning = (target.reasoning ?? '') + delta;
+            target.isThinking = true;
+          }
+        });
+      },
+
       finishAssistant: (id, patch) => {
         let saved: {
           threadId: string;
@@ -651,6 +664,7 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
           if (!target) return;
           target.streaming = false;
           if (patch) Object.assign(target, patch);
+          target.isThinking = false;
           located.runtime.streaming = false;
           if (located.threadId !== null) {
             const nowMs = Date.now();

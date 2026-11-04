@@ -81,6 +81,161 @@ describe('streamChatCompletion', () => {
     expect(completedList[0]?.toolCallCount).toBe(0);
   });
 
+  it('出站请求体包含 OpenAI 思考方言（reasoning_effort: high）', () => {
+    const fake = makeFakeStream();
+    let capturedBody = '';
+    const transport: StreamTransport = (req, h) => {
+      capturedBody = req.body;
+      return fake.transport(req, h);
+    };
+    const client = createLocalChatClient({ streamTransport: transport });
+    client.streamChatCompletion(
+      {
+        ...baseInput,
+        thinkingFormat: 'openai',
+        thinkingTier: 'xhigh',
+      },
+      {
+        onTextDelta: () => {},
+        onComplete: () => {},
+        onError: () => {},
+      }
+    );
+    const parsed = JSON.parse(capturedBody);
+    expect(parsed.reasoning_effort).toBe('high');
+  });
+
+  it('出站请求体包含 DeepSeek 思考方言（thinking.type: enabled）', () => {
+    const fake = makeFakeStream();
+    let capturedBody = '';
+    const transport: StreamTransport = (req, h) => {
+      capturedBody = req.body;
+      return fake.transport(req, h);
+    };
+    const client = createLocalChatClient({ streamTransport: transport });
+    client.streamChatCompletion(
+      {
+        ...baseInput,
+        thinkingFormat: 'deepseek',
+        thinkingTier: 'high',
+      },
+      {
+        onTextDelta: () => {},
+        onComplete: () => {},
+        onError: () => {},
+      }
+    );
+    const parsed = JSON.parse(capturedBody);
+    expect(parsed.thinking).toEqual({ type: 'enabled' });
+  });
+
+  it('SSE 数据帧中包含 reasoning_content 时触发 onReasoningDelta 回调并在 onComplete 返回完整 reasoning', () => {
+    const fake = makeFakeStream();
+    const client = createLocalChatClient({ streamTransport: fake.transport });
+    const reasoningDeltas: string[] = [];
+    const textDeltas: string[] = [];
+    let completedResult: any = null;
+
+    client.streamChatCompletion(baseInput, {
+      onTextDelta: (d) => textDeltas.push(d),
+      onReasoningDelta: (r) => reasoningDeltas.push(r),
+      onComplete: (res) => {
+        completedResult = res;
+      },
+      onError: () => {
+        throw new Error('不应报错');
+      },
+    });
+
+    fake.emit(
+      sse({
+        choices: [
+          {
+            delta: { reasoning_content: 'Step 1: 分析问题\n' },
+            finish_reason: null,
+          },
+        ],
+      })
+    );
+    fake.emit(
+      sse({
+        choices: [
+          {
+            delta: { reasoning_content: 'Step 2: 得出结论' },
+            finish_reason: null,
+          },
+        ],
+      })
+    );
+    fake.emit(
+      sse({
+        choices: [
+          {
+            delta: { content: '最终答案' },
+            finish_reason: null,
+          },
+        ],
+      }) + 'data: [DONE]\n\n'
+    );
+    fake.done();
+
+    expect(reasoningDeltas).toEqual(['Step 1: 分析问题\n', 'Step 2: 得出结论']);
+    expect(textDeltas).toEqual(['最终答案']);
+    expect(completedResult).not.toBeNull();
+    expect(completedResult.content).toBe('最终答案');
+    expect(completedResult.reasoning).toBe(
+      'Step 1: 分析问题\nStep 2: 得出结论'
+    );
+  });
+
+  it('出站请求体包含 maxTokens 与 temperature 参数', () => {
+    const fake = makeFakeStream();
+    let capturedBody = '';
+    const transport: StreamTransport = (req, h) => {
+      capturedBody = req.body;
+      return fake.transport(req, h);
+    };
+    const client = createLocalChatClient({ streamTransport: transport });
+    client.streamChatCompletion(
+      {
+        ...baseInput,
+        maxTokens: 2048,
+        temperature: 0.7,
+      },
+      {
+        onTextDelta: () => {},
+        onComplete: () => {},
+        onError: () => {},
+      }
+    );
+    const parsed = JSON.parse(capturedBody);
+    expect(parsed.max_tokens).toBe(2048);
+    expect(parsed.temperature).toBe(0.7);
+  });
+
+  it('SSE 流在 onDone 残余冲刷帧中解析 reasoning_content 并累积', () => {
+    const fake = makeFakeStream();
+    const client = createLocalChatClient({ streamTransport: fake.transport });
+    const reasoningDeltas: string[] = [];
+    let completedResult: any = null;
+
+    client.streamChatCompletion(baseInput, {
+      onTextDelta: () => {},
+      onReasoningDelta: (r) => reasoningDeltas.push(r),
+      onComplete: (res) => {
+        completedResult = res;
+      },
+      onError: () => {},
+    });
+
+    // 末尾无换行，留存在 buffer 残余中，通过 done() 时的 flush() 冲刷
+    fake.emit('data: {"choices":[{"delta":{"reasoning_content":"残余思考"}}]}');
+    fake.done();
+
+    expect(reasoningDeltas).toEqual(['残余思考']);
+    expect(completedResult?.reasoning).toBe('残余思考');
+  });
+
   it('tool_calls 只计数不执行（onComplete 携带计数，无任何执行面）', () => {
     const fake = makeFakeStream();
     const client = createLocalChatClient({ streamTransport: fake.transport });
