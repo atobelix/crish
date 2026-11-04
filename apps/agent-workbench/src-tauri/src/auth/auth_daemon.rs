@@ -51,16 +51,19 @@ pub struct AuthManager {
     /// 冷启动凭据恢复完成信号：命令面等待首次恢复结束再返回会话快照，
     /// 避免前端在恢复前读到 is_logged_in=false 后不再刷新。
     restored: watch::Sender<bool>,
+    /// 保持至少一个常驻接收端，确保 `restored.send(true)` 不会因为无 receiver 而失败或丢值
+    _restored_rx: watch::Receiver<bool>,
 }
 
 impl AuthManager {
     pub fn new(app_data_dir: PathBuf, base_url: Option<String>) -> Arc<Self> {
-        let (restored, _) = watch::channel(false);
+        let (restored, restored_rx) = watch::channel(false);
         let manager = Arc::new(Self {
             credential_store: SecureCredentialStore::new(app_data_dir),
             client: CloudAuthClient::new(base_url),
             session: RwLock::new(None),
             restored,
+            _restored_rx: restored_rx,
         });
 
         // 启动后台恢复与静默续期任务（统一走 tauri::async_runtime::spawn 确保全局 runtime 安全）
@@ -74,22 +77,29 @@ impl AuthManager {
 
     /// 应用冷启动：DPAPI 恢复 refresh token → 静默续期 → 拉真实档案 → 进入守护循环
     async fn restore_then_daemon_loop(&self) {
-        self.restore_persisted_session().await;
+        if let Err(_) =
+            tokio::time::timeout(Duration::from_secs(8), self.restore_persisted_session()).await
+        {
+            warn!("Cold-start session restoration timed out after 8s; continuing unauthenticated");
+        }
         let _ = self.restored.send(true);
         self.daemon_loop().await;
     }
 
-    /// 等待冷启动凭据恢复完成（首次完成后立即返回）。
+    /// 等待冷启动凭据恢复完成（首次完成后立即返回；超时 3 秒熔断防止死等挂起 IPC）。
     pub async fn wait_restored(&self) {
         let mut rx = self.restored.subscribe();
         if *rx.borrow_and_update() {
             return;
         }
-        while !*rx.borrow_and_update() {
-            if rx.changed().await.is_err() {
-                return;
+        let _ = tokio::time::timeout(Duration::from_secs(3), async {
+            while !*rx.borrow_and_update() {
+                if rx.changed().await.is_err() {
+                    return;
+                }
             }
-        }
+        })
+        .await;
     }
 
     /// 冷启动恢复：成功后档案经 /me 真实拉取；失败区分 401（清凭据）与网络错误
@@ -570,4 +580,49 @@ pub enum RefreshOutcome {
     TokenRejected,
     /// 网络等临时失败（触发指数退避）
     TransientFailure,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn wait_restored_unblocks_promptly_on_empty_credentials() {
+        let dir = tempdir().expect("tempdir");
+        let manager = AuthManager::new(dir.path().to_path_buf(), None);
+
+        tokio::time::timeout(Duration::from_secs(2), manager.wait_restored())
+            .await
+            .expect("wait_restored timed out");
+
+        let snap = manager.get_session_snapshot().await;
+        assert!(!snap.is_logged_in);
+        assert!(snap.user.is_none());
+    }
+
+    #[tokio::test]
+    async fn wait_restored_concurrent_callers_all_unblock() {
+        let dir = tempdir().expect("tempdir");
+        let manager = AuthManager::new(dir.path().to_path_buf(), None);
+
+        let h1 = {
+            let m = Arc::clone(&manager);
+            tokio::spawn(async move {
+                m.wait_restored().await;
+                m.get_session_snapshot().await
+            })
+        };
+        let h2 = {
+            let m = Arc::clone(&manager);
+            tokio::spawn(async move {
+                m.wait_restored().await;
+                m.get_session_snapshot().await
+            })
+        };
+
+        let (res1, res2) = tokio::join!(h1, h2);
+        assert!(!res1.expect("h1 join").is_logged_in);
+        assert!(!res2.expect("h2 join").is_logged_in);
+    }
 }

@@ -367,91 +367,42 @@
   width: 100%;
 }
 
-/* ── 暗色设置行亮度阶梯（2026-11-01 用户定版，仅暗色） ──────────────────────
-   背景：.settingsUiRow 原为 transparent，透出所在卡面；而运行时皮肤（dark-cozy）
-   把卡面（composerBg #18181a）压得比面板底（bgSecondary #1c1c1e）还暗，
-   于是每行看起来「比背景黑」。第一阶段给行一块实色派生底：
-   以卡面（设置语境 --cover-card-bg，回落 --bg-card / --surface-outer）为基，
-   用 color-mix 向 --surface-tint-target 混 6.5%（dark-cozy 下等效 rgb 36）；
-   同时设置页内含行卡片透明化，行像直接排在面板上。
-   第二阶段（同日，用户实机反馈）：多行分组看起来是几块分离的深色块漂在
-   近黑面板上——病根是行与行之间的间隙（margin）露出面板色（浅色下整组
-   同为一白面则无此问题）。改为「整组一个表面」：
-   · 多行分组卡（卡内有 ≥2 行互为兄弟）恢复整体底 = 卡面 +8.5%
-     （在第一阶段行底 6.5% 之上，按用户原话「再提亮 2%」再 +2pt；
-     dark-cozy 下 ≈rgb 40，面板 28 之上明确成块）；卡底铺满整卡，
-     行间间隙与卡边缘留白一律呈现卡底色，不再露出面板色；
-   · 分组卡内行静止透明，与卡同为一个表面，仅靠内边距区分；
-     hover / active / selected 以卡底为基准、沿原相对步长（3.5% / 6% / 7%）
-     提亮，行内输入以卡底 +4% 保持高一档（dark-cozy 下 ≈rgb 47）；
-   · 裸行与单行卡维持第一阶段口径：行底 +6.5% 自成一块、单行卡仍透明。
-   全部规则收在 html[data-theme='dark'] 作用域内，亮色渲染零变化；
-   状态走 background-color + 过渡（--transition-fast），不做瞬时跳变。 */
-:global(html[data-theme='dark']) .settingsUiRow {
-  --settings-row-bg: color-mix(
+/* ── 暗色设置行与卡片亮度阶梯（深色与浅色几何物理 1:1 对齐） ──────────────────
+   1. 几何尺寸与排布严格对齐亮色：卡片整块成面（无内层 margin），行间保留 1px 发丝分割线，
+      彻底根除深色下高度膨胀（原 margin 导致单页高度虚高 80px+）与分割线丢失问题；
+   2. 卡片表面：设置页内 .settingsUiCard 统一应用提亮底色（卡面 +8.5%），单行与多行卡同质；
+   3. 卡内各行：静止底透明（与卡为一个整体表面），行间以 hairline 发丝线自然分割，末行无底线；
+   4. 交互反馈：hover / active / selected 沿相对步长在卡底之上柔和提亮，输入框背景同档微提。 */
+:global(html[data-theme='dark']) .settingsUiPage .settingsUiCard {
+  --settings-card-bg: color-mix(
     in oklab,
     var(--cover-card-bg, var(--bg-card, var(--surface-outer))),
-    var(--surface-tint-target) 6.5%
+    var(--surface-tint-target) 8.5%
   );
-  /* 状态提亮与行内输入的派生基准面：默认 = 行底自身；多行分组卡内被覆写为
-     分组卡整体底（见下方分组规则）。--settings-row-fill 是行静止底：
-     分组卡内被覆写为 transparent，使行与卡面同为一个表面——走变量间接，
-     不在分组规则里直接写 background，以免高优先级压掉 hover 等状态色。 */
-  --settings-state-base: var(--settings-row-bg);
-  --settings-row-fill: var(--settings-row-bg);
+  background: var(--settings-card-bg);
+  border-color: var(--border-subtle);
+}
+
+:global(html[data-theme='dark']) .settingsUiRow {
+  --settings-state-base: color-mix(
+    in oklab,
+    var(--cover-card-bg, var(--bg-card, var(--surface-outer))),
+    var(--surface-tint-target) 8.5%
+  );
   --settings-input-bg: color-mix(
     in oklab,
     var(--settings-state-base),
     var(--surface-tint-target) 4%
   );
-  background: var(--settings-row-fill);
-  border-bottom: none;
-  border-radius: var(--radius-option);
+  background: transparent;
+  border-bottom: var(--hairline-width) solid
+    color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
+  border-radius: 0;
   transition: background-color var(--transition-fast);
 }
 
-/* 卡内行排布：统一行距（--gap-group）替代发丝线分隔（裸行不受影响）。
-   间隙呈现什么颜色取决于卡底：单行卡透明时间隙透出面板色；
-   多行分组卡恢复整体底后，间隙即卡底色——这是第二阶段的关键点。 */
-:global(html[data-theme='dark']) .settingsUiCard .settingsUiRow {
-  margin: var(--gap-group) var(--gap-group) 0;
-}
-
-:global(html[data-theme='dark']) .settingsUiCard .settingsUiRow:last-child {
-  margin-bottom: var(--gap-group);
-}
-
-/* 设置页内含行卡片先统一透明化（第一阶段口径，单行卡维持此现状）：
-   作用域限定 .settingsUiPage（设置页根）内含 .settingsUiRow 的卡片——
-   设置页之外的 SettingsCard 用法不受影响，无行卡片也保留原卡面底色。 */
-:global(html[data-theme='dark'])
-  .settingsUiPage
-  .settingsUiCard:has(.settingsUiRow) {
-  background: transparent;
-}
-
-/* 多行分组卡恢复整体底：卡面 +8.5%（= 原行底 6.5% 再提亮 2pt）。
-   本规则特异性高于上一条透明规则，命中卡内 ≥2 行互为兄弟的分组卡；
-   --settings-group-bg 同时供卡内行的状态/输入派生引用。 */
-:global(html[data-theme='dark'])
-  .settingsUiPage
-  .settingsUiCard:has(.settingsUiRow ~ .settingsUiRow) {
-  --settings-group-bg: color-mix(
-    in oklab,
-    var(--cover-card-bg, var(--bg-card, var(--surface-outer))),
-    var(--surface-tint-target) 8.5%
-  );
-  background: var(--settings-group-bg);
-}
-
-/* 分组卡内行回到「卡的成员」：静止底透明（与卡同色，成为整体的一部分），
-   状态提亮与行内输入改以分组卡整体底为基准派生。 */
-:global(html[data-theme='dark'])
-  .settingsUiPage
-  .settingsUiCard:has(.settingsUiRow ~ .settingsUiRow)
-  .settingsUiRow {
-  --settings-state-base: var(--settings-group-bg);
-  --settings-row-fill: transparent;
+:global(html[data-theme='dark']) .settingsUiRow:last-child {
+  border-bottom: none;
 }
 
 :global(html[data-theme='dark']) .settingsUiRowClickable:hover {

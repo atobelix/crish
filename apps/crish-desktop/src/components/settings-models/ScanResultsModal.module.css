@@ -78,7 +78,10 @@
   justify-content: center;
   flex-shrink: 0;
   background: var(--bg-card);
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .customCheckboxChecked {

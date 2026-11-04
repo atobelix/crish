@@ -65,9 +65,30 @@
   line-height: var(--line-height-base);
 }
 
+.subIntro {
+  margin: 0 0 var(--space-3) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-body);
+}
+
 .serviceDesc {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.topControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 /* 已配对设备行（SettingsRow 内的标题/副文案/动作排布） */
@@ -198,4 +219,17 @@
   flex-shrink: 0;
   margin-top: 2px;
   color: var(--text-secondary);
+}
+
+.remoteControlHeaderControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.remoteControlLabel {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--fw-medium);
+  user-select: none;
 }

@@ -364,7 +364,7 @@
 
 /* ── 弹窗外壳：无描边，对齐系统 --radius-2xl 与 --bg-card ── */
 .dialogPanel {
-  border: 0;
+  border: 1px solid var(--border-panel);
   box-shadow: var(--shadow-2xl);
   border-radius: var(--radius-2xl);
   background: var(--bg-card);

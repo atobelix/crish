@@ -21,8 +21,16 @@ pub struct CloudAuthClient {
 
 impl CloudAuthClient {
     pub fn new(base_url: Option<String>) -> Self {
+        let ua = format!(
+            "Crish/{} ({}; {}) Desktop/{}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            crate::remote::device::device_name()
+        );
         let http = Client::builder()
             .timeout(Duration::from_secs(25))
+            .user_agent(ua)
             .build()
             .unwrap_or_default();
         Self {

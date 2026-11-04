@@ -27,6 +27,7 @@ html[data-theme='light'] {
     var(--text-base) var(--text-step-decor),
     var(--surface-base, #ffffff)
   );
+  --text-disabled: var(--text-decor);
 
   /* 反色前景与浮层前景 */
   --text-inverse: var(--text-on-accent);
@@ -65,6 +66,7 @@ html[data-theme='dark'] {
     var(--text-base) var(--text-step-decor),
     var(--surface-base, #141414)
   );
+  --text-disabled: var(--text-decor);
 
   /* 反色前景与浮层前景 */
   --text-inverse: var(--text-on-accent);

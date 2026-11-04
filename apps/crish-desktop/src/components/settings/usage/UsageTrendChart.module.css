@@ -186,7 +186,11 @@
   cursor: pointer;
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast),
+    text-decoration-line var(--transition-fast);
 }
 
 .legendItem:hover {

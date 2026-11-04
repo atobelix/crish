@@ -280,7 +280,7 @@
 }
 
 .modalBody {
-  max-height: 60vh;
+  max-height: var(--expand-max-h-nested);
   overflow-y: auto;
   padding: var(--space-2) var(--space-1);
   display: flex;

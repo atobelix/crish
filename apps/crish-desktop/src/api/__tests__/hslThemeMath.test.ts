@@ -4,7 +4,7 @@ import { SKIN_PRESETS } from '../themePresets';
 import { applyPersonalization } from '../themePersonalization';
 import { shiftWarmLayers } from '../../services/warmLayerShift';
 
-describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
+describe('warm-gray 三级表面（底色约 2.5% 灰）', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
@@ -16,15 +16,15 @@ describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
     document.documentElement.style.cssText = '';
   });
 
-  it('预设：secondary/shell 约 97%L（≈3% 灰）', () => {
+  it('预设：secondary 2.5% 灰 (#f9f9f9)，shell 2.5% 灰 (#f9f9f9)', () => {
     const warmGray = SKIN_PRESETS['warm-gray'];
-    expect(warmGray.bgSecondary).toBe('#f7f6f5');
-    expect(warmGray.shellChromeBg).toBe('#f7f6f5');
+    expect(warmGray.bgSecondary).toBe('#f9f9f9');
+    expect(warmGray.shellChromeBg).toBe('#f9f9f9');
     expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgCard).toBe('#ffffff');
   });
 
-  it('注入：primary 95.2 阶梯，secondary 固定约 95±adjust*0.3，card 白', () => {
+  it('注入：primary 95.2 阶梯，secondary 固定约 97.5±adjust*0.3，card 白', () => {
     const root = document.documentElement;
     for (let adjust = -4; adjust <= 4; adjust++) {
       applyPersonalization(
@@ -40,9 +40,9 @@ describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
         'default'
       );
 
-      // review P1-3：亮度微调只平移 K（保持 M0.4/Y0.8），三层夹紧不反转
+      // review P1-3：亮度微调只平移 K，三层夹紧不反转
       const exp = shiftWarmLayers(
-        { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' },
+        { outer: '#f9f9f9', main: '#ffffff', input: '#ffffff' },
         adjust,
         false
       );
@@ -75,7 +75,7 @@ describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
     }
   });
 
-  it('adjust=0：secondary 为 K3 外层', () => {
+  it('adjust=0：secondary 为 2.5% 外层', () => {
     const root = document.documentElement;
     applyPersonalization(
       {
@@ -91,7 +91,7 @@ describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
     );
     // T7 别名收敛 + T-BLK-07b 参数化：注入面真源为 --user-surface-outer
     // （tokens.css 由 var(--user-surface-outer, 静态兜底) 派生 --surface-outer → --bg-secondary）
-    expect(root.style.getPropertyValue('--user-surface-outer')).toBe('#f7f6f5');
+    expect(root.style.getPropertyValue('--user-surface-outer')).toBe('#f9f9f9');
     expect(root.style.getPropertyValue('--surface-outer')).toBe('');
     expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe('');
     expect(root.style.getPropertyValue('--bg-secondary')).toBe('');

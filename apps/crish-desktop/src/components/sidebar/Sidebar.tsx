@@ -21,13 +21,10 @@ import {
   loadSidebarSectionsState,
   saveSidebarListPrefs,
   saveSidebarSectionsState,
-  SIDEBAR_WIDTH_MAX,
-  SIDEBAR_WIDTH_MIN,
 } from './sidebarHelpers';
 import type { FilterType, GroupType, SortType } from './sidebarHelpers';
 import { SidebarHeader } from './SidebarHeader';
 import { SidebarFooter } from './SidebarFooter';
-import { useSidebarResize } from './useSidebarResize';
 import { useSidebarContextMenu } from './useSidebarContextMenu';
 import { useSidebarHandlers } from './useSidebarHandlers';
 import { ConfirmDialog } from '@/components/ui';
@@ -161,13 +158,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const sidebarRef = useRef<HTMLDivElement>(null);
     const sortTriggerRef = useRef<HTMLButtonElement>(null);
     const sidebarScrollRef = useRef<HTMLDivElement>(null);
-
-    const {
-      sidebarWidthPx,
-      handleSidebarResizeStart,
-      handleSidebarResizeDoubleClick,
-      handleSidebarResizeKeyDown,
-    } = useSidebarResize();
 
     const {
       contextMenu,
@@ -371,25 +361,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           updateAvailable={updateAvailable}
 
           setUpdateAvailableState={setUpdateAvailableState}
-        />
-
-        <div
-          className={styles.sidebarResizer}
-          id="sidebar-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整侧栏宽度"
-          aria-valuemin={SIDEBAR_WIDTH_MIN}
-          aria-valuemax={SIDEBAR_WIDTH_MAX}
-          aria-valuenow={sidebarCollapsed ? 0 : sidebarWidthPx}
-          aria-valuetext={
-            sidebarCollapsed ? '已收起' : `侧栏宽度 ${sidebarWidthPx} 像素`
-          }
-          tabIndex={0}
-          onPointerDown={handleSidebarResizeStart}
-          onDoubleClick={handleSidebarResizeDoubleClick}
-          onKeyDown={handleSidebarResizeKeyDown}
-          style={{ touchAction: 'none' }}
         />
 
         <SidebarContextMenus

@@ -175,12 +175,22 @@ pub async fn auth_upload_avatar(
         .map_err(map_auth_err)
 }
 
-/// 登录会话列表
+/// 登录会话列表（若本机会话设备名为空，自动补齐本机设备名称）
 #[tauri::command]
 pub async fn auth_list_sessions(
     auth_mgr: State<'_, Arc<AuthManager>>,
 ) -> Result<Vec<AuthSessionInfo>, CoreError> {
-    auth_mgr.list_sessions().await.map_err(map_auth_err)
+    let mut sessions = auth_mgr.list_sessions().await.map_err(map_auth_err)?;
+    let self_id = crate::remote::device::stable_device_id();
+    let current_device_name = crate::remote::device::device_display_name();
+    for s in sessions.iter_mut() {
+        if s.current || s.device_id == self_id {
+            if s.device_name.as_deref().unwrap_or("").trim().is_empty() {
+                s.device_name = Some(current_device_name.clone());
+            }
+        }
+    }
+    Ok(sessions)
 }
 
 /// 撤销指定登录会话

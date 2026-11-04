@@ -9,8 +9,17 @@
 }
 
 /* 全文编辑器（页面主体）：ui/Textarea bare + 本地 token 口径——无边框、
- * 输入档底色 --surface-input、等宽字体（行式规则文本）；状态走全站输入框
- * 三档（hover 叠 --state-hover、聚焦回基底），过渡 150ms 级 */
+ * 白天模式下采用稍暗一档的 2.5% 纯中性灰下凹底色 (--surface-sunken, 对应 e0/e1 下凹画布档)，
+ * 避免在白卡片上完全同色融化；黑夜模式下保持输入档 (--surface-input)；
+ * 等宽字体（行式规则文本）；状态走全站输入框三档（hover 叠 --state-hover、聚焦回基底），过渡 150ms 级 */
+.editorTextarea {
+  --rules-editor-bg: var(--surface-sunken, var(--surface-canvas));
+}
+
+:global(html[data-theme='dark']) .editorTextarea {
+  --rules-editor-bg: var(--surface-input);
+}
+
 textarea.editorTextarea {
   width: 100%;
   min-height: 380px; /* 刻度外裸值：编辑器主体高度，无既有档，授权保留 */
@@ -21,7 +30,7 @@ textarea.editorTextarea {
   resize: none;
   border: none;
   border-radius: var(--radius-md);
-  background: var(--surface-input);
+  background: var(--rules-editor-bg);
   color: var(--text-primary);
   box-sizing: border-box;
   box-shadow: none;
@@ -31,12 +40,12 @@ textarea.editorTextarea {
 .editorTextarea:where(:hover:not(:focus):not(:disabled)) {
   background:
     linear-gradient(var(--state-hover), var(--state-hover)),
-    var(--surface-input);
+    var(--rules-editor-bg);
 }
 
 .editorTextarea:where(:focus, :focus:hover) {
   outline: none;
-  background: var(--surface-input);
+  background: var(--rules-editor-bg);
 }
 
 .editorTextarea:where(:disabled) {

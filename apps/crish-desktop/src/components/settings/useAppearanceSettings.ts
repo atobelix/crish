@@ -16,6 +16,7 @@ import {
 } from '../../api/shellChrome';
 import {
   readStoredTheme,
+  setTheme,
   readStoredPersonalization,
   writeStoredPersonalization,
   type PersonalizationSettings,
@@ -343,7 +344,10 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         if (personalization.themeAutoTimeTransition) {
           updatePersonalization({ themeAutoTimeTransition: false });
         }
-        void save({ theme: String(updates.theme) });
+        const nextTheme = String(updates.theme);
+        setTheme(nextTheme);
+        setActiveTheme(nextTheme as ThemeId);
+        void save({ theme: nextTheme });
       }
       if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
       if ('shellChrome' in updates)

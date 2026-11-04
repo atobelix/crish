@@ -23,14 +23,14 @@ const device = (patch: Partial<CloudDeviceItem>): CloudDeviceItem => ({
   ...patch,
 });
 
-describe('buildDeviceRows 登录设备拼装', () => {
+describe('buildDeviceRows 登录设备拼装与识别决策', () => {
   it('过滤已吊销会话，本机置顶，在线优先', () => {
     const rows = buildDeviceRows(
       [
         session({
           id: 'old',
           deviceId: 'mac',
-          userAgent: 'Macintosh',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
           createdAt: 1_600_000_000,
         }),
         session({ id: 'gone', revoked: true }),
@@ -38,7 +38,9 @@ describe('buildDeviceRows 登录设备拼装', () => {
         session({
           id: 'self',
           deviceId: 'self',
-          userAgent: 'Windows NT 10.0',
+          userAgent:
+            'Crish/1.0 (Windows NT 10.0; Win64; x64) Desktop/DESKTOP-MYPC',
+          deviceName: 'DESKTOP-MYPC · Windows 11',
           current: true,
         }),
       ],
@@ -46,27 +48,35 @@ describe('buildDeviceRows 登录设备拼装', () => {
     );
 
     expect(rows.map((row) => row.sessionId)).toEqual(['self', 'phone', 'old']);
-    expect(rows[0]).toMatchObject({
-      name: 'Windows',
-      kind: 'desktop',
-      online: true,
-    });
-    expect(rows[1]).toMatchObject({
-      name: 'iPhone 15 Pro',
-      kind: 'phone',
-      online: true,
-    });
-    expect(rows[2]).toMatchObject({
-      name: 'macOS',
-      kind: 'laptop',
-      online: false,
-    });
-    expect(rows[2].lastActiveAt).toBe(1_600_000_000_000);
+    expect(rows[0].current).toBe(true);
+    expect(rows[0].online).toBe(true);
+    expect(rows[0].name).toContain('DESKTOP-MYPC');
+    expect(rows[1].online).toBe(true);
+    expect(rows[2].online).toBe(false);
   });
 
-  it('无法推断设备名时返回空串', () => {
-    const rows = buildDeviceRows([session({ userAgent: 'curl/8' })], []);
-    expect(rows[0].name).toBe('');
+  it('单部手机显示系列，同系列多部手机时升级显示具体型号', () => {
+    const rows = buildDeviceRows(
+      [
+        session({
+          id: 'p1',
+          deviceId: 'p1',
+          deviceName: 'iPhone 15 Pro',
+          userAgent: 'iPhone16,1',
+        }),
+        session({
+          id: 'p2',
+          deviceId: 'p2',
+          deviceName: 'iPhone 13',
+          userAgent: 'iPhone14,5',
+        }),
+      ],
+      []
+    );
+
+    // 重复系列升级为具体型号
+    expect(rows[0].name).toBe('iPhone 15 Pro');
+    expect(rows[1].name).toBe('iPhone 13');
   });
 
   it('toMillis 兼容秒与毫秒', () => {

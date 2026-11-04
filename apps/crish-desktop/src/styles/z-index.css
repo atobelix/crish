@@ -31,11 +31,9 @@
      原为未定义引用（z-index: var(--x) 整条失效→退回 auto）。 */
   --z-decorative: var(--z-base);
   --z-sticky-bar: var(--z-sticky);
-  --z-smart-panel: var(--z-chrome);
   --z-dropdown-menu: var(--z-dropdown);
   --z-context-menu: var(--z-popover);
   --z-index-popover: var(--z-popover);
-  --z-smart-panel-sub: var(--z-dropdown);
   --z-drag-highlight: var(--z-popover);
   --z-drag-overlay: var(--z-tooltip);
 }

@@ -107,10 +107,10 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
-    // 同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层纯白 #ffffff、外层 K3 #f7f6f5
+    // 纯中性无彩色灰阶 —— 主层纯白 #ffffff、外层 2.5% #f9f9f9、次深 2.5% #f9f9f9
     expect(warmGray.bgPrimary).toBe('#ffffff');
-    expect(warmGray.bgSecondary).toBe('#f7f6f5');
-    expect(warmGray.bgTertiary).toBe('#ececeb');
+    expect(warmGray.bgSecondary).toBe('#f9f9f9');
+    expect(warmGray.bgTertiary).toBe('#f9f9f9');
     expect(warmGray.textPrimary).toBe('#121212');
   });
 

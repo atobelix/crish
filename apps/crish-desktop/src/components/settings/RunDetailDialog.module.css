@@ -154,7 +154,9 @@
   border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 140px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
+  max-height: var(
+    --expand-max-h-viewport-sm
+  ); /* 高度分档·档4 入：详情区滚动上限 */
   overflow-y: auto;
 }
 
@@ -168,7 +170,9 @@
   border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 180px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
+  max-height: var(
+    --expand-max-h-viewport-sm
+  ); /* 高度分档·档4 入：详情区滚动上限 */
   overflow-y: auto;
 }
 
@@ -192,7 +196,9 @@
   border-radius: var(--radius-md);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 180px; /* 刻度外裸值：详情区滚动上限，无既有档，授权保留 */
+  max-height: var(
+    --expand-max-h-viewport-sm
+  ); /* 高度分档·档4 入：详情区滚动上限 */
   overflow-y: auto;
   border: none;
 }

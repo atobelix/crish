@@ -21,8 +21,8 @@ export const SIDEBAR_WIDTH_MAX = 480;
 export const SIDEBAR_WIDTH_DEFAULT = 260;
 /** 拖过此宽度折叠侧栏 */
 export const SIDEBAR_COLLAPSE_PX = 120;
-/** 侧栏分割条命中宽度 */
-export const SIDEBAR_RESIZER_HIT_PX = 6;
+/** 侧栏分割条命中宽度（分割线统一口径：全站热区 8px） */
+export const SIDEBAR_RESIZER_HIT_PX = 8;
 export const SIDEBAR_RESIZE_STEP = 12;
 export const SIDEBAR_RESIZE_STEP_LARGE = 24;
 

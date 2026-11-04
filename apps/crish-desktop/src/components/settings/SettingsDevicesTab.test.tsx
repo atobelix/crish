@@ -1,338 +1,154 @@
 // @vitest-environment jsdom
 /**
- * 设置 · 多端互通面板渲染测试（R1-08 验收锚点：配对开关 → 二维码出现 →
- * 设备列表/撤销闭环；R1-09 网络环境卡片：配置文件类别 + 可直连 IP +
- * 公用网络切换提示 / AP 隔离引导；R1-11 多端服务开关：默认关闭提示 +
- * 开启/关闭服务路径）。mock multiDevice API 层，断言四区与操作路径。
+ * 设置 · 设备管理面板渲染与交互测试
+ * 覆盖：
+ * 1. 同账号体系下的设备管理列表展示（包含本机置顶）；
+ * 2. 单行排布与本机小号文本；
+ * 3. 未登录态引导；
+ * 4. 退出设备与退出其他设备闭环。
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SettingsDevicesTab } from './SettingsDevicesTab';
 
-const pairStart = vi.fn();
-const pairStatus = vi.fn();
-const pairCancel = vi.fn();
-const listDevices = vi.fn();
-const revokeDevice = vi.fn();
-const renameDevice = vi.fn();
-const networkEnvInfo = vi.fn();
-const setMultiDeviceEnabled = vi.fn();
+const revokeSession = vi.fn().mockResolvedValue(true);
+const revokeOtherSessions = vi.fn().mockResolvedValue(true);
+const loadSessions = vi.fn().mockResolvedValue(undefined);
+const loadDevices = vi.fn().mockResolvedValue(undefined);
+const openLogin = vi.fn();
+const mockPairStatus = vi.fn().mockResolvedValue({ service_enabled: true });
+const mockSetMultiDeviceEnabled = vi.fn().mockResolvedValue(true);
 
 vi.mock('../../api/multiDevice', () => ({
-  pairStart: (...args: unknown[]) => pairStart(...args),
-  pairStatus: (...args: unknown[]) => pairStatus(...args),
-  pairCancel: (...args: unknown[]) => pairCancel(...args),
-  listDevices: (...args: unknown[]) => listDevices(...args),
-  revokeDevice: (...args: unknown[]) => revokeDevice(...args),
-  renameDevice: (...args: unknown[]) => renameDevice(...args),
-  networkEnvInfo: (...args: unknown[]) => networkEnvInfo(...args),
-  setMultiDeviceEnabled: (...args: unknown[]) => setMultiDeviceEnabled(...args),
+  pairStatus: () => mockPairStatus(),
+  setMultiDeviceEnabled: (val: boolean) => mockSetMultiDeviceEnabled(val),
 }));
 
-const IDLE_STATUS = {
-  state: 'idle',
-  pairing_enabled: false,
-  bind_mode: 'loopback',
-  code_remaining_ms: null,
-  failed_attempts: 0,
-  token_count: 0,
-  service_enabled: false,
-};
+let mockIsLoggedIn = true;
 
-/** 服务已开启、尚未进入配对（R1-11 真值来自后端） */
-const SERVICE_ON_STATUS = {
-  ...IDLE_STATUS,
-  service_enabled: true,
-};
+vi.mock('../../store/storeAccess', () => ({
+  useAuthField: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      isLoggedIn: mockIsLoggedIn,
+      sessions: [
+        {
+          id: 'sess-self',
+          deviceId: 'dev-self',
+          deviceName: 'DESKTOP-ABC · Windows 11',
+          userAgent: 'Crish/1.0',
+          ip: '127.0.0.1',
+          createdAt: 1700000000,
+          expiresAt: 1800000000,
+          revoked: false,
+          current: true,
+        },
+        {
+          id: 'sess-p40',
+          deviceId: 'dev-p40',
+          deviceName: 'ELS-AN00',
+          userAgent: 'Mozilla/5.0 (Linux; Android 10; ELS-AN00)',
+          ip: '192.168.1.100',
+          createdAt: 1699900000,
+          expiresAt: 1800000000,
+          revoked: false,
+          current: false,
+        },
+        {
+          id: 'sess-p50',
+          deviceId: 'dev-p50',
+          deviceName: 'JAD-AL50',
+          userAgent: 'Mozilla/5.0 (Linux; Android 11; JAD-AL50)',
+          ip: '192.168.1.101',
+          createdAt: 1699800000,
+          expiresAt: 1800000000,
+          revoked: false,
+          current: false,
+        },
+      ],
+      devices: [],
+      sessionsLoading: false,
+      loadSessions,
+      loadDevices,
+      revokeSession,
+      revokeOtherSessions,
+    }),
+}));
 
-const ACTIVE_STATUS = {
-  state: 'active',
-  pairing_enabled: true,
-  bind_mode: 'lan',
-  code_remaining_ms: 600_000,
-  failed_attempts: 0,
-  token_count: 1,
-  service_enabled: true,
-};
-
-const PAIR_RESULT = {
-  code: 'CXN-1234-5678-9012',
-  qr: 'crish-pair://CXN-1234-5678-9012@192.168.1.5:8765',
-  firewall_hint: '',
-};
-
-const DEVICES = [
-  {
-    id: 'a'.repeat(64),
-    label: 'Pixel-9',
-    issued_at_ms: 1700000000000,
-    revoked: false,
-  },
-  {
-    id: 'b'.repeat(64),
-    label: '旧平板',
-    issued_at_ms: 1700000100000,
-    revoked: true,
-  },
-];
-
-const PRIVATE_NET_ENV = {
-  profile: 'private' as const,
-  usable_ips: ['192.168.1.5', '10.0.0.8'],
-  hint: '手机无法连接时请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
-};
+vi.mock('../../store/accountUiStore', () => ({
+  useAccountUiStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      openLogin,
+    }),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  pairStatus.mockResolvedValue(IDLE_STATUS);
-  listDevices.mockResolvedValue([]);
-  pairStart.mockResolvedValue(PAIR_RESULT);
-  pairCancel.mockResolvedValue(true);
-  revokeDevice.mockResolvedValue(true);
-  renameDevice.mockResolvedValue(true);
-  networkEnvInfo.mockResolvedValue(PRIVATE_NET_ENV);
-  // 服务开关真值由后端 pair_status 回填：mock 同步切换状态，
-  // 模拟真实「开/关服务 → 轮询恢复到真值」链路。
-  setMultiDeviceEnabled.mockImplementation(async (enabled: boolean) => {
-    pairStatus.mockResolvedValue(enabled ? SERVICE_ON_STATUS : IDLE_STATUS);
-    return true;
-  });
+  mockIsLoggedIn = true;
+  mockPairStatus.mockResolvedValue({ service_enabled: true });
+  mockSetMultiDeviceEnabled.mockResolvedValue(true);
+  revokeSession.mockResolvedValue(true);
+  revokeOtherSessions.mockResolvedValue(true);
+  loadSessions.mockResolvedValue(undefined);
+  loadDevices.mockResolvedValue(undefined);
 });
 
 function renderTab() {
   return render(<SettingsDevicesTab onShowToast={() => {}} />);
 }
 
-/** R1-11：点击「开启服务」并等待配对开关出现（服务开关前置步骤） */
-async function enableService() {
-  const button = await screen.findByRole('button', { name: '开启服务' });
-  fireEvent.click(button);
-  await waitFor(() => expect(setMultiDeviceEnabled).toHaveBeenCalledWith(true));
-  await screen.findByRole('switch', { name: '配对模式开关' });
-}
-
-describe('SettingsDevicesTab', () => {
-  it('默认空态（R1-11）：服务关闭提示 + 无配对开关 + 无设备提示', async () => {
+describe('SettingsDevicesTab 设备管理页（同账号模式）', () => {
+  it('已登录时展示设备列表，本机置顶且展示小号「本机」文本', async () => {
     renderTab();
-    expect(await screen.findByTestId('devices-empty')).toBeTruthy();
-    // 服务默认关闭（红线 1 零监听）：显示「未开启」提示与开启按钮，
-    // 配对模式开关不渲染
-    const off = await screen.findByTestId('service-off');
-    expect(off.textContent).toContain('多端互通服务未开启');
-    expect(screen.getByRole('button', { name: '开启服务' })).toBeTruthy();
-    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '关闭服务' })).toBeNull();
+    expect(await screen.findByText(/DESKTOP-ABC/)).toBeTruthy();
+    expect(screen.getByText('本机')).toBeTruthy();
   });
 
-  it('开启服务（R1-11）：setMultiDeviceEnabled(true) 调用 + 配对开关出现', async () => {
+  it('同系列手机重复时，升级展示具体型号（华为 P40 Pro / 华为 P50）', async () => {
     renderTab();
-    const button = await screen.findByRole('button', { name: '开启服务' });
-    fireEvent.click(button);
-    await waitFor(() =>
-      expect(setMultiDeviceEnabled).toHaveBeenCalledWith(true)
-    );
-    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(screen.queryByTestId('service-off')).toBeNull();
+    // 列表中有 ELS-AN00 (P40 Pro) 和 JAD-AL50 (P50)，两者同属华为 P 系列，升级展示为具体型号
+    expect(await screen.findByText(/华为 P40 Pro/)).toBeTruthy();
+    expect(await screen.findByText(/华为 P50/)).toBeTruthy();
   });
 
-  it('服务开启态（R1-11）：显示关闭服务按钮与断开提示', async () => {
+  it('标题栏右侧展示「允许远程控制」开关并支持切换', async () => {
     renderTab();
-    await enableService();
-    const close = screen.getByRole('button', { name: '关闭服务' });
-    expect(close).toBeTruthy();
-    expect(screen.getByTestId('service-disable-hint').textContent).toContain(
-      '关闭服务将断开所有已配对设备'
-    );
-  });
-
-  it('关闭服务（R1-11）：setMultiDeviceEnabled(false) 调用 + 回到服务关闭提示', async () => {
-    renderTab();
-    await enableService();
-    fireEvent.click(screen.getByRole('button', { name: '关闭服务' }));
-    await waitFor(() =>
-      expect(setMultiDeviceEnabled).toHaveBeenCalledWith(false)
-    );
-    expect(await screen.findByTestId('service-off')).toBeTruthy();
-    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
-  });
-
-  it('开启配对：二维码卡片与配对码出现（R1-08 锚点：开关 → 二维码）', async () => {
-    renderTab();
-    await enableService();
-    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
-    fireEvent.click(toggle);
-    expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
-    expect(screen.getByTestId('pair-code').textContent).toContain('CXN-1234');
-    // 二维码 SVG 渲染（qrcode.react 输出 svg 容器）
-    const svg = screen.getByLabelText('配对二维码');
-    expect(svg.tagName.toLowerCase()).toBe('svg');
-  });
-
-  it('防火墙提示非空时展示', async () => {
-    pairStart.mockResolvedValue({
-      ...PAIR_RESULT,
-      firewall_hint: '请允许 crish 在专用网络上的访问权限',
+    const switchEl = await screen.findByRole('switch', {
+      name: '允许远程控制',
     });
-    renderTab();
-    await enableService();
-    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
-    fireEvent.click(toggle);
-    expect(await screen.findByTestId('firewall-hint')).toBeTruthy();
+    expect(switchEl).toBeTruthy();
+    expect(switchEl.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(switchEl);
+    await waitFor(() =>
+      expect(mockSetMultiDeviceEnabled).toHaveBeenCalledWith(false)
+    );
   });
 
-  it('关闭配对（G-4 语义变更）：确认弹窗出现 → 确认后 pairCancel 调用且二维码卡片消失', async () => {
-    pairStart.mockImplementation(async () => {
-      pairStatus.mockResolvedValue(ACTIVE_STATUS);
-      return PAIR_RESULT;
+  it('退出指定设备：点击退出调用 revokeSession', async () => {
+    renderTab();
+    const revokeButtons = await screen.findAllByRole('button', {
+      name: '退出',
     });
-    renderTab();
-    await enableService();
-    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
-    fireEvent.click(toggle);
-    expect(await screen.findByTestId('pair-qr-card')).toBeTruthy();
-    await waitFor(() =>
-      expect(toggle.getAttribute('aria-checked')).toBe('true')
-    );
-    fireEvent.click(toggle);
-    // 关闭配对 = 撤销全部设备：弹确认弹窗，文案说明撤销后果
-    expect(await screen.findByRole('alertdialog')).toBeTruthy();
-    expect(
-      screen.getByText(/关闭配对将撤销全部已配对设备并断开连接/)
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '关闭配对' }));
-    await waitFor(() => expect(pairCancel).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.queryByTestId('pair-qr-card')).toBeNull()
-    );
+    expect(revokeButtons.length).toBeGreaterThan(0);
+    fireEvent.click(revokeButtons[0]);
+    await waitFor(() => expect(revokeSession).toHaveBeenCalledWith('sess-p40'));
   });
 
-  it('关闭配对（G-4 语义变更）：QR 卡已无关闭按钮，关闭只走开关；取消不调用 pairCancel', async () => {
-    pairStart.mockImplementation(async () => {
-      pairStatus.mockResolvedValue(ACTIVE_STATUS);
-      return PAIR_RESULT;
+  it('退出其他设备：点击退出其他设备调用 revokeOtherSessions', async () => {
+    renderTab();
+    const revokeOthersBtn = await screen.findByRole('button', {
+      name: '退出其他设备',
     });
-    renderTab();
-    await enableService();
-    const toggle = await screen.findByRole('switch', { name: '配对模式开关' });
-    fireEvent.click(toggle);
-    const card = await screen.findByTestId('pair-qr-card');
-    // 二维码卡底部的「关闭配对」按钮已删除（与 Switch 重复入口），卡内不应再出现
-    expect(within(card).queryByRole('button', { name: '关闭配对' })).toBeNull();
-    await waitFor(() =>
-      expect(toggle.getAttribute('aria-checked')).toBe('true')
-    );
-    // 关闭入口只剩开关：拨下开关 → 确认弹窗出现
-    fireEvent.click(toggle);
-    expect(await screen.findByRole('alertdialog')).toBeTruthy();
-    expect(
-      screen.getByText(/关闭配对将撤销全部已配对设备并断开连接/)
-    ).toBeTruthy();
-    // 取消：弹窗关闭且 pairCancel 未被调用（未误触发撤销全部）
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect(pairCancel).not.toHaveBeenCalled();
-    // 二维码卡片仍在（配对保持开启）
-    expect(screen.getByTestId('pair-qr-card')).toBeTruthy();
+    fireEvent.click(revokeOthersBtn);
+    await waitFor(() => expect(revokeOtherSessions).toHaveBeenCalled());
   });
 
-  it('设备列表：展示标签/哈希截断/时间/已撤销徽标', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    listDevices.mockResolvedValue(DEVICES);
+  it('未登录态：展示未登录提示并可点击登录', async () => {
+    mockIsLoggedIn = false;
     renderTab();
-    const list = await screen.findByTestId('device-list');
-    expect(list.textContent).toContain('Pixel-9');
-    expect(list.textContent).toContain('旧平板');
-    expect(list.textContent).toContain('已撤销');
-    expect(list.textContent).toContain('aaaa…');
-  });
-
-  it('撤销闭环：确认弹窗 → revokeDevice 调用 → 列表刷新', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    listDevices.mockResolvedValue(DEVICES);
-    renderTab();
-    const buttons = await screen.findAllByRole('button', { name: '撤销' });
-    fireEvent.click(buttons[0]);
-    expect(await screen.findByText('撤销设备')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    await waitFor(() =>
-      expect(revokeDevice).toHaveBeenCalledWith('a'.repeat(64))
-    );
-    await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(2));
-  });
-
-  it('改名闭环：行内输入 → renameDevice 调用', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    listDevices.mockResolvedValue(DEVICES);
-    renderTab();
-    const buttons = await screen.findAllByRole('button', { name: '改名' });
-    fireEvent.click(buttons[0]);
-    const input = await screen.findByLabelText('设备新名称');
-    fireEvent.change(input, { target: { value: 'Pixel-9 Pro' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() =>
-      expect(renameDevice).toHaveBeenCalledWith('a'.repeat(64), 'Pixel-9 Pro')
-    );
-  });
-
-  it('配对开启时显示网络环境卡片：配置文件类别 + AP 隔离提示（极简直连设计）', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    renderTab();
-    // ACTIVE_STATUS 已含 service_enabled=true（后端真值），无需再点开启服务
-    const card = await screen.findByTestId('network-env');
-    expect(card.textContent).toContain('专用网络');
-    expect(card.textContent).toContain('关闭路由器客户端隔离');
-    // 专用网络不显示「切换到专用网络」提示
-    expect(screen.queryByTestId('network-public-hint')).toBeNull();
-  });
-
-  it('公用网络显示切换提示（R1-09：请切换到专用网络）', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    networkEnvInfo.mockResolvedValue({
-      profile: 'public',
-      usable_ips: ['192.168.1.5'],
-      hint: '当前为公用网络，请切换到专用网络后重试；若手机仍无法连接，请关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。',
-    });
-    renderTab();
-    expect(await screen.findByTestId('network-public-hint')).toBeTruthy();
-    expect(screen.getByTestId('network-public-hint').textContent).toContain(
-      '请切换到专用网络'
-    );
-    expect(screen.getByTestId('network-env').textContent).toContain('公用网络');
-  });
-
-  it('网络类型为未知时显示未知状态与提示', async () => {
-    pairStatus.mockResolvedValue(ACTIVE_STATUS);
-    networkEnvInfo.mockResolvedValue({
-      profile: 'unknown',
-      usable_ips: ['0.0.0.0'],
-      hint: '未能识别当前网络类型。若手机无法连接，请检查 Windows 防火墙放行与路由器客户端隔离设置。',
-    });
-    renderTab();
-    const card = await screen.findByTestId('network-env');
-    expect(card.textContent).toContain('未知');
-    expect(card.textContent).toContain('未能识别当前网络类型');
-  });
-
-  it('配对未开启时不显示网络环境卡片', async () => {
-    renderTab();
-    await waitFor(() => expect(networkEnvInfo).toHaveBeenCalled());
-    expect(screen.queryByTestId('network-env')).toBeNull();
-  });
-
-  it('服务未开启时即使服务端配对态为真也不显示配对面（R1-11 守卫兜底）', async () => {
-    // 后端真值：配对态残留为真但服务开关已关闭 → 不展示配对面
-    pairStatus.mockResolvedValue({ ...ACTIVE_STATUS, service_enabled: false });
-    renderTab();
-    await waitFor(() => expect(pairStatus).toHaveBeenCalled());
-    expect(screen.queryByRole('switch', { name: '配对模式开关' })).toBeNull();
-    expect(screen.queryByTestId('network-env')).toBeNull();
+    expect(await screen.findByText('未登录')).toBeTruthy();
+    const loginBtn = screen.getByRole('button', { name: '登录' });
+    fireEvent.click(loginBtn);
+    expect(openLogin).toHaveBeenCalled();
   });
 });

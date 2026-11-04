@@ -139,7 +139,7 @@
 }
 
 .detailMdCoverContent {
-  max-height: min(320px, 45vh);
+  max-height: var(--expand-max-h-nested);
   overflow: auto;
   margin: 0;
   padding: var(--space-2_5) var(--space-3);

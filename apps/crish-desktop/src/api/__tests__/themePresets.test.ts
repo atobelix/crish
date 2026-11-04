@@ -59,19 +59,19 @@ describe('themePresets P1/P2 基准参数契约', () => {
     }
   });
 
-  it('warm-gray 采用高精度 0.4% 黄色微调与 3.5% 灰度降幅真值 #f6f6f5', () => {
+  it('warm-gray 采用 2.5% 灰度纯中性无彩色基准值 #f9f9f9', () => {
     const warmGray = SKIN_PRESETS['warm-gray'];
-    expect(warmGray.surfaceBase).toBe('#f6f6f5');
+    expect(warmGray.surfaceBase).toBe('#f9f9f9');
     const [r, g, b] = hexToRgbValues(warmGray.surfaceBase);
-    expect(r).toBe(246);
-    expect(g).toBe(246);
-    expect(b).toBe(245);
+    expect(r).toBe(249);
+    expect(g).toBe(249);
+    expect(b).toBe(249);
   });
 
   it('pure-gray 保持严格零饱和度中性灰阶契约（R=G=B）', () => {
     const pureGray = SKIN_PRESETS['pure-gray'];
     expect(pureGray).toBeDefined();
-    expect(pureGray.surfaceBase).toBe('#f7f7f7');
+    expect(pureGray.surfaceBase).toBe('#f9f9f9');
     const [r1, g1, b1] = hexToRgbValues(pureGray.surfaceBase);
     expect(r1).toBe(g1);
     expect(g1).toBe(b1);

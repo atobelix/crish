@@ -48,7 +48,7 @@ export function AccountProfileIdentity({
         <div className={styles.email}>{email}</div>
       </div>
       <div className={styles.actions}>
-        <Button variant="secondary" size="sm" type="button" onClick={onSignOut}>
+        <Button variant="danger" size="sm" type="button" onClick={onSignOut}>
           {t('settings.account.signOut')}
         </Button>
       </div>

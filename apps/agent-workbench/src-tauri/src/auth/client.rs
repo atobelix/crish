@@ -199,6 +199,8 @@ pub struct AuthSessionInfo {
     pub expires_at: u64,
     pub revoked: bool,
     pub current: bool,
+    #[serde(default)]
+    pub device_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,21 +1,31 @@
 /**
- * 登录设备列表的纯数据拼装：账号会话（auth_list_sessions）× 中继在线设备（auth_list_devices）。
- * 后端会话只带 deviceId / userAgent，没有设备名与平台字段，这里按 deviceId 关联在线设备补齐，
- * 关联不到时从 userAgent 粗略推断。
+ * 登录设备与互通设备数据拼装
+ *
+ * 职责：
+ * 整合账号会话（auth_list_sessions）与在线中继设备（auth_list_devices），
+ * 经由 deviceIdentity 模块对设备进行识别与智能命名决策（电脑显示计算机名/系统，手机显示系列，同系列重复时细化型号）。
  */
 import type { AuthSessionInfo, CloudDeviceItem } from '../../api/authApi';
+import {
+  resolveDeviceDisplayNames,
+  type DeviceCategory,
+  type ParsedDeviceInfo,
+} from './deviceIdentity';
 
-export type AccountDeviceKind = 'desktop' | 'laptop' | 'phone';
+export type AccountDeviceKind = DeviceCategory;
 
 export interface AccountDeviceRow {
   sessionId: string;
-  /** 设备名；空串表示无法推断，由界面显示「未知设备」 */
+  deviceId: string;
+  /** 设备展示名（经智能解析与判重升级决策后） */
   name: string;
   kind: AccountDeviceKind;
   current: boolean;
   online: boolean;
   /** 最近活跃时间（毫秒） */
   lastActiveAt: number;
+  /** 深度解析后的设备元数据 */
+  parsed: ParsedDeviceInfo;
 }
 
 /** 后端时间戳单位不统一：小于 1e12 视为秒 */
@@ -23,51 +33,47 @@ export function toMillis(timestamp: number): number {
   return timestamp < 1e12 ? timestamp * 1000 : timestamp;
 }
 
-const PHONE_PATTERN = /iphone|ipad|android|ios|mobile/i;
-const LAPTOP_PATTERN = /mac|darwin|laptop/i;
-
-function detectKind(hint: string): AccountDeviceKind {
-  if (PHONE_PATTERN.test(hint)) return 'phone';
-  if (LAPTOP_PATTERN.test(hint)) return 'laptop';
-  return 'desktop';
-}
-
-const UA_NAMES: ReadonlyArray<[RegExp, string]> = [
-  [/iphone/i, 'iPhone'],
-  [/ipad/i, 'iPad'],
-  [/android/i, 'Android'],
-  [/windows/i, 'Windows'],
-  [/mac/i, 'macOS'],
-  [/linux/i, 'Linux'],
-];
-
-function nameFromUserAgent(userAgent: string): string {
-  const hit = UA_NAMES.find(([pattern]) => pattern.test(userAgent));
-  return hit ? hit[1] : '';
-}
-
 export function buildDeviceRows(
   sessions: readonly AuthSessionInfo[],
-  devices: readonly CloudDeviceItem[]
+  devices: readonly CloudDeviceItem[] = []
 ): AccountDeviceRow[] {
   const deviceById = new Map(devices.map((device) => [device.id, device]));
-  const rows = sessions
+
+  // 1. 过滤有效会话并构建中间对象
+  const rawRows = sessions
     .filter((session) => !session.revoked)
-    .map((session): AccountDeviceRow => {
+    .map((session) => {
       const device = deviceById.get(session.deviceId);
-      const hint = device
-        ? `${device.platform} ${device.name}`
-        : session.userAgent;
+      const name = session.deviceName || device?.name || '';
       return {
         sessionId: session.id,
-        name: device?.name || nameFromUserAgent(session.userAgent),
-        kind: detectKind(hint),
+        deviceId: session.deviceId,
+        name,
+        userAgent: session.userAgent,
+        platform: device?.platform,
         current: session.current,
-        // 中继设备列表只含在线设备（且不含本机），本机会话恒为在线
+        // 中继设备列表只含在线设备（不含本机），本机会话恒为在线
         online: session.current || device !== undefined,
         lastActiveAt: toMillis(device?.lastSeenAt ?? session.createdAt),
       };
     });
+
+  // 2. 传入 deviceIdentity 进行全局判重与命名决策
+  const resolved = resolveDeviceDisplayNames(rawRows);
+
+  // 3. 映射为标准的 AccountDeviceRow
+  const rows: AccountDeviceRow[] = resolved.map((item) => ({
+    sessionId: item.sessionId,
+    deviceId: item.deviceId,
+    name: item.parsed.displayName,
+    kind: item.parsed.category,
+    current: item.current,
+    online: item.online,
+    lastActiveAt: item.lastActiveAt,
+    parsed: item.parsed,
+  }));
+
+  // 4. 排序：本机置顶，在线优先，随后按活跃时间倒序
   return rows.sort((a, b) => {
     if (a.current !== b.current) return a.current ? -1 : 1;
     if (a.online !== b.online) return a.online ? -1 : 1;

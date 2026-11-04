@@ -147,11 +147,11 @@
   gap: var(--space-3);
 }
 
-/* 标题行内排布：设备名（过长省略）+「本机」标签横排；字体走 SettingsRow 标题档 */
+/* 标题行内排布：单行展示设备名与状态/时间；字体走 SettingsRow 标题档 */
 .deviceTitle {
   display: flex;
   align-items: center;
-  gap: var(--gap-group);
+  gap: var(--space-2_5);
   min-width: 0;
 }
 
@@ -159,32 +159,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: var(--fw-medium);
+  color: var(--text-primary);
 }
 
-/* 「本机」标签：小胶囊，底色随所在表面派生一档（通用/暗色向提亮目标混，
- * 浅色向深混——与字段、行底同一套双向口径），不写死色值 */
-.deviceTag {
-  flex-shrink: 0;
-  padding: calc(var(--gap-inline) / 2) var(--gap-group);
-  border-radius: var(--radius-option);
-  background: color-mix(
-    in oklab,
-    var(--surface-outer),
-    var(--surface-tint-target) 12%
-  );
-  font-size: var(--font-size-meta);
+.deviceMetaText {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
   font-weight: var(--fw-regular);
-  line-height: var(--account-line-caption);
-  color: var(--account-text-2);
+  flex-shrink: 0;
 }
 
-:global(html[data-theme='light']) .deviceTag,
-:global(html[data-theme='default']) .deviceTag {
-  background: color-mix(
-    in oklab,
-    var(--surface-main),
-    var(--surface-deep-target) 6%
-  );
+/* 「本机」纯文本标签：与 Button size="sm" 几何盒模型与文字内边距精确像素对齐，无背景色 */
+.currentDeviceText {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--control-height-sm, 28px);
+  padding: 0 10px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  line-height: 1;
+  color: var(--text-tertiary);
+  user-select: none;
+  flex-shrink: 0;
 }
 
 /* 状态行（SettingsRow 副标题内）：在线绿点 + 状态文字横排 */

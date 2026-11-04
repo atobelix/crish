@@ -403,8 +403,8 @@
 }
 
 .sessionItem:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
+  background: var(--sidebar-item-hover-bg);
+  color: var(--sidebar-item-hover-text);
 }
 
 /* 深色会话名再亮一档。悬停和选中仍只靠底色区分。 */
@@ -413,8 +413,8 @@
 }
 
 .sessionItem.active {
-  background: var(--state-strong);
-  color: var(--text-primary);
+  background: var(--sidebar-item-active-bg);
+  color: var(--sidebar-item-active-text);
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
 }

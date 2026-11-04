@@ -14,7 +14,7 @@
   width: 100%;
   box-sizing: border-box;
   background: var(--cover-card-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -217,7 +217,7 @@
 .mrdModelList {
   display: flex;
   flex-direction: column;
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-lg);
   /* plans/06 E4：sticky 包含块 = 真实滚动容器 .mrdModelListScroll；
      overflow:hidden 会把 footer 的 sticky 截断在中间祖先里 */
@@ -315,7 +315,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-sm);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   background: var(--state-subtle);
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -362,7 +362,7 @@
 /* ── 6. 手动添加模型表单（内嵌微卡片：14px 外框 + 舒展内边距） ── */
 .mrdAddForm {
   padding: var(--space-3_5) var(--space-4);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--sep-radius-outer);
   background: var(--cover-card-bg, var(--bg-card));
   display: flex;
@@ -446,10 +446,12 @@
   /* top / left / width 由运行时 dropdownRect 动态写入 style */
   z-index: var(--z-tooltip);
   background: var(--cover-card-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-dropdown);
-  max-height: 210px; /* 刻度外裸值：下拉列表滚动上限，无既有档，授权保留 */
+  max-height: var(
+    --expand-max-h-viewport-sm
+  ); /* 高度分档·档4 入：下拉列表滚动上限 */
   overflow-y: auto;
   padding: var(--space-1);
 }
@@ -500,7 +502,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-tertiary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   flex-shrink: 0;
 }
 
@@ -612,7 +614,7 @@
 .cascadeFlyoutPortal {
   min-width: 200px;
   background: var(--cover-card-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-dropdown);
   padding: var(--space-1_5);
@@ -691,7 +693,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   min-width: 200px; /* 布局约束，与下拉面板保持适度呼应 */
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   background: var(--cover-card-bg, var(--bg-card));
   border-radius: var(--radius-sm);
   padding: 0 var(--space-2_5);
@@ -768,7 +770,7 @@
   display: flex;
   flex-direction: column;
   background: var(--cover-card-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--sep-radius-outer);
   overflow: hidden;
   transition:
@@ -1003,7 +1005,7 @@
 
 .mrdCurrencyToggle {
   display: inline-flex;
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--cover-card-bg, var(--bg-card));
@@ -1109,7 +1111,7 @@
   align-items: center;
   gap: var(--space-1_5);
   background: var(--bg-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: var(--hairline-width) solid var(--border-panel);
   border-radius: var(--radius-lg);
   padding: var(--space-1) var(--space-2);
   white-space: nowrap;

@@ -10,7 +10,7 @@
  * （sessions/devices 拉取与回调）不变。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Button, AppIcon, cn, type IconName } from '../ui';
+import { Button, AppIcon, type IconName } from '../ui';
 import { formatDate } from '../../i18n/SafeIntl';
 import { useI18n } from '../../i18n';
 import { useAuthField } from '../../store/storeAccess';
@@ -32,6 +32,8 @@ const KIND_ICON: Record<AccountDeviceKind, IconName> = {
   desktop: 'monitor',
   laptop: 'laptop',
   phone: 'smartphone',
+  tablet: 'smartphone',
+  unknown: 'monitor',
 };
 
 function DeviceRow({
@@ -57,31 +59,24 @@ function DeviceRow({
           <span className={styles.deviceNameText}>
             {row.name || t('settings.account.devices.unknown')}
           </span>
-          {row.current ? (
-            <span className={styles.deviceTag}>
-              {t('settings.account.devices.current')}
-            </span>
-          ) : null}
-        </span>
-      }
-      desc={
-        <span className={styles.deviceStatus}>
-          {row.online ? (
-            <span className={styles.onlineDot} aria-hidden="true" />
-          ) : null}
-          <span>{meta}</span>
+          <span className={styles.deviceMetaText}>
+            {row.online ? (
+              <span className={styles.onlineDot} aria-hidden="true" />
+            ) : null}
+            <span>{meta}</span>
+          </span>
         </span>
       }
       control={
-        row.current ? undefined : (
+        row.current ? (
+          <span className={styles.currentDeviceText}>
+            {t('settings.account.devices.current')}
+          </span>
+        ) : (
           <Button
-            variant="unstyled"
+            variant="danger"
+            size="sm"
             type="button"
-            className={cn(
-              controls.button,
-              controls.secondary,
-              styles.deviceRevoke
-            )}
             onClick={() => onRevoke(row.sessionId)}
           >
             {t('settings.account.devices.revoke')}
@@ -168,13 +163,9 @@ export function AccountDeviceList() {
       {hasOthers ? (
         <div className={styles.deviceActions}>
           <Button
-            variant="unstyled"
+            variant="danger"
+            size="sm"
             type="button"
-            className={cn(
-              controls.button,
-              controls.secondary,
-              styles.deviceRevokeAll
-            )}
             disabled={busy}
             onClick={handleRevokeOthers}
           >

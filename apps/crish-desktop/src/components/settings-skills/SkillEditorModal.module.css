@@ -20,7 +20,9 @@
 
 /* 发现技能候选列表：消除虚高压抑，恢复适度内留白与项目间距 */
 .skillsDiscoverList {
-  max-height: 220px; /* 刻度外裸值：候选列表滚动上限，无既有档，授权保留 */
+  max-height: var(
+    --expand-max-h-viewport-sm
+  ); /* 高度分档·档4 入：候选列表滚动上限 */
   overflow-y: auto;
   display: flex;
   flex-direction: column;

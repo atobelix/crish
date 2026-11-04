@@ -184,7 +184,7 @@
 
 /* 类名含 coverContent：命中 overlay-scrollbar 出口，禁写 scrollbar-width */
 .detailMdCoverContent {
-  max-height: min(320px, 50vh);
+  max-height: var(--expand-max-h-nested);
   overflow: auto;
   margin: 0;
   padding: var(--space-2) 0;
@@ -203,7 +203,7 @@
 }
 
 .toolPreviewCoverContent {
-  max-height: min(240px, 40vh);
+  max-height: var(--expand-max-h-nested);
   overflow: auto;
   margin: 0;
   padding-left: var(--space-4);

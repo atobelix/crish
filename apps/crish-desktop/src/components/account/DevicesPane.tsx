@@ -8,7 +8,6 @@
 import { useI18n } from '../../i18n';
 import { SettingsPage, SettingsSection } from '../settings/SettingsUI';
 import { AccountDeviceList } from './AccountDeviceList';
-import styles from './account.module.css';
 
 export function DevicesPane() {
   const { t } = useI18n();
@@ -16,8 +15,6 @@ export function DevicesPane() {
   return (
     <SettingsPage title={t('settings.tabs.loginDevices', '登录设备')}>
       <SettingsSection>
-        <p className={styles.subIntro}>{t('settings.account.devices.desc')}</p>
-
         <AccountDeviceList />
       </SettingsSection>
     </SettingsPage>
