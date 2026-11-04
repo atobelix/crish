@@ -16,6 +16,10 @@ jest.mock('@/db/dbBootstrap', () => ({
 }));
 import { WsGateway } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
+import {
+  MemoryOutboxAdapter,
+  type OutboxPersistAdapter,
+} from '@/adapters/persistence/outboxPersist';
 import { approvalStore } from '@/domain/store/approvalStore';
 import type { ApprovalItem } from '@/domain/types/domain';
 import type { PermissionRequest } from '@crish/shared-types';
@@ -30,6 +34,7 @@ import {
   mapReconcileApprovalItem,
   resetApprovalOutboxForTest,
   resetApprovalWiringForTest,
+  retryApprovalDecision,
   type ListPendingApprovalsRepository,
 } from './approvalWiring';
 
@@ -767,5 +772,159 @@ describe('approvalWiring：装配单例（ensureApprovalWiring）', () => {
 
     expect(approvalOutboxCount()).toBe(0);
     expect(approvalStore.getState().pending).toHaveLength(0);
+  });
+});
+
+describe('approvalWiring：outbox 持久化故障面（收口批，失败不静默）', () => {
+  function makePersistBridge(persistAdapter: OutboxPersistAdapter) {
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new ApprovalBridge({
+      gateway,
+      now: () => t,
+      persistAdapter,
+    });
+    bridges.push(bridge);
+    return { gateway, bridge };
+  }
+
+  const failingSaveAdapter: OutboxPersistAdapter = {
+    persistent: true,
+    load: async () => [],
+    save: async () => {
+      throw new Error('disk full');
+    },
+    clear: async () => {},
+  };
+
+  const healthyAdapter: OutboxPersistAdapter = {
+    persistent: true,
+    load: async () => [],
+    save: async () => {},
+    clear: async () => {},
+  };
+
+  beforeEach(() => {
+    approvalStore.setState({ outboxPersistError: null });
+  });
+
+  it('水合失败 → 故障面置「离线决策恢复失败」', async () => {
+    const { bridge } = makePersistBridge({
+      persistent: true,
+      load: async () => {
+        throw new Error('db corrupted');
+      },
+      save: async () => {},
+      clear: async () => {},
+    });
+    await bridge.hydrate();
+    expect(approvalStore.getState().outboxPersistError).toBe(
+      '离线决策恢复失败'
+    );
+  });
+
+  it('内存降级适配器水合 → 故障面置内存态信息（不冒充持久化健康）', async () => {
+    const { bridge } = makePersistBridge(new MemoryOutboxAdapter());
+    await bridge.hydrate();
+    expect(approvalStore.getState().outboxPersistError).toBe(
+      '离线决策仅保存在内存中，重启应用后将丢失'
+    );
+  });
+
+  it('落盘失败（resolved 帧触发保存）→ 故障面置保存失败信息', async () => {
+    const { gateway, bridge } = makePersistBridge(failingSaveAdapter);
+    bridge.attach();
+    gateway.dispatchFrame({
+      v: 1,
+      kind: 'events.push',
+      msgId: 'push-persist-fail',
+      ts: t,
+      from: 'desktop',
+      to: 'mobile',
+      body: {
+        event: resolvedEnvelope('call-x', 'approved'),
+        sessionId: 's-1',
+        preview: false,
+      },
+    } as InboundEnvelope);
+    await tick();
+    await tick();
+    expect(approvalStore.getState().outboxPersistError).toBe(
+      '离线决策保存失败，重启应用后可能丢失'
+    );
+  });
+
+  it('真落盘成功 → 既有故障面被清除', async () => {
+    approvalStore.setState({ outboxPersistError: '离线决策恢复失败' });
+    const { gateway, bridge } = makePersistBridge(healthyAdapter);
+    bridge.attach();
+    gateway.dispatchFrame({
+      v: 1,
+      kind: 'events.push',
+      msgId: 'push-persist-ok',
+      ts: t,
+      from: 'desktop',
+      to: 'mobile',
+      body: {
+        event: resolvedEnvelope('call-x', 'approved'),
+        sessionId: 's-1',
+        preview: false,
+      },
+    } as InboundEnvelope);
+    await tick();
+    await tick();
+    expect(approvalStore.getState().outboxPersistError).toBeNull();
+  });
+});
+
+describe('approvalWiring：未送达镜像与手动重发（批 C 03-4）', () => {
+  it('入队即镜像 approvalStore.outboxItems；失败后镜像状态同步', async () => {
+    const { pushEvent, bridge, respondError } = makeHarness();
+    pushEvent(requestedEnvelope('call-1'));
+    decide('call-1', 'approved');
+
+    let items = approvalStore.getState().outboxItems;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ toolCallId: 'call-1', status: 'pending' });
+
+    const p = bridge.flush();
+    respondError('cmd.timeout', true);
+    await p;
+
+    items = approvalStore.getState().outboxItems;
+    expect(items[0]).toMatchObject({ status: 'failed', attempts: 1 });
+  });
+
+  it('retryApprovalDecision：failed 条目回到 pending 并可再发送；sent/不存在拒绝', async () => {
+    const { pushEvent, bridge, sent, respondError, respondOk } = makeHarness();
+    pushEvent(requestedEnvelope('call-1'));
+    decide('call-1', 'approved');
+
+    const p1 = bridge.flush();
+    respondError('cmd.timeout', true);
+    await p1;
+    const failed = approvalStore.getState().outboxItems[0]!;
+    expect(failed.status).toBe('failed');
+
+    expect(retryApprovalDecision(failed.id)).toBe(true);
+    const after = approvalStore.getState().outboxItems[0]!;
+    expect(after.status).toBe('pending');
+    expect(after.nextRetryAtMs).toBeNull();
+
+    // 条目可再发送（harness 以 bridge 直连，无 singleton 自动 flush）
+    const p2 = bridge.flush();
+    expect(sent).toHaveLength(2);
+    respondOk('approve', {
+      ok: true,
+      toolCallId: 'call-1',
+      decision: 'approved',
+    });
+    await p2;
+
+    // sent 待事件确认：镜像保留 sent 条目（未送达行的转绿投影数据面）
+    const sentItems = approvalStore.getState().outboxItems;
+    expect(sentItems).toHaveLength(1);
+    expect(sentItems[0]!.status).toBe('sent');
+    expect(retryApprovalDecision(sentItems[0]!.id)).toBe(false);
+    expect(retryApprovalDecision('nonexistent-id')).toBe(false);
   });
 });

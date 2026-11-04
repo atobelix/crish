@@ -9,7 +9,11 @@
 //   SqlNotificationsDao 的 NotificationRow.title 为可空（表语义），而
 //   InAppNotification.title 为非空展示字段（reducers 注释「title 展示缺省空串」）→
 //   DaoNotificationsPersist 在 listByStatus 出口做 title ?? '' 归一（去重/排序语义不变）。
-import { SqlSettingsDao, SqlNotificationsDao } from '@/db/dao';
+import {
+  SqlSettingsDao,
+  SqlNotificationsDao,
+  SqlLocalThreadsDao,
+} from '@/db/dao';
 import type { NotificationsDao } from '@/db/dao';
 import type { SqlDriver } from '@/db/driver';
 import {
@@ -24,6 +28,10 @@ import {
   configureLocalChatPersistence,
   configureLocalChatSecure,
 } from '@/domain/store/localChatStore';
+import { configureScrollAnchorPersistence } from '@/domain/store/scrollAnchorStore';
+import { configureComposerDraftPersistence } from '@/domain/store/composerDraftStore';
+import { configureSendQueuePersistence } from '@/domain/store/sendQueueStore';
+import { configureLocalChatSessionPersistence } from '@/domain/store/localChatSessionStore';
 import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
 
@@ -88,4 +96,24 @@ export function configureSqlitePersistence(driver: SqlDriver | null): void {
     driver === null ? null : (new SqlSettingsDao(driver) as SettingsPersist)
   );
   configureLocalChatSecure(expoSecureStoreDriver());
+  // 本地对话线程历史（CON-4/L2）：SQLite local_threads/local_messages；
+  // DB 降级时传 null → 纯内存形态（与配置面降级口径一致）。
+  configureLocalChatSessionPersistence(
+    driver === null ? null : new SqlLocalThreadsDao(driver)
+  );
+  // 阅读锚点（批 B ⑱）：与 settings 共用 kv 表（键 chat.scroll_anchor.*，
+  // SqlSettingsDao 的 get/set/delete 结构满足 ScrollAnchorPersist）；
+  // DB 降级时传 null → 进程内内存形态。
+  configureScrollAnchorPersistence(
+    driver === null ? null : new SqlSettingsDao(driver)
+  );
+  // 会话草稿键控 + 生成中发送队列（批 C ②）：同 kv 表共用装配
+  // （键 chat.draft.* / chat.send_queue.*，按会话键逐个 get/set，
+  // 不经 getAll 全量面）；DB 降级时传 null → 进程内内存形态。
+  configureComposerDraftPersistence(
+    driver === null ? null : new SqlSettingsDao(driver)
+  );
+  configureSendQueuePersistence(
+    driver === null ? null : new SqlSettingsDao(driver)
+  );
 }

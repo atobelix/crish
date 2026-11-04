@@ -20,6 +20,7 @@ import {
   ingestNotification,
   markAllNotificationsRead,
   markNotificationRead,
+  markNotificationsReadByIds,
   NOTIFICATION_RESOLVED_RETENTION_MS,
   recalcUnread,
   type InAppNotification,
@@ -55,6 +56,11 @@ export interface NotificationState extends NotificationListState {
   markRead: (id: string) => void;
   /** 全部已读（未读计数归零） */
   markAllRead: () => void;
+  /**
+   * 按 id 集批量已读（批 C ⑫ 打开即退休的数据面：打开会话时该会话的
+   * shown 条目一并 resolved，角标随未读计数联动归零）；返回迁移条数。
+   */
+  markManyRead: (ids: readonly string[]) => number;
   /**
    * 清理 resolved 且早于 beforeMs（缺省 now - 7 天，M5 §5.5）的条目；
    * 返回清理条数；接线层同步落库 deleteResolvedOlderThan。
@@ -136,6 +142,14 @@ export const notificationStore: StoreApi<NotificationState> =
         set((s) => {
           markAllNotificationsRead(s);
         }),
+
+      markManyRead: (ids) => {
+        let changed = 0;
+        set((s) => {
+          changed = markNotificationsReadByIds(s, new Set(ids));
+        });
+        return changed;
+      },
 
       clearResolved: (beforeMs, nowMs = nowDefault()) => {
         const cutoff = beforeMs ?? nowMs - NOTIFICATION_RESOLVED_RETENTION_MS;

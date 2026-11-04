@@ -3,6 +3,7 @@ import {
   NOTIFICATION_CATEGORY_LABEL,
   notificationKindCategory,
   notificationRouteToPath,
+  notificationSessionId,
   type NotificationDeepLinkSource,
 } from './notificationMeta';
 
@@ -173,6 +174,43 @@ describe('notificationRouteToPath（深链白名单翻译）', () => {
           kind: 'approval-requested',
           toolCallId: null,
         })
+      )
+    ).toBeNull();
+  });
+});
+
+describe('notificationSessionId（批 C ⑫ 归属会话提取）', () => {
+  it('crish://session/<id> 与相对路径都取到会话 id', () => {
+    expect(
+      notificationSessionId(makeSource({ route: 'crish://session/s-42' }))
+    ).toBe('s-42');
+    expect(notificationSessionId(makeSource({ route: '/session/s-7' }))).toBe(
+      's-7'
+    );
+    expect(
+      notificationSessionId(
+        makeSource({ route: 'crish://session/s-9?runId=run-1' })
+      )
+    ).toBe('s-9');
+  });
+
+  it('指向审批/运行/无深链 → null（归属走 toolCallId 连接，不猜）', () => {
+    expect(
+      notificationSessionId(makeSource({ route: 'crish://approval/tc-1' }))
+    ).toBeNull();
+    expect(
+      notificationSessionId(
+        makeSource({
+          kind: 'run-ended',
+          route: 'crish://run/run-7',
+          toolCallId: null,
+          runId: 'run-7',
+        })
+      )
+    ).toBeNull();
+    expect(
+      notificationSessionId(
+        makeSource({ route: null, kind: 'system', toolCallId: null })
       )
     ).toBeNull();
   });

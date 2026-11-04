@@ -9,6 +9,7 @@ import {
   setReplaying,
   markSent,
   recordFailure,
+  retryOutboxItem,
   confirmResolved,
   snapshotOutbox,
   hydrateOutbox,
@@ -321,5 +322,34 @@ describe('重放单飞（M5 §4.6.1：禁止并发重放同一批）', () => {
     const s = createOutboxState();
     expect(s.replaying).toBe(false);
     expect(setReplaying(s, true).replaying).toBe(true);
+  });
+});
+
+describe('retryOutboxItem（批 C 手动重发）', () => {
+  it('failed → pending 且退避清空，attempts 保留（失败历史不消失）', () => {
+    const failed = recordFailure(
+      enqueueDecision(createOutboxState(), makeInput(), NOW).state,
+      'o-1',
+      'net down',
+      NOW
+    );
+    const retried = retryOutboxItem(failed, 'o-1', NOW + 500);
+    const entry = retried.items[0]!;
+    expect(entry.status).toBe('pending');
+    expect(entry.nextRetryAtMs).toBeNull();
+    expect(entry.attempts).toBe(1);
+    expect(entry.updatedAtMs).toBe(NOW + 500);
+    // 回到可重放集（立即）
+    expect(collectReplayable(retried, NOW + 500)).toHaveLength(1);
+  });
+
+  it('sent 与不存在的条目不动（返回原状态引用）', () => {
+    const sent = markSent(
+      enqueueDecision(createOutboxState(), makeInput(), NOW).state,
+      'o-1',
+      NOW
+    );
+    expect(retryOutboxItem(sent, 'o-1', NOW + 1)).toBe(sent);
+    expect(retryOutboxItem(sent, 'missing', NOW + 1)).toBe(sent);
   });
 });

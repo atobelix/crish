@@ -136,3 +136,23 @@ export function notificationRouteToPath(
   }
   return null;
 }
+
+/**
+ * 通知项归属会话（批 C ⑫ 打开即退休的判定面）：深链翻译结果指向
+ * 会话页（/session/<id>）时取该 id；指向审批/运行等其他目标或无深链
+ * 时返回 null（审批类通知的会话归属由调用方经 approvalStore 以
+ * toolCallId 连接，不在此猜测）。
+ */
+export function notificationSessionId(
+  src: NotificationDeepLinkSource
+): string | null {
+  const path = notificationRouteToPath(src);
+  if (!path) return null;
+  const match = /^\/session\/([^/?#]+)/.exec(path);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return match[1]!;
+  }
+}

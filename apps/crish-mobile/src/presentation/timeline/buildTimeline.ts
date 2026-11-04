@@ -1,5 +1,20 @@
 // 会话时间线投影：把原始引擎事件折叠为对话 / 工具 / 审批 / 错误 / 系统提示块。
-// 纯函数，不依赖 React / store，便于单测与桌面端展示语义复用。
+// 纯函数（输出值只取决于输入值），不依赖 React / store，便于单测与桌面端展示语义复用。
+//
+// 身份纪律（结构共享，PERF 时间线抖动专项）：
+// - 折叠是顺序确定的：同一批 entry 对象引用、仅在尾部追加新条目时，
+//   折叠状态可增量延续——本轮未被任何新条目触碰的块，其构成条目集未变，
+//   发射时复用上轮的块对象（同一引用），memo(TimelineBlockView) 浅比较
+//   才能真正跳过已封口行；被触碰的块（流式尾、迟到更新、审批落定）以
+//   草稿的浅拷贝换新对象，照常重渲染。
+// - 合并语义靠折叠本身承载：一块由多条 entry 累积（消息 = start +
+//   deltas + end；工具 = start + updates + end），缓存的是整段折叠
+//   状态而非单条 entry 的产物，故累积内容永不丢失、永不重算错位。
+// - 输入分歧即失效：已折叠前缀中任一条目引用变化（同 seq 覆盖替换了
+//   条目对象）、输入缩短、或环形窗口裁掉头部（首条目更换）时，整段
+//   状态作废、全量重折——正确性优先于共享，绝不发射过期内容。
+// - 草稿对象永不外泄：折叠只改草稿，对外发射的是草稿快照；快照被
+//   消费方只读使用（TimelineView / 工具抽屉均不回写块对象）。
 import type { FeedEntry } from '@/domain/store/eventReducers';
 import {
   readBool,
@@ -8,6 +23,7 @@ import {
   readString,
 } from '@/domain/store/eventReducers';
 import { stripAnsi } from '@/domain/pure/ansi';
+import { presentRemoteFailure } from '@/domain/pure/remoteFailure';
 
 export type TimelineTone = 'muted' | 'info' | 'success' | 'warning' | 'danger';
 
@@ -20,14 +36,48 @@ export interface AssistantMessageBlock {
   atMs: number;
 }
 
+/**
+ * 消息级图片块（message.blocks 的 image 变体）：此前投影层只取 text 块、
+ * image 块被静默丢弃——含图片的助手消息在手机上会少内容（审计关联缺口）。
+ * 本批起如实入时间线：有可用来源（url / data）呈现图片，无来源呈现占位行。
+ */
+export interface MessageImageBlock {
+  kind: 'image';
+  id: string;
+  /** 可用图片来源（远端 url 或 data URI）；null = 无可用来源，呈现占位行 */
+  source: string | null;
+  alt: string;
+  atMs: number;
+}
+
+/**
+ * 思考链（Reasoning / DeepSeek R1 / Claude Extended Thinking 等）专用块：
+ * 解封被过滤的 thought 增量，包含思考正文、思考中状态 isThinking、耗时等。
+ */
+export interface ReasoningBlock {
+  kind: 'reasoning';
+  id: string;
+  text: string;
+  streaming: boolean;
+  isThinking: boolean;
+  durationMs?: number;
+  atMs: number;
+}
+
 export interface ToolBlock {
   kind: 'tool';
   id: string;
   toolName: string;
   summary: string;
   status: 'running' | 'done' | 'error';
+  input?: Record<string, unknown> | string;
   output: string;
+  isDiff?: boolean;
+  diffStats?: { added: number; removed: number };
   atMs: number;
+  /** 工具结束事件的接收时刻（tool-end 落点；运行中未定）。工具组总时长的
+   * 数据面（批 B：过程组收尾组头带总时长）；本地线程无工具块，不涉及。 */
+  endedAtMs?: number;
 }
 
 export interface ApprovalBlock {
@@ -43,12 +93,19 @@ export interface NoticeBlock {
   kind: 'notice';
   id: string;
   text: string;
+  /** 原始诊断串（仅失败 notice：用户点开才呈现，主文案走分类映射） */
+  detail?: string;
   tone: TimelineTone;
   atMs: number;
 }
 
 export type TimelineBlock =
-  AssistantMessageBlock | ToolBlock | ApprovalBlock | NoticeBlock;
+  | AssistantMessageBlock
+  | MessageImageBlock
+  | ReasoningBlock
+  | ToolBlock
+  | ApprovalBlock
+  | NoticeBlock;
 
 const MAX_TOOL_OUTPUT = 4000;
 
@@ -79,6 +136,47 @@ function textOfMessage(frame: FeedEntry): string {
   );
 }
 
+/**
+ * message.blocks 中的 image 块 → 图片来源列表（保持块序）。
+ * 来源优先级：url 直用；data 为完整 data URI 直用，裸 base64 数据拼
+ * `data:<mimeType>;base64,`（mimeType 是注册表必填字段，缺失则无可用来源）。
+ */
+function imagesOfMessage(
+  frame: FeedEntry
+): { source: string | null; alt: string }[] {
+  const message = readRecord(frame['message']);
+  const blocks = message?.['blocks'];
+  if (!Array.isArray(blocks)) return [];
+  const images: { source: string | null; alt: string }[] = [];
+  for (const block of blocks) {
+    const record = readRecord(block);
+    if (!record || record['type'] !== 'image') continue;
+    const url =
+      typeof record['url'] === 'string' && record['url'] !== ''
+        ? record['url']
+        : null;
+    const data =
+      typeof record['data'] === 'string' && record['data'] !== ''
+        ? record['data']
+        : null;
+    const mimeType =
+      typeof record['mimeType'] === 'string' ? record['mimeType'] : null;
+    let source = url;
+    if (!source && data) {
+      source = data.startsWith('data:')
+        ? data
+        : mimeType
+          ? `data:${mimeType};base64,${data}`
+          : null;
+    }
+    images.push({
+      source,
+      alt: typeof record['alt'] === 'string' ? record['alt'] : '',
+    });
+  }
+  return images;
+}
+
 function messageMeta(frame: FeedEntry): {
   id: string;
   role: 'assistant' | 'user';
@@ -93,15 +191,91 @@ function messageMeta(frame: FeedEntry): {
   return { id, role, atMs: frame.receivedAtMs };
 }
 
+function isThoughtDelta(frame: FeedEntry): boolean {
+  const block = readRecord(frame['block']);
+  if (block && (block['type'] === 'thought' || block['type'] === 'reasoning')) {
+    return true;
+  }
+  return Boolean(
+    readString(frame, 'thought') ||
+    readString(frame, 'thoughtDelta') ||
+    readString(frame, 'reasoning') ||
+    readString(frame, 'reasoningDelta')
+  );
+}
+
+function deltaThought(frame: FeedEntry): string {
+  const block = readRecord(frame['block']);
+  if (block && (block['type'] === 'thought' || block['type'] === 'reasoning')) {
+    const text =
+      (typeof block['text'] === 'string' ? block['text'] : null) ??
+      (typeof block['thought'] === 'string' ? block['thought'] : null) ??
+      readString(frame, 'text') ??
+      '';
+    return stripAnsi(text);
+  }
+  const direct =
+    readString(frame, 'thought') ??
+    readString(frame, 'thoughtDelta') ??
+    readString(frame, 'reasoning') ??
+    readString(frame, 'reasoningDelta');
+  return direct ? stripAnsi(direct) : '';
+}
+
 function deltaText(frame: FeedEntry): string {
   const block = readRecord(frame['block']);
   if (!block) return stripAnsi(readString(frame, 'text') ?? '');
-  if (block['type'] === 'thought') return '';
+  if (block['type'] === 'thought' || block['type'] === 'reasoning') return '';
   const text =
     (typeof block['text'] === 'string' ? block['text'] : null) ??
     readString(frame, 'text') ??
     '';
   return stripAnsi(text);
+}
+
+function thoughtOfMessage(frame: FeedEntry): string {
+  const message = readRecord(frame['message']);
+  if (!message) {
+    return stripAnsi(
+      readString(frame, 'thought') ?? readString(frame, 'reasoning') ?? ''
+    );
+  }
+  const blocks = message['blocks'];
+  if (Array.isArray(blocks)) {
+    const parts: string[] = [];
+    for (const block of blocks) {
+      const record = readRecord(block);
+      if (!record) continue;
+      if (record['type'] === 'thought' || record['type'] === 'reasoning') {
+        const text =
+          typeof record['text'] === 'string'
+            ? record['text']
+            : typeof record['thought'] === 'string'
+              ? record['thought']
+              : '';
+        if (text.trim() !== '') {
+          parts.push(text);
+        }
+      }
+    }
+    if (parts.length > 0) return stripAnsi(parts.join('\n\n'));
+  }
+  const metadata = readRecord(message['metadata']);
+  const metaThought =
+    metadata && typeof metadata['thought'] === 'string'
+      ? metadata['thought']
+      : metadata && typeof metadata['reasoning'] === 'string'
+        ? metadata['reasoning']
+        : null;
+  const msgThought =
+    typeof message['thought'] === 'string'
+      ? message['thought']
+      : typeof message['reasoning'] === 'string'
+        ? message['reasoning']
+        : null;
+  return stripAnsi(
+    metaThought ?? msgThought ?? readString(frame, 'thought') ?? ''
+  );
 }
 
 function toolIdOf(frame: FeedEntry, fallback: string): string {
@@ -164,86 +338,192 @@ function terminalNotice(frame: FeedEntry): NoticeBlock | null {
     };
   }
   const reason = readString(frame, 'error') ?? readString(frame, 'reason');
+  // 批 C ⑮：原始 reason 串不直接内联——先映射本地封闭分类再呈现
+  // （标题 + 一句话），原始串只进 detail（点开才见）；映射不中归
+  // 「未分类」诚实呈现（presentRemoteFailure 口径）。
+  const presentation = presentRemoteFailure(reason);
   return {
     kind: 'notice',
     id: `run-terminal-${readNumber(frame, 'sequence') ?? frame.receivedAtMs}`,
-    text: reason ? `运行失败：${reason}` : '运行失败',
+    text: presentation.text,
+    ...(presentation.detail !== undefined
+      ? { detail: presentation.detail }
+      : {}),
     tone: 'danger',
     atMs: frame.receivedAtMs,
   };
 }
 
+// ── 增量折叠状态（身份纪律的载体，见文件头注） ──
+
 /**
- * 事件窗口 → 时间线块（顺序 = 首次出现顺序）。
- * 只保留有阅读价值的内容：助手正文、工具调用、审批、错误、运行终态。
+ * 一段事件流的折叠状态：草稿块 + 索引 + 已折叠前缀的条目引用快照。
+ * 以流的首条目对象为键存入 WeakMap——不同会话 / 窗口的首条目互不
+ * 相同，各自独立延续；条目对象被回收时状态随之回收，无显式清理。
  */
-export function buildSessionTimeline(
-  entries: readonly FeedEntry[]
-): TimelineBlock[] {
-  const blocks: TimelineBlock[] = [];
-  const messageIndex = new Map<string, number>();
-  const toolIndex = new Map<string, number>();
-  const approvalIndex = new Map<string, number>();
-  let lastToolId: string | null = null;
+interface TimelineFoldState {
+  /** 草稿块（折叠在此累积变异，永不外泄） */
+  blocks: TimelineBlock[];
+  /** 与草稿同序的上轮发射快照；null = 上轮被空消息过滤（或尚未发射） */
+  emitted: (TimelineBlock | null)[];
+  /** 本轮折叠中被条目触碰（变异）过的草稿下标，发射后清空 */
+  touched: Set<number>;
+  pendingMeta: Map<
+    string,
+    { id: string; role: 'assistant' | 'user'; atMs: number }
+  >;
+  messageIndex: Map<string, number>;
+  imageIndex: Map<string, number>;
+  reasoningIndex: Map<string, number>;
+  toolIndex: Map<string, number>;
+  approvalIndex: Map<string, number>;
+  lastToolId: string | null;
+  /** 已折叠前缀的条目引用快照（与下轮输入逐个比对，判增量 / 分歧） */
+  foldedRefs: readonly FeedEntry[];
+  /** 上轮返回的数组（元素全同时复用同一数组引用） */
+  lastOut: TimelineBlock[] | null;
+}
 
-  const findBlock = <T extends TimelineBlock>(
-    map: Map<string, number>,
-    id: string,
-    kind: T['kind']
-  ): T | null => {
-    const index = map.get(id);
-    if (index === undefined) return null;
-    const block = blocks[index];
-    return block && block.kind === kind ? (block as T) : null;
+function createFoldState(): TimelineFoldState {
+  return {
+    blocks: [],
+    emitted: [],
+    touched: new Set(),
+    pendingMeta: new Map(),
+    messageIndex: new Map(),
+    imageIndex: new Map(),
+    reasoningIndex: new Map(),
+    toolIndex: new Map(),
+    approvalIndex: new Map(),
+    lastToolId: null,
+    foldedRefs: [],
+    lastOut: null,
   };
+}
 
-  entries.forEach((entry, entryIndex) => {
+function pushDraft(state: TimelineFoldState, block: TimelineBlock): number {
+  const index = state.blocks.length;
+  state.blocks.push(block);
+  state.emitted.push(null);
+  return index;
+}
+
+function draftAt<T extends TimelineBlock>(
+  state: TimelineFoldState,
+  map: Map<string, number>,
+  id: string,
+  kind: T['kind']
+): { index: number; block: T } | null {
+  const index = map.get(id);
+  if (index === undefined) return null;
+  const block = state.blocks[index];
+  return block && block.kind === kind ? { index, block: block as T } : null;
+}
+
+/** 把 entries[from..] 折叠进 state（语义与全量折叠逐字一致）。 */
+function foldEntries(
+  state: TimelineFoldState,
+  entries: readonly FeedEntry[],
+  from: number
+): void {
+  for (let entryIndex = from; entryIndex < entries.length; entryIndex += 1) {
+    const entry = entries[entryIndex]!;
     const type = entry.type;
     const fallbackId = `entry-${readNumber(entry, 'sequence') ?? entryIndex}`;
 
     switch (type) {
       case 'message-start': {
         const meta = messageMeta(entry);
-        if (messageIndex.has(meta.id)) break;
-        messageIndex.set(meta.id, blocks.length);
-        blocks.push({
-          kind: 'message',
-          id: meta.id,
-          role: meta.role,
-          text: '',
-          streaming: true,
-          atMs: meta.atMs,
-        });
+        state.pendingMeta.set(meta.id, meta);
+        const initThought = thoughtOfMessage(entry);
+        if (initThought !== '' && !state.reasoningIndex.has(meta.id)) {
+          const rIndex = pushDraft(state, {
+            kind: 'reasoning',
+            id: `${meta.id}:reasoning`,
+            text: initThought,
+            streaming: true,
+            isThinking: true,
+            atMs: meta.atMs,
+          });
+          state.reasoningIndex.set(meta.id, rIndex);
+        }
         break;
       }
       case 'message-delta': {
-        const meta = messageMeta(entry);
-        const text = deltaText(entry);
-        if (text === '') {
-          if (!messageIndex.has(meta.id)) {
-            messageIndex.set(meta.id, blocks.length);
-            blocks.push({
-              kind: 'message',
-              id: meta.id,
-              role: meta.role,
-              text: '',
+        const msgId =
+          readString(entry, 'messageId') ??
+          (readRecord(entry['message'])?.['id'] as string | undefined);
+        const meta =
+          (msgId ? state.pendingMeta.get(msgId) : null) ?? messageMeta(entry);
+
+        if (isThoughtDelta(entry)) {
+          const thought = deltaThought(entry);
+          const existingReasoning = draftAt<ReasoningBlock>(
+            state,
+            state.reasoningIndex,
+            meta.id,
+            'reasoning'
+          );
+          if (existingReasoning) {
+            if (thought !== '') {
+              existingReasoning.block.text += thought;
+            }
+            existingReasoning.block.streaming = true;
+            existingReasoning.block.isThinking = true;
+            state.touched.add(existingReasoning.index);
+          } else {
+            const rIndex = pushDraft(state, {
+              kind: 'reasoning',
+              id: `${meta.id}:reasoning`,
+              text: thought,
               streaming: true,
+              isThinking: true,
               atMs: meta.atMs,
             });
+            state.reasoningIndex.set(meta.id, rIndex);
           }
           break;
         }
-        const existing = findBlock<AssistantMessageBlock>(
-          messageIndex,
+
+        const text = deltaText(entry);
+        // 非思考正文到来，说明当前消息的思考阶段已完成
+        const activeReasoning = draftAt<ReasoningBlock>(
+          state,
+          state.reasoningIndex,
+          meta.id,
+          'reasoning'
+        );
+        if (
+          activeReasoning &&
+          (activeReasoning.block.streaming || activeReasoning.block.isThinking)
+        ) {
+          activeReasoning.block.streaming = false;
+          activeReasoning.block.isThinking = false;
+          if (activeReasoning.block.durationMs === undefined) {
+            activeReasoning.block.durationMs = Math.max(
+              0,
+              entry.receivedAtMs - activeReasoning.block.atMs
+            );
+          }
+          state.touched.add(activeReasoning.index);
+        }
+
+        if (text === '') {
+          break;
+        }
+
+        const existing = draftAt<AssistantMessageBlock>(
+          state,
+          state.messageIndex,
           meta.id,
           'message'
         );
         if (existing) {
-          existing.text += text;
-          existing.streaming = true;
+          existing.block.text += text;
+          existing.block.streaming = true;
+          state.touched.add(existing.index);
         } else {
-          messageIndex.set(meta.id, blocks.length);
-          blocks.push({
+          const index = pushDraft(state, {
             kind: 'message',
             id: meta.id,
             role: meta.role,
@@ -251,23 +531,60 @@ export function buildSessionTimeline(
             streaming: true,
             atMs: meta.atMs,
           });
+          state.messageIndex.set(meta.id, index);
         }
         break;
       }
       case 'message-end': {
-        const meta = messageMeta(entry);
+        const rawMeta = messageMeta(entry);
+        const meta = state.pendingMeta.get(rawMeta.id) ?? rawMeta;
         const text = textOfMessage(entry);
-        const existing = findBlock<AssistantMessageBlock>(
-          messageIndex,
+        const thought = thoughtOfMessage(entry);
+
+        // 1. 思考链收口
+        const existingReasoning = draftAt<ReasoningBlock>(
+          state,
+          state.reasoningIndex,
+          meta.id,
+          'reasoning'
+        );
+        if (existingReasoning) {
+          if (thought !== '') existingReasoning.block.text = thought;
+          existingReasoning.block.streaming = false;
+          existingReasoning.block.isThinking = false;
+          if (existingReasoning.block.durationMs === undefined) {
+            existingReasoning.block.durationMs = Math.max(
+              0,
+              entry.receivedAtMs - existingReasoning.block.atMs
+            );
+          }
+          state.touched.add(existingReasoning.index);
+        } else if (thought !== '') {
+          const rIndex = pushDraft(state, {
+            kind: 'reasoning',
+            id: `${meta.id}:reasoning`,
+            text: thought,
+            streaming: false,
+            isThinking: false,
+            durationMs: 0,
+            atMs: meta.atMs,
+          });
+          state.reasoningIndex.set(meta.id, rIndex);
+        }
+
+        // 2. 正文收口
+        const existing = draftAt<AssistantMessageBlock>(
+          state,
+          state.messageIndex,
           meta.id,
           'message'
         );
         if (existing) {
-          if (text !== '') existing.text = text;
-          existing.streaming = false;
+          if (text !== '') existing.block.text = text;
+          existing.block.streaming = false;
+          state.touched.add(existing.index);
         } else if (text !== '') {
-          messageIndex.set(meta.id, blocks.length);
-          blocks.push({
+          const index = pushDraft(state, {
             kind: 'message',
             id: meta.id,
             role: meta.role,
@@ -275,53 +592,89 @@ export function buildSessionTimeline(
             streaming: false,
             atMs: meta.atMs,
           });
+          state.messageIndex.set(meta.id, index);
         }
+
+        // 3. image 块如实入线（落本消息块之后；同 id 只入一次，防重放重复）
+        imagesOfMessage(entry).forEach((image, imageOrder) => {
+          const imageId = `${meta.id}:image:${imageOrder}`;
+          if (state.imageIndex.has(imageId)) return;
+          const index = pushDraft(state, {
+            kind: 'image',
+            id: imageId,
+            source: image.source,
+            alt: image.alt,
+            atMs: meta.atMs,
+          });
+          state.imageIndex.set(imageId, index);
+        });
         break;
       }
       case 'tool-start': {
         const id = toolIdOf(entry, fallbackId);
-        lastToolId = id;
+        state.lastToolId = id;
         const call = readRecord(entry['call']);
         const summary = stripAnsi(
           readString(entry, 'summary') ??
             (call && typeof call['summary'] === 'string' ? call['summary'] : '')
         );
-        toolIndex.set(id, blocks.length);
-        blocks.push({
+        const rawInput =
+          entry['input'] ??
+          (call && call['input'] ? call['input'] : undefined) ??
+          entry['args'] ??
+          (call && call['args'] ? call['args'] : undefined);
+        const input =
+          typeof rawInput === 'object' && rawInput !== null
+            ? (rawInput as Record<string, unknown>)
+            : typeof rawInput === 'string'
+              ? rawInput
+              : undefined;
+        const index = pushDraft(state, {
           kind: 'tool',
           id,
           toolName: toolNameOf(entry),
           summary,
           status: 'running',
+          input,
           output: '',
           atMs: entry.receivedAtMs,
         });
+        state.toolIndex.set(id, index);
         break;
       }
       case 'tool-update': {
-        const id = toolIdOf(entry, lastToolId ?? fallbackId);
+        const id = toolIdOf(entry, state.lastToolId ?? fallbackId);
         const update = readRecord(entry['update']);
         const text = stripAnsi(
           readString(entry, 'text') ??
             (update && typeof update['text'] === 'string' ? update['text'] : '')
         );
-        const existing = findBlock<ToolBlock>(toolIndex, id, 'tool');
+        const existing = draftAt<ToolBlock>(state, state.toolIndex, id, 'tool');
         if (existing) {
           if (text) {
-            existing.output = `${existing.output}${text}`.slice(
+            existing.block.output = `${existing.block.output}${text}`.slice(
               -MAX_TOOL_OUTPUT
             );
+            state.touched.add(existing.index);
           }
-        } else if (lastToolId) {
-          const last = findBlock<ToolBlock>(toolIndex, lastToolId, 'tool');
+        } else if (state.lastToolId) {
+          const last = draftAt<ToolBlock>(
+            state,
+            state.toolIndex,
+            state.lastToolId,
+            'tool'
+          );
           if (last && text) {
-            last.output = `${last.output}${text}`.slice(-MAX_TOOL_OUTPUT);
+            last.block.output = `${last.block.output}${text}`.slice(
+              -MAX_TOOL_OUTPUT
+            );
+            state.touched.add(last.index);
           }
         }
         break;
       }
       case 'tool-end': {
-        const id = toolIdOf(entry, lastToolId ?? fallbackId);
+        const id = toolIdOf(entry, state.lastToolId ?? fallbackId);
         const result = readRecord(entry['result']);
         const isError =
           readBool(entry, 'result', 'isError') || result?.['isError'] === true;
@@ -331,27 +684,37 @@ export function buildSessionTimeline(
               ? result['output']
               : '')
         );
-        const existing = findBlock<ToolBlock>(toolIndex, id, 'tool');
+        const isDiff =
+          readBool(entry, 'result', 'isDiff') ||
+          result?.['isDiff'] === true ||
+          output.includes('@@ -') ||
+          output.includes('diff --git');
+        const existing = draftAt<ToolBlock>(state, state.toolIndex, id, 'tool');
         if (existing) {
-          existing.status = isError ? 'error' : 'done';
+          existing.block.status = isError ? 'error' : 'done';
+          existing.block.endedAtMs = entry.receivedAtMs;
+          if (isDiff) existing.block.isDiff = true;
           if (output) {
-            existing.output = `${existing.output}${output}`.slice(
+            existing.block.output = `${existing.block.output}${output}`.slice(
               -MAX_TOOL_OUTPUT
             );
           }
+          state.touched.add(existing.index);
         } else {
-          toolIndex.set(id, blocks.length);
-          blocks.push({
+          const index = pushDraft(state, {
             kind: 'tool',
             id,
             toolName: toolNameOf(entry),
             summary: '',
             status: isError ? 'error' : 'done',
+            isDiff,
             output,
             atMs: entry.receivedAtMs,
+            endedAtMs: entry.receivedAtMs,
           });
+          state.toolIndex.set(id, index);
         }
-        lastToolId = null;
+        state.lastToolId = null;
         break;
       }
       case 'approval-requested': {
@@ -360,9 +723,8 @@ export function buildSessionTimeline(
           readString(entry, 'tool_call_id') ??
           fallbackId;
         const summary = stripAnsi(readString(entry, 'summary') ?? '');
-        if (!approvalIndex.has(id)) {
-          approvalIndex.set(id, blocks.length);
-          blocks.push({
+        if (!state.approvalIndex.has(id)) {
+          const index = pushDraft(state, {
             kind: 'approval',
             id,
             toolName: readString(entry, 'toolName') ?? '工具',
@@ -370,6 +732,7 @@ export function buildSessionTimeline(
             status: 'pending',
             atMs: entry.receivedAtMs,
           });
+          state.approvalIndex.set(id, index);
         }
         break;
       }
@@ -378,13 +741,17 @@ export function buildSessionTimeline(
           readString(entry, 'toolCallId') ??
           readString(entry, 'tool_call_id') ??
           fallbackId;
-        const existing = findBlock<ApprovalBlock>(
-          approvalIndex,
+        const existing = draftAt<ApprovalBlock>(
+          state,
+          state.approvalIndex,
           id,
           'approval'
         );
         if (existing) {
-          existing.status = approvalStatusOf(readString(entry, 'decision'));
+          existing.block.status = approvalStatusOf(
+            readString(entry, 'decision')
+          );
+          state.touched.add(existing.index);
         }
         break;
       }
@@ -394,7 +761,7 @@ export function buildSessionTimeline(
           readString(entry, 'error') ??
           readString(entry, 'reason') ??
           '运行出现异常';
-        blocks.push({
+        pushDraft(state, {
           kind: 'notice',
           id: `error-${readNumber(entry, 'sequence') ?? entryIndex}`,
           text: stripAnsi(text),
@@ -405,11 +772,11 @@ export function buildSessionTimeline(
       }
       case 'run-terminal': {
         const notice = terminalNotice(entry);
-        if (notice) blocks.push(notice);
+        if (notice) pushDraft(state, notice);
         break;
       }
       case 'task-failed': {
-        blocks.push({
+        pushDraft(state, {
           kind: 'notice',
           id: `task-failed-${readNumber(entry, 'sequence') ?? entryIndex}`,
           text: stripAnsi(
@@ -425,12 +792,87 @@ export function buildSessionTimeline(
       default:
         break;
     }
-  });
+  }
+}
 
-  // 空消息（只有 message-start 没有正文）不占位
-  return blocks.filter(
-    (block) => block.kind !== 'message' || block.text.trim() !== ''
-  );
+/**
+ * 发射：草稿 → 对外块数组。未被触碰的草稿复用上轮快照（同一引用）；
+ * 被触碰 / 新生草稿发浅拷贝新快照；空消息（只有 start 没有正文）不
+ * 占位（与历史口径一致，过滤在发射面做、草稿保留待后续增量续写）。
+ * 元素与上轮全同时复用上轮数组本身。
+ */
+function emitTimeline(state: TimelineFoldState): TimelineBlock[] {
+  const prev = state.lastOut;
+  const out: TimelineBlock[] = [];
+  let sameAsPrev = prev !== null;
+  for (let index = 0; index < state.blocks.length; index += 1) {
+    const draft = state.blocks[index]!;
+    if (draft.kind === 'message' && draft.text.trim() === '') {
+      state.emitted[index] = null;
+      continue;
+    }
+    if (
+      draft.kind === 'reasoning' &&
+      draft.text.trim() === '' &&
+      !draft.streaming &&
+      !draft.isThinking
+    ) {
+      state.emitted[index] = null;
+      continue;
+    }
+    let snapshot = state.emitted[index] ?? null;
+    if (snapshot === null || state.touched.has(index)) {
+      snapshot = { ...draft };
+      state.emitted[index] = snapshot;
+    }
+    if (sameAsPrev && prev![out.length] !== snapshot) sameAsPrev = false;
+    out.push(snapshot);
+  }
+  state.touched.clear();
+  if (sameAsPrev && prev !== null && prev.length === out.length) return prev;
+  state.lastOut = out;
+  return out;
+}
+
+/** 下轮输入是否同一段流的尾部延续（已折叠前缀逐个引用相等）。 */
+function isFoldExtension(
+  state: TimelineFoldState,
+  entries: readonly FeedEntry[]
+): boolean {
+  const prev = state.foldedRefs;
+  if (entries.length < prev.length) return false;
+  for (let index = 0; index < prev.length; index += 1) {
+    if (entries[index] !== prev[index]) return false;
+  }
+  return true;
+}
+
+const foldStates = new WeakMap<FeedEntry, TimelineFoldState>();
+const EMPTY_TIMELINE: TimelineBlock[] = [];
+
+/**
+ * 事件窗口 → 时间线块（顺序 = 首次出现顺序）。
+ * 只保留有阅读价值的内容：助手正文、工具调用、审批、错误、运行终态。
+ * 输出值与全量折叠恒等；对象身份按文件头注的身份纪律共享。
+ */
+export function buildSessionTimeline(
+  entries: readonly FeedEntry[]
+): TimelineBlock[] {
+  if (entries.length === 0) return EMPTY_TIMELINE;
+  const anchor = entries[0]!;
+  let state = foldStates.get(anchor);
+  if (state && !isFoldExtension(state, entries)) {
+    // 分歧（条目被替换 / 输入缩短 / 换流）：整段作废，全量重折
+    foldStates.delete(anchor);
+    state = undefined;
+  }
+  if (!state) {
+    state = createFoldState();
+    foldStates.set(anchor, state);
+  }
+  foldEntries(state, entries, state.foldedRefs.length);
+  state.foldedRefs = entries.slice();
+  return emitTimeline(state);
 }
 
 /** 工具块一行摘要（折叠态）。 */

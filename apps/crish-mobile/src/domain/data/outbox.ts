@@ -236,6 +236,29 @@ export function needsHumanAttention(item: OutboxItem): boolean {
   return item.attempts >= OUTBOX_MAX_ATTEMPTS;
 }
 
+/**
+ * 用户手动重发（批 C 未送达行规格化）：failed / pending 条目立即回到
+ * 可重放态（status → pending、退避清空），attempts 保留（失败历史是
+ * 真实信息，不因手动重试清零；退避表按 attempts 继续计程）。
+ * sent（已送达待确认）与不存在的条目不动，返回原状态引用。
+ */
+export function retryOutboxItem(
+  state: OutboxState,
+  id: string,
+  nowMs: number
+): OutboxState {
+  const target = state.items.find((i) => i.id === id);
+  if (!target || target.status === 'sent') return state;
+  return {
+    ...state,
+    items: state.items.map((i) =>
+      i.id === id
+        ? { ...i, status: 'pending', nextRetryAtMs: null, updatedAtMs: nowMs }
+        : i
+    ),
+  };
+}
+
 /** 条目 TTL 到期（D6 §6.4：仅展示层语义「可能已过期」，仍在队列中——命令仍可能被桌面接受） */
 export function isTtlExpired(item: OutboxItem, nowMs: number): boolean {
   return nowMs - item.createdAtMs > OUTBOX_TTL_MS;

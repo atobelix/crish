@@ -219,3 +219,28 @@ describe('持久化接口注入面（接线层先落库再推 store 的注记面
     expect(persist.upsert).not.toHaveBeenCalled();
   });
 });
+
+describe('markManyRead（批 C ⑫ 打开即退休的数据面）', () => {
+  beforeEach(() => {
+    resetNotificationsForTest();
+  });
+
+  it('按 id 集批量已读：只迁移命中的 shown 条目并返回条数，未读计数联动', () => {
+    const store = notificationStore.getState();
+    store.ingest(makeInput({ id: 'r-1' }), NOW);
+    store.ingest(makeInput({ id: 'r-2' }), NOW + 1);
+    store.ingest(makeInput({ id: 'r-3' }), NOW + 2);
+    expect(unreadOf()).toBe(3);
+
+    const changed = store.markManyRead(['r-1', 'r-3', 'missing-id']);
+    expect(changed).toBe(2);
+    expect(unreadOf()).toBe(1);
+    const byId = new Map(listOf().map((n) => [n.id, n.status]));
+    expect(byId.get('r-1')).toBe('resolved');
+    expect(byId.get('r-2')).toBe('shown');
+    expect(byId.get('r-3')).toBe('resolved');
+
+    // 幂等：重复退休同一批返回 0
+    expect(store.markManyRead(['r-1', 'r-3'])).toBe(0);
+  });
+});

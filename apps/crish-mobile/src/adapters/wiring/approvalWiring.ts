@@ -41,6 +41,7 @@ import {
   hydrateOutbox,
   markSent,
   recordFailure,
+  retryOutboxItem,
   snapshotOutbox,
   type EnqueueInput,
   type OutboxItem,
@@ -63,6 +64,21 @@ import type {
   PendingApproval,
 } from '@crish/shared-types';
 import { getObservationWiring, onObservationOpen } from './observationWiring';
+import { authStore } from '@/domain/store/authStore';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('approvalWiring');
+
+/**
+ * 审批接线属主推导（M7）：显式 opts 优先（ensure 调用点解析）；本函数是
+ * 未显式给出时的兜底——relay 接线 url 形如 relay://<targetId>，属主即
+ * 目标设备；配对接线属主 = 已配对桌面 id（authStore.desktopId）。
+ */
+function deriveOwnerDeviceId(): string | undefined {
+  const url = getObservationWiring()?.url;
+  if (url?.startsWith('relay://')) return url.slice('relay://'.length);
+  return authStore.getState().desktopId ?? undefined;
+}
 
 // ── 决策冲突/终局错误码（不可重试；D6 §6.3 不自动重试 conflict/stale） ────────
 // - cmd.approval_mismatch：toolCallId 不在待审批集合（I-02 语义，F2 §11.2 冲突表）；
@@ -89,11 +105,52 @@ export function approvalOutboxCount(): number {
 /** 测试隔离：清空内存 outbox 队列（仅测试调用） */
 export function resetApprovalOutboxForTest(): void {
   outboxState = createOutboxState();
+  syncOutboxCount();
 }
 
-/** 审批 store 角标同步（outbox 三态任何变化后调用，M5 §3.1 setOutboxCount） */
+/**
+ * 审批 store 同步漏斗（outbox 三态任何变化后调用）：角标计数
+ * （M5 §3.1 setOutboxCount）+ 条目镜像（批 C 未送达行投影的数据面，
+ * approvalStore.outboxItems）。outbox 的全部变更路径（入队 / 重放 /
+ * 水合 / 事件收敛 / 冲突收敛）都经此漏斗，不许绕行。
+ */
 function syncOutboxCount(): void {
   approvalStore.getState().setOutboxCount(approvalOutboxCount());
+  approvalStore.getState().setOutboxItems(snapshotOutbox(outboxState));
+}
+
+// ── outbox 持久化故障面（收口批：失败必须经 approvalStore 状态出口显形，
+// 不再仅有日志出口——离线决策静默丢失是用户可见的数据事故） ────────────────
+
+/** 落盘失败（SQLite 写入异常）：决策仍在内存队列中，但重启后可能丢失 */
+const OUTBOX_PERSIST_FAILED_MESSAGE = '离线决策保存失败，重启应用后可能丢失';
+/** 水合失败（启动恢复异常）：此前落盘的决策未能恢复 */
+const OUTBOX_HYDRATE_FAILED_MESSAGE = '离线决策恢复失败';
+/** DB 装配失败降级内存适配器：决策从未落盘，进程退出即丢 */
+const OUTBOX_MEMORY_ONLY_MESSAGE = '离线决策仅保存在内存中，重启应用后将丢失';
+
+/**
+ * 保存 outbox 快照并维护故障面：真落盘成功 → 清故障；落盘失败 → 置失败
+ * 信息（同时 log.error 留痕）；内存降级适配器 → 恒置内存态信息（其 save
+ * 成功不构成持久化健康，不许清面）。
+ */
+function persistOutbox(adapter: OutboxPersistAdapter): void {
+  if (!adapter.persistent) {
+    approvalStore.getState().setOutboxPersistError(OUTBOX_MEMORY_ONLY_MESSAGE);
+  }
+  void adapter.save(snapshotOutbox(outboxState)).then(
+    () => {
+      if (adapter.persistent) {
+        approvalStore.getState().setOutboxPersistError(null);
+      }
+    },
+    (e: unknown) => {
+      log.error('outbox 持久化失败，离线决策可能丢失', e);
+      approvalStore
+        .getState()
+        .setOutboxPersistError(OUTBOX_PERSIST_FAILED_MESSAGE);
+    }
+  );
 }
 
 // ── 命令构造（C11/C12/C13，M6 §4.2；协议注册表锁定的 kind/command 双射） ──────
@@ -223,6 +280,12 @@ export interface ApprovalWiringOptions {
   listPendingApprovals?: ListPendingApprovalsRepository;
   /** 持久化适配器（缺省 = SecureStoreOutboxAdapter，抗进程强杀） */
   persistAdapter?: OutboxPersistAdapter;
+  /**
+   * 接线属主设备（M7 盖章穿线）：帧/对账驱动的 store 写入以此为来源，
+   * 与 approvalStore 盖章不符即丢弃（防旧桥在途对账在切换后落入新
+   * 设备审批面）。缺省由 ensure 路径按现行接线推导。
+   */
+  ownerDeviceId?: string;
 }
 
 export class ApprovalBridge {
@@ -230,6 +293,8 @@ export class ApprovalBridge {
   private readonly nowFn: () => number;
   private readonly listPendingRepo: ListPendingApprovalsRepository;
   readonly persistAdapter?: OutboxPersistAdapter;
+  /** 接线属主设备（M7 盖章穿线；见 ApprovalWiringOptions.ownerDeviceId） */
+  private readonly ownerDeviceId?: string;
   private unsubscribers: Array<() => void> = [];
   /** outbox 重放单飞（M5 §4.6.1：禁止并发重放） */
   private replayInflight = false;
@@ -242,21 +307,25 @@ export class ApprovalBridge {
     this.listPendingRepo =
       opts.listPendingApprovals ?? gatewayListPendingApprovals;
     this.persistAdapter = opts.persistAdapter;
+    this.ownerDeviceId = opts.ownerDeviceId;
   }
 
   private syncAndPersist(): void {
     syncOutboxCount();
     if (!this.persistAdapter) return;
-    // 持久化失败不得静默：离线决策丢失是用户可见的数据事故，必须留下
-    // 可观测错误（console.error + 可选 onError 上报），而不是 void 吞掉。
-    void this.persistAdapter.save(snapshotOutbox(outboxState)).catch((e) => {
-      console.error('[approvalWiring] outbox 持久化失败，离线决策可能丢失:', e);
-    });
+    // 持久化失败不得静默：经 persistOutbox 走 approvalStore 故障面显形
+    // （审批列表页呈现）+ log.error 留痕，不再是仅日志的静默点。
+    persistOutbox(this.persistAdapter);
   }
 
   /** 从 SQLite approval_queue 水合恢复 Outbox 队列 */
   async hydrate(): Promise<void> {
     if (!this.persistAdapter) return;
+    if (!this.persistAdapter.persistent) {
+      approvalStore
+        .getState()
+        .setOutboxPersistError(OUTBOX_MEMORY_ONLY_MESSAGE);
+    }
     try {
       const persisted = await this.persistAdapter.load();
       if (persisted.length > 0) {
@@ -264,7 +333,10 @@ export class ApprovalBridge {
         syncOutboxCount();
       }
     } catch (e) {
-      console.error('[approvalWiring] outbox 水合失败:', e);
+      log.error('outbox 水合失败', e);
+      approvalStore
+        .getState()
+        .setOutboxPersistError(OUTBOX_HYDRATE_FAILED_MESSAGE);
     }
   }
 
@@ -306,9 +378,7 @@ export class ApprovalBridge {
       const result = await this.listPendingRepo(this.gateway);
       this.applyReconcile(result);
     } catch (err) {
-      console.warn(
-        `[wiring] 审批对账失败（跳过，事件流/下次重连兜底）：${err instanceof Error ? err.message : String(err)}`
-      );
+      log.warn('审批对账失败（跳过，事件流/下次重连兜底）', err);
     }
   }
 
@@ -354,7 +424,10 @@ export class ApprovalBridge {
       const runId = readString(env, 'runId') ?? null;
       approvalStore
         .getState()
-        .upsertPending(mapApprovalRequested(event, runId, this.nowFn()));
+        .upsertPending(
+          mapApprovalRequested(event, runId, this.nowFn()),
+          this.ownerDeviceId
+        );
       return;
     }
     if (event.type === 'approval-resolved') {
@@ -362,7 +435,12 @@ export class ApprovalBridge {
       const store = approvalStore.getState();
       // 幂等收敛（F2 §11.2）：移除 + 历史；resolveApproval 未命中 → 无操作，
       // 重复 resolved / 已由命令回执处理 → 幂等忽略
-      store.handleResolved(view.toolCallId, view.decision, view.resolvedAtMs);
+      store.handleResolved(
+        view.toolCallId,
+        view.decision,
+        view.resolvedAtMs,
+        this.ownerDeviceId
+      );
       // outbox 确认出队：sent 收口 / 事件先到（未发送）清理（M5 §4.6.2 冲突收敛表）
       outboxState = confirmResolved(outboxState, view.toolCallId);
       this.syncAndPersist();
@@ -485,14 +563,17 @@ export class ApprovalBridge {
     // 引擎有、本地无 → 入队（含离线期间遗漏，F2 §4.1）
     for (const pa of result.approvals) {
       if (!localIds.has(pa.toolCallId)) {
-        store.upsertPending(mapReconcileApprovalItem(pa, now));
+        store.upsertPending(
+          mapReconcileApprovalItem(pa, now),
+          this.ownerDeviceId
+        );
       }
     }
     // 本地有、引擎无 → 已被处理/过期 → 对账确认移除（F2 §4.1；D6 §6.5 以权威为准）。
     // deciding 在途条目保留：命令由桌面裁决，不主动丢弃（保守，D6 §6.5 第 1 条）
     for (const p of local) {
       if (!engineIds.has(p.request.toolCallId) && p.status !== 'deciding') {
-        store.removePending(p.request.toolCallId);
+        store.removePending(p.request.toolCallId, this.ownerDeviceId);
       }
     }
     store.setLastReconcileAt(now);
@@ -535,7 +616,7 @@ let singleton: ApprovalWiring | null = null;
  * DB 就绪门禁（实现波总方案 D3）：Outbox 持久化必须绑定 SQLite——装配前等待
  * `ensureDatabaseReady()`，杜绝「配对接线早于 DB → getSqlDriver() 为 null →
  * 单例永久降级内存态」的启动竞态。仅当 DB 明确失败（driver=null）时才落入
- * 内存态并 console.error 留痕（诚实降级，非静默竞态）。
+ * 内存态并 log.error 留痕（诚实降级，非静默竞态）。
  */
 export function ensureApprovalWiring(
   opts: Omit<ApprovalWiringOptions, 'gateway'> & { gateway?: WsGateway } = {}
@@ -551,15 +632,17 @@ export function ensureApprovalWiring(
   void ensureDatabaseReady().then((driver) => {
     if (singleton) return;
     if (!driver) {
-      console.error(
-        '[approvalWiring] DB 装配失败，离线决策仅内存暂存（进程被杀将丢失）'
-      );
+      log.error('DB 装配失败，离线决策仅内存暂存（进程被杀将丢失）');
+      approvalStore
+        .getState()
+        .setOutboxPersistError(OUTBOX_MEMORY_ONLY_MESSAGE);
     }
     singleton = startApprovalWiring({
       // driver=null 仅发生在 DB 明确故障；正常路径此处必为 SQLite driver
       persistAdapter: createDefaultOutboxPersist(driver),
       ...opts,
       gateway,
+      ownerDeviceId: opts.ownerDeviceId ?? deriveOwnerDeviceId(),
     });
     void singleton.bridge.hydrate();
   });
@@ -601,16 +684,14 @@ export function disposeApprovalWiring(): void {
   singleton = null;
   clearPendingOpenRegistration();
   outboxState = createOutboxState();
+  syncOutboxCount();
   // 磁盘残留必须同步清除：换机后旧桌面的离线决策若被新连接水合回放，
   // 将构成跨主机越权执行（实现波总方案 V18a）。DB 未就绪/故障时无法清理，
   // 交由 hydrate 门禁侧的隔离语义兜底（无凭据不装配）。
   const driver = getSqlDriver();
   if (driver) {
     new SqlApprovalQueueDao(driver).clear().catch((error: unknown) => {
-      console.error(
-        '[approvalWiring] 解绑清理 approval_queue 失败：',
-        error instanceof Error ? error.message : String(error)
-      );
+      log.error('解绑清理 approval_queue 失败', error);
     });
   }
 }
@@ -648,17 +729,28 @@ export function enqueueApprovalDecision(
   outboxState = result.state;
   syncOutboxCount();
   if (singleton?.bridge.persistAdapter) {
-    void singleton.bridge.persistAdapter
-      .save(snapshotOutbox(outboxState))
-      .catch((e) => {
-        console.error(
-          '[approvalWiring] outbox 持久化失败，离线决策可能丢失:',
-          e
-        );
-      });
+    persistOutbox(singleton.bridge.persistAdapter);
   }
   if (result.outcome !== 'full') {
     void singleton?.flush();
   }
   return result.outcome;
+}
+
+/**
+ * 未送达行「重发」（批 C 03-4）：用户在未送达行上手动重试单条决策——
+ * 条目立即回到可重放态并触发一轮重放（接线未就绪时条目保持 pending，
+ * 待 subscribe.ok 补发，与离线入队同一收敛路径）。sent / 不存在返回
+ * false（行已过期，调用方无需再动作）。
+ */
+export function retryApprovalDecision(itemId: string): boolean {
+  const target = outboxState.items.find((i) => i.id === itemId);
+  if (!target || target.status === 'sent') return false;
+  outboxState = retryOutboxItem(outboxState, itemId, Date.now());
+  syncOutboxCount();
+  if (singleton?.bridge.persistAdapter) {
+    persistOutbox(singleton.bridge.persistAdapter);
+  }
+  void singleton?.flush();
+  return true;
 }

@@ -113,6 +113,22 @@ export function markNotificationRead(
   }
 }
 
+/** 按 id 集批量已读（批 C ⑫ 打开即退休：shown → resolved；返回实际迁移条数） */
+export function markNotificationsReadByIds(
+  state: NotificationListState,
+  ids: ReadonlySet<string>
+): number {
+  let changed = 0;
+  for (const n of state.items) {
+    if (n.status === 'shown' && ids.has(n.id)) {
+      n.status = 'resolved';
+      changed += 1;
+    }
+  }
+  if (changed > 0) recalcUnread(state);
+  return changed;
+}
+
 /** 全部已读（全部 shown → resolved；未读计数归零） */
 export function markAllNotificationsRead(state: NotificationListState): void {
   let changed = false;

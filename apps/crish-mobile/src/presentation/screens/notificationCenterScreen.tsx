@@ -1,5 +1,7 @@
 // 通知中心：未读管理 + 深链跳转。
-import { FlatList, Pressable, StyleSheet } from 'react-native';
+// 时间分组（批 C ⑬）：列表按本地日历日分 今天/昨天/更早 三组呈现
+// （分组投影在 VM 的 sections，纯函数 groupNotificationsByDay）。
+import { SectionList, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { useNotificationCenterVm } from '@/adapters/viewmodels/useNotificationCenterVm';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
@@ -10,6 +12,10 @@ import {
   Screen,
   useToast,
 } from '@/presentation/ui';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import { NotificationRow } from '@/presentation/components/notifications/NotificationRow';
 import { notificationRouteToPath } from '@/notifications/notificationMeta';
 
@@ -25,6 +31,7 @@ export default function NotificationCenterScreen({
   const theme = useTheme();
   const toast = useToast();
   const vm = useNotificationCenterVm();
+  const markAllPress = usePressFade();
 
   const handlePress = (item: InAppNotification) => {
     vm.markRead(item.id);
@@ -39,7 +46,7 @@ export default function NotificationCenterScreen({
         onBack={onBack}
         actions={
           vm.unreadCount > 0 ? (
-            <Pressable
+            <AnimatedPressable
               testID="mark-all-read"
               accessibilityRole="button"
               accessibilityLabel="全部已读"
@@ -47,27 +54,46 @@ export default function NotificationCenterScreen({
                 vm.markAllRead();
                 toast.showToast('已全部标为已读', 'success');
               }}
-              style={({ pressed }) => [
-                styles.action,
-                pressed && { opacity: 0.65 },
-              ]}
+              onPressIn={markAllPress.onPressIn}
+              onPressOut={markAllPress.onPressOut}
+              style={[styles.action, markAllPress.fadeStyle]}
             >
               <AppText variant="footnote" color="textPrimary">
                 全部已读
               </AppText>
-            </Pressable>
+            </AnimatedPressable>
           ) : undefined
         }
       />
       {vm.items.length === 0 ? (
         <EmptyState title="暂无通知" />
       ) : (
-        <FlatList
+        <SectionList
           testID="notification-list"
-          data={[...vm.items]}
+          sections={vm.sections.map((section) => ({
+            key: section.key,
+            title: section.title,
+            data: [...section.items],
+          }))}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <NotificationRow item={item} onPress={handlePress} />
+          )}
+          renderSectionHeader={({ section }) => (
+            <View
+              style={[
+                styles.sectionHeader,
+                {
+                  paddingHorizontal: theme.space.lg,
+                  paddingTop: theme.space.md,
+                  paddingBottom: theme.space.xs,
+                },
+              ]}
+            >
+              <AppText variant="caption" color="textTertiary">
+                {section.title}
+              </AppText>
+            </View>
           )}
           contentContainerStyle={[
             styles.content,
@@ -88,4 +114,5 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 4,
   },
+  sectionHeader: {},
 });

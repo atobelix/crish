@@ -101,15 +101,110 @@ describe('buildSessionTimeline', () => {
     });
   });
 
-  it('运行终态转系统提示，失败带原因', () => {
+  it('运行终态转系统提示，失败先分类映射（原始串退居详情，批 C ⑮）', () => {
     const blocks = buildSessionTimeline([
       entry('run-terminal', { terminal: 'failed', error: '工具超时' }),
     ]);
+    // 「工具超时」按本地封闭分类归 network：主文案 = 分类文案，
+    // 原始串只进 detail（点开才见），不再直接内联
     expect(blocks[0]).toMatchObject({
       kind: 'notice',
       tone: 'danger',
-      text: '运行失败：工具超时',
+      text: '网络不可达：无法连接供应商服务，请检查网络与 Base URL。',
+      detail: '工具超时',
     });
+  });
+
+  it('image 块如实入时间线：url 来源直用，落消息块之后', () => {
+    const blocks = buildSessionTimeline([
+      entry('message-end', {
+        message: {
+          id: 'm-img',
+          role: 'assistant',
+          blocks: [
+            { type: 'text', text: '这是生成的图：' },
+            {
+              type: 'image',
+              mimeType: 'image/png',
+              url: 'https://example.com/a.png',
+              alt: '示意图',
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(blocks.map((b) => b.kind)).toEqual(['message', 'image']);
+    expect(blocks[1]).toMatchObject({
+      kind: 'image',
+      id: 'm-img:image:0',
+      source: 'https://example.com/a.png',
+      alt: '示意图',
+    });
+  });
+
+  it('image 块 data 裸 base64 拼 data URI；完整 data URI 直用', () => {
+    const blocks = buildSessionTimeline([
+      entry('message-end', {
+        message: {
+          id: 'm-data',
+          role: 'assistant',
+          blocks: [
+            { type: 'image', mimeType: 'image/jpeg', data: 'QUJD' },
+            {
+              type: 'image',
+              mimeType: 'image/png',
+              data: 'data:image/png;base64,REVG',
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({
+      source: 'data:image/jpeg;base64,QUJD',
+    });
+    expect(blocks[1]).toMatchObject({
+      source: 'data:image/png;base64,REVG',
+    });
+  });
+
+  it('image 块无可用来源 → source 为 null（呈现占位行，不静默丢弃）', () => {
+    const blocks = buildSessionTimeline([
+      entry('message-end', {
+        message: {
+          id: 'm-nosrc',
+          role: 'assistant',
+          blocks: [{ type: 'image', mimeType: 'image/png', alt: '缺失的图' }],
+        },
+      }),
+    ]);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      kind: 'image',
+      source: null,
+      alt: '缺失的图',
+    });
+  });
+
+  it('纯图片消息（无正文）不被空消息过滤吞掉', () => {
+    const blocks = buildSessionTimeline([
+      entry('message-start', { message: { id: 'm-only', role: 'assistant' } }),
+      entry('message-end', {
+        message: {
+          id: 'm-only',
+          role: 'assistant',
+          blocks: [
+            {
+              type: 'image',
+              mimeType: 'image/png',
+              url: 'https://example.com/only.png',
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({ kind: 'image', id: 'm-only:image:0' });
   });
 
   it('空正文消息不占位；未知事件忽略', () => {
