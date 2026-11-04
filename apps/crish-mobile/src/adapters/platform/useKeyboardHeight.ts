@@ -1,23 +1,11 @@
-// 软键盘高度订阅（0 = 收起）。iOS 用 will* 事件与系统动画同步；Android 只有 did* 事件。
-import { useEffect, useState } from 'react';
-import { Keyboard, Platform } from 'react-native';
+// 软键盘高度订阅（0 = 收起）。
+// 单源纪律（键盘审计 §4.2）：全仓唯一的键盘高度/状态生产者是根布局挂载的
+// KeyboardProvider（react-native-keyboard-controller）；本 hook 只是对它的
+// 只读投影，禁止再接 RN Keyboard 事件另起第二套高度来源——历史上主页与
+// ApprovalFloat 各写一套事件补偿正是双源苗头。需要逐帧动画值的场景走库的
+// 动画面（KeyboardStickyView / useKeyboardHandler），不要经本 hook 中转。
+import { useKeyboardState } from 'react-native-keyboard-controller';
 
 export function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const ios = Platform.OS === 'ios';
-    const show = Keyboard.addListener(
-      ios ? 'keyboardWillShow' : 'keyboardDidShow',
-      (event) => setHeight(event.endCoordinates.height)
-    );
-    const hide = Keyboard.addListener(
-      ios ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setHeight(0)
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
+  return useKeyboardState((state) => (state.isVisible ? state.height : 0));
 }

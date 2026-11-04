@@ -40,11 +40,6 @@ export default function LocalProvidersView({
           gap: theme.space.lg,
         }}
       >
-        <AppText variant="footnote" color="textTertiary">
-          手机直连的 AI 供应商（OpenAI
-          兼容接口）。与电脑端的模型设置互相独立：远程连接不可用时，本地对话使用这里的配置。
-        </AppText>
-
         {vm.rows.length === 0 ? (
           <EmptyState title="尚未添加供应商" />
         ) : (

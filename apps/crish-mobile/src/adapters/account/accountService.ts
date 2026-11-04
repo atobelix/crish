@@ -47,6 +47,9 @@ import {
   type EmailCodeTicket,
   type EmailContinueOutcome,
 } from './accountApi';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('account');
 
 const driver: SecureStoreDriver = expoSecureStoreDriver();
 let cachedDeviceId: string | null = null;
@@ -141,17 +144,20 @@ async function loadDevices(token: string): Promise<AccountDevice[]> {
   return fetchRelayDevices(token);
 }
 
-/** 在线设备发现失败不阻断登录；远程 runtime 会在下一轮 discovery 重试。 */
-async function loadDevicesBestEffort(token: string): Promise<AccountDevice[]> {
+/**
+ * 在线设备发现失败不阻断登录；远程 runtime 会在下一轮 discovery 重试。
+ * 失败返回 null，与「成功但列表为空」严格区分（CON-1 空发现保护）：调用方
+ * 据此保留既有设备表与目标，禁止一次网络失败清表丢目标——与稳态
+ * refreshAccountDevices「失败只记 error 不清表」的口径对齐。
+ */
+async function loadDevicesBestEffort(
+  token: string
+): Promise<AccountDevice[] | null> {
   try {
     return await loadDevices(token);
   } catch (error) {
-    console.warn(
-      `[account] 在线设备发现失败（将在后续重试）：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-    return [];
+    log.warn('在线设备发现失败（将在后续重试）', error);
+    return null;
   }
 }
 
@@ -180,6 +186,15 @@ export async function hydrateAccount(): Promise<void> {
         store.setProfile(JSON.parse(session.profileJson) as AccountProfile);
       }
       store.setStatus('loggedIn');
+      // 已选目标随会话落盘恢复（CON-1 目标持久化）：冷启动在首轮发现回来
+      // 前即有目标，发现命中后资格门可立即成线，不再必然先闪一轮未连接。
+      if (session.targetDeviceId) {
+        store.selectTarget(session.targetDeviceId);
+      } else if (session.localTargetPinned) {
+        // 用户上次显式选了「本机」：恢复本地钉住——首轮发现回来也不得
+        // 自动改选远端（钉住与目标同为会话级选择，一并落盘恢复）。
+        store.selectLocalTarget();
+      }
     } catch {
       // 快照损坏：凭据仍在但本地无法恢复登录态，交由远程校正或重新登录
       store.setStatus('loggedOut');
@@ -232,7 +247,8 @@ export async function reconcileAccountRemote(): Promise<void> {
     const store = accountStore.getState();
     store.setUser(user);
     if (profile) store.setProfile(profile);
-    store.setDevices(devices);
+    // 发现失败（null）不清表：保留既有设备/目标，等下一轮 discovery（CON-1）
+    if (devices !== null) store.setDevices(devices);
     store.setStatus('loggedIn');
     store.setError(null);
     const session = await loadAccountSession(driver);
@@ -244,8 +260,21 @@ export async function reconcileAccountRemote(): Promise<void> {
       email: user.email,
       userJson: JSON.stringify(user),
       profileJson: profile ? JSON.stringify(profile) : null,
+      targetDeviceId: accountStore.getState().targetDeviceId,
+      localTargetPinned: accountStore.getState().localTargetPinned,
     });
   } catch (error) {
+    // 发现与 me 解耦（CON-1）：账号校正失败不连坐设备发现——独立补一轮
+    // 发现落表，账号接口抖动时冷启动仍能选靶接线；发现也失败则保留旧表，
+    // 等 15s 心跳重试（各自失败不连坐）。
+    try {
+      if (accountStore.getState().status === 'loggedIn') {
+        const devices = await withAccessToken(loadDevices);
+        accountStore.getState().setDevices(devices);
+      }
+    } catch {
+      // 发现同步失败：保留既有设备表
+    }
     accountStore
       .getState()
       .setError(error instanceof Error ? error.message : '账号状态校正失败');
@@ -262,6 +291,14 @@ async function applyTokenPair(
     loadDevicesBestEffort(pair.accessToken),
     fetchAccountProfile(pair.accessToken).catch(() => null),
   ]);
+  const store = accountStore.getState();
+  store.setAccessToken(pair.accessToken);
+  store.setUser(user);
+  if (profile) store.setProfile(profile);
+  // 发现失败（null）不清表：保留既有设备/目标（CON-1 空发现保护）
+  if (devices !== null) store.setDevices(devices);
+  store.setStatus('loggedIn');
+  store.setHydrated(true);
   await persist({
     accessToken: pair.accessToken,
     refreshToken: pair.refreshToken,
@@ -270,14 +307,10 @@ async function applyTokenPair(
     email: user.email,
     userJson: JSON.stringify(user),
     profileJson: profile ? JSON.stringify(profile) : null,
+    // 已选目标（setDevices 自动选靶的结果）随会话落盘，冷启动水合恢复（CON-1）
+    targetDeviceId: accountStore.getState().targetDeviceId,
+    localTargetPinned: accountStore.getState().localTargetPinned,
   });
-  const store = accountStore.getState();
-  store.setAccessToken(pair.accessToken);
-  store.setUser(user);
-  if (profile) store.setProfile(profile);
-  store.setDevices(devices);
-  store.setStatus('loggedIn');
-  store.setHydrated(true);
 }
 
 /** 登录失败分类：凭据错误（401/403）与网络故障分开呈现，禁止把断网误报为密码错误。 */
@@ -499,9 +532,39 @@ export async function revokeAccountSessionById(
   await withAccessToken((token) => revokeAccountSession(token, sessionId));
 }
 
-/** 选择/切换目标桌面（UI 调用）。 */
+/**
+ * 选择/切换目标桌面（UI 调用）：同步更新内存态，并把目标随账号会话落盘，
+ * 冷启动水合即可恢复（CON-1 目标持久化）。落盘是尽力而为：失败不影响本次
+ * 选择（内存态已生效，下次登录/校正的持久化会带上最新目标）。
+ */
 export function selectAccountTarget(deviceId: string | null): void {
   accountStore.getState().selectTarget(deviceId);
+  void persistTargetDeviceId(deviceId);
+}
+
+/**
+ * 选「本机」为当前设备（UI 调用）：目标清空并钉住本地——账号 runtime 的
+ * 资格门随即拆远端接线、本地接管；自动选靶/发现轮次不得改选远端。钉住
+ * 随会话落盘，冷启动恢复；用户改选任一远端设备即解钉。
+ */
+export function selectLocalTarget(): void {
+  accountStore.getState().selectLocalTarget();
+  void persistTargetDeviceId(null);
+}
+
+async function persistTargetDeviceId(deviceId: string | null): Promise<void> {
+  try {
+    const session = await loadAccountSession(driver);
+    if (!session) return;
+    // 钉住态以 store 为单一真源一并落盘（选远端解钉 / 选本机钉住同路）
+    await persist({
+      ...session,
+      targetDeviceId: deviceId,
+      localTargetPinned: accountStore.getState().localTargetPinned,
+    });
+  } catch {
+    // 落盘失败静默：目标已在内存生效，不阻断切换
+  }
 }
 
 /** 为当前目标桌面申请 client 票据（每次重连都重新申请）。 */

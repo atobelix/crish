@@ -670,6 +670,10 @@ export function Composer({
     permissionOnPress: contextBar?.onPermissionPress,
   };
   const handleSubmitPress = useCallback(() => {
+    // 发送消息生命周期闭环：输入框失焦并收起软键盘，让输入框平滑回到最下面
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setIsFocused(false);
     latestCallbacksRef.current.onSubmit();
   }, []);
   const handleAttachPress = useCallback(() => {

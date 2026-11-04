@@ -1,0 +1,33 @@
+appId: com.crish.mobile
+name: 03 Sheet → 把手处下滑关闭（手势冒烟）
+---
+# 目的：钉住「Sheet 有拖拽把手就必须支持下滑关闭」的手势契约。
+# 已知状态（2026-11-02）：Sheet.tsx 无任何拖拽手势、把手纯装饰
+# （移动端交互审计 D1），本流当前预期为红——失败归属 = 产品缺陷，
+# D1 修复落地后本流应自动转绿。不要把本流改成点遮罩关闭来凑绿：
+# 遮罩点按关闭是另一条路径，不是本流要守的手势。
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: 'home-composer'
+    timeout: 60000
+# 经设备胶囊打开 DeviceSheet（testID home-device-sheet）。
+- tapOn:
+    id: 'device-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'home-device-sheet'
+    timeout: 15000
+- takeScreenshot: 03-sheet-open
+# 在面板区域内自上而下滑动（把手位于面板顶部，滑动从面板内起手，
+# 避免落在遮罩上变成点按关闭的假绿）。
+- swipe:
+    start: '50%,70%'
+    end: '50%,97%'
+    duration: 400
+- extendedWaitUntil:
+    notVisible:
+      id: 'home-device-sheet'
+    timeout: 8000
+- takeScreenshot: 03-sheet-closed

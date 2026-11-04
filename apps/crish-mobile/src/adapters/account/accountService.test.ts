@@ -95,15 +95,31 @@ jest.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 import {
   confirmAccountEmailContinue,
   deleteAccountByConfirmEmail,
+  hydrateAccount,
   loginAccountWithPassword,
   logoutAccount,
+  reconcileAccountRemote,
   refreshAccountDevices,
   refreshAccountProfile,
   saveAccountProfile,
   requestClientTicket,
   selectAccountTarget,
+  selectLocalTarget,
   getAccountUser,
 } from './accountService';
+
+/** 等待若干微任务轮次（selectAccountTarget 的落盘是 fire-and-forget 异步链） */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+}
+
+const deskDevice = {
+  id: 'd-1',
+  name: '桌面',
+  platform: 'desktop',
+  lastSeenAt: 1,
+  online: true,
+};
 
 const profile = {
   accountId: 'u-1',
@@ -201,6 +217,143 @@ describe('loginAccountWithPassword', () => {
     expect(ok).toEqual({ ok: true });
     expect(accountStore.getState().status).toBe('loggedIn');
     expect(accountStore.getState().devices).toEqual([]);
+  });
+
+  it('设备发现失败不清既有设备表与目标（CON-1 空发现保护）', async () => {
+    // 已有设备表（例如同账号重复登录/校正路径）：一次发现失败不得清零
+    accountStore.getState().setDevices([deskDevice]);
+    expect(accountStore.getState().targetDeviceId).toBe('d-1');
+    mockApi.loginAccount.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      user,
+    });
+    mockApi.fetchRelayDevices.mockRejectedValue(new Error('network down'));
+
+    const ok = await loginAccountWithPassword('a@b.c', 'pw');
+
+    expect(ok).toEqual({ ok: true });
+    expect(accountStore.getState().devices).toEqual([deskDevice]);
+    expect(accountStore.getState().targetDeviceId).toBe('d-1');
+  });
+
+  it('登录持久化带上自动选靶的目标（CON-1 目标持久化）', async () => {
+    mockApi.loginAccount.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      user,
+    });
+    mockApi.fetchRelayDevices.mockResolvedValue([deskDevice]);
+
+    await loginAccountWithPassword('a@b.c', 'pw');
+
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetDeviceId: 'd-1' })
+    );
+  });
+});
+
+describe('hydrateAccount（CON-1）', () => {
+  it('水合恢复落盘的已选目标（冷启动首轮发现前即有目标）', async () => {
+    mockSecure.loadAccountSession.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      // 与 generateDeviceId mock 同值：hydrate 会把 session.deviceId 写进
+      // 模块级 cachedDeviceId，后续用例断言的设备 id 须保持一致
+      deviceId: 'dev-generated',
+      userId: 'u-1',
+      email: 'a@b.c',
+      userJson: JSON.stringify(user),
+      profileJson: null,
+      targetDeviceId: 'desk-9',
+      localTargetPinned: false,
+    });
+
+    await hydrateAccount();
+
+    expect(accountStore.getState().status).toBe('loggedIn');
+    expect(accountStore.getState().targetDeviceId).toBe('desk-9');
+  });
+
+  it('水合恢复落盘的本机钉住（上次显式选了本机，冷启动仍是本地）', async () => {
+    mockSecure.loadAccountSession.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      deviceId: 'dev-generated',
+      userId: 'u-1',
+      email: 'a@b.c',
+      userJson: JSON.stringify(user),
+      profileJson: null,
+      targetDeviceId: null,
+      localTargetPinned: true,
+    });
+
+    await hydrateAccount();
+
+    expect(accountStore.getState().status).toBe('loggedIn');
+    expect(accountStore.getState().targetDeviceId).toBeNull();
+    expect(accountStore.getState().localTargetPinned).toBe(true);
+  });
+});
+
+describe('reconcileAccountRemote（CON-1）', () => {
+  function seedLoggedInWithDevices(): void {
+    accountStore.setState({ status: 'loggedIn', accessToken: 'at' });
+    accountStore.getState().setDevices([deskDevice]);
+  }
+
+  it('me 成功但发现失败：不清既有设备表与目标', async () => {
+    seedLoggedInWithDevices();
+    mockApi.fetchAccountMe.mockResolvedValue(user);
+    mockApi.fetchRelayDevices.mockRejectedValue(new Error('network down'));
+
+    await reconcileAccountRemote();
+
+    expect(accountStore.getState().status).toBe('loggedIn');
+    expect(accountStore.getState().devices).toEqual([deskDevice]);
+    expect(accountStore.getState().targetDeviceId).toBe('d-1');
+    expect(accountStore.getState().error).toBeNull();
+  });
+
+  it('me 网络失败：设备发现解耦独立落表，错误仍记录（不连坐）', async () => {
+    accountStore.setState({ status: 'loggedIn', accessToken: 'at' });
+    mockApi.fetchAccountMe.mockRejectedValue(new Error('海外节点超时'));
+    mockApi.fetchRelayDevices.mockResolvedValue([{ ...deskDevice, id: 'd-2' }]);
+
+    await reconcileAccountRemote();
+
+    expect(accountStore.getState().status).toBe('loggedIn');
+    expect(accountStore.getState().devices).toEqual([
+      { ...deskDevice, id: 'd-2' },
+    ]);
+    expect(accountStore.getState().targetDeviceId).toBe('d-2');
+    expect(accountStore.getState().error).toContain('海外节点超时');
+  });
+
+  it('me 与发现都失败：保留既有设备表（各自失败不连坐）', async () => {
+    seedLoggedInWithDevices();
+    mockApi.fetchAccountMe.mockRejectedValue(new Error('海外节点超时'));
+    mockApi.fetchRelayDevices.mockRejectedValue(new Error('network down'));
+
+    await reconcileAccountRemote();
+
+    expect(accountStore.getState().devices).toEqual([deskDevice]);
+    expect(accountStore.getState().targetDeviceId).toBe('d-1');
+    expect(accountStore.getState().error).toContain('海外节点超时');
+  });
+
+  it('校正成功持久化带上当前目标', async () => {
+    seedLoggedInWithDevices();
+    mockApi.fetchAccountMe.mockResolvedValue(user);
+    mockApi.fetchRelayDevices.mockResolvedValue([deskDevice]);
+
+    await reconcileAccountRemote();
+
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetDeviceId: 'd-1' })
+    );
   });
 });
 
@@ -438,6 +591,64 @@ describe('selectAccountTarget / getAccountUser', () => {
     selectAccountTarget('d-9');
     selectAccountTarget(null);
     expect(accountStore.getState().targetDeviceId).toBeNull();
+  });
+
+  it('选择目标同步落盘（冷启动水合可恢复，CON-1）', async () => {
+    mockSecure.loadAccountSession.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      deviceId: 'dev-1',
+      userId: 'u-1',
+      email: 'a@b.c',
+      userJson: null,
+      profileJson: null,
+      targetDeviceId: null,
+      localTargetPinned: false,
+    });
+
+    selectAccountTarget('d-9');
+    expect(accountStore.getState().targetDeviceId).toBe('d-9');
+
+    await flushMicrotasks();
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetDeviceId: 'd-9' })
+    );
+  });
+
+  it('selectLocalTarget：清目标 + 钉住并落盘；改选远端落盘解钉', async () => {
+    mockSecure.loadAccountSession.mockResolvedValue({
+      accessToken: 'at',
+      refreshToken: 'rt',
+      deviceId: 'dev-1',
+      userId: 'u-1',
+      email: 'a@b.c',
+      userJson: null,
+      profileJson: null,
+      targetDeviceId: 'd-9',
+      localTargetPinned: false,
+    });
+
+    selectLocalTarget();
+    expect(accountStore.getState().targetDeviceId).toBeNull();
+    expect(accountStore.getState().localTargetPinned).toBe(true);
+
+    await flushMicrotasks();
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetDeviceId: null, localTargetPinned: true })
+    );
+
+    selectAccountTarget('d-9');
+    expect(accountStore.getState().localTargetPinned).toBe(false);
+    await flushMicrotasks();
+    expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        targetDeviceId: 'd-9',
+        localTargetPinned: false,
+      })
+    );
   });
 
   it('getAccountUser 反映当前 store', () => {

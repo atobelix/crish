@@ -159,3 +159,81 @@ describe('sessionStore 活动 run 与审批角标（F1 §4.4 / F1 §5.3）', () 
     expect(sessionStore.getState().sessions[0]!.pendingApprovalCount).toBe(0);
   });
 });
+
+describe('sessionStore 属主盖章（M7 设备分区不变量）', () => {
+  beforeEach(() => {
+    sessionStore.getState().reset();
+  });
+
+  function summaryOf(id: string) {
+    return {
+      ...makeSession({ id }),
+      receivedAtMs: 1,
+      lastReadSequence: 0,
+      unreadCount: 0,
+      activeRunIds: [] as string[],
+      pendingApprovalCount: 0,
+    };
+  }
+
+  it('盖章后同源写入放行；异源 upsert/reconcile 直接丢弃并计数', () => {
+    const store = sessionStore.getState();
+    store.stampOwner('dev-a');
+    store.upsert(makeSession({ id: 's-a' }), undefined, 'dev-a');
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['s-a']);
+
+    store.upsert(makeSession({ id: 's-b' }), undefined, 'dev-b');
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['s-a']);
+    expect(sessionStore.getState().droppedWriteCount).toBe(1);
+
+    store.reconcile([makeSession({ id: 's-b-1' })], undefined, 'dev-b');
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['s-a']);
+    expect(sessionStore.getState().droppedWriteCount).toBe(2);
+  });
+
+  it('绕过清场换设备：盖章已改、新设备对账未至时旧设备迟到写入不得混入', () => {
+    const store = sessionStore.getState();
+    store.stampOwner('dev-a');
+    store.upsert(makeSession({ id: 's-a' }), undefined, 'dev-a');
+    // 某路径绕过清场编排直接改章到 dev-b（数据未清），且 dev-b 的对账
+    // 恰好失败未至——审计 §四.2 的残余串扰窗口，现由数据不变量封堵：
+    store.stampOwner('dev-b');
+    store.upsert(makeSession({ id: 's-a-late' }), undefined, 'dev-a');
+    store.applyRunActive('s-a', 'r-1', true, 'dev-a');
+    const state = sessionStore.getState();
+    expect(state.sessions.map((s) => s.id)).toEqual(['s-a']);
+    expect(state.sessions[0]!.activeRunIds).toEqual([]);
+    expect(state.droppedWriteCount).toBe(2);
+  });
+
+  it('无来源写入（本地 UI 动作）不设防；未盖章时带来源也放行', () => {
+    const store = sessionStore.getState();
+    store.upsert(makeSession({ id: 's-1' }), undefined, 'dev-x');
+    expect(sessionStore.getState().sessions).toHaveLength(1);
+    store.stampOwner('dev-a');
+    store.setSelected('s-1');
+    store.markRead('s-1', 3);
+    expect(sessionStore.getState().selectedSessionId).toBe('s-1');
+    expect(sessionStore.getState().droppedWriteCount).toBe(0);
+  });
+
+  it('reset 连带清盖章与丢弃计数', () => {
+    const store = sessionStore.getState();
+    store.stampOwner('dev-a');
+    store.upsert(makeSession({ id: 's-b' }), undefined, 'dev-b');
+    expect(sessionStore.getState().droppedWriteCount).toBe(1);
+    store.reset();
+    expect(sessionStore.getState().ownerDeviceId).toBeNull();
+    expect(sessionStore.getState().droppedWriteCount).toBe(0);
+  });
+
+  it('restoreSnapshotData 整表装入；选中项不在表中时清空选中', () => {
+    const store = sessionStore.getState();
+    const items = [summaryOf('s-1'), summaryOf('s-2')];
+    store.restoreSnapshotData(items, 's-9');
+    expect(sessionStore.getState().sessions).toHaveLength(2);
+    expect(sessionStore.getState().selectedSessionId).toBeNull();
+    store.restoreSnapshotData(items, 's-2');
+    expect(sessionStore.getState().selectedSessionId).toBe('s-2');
+  });
+});

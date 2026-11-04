@@ -1,0 +1,61 @@
+appId: com.crish.mobile
+name: 04 本地对话 → 新建线程 → 发送 → 流式回复或诚实报错
+---
+# 目的：本地链冒烟（手机直连供应商，不依赖桌面在线/中继）。
+# 两种合法终态：
+#  A 已配置供应商：发送后出现生成态并最终收尾（停止钮消失），用户消息上屏；
+#  B 未配置供应商：发送后错误栏（local-chat-error）诚实呈现。
+# 两条路径共用前段：进本地线程列表 → 新建并打开线程 → 输入并发送。
+# 本流新建的线程会保留在设备上（标题由首条消息派生，一眼可辨为冒烟产物），
+# 流内不删——线程行 testID 含动态 id，删除动作留待人工在列表页处理。
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: 'home-composer'
+    timeout: 60000
+# 抽屉 → 本地对话（线程列表）。
+- tapOn:
+    id: 'header-menu'
+- extendedWaitUntil:
+    visible:
+      id: 'drawer-local-chat'
+    timeout: 15000
+- tapOn:
+    id: 'drawer-local-chat'
+# 新建入口二选一：有线程时在页眉（local-thread-new），空态时在页面中部
+# （local-thread-create-empty）；两者都是「新建并打开」。未配置且无线程时
+# 页眉入口仍在，走 local-thread-new 分支。
+- extendedWaitUntil:
+    visible:
+      id: 'local-thread-new'
+    timeout: 15000
+- runFlow:
+    when:
+      visible:
+        id: 'local-thread-new'
+    commands:
+      - tapOn:
+          id: 'local-thread-new'
+- extendedWaitUntil:
+    visible:
+      id: 'local-chat-composer'
+    timeout: 15000
+# 输入并发送（固定文案、无敏感信息；供应商 key 只在设备 SecureStore，
+# 流不读取、不回显）。
+- tapOn:
+    id: 'local-chat-composer'
+- inputText: 'E2E冒烟：本地对话链路测试'
+- tapOn:
+    id: 'local-chat-composer-send'
+# 用户消息应上屏（两条路径共同断言）。
+- extendedWaitUntil:
+    visible:
+      text: 'E2E冒烟：本地对话链路测试'
+    timeout: 30000
+# 路径 A：若进入生成态，等它收尾（停止钮出现后消失）；从未生成则立即通过。
+- extendedWaitUntil:
+    notVisible:
+      id: 'local-chat-stop'
+    timeout: 120000
+- takeScreenshot: 04-local-result

@@ -138,6 +138,8 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
     email: 'a@b.c',
     userJson: '{"id":"u-1","email":"a@b.c","name":null}',
     profileJson: null,
+    targetDeviceId: 'desk-1',
+    localTargetPinned: false,
   };
 
   it('save 与 load 往返完整保留字段', async () => {
@@ -162,11 +164,14 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
       email: null,
       userJson: null,
       profileJson: null,
+      targetDeviceId: null,
+      localTargetPinned: false,
     });
 
     expect(await store.getItem('account.access_token')).toBeNull();
     expect(await store.getItem('account.user_id')).toBeNull();
     expect(await store.getItem('account.email')).toBeNull();
+    expect(await store.getItem('account.target_device_id')).toBeNull();
     expect(await loadAccountSession(store)).toEqual({
       accessToken: null,
       refreshToken: 'rt-1',
@@ -175,7 +180,40 @@ describe('账号会话存取（ACCOUNT_KEYS）', () => {
       email: null,
       userJson: null,
       profileJson: null,
+      targetDeviceId: null,
+      localTargetPinned: false,
     });
+  });
+
+  it('localTargetPinned 往返保留（选本机落盘），改选/清除后删除', async () => {
+    const store = new InMemorySecureStore();
+    await saveAccountSession(store, {
+      ...fullSession,
+      targetDeviceId: null,
+      localTargetPinned: true,
+    });
+    expect(await store.getItem('account.target_local_pinned')).toBe('1');
+    expect((await loadAccountSession(store))?.localTargetPinned).toBe(true);
+    // 改选远端（钉住=false）→ 标记键删除，不写空串
+    await saveAccountSession(store, fullSession);
+    expect(await store.getItem('account.target_local_pinned')).toBeNull();
+    expect((await loadAccountSession(store))?.localTargetPinned).toBe(false);
+    // clear 覆盖新键（ACCOUNT_KEYS 遍历删除）
+    await saveAccountSession(store, {
+      ...fullSession,
+      localTargetPinned: true,
+    });
+    await clearAccountSession(store);
+    expect(await store.getItem('account.target_local_pinned')).toBeNull();
+  });
+
+  it('targetDeviceId 往返保留，clear 后删除（CON-1 目标持久化）', async () => {
+    const store = new InMemorySecureStore();
+    await saveAccountSession(store, fullSession);
+    expect(await store.getItem('account.target_device_id')).toBe('desk-1');
+    expect((await loadAccountSession(store))?.targetDeviceId).toBe('desk-1');
+    await clearAccountSession(store);
+    expect(await store.getItem('account.target_device_id')).toBeNull();
   });
 
   it('覆盖写入时清掉旧的空字段值', async () => {

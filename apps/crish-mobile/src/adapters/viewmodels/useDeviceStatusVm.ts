@@ -11,15 +11,16 @@ import { useCallback } from 'react';
 import { useAuthStore, useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { useDeviceDirectoryStore } from '@/adapters/hooks/useDeviceDirectoryStore';
-import { selectConnectionPhaseText } from '@/domain/store/connectionStore';
+import {
+  selectConnectionPhaseText,
+  selectEffectiveChatMode,
+} from '@/domain/store/connectionStore';
 import {
   refreshAccountDevices,
   selectAccountTarget,
+  selectLocalTarget,
 } from '@/adapters/account/accountService';
-import {
-  ensureObservationWiring,
-  getObservationWiring,
-} from '@/adapters/wiring/observationWiring';
+import { reconnectNow } from '@/adapters/runtime/appRuntime';
 
 /** 设备列表行（设备 Sheet 呈现面；来自已知设备目录，含离线灰置条目） */
 export interface DeviceRowVm {
@@ -51,6 +52,18 @@ export interface DeviceStatusVm {
   switchDevice: (deviceId: string) => void;
   /** 立即刷新一轮设备发现（打开 Sheet 时调用，在线状态尽量新） */
   refreshDevices: () => void;
+  /**
+   * 当前设备名（设备身份，永远有名有姓）：本地生效 = 「本机」；选中了远端
+   * 设备 = 该设备名（离线也用其名，连接状态走徽标/副文案，不顶替身份）。
+   */
+  currentDeviceName: string;
+  /** 「本机」行（设备列表恒含；selected = 本地当前生效） */
+  localDevice: { name: string; selected: boolean };
+  /**
+   * 切到本机（账号模式：清目标 + 本地钉住，runtime 随即拆远端接线；
+   * 非账号模式无目标可清，为 no-op——「现在用本地」由呈现层导航本地页）。
+   */
+  switchToLocal: () => void;
 }
 
 export function useDeviceStatusVm(): DeviceStatusVm {
@@ -60,6 +73,7 @@ export function useDeviceStatusVm(): DeviceStatusVm {
   const accountStatus = useAccountStore((s) => s.status);
   const accessToken = useAccountStore((s) => s.accessToken);
   const targetDeviceId = useAccountStore((s) => s.targetDeviceId);
+  const localTargetPinned = useAccountStore((s) => s.localTargetPinned);
   const freshDevices = useAccountStore((s) => s.devices);
   const knownDevices = useDeviceDirectoryStore((s) => s.knownDevices);
 
@@ -88,10 +102,11 @@ export function useDeviceStatusVm(): DeviceStatusVm {
       }))
     : [];
 
+  // 手动重连统一走 appRuntime.reconnectNow 的模式分发（CON-1）：账号模式
+  // 触发设备发现 + 资格同步；旧实现「无接线 → ensureObservationWiring」
+  // 会落到局域网配对路径，账号模式下多半无效且不触发发现（审计 A.3）。
   const reconnect = useCallback(() => {
-    const wiring = getObservationWiring();
-    if (wiring) wiring.reconnect();
-    else ensureObservationWiring();
+    reconnectNow();
   }, []);
 
   const switchDevice = useCallback(
@@ -113,8 +128,24 @@ export function useDeviceStatusVm(): DeviceStatusVm {
     void refreshAccountDevices();
   }, []);
 
+  const connected = selectEffectiveChatMode(phase) === 'remote';
+  // 本地是否当前生效：账号模式看钉住/无目标（有目标即该远端设备当值，哪怕
+  // 它离线——设备身份是它，不是本机）；非账号模式看链路（未连接即本地）。
+  const localSelected = accountMode
+    ? localTargetPinned || (targetDeviceId === null && !relayEngaged)
+    : !connected;
+  const currentDeviceName = localSelected
+    ? '本机'
+    : (targetName ?? pairedHost ?? '本机');
+
+  const switchToLocal = useCallback(() => {
+    if (!accountMode || localTargetPinned) return;
+    selectLocalTarget();
+  }, [accountMode, localTargetPinned]);
+
   return {
-    connected: phase === 'ready',
+    // 设备链路是否就绪：CON-2 起经中央派生反推（与模式判定同一出口）
+    connected,
     phaseLabel: selectConnectionPhaseText(phase),
     host,
     lastError,
@@ -126,13 +157,20 @@ export function useDeviceStatusVm(): DeviceStatusVm {
     pairedHost,
     switchDevice,
     refreshDevices,
+    currentDeviceName,
+    localDevice: { name: '本机', selected: localSelected },
+    switchToLocal,
   };
 }
 
-/** 一行设备描述：在线显示主机名，离线显示连接阶段 */
+/**
+ * 一行设备描述：设备身份永远在前——本地 = 「本机」，远端 = 设备名；
+ * 连接状态只作后缀（在线点缀 / 未连接标注），不再用裸「未连接」顶替身份。
+ */
 export function deviceLineOf(
-  vm: Pick<DeviceStatusVm, 'connected' | 'phaseLabel' | 'host'>
+  vm: Pick<DeviceStatusVm, 'connected' | 'currentDeviceName'>
 ): string {
-  if (!vm.connected) return vm.phaseLabel;
-  return vm.host ? `电脑在线 · ${vm.host}` : '电脑在线';
+  const name = vm.currentDeviceName;
+  if (name === '本机') return '本机';
+  return vm.connected ? `电脑在线 · ${name}` : `${name} · 未连接`;
 }

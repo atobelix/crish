@@ -1,13 +1,22 @@
 // 设备胶囊（原型 device-pill-btn）：磨砂胶囊（J7）+ 电脑图标与状态微标二合一 + 名称 + 下箭头。
-// 点击唤起连接设备 Sheet。
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+// 点击唤起连接设备 Sheet。阴影口径（SVG 软阴影收编定案）：本胶囊是原型点名
+// 的悬浮面之一——Android 浅色经 SoftShadow 出原型两层极淡投影（实测宽度
+// 到手才渲染，口径同抽屉搜索胶囊），填充由本组件 backgroundColor 单一承担
+// （surfaceRaised）；深色 SoftShadow 内部短路、区分回归亮度台阶；iOS 无
+// 阴影，走 BlurView + glass 磨砂。
+import { useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/adapters/platform/theme';
 import {
   useDeviceStatusVm,
   deviceLineOf,
 } from '@/adapters/viewmodels/useDeviceStatusVm';
-import { AppText, Icon } from '@/presentation/ui';
+import { AppText, Icon, SoftShadow } from '@/presentation/ui';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 
 export interface DevicePillProps {
   onPress: () => void;
@@ -18,26 +27,41 @@ export function DevicePill({ onPress }: DevicePillProps) {
   const device = useDeviceStatusVm();
   const label = deviceLineOf(device);
   const iosBlur = Platform.OS === 'ios';
+  // Android 软阴影需要实测宽度（胶囊宽随设备名变化），onLayout 捕获后渲染
+  const [pillWidth, setPillWidth] = useState(0);
+  const pillHeight = theme.size.barAction + 2;
+  const press = usePressFade();
   return (
-    <Pressable
+    <AnimatedPressable
       testID="device-pill"
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ busy: !device.connected }}
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
+      style={[
         styles.pill,
         {
-          height: theme.size.barAction + 2,
+          height: pillHeight,
           borderRadius: theme.radius.pill,
-          backgroundColor: iosBlur ? 'transparent' : theme.colors.glass,
+          backgroundColor: iosBlur ? 'transparent' : theme.colors.surfaceRaised,
           paddingHorizontal: theme.space.md,
           gap: theme.space.sm - 1,
         },
-        theme.shadow.sm,
-        pressed && { opacity: 0.7 },
+        press.fadeStyle,
       ]}
     >
+      {/* Android SVG 软阴影（全 App 唯一阴影路径）：最先渲染（最底层），
+          只画阴影不绘填充（填充由上方 backgroundColor 单一承担） */}
+      {Platform.OS === 'android' && pillWidth > 0 ? (
+        <SoftShadow
+          width={pillWidth}
+          height={pillHeight}
+          borderRadius={pillHeight / 2}
+        />
+      ) : null}
       {iosBlur ? (
         <BlurView
           pointerEvents="none"
@@ -68,7 +92,7 @@ export function DevicePill({ onPress }: DevicePillProps) {
               top: -2.5,
               right: -3.5,
               borderRadius: theme.radius.pill,
-              backgroundColor: theme.colors.surface,
+              backgroundColor: theme.colors.surfaceRaised,
             },
           ]}
         >
@@ -94,14 +118,14 @@ export function DevicePill({ onPress }: DevicePillProps) {
           { fontSize: theme.type.footnote.fontSize + 0.5 },
         ]}
       >
-        {device.host ?? device.phaseLabel}
+        {device.currentDeviceName}
       </AppText>
       <Icon
         name="chevron-down"
         size={theme.size.iconSmall - 5}
         color={theme.colors.textSecondary}
       />
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

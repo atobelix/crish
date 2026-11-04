@@ -1,10 +1,12 @@
 // 文件行：类型图标 + 名称 + 大小/时间（目录无 meta）。
 import { memo } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
+import Animated from 'react-native-reanimated';
 import type { FileEntry } from '@/domain/types/domain';
 import { useTheme } from '@/adapters/platform/theme';
 import { formatRelativeTime } from '@/domain/pure/time';
 import { AppText, Icon } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import {
   detectFileKind,
   FILE_KIND_ICON,
@@ -42,6 +44,7 @@ export const FileRow = memo(function FileRow({
     : theme.colors[FILE_KIND_TONE[kind]];
   const meta = rowMetaText(entry);
   const sensitive = !entry.isDir && isSensitiveFile(entry.name);
+  const press = usePressFade();
 
   return (
     <Pressable
@@ -51,15 +54,24 @@ export const FileRow = memo(function FileRow({
         meta ? `，${meta}` : ''
       }${sensitive ? '，敏感文件' : ''}`}
       onPress={() => onPress(entry)}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.row,
         {
           borderBottomColor: theme.colors.hairline,
           borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
         },
-        pressed && { backgroundColor: theme.colors.fillSubtle },
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: theme.colors.fillSubtle },
+          press.overlayStyle,
+        ]}
+      />
       <Icon name={icon} size={theme.size.icon} color={color} />
       <AppText variant="body" numberOfLines={1} style={styles.name}>
         {entry.name}

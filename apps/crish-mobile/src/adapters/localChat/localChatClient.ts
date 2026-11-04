@@ -154,6 +154,20 @@ export interface LocalChatClientDeps {
   jsonFetch?: JsonFetch;
   /** 自检超时（ms，缺省 15000） */
   checkTimeoutMs?: number;
+  /** 一次性补全超时（ms，缺省 15000；AI 标题生成用，超时按失败静默回退） */
+  completionTimeoutMs?: number;
+}
+
+/** 一次性非流式补全入参（AI 标题等小调用；与流式同端点同错误分类） */
+export interface CompleteChatInput {
+  baseUrl: string;
+  apiKey: string | null;
+  model: string;
+  messages: readonly LocalWireMessage[];
+  /** 输出上限（缺省 32，标题量级） */
+  maxTokens?: number;
+  /** 采样温度（缺省 0.3） */
+  temperature?: number;
 }
 
 export interface StreamChatInput {
@@ -183,6 +197,11 @@ export interface LocalChatClient {
     input: StreamChatInput,
     callbacks: StreamChatCallbacks
   ) => StreamHandle;
+  /**
+   * 一次性非流式补全：resolve 助手正文全文；失败 reject 分类错误
+   * （LocalChatError，message 已补齐）——与 streamChatCompletion 同错误分类。
+   */
+  completeChatCompletion: (input: CompleteChatInput) => Promise<string>;
   fetchProviderModels: (input: {
     baseUrl: string;
     apiKey: string | null;
@@ -200,6 +219,7 @@ export function createLocalChatClient(
   const streamTransport = deps.streamTransport ?? xhrStreamTransport;
   const jsonFetch = deps.jsonFetch ?? defaultJsonFetch;
   const checkTimeoutMs = deps.checkTimeoutMs ?? 15000;
+  const completionTimeoutMs = deps.completionTimeoutMs ?? 15000;
 
   return {
     streamChatCompletion(input, callbacks) {
@@ -296,6 +316,49 @@ export function createLocalChatClient(
           handle.abort();
         },
       };
+    },
+
+    async completeChatCompletion(input) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), completionTimeoutMs);
+      let res: { status: number; text: string; retryAfterSec?: number };
+      try {
+        res = await jsonFetch(buildChatCompletionsUrl(input.baseUrl), {
+          method: 'POST',
+          headers: buildJsonHeaders(input.apiKey),
+          body: JSON.stringify(
+            buildChatRequestBody({
+              model: input.model,
+              messages: input.messages,
+              stream: false,
+              maxTokens: input.maxTokens ?? 32,
+              temperature: input.temperature ?? 0.3,
+            })
+          ),
+          signal: controller.signal,
+        });
+      } catch {
+        // 网络失败与超时（abort）在调用方同为「生成失败」——分类按 network 出口
+        throw withErrorMessage(networkError());
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res.status < 200 || res.status >= 300) {
+        throw withErrorMessage(
+          classifyHttpError(res.status, res.text, res.retryAfterSec)
+        );
+      }
+      // 正文提取复用流式块解析的 message 兜底口径（choices[0].message.content）
+      const delta = applyChatChunk(res.text);
+      if (delta === null) {
+        throw withErrorMessage({
+          kind: 'unknown',
+          status: res.status,
+          message: '补全响应不是合法的对话补全结构。',
+          retryable: false,
+        });
+      }
+      return delta.contentDelta;
     },
 
     async fetchProviderModels(input) {

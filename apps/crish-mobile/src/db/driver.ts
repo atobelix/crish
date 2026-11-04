@@ -22,7 +22,9 @@ export interface SqlDriver {
 /**
  * 内存 SQL 引擎（测试/开发用 mock）：支持本仓库 SQL 子集，语义对齐 SQLite：
  * - CREATE TABLE IF NOT EXISTS <t> (<列定义>, ...)：列定义支持 列名 类型 [NOT NULL] [PRIMARY KEY]、
- *   PRIMARY KEY (a, b)、UNIQUE (a, b)、CHECK (...)（忽略）；
+ *   PRIMARY KEY (a, b)、UNIQUE (a, b)、CHECK (...)（忽略）；列 DEFAULT 字面量（字符串/数值/NULL）
+ *   会被登记，INSERT 未列出的列按 DEFAULT 填充（无 DEFAULT 则 NULL，对齐 SQLite）；
+ * - ALTER TABLE <t> ADD COLUMN <列定义>：追加列并给存量行回填 DEFAULT（无则 NULL）；
  * - CREATE INDEX IF NOT EXISTS ... ON ...：忽略（内存引擎不需要索引）；
  * - INSERT INTO <t> (<列>) VALUES (?, ...) [ON CONFLICT(<列>) DO UPDATE SET <列> = ?, ...]：
  *   主键/唯一约束冲突抛错（对齐 SQLite）；带 ON CONFLICT DO UPDATE 时冲突改走原子更新分支；
@@ -34,7 +36,7 @@ export interface SqlDriver {
  * 超出子集的语句抛错（fail-fast，防止测试用 SQL 与真实环境语义漂移）。
  */
 export class MemorySqlDriver implements SqlDriver {
-  /** 表名 → 表结构（列名 + 主键 + 唯一约束） */
+  /** 表名 → 表结构（列名 + 主键 + 唯一约束 + 列类型 + 列默认值） */
   private readonly tables = new Map<
     string,
     {
@@ -42,6 +44,7 @@ export class MemorySqlDriver implements SqlDriver {
       pks: string[];
       uniques: string[][];
       types: Map<string, string>;
+      defaults: Map<string, unknown>;
     }
   >();
   /** 表名 → 行数组（行 = 列名 → 值） */
@@ -106,6 +109,7 @@ export class MemorySqlDriver implements SqlDriver {
     if (upper.startsWith('CREATE INDEX ')) return []; // 索引为优化项，内存引擎忽略
     if (upper.startsWith('DROP INDEX ')) return []; // 索引为优化项，内存引擎忽略
     if (upper.startsWith('DROP TABLE ')) return this.execDropTable(stmt);
+    if (upper.startsWith('ALTER TABLE ')) return this.execAlterTable(stmt);
     if (upper.startsWith('INSERT INTO ')) return this.execInsert(stmt, params);
     if (upper.startsWith('SELECT ')) return this.execSelect(stmt, params);
     if (upper.startsWith('UPDATE ')) return this.execUpdate(stmt, params);
@@ -155,6 +159,7 @@ export class MemorySqlDriver implements SqlDriver {
     const pks: string[] = [];
     const uniques: string[][] = [];
     const types = new Map<string, string>();
+    const defaults = new Map<string, unknown>();
     for (const raw of defs) {
       const def = raw.trim();
       if (!def) continue;
@@ -174,11 +179,55 @@ export class MemorySqlDriver implements SqlDriver {
       const col = colMatch[1]!;
       cols.push(col);
       types.set(col, colMatch[2]!.toUpperCase());
-      const rest = (colMatch[3] ?? '').toUpperCase();
+      const rawRest = colMatch[3] ?? '';
+      const rest = rawRest.toUpperCase();
       if (rest.includes('PRIMARY KEY')) pks.push(col);
+      const dflt = this.parseColumnDefault(rawRest);
+      if (dflt.has) defaults.set(col, dflt.value);
     }
-    this.tables.set(name, { cols, pks, uniques, types });
+    this.tables.set(name, { cols, pks, uniques, types, defaults });
     this.rows.set(name, []);
+    return [];
+  }
+
+  /** 解析列定义尾部的 DEFAULT 字面量（字符串/数值/NULL；无 DEFAULT → has=false） */
+  private parseColumnDefault(rest: string): { has: boolean; value: unknown } {
+    const m = /DEFAULT\s+('(?:[^']|'')*'|-?\d+(?:\.\d+)?|NULL)/i.exec(rest);
+    if (!m) return { has: false, value: null };
+    const token = m[1]!;
+    if (token.toUpperCase() === 'NULL') return { has: true, value: null };
+    if (token.startsWith("'")) {
+      return { has: true, value: token.slice(1, -1).replace(/''/g, "'") };
+    }
+    return { has: true, value: Number(token) };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ALTER TABLE
+  // ---------------------------------------------------------------------------
+
+  /** ALTER TABLE <t> ADD COLUMN <列定义>：追加列 + 存量行回填 DEFAULT（对齐 SQLite） */
+  private execAlterTable(stmt: string): unknown[] {
+    const m = /^ALTER\s+TABLE\s+(\S+)\s+ADD\s+COLUMN\s+([\s\S]+?)\s*;?$/i.exec(
+      stmt
+    );
+    if (!m) throw new Error(`无法解析 ALTER TABLE：${stmt.slice(0, 60)}`);
+    const name = m[1]!;
+    const table = this.tables.get(name);
+    if (!table) throw new Error(`表不存在：${name}`);
+    const colMatch = /^(\S+)\s+(\S+)(?:\s+(.*))?$/i.exec(m[2]!.trim());
+    if (!colMatch) throw new Error(`无法解析列定义：${m[2]!.trim()}`);
+    const col = colMatch[1]!;
+    if (table.cols.includes(col)) {
+      throw new Error(`列已存在：${name}.${col}`);
+    }
+    table.cols.push(col);
+    table.types.set(col, colMatch[2]!.toUpperCase());
+    const dflt = this.parseColumnDefault(colMatch[3] ?? '');
+    if (dflt.has) table.defaults.set(col, dflt.value);
+    for (const row of this.rows.get(name) ?? []) {
+      row[col] = dflt.has ? dflt.value : null;
+    }
     return [];
   }
 
@@ -215,6 +264,12 @@ export class MemorySqlDriver implements SqlDriver {
         const lit = /^'(.*)'$/s.exec(token);
         if (!lit) throw new Error(`INSERT 值不支持：${token}`);
         row[cols[i]!] = lit[1]!;
+      }
+    }
+    // 未列出的列按 DEFAULT 填充（无 DEFAULT 则 NULL，对齐 SQLite 部分列 INSERT）
+    for (const col of table.cols) {
+      if (!(col in row)) {
+        row[col] = table.defaults.has(col) ? table.defaults.get(col) : null;
       }
     }
     const existing = this.findConflicting(m[1]!, table, row);

@@ -1,14 +1,14 @@
 // 统一头栏：根页大标题 / 二级页紧凑标题，无底部发丝线。
 // 返回只使用图标，不出现「← 返回」文字。
 // floating = 设置族悬浮口径（原型 settings-topbar）：绝对定位通透层，内容滚行其下；
-// 返回为 38 白圆钮，标题为纯文字 15.5/600 左置，无胶囊。仅设置族页面开启，
-// 其余页面（centered / 默认）行为不变。
+// 返回走共享 IconButton floating 档（与主界面汉堡钮一致的圆角软阴影悬浮白盘，
+// Ø38、热区补足 44、SoftShadow 微浮雕），标题为纯文字 15.5/600 左置，无胶囊。
+// centered / 默认模式的返回同走 floating 软阴影悬浮盘。
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
-import Icon from './Icon';
 import IconButton from './IconButton';
 
 export interface AppHeaderProps {
@@ -25,7 +25,7 @@ export interface AppHeaderProps {
   leading?: ReactNode;
   /** 分组页样式：返回圆钮 + 居中标题（设置等二级页） */
   centered?: boolean;
-  /** 设置族悬浮顶栏：绝对定位通透层（返回白圆钮 38 + 纯文字标题 15.5/600 左置） */
+  /** 设置族悬浮顶栏：绝对定位通透层（返回台阶盘 40 + 纯文字标题 15.5/600 左置） */
   floating?: boolean;
   testID?: string;
 }
@@ -44,7 +44,6 @@ export function AppHeader({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   if (floating) {
-    const backSize = theme.size.iconButton - 2;
     return (
       <View
         testID={testID}
@@ -65,31 +64,14 @@ export function AppHeader({
           ]}
         >
           {onBack ? (
-            <Pressable
-              accessibilityRole="button"
+            <IconButton
+              name="chevron-left"
+              variant="floating"
               accessibilityLabel="返回"
               testID="header-back"
               onPress={onBack}
-              style={({ pressed }) => [
-                styles.backCircle,
-                theme.shadow.sm,
-                {
-                  width: backSize,
-                  height: backSize,
-                  borderRadius: theme.radius.pill,
-                  backgroundColor: pressed
-                    ? theme.colors.fillSubtle
-                    : theme.colors.surface,
-                  transform: [{ scale: pressed ? theme.motion.pressScale : 1 }],
-                },
-              ]}
-            >
-              <Icon
-                name="chevron-left"
-                size={theme.size.icon}
-                color={theme.colors.textPrimary}
-              />
-            </Pressable>
+              size={theme.size.icon}
+            />
           ) : null}
           <AppText
             variant="headline"
@@ -171,11 +153,13 @@ export function AppHeader({
         {onBack ? (
           <IconButton
             name="chevron-left"
+            variant="floating"
             accessibilityLabel="返回"
             onPress={onBack}
             testID="header-back"
-            // 抵消圆钮内边距，让图标与内容左缘对齐
-            style={{ marginLeft: -theme.space.md, marginRight: theme.space.xs }}
+            // 实盘左缘与内容左缘齐平（容器已有 space.lg 左内距，不再用负
+            // margin 做裸字形的光学补偿）；盘与标题间距与 floating 同口径
+            style={{ marginRight: theme.space.md }}
           />
         ) : null}
         {leading ? (
@@ -209,10 +193,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-  },
-  backCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   floatingActions: {
     flex: 1,

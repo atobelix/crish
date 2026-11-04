@@ -20,10 +20,13 @@ import {
   ensureApprovalWiring,
 } from '../wiring/approvalWiring';
 import {
+  refreshAndSyncAccountRemote,
   startAccountRuntime,
   stopAccountRuntime,
   syncAccountRemote,
 } from './accountRuntime';
+import { deviceSnapshotStore } from '@/domain/store/deviceSnapshotStore';
+import { stampDataPlane } from './remoteData';
 
 let started = false;
 let appStateSub: { remove: () => void } | null = null;
@@ -40,12 +43,21 @@ function clearSessionData(): void {
   filesStore.getState().resetWorkspace(null);
   connectionStore.getState().reset();
   notificationStore.getState().reset();
+  // 解绑/登出等价路径：CON-3 的设备分区快照同为远端数据面，一并全清
+  deviceSnapshotStore.getState().clearSnapshots();
+  deviceSnapshotStore.getState().setLiveStale(false, null);
 }
 
 function handleAuthChange(): void {
   const state = authStore.getState();
   const accountLoggedIn = accountStore.getState().status === 'loggedIn';
   if (state.hydrated && state.pairState === 'paired') {
+    // 配对模式数据面盖章（M7 单主机退化）：属主 = 已配对桌面 id。
+    // 账号模式优先——已登录时接线属主归 accountRuntime 的目标设备，
+    // 本处不得覆写其盖章（两种传输互斥，登录态以账号为准）。
+    if (!accountLoggedIn && state.desktopId) {
+      stampDataPlane(state.desktopId);
+    }
     ensureApprovalWiring();
     return;
   }
@@ -131,8 +143,18 @@ export function ensureRunHistory(runId: string): void {
   void getObservationWiring()?.bridge.hydrateRun(runId);
 }
 
-/** 手动重连（设置 / 空态重试） */
+/**
+ * 手动重连（设置 / 横幅 / 空态重试的统一入口，CON-1）：按连接模式分发。
+ * - 账号中继模式：走「设备发现 + 资格同步」分发（refreshAndSyncAccountRemote）
+ *   ——「未连接」多半源于目标未被发现为在线，只对旧接线裸重连毫无作用，
+ *   更不得回落局域网配对路径（审计 A.3 接错线缺陷）；
+ * - 局域网配对模式：既有接线裸重连 / 无接线时按配对端点建立。
+ */
 export function reconnectNow(): void {
+  if (accountStore.getState().status === 'loggedIn') {
+    refreshAndSyncAccountRemote();
+    return;
+  }
   const wiring = getObservationWiring();
   if (wiring) {
     wiring.reconnect();
@@ -142,6 +164,6 @@ export function reconnectNow(): void {
     ensureObservationWiring();
     return;
   }
-  // 账号中继模式：接线不存在时按账号状态重建
+  // 未登录且未配对：按账号状态同步一次（无资格时为空操作）
   syncAccountRemote();
 }

@@ -5,7 +5,7 @@
 //   cancelling 态波形与提示变红「松开取消」，finishing 态显示「正在识别…」。
 // - 下载门：模型未就绪时以 Dialog 诚实说明体积与进度，可收起后台续传，
 //   失败可重试；绝不假装已就绪。
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import type { AsrModelState } from '@/adapters/asr/modelManager';
+import { formatBytes, type AsrModelState } from '@/adapters/asr/modelManager';
 import type {
   VoiceErrorState,
   VoiceRecovery,
@@ -25,6 +25,7 @@ import AppText from './AppText';
 import Dialog from './Dialog';
 import Icon from './Icon';
 import { SoftShadowSurface } from './SoftShadowSurface';
+import Spinner from './Spinner';
 
 /** 波形各柱权重（中间高、两侧低的对称包络） */
 const BAR_WEIGHTS = [0.55, 0.85, 1, 0.85, 0.55] as const;
@@ -236,23 +237,68 @@ export function VoiceModelGate({
   onConfirmDownload,
   onDismiss,
 }: VoiceModelGateProps) {
+  const theme = useTheme();
   const totalMb = Math.round(modelTotalBytes / (1024 * 1024));
   let description: string;
   let primaryLabel: string | null = '下载模型';
+  let content: ReactNode = null;
+
   if (state?.kind === 'downloading') {
-    description = `正在下载 ${state.fileName}…总进度 ${Math.round(
-      state.overallFraction * 100
-    )}%。可收起此弹窗，下载会在后台继续。`;
+    const percent = Math.round(state.overallFraction * 100);
+    const received = formatBytes(state.receivedBytes);
+    const total = formatBytes(state.totalBytes);
+    const fileIndex = 'fileIndex' in state ? state.fileIndex : 1;
+    const totalFiles = 'totalFiles' in state ? state.totalFiles : 3;
+    description = `正在下载 ${state.fileName} (${fileIndex}/${totalFiles})\n已完成 ${received} / ${total}（总进度 ${percent}%）。\n可收起此弹窗，下载会在后台继续。`;
     primaryLabel = null;
+    const fraction = Math.max(0, Math.min(1, state.overallFraction));
+    content = (
+      <View style={styles.gateProgressContainer}>
+        <View
+          style={[
+            styles.gateProgressBarTrack,
+            {
+              backgroundColor: theme.colors.fillSubtle,
+              borderRadius: theme.radius.pill,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.gateProgressBarFill,
+              {
+                width: `${Math.round(fraction * 100)}%`,
+                backgroundColor: theme.colors.actionPrimary,
+                borderRadius: theme.radius.pill,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    );
   } else if (state?.kind === 'verifying') {
-    description = `正在校验 ${state.fileName} 的完整性…`;
+    const fileIndex = 'fileIndex' in state ? state.fileIndex : 1;
+    const totalFiles = 'totalFiles' in state ? state.totalFiles : 3;
+    description = `正在高速校验 ${state.fileName} (${fileIndex}/${totalFiles}) 的完整性…`;
     primaryLabel = null;
+    content = (
+      <View style={styles.gateVerifyingContainer}>
+        <Spinner size="small" />
+      </View>
+    );
   } else if (state?.kind === 'error') {
     description = `下载失败：${state.message}。请检查网络后重试。`;
     primaryLabel = '重试';
   } else {
     description = `按住说话使用本机离线识别，需要先下载语音模型（约 ${totalMb}MB，建议 Wi-Fi 环境）。`;
   }
+
+  // 校验完成后自动关闭弹窗无缝就绪
+  useEffect(() => {
+    if (state?.kind === 'ready') {
+      onDismiss();
+    }
+  }, [state?.kind, onDismiss]);
 
   return (
     <Dialog
@@ -279,7 +325,9 @@ export function VoiceModelGate({
             ]
           : []),
       ]}
-    />
+    >
+      {content}
+    </Dialog>
   );
 }
 
@@ -315,6 +363,25 @@ const styles = StyleSheet.create({
   },
   errorAction: {
     fontWeight: '600',
+  },
+  gateProgressContainer: {
+    width: '100%',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  gateProgressBarTrack: {
+    width: '100%',
+    height: 6,
+    overflow: 'hidden',
+  },
+  gateProgressBarFill: {
+    height: '100%',
+  },
+  gateVerifyingContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
   },
 });
 

@@ -1,7 +1,7 @@
 // 迁移测试（Z0 R2-13 验收锚点：迁移幂等测试 v0 逐级升最新；M5 §5.4 迁移纪律）
 import { migrateIfNeeded } from './db';
 import { MemorySqlDriver } from './driver';
-import { LATEST_VERSION, type Migration } from './migrations';
+import { LATEST_VERSION, MIGRATIONS, type Migration } from './migrations';
 import { SCHEMA_VERSION, TABLES } from './schema';
 
 describe('迁移：全新库直达最新（v0 → 最新）', () => {
@@ -107,6 +107,48 @@ describe('迁移：从中间版本逐级升最新', () => {
     await expect(db.getFirst('PRAGMA user_version')).resolves.toEqual({
       user_version: 1,
     });
+  });
+});
+
+describe('迁移：v3 → v4（本地线程标题来源列，U4）', () => {
+  it('存量 v3 库升级：title_source 补列且存量行默认 derived，标题与行数不丢', async () => {
+    const db = new MemorySqlDriver();
+    // 只跑到 v3（真实迁移数组前三项），构造存量库
+    await migrateIfNeeded(db, MIGRATIONS.slice(0, 3));
+    await expect(db.getFirst('PRAGMA user_version')).resolves.toEqual({
+      user_version: 3,
+    });
+    // v3 形态写入（列清单不含 title_source）
+    await db.exec(
+      'INSERT INTO local_threads (id, title, preview, provider_id, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['t1', '旧线程标题', '摘要', 'p1', 'm1', 100, 200]
+    );
+    await db.exec(
+      'INSERT INTO local_threads (id, title, preview, provider_id, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['t2', '另一线程', '', null, null, 300, 400]
+    );
+
+    await expect(migrateIfNeeded(db)).resolves.toBe(4);
+    expect(db.rowCount('local_threads')).toBe(2);
+    const rows = await db.getAll<{
+      id: string;
+      title: string;
+      title_source: string;
+    }>('SELECT id, title, title_source FROM local_threads ORDER BY id ASC');
+    expect(rows).toEqual([
+      { id: 't1', title: '旧线程标题', title_source: 'derived' },
+      { id: 't2', title: '另一线程', title_source: 'derived' },
+    ]);
+    // 升级后新写入可携带显式来源（v4 形态 INSERT 全列）
+    await db.exec(
+      'INSERT INTO local_threads (id, title, title_source, preview, provider_id, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ['t3', '新线程', 'ai', '', null, null, 500, 500]
+    );
+    const t3 = await db.getFirst<{ title_source: string }>(
+      'SELECT title_source FROM local_threads WHERE id = ?',
+      ['t3']
+    );
+    expect(t3?.title_source).toBe('ai');
   });
 });
 

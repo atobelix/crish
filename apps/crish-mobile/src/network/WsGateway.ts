@@ -357,6 +357,11 @@ export class WsGateway {
     this.sendFn = send;
   }
 
+  /** 断开连接时清理发送闭包，防止已断开的 socket 吞帧或悬挂 */
+  detachSend(): void {
+    this.sendFn = null;
+  }
+
   /** 请求-响应分发（D3 §5.4）：构造带 msgId 请求帧 → 注册 pending → 发送；
    *  响应帧/错误帧按 reqMsgId 回填，超时 reject（cmd.timeout，可重发幂等）。 */
   invoke<T>(kind: string, body: unknown, timeoutMs?: number): Promise<T> {
@@ -404,9 +409,14 @@ export class WsGateway {
     });
   }
 
-  /** 无响应推流发送（心跳等推送类消息，M6 §3.2：无响应）；未接线时静默丢弃 */
-  send(kind: string, body: unknown): void {
-    if (!this.sendFn) return;
+  /** 是否已挂载可用发送闭包 */
+  canSend(): boolean {
+    return this.sendFn !== null;
+  }
+
+  /** 无响应推流发送（心跳等推送类消息，M6 §3.2：无响应）；未接线时静默丢弃返回 false */
+  send(kind: string, body: unknown): boolean {
+    if (!this.sendFn) return false;
     const msgId = nextMsgId(this.msgIdPrefix);
     const env = this.buildRequestFn(
       kind,
@@ -415,6 +425,7 @@ export class WsGateway {
       this.nowFn()
     );
     this.sendFn(encodeFrame(env));
+    return true;
   }
 
   /** 订阅分发（精确 kind + 通配 '*'；返回退订函数）。

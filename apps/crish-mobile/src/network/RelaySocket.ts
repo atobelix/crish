@@ -2,6 +2,9 @@
 // 票据、连接 relay，等待 host peer 在线后才触发 onopen；数据帧自动包/解
 // relay.data 信封。
 import type { WsSocket } from '@/network/ReconnectingWsClient';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('relay');
 
 export interface RelayTicketEndpoint {
   url: string;
@@ -10,7 +13,10 @@ export interface RelayTicketEndpoint {
 
 export type RelayTicketProvider = () => Promise<RelayTicketEndpoint>;
 
-const PEER_WAIT_MS = 20_000;
+/** 等待 host peer 在线上限（relay.peer=online 前不宣告 open）。
+ *  导出供接线层做握手预算对齐：ReconnectingWsClient 的看门狗必须 ≥
+ *  票据 HTTP 超时 + 本等待（observationWiring RELAY_CONNECT_TIMEOUT_MS，CON-1）。 */
+export const PEER_WAIT_MS = 20_000;
 
 export class RelaySocket implements WsSocket {
   onopen: (() => void) | null = null;
@@ -117,7 +123,7 @@ export class RelaySocket implements WsSocket {
         if (code === 'replaced' || code === 'peer.offline') {
           this.fail();
         } else {
-          console.warn(`[relay] ${code}`);
+          log.warn(code);
         }
         return;
       }

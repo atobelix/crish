@@ -15,6 +15,7 @@ import {
   parseModelsList,
   providerSpecFromDraft,
   resolveActiveSelection,
+  sanitizeAiTitle,
   validateProviderDraft,
 } from './localChatProtocol';
 import type {
@@ -254,5 +255,60 @@ describe('草稿与配置组装', () => {
     expect(resolveActiveSelection(config)).toBeNull();
     config.activeModel = { providerId: 'p1', modelId: 'm1' };
     expect(resolveActiveSelection(config)?.modelId).toBe('m1');
+  });
+});
+
+describe('sanitizeAiTitle（U4 标题消毒：异常一律 null）', () => {
+  it('干净标题原样通过；首尾空白去除', () => {
+    expect(sanitizeAiTitle('秋日诗歌创作')).toBe('秋日诗歌创作');
+    expect(sanitizeAiTitle('  季度 报告 汇总  ')).toBe('季度 报告 汇总');
+  });
+
+  it('剥外层引号（直引号/中文引号/书名式引号）', () => {
+    expect(sanitizeAiTitle('"秋天的诗"')).toBe('秋天的诗');
+    expect(sanitizeAiTitle('“旅行计划”')).toBe('旅行计划');
+    expect(sanitizeAiTitle('「代码评审」')).toBe('代码评审');
+  });
+
+  it('多行只取首个非空行；markdown 标记不进标题', () => {
+    expect(sanitizeAiTitle('\n**重点** 讨论 `方案`\n这是解释行')).toBe(
+      '重点 讨论 方案'
+    );
+    expect(sanitizeAiTitle('# 周报标题')).toBe('周报标题');
+  });
+
+  it('超长硬截断到 16 字（无省略号，标题量级）', () => {
+    const long = '一二三四五六七八九十甲乙丙丁戊己庚辛壬癸';
+    const out = sanitizeAiTitle(long);
+    expect(out).toHaveLength(16);
+    expect(out).not.toContain('…');
+  });
+
+  it('空/纯空白/纯标记 → null（视为生成失败）', () => {
+    expect(sanitizeAiTitle('')).toBeNull();
+    expect(sanitizeAiTitle('   \n  ')).toBeNull();
+    expect(sanitizeAiTitle('**')).toBeNull();
+    expect(sanitizeAiTitle('""')).toBeNull();
+  });
+});
+
+describe('buildChatRequestBody temperature（U4 一次性补全）', () => {
+  it('未设 temperature 不写键（compact 口径）；设了才写', () => {
+    const base = buildChatRequestBody({
+      model: 'm',
+      messages: [],
+      stream: false,
+    });
+    expect(base).not.toHaveProperty('temperature');
+    const withTemp = buildChatRequestBody({
+      model: 'm',
+      messages: [],
+      stream: false,
+      temperature: 0.3,
+      maxTokens: 32,
+    });
+    expect(withTemp.temperature).toBe(0.3);
+    expect(withTemp.max_tokens).toBe(32);
+    expect(withTemp).not.toHaveProperty('tools');
   });
 });

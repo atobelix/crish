@@ -2,9 +2,14 @@
 // 模型清单（拉取或手填）/ 默认模型 / 连通性自检 / 保存与删除。
 // 密钥只在输入瞬间存在于表单状态，保存后落 SecureStore，配置仅存引用。
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import type { LocalProviderEditVm } from '@/adapters/viewmodels/useLocalProviderEditVm';
 import type { ProviderDraftIssue } from '@/domain/types/localChat';
 import {
@@ -41,8 +46,14 @@ export default function LocalProviderEditView({
   const insets = useSafeAreaInsets();
   const [keyVisible, setKeyVisible] = useState(false);
   const [modelInput, setModelInput] = useState('');
+  // 显隐钮 / 模型行按压反馈（按压过渡统一批）
+  const eyePress = usePressFade();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const providerId = vm.providerId;
+  // 本页底 = canvasGrouped，与次级按钮默认填充 fillSubtle 同值（浅色同为
+  // #f9f9f9），胶囊整个隐形、只剩大号粗字与标题无异（用户点名）——本页次级
+  // 动作统一以 surface 白填充呈现（与 AuthButton 次按钮白底、模型行白底同口径）
+  const groupedSecondaryStyle = { backgroundColor: theme.colors.surface };
 
   const addModelFromInput = () => {
     const id = modelInput.trim();
@@ -59,7 +70,11 @@ export default function LocalProviderEditView({
         onBack={onBack}
         floating
       />
-      <ScrollView
+      {/* 库版键盘感知滚动：聚焦下半区字段时自动滚出并逐帧跟随键盘
+          （原 RN ScrollView 无键盘 inset，resize 失效时字段滚不出来，
+          键盘审计 §一 P1） */}
+      <KeyboardAwareScrollView
+        bottomOffset={theme.space.md}
         contentContainerStyle={{
           paddingHorizontal: theme.space.lg,
           paddingTop: insets.top + theme.size.touchLarge + theme.space.sm + 2,
@@ -72,6 +87,7 @@ export default function LocalProviderEditView({
           <FieldLabel text="名称" />
           <Input
             testID="local-provider-name"
+            tone="field"
             value={vm.draft.name}
             onChangeText={vm.setName}
             placeholder="如 DeepSeek / OpenAI / 本地 Ollama"
@@ -80,6 +96,7 @@ export default function LocalProviderEditView({
           <FieldLabel text="Base URL" />
           <Input
             testID="local-provider-base-url"
+            tone="field"
             value={vm.draft.baseUrl}
             onChangeText={vm.setBaseUrl}
             placeholder="https://api.deepseek.com/v1"
@@ -92,6 +109,7 @@ export default function LocalProviderEditView({
             <View style={styles.flex}>
               <Input
                 testID="local-provider-api-key"
+                tone="field"
                 value={vm.draft.apiKey}
                 onChangeText={vm.setApiKey}
                 placeholder={vm.hasStoredKey ? '已保存（留空不修改）' : 'sk-…'}
@@ -100,22 +118,21 @@ export default function LocalProviderEditView({
                 autoCorrect={false}
               />
             </View>
-            <Pressable
+            <AnimatedPressable
               accessibilityRole="button"
               accessibilityLabel={keyVisible ? '隐藏密钥' : '显示密钥'}
               onPress={() => setKeyVisible((v) => !v)}
-              style={styles.eyeButton}
+              onPressIn={eyePress.onPressIn}
+              onPressOut={eyePress.onPressOut}
+              style={[styles.eyeButton, eyePress.fadeStyle]}
             >
               <Icon
                 name={keyVisible ? 'eye-off' : 'eye'}
                 size={theme.size.iconSmall + 2}
                 color={theme.colors.textSecondary}
               />
-            </Pressable>
+            </AnimatedPressable>
           </View>
-          <AppText variant="caption" color="textTertiary">
-            密钥保存在本机安全存储中，不会同步到电脑或其他设备。
-          </AppText>
           {vm.hasStoredKey && !vm.isNew ? (
             <AppText
               variant="footnote"
@@ -129,54 +146,20 @@ export default function LocalProviderEditView({
 
         <View style={{ gap: theme.space.sm }}>
           <FieldLabel text="模型" />
-          {vm.draft.modelIds.map((id) => {
-            const isDefault = vm.draft.defaultModelId === id;
-            return (
-              <Pressable
-                key={id}
-                testID={`local-model-${id}`}
-                accessibilityRole="button"
-                accessibilityLabel={`${id}${isDefault ? '，默认模型' : ''}`}
-                onPress={() => vm.setDefaultModelId(id)}
-                style={[
-                  styles.modelRow,
-                  {
-                    borderRadius: theme.radius.menu,
-                    backgroundColor: theme.colors.surfaceGrouped,
-                    paddingHorizontal: theme.space.md,
-                    paddingVertical: theme.space.sm + 2,
-                  },
-                ]}
-              >
-                <Icon
-                  name={isDefault ? 'check' : 'add'}
-                  size={theme.size.iconSmall}
-                  color={
-                    isDefault ? theme.colors.brand : theme.colors.textTertiary
-                  }
-                />
-                <AppText variant="body" style={styles.flex}>
-                  {id}
-                </AppText>
-                {isDefault ? (
-                  <AppText variant="caption" color="brand">
-                    默认
-                  </AppText>
-                ) : null}
-                <AppText
-                  variant="footnote"
-                  color="textTertiary"
-                  onPress={() => vm.removeModel(id)}
-                >
-                  移除
-                </AppText>
-              </Pressable>
-            );
-          })}
+          {vm.draft.modelIds.map((id) => (
+            <ModelRow
+              key={id}
+              id={id}
+              isDefault={vm.draft.defaultModelId === id}
+              onPress={() => vm.setDefaultModelId(id)}
+              onRemove={() => vm.removeModel(id)}
+            />
+          ))}
           <View style={styles.keyRow}>
             <View style={styles.flex}>
               <Input
                 testID="local-model-input"
+                tone="field"
                 value={modelInput}
                 onChangeText={setModelInput}
                 placeholder="手动输入模型 id，如 deepseek-chat"
@@ -185,13 +168,21 @@ export default function LocalProviderEditView({
                 onSubmitEditing={addModelFromInput}
               />
             </View>
-            <Button label="添加" variant="ghost" onPress={addModelFromInput} />
+            <Button
+              label="添加"
+              variant="secondary"
+              style={groupedSecondaryStyle}
+              onPress={addModelFromInput}
+              testID="local-model-add"
+            />
           </View>
           <Button
             label={vm.fetchingModels ? '拉取中…' : '从供应商拉取模型列表'}
             variant="secondary"
+            style={groupedSecondaryStyle}
             disabled={vm.fetchingModels || vm.draft.baseUrl.trim() === ''}
             onPress={() => void vm.fetchModels()}
+            testID="local-provider-fetch-models"
           />
           {vm.fetchError ? (
             <AppText variant="footnote" color="danger">
@@ -199,15 +190,14 @@ export default function LocalProviderEditView({
               {vm.fetchError.detail ? `（${vm.fetchError.detail}）` : ''}
             </AppText>
           ) : null}
-          <AppText variant="caption" color="textTertiary">
-            点按模型行设为默认；拉取失败不影响手填。
-          </AppText>
         </View>
 
         <View style={{ gap: theme.space.sm }}>
           <Button
             label={vm.checking ? '检查中…' : '连通性检查'}
             variant="secondary"
+            style={groupedSecondaryStyle}
+            testID="local-provider-check-connectivity"
             disabled={
               vm.checking ||
               vm.draft.baseUrl.trim() === '' ||
@@ -261,7 +251,7 @@ export default function LocalProviderEditView({
             testID="local-provider-delete"
           />
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Dialog
         visible={deleteOpen}
@@ -291,8 +281,17 @@ export default function LocalProviderEditView({
 }
 
 function FieldLabel({ text }: { text: string }) {
+  const theme = useTheme();
   return (
-    <AppText variant="sectionLabel" color="textTertiary">
+    <AppText
+      variant="sectionLabel"
+      color="textTertiary"
+      style={{
+        // 与账号表单 AuthField 标签同口径：内衬 xs、字重 500（盒上标签层级）
+        paddingHorizontal: theme.space.xs,
+        fontWeight: '500',
+      }}
+    >
       {text}
     </AppText>
   );
@@ -304,3 +303,57 @@ const styles = StyleSheet.create({
   modelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   flex: { flex: 1 },
 });
+
+/** 模型行（列表项内独立组件：按压 hook 不得进 map 回调）；行内「移除」为
+ * 文字链（AppText onPress），整体行按压走透明度过渡 */
+function ModelRow({
+  id,
+  isDefault,
+  onPress,
+  onRemove,
+}: {
+  id: string;
+  isDefault: boolean;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const theme = useTheme();
+  const press = usePressFade();
+  return (
+    <AnimatedPressable
+      testID={`local-model-${id}`}
+      accessibilityRole="button"
+      accessibilityLabel={`${id}${isDefault ? '，默认模型' : ''}`}
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
+        styles.modelRow,
+        {
+          borderRadius: theme.radius.menu,
+          backgroundColor: theme.colors.surfaceGrouped,
+          paddingHorizontal: theme.space.md,
+          paddingVertical: theme.space.sm + 2,
+        },
+        press.fadeStyle,
+      ]}
+    >
+      <Icon
+        name={isDefault ? 'check' : 'add'}
+        size={theme.size.iconSmall}
+        color={isDefault ? theme.colors.brand : theme.colors.textTertiary}
+      />
+      <AppText variant="body" style={styles.flex}>
+        {id}
+      </AppText>
+      {isDefault ? (
+        <AppText variant="caption" color="brand">
+          默认
+        </AppText>
+      ) : null}
+      <AppText variant="footnote" color="textTertiary" onPress={onRemove}>
+        移除
+      </AppText>
+    </AnimatedPressable>
+  );
+}

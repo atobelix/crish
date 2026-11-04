@@ -1,9 +1,11 @@
 // 审批列表项：工具 / 风险 / 摘要 / 倒计时 / 会话。
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import type { ApprovalItem } from '@/domain/types/domain';
 import { formatRelativeTime } from '@/domain/pure/time';
 import { AppText, Badge } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import {
   COUNTDOWN_WARNING_MS,
   formatRemainingMs,
@@ -31,6 +33,7 @@ export function ApprovalListItem({
     ? `$ ${maskCommandSecrets(item.riskMeta.command)}`
     : summarizeParameters(item.request.parameters, 120);
   const time = formatRelativeTime(item.receivedAtMs);
+  const press = usePressFade();
 
   return (
     <Pressable
@@ -38,18 +41,29 @@ export function ApprovalListItem({
       accessibilityRole="button"
       accessibilityLabel={`审批：${item.request.toolName}，剩余 ${formatRemainingMs(remainingMs)}`}
       onPress={() => onPress(item.request.toolCallId)}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         {
           marginHorizontal: theme.space.lg,
           padding: theme.space.lg,
           gap: theme.space.sm,
           borderRadius: theme.radius.card,
-          backgroundColor: pressed
-            ? theme.colors.fillPressed
-            : theme.colors.fillSubtle,
+          backgroundColor: theme.colors.fillSubtle,
         },
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: theme.radius.card,
+            backgroundColor: theme.colors.fillPressed,
+          },
+          press.overlayStyle,
+        ]}
+      />
       <View style={[styles.row, { gap: theme.space.sm }]}>
         <Badge dot tone={highRisk ? 'danger' : 'warning'} />
         <AppText variant="bodyStrong" numberOfLines={1} style={styles.toolName}>

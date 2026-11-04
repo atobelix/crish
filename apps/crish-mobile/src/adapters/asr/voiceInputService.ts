@@ -6,6 +6,7 @@
 //   再返回；cancel() 直接复位管线丢弃本句。
 import { PermissionsAndroid, Platform } from 'react-native';
 import { getCrishAsrNative } from 'crish-asr';
+import { createLogger } from '@/adapters/platform/logger';
 import {
   SimulatedStreamingPipeline,
   type AsrResultEvent,
@@ -31,6 +32,8 @@ export interface VoiceSessionHandlers {
 interface Subscription {
   remove(): void;
 }
+
+const log = createLogger('voiceInput');
 
 class VoiceInputService {
   private engineReady = false;
@@ -79,7 +82,12 @@ class VoiceInputService {
         this.engineReady = true;
         this.engineDir = paths.dir;
       }
-    } catch {
+    } catch (error) {
+      // 原生建引擎的失败原因只在这里可见：必须留痕，静默吞掉曾让
+      // 「语音引擎启动失败」在真机上无从溯源（2026-11-03）。
+      log.error('语音引擎创建失败', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return 'engine-failed';
     }
 
@@ -107,7 +115,10 @@ class VoiceInputService {
     let captureOk = false;
     try {
       captureOk = await native.startCapture();
-    } catch {
+    } catch (error) {
+      log.error('麦克风采集启动失败', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       captureOk = false;
     }
     if (!captureOk) {

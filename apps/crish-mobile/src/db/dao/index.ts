@@ -5,3 +5,14 @@ export type { NotificationRow, NotificationsDao } from './notificationsDao';
 export { SqlNotificationsDao } from './notificationsDao';
 export type { ApprovalQueueDao, ApprovalQueueRow } from './approvalQueueDao';
 export { SqlApprovalQueueDao, rowToOutboxItem } from './approvalQueueDao';
+export type {
+  LocalThreadsDao,
+  LocalThreadRow,
+  LocalMessageRow,
+  LocalMessageWithThread,
+} from './localThreadsDao';
+export {
+  SqlLocalThreadsDao,
+  rowToThreadMeta,
+  rowToLocalMessage,
+} from './localThreadsDao';

@@ -44,6 +44,7 @@ function resetStore(): void {
     pending: [],
     decisionBusy: {},
     outboxCount: 0,
+    outboxPersistError: null,
     lastReconcileAt: null,
     history: [],
   });
@@ -212,5 +213,72 @@ describe('approvalStore 计数 / 时间戳 / queued', () => {
     expect(approvalStore.getState().outboxCount).toBe(7);
     approvalStore.getState().setLastReconcileAt(42);
     expect(approvalStore.getState().lastReconcileAt).toBe(42);
+  });
+});
+
+describe('approvalStore 属主盖章（M7 设备分区不变量）', () => {
+  beforeEach(() => {
+    approvalStore.getState().reset();
+  });
+
+  it('异源 upsertPending/handleResolved 丢弃并计数，同源放行', () => {
+    const store = approvalStore.getState();
+    store.stampOwner('dev-a');
+    store.upsertPending(makeItem(), 'dev-b');
+    expect(approvalStore.getState().pending).toHaveLength(0);
+    expect(approvalStore.getState().droppedWriteCount).toBe(1);
+
+    store.upsertPending(makeItem(), 'dev-a');
+    expect(approvalStore.getState().pending).toHaveLength(1);
+
+    store.handleResolved('call-1', 'approved', NOW, 'dev-b');
+    expect(approvalStore.getState().pending).toHaveLength(1);
+    expect(approvalStore.getState().droppedWriteCount).toBe(2);
+
+    store.handleResolved('call-1', 'approved', NOW, 'dev-a');
+    expect(approvalStore.getState().pending).toHaveLength(0);
+  });
+
+  it('决策流（本地用户动作）不设防：盖章后 beginDecision 仍可走', () => {
+    const store = approvalStore.getState();
+    store.stampOwner('dev-a');
+    store.upsertPending(makeItem(), 'dev-a');
+    expect(store.beginDecision('call-1', NOW)).toBe(true);
+  });
+
+  it('restoreSnapshotData 整表装入审批面', () => {
+    const store = approvalStore.getState();
+    store.restoreSnapshotData({
+      pending: [makeItem()],
+      decisionBusy: {},
+      history: [],
+      lastReconcileAt: 42,
+      outboxCount: 0,
+    });
+    expect(approvalStore.getState().pending).toHaveLength(1);
+    expect(approvalStore.getState().lastReconcileAt).toBe(42);
+  });
+});
+
+describe('approvalStore outbox 持久化故障面（收口批）', () => {
+  it('缺省为 null（持久化健康）', () => {
+    expect(approvalStore.getState().outboxPersistError).toBeNull();
+  });
+
+  it('setOutboxPersistError 置入/清除故障信息', () => {
+    const store = approvalStore.getState();
+    store.setOutboxPersistError('离线决策保存失败，重启应用后可能丢失');
+    expect(approvalStore.getState().outboxPersistError).toBe(
+      '离线决策保存失败，重启应用后可能丢失'
+    );
+    store.setOutboxPersistError(null);
+    expect(approvalStore.getState().outboxPersistError).toBeNull();
+  });
+
+  it('reset 清空故障面（解绑/换机不带走旧故障）', () => {
+    const store = approvalStore.getState();
+    store.setOutboxPersistError('离线决策恢复失败');
+    store.reset();
+    expect(approvalStore.getState().outboxPersistError).toBeNull();
   });
 });

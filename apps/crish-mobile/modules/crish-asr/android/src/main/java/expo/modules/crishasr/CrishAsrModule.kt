@@ -15,11 +15,15 @@ import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.File
+import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import kotlin.concurrent.thread
 
 /**
@@ -50,6 +54,19 @@ class CrishAsrModule : Module() {
     Name("CrishAsr")
 
     Events("onAudioChunk", "onCaptureError")
+
+    AsyncFunction("fileSha256") { filePath: String, promise: Promise ->
+      thread(start = true, isDaemon = true, name = "crish-file-sha256") {
+        try {
+          val hash = calculateFileSha256(filePath)
+          promise.resolve(hash)
+        } catch (e: CodedException) {
+          promise.reject(e)
+        } catch (e: Throwable) {
+          promise.reject(CodedException("FILE_SHA256_ERROR", e.message ?: "计算文件哈希失败", e))
+        }
+      }
+    }
 
     AsyncFunction("createEngine") { modelPath: String, tokensPath: String, vadModelPath: String ->
       createEngineInternal(modelPath, tokensPath, vadModelPath)
@@ -276,6 +293,30 @@ class CrishAsrModule : Module() {
     val buffer = ByteBuffer.allocate(samples.size * 4).order(ByteOrder.LITTLE_ENDIAN)
     buffer.asFloatBuffer().put(samples)
     return Base64.encodeToString(buffer.array(), Base64.NO_WRAP)
+  }
+
+  // ── 文件哈希（SHA-256 原生加速）────────────────────────────────
+
+  private fun calculateFileSha256(filePath: String): String {
+    val nativePath = if (filePath.startsWith("file://")) filePath.substring(7) else filePath
+    val file = File(nativePath)
+    if (!file.exists() || !file.isFile) {
+      throw CodedException("FILE_NOT_FOUND", "待校验文件不存在: $nativePath", null)
+    }
+    val digest = MessageDigest.getInstance("SHA-256")
+    FileInputStream(file).use { fis ->
+      val buffer = ByteArray(131072) // 128KB 高性能分块读取
+      var read: Int
+      while (fis.read(buffer).also { read = it } != -1) {
+        digest.update(buffer, 0, read)
+      }
+    }
+    val bytes = digest.digest()
+    val sb = StringBuilder(bytes.size * 2)
+    for (b in bytes) {
+      sb.append(String.format("%02x", b))
+    }
+    return sb.toString()
   }
 
   companion object {

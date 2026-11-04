@@ -89,6 +89,7 @@ export function ConversationScreen({
         busy={engine.busy}
         anchorKey={`${engine.kind}:${engine.id}`}
         readyCover
+        canRegenerate={!engine.busy}
       />
 
       {/* 上下羽化：内容临近边缘渐隐（含头栏/输入框背后的过渡区；
@@ -110,7 +111,8 @@ export function ConversationScreen({
 
       {!follow ? (
         <ScrollToBottomButton
-          bottomOffset={floatingHeight + theme.space.section}
+          alignment="left"
+          bottomOffset={floatingHeight + theme.space.sm}
           followKeyboard
           onPress={() => {
             listRef.current?.scrollToEnd({ animated: true });

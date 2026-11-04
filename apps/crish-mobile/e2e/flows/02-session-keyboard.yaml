@@ -1,0 +1,42 @@
+appId: com.crish.mobile
+name: 02 会话页 → 键盘弹起且输入框可见（键盘避让冒烟）
+---
+# 目的：防键盘避让回归（审计：会话页悬浮 composer 曾被键盘完全盖住）。
+# 前提：主页列表中至少有一条会话（远程或本地线程行均可，行 testID 前缀
+# chat-item-）。桌面离线时远程会话页呈断线出路条、composer 不可输入——
+# 此时走降级断言（截图存证后结束），键盘段在桌面在线时才有意义。
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: 'home-composer'
+    timeout: 60000
+# 打开列表第一条会话（id 为正则匹配：chat-item-<id> / chat-item-local-<id>）。
+- tapOn:
+    id: 'chat-item-.*'
+- extendedWaitUntil:
+    visible:
+      id: 'session-composer'
+    timeout: 30000
+# 降级路径：断线出路条在场 → 键盘段不适用，截图存证即可。
+- runFlow:
+    when:
+      visible:
+        id: 'session-offline-exit'
+    commands:
+      - takeScreenshot: 02-session-offline
+# 正常路径：点输入框 → 键盘弹起 → 输入框仍可见（不被键盘遮盖而失联）。
+- runFlow:
+    when:
+      notVisible:
+        id: 'session-offline-exit'
+    commands:
+      - tapOn:
+          id: 'session-composer'
+      - inputText: '键盘冒烟'
+      - assertVisible:
+          id: 'session-composer'
+      - takeScreenshot: 02-session-keyboard
+      # 只留草稿不发送；收尾擦除草稿，不动用户数据。
+      - eraseText: 4
+      - hideKeyboard

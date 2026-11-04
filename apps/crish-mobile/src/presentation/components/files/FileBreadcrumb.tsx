@@ -1,9 +1,14 @@
 // 面包屑：工作区根 + 目录层级；点击段跳转。
+// 按压反馈（按压过渡统一批）：段链接整件透明度 120ms 过渡。
 import { memo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { workspaceNameOf } from '@/domain/pure/workspacePath';
 import { AppText, Icon, IconButton } from '@/presentation/ui';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 
 export function segmentLabel(
   segment: string,
@@ -57,27 +62,11 @@ export const FileBreadcrumb = memo(function FileBreadcrumb({
                   color={theme.colors.textTertiary}
                 />
               ) : null}
-              <Pressable
-                testID={isCurrent ? 'crumb-current' : 'crumb'}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isCurrent }}
-                accessibilityLabel={`跳转到 ${label}`}
-                disabled={isCurrent}
+              <CrumbLink
+                label={label}
+                isCurrent={isCurrent}
                 onPress={() => onSelectSegment(index)}
-                style={({ pressed }) => [
-                  styles.crumb,
-                  pressed && !isCurrent && { opacity: 0.6 },
-                ]}
-              >
-                <AppText
-                  variant="meta"
-                  color={isCurrent ? 'textPrimary' : 'textSecondary'}
-                  numberOfLines={1}
-                  style={isCurrent ? styles.current : undefined}
-                >
-                  {label}
-                </AppText>
-              </Pressable>
+              />
             </View>
           );
         })}
@@ -85,6 +74,41 @@ export const FileBreadcrumb = memo(function FileBreadcrumb({
     </View>
   );
 });
+
+/** 单段链接：整件透明度 120ms 过渡（当前段禁用无按压） */
+function CrumbLink({
+  label,
+  isCurrent,
+  onPress,
+}: {
+  label: string;
+  isCurrent: boolean;
+  onPress: () => void;
+}) {
+  const press = usePressFade();
+  return (
+    <AnimatedPressable
+      testID={isCurrent ? 'crumb-current' : 'crumb'}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isCurrent }}
+      accessibilityLabel={`跳转到 ${label}`}
+      disabled={isCurrent}
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[styles.crumb, press.fadeStyle]}
+    >
+      <AppText
+        variant="footnote"
+        color={isCurrent ? 'textPrimary' : 'textSecondary'}
+        numberOfLines={1}
+        style={isCurrent ? styles.current : undefined}
+      >
+        {label}
+      </AppText>
+    </AnimatedPressable>
+  );
+}
 
 const styles = StyleSheet.create({
   bar: {

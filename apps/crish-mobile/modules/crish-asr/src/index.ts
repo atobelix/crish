@@ -19,6 +19,8 @@ export interface CaptureErrorEvent {
 }
 
 export interface CrishAsrNativeModule {
+  /** 对本地文件计算 SHA-256 哈希字符串（全原生 IO + 硬件加速，毫秒级返回） */
+  fileSha256(filePath: string): Promise<string>;
   /** 以本地模型文件创建识别器 + VAD（参数为规范锁定值，见 Kotlin 侧） */
   createEngine(
     modelPath: string,
@@ -63,6 +65,18 @@ export function getCrishAsrNative(): CrishAsrNativeModule | null {
 
 export function isCrishAsrAvailable(): boolean {
   return getCrishAsrNative() !== null;
+}
+
+/**
+ * 原生文件 SHA-256 计算契约转发：全原生 IO + 硬件加速，毫秒级返回 64 位小写十六进制字符串。
+ * 原生模块不可用时抛出异常。
+ */
+export async function fileSha256(filePath: string): Promise<string> {
+  const native = getCrishAsrNative();
+  if (!native?.fileSha256) {
+    throw new Error('原生 CrishAsr.fileSha256 模块不可用');
+  }
+  return native.fileSha256(filePath);
 }
 
 export default getCrishAsrNative;

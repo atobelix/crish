@@ -47,10 +47,37 @@ describe('accountStore', () => {
     expect(accountStore.getState().targetDeviceId).toBe('desk-a');
   });
 
+  it('成功但为空的发现不清既有目标（CON-1 空发现保护）', () => {
+    accountStore.getState().setDevices([device('desk-a', true)]);
+    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
+    accountStore.getState().setDevices([]);
+    expect(accountStore.getState().devices).toEqual([]);
+    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
+  });
+
+  it('本地钉住：发现轮次不改选远端，目标恒为 null（选本机不被心跳撤销）', () => {
+    accountStore.getState().selectLocalTarget();
+    expect(accountStore.getState().localTargetPinned).toBe(true);
+    accountStore.getState().setDevices([device('desk-a', true)]);
+    expect(accountStore.getState().targetDeviceId).toBeNull();
+    accountStore.getState().setDevices([]);
+    expect(accountStore.getState().targetDeviceId).toBeNull();
+    expect(accountStore.getState().localTargetPinned).toBe(true);
+  });
+
+  it('显式改选远端解钉：selectTarget 后目标与自动选靶恢复', () => {
+    accountStore.getState().selectLocalTarget();
+    accountStore.getState().selectTarget('desk-a');
+    expect(accountStore.getState().localTargetPinned).toBe(false);
+    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
+  });
+
   it('reset 清空账号态并标记 hydrated', () => {
     accountStore.getState().setStatus('loggedIn');
+    accountStore.getState().selectLocalTarget();
     accountStore.getState().setDevices([device('desk-a', true)]);
     accountStore.getState().reset();
+    expect(accountStore.getState().localTargetPinned).toBe(false);
     expect(accountStore.getState().status).toBe('loggedOut');
     expect(accountStore.getState().hydrated).toBe(true);
     expect(accountStore.getState().devices).toEqual([]);

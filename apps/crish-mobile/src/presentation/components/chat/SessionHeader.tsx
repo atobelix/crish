@@ -1,14 +1,25 @@
-// 会话页悬浮头栏（原型 conv-top-bar）：完全通透，无底色、无边界，
-// 浮于滚动流之上；返回白圆钮 + 纯白标题胶囊 + 更多白圆钮。
-import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+// 统一对话屏悬浮头栏（移动界面统一方案 §7，由 SessionHeader 演进为
+// ConversationHeader；文件名沿旧名——原生阴影守卫按路径点名本文件，
+// 改名留待守卫口径统一时处理）：完全通透，无底色、无边界，浮于滚动流
+// 之上；汉堡圆钮（开抽屉，代原返回钮）+ 纯白标题胶囊 + 新建对话圆钮 +
+// 更多圆钮。返回路径由抽屉/新建/系统返回兜底（方案 §2.3）。
+// 阴影口径（SVG 软阴影收编定案）：标题胶囊是原型点名的悬浮面之一——
+// Android 浅色经 SoftShadow 出原型两层极淡投影（实测宽度到手才渲染），
+// 填充由胶囊 backgroundColor 单一承担（surfaceRaised）；深色 SoftShadow
+// 内部短路、区分回归亮度台阶；iOS 无阴影。两侧圆钮（汉堡钮/新建/更多）
+// 均为 floating 圆钮，阴影由 IconButton floating 自带 SoftShadow（button 档）。
+import { useState, type ReactNode } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, IconButton } from '@/presentation/ui';
+import { AppText, IconButton, SoftShadow } from '@/presentation/ui';
 
-export interface SessionHeaderProps {
+export interface ConversationHeaderProps {
   title: string;
-  onBack: () => void;
+  /** 汉堡钮：打开 (main) 抽屉（全 App 顶栏左侧语义收敛为开抽屉） */
+  onOpenDrawer: () => void;
+  /** 新建对话（回主页新对话面） */
+  onNewConversation: () => void;
   /** 更多菜单触发（菜单本体由调用方渲染，锚点见 DropdownMenu top） */
   onMore: () => void;
   /** 标题胶囊内尾随元素（预留） */
@@ -16,15 +27,19 @@ export interface SessionHeaderProps {
   testID?: string;
 }
 
-export function SessionHeader({
+export function ConversationHeader({
   title,
-  onBack,
+  onOpenDrawer,
+  onNewConversation,
   onMore,
   trailing,
   testID,
-}: SessionHeaderProps) {
+}: ConversationHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Android 软阴影需要实测宽度（胶囊宽随标题长度变化），onLayout 捕获后渲染
+  const [pillWidth, setPillWidth] = useState(0);
+  const pillHeight = theme.size.barAction + 2;
   return (
     <View
       testID={testID}
@@ -38,36 +53,61 @@ export function SessionHeader({
         },
       ]}
     >
-      <View style={[styles.row, { gap: theme.space.sm }]}>
-        <View style={styles.side}>
+      <View style={styles.row}>
+        {/* 左侧复合簇：菜单按钮 + 紧随其后的对话标题胶囊（取消居中，自然左对齐流） */}
+        <View style={[styles.leftCluster, { gap: theme.space.sm }]}>
           <IconButton
-            name="chevron-left"
+            name="menu"
             variant="floating"
-            accessibilityLabel="返回会话列表"
-            onPress={onBack}
-            testID="session-back"
+            accessibilityLabel="打开菜单"
+            onPress={onOpenDrawer}
+            testID="session-drawer"
           />
+
+          {/* 标题胶囊：纯白、仅文字，无任何多余图标；自适应收缩与超长截断 */}
+          <View
+            onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
+            style={[
+              styles.titlePill,
+              {
+                height: pillHeight,
+                borderRadius: theme.radius.pill,
+                // 填充单一绘制点（surfaceRaised）；Android 浅色的投影由
+                // 下方 SoftShadow 承担，深色/iOS 靠本亮度台阶区分
+                backgroundColor: theme.colors.surfaceRaised,
+                paddingHorizontal: theme.space.lg,
+              },
+            ]}
+          >
+            {/* Android SVG 软阴影（全 App 唯一阴影路径）：最底层，只画
+                阴影不绘填充（填充由上方 backgroundColor 单一承担） */}
+            {Platform.OS === 'android' && pillWidth > 0 ? (
+              <SoftShadow
+                width={pillWidth}
+                height={pillHeight}
+                borderRadius={pillHeight / 2}
+              />
+            ) : null}
+            <AppText
+              variant="barAction"
+              numberOfLines={1}
+              style={styles.titleText}
+            >
+              {title}
+            </AppText>
+            {trailing ?? null}
+          </View>
         </View>
-        {/* 标题胶囊：纯白、仅文字，无任何多余图标 */}
-        <View
-          style={[
-            styles.titlePill,
-            {
-              height: theme.size.barAction + 2,
-              borderRadius: theme.radius.pill,
-              backgroundColor: theme.colors.surface,
-              paddingHorizontal: theme.space.lg,
-              maxWidth: theme.layout.dialogMaxWidth,
-            },
-            theme.shadow.sm,
-          ]}
-        >
-          <AppText variant="barAction" numberOfLines={1}>
-            {title}
-          </AppText>
-          {trailing ?? null}
-        </View>
-        <View style={[styles.side, styles.sideEnd]}>
+
+        {/* 右侧动作簇：新建会话 + 更多菜单（高优先级显示空间，永不位移压缩） */}
+        <View style={[styles.rightCluster, { gap: theme.space.sm }]}>
+          <IconButton
+            name="add"
+            variant="floating"
+            accessibilityLabel="新建对话"
+            onPress={onNewConversation}
+            testID="session-new"
+          />
           <IconButton
             name="more"
             variant="floating"
@@ -94,22 +134,30 @@ const styles = StyleSheet.create({
     height: 48,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  side: {
+  leftCluster: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  sideEnd: {
-    justifyContent: 'flex-end',
+    minWidth: 0, // 拦截溢出关键
+    marginRight: 12, // 与右侧簇保持呼吸间隙
   },
   titlePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
+    flexShrink: 1, // 自适应压缩
+  },
+  titleText: {
     flexShrink: 1,
+  },
+  rightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
   },
 });
 
-export default SessionHeader;
+export default ConversationHeader;

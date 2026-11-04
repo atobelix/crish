@@ -1,8 +1,14 @@
 // 文件预览：文本 / 占位态 / 错误态 / 续读。
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import type { FilePreviewVm } from '@/adapters/viewmodels/useFilePreviewVm';
-import { AppText, Button, EmptyState, Icon, Spinner } from '@/presentation/ui';
+import {
+  AppText,
+  Button,
+  EmptyState,
+  IconButton,
+  Spinner,
+} from '@/presentation/ui';
 import { mapFilesErrorCode } from './fileMeta';
 
 export interface FilePreviewProps {
@@ -32,23 +38,27 @@ export function FilePreview({
     <View style={styles.container}>
       {showHeader ? (
         <View
-          style={[styles.header, { borderBottomColor: theme.colors.hairline }]}
+          style={[
+            styles.header,
+            {
+              borderBottomColor: theme.colors.hairline,
+              // 台阶盘左缘与 AppHeader 同口径（space.lg 左内距），不贴边
+              paddingLeft: theme.space.lg,
+            },
+          ]}
         >
-          <Pressable
-            testID="preview-back"
-            accessibilityRole="button"
+          {/* 返回与全站单轨：共享 IconButton 的 A2 台阶盘（手搓
+              AnimatedPressable + 整件淡出已退役，2026-11-02 A2 第二阶段） */}
+          <IconButton
+            name="chevron-left"
+            variant="floating"
+            tone="step"
             accessibilityLabel="返回文件列表"
             onPress={onBack}
-            style={({ pressed }) => [styles.back, pressed && { opacity: 0.6 }]}
-          >
-            <Icon
-              name="chevron-left"
-              size={22}
-              color={theme.colors.textPrimary}
-            />
-          </Pressable>
+            testID="preview-back"
+          />
           <View style={styles.titleWrap}>
-            <AppText variant="subhead" numberOfLines={1}>
+            <AppText variant="headline" numberOfLines={1}>
               {file.name}
             </AppText>
             <AppText variant="caption" color="textTertiary" numberOfLines={1}>
@@ -66,7 +76,7 @@ export function FilePreview({
             { backgroundColor: theme.colors.warningSoft },
           ]}
         >
-          <AppText variant="meta" color="warning">
+          <AppText variant="footnote" color="warning">
             敏感文件，内容不会缓存
           </AppText>
         </View>
@@ -137,12 +147,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  back: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   titleWrap: {
     flex: 1,

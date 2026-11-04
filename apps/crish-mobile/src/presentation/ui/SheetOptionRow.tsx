@@ -2,16 +2,15 @@
 // 激活态只以绿色对号表达，行本身不加高亮底色（原型裁定）。
 // 状态文（如设备「在线」）按原型 device-status-text 口径：标题后内联小字，
 // 在线为纯绿字 12，其余状态为弱灰字 12——不占右侧、不与对号互斥。
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+// 按压反馈（按压过渡统一批，2026-11-02）：按压叠层 120ms 淡入淡出，
+// 取代瞬时换色（fillPressed 叠层 ListRow 同款）。
+import { Pressable, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import AppText from './AppText';
 import Icon from './Icon';
+import { usePressFade } from './pressFeedback';
 
 export interface SheetOptionRowProps {
   label: string;
@@ -45,6 +44,7 @@ export function SheetOptionRow({
   style,
 }: SheetOptionRowProps) {
   const theme = useTheme();
+  const press = usePressFade();
   return (
     <Pressable
       testID={testID}
@@ -53,14 +53,13 @@ export function SheetOptionRow({
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.row,
         {
           borderRadius: theme.radius.md,
-          backgroundColor:
-            pressed && !disabled
-              ? theme.colors.fillPressed
-              : theme.colors.fillSubtle,
+          backgroundColor: theme.colors.fillSubtle,
           paddingHorizontal: theme.space.md + theme.space.xxs,
           paddingVertical: theme.space.md + 1,
           gap: theme.space.sm,
@@ -69,6 +68,17 @@ export function SheetOptionRow({
         style,
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.fillPressed,
+          },
+          press.overlayStyle,
+        ]}
+      />
       <View style={[styles.left, { gap: theme.space.xs }]}>
         <AppText
           variant="body"

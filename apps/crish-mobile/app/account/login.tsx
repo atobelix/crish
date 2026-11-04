@@ -2,18 +2,21 @@
 import { router } from 'expo-router';
 import { AccountEmailScreen } from '@/presentation/account/accountEmailScreen';
 import { useSafeBack } from '@/presentation/navigation/useSafeBack';
+import { RequireGuest } from '@/presentation/components/auth/RequireGuest';
 
 export default function AccountLoginRoute() {
   const goBack = useSafeBack();
   return (
-    <AccountEmailScreen
-      onBack={goBack}
-      onCodeSent={() =>
-        router.push({ pathname: '/account/code', params: { next: 'home' } })
-      }
-      onUsePassword={(email) =>
-        router.push({ pathname: '/account/password', params: { email } })
-      }
-    />
+    <RequireGuest>
+      <AccountEmailScreen
+        onBack={goBack}
+        onCodeSent={() =>
+          router.push({ pathname: '/account/code', params: { next: 'home' } })
+        }
+        onUsePassword={(email) =>
+          router.push({ pathname: '/account/password', params: { email } })
+        }
+      />
+    </RequireGuest>
   );
 }

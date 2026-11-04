@@ -95,7 +95,7 @@ function contrastRatio(foreground: string, background: string): number {
 //    自动成立；功能色收敛后的新配对按实测复核——actionPrimaryText/bubbleUser
 //    等墨白配对 ≈17.9、info（改 #555555 中性灰）/canvas ≈7.1、danger（降饱和
 //    #c62f2f) 作文字 ≈5.2–5.5（反而高于浅色原型的 ≈3.4–3.8)、warningText
-//    （#8a6d1f) ≈4.65–4.90 守住 4.5、danger/dangerSoft ≈4.8。success 在本档
+//    （#876a1e) ≈4.65–4.90 守住 4.5、danger/dangerSoft ≈4.8。success 在本档
 //    已收敛为墨，不再单列绿色配对。
 const SCAN_PAIRS = [
   // 正文/元信息文字对（bg 全背景面）
@@ -140,6 +140,49 @@ describe('主题 token 对比度审计（R2-05 部分 11 / R2UX-06-05）', () =>
       (foreground, background, threshold) => {
         const ratio = contrastRatio(tokens[foreground], tokens[background]);
         expect(ratio).toBeGreaterThanOrEqual(threshold);
+      }
+    );
+  });
+
+  // ── 带文字主按钮配对（用户裁决 2026-11-02，推翻 D3 深绿填充）──
+  // 主按钮填充恢复 actionPrimary 亮绿 #10b981（用户原话：之前鲜亮一点的绿色
+  // 就挺好的）；白字其上实测 ≈2.54:1，不达 WCAG 正文 4.5 / 大字 3.0——这是
+  // 用户知情取舍（原型定版配对亦同此值），本块不再按达标口径断言，而是把
+  // 比值钉在 2.54 附近：主绿任何漂移都必须同步改此口径说明，不许无声变更。
+  // 中性灰档 actionPrimary 收敛为墨 #171717，白字 ≈17.9:1，仍按 ≥4.5 断言。
+  // brandStrong 退回「浅底深绿文字」档：其作文字对浅底的 ≥4.5 性质保留断言
+  // （仅浅色/中性灰——深色底上深绿字不在 sanctioned 用法内，且已无消费面）。
+  describe('带文字主按钮配对（用户裁决：亮绿填充）', () => {
+    it.each([
+      ['浅色', lightTheme.colors],
+      ['深色', darkTheme.colors],
+    ] as const)(
+      '%s：actionPrimaryText / actionPrimary ≈ 2.54:1（知情取舍，钉值）',
+      (_name, tokens) => {
+        expect(
+          contrastRatio(tokens.actionPrimaryText, tokens.actionPrimary)
+        ).toBeCloseTo(2.54, 1);
+      }
+    );
+
+    it('纯净中性灰（推导）：actionPrimaryText / actionPrimary ≥ 4.5:1（墨底白字）', () => {
+      expect(
+        contrastRatio(
+          neutralTheme.colors.actionPrimaryText,
+          neutralTheme.colors.actionPrimary
+        )
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it.each([
+      ['浅色', lightTheme.colors],
+      ['纯净中性灰（推导）', neutralTheme.colors],
+    ] as const)(
+      '%s：brandStrong 作文字 / canvas ≥ 4.5:1（深绿文字档保留）',
+      (_name, tokens) => {
+        expect(
+          contrastRatio(tokens.brandStrong, tokens.canvas)
+        ).toBeGreaterThanOrEqual(4.5);
       }
     );
   });

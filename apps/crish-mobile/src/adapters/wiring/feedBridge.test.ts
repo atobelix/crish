@@ -3,15 +3,21 @@
 // - events.resume.page：正常分派 + hasMore 自动续页（store 游标为下一页起点）+ 完成清在途；
 // - 相位投影：handlePhaseChange → eventStore.network + connectionStore.phase；
 // - 对账驱动：handleProjection（resume/fullReplay/fresh/cleanup）+ 会话索引重拉；
+// - 对账可见化（M1）→ 增量口径（2026-11-02）：成败落 connectionStore 对账状态
+//   （ok/error+错误信息）；无定时重试（fake timer 推进零同步调用）、后台对账
+//   不置 syncing、无差分对账静默（状态/打点/列表引用全不动）、真实增量落地
+//   清陈旧标记（已连接零未连接误报面）；
 // - 窗口卸载：maxWindows 超限卸载最久未活跃者（R2UX-05-09）；
 // - 设备在场查询：open 相位 remote.listDevices fire-and-forget。
 import { act } from '@testing-library/react-native';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
 import { WsGateway } from '@/network/WsGateway';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
+import { deviceSnapshotStore } from '@/domain/store/deviceSnapshotStore';
 import { FeedBridge, feedNetworkOf } from './feedBridge';
 
 function frame(kind: string, body: unknown): InboundEnvelope {
@@ -29,7 +35,12 @@ function frame(kind: string, body: unknown): InboundEnvelope {
 function resetStores(): void {
   eventStore.setState({ windows: {}, network: 'live' });
   sessionStore.setState({ sessions: [], selectedSessionId: null });
-  connectionStore.setState({ phase: 'disconnected' });
+  connectionStore.setState({
+    phase: 'disconnected',
+    sessionSyncStatus: 'idle',
+    sessionSyncError: null,
+    lastReconcileAt: null,
+  });
 }
 
 beforeEach(() => {
@@ -499,7 +510,7 @@ describe('FeedBridge 连接就绪订阅（open 相位）', () => {
 });
 
 describe('FeedBridge 会话索引对账（refreshSessions）', () => {
-  it('listSessions 成功 → reconcile 写入；失败 → warn 留痕静默', async () => {
+  it('listSessions 成功 → reconcile 写入 + 状态 ok；失败 → 状态 error + warn 留痕（M1 可见化）', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const listSessions = jest
@@ -516,6 +527,10 @@ describe('FeedBridge 会话索引对账（refreshSessions）', () => {
       expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual([
         's-1',
       ]);
+      // M1：成功落一等状态（ok + 成功打点 + 无错误）
+      expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+      expect(connectionStore.getState().sessionSyncError).toBeNull();
+      expect(connectionStore.getState().lastReconcileAt).not.toBeNull();
       await act(async () => {
         bridge.handlePhaseChange('open');
         await Promise.resolve();
@@ -523,9 +538,225 @@ describe('FeedBridge 会话索引对账（refreshSessions）', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('会话索引对账失败')
       );
+      // M1：失败不再静默——状态 error + 错误信息入面；既有列表残量不被清
+      expect(connectionStore.getState().sessionSyncStatus).toBe('error');
+      expect(connectionStore.getState().sessionSyncError).toBe('对账超时');
+      expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual([
+        's-1',
+      ]);
       bridge.detach();
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('FeedBridge 增量同步口径（2026-11-02 用户裁决）', () => {
+  it('对账失败 → 无定时重试：fake timer 推进零同步调用；手动 refreshNow 成功 → ok', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.useFakeTimers();
+    try {
+      const listSessions = jest.fn().mockRejectedValue(new Error('持续失败'));
+      const gateway = new WsGateway({ send: () => {} });
+      const bridge = new FeedBridge({ gateway, listSessions });
+      bridge.attach();
+      await act(async () => {
+        bridge.handlePhaseChange('open');
+        await Promise.resolve();
+      });
+      expect(listSessions).toHaveBeenCalledTimes(1);
+      expect(connectionStore.getState().sessionSyncStatus).toBe('error');
+      // 定时自动刷新已废除：时间推进不产生任何新的列表同步调用
+      await act(async () => {
+        jest.advanceTimersByTime(120_000);
+        await Promise.resolve();
+      });
+      expect(listSessions).toHaveBeenCalledTimes(1);
+      expect(connectionStore.getState().sessionSyncStatus).toBe('error');
+      // 恢复靠用户主动刷新（下拉/重试同路）
+      listSessions.mockResolvedValue([{ id: 's-9', updatedAt: 9000 }]);
+      await act(async () => {
+        await bridge.refreshNow();
+      });
+      expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+      expect(sessionStore.getState().sessions.map((x) => x.id)).toEqual([
+        's-9',
+      ]);
+      bridge.detach();
+    } finally {
+      jest.useRealTimers();
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('后台对账不置 syncing（零「同步中」呈现面）；手动 refreshNow 才置 syncing', async () => {
+    let resolveList: ((v: SessionIndexEntry[]) => void) | null = null;
+    const listSessions = jest.fn(
+      () =>
+        new Promise<SessionIndexEntry[]>((resolve) => {
+          resolveList = resolve;
+        })
+    );
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({ gateway, listSessions });
+    bridge.attach();
+    // 后台（open 触发）：在途期间状态面保持 idle，绝不出现 syncing
+    bridge.handlePhaseChange('open');
+    expect(connectionStore.getState().sessionSyncStatus).toBe('idle');
+    await act(async () => {
+      resolveList!([{ id: 's-1', updatedAt: 1000 }]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+    // 手动刷新：在途期间置 syncing（反馈归下拉原生指示，状态面如实）
+    const pending = bridge.refreshNow();
+    expect(connectionStore.getState().sessionSyncStatus).toBe('syncing');
+    await act(async () => {
+      resolveList!([{ id: 's-1', updatedAt: 1000 }]);
+      await pending;
+    });
+    expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+    bridge.detach();
+  });
+
+  it('无差分对账静默收尾：列表引用、状态、成功打点全不动', async () => {
+    const entry = { id: 's-1', title: '甲', updatedAt: 1000 };
+    const listSessions = jest.fn().mockResolvedValue([{ ...entry }]);
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({ gateway, listSessions });
+    bridge.attach();
+    await act(async () => {
+      bridge.handlePhaseChange('open');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const sessionsRef = sessionStore.getState().sessions;
+    const reconcileAt = connectionStore.getState().lastReconcileAt;
+    expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+    expect(reconcileAt).not.toBeNull();
+    // 第二轮 open，权威列表内容与现状完全一致（新数组、新对象）
+    await act(async () => {
+      bridge.handlePhaseChange('open');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(listSessions).toHaveBeenCalledTimes(2);
+    // 静默：同一列表引用（零写入）、成功打点不刷新、状态不翻动
+    expect(sessionStore.getState().sessions).toBe(sessionsRef);
+    expect(connectionStore.getState().lastReconcileAt).toBe(reconcileAt);
+    expect(connectionStore.getState().sessionSyncStatus).toBe('ok');
+    bridge.detach();
+  });
+
+  it('增量落地清陈旧：ready 相位下 session.updated 帧到达 → 陈旧标记撤下（误报修复）', async () => {
+    deviceSnapshotStore.setState({ liveStale: true, liveSnapshotAt: 42 });
+    connectionStore.setState({ phase: 'ready' });
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({ gateway });
+    bridge.attach();
+    await act(async () => {
+      gateway.dispatchFrame(
+        frame('session.updated', {
+          session: { id: 's-1', title: '实时更新', updatedAt: 2000 },
+        })
+      );
+    });
+    expect(sessionStore.getState().sessions.map((x) => x.id)).toEqual(['s-1']);
+    expect(deviceSnapshotStore.getState().liveStale).toBe(false);
+    bridge.detach();
+  });
+
+  it('清陈旧守卫：非 ready 相位 / 仅 refresh 信号 → 不清标（不冒充新鲜）', async () => {
+    deviceSnapshotStore.setState({ liveStale: true, liveSnapshotAt: 42 });
+    connectionStore.setState({ phase: 'disconnected' });
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({ gateway });
+    bridge.attach();
+    await act(async () => {
+      gateway.dispatchFrame(
+        frame('session.updated', {
+          session: { id: 's-1', updatedAt: 2000 },
+        })
+      );
+    });
+    // 相位未就绪：帧虽入店，数据面不算「活」，陈旧标注保留
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+    connectionStore.setState({ phase: 'ready' });
+    await act(async () => {
+      gateway.dispatchFrame(frame('session.updatedAll', {}));
+    });
+    // updatedAll 只触发对账（无 repo 时无从落盘）——信号本身不清标
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+    bridge.detach();
+    deviceSnapshotStore.setState({ liveStale: false, liveSnapshotAt: null });
+  });
+});
+
+describe('FeedBridge 属主盖章穿线（M7 / CON-3）', () => {
+  afterEach(() => {
+    sessionStore.setState({ ownerDeviceId: null, droppedWriteCount: 0 });
+    deviceSnapshotStore.setState({
+      snapshots: {},
+      liveStale: false,
+      liveSnapshotAt: null,
+    });
+  });
+
+  it('旧桥在途对账在设备切换后落不进新属主数据面（盖章丢弃且不清陈旧标）', async () => {
+    // 场景：dev-a 的桥已发出对账请求，用户切到 dev-b 并完成盖章，
+    // dev-a 的对账结果此后才返回——不得整表替换 dev-b 的数据面。
+    sessionStore.getState().stampOwner('dev-b');
+    deviceSnapshotStore.setState({ liveStale: true, liveSnapshotAt: 42 });
+    const listSessions = jest
+      .fn()
+      .mockResolvedValue([{ id: 's-a', updatedAt: 1000 }]);
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({
+      gateway,
+      listSessions,
+      ownerDeviceId: 'dev-a',
+    });
+    bridge.attach();
+    await act(async () => {
+      bridge.handlePhaseChange('open');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sessionStore.getState().sessions).toEqual([]);
+    expect(sessionStore.getState().droppedWriteCount).toBe(1);
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+    bridge.detach();
+  });
+
+  it('同属主对账落盘并清陈旧标（保留快照转新鲜）', async () => {
+    sessionStore.getState().stampOwner('dev-a');
+    deviceSnapshotStore.setState({ liveStale: true, liveSnapshotAt: 42 });
+    const listSessions = jest
+      .fn()
+      .mockResolvedValue([{ id: 's-a', updatedAt: 1000 }]);
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({
+      gateway,
+      listSessions,
+      ownerDeviceId: 'dev-a',
+    });
+    bridge.attach();
+    await act(async () => {
+      bridge.handlePhaseChange('open');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['s-a']);
+    expect(deviceSnapshotStore.getState().liveStale).toBe(false);
+    bridge.detach();
+  });
+
+  it('接线 dead → live 打陈旧标记（此后列表是上次同步存量）', () => {
+    const gateway = new WsGateway({ send: () => {} });
+    const bridge = new FeedBridge({ gateway });
+    bridge.handlePhaseChange('dead');
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+    bridge.detach();
   });
 });

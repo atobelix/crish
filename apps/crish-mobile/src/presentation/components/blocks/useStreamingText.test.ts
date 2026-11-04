@@ -1,12 +1,13 @@
-// useStreamingText 单测（R2UX-05-02 渲染节流接线）：
+// useStreamingText 单测（R2UX-05-02 渲染节流接线 + 方案 04 自适应打字平准器）：
 // - 渐进渲染：流式期帧合并（窗口内多帧合并为一次渲染，只显示最新值）；
 // - 终值替换：streaming=false 立即渲染最新全文（不等待窗口、无残留调度）；
 // - 强制刷新：连续帧流保证 maxWaitMs 内渲染一次；
 // - 条目键变化：新条目立即渲染并清空旧 pending；
-// - 卸载清理：unmount 后定时器不回调。
+// - 卸载清理：unmount 后定时器不回调；
+// - 平准模式：smooth=true 接入 AdaptiveStreamingSmoother，rAF 匀速平准推进 + 终态优雅泄洪。
 // 注：RNTL v14 renderHook 返回 Promise（须 await）；act 亦为异步 API（须 await）。
 import { act, renderHook } from '@testing-library/react-native';
-import { useStreamingText } from './useStreamingText';
+import { useAdaptiveStreamingText, useStreamingText } from './useStreamingText';
 
 async function useHarness() {
   return await renderHook(
@@ -164,5 +165,78 @@ describe('卸载清理（组件退场即退订，M4 §8.2）', () => {
       jest.advanceTimersByTime(200);
     });
     expect(result.current).toBe('首帧'); // 挂起帧未在退订后应用
+  });
+});
+
+describe('自适应匀速打字平准器（AdaptiveStreamingSmoother 接入，方案 04）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  async function useSmoothHarness(initialText = '首帧') {
+    return await renderHook(
+      ({
+        identity,
+        text,
+        streaming,
+      }: {
+        identity: string;
+        text: string;
+        streaming: boolean;
+      }) =>
+        useStreamingText(identity, text, streaming, {
+          smooth: true,
+        }),
+      {
+        initialProps: { identity: 'seq:1', text: initialText, streaming: true },
+      }
+    );
+  }
+
+  it('首帧挂载立即呈现起始字符（无白屏延迟）', async () => {
+    const { result } = await useSmoothHarness('初始文本');
+    expect(result.current).toBe('初始');
+  });
+
+  it('流式文本到达时平滑推进，不单帧暴砸全量字符', async () => {
+    const { result, rerender } = await useSmoothHarness('首');
+    const burstText = '首' + '测试'.repeat(100);
+    await rerender({ identity: 'seq:1', text: burstText, streaming: true });
+
+    // 此时平准器启动，在推进 50ms 后不会瞬间全部展开 201 字符
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(result.current.length).toBeLessThan(burstText.length);
+    expect(burstText.startsWith(result.current)).toBe(true);
+  });
+
+  it('流式结束（streaming=false）快速收敛泄洪，最终 100% 呈现完整文本', async () => {
+    const { result, rerender } = await useSmoothHarness('首');
+    const fullText = '这是一段完整的流式回答内容，测试终态收敛。';
+    await rerender({ identity: 'seq:1', text: fullText, streaming: true });
+    await rerender({ identity: 'seq:1', text: fullText, streaming: false });
+
+    // 泄洪周期 <= 280ms，推进 300ms 保证完成收敛
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current).toBe(fullText);
+  });
+
+  it('identity 切换时立即复位并从新条目开始平准', async () => {
+    const { result, rerender } = await useSmoothHarness('旧内容');
+    await rerender({ identity: 'seq:2', text: '新内容', streaming: true });
+    expect('新内容'.startsWith(result.current)).toBe(true);
+  });
+
+  it('useAdaptiveStreamingText 别名 Hook 自动启用平准模式（终态立即完整展现）', async () => {
+    const { result } = await renderHook(() =>
+      useAdaptiveStreamingText('seq:1', '便捷接入', false)
+    );
+    expect(result.current).toBe('便捷接入');
   });
 });

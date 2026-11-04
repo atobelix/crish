@@ -3,8 +3,10 @@
 // 8px 静态色点（brand/success/danger）——PulseDot 呼吸脉冲违 U8 已物理删除。
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import type { ToolBlock } from '@/presentation/timeline/buildTimeline';
 
 export interface ToolRowProps {
@@ -26,6 +28,7 @@ export function ToolRow({ tool }: ToolRowProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
   const output = tool.output.trim();
+  const press = usePressFade();
   return (
     <View style={{ gap: theme.space.sm }}>
       <Pressable
@@ -34,16 +37,25 @@ export function ToolRow({ tool }: ToolRowProps) {
         accessibilityState={{ expanded }}
         accessibilityLabel={`${tool.toolName}，${statusLabel(tool.status)}`}
         onPress={() => setExpanded((value) => !value)}
-        style={({ pressed }) => [
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        style={[
           styles.row,
           {
             minHeight: theme.size.row,
             gap: theme.space.md,
             paddingHorizontal: theme.space.screenX,
           },
-          pressed && { backgroundColor: theme.colors.fillPressed },
         ]}
       >
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: theme.colors.fillPressed },
+            press.overlayStyle,
+          ]}
+        />
         <View style={styles.body}>
           <AppText variant="callout" numberOfLines={1}>
             {tool.toolName}

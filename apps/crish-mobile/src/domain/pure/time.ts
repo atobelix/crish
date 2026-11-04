@@ -1,3 +1,11 @@
+/** 月日短格式（如「11月3日」）：登录设备离线行的最近活跃日期，
+ * 与桌面端 formatDate({ month: 'short', day: 'numeric' }) 的中文形态一致。 */
+export function formatMonthDay(timestampMs: number): string {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return '';
+  const date = new Date(timestampMs);
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
 // 相对时间格式化（会话 / 文件 / 历史共用单一实现）。
 export function formatRelativeTime(
   timestampMs: number,

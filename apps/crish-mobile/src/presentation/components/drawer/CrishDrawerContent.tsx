@@ -5,6 +5,7 @@
 // 底部单行通栏【头像昵称 → 设置 / 新对话通透极简图标（variant="plain"，无底色块）】。全部样式走 theme token，零描边。
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,6 +35,7 @@ import {
   Icon,
   IconButton,
   LoadingState,
+  SoftShadow,
 } from '@/presentation/ui';
 import {
   AnimatedPressable,
@@ -52,6 +54,21 @@ import { useLocalThreadOpsController } from '@/presentation/components/sessions/
 import { AccountAvatar } from '@/presentation/account/ui';
 import { useDrawerActions, useDrawerController } from './DrawerContext';
 import { dismissKeyboardAndBlur } from './drawerFocus';
+
+/**
+ * 判定当前路径是否处于主屏（(main) 作用域内的首页、远端会话或本地线程）：
+ * 非主屏页面（如 /settings、/account 等）退栈返回期间，抽屉必须保持静默。
+ */
+export function isMainScreenRoute(
+  pathname: string | null | undefined
+): boolean {
+  if (!pathname) return false;
+  return (
+    pathname === '/' ||
+    pathname.startsWith('/session/') ||
+    pathname.startsWith('/thread/')
+  );
+}
 
 /**
  * 从当前路径解析聚焦对话：远端 /session/[id] 与本地 /thread/[id] 同为
@@ -75,11 +92,15 @@ function displayNameOf(profile: {
   return profile.displayName?.trim() || profile.email?.trim() || '本地用户';
 }
 
+export interface CrishDrawerContentProps {
+  registerCloseListener?: (listener: () => void) => () => void;
+  isOpen?: boolean;
+}
+
 export function CrishDrawerContent({
   registerCloseListener,
-}: {
-  registerCloseListener?: (listener: () => void) => () => void;
-} = {}) {
+  isOpen: propIsOpen,
+}: CrishDrawerContentProps = {}) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const controller = useDrawerController();
@@ -87,25 +108,47 @@ export function CrishDrawerContent({
   // 中点翻转稳定，不再逐渲染换新引用击穿行 memo；controller 只余
   // isOpen 状态用途（下方时钟刷新与搜索收起）。
   const actions = useDrawerActions();
-  const pathname = usePathname();
-  // 解析结果按 pathname 记忆：旧实现每渲染重造对象，作为列表段的
-  // selected 入参会逐渲染换引用、击穿其 memo（C-PERF）。
+  const rawPathname = usePathname();
+
+  // 优先级：显式 prop 优先，回退到 context 控制器状态
+  const isOpen = propIsOpen ?? controller.isOpen;
+
+  // 【流畅度方案 08·核心优化】：抽屉闭合静默门
+  // 当抽屉处于闭合状态（isOpen === false 或当前页面不在主屏）时，
+  // 彻底绝缘外部路由变动（如从 /settings 返回 /）对抽屉内部的重算响应；
+  // 阻断返回转场动画期间隐式触发的 buildDrawerRows 批量对象分配与 20+ 会话行组件重排重绘；
+  // 保证仅当抽屉由手势拉开（isOpen === true 或手势位移 > 0）且处于主屏路由时，才触发一次性的列表项有效激活。
+  const [activePathname, setActivePathname] = useState(() =>
+    isOpen && isMainScreenRoute(rawPathname) ? rawPathname : '/'
+  );
+
+  useEffect(() => {
+    if (isOpen && isMainScreenRoute(rawPathname)) {
+      setActivePathname(rawPathname);
+    }
+  }, [isOpen, rawPathname]);
+
+  // 解析结果按 activePathname 记忆，且闭合态恒为 null：
+  // 闭合态不计算选中态，防止路由变动击穿 DrawerSessionList 的 memo。
   const selected = useMemo(
-    () => selectedConversationOf(pathname ?? ''),
-    [pathname]
+    () => (isOpen ? selectedConversationOf(activePathname ?? '') : null),
+    [activePathname, isOpen]
   );
   const accountUser = useAccountStore((s) => s.user);
   const profile = useAccountStore((s) => s.profile);
   const pending = useApprovalStore((s) => s.pending);
   const approvalCount = useMemo(() => countUserDecisions(pending), [pending]);
 
-  // 每次展开重算「今天」分组边界（跨零点不分错组）；isOpen 翻转时刷新 nowMs
+  // 展开重算时钟：仅在 isOpen 翻转为 true 的瞬间刷新 nowMs，关闭期间完全冻结，转场中途保持不变
   const [clock, setClock] = useState(() => ({
-    open: controller.isOpen,
+    open: isOpen,
     nowMs: Date.now(),
   }));
-  if (clock.open !== controller.isOpen) {
-    setClock({ open: controller.isOpen, nowMs: Date.now() });
+  if (clock.open !== isOpen) {
+    setClock({
+      open: isOpen,
+      nowMs: isOpen ? Date.now() : clock.nowMs,
+    });
   }
   const vm = useSessionListVm(clock.nowMs);
   // 会话操作（G3）：远端行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）。
@@ -190,8 +233,8 @@ export function CrishDrawerContent({
   }, [registerCloseListener, searching, toggleSearch]);
 
   useEffect(() => {
-    if (!controller.isOpen && searching) toggleSearch(false);
-  }, [controller.isOpen, searching, toggleSearch]);
+    if (!isOpen && searching) toggleSearch(false);
+  }, [isOpen, searching, toggleSearch]);
 
   // N04 单入口编排：会话切换在 (main) 内完成（无栈动画）→ 定时收起即转场；
   // 根栈页面 → 先 push，抽屉无动画静默重置，杜绝双动画竞争。
@@ -596,6 +639,7 @@ function SearchPill({
 }) {
   const theme = useTheme();
   const pillHeight = theme.size.iconButton; // 40
+  const [pillWidth, setPillWidth] = useState(0);
 
   useEffect(() => {
     return () => {
@@ -604,7 +648,7 @@ function SearchPill({
   }, []);
 
   // 搜索框通透化（融入抽屉底板）：浅色走微弱凹槽质感（rgba(0, 0, 0, 0.03)），深色走 surfaceRaised，
-  // 彻底移除厚重白色底色块与 SoftShadow 软阴影，通透扁平融入 canvasDrawer。
+  // 配合 SoftShadow 空气微气垫，通透融入 canvasDrawer。
   const pillFill = theme.dark
     ? theme.colors.surfaceRaised
     : 'rgba(0, 0, 0, 0.03)';
@@ -615,6 +659,7 @@ function SearchPill({
       accessibilityRole={searching ? 'search' : 'button'}
       accessibilityLabel="搜索会话"
       onPress={searching ? undefined : onOpen}
+      onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
       style={[
         styles.searchPill,
         {
@@ -627,6 +672,13 @@ function SearchPill({
         },
       ]}
     >
+      {Platform.OS === 'android' && pillWidth > 0 ? (
+        <SoftShadow
+          width={pillWidth}
+          height={pillHeight}
+          borderRadius={pillHeight / 2}
+        />
+      ) : null}
       <Icon
         name="search"
         size={theme.size.iconSmall}

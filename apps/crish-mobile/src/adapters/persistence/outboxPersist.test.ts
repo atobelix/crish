@@ -148,4 +148,14 @@ describe('createDefaultOutboxPersist', () => {
     await adapter.clear();
     expect(await adapter.load()).toEqual([]);
   });
+
+  it('persistent 标记：SQLite 实现为 true、内存降级为 false（接线层据此显形）', async () => {
+    const sqlite = createDefaultOutboxPersist(
+      await migratedDriver(),
+      new InMemorySecureStore()
+    );
+    expect(sqlite.persistent).toBe(true);
+    const memory = createDefaultOutboxPersist(null, new InMemorySecureStore());
+    expect(memory.persistent).toBe(false);
+  });
 });

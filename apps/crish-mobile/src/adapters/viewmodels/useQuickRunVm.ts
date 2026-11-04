@@ -1,8 +1,10 @@
 // 快速操作视图模型（R2-05 部分 5：仪表盘发起 run 快捷入口）
 //
-// - 读：connectionStore.phase（未连接 → 禁用态）、sessionStore.sessions（最近会话
-//   快速选择数据面，前 N 个按 store 排序不变量：pinned → 活动 → updatedAt 降序，
-//   F1 §4.4 / F5 §2.1）；
+// - 读：有效模式中央派生反推的远程可用性（CON-2：本 VM 是主页的**远程**
+//   提交管线，connected 只作本管线的提交守卫；主页整体的模式判定走
+//   selectEffectiveChatMode，未连接时主页改走本地发送，不经本管线）、
+//   sessionStore.sessions（最近会话快速选择数据面，前 N 个按 store 排序
+//   不变量：pinned → 活动 → updatedAt 降序，F1 §4.4 / F5 §2.1）；
 // - 写：submit → 接线上下文仓库 runTask（buildRunTaskRequest 构造 + WsGateway.invoke，
 //   注入模式对齐 useFilesVm/contextOverride）；成功回执 runId → feedback success
 //   （UI 跳转 run 详情）；失败 → 错误码映射人话文案（M6 §11.3）；
@@ -23,6 +25,8 @@ import {
   RunTaskCommandError,
   type QuickRunContext,
 } from '@/adapters/quickRunWiring';
+import { selectEffectiveChatMode } from '@/domain/store/connectionStore';
+import { haptics } from '@/adapters/platform/haptics';
 import type { RunTaskParams, PermissionMode } from '@crish/shared-types';
 import { settingsStore } from '@/domain/store/settingsStore';
 import { runPermissionMode } from '@/domain/pure/permissionMode';
@@ -79,7 +83,11 @@ export type QuickRunFeedback =
   | { kind: 'error'; code: string; message: string };
 
 export interface QuickRunVm {
-  /** 连接是否就绪（phase === 'ready'；否则输入/按钮禁用 + 未连接提示） */
+  /**
+   * 远程管线是否可用（CON-2：中央派生 effectiveChatMode === 'remote'）。
+   * 仅作本管线的提交守卫——主页输入的生死由模式路由决定（未连接走
+   * 本地模式解封），不再由本字段一刀切。
+   */
   connected: boolean;
   /** 最近会话（前 N 个最近活跃；空 = 无会话，隐藏选择区） */
   recentSessions: readonly SessionSummary[];
@@ -96,7 +104,7 @@ export interface QuickRunVm {
   setPrompt: (text: string) => void;
   /** 会话选择切换（同 id 再点取消选择 → 回到新会话） */
   selectSession: (sessionId: string | null) => void;
-  /** 发起 run（busy 防重入；未连接/空 prompt 静默拒绝） */
+  /** 发起 run（busy 防重入；远程不可用/空 prompt 拒绝——主页已按模式分发，本地模式不会走到本管线，此处仅为防御守卫） */
   submit: () => void;
   /** 以显式文本发起 run（语音输入松开直发：回填与提交同刻，不依赖 prompt 状态时序） */
   submitText: (text: string) => void;
@@ -116,7 +124,9 @@ export interface QuickRunVm {
 export function useQuickRunVm(
   contextOverride?: QuickRunContext | null
 ): QuickRunVm {
-  const connected = useConnectionStore((s) => s.phase === 'ready');
+  const connected = useConnectionStore(
+    (s) => selectEffectiveChatMode(s.phase) === 'remote'
+  );
   const sessions = useSessionStore((s) => s.sessions);
   const [prompt, setPromptState] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -165,6 +175,8 @@ export function useQuickRunVm(
       void ctx.repository
         .runTask(params)
         .then((res) => {
+          // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
+          haptics.success();
           setFeedback({
             kind: 'success',
             runId: res.runId,

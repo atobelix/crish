@@ -22,6 +22,7 @@ jest.mock('./accountRuntime', () => ({
   startAccountRuntime: jest.fn(),
   stopAccountRuntime: jest.fn(),
   syncAccountRemote: jest.fn(),
+  refreshAndSyncAccountRemote: jest.fn(),
 }));
 
 import {
@@ -40,7 +41,11 @@ import {
   ensureApprovalWiring,
   disposeApprovalWiring,
 } from '@/adapters/wiring/approvalWiring';
-import { startAccountRuntime, stopAccountRuntime } from './accountRuntime';
+import {
+  refreshAndSyncAccountRemote,
+  startAccountRuntime,
+  stopAccountRuntime,
+} from './accountRuntime';
 
 const ensureObsMock = ensureObservationWiring as jest.Mock;
 const disposeObsMock = disposeObservationWiring as jest.Mock;
@@ -49,6 +54,7 @@ const ensureApprovalMock = ensureApprovalWiring as jest.Mock;
 const disposeApprovalMock = disposeApprovalWiring as jest.Mock;
 const startAccountMock = startAccountRuntime as jest.Mock;
 const stopAccountMock = stopAccountRuntime as jest.Mock;
+const refreshAndSyncMock = refreshAndSyncAccountRemote as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -147,6 +153,21 @@ describe('认证变化分流', () => {
 });
 
 describe('reconnectNow', () => {
+  it('账号已登录时走账号分发（发现+同步），不裸重连旧接线、不走 LAN（CON-1）', () => {
+    const reconnect = jest.fn();
+    getObsMock.mockReturnValue({ reconnect });
+    accountStore.setState({ status: 'loggedIn' });
+    startAppRuntime();
+    refreshAndSyncMock.mockClear();
+    ensureObsMock.mockClear();
+
+    reconnectNow();
+
+    expect(refreshAndSyncMock).toHaveBeenCalledTimes(1);
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(ensureObsMock).not.toHaveBeenCalled();
+  });
+
   it('已有 wiring 时直接重连', () => {
     const reconnect = jest.fn();
     getObsMock.mockReturnValue({ reconnect });

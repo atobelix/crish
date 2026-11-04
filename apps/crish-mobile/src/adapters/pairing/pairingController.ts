@@ -7,6 +7,7 @@
 // - ensurePairingWiringForApp：装配 + 冷启动恢复水合（pair/_layout 挂载调用：
 //   已配对 → 恢复 paired → (main) 配对守卫 自动放行；未配对 → 走配对引导）；
 // - 只读纪律：本文件只消费 pairingWiring 公开 API，不改动接线层。
+import { installAppRandomSource } from '@/pairing/crypto/randomSource';
 import {
   ensurePairingWiring,
   getPairingWiring,
@@ -60,6 +61,9 @@ export function ensurePairingController(): PairingWiring {
 
 /** 配对流程页面装配：确保接线单例 + 冷启动恢复水合（幂等；已配对自动恢复） */
 export async function ensurePairingWiringForApp(): Promise<PairingWiring> {
+  // 随机源装配（release 独立包修复，2026-11-02 实测发现）：必须先于任何
+  // 密钥协商——release 下环境探测链两端全空，见 crypto/randomSource.ts
+  installAppRandomSource();
   const wiring = ensurePairingController();
   await wiring.hydrate();
   return wiring;

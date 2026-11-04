@@ -3,13 +3,17 @@
 // Composer 可直接消费的按压手势 API。
 //
 // 流程：
-// - 按下：先查模型——未就绪弹下载门（不录音）；就绪则请求权限并开录，
-//   权限被拒/引擎失败一律 Toast 诚实告知并回落打字（01 文档 W-D 口径）；
+// - 按下：先查模型——未就绪弹下载门（不录音）；就绪则请求权限并开录；
+// - 硬错误（权限被拒/引擎/采集失败/识别出错）：落常驻错误态（VoiceErrorBar
+//   呈现），按根因带恢复动作（去设置/重新初始化/重试），绝不只弹一条
+//   Toast 就断头（2026-11-02 用户投诉：报错后没有任何能重试的地方）；
+//   瞬时提示（没听清、下载完成）仍走 Toast；
 // - 按住滑动：位移驱动 recording ⇄ cancelling；
 // - 松手：recording → 收尾（等最后一条 final）后非空文本回填并提交，
 //   空结果 Toast「没有听清」；cancelling → 丢弃，不打扰用户；
 // - 启动耗时（首次建引擎）期间已松手 → 就绪后立即按松手结局收尾。
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking } from 'react-native';
 import type { AsrResultEvent } from '@/domain/asr/simulatedStreamingPipeline';
 import {
   applyAsrResult,
@@ -37,12 +41,27 @@ export interface UseVoiceInputOptions {
   notify: (message: string, tone?: 'success' | 'error' | 'info') => void;
 }
 
+/** 语音硬错误的恢复通道（呈现面据此给动作钮，文案在 VoiceErrorBar） */
+export type VoiceRecovery = 'retry-init' | 'retry-capture' | 'open-settings';
+
+export interface VoiceErrorState {
+  message: string;
+  /** null = 无恢复动作（设备根本不支持），错误条仅可关闭 */
+  recovery: VoiceRecovery | null;
+}
+
 export interface VoiceInputApi {
   phase: VoicePhase;
   /** 启动中（首次建引擎等）：浮层以「准备中」呈现 */
   starting: boolean;
   displayText: string;
   level: number;
+  /** 常驻硬错误（带恢复动作）；null = 无错误 */
+  error: VoiceErrorState | null;
+  /** 执行错误对应的恢复动作（重新初始化/去设置/收起待重试） */
+  recover: () => void;
+  /** 关闭错误呈现 */
+  dismissError: () => void;
   /** 模型下载门状态（visible 时渲染 Dialog） */
   gateState: AsrModelState | null;
   gateVisible: boolean;
@@ -65,6 +84,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
   const [level, setLevel] = useState(0);
   const [gateState, setGateState] = useState<AsrModelState | null>(null);
   const [gateVisible, setGateVisible] = useState(false);
+  const [error, setError] = useState<VoiceErrorState | null>(null);
 
   const phaseRef = useRef<VoicePhase>('idle');
   const textRef = useRef<VoiceTextState>(EMPTY_VOICE_TEXT);
@@ -76,6 +96,14 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
     phaseRef.current = next;
     setPhase(next);
   }, []);
+
+  const errorRef = useRef<VoiceErrorState | null>(null);
+  const setErrorBoth = useCallback((next: VoiceErrorState | null) => {
+    errorRef.current = next;
+    setError(next);
+  }, []);
+  /** 待落定的引擎重初始化（recover 触发）：下一次 beginSession 先等它 */
+  const reinitRef = useRef<Promise<void> | null>(null);
 
   const setTextBoth = useCallback((next: VoiceTextState) => {
     textRef.current = next;
@@ -119,6 +147,11 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
   );
 
   const beginSession = useCallback(async () => {
+    // 上一次 recover 触发的引擎重初始化先落定，保证本次用新引擎启动
+    if (reinitRef.current) {
+      await reinitRef.current;
+      reinitRef.current = null;
+    }
     const modelState = await asrModelManager().check();
     if (modelState.kind !== 'ready') {
       // 模型未就绪：弹下载门，本次按压不录音
@@ -132,19 +165,25 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
     const outcome = await voiceInputService.start(modelState.paths, {
       onResult: handleResult,
       onLevel: (next) => setLevel(next),
-      onError: (message) => optionsRef.current.notify(message, 'error'),
+      // 识别管道中途出错：引擎状态不可信 → 常驻错误 + 重新初始化通道
+      onError: (message) => setErrorBoth({ message, recovery: 'retry-init' }),
     });
     startingRef.current = false;
     setStarting(false);
     if (outcome !== 'started') {
       pressWantedRef.current = false;
+      // 硬错误按根因落常驻错误态（错误条带恢复动作，不再 Toast 断头）
       if (outcome === 'permission-denied') {
-        optionsRef.current.notify(
-          '麦克风权限被拒绝，请在系统设置中开启，或继续打字输入',
-          'error'
-        );
+        setErrorBoth({
+          message: '麦克风权限被拒绝',
+          recovery: 'open-settings',
+        });
+      } else if (outcome === 'engine-failed') {
+        setErrorBoth({ message: '语音引擎启动失败', recovery: 'retry-init' });
+      } else if (outcome === 'capture-failed') {
+        setErrorBoth({ message: '麦克风启动失败', recovery: 'retry-capture' });
       } else {
-        optionsRef.current.notify('语音输入暂时不可用，请打字输入', 'error');
+        setErrorBoth({ message: '当前设备不支持离线语音输入', recovery: null });
       }
       return;
     }
@@ -154,20 +193,41 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
       return;
     }
     setPhaseBoth('recording');
-  }, [finishSession, handleResult, setPhaseBoth]);
+  }, [finishSession, handleResult, setErrorBoth, setPhaseBoth]);
 
   const pressStart = useCallback(() => {
     if (phaseRef.current !== 'idle' || startingRef.current) return;
     if (!voiceInputService.isAvailable()) {
-      optionsRef.current.notify('当前设备不支持离线语音输入', 'error');
+      setErrorBoth({ message: '当前设备不支持离线语音输入', recovery: null });
       return;
     }
+    setErrorBoth(null);
     pressWantedRef.current = true;
     startingRef.current = true;
     setStarting(true);
     setTextBoth(EMPTY_VOICE_TEXT);
     void beginSession();
-  }, [beginSession, setTextBoth]);
+  }, [beginSession, setErrorBoth, setTextBoth]);
+
+  const recover = useCallback(() => {
+    const current = errorRef.current;
+    if (!current) return;
+    if (current.recovery === 'open-settings') {
+      // 权限在系统侧被拒：唯一真实恢复通道是系统设置页
+      void Linking.openSettings();
+      return;
+    }
+    if (current.recovery === 'retry-init') {
+      // 引擎重初始化：释放引擎，下次按压重建；beginSession 先等释放落定
+      reinitRef.current = voiceInputService.release();
+    }
+    // retry-capture 无引擎状态可清：收起错误，下一次按压即全新尝试
+    setErrorBoth(null);
+  }, [setErrorBoth]);
+
+  const dismissError = useCallback(() => {
+    setErrorBoth(null);
+  }, [setErrorBoth]);
 
   const pressMove = useCallback(
     (translationY: number) => {
@@ -194,7 +254,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
         setGateVisible(false);
         setGateState(null);
         optionsRef.current.notify(
-          '语音模型下载完成，可长按麦克风说话',
+          '语音模型就绪，现在长按输入框即可说话',
           'success'
         );
       }
@@ -224,6 +284,9 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
     starting,
     displayText: voiceDisplayText(textState),
     level,
+    error,
+    recover,
+    dismissError,
     gateState,
     gateVisible,
     modelTotalBytes: ASR_MODEL_TOTAL_BYTES,

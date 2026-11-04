@@ -13,11 +13,16 @@ import type { SecureStoreDriver } from '@/db/secureStore';
 import { expoSecureStoreDriver } from '@/db/secureStore';
 import { SqlApprovalQueueDao } from '@/db/dao';
 import type { SqlDriver } from '@/db/driver';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('outbox');
 
 /** 旧版 secure-store 键（迁移后删除，不再写入） */
 export const OUTBOX_LEGACY_STORAGE_KEY = 'crish.mobile.outbox.v1';
 
 export interface OutboxPersistAdapter {
+  /** 是否为真持久化（false = 内存降级态，进程退出即丢；接线层据此显形降级） */
+  readonly persistent: boolean;
   /** 加载持久化的 Outbox 队列快照 */
   load(): Promise<OutboxItem[]>;
   /** 原子保存当前 Outbox 队列状态 */
@@ -28,6 +33,7 @@ export interface OutboxPersistAdapter {
 
 /** 基于 SQLite approval_queue 的实现 */
 export class SqliteOutboxAdapter implements OutboxPersistAdapter {
+  readonly persistent = true;
   private readonly dao: SqlApprovalQueueDao;
 
   constructor(
@@ -80,10 +86,7 @@ export class SqliteOutboxAdapter implements OutboxPersistAdapter {
             (item as OutboxItem).decision === 'denied')
       );
     } catch (err) {
-      console.warn(
-        '[OutboxPersist] 旧 secure-store 队列读取失败，按空处理:',
-        err
-      );
+      log.warn('旧 secure-store 队列读取失败，按空处理', err);
       return [];
     }
   }
@@ -92,7 +95,7 @@ export class SqliteOutboxAdapter implements OutboxPersistAdapter {
     try {
       await this.legacyDriver?.deleteItem(OUTBOX_LEGACY_STORAGE_KEY);
     } catch (err) {
-      console.warn('[OutboxPersist] 清除旧 secure-store 队列失败:', err);
+      log.warn('清除旧 secure-store 队列失败', err);
     }
   }
 }
@@ -113,6 +116,7 @@ export function createDefaultOutboxPersist(
 
 /** 无持久化降级实现（DB 不可用时使用；内存态，进程退出即丢） */
 export class MemoryOutboxAdapter implements OutboxPersistAdapter {
+  readonly persistent = false;
   private items: OutboxItem[] = [];
 
   async load(): Promise<OutboxItem[]> {

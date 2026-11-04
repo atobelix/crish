@@ -7,21 +7,24 @@ import {
   parseAccountFlowNext,
 } from '@/presentation/navigation/accountNavigation';
 import { useSafeBack } from '@/presentation/navigation/useSafeBack';
+import { RequireGuest } from '@/presentation/components/auth/RequireGuest';
 
 export default function AccountCodeRoute() {
   const goBack = useSafeBack();
   const params = useLocalSearchParams<{ next?: string }>();
   const next = parseAccountFlowNext(paramOf(params.next));
   return (
-    <AccountCodeScreen
-      onBack={goBack}
-      onSuccess={() => finishAccountFlow(next)}
-      onSetPassword={(mode) =>
-        router.push({
-          pathname: '/account/set-password',
-          params: { mode },
-        })
-      }
-    />
+    <RequireGuest>
+      <AccountCodeScreen
+        onBack={goBack}
+        onSuccess={() => finishAccountFlow(next)}
+        onSetPassword={(mode) =>
+          router.push({
+            pathname: '/account/set-password',
+            params: { mode },
+          })
+        }
+      />
+    </RequireGuest>
   );
 }

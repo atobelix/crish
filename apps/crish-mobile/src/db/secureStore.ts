@@ -49,6 +49,10 @@ export const ACCOUNT_KEYS = {
   USER_JSON: 'account.user_json',
   /** 账号资料快照 JSON（可空；与 user_json 同生命周期） */
   PROFILE_JSON: 'account.profile_json',
+  /** 已选目标桌面 id（可空；随会话落盘，冷启动水合恢复——免首轮发现回来前无目标，CON-1） */
+  TARGET_DEVICE_ID: 'account.target_device_id',
+  /** 本机钉住标记（'1' = 用户在设备列表显式选了「本机」；随会话落盘恢复） */
+  TARGET_LOCAL_PINNED: 'account.target_local_pinned',
 } as const;
 
 export interface AccountSession {
@@ -61,6 +65,10 @@ export interface AccountSession {
   userJson: string | null;
   /** 资料快照 JSON（JSON.stringify(AccountProfile)；未保存为 null） */
   profileJson: string | null;
+  /** 已选目标桌面 id（未选为 null；旧版本会话无此键时 load 归一为 null） */
+  targetDeviceId: string | null;
+  /** 用户显式选了「本机」为当前设备（旧版本会话无此键时 load 归一为 false） */
+  localTargetPinned: boolean;
 }
 
 export async function loadAccountSession(
@@ -74,6 +82,8 @@ export async function loadAccountSession(
     email,
     userJson,
     profileJson,
+    targetDeviceId,
+    localTargetPinned,
   ] = await Promise.all([
     driver.getItem(ACCOUNT_KEYS.REFRESH_TOKEN),
     driver.getItem(ACCOUNT_KEYS.DEVICE_ID),
@@ -82,6 +92,8 @@ export async function loadAccountSession(
     driver.getItem(ACCOUNT_KEYS.EMAIL),
     driver.getItem(ACCOUNT_KEYS.USER_JSON),
     driver.getItem(ACCOUNT_KEYS.PROFILE_JSON),
+    driver.getItem(ACCOUNT_KEYS.TARGET_DEVICE_ID),
+    driver.getItem(ACCOUNT_KEYS.TARGET_LOCAL_PINNED),
   ]);
   if (refreshToken === null || deviceId === null) return null;
   return {
@@ -92,6 +104,8 @@ export async function loadAccountSession(
     email,
     userJson,
     profileJson,
+    targetDeviceId,
+    localTargetPinned: localTargetPinned === '1',
   };
 }
 
@@ -117,6 +131,12 @@ export async function saveAccountSession(
     session.profileJson !== null
       ? driver.setItem(ACCOUNT_KEYS.PROFILE_JSON, session.profileJson)
       : driver.deleteItem(ACCOUNT_KEYS.PROFILE_JSON),
+    session.targetDeviceId !== null
+      ? driver.setItem(ACCOUNT_KEYS.TARGET_DEVICE_ID, session.targetDeviceId)
+      : driver.deleteItem(ACCOUNT_KEYS.TARGET_DEVICE_ID),
+    session.localTargetPinned
+      ? driver.setItem(ACCOUNT_KEYS.TARGET_LOCAL_PINNED, '1')
+      : driver.deleteItem(ACCOUNT_KEYS.TARGET_LOCAL_PINNED),
   ]);
 }
 

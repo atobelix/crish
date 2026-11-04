@@ -1,8 +1,10 @@
 import type { WsPhase } from '@/network/ReconnectingWsClient';
+import type { ConnectionPhase } from '../store/connectionStore';
 import {
   CONNECTION_PHASE_TEXT,
   mapWsPhase,
   selectConnectionPhaseText,
+  selectEffectiveChatMode,
 } from './selectors';
 
 // 相位投影纯函数单测（D4 §6.2.5 映射表全量覆盖）
@@ -47,5 +49,22 @@ describe('连接相位中文文案', () => {
     expect(Object.keys(CONNECTION_PHASE_TEXT).sort()).toEqual(
       ['connecting', 'disconnected', 'offline', 'ready', 'recovering'].sort()
     );
+  });
+});
+
+// CON-2 中央派生投影表：ready → remote，其余全部 → local（全相位覆盖，
+// 改口径必然在此翻红——这是全仓模式判定的单一真源）
+describe('selectEffectiveChatMode（CON-2 有效对话模式）', () => {
+  it('逐行覆盖五相位投影表', () => {
+    const table: Array<[ConnectionPhase, string]> = [
+      ['ready', 'remote'],
+      ['disconnected', 'local'],
+      ['connecting', 'local'],
+      ['recovering', 'local'],
+      ['offline', 'local'],
+    ];
+    for (const [phase, expected] of table) {
+      expect(selectEffectiveChatMode(phase)).toBe(expected);
+    }
   });
 });

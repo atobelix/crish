@@ -1,7 +1,8 @@
-// 会话列表视图模型测试：会话/窗口投影、连接态、刷新分支。
+// 会话列表视图模型测试：会话/窗口投影、连接态、刷新分支、对账状态透传（M1）。
 import { Pressable } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { useSessionsVm, type SessionsVm } from './useSessionsVm';
+import { accountStore } from '@/domain/store/accountStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { eventStore } from '@/domain/store/eventStore';
 import { sessionStore } from '@/domain/store/sessionStore';
@@ -9,10 +10,15 @@ import type { SessionSummary } from '@/domain/store/sessionReducers';
 
 const mockGetWiring = jest.fn();
 const mockEnsureWiring = jest.fn();
+const mockReconnectNow = jest.fn();
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
   getObservationWiring: () => mockGetWiring(),
   ensureObservationWiring: () => mockEnsureWiring(),
+}));
+
+jest.mock('@/adapters/runtime/appRuntime', () => ({
+  reconnectNow: () => mockReconnectNow(),
 }));
 
 function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
@@ -44,6 +50,7 @@ function Probe(): React.ReactElement {
 beforeEach(() => {
   latest = null;
   jest.clearAllMocks();
+  accountStore.getState().reset();
   connectionStore.setState({ phase: 'disconnected', lastError: null });
   sessionStore.setState({ sessions: [] });
   eventStore.setState({ windows: {} });
@@ -72,6 +79,25 @@ describe('useSessionsVm', () => {
     expect(latest?.connected).toBe(false);
   });
 
+  it('对账状态透传（M1）：error + 错误信息 / ok + 成功打点随 store 变化', async () => {
+    connectionStore.setState({
+      sessionSyncStatus: 'error',
+      sessionSyncError: '对账超时',
+      lastReconcileAt: null,
+    });
+    await render(<Probe />);
+    expect(latest?.syncStatus).toBe('error');
+    expect(latest?.syncError).toBe('对账超时');
+    expect(latest?.lastReconcileAt).toBeNull();
+
+    await act(async () => {
+      connectionStore.getState().markSessionSyncSucceeded(4242);
+    });
+    expect(latest?.syncStatus).toBe('ok');
+    expect(latest?.syncError).toBeNull();
+    expect(latest?.lastReconcileAt).toBe(4242);
+  });
+
   it('refresh 复用已有 wiring', async () => {
     const refreshNow = jest.fn(async () => {});
     mockGetWiring.mockReturnValue({ bridge: { refreshNow } });
@@ -95,6 +121,18 @@ describe('useSessionsVm', () => {
 
     expect(mockEnsureWiring).toHaveBeenCalledTimes(1);
     expect(refreshNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('refresh 在账号模式无 wiring 时走 reconnectNow，不回落 LAN 接线（CON-1）', async () => {
+    accountStore.setState({ status: 'loggedIn' });
+    mockGetWiring.mockReturnValue(null);
+    const view = await render(<Probe />);
+
+    fireEvent.press(view.getByTestId('refresh'));
+    await Promise.resolve();
+
+    expect(mockReconnectNow).toHaveBeenCalledTimes(1);
+    expect(mockEnsureWiring).not.toHaveBeenCalled();
   });
 
   it('refresh 在完全无接线时安全返回（可选链兜底）', async () => {

@@ -1,6 +1,9 @@
 // 设计系统原子测试：文本 / 图标 / 按钮 / 徽标 / 输入 / 列表行 / Sheet 选项行。
+import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
+import { lightTheme } from '@/adapters/platform/theme';
+import { AuthButton } from '@/presentation/account/ui';
 import {
   AppText,
   Badge,
@@ -32,6 +35,18 @@ async function renderWithProviders(element: React.ReactElement) {
   return await render(element, { wrapper: Providers });
 }
 
+type FlatStyle = Record<string, unknown>;
+
+/** 解析节点 style（数组 / 函数式 Pressable style 均摊平为单对象，未按下态） */
+function flatStyleOf(node: { props: { style?: unknown } }): FlatStyle {
+  const raw = node.props.style as unknown;
+  const resolved =
+    typeof raw === 'function'
+      ? (raw as (s: { pressed: boolean }) => unknown)({ pressed: false })
+      : raw;
+  return (StyleSheet.flatten(resolved as never) ?? {}) as FlatStyle;
+}
+
 describe('text / icon', () => {
   it('renders text, icons and spinner', async () => {
     const view = await renderWithProviders(
@@ -45,6 +60,17 @@ describe('text / icon', () => {
     );
     expect(view.getByText('标题')).toBeTruthy();
     expect(view.toJSON()).toBeTruthy();
+  });
+
+  it('caps system font scaling at 1.35 by default; explicit value wins', async () => {
+    const view = await renderWithProviders(
+      <>
+        <AppText>默认上限</AppText>
+        <AppText maxFontSizeMultiplier={2}>显式上限</AppText>
+      </>
+    );
+    expect(view.getByText('默认上限').props.maxFontSizeMultiplier).toBe(1.35);
+    expect(view.getByText('显式上限').props.maxFontSizeMultiplier).toBe(2);
   });
 });
 
@@ -65,6 +91,27 @@ describe('Button', () => {
     fireEvent.press(view.getByText('加载'));
     fireEvent.press(view.getByText('禁用'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('带文字主按钮填充 = actionPrimary 亮绿（用户裁决 2026-11-02，推翻 D3 深绿）', async () => {
+    const view = await renderWithProviders(
+      <>
+        <Button label="主" testID="btn-primary" onPress={() => {}} />
+        <AuthButton
+          label="账号主"
+          testID="btn-auth-primary"
+          onPress={() => {}}
+        />
+      </>
+    );
+    // 钉住亮绿口径：填充取 actionPrimary 本值（浅色 #10b981），不得回退 brandStrong
+    expect(flatStyleOf(view.getByTestId('btn-primary')).backgroundColor).toBe(
+      lightTheme.colors.actionPrimary
+    );
+    expect(
+      flatStyleOf(view.getByTestId('btn-auth-primary')).backgroundColor
+    ).toBe(lightTheme.colors.actionPrimary);
+    expect(lightTheme.colors.actionPrimary).toBe('#10b981');
   });
 });
 
@@ -104,6 +151,8 @@ describe('Input / ListRow / SheetOptionRow', () => {
     const view = await renderWithProviders(
       <>
         <Input testID="input" label="主机" error="必填" />
+        <Input testID="input-plain" />
+        <Input testID="input-field" tone="field" />
         <ListRow
           title="桌面连接"
           subtitle="192.168.1.2:8765"
@@ -132,5 +181,23 @@ describe('Input / ListRow / SheetOptionRow', () => {
     expect(view.getByText('必填')).toBeTruthy();
     expect(view.getByText('静态')).toBeTruthy();
     expect(view.getByText('连接')).toBeTruthy();
+    // 输入壳形态（2026-11-02）：默认 subtle 壳 = fillSubtle；tone="field" 档
+    // 壳 = field 白盒（grouped 背景上的表单口径）。壳 = TextInput 的父节点
+    // （Animated.View 透传的 View）；reanimated 桩下动画底色求值为静置端。
+    // 注 1：壳断言并入本用例而非独立用例——本文件内第二个含 TextInput 的
+    // render 在先行用例的 focus/press 之后按 testID 查找 TextInput 会落空
+    // （bisect 实测的跨用例污染），故同批断言同居一例。
+    // 注 2：subtle 断言取无错误态的 input-plain——带 error 的 input 壳按设计
+    // 被 dangerSoft 静态底覆盖（错误态优先），不作静置底色样本。
+    const subtleShell = view.getByTestId('input-plain').parent;
+    const fieldShell = view.getByTestId('input-field').parent;
+    expect(subtleShell).toBeTruthy();
+    expect(fieldShell).toBeTruthy();
+    expect(flatStyleOf(subtleShell!).backgroundColor).toBe(
+      lightTheme.colors.fillSubtle
+    );
+    expect(flatStyleOf(fieldShell!).backgroundColor).toBe(
+      lightTheme.colors.field
+    );
   });
 });

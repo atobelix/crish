@@ -3,7 +3,7 @@
 // 收敛为不抢眼的次级小入口（帮助 = 弱文字链、重试 = 小号弱色图标钮）排在胶囊左侧。
 // 仅在非 ready 时出现；断连排障入口保留 ConnectionHelpSheet。
 import { useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import {
@@ -76,15 +76,17 @@ export function ConnectionBanner({
           size={theme.size.iconSmall}
           color={theme.colors.textSecondary}
         />
-        {/* 原型文案 12.5/500、次级文字色 */}
-        <AppText
-          variant="caption"
-          color="textSecondary"
-          style={styles.bannerText}
-          numberOfLines={1}
-        >
-          {lastError ?? phaseLabel}
-        </AppText>
+        <View style={styles.textContainer}>
+          {/* 原型文案 12.5/500、次级文字色 */}
+          <AppText
+            variant="caption"
+            color="textSecondary"
+            style={styles.bannerText}
+            numberOfLines={1}
+          >
+            {(lastError && lastError.trim()) || phaseLabel}
+          </AppText>
+        </View>
         {/* 原型次级排障入口（帮助）：弱文字链，按压整件透明度 120ms 过渡 */}
         <AnimatedPressable
           accessibilityRole="button"
@@ -148,9 +150,10 @@ export function ConnectionBanner({
 }
 
 const styles = StyleSheet.create({
-  banner: { width: '100%', flexDirection: 'row', alignItems: 'center' },
+  banner: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center' },
   surface: { flex: 1, width: '100%' },
-  bannerText: { flex: 1, fontWeight: '500' },
+  textContainer: { flex: 1, minWidth: 0 },
+  bannerText: { fontWeight: '500' },
   switchCapsule: { alignItems: 'center', justifyContent: 'center' },
 });
 

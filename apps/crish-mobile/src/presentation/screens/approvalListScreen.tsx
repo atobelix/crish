@@ -45,6 +45,26 @@ export default function ApprovalListScreen({
           </AppText>
         ) : null}
       </View>
+      {vm.outboxPersistError ? (
+        <View
+          style={[
+            styles.banner,
+            {
+              marginHorizontal: theme.space.lg,
+              marginBottom: theme.space.sm,
+              minHeight: theme.size.summaryRow,
+              paddingHorizontal: theme.space.md,
+              gap: theme.space.sm,
+              borderRadius: theme.radius.control,
+              backgroundColor: theme.colors.dangerSoft,
+            },
+          ]}
+        >
+          <AppText variant="footnote" color="danger">
+            {vm.outboxPersistError}
+          </AppText>
+        </View>
+      ) : null}
       {vm.outboxCount > 0 ? (
         <View
           style={[

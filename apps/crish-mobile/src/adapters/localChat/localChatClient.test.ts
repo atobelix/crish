@@ -228,3 +228,67 @@ describe('fetchProviderModels / checkConnectivity', () => {
     expect(down.error?.kind).toBe('network');
   });
 });
+
+describe('completeChatCompletion（U4 一次性非流式补全）', () => {
+  const completionInput = {
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-test',
+    model: 'm1',
+    messages: [{ role: 'user' as const, content: '给这段对话起个标题' }],
+  };
+
+  it('成功：解析 message.content；请求体 stream=false/max_tokens=32/temperature=0.3 且无 tools', async () => {
+    let capturedUrl = '';
+    let capturedBody = '';
+    const jsonFetch: JsonFetch = async (url, init) => {
+      capturedUrl = url;
+      capturedBody = init.body ?? '';
+      return {
+        status: 200,
+        text: JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: '秋日诗歌' } }],
+        }),
+      };
+    };
+    const client = createLocalChatClient({ jsonFetch });
+    await expect(client.completeChatCompletion(completionInput)).resolves.toBe(
+      '秋日诗歌'
+    );
+    expect(capturedUrl).toBe('https://api.example.com/v1/chat/completions');
+    const body = JSON.parse(capturedBody) as Record<string, unknown>;
+    expect(body.stream).toBe(false);
+    expect(body.max_tokens).toBe(32);
+    expect(body.temperature).toBe(0.3);
+    expect(body).not.toHaveProperty('tools');
+  });
+
+  it('HTTP 401 → reject auth 分类错误（与流式同分类口径）', async () => {
+    const jsonFetch: JsonFetch = async () => ({
+      status: 401,
+      text: '{"error":{"message":"invalid api key"}}',
+    });
+    const client = createLocalChatClient({ jsonFetch });
+    await expect(
+      client.completeChatCompletion(completionInput)
+    ).rejects.toMatchObject({ kind: 'auth' });
+  });
+
+  it('网络失败 → reject network；响应非补全结构 → reject unknown', async () => {
+    const downFetch: JsonFetch = async () => {
+      throw new Error('offline');
+    };
+    const down = createLocalChatClient({ jsonFetch: downFetch });
+    await expect(
+      down.completeChatCompletion(completionInput)
+    ).rejects.toMatchObject({ kind: 'network' });
+
+    const junkFetch: JsonFetch = async () => ({
+      status: 200,
+      text: '{"hello":"world"}',
+    });
+    const junk = createLocalChatClient({ jsonFetch: junkFetch });
+    await expect(
+      junk.completeChatCompletion(completionInput)
+    ).rejects.toMatchObject({ kind: 'unknown' });
+  });
+});

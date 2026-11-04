@@ -9,13 +9,11 @@
 //   确认（点允许 → 确认框 → 确认放行）；reduce-motion 时整体降级为两段式点按；
 // - U8 零描边：滑轨/滑块一律表面色阶表达（armed → successSoft 轨道 + 图标变色），
 //   无 borderWidth、无阴影。
+// - 手感基建批：释放弹簧速度播种（手指 velocityX 直传 spring.slideThumb）；
+//   确认瞬间经触觉门面发 snap 触感；reduce-motion 信号改走共享实现
+//   adapters/platform/useReducedMotion（本地探测已删）。
 import { useEffect, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  GestureResponderEvent,
-  StyleSheet,
-  Text,
-} from 'react-native';
+import { GestureResponderEvent, StyleSheet, Text } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -25,6 +23,8 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
+import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
+import { haptics } from '@/adapters/platform/haptics';
 import { Button, Dialog } from '@/presentation/ui';
 
 /** 触发阈值（F2 §5.3 / R2UX §2.4-3：滑过 70% 才可抬起触发） */
@@ -82,45 +82,17 @@ export default function SlideToConfirm({
   const [trackWidth, setTrackWidth] = useState(0);
   const [armed, setArmed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [reduceMotionDetected, setReduceMotionDetected] = useState(false);
   const thumbX = useSharedValue(0);
   const onConfirmRef = useRef(onConfirm);
   onConfirmRef.current = onConfirm;
 
   const usable = slideUsableWidth(trackWidth);
 
-  // reduce-motion 探测（R2UX §4.4-1：订阅变化即时响应；jest/无原生环境回落默认 false）
-  useEffect(() => {
-    let mounted = true;
-    try {
-      AccessibilityInfo.isReduceMotionEnabled()
-        .then((value) => {
-          if (mounted) setReduceMotionDetected(value);
-        })
-        .catch(() => {
-          /* swallow-ok: 原生模块缺失（jest 等）时保持默认 false */
-        });
-    } catch {
-      // 原生模块缺失（jest 等）时保持默认 false
-    }
-    let subscription: { remove: () => void } | null = null;
-    try {
-      subscription = AccessibilityInfo.addEventListener(
-        'reduceMotionChanged',
-        (value) => {
-          if (mounted) setReduceMotionDetected(value);
-        }
-      );
-    } catch {
-      subscription = null;
-    }
-    return () => {
-      mounted = false;
-      subscription?.remove();
-    };
-  }, []);
-
-  const effectiveReduceMotion = reduceMotion ?? reduceMotionDetected;
+  // reduce-motion 信号收敛到共享实现（手感基建批，审计 H-1：原本地
+  // AccessibilityInfo 探测已删除）；显式注入的 reduceMotion prop 仍优先
+  // （测试注入口径不变）
+  const sharedReduceMotion = useReducedMotion();
+  const effectiveReduceMotion = reduceMotion ?? sharedReduceMotion;
 
   // busy 锁定：弹窗强制关闭 + 复位滑块（防双点，R2UX-04-03 同拒绝弹窗语义）
   useEffect(() => {
@@ -131,6 +103,8 @@ export default function SlideToConfirm({
   }, [disabled, thumbX]);
 
   const trigger = () => {
+    // 吸附确认触感与放行同帧（触觉门面语义：snap）
+    haptics.snap();
     setArmed(false);
     onConfirmRef.current();
   };
@@ -141,14 +115,22 @@ export default function SlideToConfirm({
       'worklet';
       thumbX.value = Math.min(Math.max(event.translationX, 0), usable);
     })
-    .onEnd(() => {
+    .onEnd((event) => {
       'worklet';
       const progress = usable > 0 ? thumbX.value / usable : 0;
+      // 速度播种（手感基建批 M-1）：释放弹簧吃手指水平速度，快甩与慢拖
+      // 的确认落定/回弹速度自此不同（位移单位 px/s 与 thumbX 同量纲直传）
       if (slideReleaseDecision(progress) === 'confirm') {
-        thumbX.value = usable;
+        thumbX.value = withSpring(usable, {
+          ...theme.motion.spring.slideThumb,
+          velocity: event.velocityX,
+        });
         runOnJS(trigger)();
       } else {
-        thumbX.value = withSpring(0, theme.motion.spring.slideThumb);
+        thumbX.value = withSpring(0, {
+          ...theme.motion.spring.slideThumb,
+          velocity: event.velocityX,
+        });
       }
     });
 
@@ -172,6 +154,8 @@ export default function SlideToConfirm({
   };
 
   const confirmTwoStep = () => {
+    // 两段式点按确认与滑动确认同一语义点（snap），触感口径一致
+    haptics.snap();
     setDialogOpen(false);
     onConfirmRef.current();
   };

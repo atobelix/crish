@@ -42,11 +42,12 @@ import type {
   AssistantMessageBlock,
   MessageImageBlock,
   NoticeBlock,
-  ReasoningBlock,
   TimelineBlock,
 } from './buildTimeline';
 import { groupToolRuns, type DisplayBlock } from './groupToolRuns';
 import { ToolSummaryRow } from './ToolSummaryRow';
+import { ReasoningCard } from './ReasoningCard';
+import { MessageActionBar } from './MessageActionBar';
 import {
   formatTimeSeparator,
   insertTimeSeparators,
@@ -57,15 +58,14 @@ import {
   restoreScrollOffset,
   shouldFreezeTail,
 } from './timelineScrollRules';
-import { useMinResidencyText } from './useActivityLabel';
 import {
   clearScrollAnchor,
   loadScrollAnchor,
   saveScrollAnchor,
   type ScrollAnchor,
 } from '@/domain/store/scrollAnchorStore';
+import { evaluateFollowState } from '@/domain/pure/timelineBottomInset';
 
-const FOLLOW_THRESHOLD = 40;
 /** 锚点节流写入间隔（ms）：非跟随滚动中最多每 200ms 落一次盘 */
 const ANCHOR_SAVE_THROTTLE_MS = 200;
 /** 就绪遮罩看门狗（ms）：布局/锚点信号异常缺失时强制就绪——会话不许
@@ -124,6 +124,10 @@ export interface TimelineViewProps {
    * 次级宿主（运行详情等）不启用。
    */
   readyCover?: boolean;
+  /** 重新生成回调（透传助手消息底部工具栏） */
+  onRegenerate?: (messageId: string) => void;
+  /** 是否允许重新生成（引擎空闲状态） */
+  canRegenerate?: boolean;
 }
 
 export function TimelineView({
@@ -140,6 +144,8 @@ export function TimelineView({
   busy = false,
   anchorKey,
   readyCover = false,
+  onRegenerate,
+  canRegenerate,
 }: TimelineViewProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
@@ -469,11 +475,18 @@ export function TimelineView({
 
   // 手势与滚动调度守卫：保护用户手动拖拽浏览，防止流式打字与 Yoga 排版测高抢夺手势
   const isDraggingRef = useRef(false);
+  const isMomentumRef = useRef(false);
   const rafScrollRef = useRef<number | null>(null);
 
   const scheduleScrollToEnd = useCallback(
     (animated = false) => {
-      if (!follow || isDraggingRef.current || blocks.length === 0) return;
+      if (
+        !follow ||
+        isDraggingRef.current ||
+        isMomentumRef.current ||
+        blocks.length === 0
+      )
+        return;
       // 锚点恢复未 settle 前禁止贴底：恢复落位与贴底同帧竞争会把
       // 用户拽回底部（遮罩在此期间盖住列表，就绪后二选一生效）
       if (anchorPhaseRef.current !== 'done') return;
@@ -482,7 +495,13 @@ export function TimelineView({
       }
       rafScrollRef.current = requestAnimationFrame(() => {
         rafScrollRef.current = null;
-        if (!follow || isDraggingRef.current || blocks.length === 0) return;
+        if (
+          !follow ||
+          isDraggingRef.current ||
+          isMomentumRef.current ||
+          blocks.length === 0
+        )
+          return;
         if (anchorPhaseRef.current !== 'done') return;
         targetRef.current?.scrollToEnd({ animated });
       });
@@ -500,7 +519,13 @@ export function TimelineView({
   }, []);
 
   useEffect(() => {
-    if (!follow || isDraggingRef.current || blocks.length === 0) return;
+    if (
+      !follow ||
+      isDraggingRef.current ||
+      isMomentumRef.current ||
+      blocks.length === 0
+    )
+      return;
     scheduleScrollToEnd(false);
     // bottomInset 入 deps：浮层增厚（错误条/停止胶囊出现、键盘弹起）
     // 时跟随态须重新贴底，否则尾部会被新浮层压住一截
@@ -512,7 +537,7 @@ export function TimelineView({
     viewportHeightRef.current = layoutMeasurement.height;
     const distance =
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    const following = distance <= FOLLOW_THRESHOLD;
+    const following = evaluateFollowState(distance, follow);
     if (following !== follow) onFollowChange(following);
     // 锚点节流落盘 + 尾部冻结重评（均为 ref 级计算，跨阈值才改状态）
     persistAnchorThrottled();
@@ -526,7 +551,12 @@ export function TimelineView({
       evaluateTailFreeze();
       // 原生 Yoga 测高完成且处于 follow 状态时，通过 requestAnimationFrame 安排 scrollToEnd，
       // 彻底解决文本换行或新块渲染后尺寸增加留在视口外“划不动”的断裂
-      if (follow && !isDraggingRef.current && blocks.length > 0) {
+      if (
+        follow &&
+        !isDraggingRef.current &&
+        !isMomentumRef.current &&
+        blocks.length > 0
+      ) {
         scheduleScrollToEnd(false);
       }
     },
@@ -543,6 +573,7 @@ export function TimelineView({
     (_event: NativeSyntheticEvent<NativeScrollEvent>) => {
       // 锁定手势：用户手动拖拽期间严禁流式更新或 Yoga 排版重排打断手势响应链
       isDraggingRef.current = true;
+      isMomentumRef.current = false;
       if (rafScrollRef.current !== null) {
         cancelAnimationFrame(rafScrollRef.current);
         rafScrollRef.current = null;
@@ -554,17 +585,20 @@ export function TimelineView({
   const handleScrollEndDrag = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       isDraggingRef.current = false;
+      const vy = Math.abs(event.nativeEvent?.velocity?.y ?? 0);
+      isMomentumRef.current = vy > 0.05;
       handleScroll(event);
     },
-    [follow, onFollowChange]
+    [handleScroll]
   );
 
   const handleMomentumScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       isDraggingRef.current = false;
+      isMomentumRef.current = false;
       handleScroll(event);
     },
-    [follow, onFollowChange]
+    [handleScroll]
   );
 
   // 等待占位行（04-3）：busy 且最后一个用户块之后尚无任何过程内容
@@ -626,6 +660,8 @@ export function TimelineView({
                 onOpenTools={onOpenTools}
                 disclosureStore={disclosureRef.current}
                 onToggleDisclosure={handleToggleDisclosure}
+                onRegenerate={onRegenerate}
+                canRegenerate={canRegenerate}
               />
             </View>
           );
@@ -749,6 +785,8 @@ const TimelineBlockView = memo(function TimelineBlockView({
   onOpenTools,
   disclosureStore,
   onToggleDisclosure,
+  onRegenerate,
+  canRegenerate,
 }: {
   block: DisplayBlock;
   onOpenTools?: (focusId: string) => void;
@@ -756,10 +794,18 @@ const TimelineBlockView = memo(function TimelineBlockView({
   disclosureStore?: Map<string, boolean>;
   /** ⑰ 折叠区切换通知（宿主据此脱离跟随） */
   onToggleDisclosure?: () => void;
+  onRegenerate?: (messageId: string) => void;
+  canRegenerate?: boolean;
 }) {
   switch (block.kind) {
     case 'message':
-      return <MessageView block={block} />;
+      return (
+        <MessageView
+          block={block}
+          canRegenerate={canRegenerate}
+          onRegenerate={onRegenerate}
+        />
+      );
     case 'image':
       return <MessageImageView block={block} />;
     case 'toolRun':
@@ -771,7 +817,7 @@ const TimelineBlockView = memo(function TimelineBlockView({
       return <NoticeView block={block} />;
     case 'reasoning':
       return (
-        <ReasoningView
+        <ReasoningCard
           block={block}
           disclosureStore={disclosureStore}
           onToggleDisclosure={onToggleDisclosure}
@@ -782,77 +828,15 @@ const TimelineBlockView = memo(function TimelineBlockView({
   }
 });
 
-function ReasoningView({
+function MessageView({
   block,
-  disclosureStore,
-  onToggleDisclosure,
+  canRegenerate,
+  onRegenerate,
 }: {
-  block: ReasoningBlock;
-  disclosureStore?: Map<string, boolean>;
-  onToggleDisclosure?: () => void;
+  block: AssistantMessageBlock;
+  canRegenerate?: boolean;
+  onRegenerate?: (messageId: string) => void;
 }) {
-  const theme = useTheme();
-  // 流式期默认折叠（批 B 04-1，取代旧「流式默认展开」）：思考过程收
-  // 进一行状态行，正文区不被未定稿思考挤占；用户手动展开/折叠的选
-  // 择按块写入 disclosureStore，该轮内（含 FlatList 回收重挂载）保持。
-  const [expanded, setExpanded] = useState(
-    () => disclosureStore?.get(block.id) ?? false
-  );
-  const seconds = Math.max(1, Math.round((block.durationMs ?? 0) / 1000));
-  const rawLabel = block.isThinking ? '正在思考...' : `已思考 ${seconds} 秒`;
-  // 活动文案最短驻留：思考中驻留整形，封口（isThinking=false）直通
-  // 终态文案（已思考 N 秒 = 过程组组头总时长呈现）
-  const label = useMinResidencyText(rawLabel, block.isThinking);
-  const toggle = () => {
-    const next = !expanded;
-    setExpanded(next);
-    disclosureStore?.set(block.id, next);
-    // ⑰：折叠区切换即脱离跟随
-    onToggleDisclosure?.();
-  };
-
-  return (
-    <View style={styles.reasoningContainer}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        onPress={toggle}
-        style={[
-          styles.inlineRow,
-          styles.reasoningHeader,
-          { gap: theme.space.xs },
-        ]}
-      >
-        <AppText variant="caption" color="textTertiary">
-          {label}
-        </AppText>
-        <Icon
-          name={expanded ? 'chevron-down' : 'chevron-right'}
-          size={12}
-          color={theme.colors.textTertiary}
-        />
-      </Pressable>
-      {expanded && block.text.trim().length > 0 ? (
-        <View
-          style={[
-            styles.reasoningBody,
-            {
-              borderLeftColor: theme.colors.borderStrong,
-              paddingLeft: theme.space.sm,
-              marginTop: theme.space.xs,
-            },
-          ]}
-        >
-          <AppText variant="footnote" color="textSecondary">
-            {block.text}
-          </AppText>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function MessageView({ block }: { block: AssistantMessageBlock }) {
   const theme = useTheme();
   if (block.role === 'user') {
     return (
@@ -886,13 +870,22 @@ function MessageView({ block }: { block: AssistantMessageBlock }) {
     );
   }
   return (
-    <StreamingText
-      identity={`message:${block.id}`}
-      text={block.text}
-      streaming={block.streaming}
-      cursorStyle={{ color: theme.colors.textTertiary }}
-      style={[theme.type.chat, { color: theme.colors.textPrimary }]}
-    />
+    <View style={styles.assistantMessageContainer}>
+      <StreamingText
+        identity={`message:${block.id}`}
+        text={block.text}
+        streaming={block.streaming}
+        cursorStyle={{ color: theme.colors.textTertiary }}
+        style={[theme.type.chat, { color: theme.colors.textPrimary }]}
+      />
+      <MessageActionBar
+        messageId={block.id}
+        text={block.text}
+        streaming={block.streaming}
+        canRegenerate={canRegenerate}
+        onRegenerate={onRegenerate}
+      />
+    </View>
   );
 }
 
@@ -966,6 +959,7 @@ const styles = StyleSheet.create({
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
   userRow: { alignItems: 'flex-end' },
   userBubble: { maxWidth: '82%' },
+  assistantMessageContainer: { width: '100%' },
   inlineRow: { flexDirection: 'row', alignItems: 'center' },
   center: { justifyContent: 'center' },
   centerText: { textAlign: 'center' },

@@ -24,6 +24,9 @@
 // HEARTBEAT_TIMEOUT_FACTOR=3（3×间隔无消息 → 判定断线，90s 假死）、
 import { WsGateway, GatewayError, decodeFrame } from './WsGateway';
 import { buildAuthenticatedWsUrl } from './EndpointResolver';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('ws');
 
 /** WS 内部相位（D4 §6.2.2 / 本类状态机词汇表：类型所有权归 network——
  *  上层（domain 投影 / wiring）依赖本类型为正确单向；此前定义在
@@ -53,6 +56,11 @@ export interface ReconnectingWsClientOptions {
   maxRetryMs?: number;
   /** 连续重连失败上限（M5 §4.3.1 默认 5；超限 → dead 终态） */
   maxRetries?: number;
+  /** 握手看门狗覆盖（缺省 CONNECT_TIMEOUT_MS = 8s）。relay 场景一次握手
+   *  = 票据 HTTP + 等 peer 在线，远超 8s，须由接线层注入放大值
+   *  （observationWiring 的 RELAY_CONNECT_TIMEOUT_MS，CON-1 预算对齐），
+   *  否则看门狗会在票据返回前就把 socket 关掉记一次失败。 */
+  connectTimeoutMs?: number;
   /** 退避抖动上限（缺省 1s；测试传 0 锁定退避序列） */
   jitterMaxMs?: number;
   /** WebSocket 工厂（RN 默认全局；测试注入 mock class） */
@@ -171,6 +179,7 @@ export class ReconnectingWsClient {
   private manualClose = false;
   private readonly heartbeatInterval: number;
   private readonly maxRetries: number;
+  private readonly connectTimeoutMs: number;
 
   /** 消息分发出口（R2-05 域订阅 / 测试断言；构造注入或内部新建） */
   readonly gateway: WsGateway;
@@ -179,6 +188,7 @@ export class ReconnectingWsClient {
     this.gateway = opts.gateway ?? new WsGateway({ msgIdPrefix: 'mob' });
     this.heartbeatInterval = opts.heartbeatMs ?? HEARTBEAT_INTERVAL_MS;
     this.maxRetries = opts.maxRetries ?? 5;
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
     this.setupRoutes();
   }
 
@@ -259,6 +269,7 @@ export class ReconnectingWsClient {
     this.stopHeartbeat();
     this.manualClose = true;
     this.retryCountValue = 0;
+    this.gateway.detachSend();
     this.gateway.abortAllPending(
       new GatewayError('cmd.cancelled', '连接已主动断开', false)
     );
@@ -278,14 +289,15 @@ export class ReconnectingWsClient {
     });
     const ws = factory(connectUrl);
     this.ws = ws;
-    // 握手看门狗：8s 未 open 主动放弃本次握手（close → onclose → 退避重连）
+    // 握手看门狗：connectTimeoutMs（默认 8s；relay 场景注入放大值）未 open
+    // 主动放弃本次握手（close → onclose → 退避重连）
     this.connectWatchdog = setTimeout(() => {
       this.connectWatchdog = null;
       if (this.ws === ws && this.phaseValue !== 'open') {
-        console.warn('[ReconnectingWsClient] 握手超时，放弃本次连接');
+        log.warn('握手超时，放弃本次连接');
         ws.close();
       }
-    }, CONNECT_TIMEOUT_MS);
+    }, this.connectTimeoutMs);
     ws.onopen = () => this.handleOpen(ws);
     ws.onmessage = (ev) => this.handleMessage(ev.data);
     ws.onclose = () => this.handleClose();
@@ -297,7 +309,14 @@ export class ReconnectingWsClient {
     this.cancelReconnectTimer();
     // 出站接线：优先完成出站管道绑定，保证任何下游回调发起出站帧时 sendFn 已可用
     this.gateway.attachSend((raw) => {
-      if (this.ws === ws) ws.send(raw);
+      if (this.ws !== ws) {
+        throw new GatewayError(
+          'transport.closed',
+          '连接未就绪，无法发送请求',
+          true
+        );
+      }
+      ws.send(raw);
     });
     this.setPhase('open');
     this.startHeartbeat();
@@ -317,9 +336,7 @@ export class ReconnectingWsClient {
     const result = decodeFrame(data);
     if (!result.ok) {
       // 解码失败：宽容丢弃 + 记日志（D3 §10.3，不打断连接）
-      console.warn(
-        `[ReconnectingWsClient] 解码失败丢弃（${result.error.code}）：${result.error.message}`
-      );
+      log.warn(`解码失败丢弃（${result.error.code}）：${result.error.message}`);
       return;
     }
     this.gateway.dispatchFrame(result.frame);
@@ -333,6 +350,7 @@ export class ReconnectingWsClient {
     }
     this.stopHeartbeat();
     this.ws = null;
+    this.gateway.detachSend();
     if (this.manualClose) return; // 主动断开：不进入重连
     // 意外断开：挂起请求立即失败（transport.closed，retryable → outbox 层重发）
     this.gateway.abortAllPending(
@@ -343,9 +361,7 @@ export class ReconnectingWsClient {
 
   /** onerror 只记日志不推进相位（M5 R-02：以 onclose 为判死事件，不依赖 onerror 时序） */
   private handleError(): void {
-    console.warn(
-      '[ReconnectingWsClient] WebSocket error（等待 close 事件判死）'
-    );
+    log.warn('WebSocket error（等待 close 事件判死）');
   }
 
   /** 指数退避重连（M5 §4.3.2）：1s→2s→4s→8s→16s→30s 封顶 + 抖动；

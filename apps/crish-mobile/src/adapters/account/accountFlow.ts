@@ -3,16 +3,15 @@
 // 服务端统一入口：
 // - 邮箱 → `POST /email/continue`（已注册发登录码，未注册发注册码）；
 // - 验证码 → `POST /email/continue/confirm`：老用户直接登录；新用户返回 setupToken；
-// - 注册 / 重置 → `POST /email/code/verify` 换 setupToken → `POST /email/password/set`；
-// - 已登录改密 → `POST /password/change/request|confirm`。
+// - 注册 / 重置 → `POST /email/code/verify` 换 setupToken → `POST /email/password/set`。
+// 已登录改密不经本编排：单页式改密页（accountChangePasswordScreen）直连
+// accountService 的发码 / 确认接口，不再把新密码暂存草稿跨页传递。
 //
-// 新密码与 setupToken 只放内存草稿，不落盘、不进路由参数。
+// setupToken 只放内存草稿，不落盘、不进路由参数。
 import {
   confirmAccountEmailContinue,
-  confirmAccountPasswordChange,
   continueAccountEmail,
   requestAccountEmailCode,
-  requestAccountPasswordChangeCode,
   setAccountPasswordWithToken,
   verifyAccountResetCode,
 } from '@/adapters/account/accountService';
@@ -34,14 +33,12 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** 流程用途：login 覆盖「登录或注册」，reset 是未登录找回，change 是已登录改密。 */
-export type AccountFlowPurpose = 'login' | 'reset' | 'change';
+/** 流程用途：login 覆盖「登录或注册」，reset 是未登录找回。 */
+export type AccountFlowPurpose = 'login' | 'reset';
 
 export interface AccountFlowDraft {
   email: string;
   purpose: AccountFlowPurpose;
-  /** change 场景的新密码（只在内存里，提交验证码时使用） */
-  password: string | null;
   /** 验证码校验后的一次性 setup token（register / reset 设密使用） */
   setupToken: string | null;
   /** 可再次发送的时间戳（ms） */
@@ -66,7 +63,6 @@ export type CodeRequestResult =
 export type ConfirmCodeResult =
   | { kind: 'signed_in' }
   | { kind: 'set_password'; mode: 'register' | 'reset' }
-  | { kind: 'changed' }
   | { kind: 'failed'; message: string; retryAfter?: number };
 
 function messageOf(error: unknown, fallback: string): string {
@@ -95,14 +91,12 @@ function draftAfterSend(
   email: string,
   purpose: AccountFlowPurpose,
   now: number,
-  devCode: string | null,
-  extra?: { password?: string | null; setupToken?: string | null }
+  devCode: string | null
 ): AccountFlowDraft {
   return {
     email,
     purpose,
-    password: extra?.password ?? null,
-    setupToken: extra?.setupToken ?? null,
+    setupToken: null,
     resendAt: now + RESEND_COOLDOWN_SECONDS * 1000,
     devCode,
   };
@@ -141,31 +135,6 @@ export async function startPasswordReset(
   }
 }
 
-/** 已登录修改密码：先收下新密码草稿并向绑定邮箱发验证码。 */
-export async function startPasswordChange(
-  email: string,
-  password: string,
-  now: number = Date.now()
-): Promise<CodeRequestResult> {
-  try {
-    const ticket = await requestAccountPasswordChangeCode();
-    setDraft(
-      draftAfterSend(
-        normalizeEmail(email),
-        'change',
-        now,
-        ticket.devCode ?? null,
-        {
-          password,
-        }
-      )
-    );
-    return { kind: 'sent' };
-  } catch (error) {
-    return errorResult(error, '验证码发送失败');
-  }
-}
-
 /** 重新发送当前草稿场景的验证码。 */
 export async function resendAccountCode(
   now: number = Date.now()
@@ -177,11 +146,8 @@ export async function resendAccountCode(
     if (current.purpose === 'login') {
       const ticket = await continueAccountEmail(current.email);
       devCode = ticket.devCode ?? null;
-    } else if (current.purpose === 'reset') {
-      const ticket = await requestAccountEmailCode('reset', current.email);
-      devCode = ticket.devCode ?? null;
     } else {
-      const ticket = await requestAccountPasswordChangeCode();
+      const ticket = await requestAccountEmailCode('reset', current.email);
       devCode = ticket.devCode ?? null;
     }
     draft = {
@@ -198,8 +164,7 @@ export async function resendAccountCode(
 /**
  * 校验验证码：
  * - login：老用户直接登录；新用户携带 setupToken 进入「设置密码」；
- * - reset：换 setupToken 进入「设置密码」；
- * - change：带草稿里的新密码提交改密。
+ * - reset：换 setupToken 进入「设置密码」。
  */
 export async function confirmAccountCode(
   code: string
@@ -216,17 +181,9 @@ export async function confirmAccountCode(
       draft = { ...current, setupToken: outcome.setupToken };
       return { kind: 'set_password', mode: 'register' };
     }
-    if (current.purpose === 'reset') {
-      const setupToken = await verifyAccountResetCode(current.email, code);
-      draft = { ...current, setupToken };
-      return { kind: 'set_password', mode: 'reset' };
-    }
-    if (!current.password) {
-      return { kind: 'failed', message: '请返回重新设置新密码' };
-    }
-    await confirmAccountPasswordChange(code, current.password);
-    clearAccountFlowDraft();
-    return { kind: 'changed' };
+    const setupToken = await verifyAccountResetCode(current.email, code);
+    draft = { ...current, setupToken };
+    return { kind: 'set_password', mode: 'reset' };
   } catch (error) {
     const message =
       error instanceof AccountApiError &&

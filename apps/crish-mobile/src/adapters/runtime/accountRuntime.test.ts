@@ -5,6 +5,12 @@
 import { accountStore } from '@/domain/store/accountStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { deviceDirectoryStore } from '@/domain/store/deviceDirectoryStore';
+import { sessionStore } from '@/domain/store/sessionStore';
+import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
+import { approvalStore } from '@/domain/store/approvalStore';
+import { deviceSnapshotStore } from '@/domain/store/deviceSnapshotStore';
+import type { EventEnvelopeFrame } from '@/domain/store/eventReducers';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import type { AccountDevice } from '@/domain/types/account';
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
@@ -37,6 +43,7 @@ import {
   startAccountRuntime,
   stopAccountRuntime,
   accountRemoteTargetId,
+  refreshAndSyncAccountRemote,
 } from './accountRuntime';
 import {
   ensureRelayObservationWiring,
@@ -221,6 +228,101 @@ describe('目标切换与销毁', () => {
   });
 });
 
+describe('资格门去抖（CON-1）', () => {
+  it('目标第一轮发现未命中保留接线，第二轮未命中才拆线', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    expect(accountRemoteTargetId()).toBe('d-1');
+
+    // 第 1 轮未命中（新发现快照：目标离线）→ 保留
+    accountStore.setState({ devices: [device({ id: 'd-1', online: false })] });
+    expect(disposeObsMock).not.toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBe('d-1');
+
+    // 第 2 轮未命中（又一轮新快照）→ 拆线
+    accountStore.setState({ devices: [device({ id: 'd-1', online: false })] });
+    expect(disposeObsMock).toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBeNull();
+  });
+
+  it('同一轮快照内的重复 sync 不重复计未命中（引用未变不算新轮次）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    const missSnapshot = [device({ id: 'd-1', online: false })];
+    accountStore.setState({ devices: missSnapshot });
+    // 同一引用再触发若干次 sync（其它字段变化）仍只算 1 轮
+    accountStore.setState({ error: 'x' });
+    accountStore.setState({ devices: missSnapshot });
+    expect(disposeObsMock).not.toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBe('d-1');
+  });
+
+  it('未命中后目标恢复在线：不拆线且未命中计数清零', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+
+    accountStore.setState({ devices: [device({ id: 'd-1', online: false })] });
+    accountStore.setState({ devices: [device({ id: 'd-1', online: true })] });
+    expect(disposeObsMock).not.toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBe('d-1');
+
+    // 计数已清零：再来一轮未命中仍保留（须连续 2 轮才拆）
+    accountStore.setState({ devices: [device({ id: 'd-1', online: false })] });
+    expect(disposeObsMock).not.toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBe('d-1');
+  });
+
+  it('硬资格丢失（登出）立即拆线，不去抖', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+
+    accountStore.setState({ status: 'loggedOut' });
+
+    expect(disposeObsMock).toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBeNull();
+  });
+
+  it('目标从发现中整轮消失同样计未命中（缺席与离线同口径）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+
+    accountStore.setState({ devices: [] });
+    expect(disposeObsMock).not.toHaveBeenCalled();
+    accountStore.setState({ devices: [device({ id: 'other' })] });
+    expect(disposeObsMock).toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBeNull();
+  });
+});
+
+describe('发现后显式同步与 dead 复活（CON-1）', () => {
+  it('refreshAndSyncAccountRemote：dead 接线被同步复活并补一轮发现', () => {
+    const { refreshAccountDevices } = jest.requireMock(
+      '@/adapters/account/accountService'
+    ) as { refreshAccountDevices: jest.Mock };
+    startAccountRuntime();
+    setEligible('d-1');
+    const connect = jest.fn();
+    getObsMock.mockReturnValue({ client: { phase: 'dead', connect } });
+    refreshAccountDevices.mockClear();
+
+    refreshAndSyncAccountRemote();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(refreshAccountDevices).toHaveBeenCalledTimes(1);
+  });
+
+  it('发现心跳 tick 主动 sync：发现未产生 store 变化时 dead 接线也被复活', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    const connect = jest.fn();
+    getObsMock.mockReturnValue({ client: { phase: 'dead', connect } });
+
+    jest.advanceTimersByTime(15_000);
+
+    expect(connect).toHaveBeenCalled();
+  });
+});
+
 describe('已知设备目录喂数（G4）', () => {
   it('登录态同步把最新发现并入目录', () => {
     startAccountRuntime();
@@ -248,5 +350,206 @@ describe('已知设备目录喂数（G4）', () => {
     expect(deviceDirectoryStore.getState().knownDevices.length).toBe(1);
     accountStore.setState({ status: 'loggedOut' });
     expect(deviceDirectoryStore.getState().knownDevices).toEqual([]);
+  });
+});
+
+describe('CON-3 断线保留与设备分区', () => {
+  function entry(id: string): SessionIndexEntry {
+    return { id, title: `会话 ${id}`, updatedAt: 1000 };
+  }
+
+  function frame(sessionId: string, sequence: number): EventEnvelopeFrame {
+    return { sessionId, type: 'message-end', sequence } as EventEnvelopeFrame;
+  }
+
+  function seedSession(id: string): void {
+    sessionStore.getState().upsert(entry(id));
+  }
+
+  /** 两轮发现未命中（去抖到期）→ 拆线断开 */
+  function disconnectByMisses(id = 'd-1'): void {
+    accountStore.setState({ devices: [device({ id, online: false })] });
+    accountStore.setState({ devices: [device({ id, online: false })] });
+  }
+
+  beforeEach(() => {
+    sessionStore.getState().reset();
+    eventStore.getState().reset();
+    approvalStore.getState().reset();
+    deviceSnapshotStore.setState({
+      snapshots: {},
+      liveStale: false,
+      liveSnapshotAt: null,
+    });
+  });
+
+  it('同设备断线（去抖到期拆线）后会话列表原地保留 + 陈旧标记，不再 wipe', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+
+    disconnectByMisses();
+
+    expect(disposeObsMock).toHaveBeenCalled();
+    expect(accountRemoteTargetId()).toBeNull();
+    expect(connectionStore.getState().phase).toBe('disconnected');
+    // 数据面保留（CON-3 前 disposeRemote 在此处连带 reset 三店）
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['a-1']);
+    expect(sessionStore.getState().ownerDeviceId).toBe('d-1');
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+  });
+
+  it('断线后同设备重连：数据仍在 live、盖章不变、接线以同目标重建', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+    disconnectByMisses();
+    ensureRelayMock.mockClear();
+
+    accountStore.setState({ devices: [device({ id: 'd-1', online: true })] });
+
+    expect(ensureRelayMock).toHaveBeenCalledTimes(1);
+    expect(accountRemoteTargetId()).toBe('d-1');
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['a-1']);
+    expect(sessionStore.getState().ownerDeviceId).toBe('d-1');
+  });
+
+  it('切换设备往返：A 列表分键保留、B 只见自己、切回 A 原样恢复（绝不串）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+    seedSession('a-2');
+
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    // B 呈现空表（无 B 快照）；A 数据进 A 分区
+    expect(sessionStore.getState().sessions).toEqual([]);
+    expect(sessionStore.getState().ownerDeviceId).toBe('d-2');
+    expect(
+      deviceSnapshotStore.getState().snapshots['d-1']?.sessions.map((s) => s.id)
+    ).toEqual(['a-1', 'a-2']);
+
+    seedSession('b-1');
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['b-1']);
+
+    // 切回 A：A 快照恢复 + 陈旧标记；B 数据进 B 分区、不混入
+    accountStore.setState({
+      targetDeviceId: 'd-1',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual([
+      'a-1',
+      'a-2',
+    ]);
+    expect(deviceSnapshotStore.getState().liveStale).toBe(true);
+    expect(
+      deviceSnapshotStore.getState().snapshots['d-2']?.sessions.map((s) => s.id)
+    ).toEqual(['b-1']);
+
+    // 再切 B：只见 b-1
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['b-1']);
+  });
+
+  it('切到离线设备（暂不合资格）：旧设备数据同样分键保留，新目标呈空表', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2', online: false })],
+    });
+
+    expect(accountRemoteTargetId()).toBeNull();
+    expect(sessionStore.getState().sessions).toEqual([]);
+    expect(sessionStore.getState().ownerDeviceId).toBe('d-2');
+    expect(
+      deviceSnapshotStore.getState().snapshots['d-1']?.sessions.map((s) => s.id)
+    ).toEqual(['a-1']);
+
+    // d-2 上线建线后切回 d-1：A 快照仍可恢复
+    accountStore.setState({
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2', online: true })],
+    });
+    expect(accountRemoteTargetId()).toBe('d-2');
+    accountStore.setState({
+      targetDeviceId: 'd-1',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    expect(sessionStore.getState().sessions.map((s) => s.id)).toEqual(['a-1']);
+  });
+
+  it('事件窗口随数据面一同保留/分区（断线不清窗、切换不串窗）', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+    eventStore.getState().ingest('a-1', frame('a-1', 3), false, 1000);
+    expect(lastSeqOf('a-1')).toBe(3);
+
+    disconnectByMisses();
+    expect(lastSeqOf('a-1')).toBe(3);
+
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    expect(eventStore.getState().windows).toEqual({});
+
+    accountStore.setState({
+      targetDeviceId: 'd-1',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    expect(lastSeqOf('a-1')).toBe(3);
+  });
+
+  it('登出：live 与全部分区快照一并清除，盖章归零', () => {
+    startAccountRuntime();
+    setEligible('d-1');
+    seedSession('a-1');
+    accountStore.setState({
+      targetDeviceId: 'd-2',
+      devices: [device({ id: 'd-1' }), device({ id: 'd-2' })],
+    });
+    seedSession('b-1');
+    // 前置状态：注册表有 d-1 分区，live 是 d-2 的 b-1
+    expect(deviceSnapshotStore.getState().snapshots['d-1']).toBeDefined();
+
+    accountStore.setState({ status: 'loggedOut' });
+
+    expect(sessionStore.getState().sessions).toEqual([]);
+    expect(deviceSnapshotStore.getState().snapshots).toEqual({});
+    expect(sessionStore.getState().ownerDeviceId).toBeNull();
+    expect(deviceSnapshotStore.getState().liveStale).toBe(false);
+  });
+});
+
+describe('发现心跳与列表同步解耦（2026-11-02 增量口径）', () => {
+  it('心跳 tick 只维护设备表：目标未变 + 接线存活 → 不重建接线、会话数据面零写入', () => {
+    const { refreshAccountDevices } = jest.requireMock(
+      '@/adapters/account/accountService'
+    ) as { refreshAccountDevices: jest.Mock };
+    startAccountRuntime();
+    setEligible('d-1');
+    getObsMock.mockReturnValue({
+      client: { phase: 'open', connect: jest.fn() },
+    });
+    ensureRelayMock.mockClear();
+    refreshAccountDevices.mockClear();
+    const sessionsBefore = sessionStore.getState().sessions;
+
+    jest.advanceTimersByTime(45_000);
+
+    // 设备发现轮次在推进（设备表维护面存活）
+    expect(refreshAccountDevices).toHaveBeenCalled();
+    // 接线零重建：无新桥即无从触发任何列表对账/同步（心跳与列表同步解耦）
+    expect(ensureRelayMock).not.toHaveBeenCalled();
+    // 会话数据面引用不变（零写入）
+    expect(sessionStore.getState().sessions).toBe(sessionsBefore);
   });
 });

@@ -22,8 +22,9 @@ export const FONT_SCALE_LABELS: Record<FontScale, string> = {
   xlarge: '特大',
 };
 
-const FONT_SCALE_HINTS: Record<FontScale, string> = {
-  standard: '默认大小',
+// 「标准」即默认，不挂副文案（显示内容净化裁定 2026-11-02）；
+// 大/特大的百分比是定量决策信息，保留。
+const FONT_SCALE_HINTS: Partial<Record<FontScale, string>> = {
   large: '放大 12.5%',
   xlarge: '放大 25%',
 };
@@ -88,7 +89,7 @@ export function SettingsFontView({ vm, onBack }: SettingsFontViewProps) {
             }}
           >
             <AppText variant="body">
-              这段文字使用当前字号显示，切换上方选项会立即生效。
+              清晨的阳光落在窗台上，新的一天才刚刚开始。
             </AppText>
             <AppText variant="footnote" color="textTertiary">
               The quick brown fox jumps over the lazy dog.

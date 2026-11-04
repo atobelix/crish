@@ -23,6 +23,9 @@ function resetStore(): void {
     attemptCount: 0,
     lastError: null,
     lastSyncAt: null,
+    sessionSyncStatus: 'idle',
+    sessionSyncError: null,
+    lastReconcileAt: null,
   });
 }
 
@@ -94,6 +97,31 @@ describe('setPhase（归一相位写入，接线层经 mapWsPhase 投影后调�
     connectionStore.getState().setPhase('recovering');
     expect(connectionStore.getState().attemptCount).toBe(1);
   });
+
+  it('连接纪元：跃入 ready 打点、重复 ready 不挪动、离开 ready 清空（状态板资格界）', () => {
+    connectionStore.getState().setPhase('connecting');
+    expect(connectionStore.getState().connectedSinceMs).toBeNull();
+    connectionStore.getState().setPhase('ready');
+    const epoch = connectionStore.getState().connectedSinceMs;
+    expect(epoch).not.toBeNull();
+    // 同一连接内重复 ready：纪元稳定（资格判定不漂移）
+    connectionStore.getState().setPhase('ready');
+    expect(connectionStore.getState().connectedSinceMs).toBe(epoch);
+    // 离开 ready → 纪元清空；再次 ready → 新纪元（不早于旧纪元）
+    connectionStore.getState().setPhase('recovering');
+    expect(connectionStore.getState().connectedSinceMs).toBeNull();
+    connectionStore.getState().setPhase('ready');
+    const epoch2 = connectionStore.getState().connectedSinceMs;
+    expect(epoch2).not.toBeNull();
+    expect(epoch2!).toBeGreaterThanOrEqual(epoch!);
+  });
+
+  it('reset 清连接纪元', () => {
+    connectionStore.getState().setPhase('ready');
+    expect(connectionStore.getState().connectedSinceMs).not.toBeNull();
+    connectionStore.getState().reset();
+    expect(connectionStore.getState().connectedSinceMs).toBeNull();
+  });
 });
 
 describe('setEndpoint（已选端点）', () => {
@@ -123,6 +151,47 @@ describe('onReconnectAttempt / onError（重连与错误数据面）', () => {
     const s = connectionStore.getState();
     expect(s.lastError).toBe('连接被对端关闭');
     expect(s.phase).toBe('recovering');
+  });
+});
+
+describe('会话对账状态（M1 数据完整性面）', () => {
+  it('初始 idle：未对账、无错误、无成功打点', () => {
+    const s = connectionStore.getState();
+    expect(s.sessionSyncStatus).toBe('idle');
+    expect(s.sessionSyncError).toBeNull();
+    expect(s.lastReconcileAt).toBeNull();
+  });
+
+  it('started → syncing；succeeded → ok + 打点 lastReconcileAt + 清错误', () => {
+    connectionStore.getState().markSessionSyncFailed('旧错误');
+    connectionStore.getState().markSessionSyncStarted();
+    // 进行中保留上次错误（结果落定前不闪烁清空）
+    expect(connectionStore.getState().sessionSyncStatus).toBe('syncing');
+    expect(connectionStore.getState().sessionSyncError).toBe('旧错误');
+    connectionStore.getState().markSessionSyncSucceeded(123_456);
+    const s = connectionStore.getState();
+    expect(s.sessionSyncStatus).toBe('ok');
+    expect(s.sessionSyncError).toBeNull();
+    expect(s.lastReconcileAt).toBe(123_456);
+  });
+
+  it('failed → error + 错误信息入面；lastReconcileAt 不动（仍指上次成功）', () => {
+    connectionStore.getState().markSessionSyncSucceeded(999);
+    connectionStore.getState().markSessionSyncStarted();
+    connectionStore.getState().markSessionSyncFailed('对账超时');
+    const s = connectionStore.getState();
+    expect(s.sessionSyncStatus).toBe('error');
+    expect(s.sessionSyncError).toBe('对账超时');
+    expect(s.lastReconcileAt).toBe(999);
+  });
+
+  it('reset 一并复位对账状态（断开/注销后不残留旧连接的同步结论）', () => {
+    connectionStore.getState().markSessionSyncFailed('对账超时');
+    connectionStore.getState().reset();
+    const s = connectionStore.getState();
+    expect(s.sessionSyncStatus).toBe('idle');
+    expect(s.sessionSyncError).toBeNull();
+    expect(s.lastReconcileAt).toBeNull();
   });
 });
 

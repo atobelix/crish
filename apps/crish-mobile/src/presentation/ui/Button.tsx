@@ -2,16 +2,13 @@
 // primary 为绿色主操作（J4）；secondary 为浅灰填充，无描边。
 // compact 档（原型弹窗口径）：44 高、字 14，主/危险 600、次/幽灵 500。
 // N05/G4 裁定：按钮内不嵌图标（文字已足够），icon prop 删除。
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+// 按压反馈（按压过渡统一批，2026-11-02）：整件透明度 1→motion.pressOpacity
+// 走 120ms 过渡（usePressFade fadeStyle），取代瞬时 opacity 跳变。
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { useTheme, type Theme } from '@/adapters/platform/theme';
 import AppText from './AppText';
+import { AnimatedPressable, usePressFade } from './pressFeedback';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -38,6 +35,9 @@ interface ButtonPalette {
 function paletteFor(theme: Theme, variant: ButtonVariant): ButtonPalette {
   switch (variant) {
     case 'primary':
+      // 带文字主按钮：底色用 actionPrimary 亮绿（用户裁决 2026-11-02 恢复，
+      // 推翻 D3 的 brandStrong 深绿填充；白字 ≈2.54:1 为知情取舍，口径与
+      // 钉值见 theme.contrast.test.ts 主按钮配对块）；brandStrong 只作深绿文字档
       return {
         background: theme.colors.actionPrimary,
         foreground: theme.colors.actionPrimaryText,
@@ -75,16 +75,19 @@ export function Button({
   const isDisabled = disabled || loading;
   const { background, foreground } = paletteFor(theme, variant);
   const compact = size === 'compact';
+  const press = usePressFade();
 
   return (
-    <Pressable
+    <AnimatedPressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.button,
         {
           minHeight: compact ? theme.size.touch : theme.size.touchLarge,
@@ -92,8 +95,7 @@ export function Button({
           paddingHorizontal: theme.space.xl,
           backgroundColor: background,
         },
-        isDisabled && styles.disabled,
-        pressed && !isDisabled && { opacity: theme.motion.pressOpacity },
+        isDisabled ? styles.disabled : press.fadeStyle,
         style,
       ]}
     >
@@ -112,7 +114,7 @@ export function Button({
           {label}
         </AppText>
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

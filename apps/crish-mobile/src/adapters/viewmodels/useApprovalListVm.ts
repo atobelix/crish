@@ -16,12 +16,15 @@ export interface ApprovalRow {
 export interface ApprovalListVm {
   rows: ApprovalRow[];
   outboxCount: number;
+  /** outbox 持久化故障面（approvalStore 直读；null = 持久化健康） */
+  outboxPersistError: string | null;
   refresh: () => Promise<void>;
 }
 
 export function useApprovalListVm(): ApprovalListVm {
   const pending = useApprovalStore((s) => s.pending);
   const outboxCount = useApprovalStore((s) => s.outboxCount);
+  const outboxPersistError = useApprovalStore((s) => s.outboxPersistError);
   const now = useCountdownTick(COUNTDOWN_TICK_MS, pending.length > 0);
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export function useApprovalListVm(): ApprovalListVm {
   return {
     rows,
     outboxCount,
+    outboxPersistError,
     refresh,
   };
 }

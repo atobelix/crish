@@ -23,6 +23,9 @@ function makeVm(overrides: Partial<DeviceStatusVm> = {}): DeviceStatusVm {
     pairedHost: null,
     switchDevice: jest.fn(),
     refreshDevices: jest.fn(),
+    currentDeviceName: '本机',
+    localDevice: { name: '本机', selected: true },
+    switchToLocal: jest.fn(),
     ...overrides,
   };
 }
@@ -30,7 +33,8 @@ function makeVm(overrides: Partial<DeviceStatusVm> = {}): DeviceStatusVm {
 async function renderSheet(
   vm: DeviceStatusVm,
   onClose = jest.fn(),
-  onOpenScan = jest.fn()
+  onOpenScan = jest.fn(),
+  onUseLocal = jest.fn()
 ) {
   const view = await render(
     <SafeAreaProvider initialMetrics={metrics}>
@@ -39,12 +43,36 @@ async function renderSheet(
         onClose={onClose}
         device={vm}
         onOpenScan={onOpenScan}
+        onUseLocal={onUseLocal}
         testID="device-sheet"
       />
     </SafeAreaProvider>
   );
-  return { view, onClose, onOpenScan };
+  return { view, onClose, onOpenScan, onUseLocal };
 }
+
+describe('DeviceSheet · 本机行（恒在）', () => {
+  it('非账号模式：本机行在场，本地生效时选中', async () => {
+    const vm = makeVm({ pairedHost: '192.168.1.2' });
+    const { view } = await renderSheet(vm);
+    const localRow = view.getByTestId('device-sheet-local');
+    expect(localRow.props.accessibilityState.selected).toBe(true);
+  });
+
+  it('非账号模式远端在效时点本机行 = onUseLocal 导航（不解绑配对）', async () => {
+    const vm = makeVm({
+      pairedHost: '192.168.1.2',
+      host: '192.168.1.2',
+      connected: true,
+      localDevice: { name: '本机', selected: false },
+    });
+    const { view, onClose, onUseLocal } = await renderSheet(vm);
+    await fireEvent.press(view.getByTestId('device-sheet-local'));
+    expect(onUseLocal).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalled();
+    expect(vm.switchToLocal).not.toHaveBeenCalled();
+  });
+});
 
 describe('DeviceSheet · 非账号模式（历史单设备形态不回归）', () => {
   it('渲染配对行 + 扫码行，无账号设备行', async () => {
@@ -53,7 +81,7 @@ describe('DeviceSheet · 非账号模式（历史单设备形态不回归）', (
     expect(view.getByTestId('device-sheet-current')).toBeTruthy();
     expect(view.getByText('192.168.1.2')).toBeTruthy();
     expect(view.getByTestId('device-sheet-scan')).toBeTruthy();
-    expect(view.queryByText('暂无已知设备')).toBeNull();
+    expect(view.queryByText('暂无已知电脑')).toBeNull();
   });
 
   it('未连接时点配对行 = 重连并关闭', async () => {
@@ -126,8 +154,38 @@ describe('DeviceSheet · 账号模式多设备', () => {
   it('空目录：诚实空态（不编造设备）', async () => {
     const vm = makeVm({ accountMode: true, devices: [] });
     const { view } = await renderSheet(vm);
-    expect(view.getByText('暂无已知设备')).toBeTruthy();
+    expect(view.getByText('暂无已知电脑')).toBeTruthy();
     expect(view.getByTestId('device-sheet-scan')).toBeTruthy();
+  });
+
+  it('本机行恒在且本地生效时选中（账号模式，目录非空）', async () => {
+    const vm = makeVm({
+      accountMode: true,
+      relayEngaged: false,
+      devices: twoDevices,
+      targetDeviceId: null,
+      localDevice: { name: '本机', selected: true },
+    });
+    const { view } = await renderSheet(vm);
+    const localRow = view.getByTestId('device-sheet-local');
+    expect(localRow).toBeTruthy();
+    expect(localRow.props.accessibilityState.selected).toBe(true);
+    expect(view.getByText('本机')).toBeTruthy();
+  });
+
+  it('账号模式点本机行 = 切本地（switchToLocal）并关闭', async () => {
+    const vm = makeVm({
+      accountMode: true,
+      relayEngaged: true,
+      devices: twoDevices,
+      targetDeviceId: 'desk-a',
+      connected: true,
+      localDevice: { name: '本机', selected: false },
+    });
+    const { view, onClose } = await renderSheet(vm);
+    await fireEvent.press(view.getByTestId('device-sheet-local'));
+    expect(vm.switchToLocal).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('中继未接管且已配对：账号行与配对行并存（配对设备管理不回归）', async () => {

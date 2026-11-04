@@ -1,13 +1,12 @@
 // 页面容器：统一背景、安全区与键盘避让。
+// 键盘避让走 react-native-keyboard-controller 的 KeyboardAvoidingView：
+// edge-to-edge 下 Android 的 IME 以 inset 下发、窗口不再 resize，RN 内置
+// KAV 在 Android 上 behavior=undefined 即恒 no-op（键盘审计 §一/§二），
+// 故双平台统一用库版并显式 behavior="padding"；黑名单守卫见
+// src/__tests__/keyboardAvoidance.guard.test.tsx。
 import type { ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 
@@ -53,10 +52,7 @@ export function Screen({
   );
   if (!avoidKeyboard) return content;
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView style={styles.flex} behavior="padding">
       {content}
     </KeyboardAvoidingView>
   );

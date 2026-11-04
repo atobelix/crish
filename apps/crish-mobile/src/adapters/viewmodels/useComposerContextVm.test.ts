@@ -9,6 +9,7 @@ import type {
 import { useComposerContextVm } from './useComposerContextVm';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { filesStore } from '@/domain/store/filesStore';
+import { modelsStore } from '@/domain/store/modelsStore';
 import { settingsStore } from '@/domain/store/settingsStore';
 import type { FilesContext } from '@/adapters/wiring/filesWiring';
 import { ModelsCommandError } from '@/adapters/wiring/modelsRepository';
@@ -40,6 +41,9 @@ function fakeContext() {
 function resetStores() {
   connectionStore.setState({ phase: 'disconnected' });
   filesStore.setState({ activeWorkspaceRoot: null });
+  // M2：模型面是共享 store，跨用例必须复位（否则上一例的已加载数据会让
+  // 下一例的连接就绪自动拉取不触发）
+  modelsStore.getState().reset();
   settingsStore.setState((s) => ({
     groups: {
       ...s.groups,
@@ -319,5 +323,81 @@ describe('useComposerContextVm · 视觉能力（G5b）', () => {
     );
     await waitFor(() => expect(result.current.models).not.toBeNull());
     expect(result.current.activeModelVisionSupported).toBe(false);
+  });
+});
+
+// ── M2 模型共享与拉取制度化（共享 store + 超龄重拉 + 可选性派生）─────────
+
+describe('useComposerContextVm · 模型共享与拉取制度（M2）', () => {
+  it('跨实例共享：一处切换 → 另一实例（后挂载）即时同值，不重复拉取', async () => {
+    const { ctx } = fakeContext();
+    const models = fakeModelsContext();
+    connectionStore.setState({ phase: 'ready' });
+    const sessionPage = await renderHook(() =>
+      useComposerContextVm(ctx, models.ctx)
+    );
+    await waitFor(() =>
+      expect(sessionPage.result.current.models).not.toBeNull()
+    );
+    await act(async () => {
+      await sessionPage.result.current.selectModel('openai', 'gpt-x');
+    });
+    expect(sessionPage.result.current.modelLabel).toBe('GPT X');
+    // 主页实例后挂载（主页在会话页切换期间一直挂载是真机常态，此处以
+    // 后挂载近似）：读同一份共享 store，选中态为新模型且不重拉
+    const home = await renderHook(() => useComposerContextVm(ctx, models.ctx));
+    expect(home.result.current.modelLabel).toBe('GPT X');
+    expect(home.result.current.activeModelId).toBe('["openai","gpt-x"]');
+    expect(models.repository.listModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('openModelList：保鲜期内不重拉；超龄（>30s）静默重拉且跟随桌面新默认', async () => {
+    const { ctx } = fakeContext();
+    const models = fakeModelsContext();
+    connectionStore.setState({ phase: 'ready' });
+    const { result } = await renderHook(() =>
+      useComposerContextVm(ctx, models.ctx)
+    );
+    await waitFor(() => expect(result.current.models).not.toBeNull());
+    expect(models.repository.listModels).toHaveBeenCalledTimes(1);
+    // 保鲜期内打开 Sheet：不打扰命令面
+    await act(async () => {
+      result.current.openModelList();
+    });
+    expect(models.repository.listModels).toHaveBeenCalledTimes(1);
+    // 桌面改默认（仓库回传新默认）+ 本地数据龄压过 30s → 打开 Sheet 静默重拉并跟随
+    models.repository.listModels.mockResolvedValue({
+      models: [MODEL_A, { ...MODEL_B, active: true }],
+      activeModel: ACTIVE_B,
+    });
+    modelsStore.setState({ loadedAtMs: Date.now() - 31_000 });
+    await act(async () => {
+      result.current.openModelList();
+    });
+    await waitFor(() => expect(result.current.modelLabel).toBe('GPT X'));
+    expect(models.repository.listModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('activeModelSelectable：默认在可选集 → true；已停用不在可选集 → false；未设默认 → false', async () => {
+    const { ctx } = fakeContext();
+    const inSet = fakeModelsContext();
+    connectionStore.setState({ phase: 'ready' });
+    const a = await renderHook(() => useComposerContextVm(ctx, inSet.ctx));
+    await waitFor(() => expect(a.result.current.models).not.toBeNull());
+    expect(a.result.current.activeModelSelectable).toBe(true);
+    a.unmount();
+
+    modelsStore.getState().reset();
+    const gone = fakeVisionContext([MODEL_B], ACTIVE_A);
+    const b = await renderHook(() => useComposerContextVm(ctx, gone.ctx));
+    await waitFor(() => expect(b.result.current.models).not.toBeNull());
+    expect(b.result.current.activeModelSelectable).toBe(false);
+    b.unmount();
+
+    modelsStore.getState().reset();
+    const none = fakeVisionContext([MODEL_A], null);
+    const c = await renderHook(() => useComposerContextVm(ctx, none.ctx));
+    await waitFor(() => expect(c.result.current.models).not.toBeNull());
+    expect(c.result.current.activeModelSelectable).toBe(false);
   });
 });

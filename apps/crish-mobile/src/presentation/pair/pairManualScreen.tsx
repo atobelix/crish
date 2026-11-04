@@ -1,12 +1,6 @@
 // 手动配对：主机 + 配对码（可选端口）。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  BackHandler,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { BackHandler, Platform, StyleSheet, View } from 'react-native';
 import {
   extractCodeFromDraft,
   normalizePairCode,
@@ -33,6 +27,10 @@ import {
   ensurePairingController,
   type PairingController,
 } from '@/adapters/pairing/pairingController';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import { ConnectionHelpSheet } from '@/presentation/components/status/ConnectionHelpSheet';
 import {
   PAIR_ABANDON_DIALOG_DESCRIPTION,
@@ -85,6 +83,9 @@ export default function PairManualScreen({
   const [codeRaw, setCodeRaw] = useState('');
   const [portText, setPortText] = useState('');
   const [advanced, setAdvanced] = useState(false);
+  // 高级设置展开 / 帮助入口按压反馈（按压过渡统一批）
+  const advancedPress = usePressFade();
+  const helpPress = usePressFade();
   const [localError, setLocalError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -185,17 +186,19 @@ export default function PairManualScreen({
           autoCapitalize="characters"
           autoCorrect={false}
         />
-        <Pressable
+        <AnimatedPressable
           accessibilityRole="button"
           accessibilityLabel="高级设置"
           accessibilityState={{ expanded: advanced }}
           onPress={() => setAdvanced((value) => !value)}
-          style={styles.advancedToggle}
+          onPressIn={advancedPress.onPressIn}
+          onPressOut={advancedPress.onPressOut}
+          style={[styles.advancedToggle, advancedPress.fadeStyle]}
         >
           <AppText variant="footnote" color="textSecondary">
             {advanced ? '收起高级设置' : '高级设置'}
           </AppText>
-        </Pressable>
+        </AnimatedPressable>
         {advanced ? (
           <Input
             testID="pair-port-input"
@@ -228,16 +231,18 @@ export default function PairManualScreen({
         <AppText variant="caption" color="textTertiary" style={styles.hint}>
           在桌面端「设置 → 多端互通」中开启配对，可扫码或复制配对码。
         </AppText>
-        <Pressable
+        <AnimatedPressable
           accessibilityRole="button"
           accessibilityLabel="查看连接帮助"
           onPress={() => setHelpOpen(true)}
-          style={styles.helpButton}
+          onPressIn={helpPress.onPressIn}
+          onPressOut={helpPress.onPressOut}
+          style={[styles.helpButton, helpPress.fadeStyle]}
         >
           <AppText variant="footnote" color="textSecondary">
             连接遇到问题？
           </AppText>
-        </Pressable>
+        </AnimatedPressable>
       </View>
       <ConnectionHelpSheet
         visible={helpOpen}

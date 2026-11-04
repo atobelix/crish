@@ -1,8 +1,11 @@
 // 审批决策区：允许 / 拒绝；L2 高风险允许改为滑动确认。
+// 触觉（手感基建批）：L1 允许 → 门面 success、确认拒绝 → 门面 failure，与
+// 决策同帧；L2 允许的触感由 SlideToConfirm 自身在确认瞬间发 snap，本层不叠加。
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
+import { haptics } from '@/adapters/platform/haptics';
 import { AppText, Button, Dialog } from '@/presentation/ui';
 import SlideToConfirm from './SlideToConfirm';
 
@@ -82,7 +85,10 @@ export default function ApprovalActionBar({
             <Button
               label="允许"
               variant="primary"
-              onPress={onAllow}
+              onPress={() => {
+                haptics.success();
+                onAllow();
+              }}
               disabled={busy}
               loading={busy}
               testID="approval-allow"
@@ -108,6 +114,7 @@ export default function ApprovalActionBar({
             label: '确认拒绝',
             variant: 'danger',
             onPress: () => {
+              haptics.failure();
               setConfirmOpen(false);
               onDeny();
             },

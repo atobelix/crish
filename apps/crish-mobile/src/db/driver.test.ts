@@ -308,3 +308,62 @@ describe('MemorySqlDriver UPDATE / DELETE / 事务', () => {
     expect(db.rowCount('demo')).toBe(1);
   });
 });
+
+describe('MemorySqlDriver DEFAULT 填充与 ALTER（v4 迁移支撑）', () => {
+  it('INSERT 未列出的列按 DEFAULT 填充，无 DEFAULT 则 NULL（对齐 SQLite）', async () => {
+    const db = new MemorySqlDriver();
+    await setup(db);
+    await db.exec('INSERT INTO demo (id, session_id, seq) VALUES (?, ?, ?)', [
+      'd1',
+      's1',
+      1,
+    ]);
+    const row = await db.getFirst<{ status: string; label: string | null }>(
+      'SELECT status, label FROM demo WHERE id = ?',
+      ['d1']
+    );
+    expect(row).toEqual({ status: 'open', label: null });
+  });
+
+  it('ALTER TABLE ADD COLUMN：存量行回填 DEFAULT，新行同样生效；重复加列抛错', async () => {
+    const db = new MemorySqlDriver();
+    await setup(db);
+    await db.exec('INSERT INTO demo (id, session_id, seq) VALUES (?, ?, ?)', [
+      'd1',
+      's1',
+      1,
+    ]);
+    await db.exec(
+      "ALTER TABLE demo ADD COLUMN title_source TEXT NOT NULL DEFAULT 'derived'"
+    );
+    const old = await db.getFirst<{ title_source: string }>(
+      'SELECT title_source FROM demo WHERE id = ?',
+      ['d1']
+    );
+    expect(old?.title_source).toBe('derived');
+    // 新行未列出该列 → 同样按 DEFAULT 填充；显式给值则用显式值
+    await db.exec('INSERT INTO demo (id, session_id, seq) VALUES (?, ?, ?)', [
+      'd2',
+      's1',
+      2,
+    ]);
+    await db.exec(
+      'INSERT INTO demo (id, session_id, seq, title_source) VALUES (?, ?, ?, ?)',
+      ['d3', 's1', 3, 'ai']
+    );
+    const rows = await db.getAll<{ id: string; title_source: string }>(
+      'SELECT id, title_source FROM demo ORDER BY seq ASC'
+    );
+    expect(rows).toEqual([
+      { id: 'd1', title_source: 'derived' },
+      { id: 'd2', title_source: 'derived' },
+      { id: 'd3', title_source: 'ai' },
+    ]);
+    await expect(
+      db.exec('ALTER TABLE demo ADD COLUMN title_source TEXT')
+    ).rejects.toThrow('列已存在');
+    await expect(
+      db.exec('ALTER TABLE missing ADD COLUMN x TEXT')
+    ).rejects.toThrow('表不存在');
+  });
+});

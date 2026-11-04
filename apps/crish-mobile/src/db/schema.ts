@@ -1,23 +1,35 @@
-// 本地存储 schema（Z0 R2-13 / M5 §5.2；v2 收敛为 3 张生效表）
+// 本地存储 schema（Z0 R2-13 / M5 §5.2；v2 收敛为 3 张生效表；v3 增本地线程两表；
+// v4 给 local_threads 增 title_source 列，见 V4_THREAD_TITLE_SOURCE_SQL）
 // 纪律（M5 §1.2 规则 2）：存储层不得 import 网络层；与 src/network 互不可见。
 // 迁移纪律（M5 §5.4）：已发布迁移 SQL 禁止修改，新需求走 v2+；本文件只追加表定义。
 
 /**
- * 生效表清单（v2 收敛，实现波总方案 D5）：
+ * 生效表清单（v3）：
  * 1. approval_queue   outbox 待发队列（SqlApprovalQueueDao）
  * 2. settings         键值存储（SqlSettingsDao）
  * 3. notifications    应用内通知/角标状态（SqlNotificationsDao）
+ * 4. local_threads    本地对话线程元数据（SqlLocalThreadsDao；CON-4/L2）
+ * 5. local_messages   本地对话消息历史（SqlLocalThreadsDao；CON-4/L2）
  *
  * v1 曾声明 8 表；其中 `events` / `approval_history` / `session_summaries` /
  * `push_tokens` / `device_info` 五表自始至终无 DAO 无读写（早期全量镜像方案的
  * 死 DDL，与「内存流投影伴侣」架构相悖），v2 迁移统一 DROP（见 V2_CLEANUP_SQL）。
+ * v3 的本地线程两表只存对话内容与线程元数据——**不存任何凭据**：API key
+ * 材料只进 SecureStore（localChatStore 纪律），本表连 apiKeyRef 都不落，
+ * provider/model 只存二元身份（provider_id + model_id，与配置面 join 即可）。
  */
 
 /** 当前 schema 版本（PRAGMA user_version 目标值） */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
 
 /** 全部生效表名（供测试与工具使用） */
-export const TABLES = ['approval_queue', 'settings', 'notifications'] as const;
+export const TABLES = [
+  'approval_queue',
+  'settings',
+  'notifications',
+  'local_threads',
+  'local_messages',
+] as const;
 
 export type TableName = (typeof TABLES)[number];
 
@@ -156,4 +168,46 @@ export const V2_CLEANUP_SQL: readonly string[] = [
   `DROP TABLE IF EXISTS session_summaries`,
   `DROP TABLE IF EXISTS push_tokens`,
   `DROP TABLE IF EXISTS device_info`,
+];
+
+/**
+ * v3 建表 SQL（CON-4 / 本地对话 L2：多线程 + 历史持久化，用户裁决 2026-11-02）：
+ * - local_threads：线程元数据（标题/摘要/每线程模型二元身份/时间戳）；
+ * - local_messages：消息历史（seq 为线程内单调序，UNIQUE(thread_id, seq)
+ *   保证顺序唯一；stopped/tool_call_count 对齐 LocalChatMessage 可选字段）；
+ * - 级联删除由 DAO 在事务内手动完成（不用 FOREIGN KEY 子句，保持与内存
+ *   驱动 SQL 子集的一致口径）。
+ */
+export const V3_LOCAL_THREADS_SQL: readonly string[] = [
+  `CREATE TABLE IF NOT EXISTS local_threads (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    preview     TEXT NOT NULL DEFAULT '',
+    provider_id TEXT,
+    model_id    TEXT,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS local_messages (
+    id              TEXT PRIMARY KEY,
+    thread_id       TEXT NOT NULL,
+    seq             INTEGER NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    stopped         INTEGER NOT NULL DEFAULT 0,
+    tool_call_count INTEGER,
+    UNIQUE (thread_id, seq)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_local_messages_thread ON local_messages(thread_id, seq)`,
+];
+
+/**
+ * v4 迁移 SQL（U4 AI 标题）：local_threads 增 title_source 列（标题来源
+ * 阶梯 placeholder/derived/ai/user，见 domain/types/localChat 的
+ * LocalThreadTitleSource）。存量行 DEFAULT 'derived'——不追溯生成 AI
+ * 标题：存量线程保持其截断标题、用户可改名，只有新建线程走 AI 流程，
+ * 避免历史标题被无声改写。本列只存来源枚举，不存任何凭据形态。
+ */
+export const V4_THREAD_TITLE_SOURCE_SQL: readonly string[] = [
+  `ALTER TABLE local_threads ADD COLUMN title_source TEXT NOT NULL DEFAULT 'derived'`,
 ];

@@ -2,7 +2,10 @@
 import { Component, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
+import { createLogger } from '@/adapters/platform/logger';
 import { AppText, Button } from '@/presentation/ui';
+
+const log = createLogger('error-boundary');
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -19,9 +22,7 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
-    console.warn(
-      `[error-boundary] ${error.message}${info.componentStack ?? ''}`
-    );
+    log.warn(`${error.message}${info.componentStack ?? ''}`);
   }
 
   private reset = () => {

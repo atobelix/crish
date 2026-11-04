@@ -8,22 +8,26 @@ import type { AccountDevice } from '@/domain/types/account';
 
 jest.mock('@/adapters/account/accountService', () => ({
   selectAccountTarget: jest.fn(),
+  selectLocalTarget: jest.fn(),
   refreshAccountDevices: jest.fn(async () => {}),
 }));
 
-jest.mock('@/adapters/wiring/observationWiring', () => ({
-  getObservationWiring: jest.fn(() => null),
-  ensureObservationWiring: jest.fn(),
+jest.mock('@/adapters/runtime/appRuntime', () => ({
+  reconnectNow: jest.fn(),
 }));
 
 import {
   refreshAccountDevices,
   selectAccountTarget,
+  selectLocalTarget,
 } from '@/adapters/account/accountService';
-import { useDeviceStatusVm } from './useDeviceStatusVm';
+import { reconnectNow } from '@/adapters/runtime/appRuntime';
+import { deviceLineOf, useDeviceStatusVm } from './useDeviceStatusVm';
 
 const selectTargetMock = selectAccountTarget as jest.Mock;
+const selectLocalMock = selectLocalTarget as jest.Mock;
 const refreshMock = refreshAccountDevices as jest.Mock;
+const reconnectNowMock = reconnectNow as jest.Mock;
 
 function device(
   id: string,
@@ -143,5 +147,62 @@ describe('useDeviceStatusVm', () => {
       result.current.refreshDevices();
     });
     expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnect 统一走 appRuntime.reconnectNow 的模式分发（CON-1）', async () => {
+    const { result } = await renderHook(() => useDeviceStatusVm());
+    await act(async () => {
+      result.current.reconnect();
+    });
+    expect(reconnectNowMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('未连接（非账号）：本机行选中，当前设备名 = 本机，描述行不出现裸「未连接」', async () => {
+    authStore.setState({ host: '192.168.1.2' });
+    const { result } = await renderHook(() => useDeviceStatusVm());
+    expect(result.current.localDevice).toEqual({
+      name: '本机',
+      selected: true,
+    });
+    expect(result.current.currentDeviceName).toBe('本机');
+    expect(deviceLineOf(result.current)).toBe('本机');
+  });
+
+  it('账号模式目标离线：当前设备名 = 目标设备名，状态只作后缀', async () => {
+    accountStore.setState({
+      status: 'loggedIn',
+      accessToken: 'at',
+      targetDeviceId: 'desk-a',
+      devices: [device('desk-a', false, '办公电脑', 100)],
+    });
+    const { result } = await renderHook(() => useDeviceStatusVm());
+    expect(result.current.localDevice.selected).toBe(false);
+    expect(result.current.currentDeviceName).toBe('办公电脑');
+    expect(deviceLineOf(result.current)).toBe('办公电脑 · 未连接');
+  });
+
+  it('账号模式钉住本机：本机行选中，当前设备名 = 本机', async () => {
+    setAccountScene();
+    accountStore.setState({ targetDeviceId: null, localTargetPinned: true });
+    const { result } = await renderHook(() => useDeviceStatusVm());
+    expect(result.current.localDevice.selected).toBe(true);
+    expect(result.current.currentDeviceName).toBe('本机');
+    expect(deviceLineOf(result.current)).toBe('本机');
+  });
+
+  it('switchToLocal：账号模式未钉住 → 走 selectLocalTarget；已钉住/非账号为 no-op', async () => {
+    setAccountScene();
+    const { result } = await renderHook(() => useDeviceStatusVm());
+    await act(async () => {
+      result.current.switchToLocal();
+    });
+    expect(selectLocalMock).toHaveBeenCalledTimes(1);
+
+    accountStore.setState({ localTargetPinned: true });
+    const pinned = await renderHook(() => useDeviceStatusVm());
+    await act(async () => {
+      pinned.result.current.switchToLocal();
+    });
+    expect(selectLocalMock).toHaveBeenCalledTimes(1);
   });
 });

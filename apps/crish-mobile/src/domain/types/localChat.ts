@@ -122,6 +122,35 @@ export interface LocalChatError {
   retryAfterSec?: number;
 }
 
+/**
+ * 本地线程标题来源（U4 AI 标题，2026-11-02）：来源阶梯
+ * placeholder（占位）< derived（首条消息截断派生）< ai（AI 生成）< user（用户改名）。
+ * 纪律与桌面 sessionTitle.ts 对齐并扩一个来源值：自动机制只许「升」不许
+ * 「降」——user 封顶，AI 迟到结果撞上用户改名必须丢弃；远端会话标题真源在
+ * 桌面，移动端不给远端会话起标题，本来源只属于本地线程。
+ */
+export type LocalThreadTitleSource = 'placeholder' | 'derived' | 'ai' | 'user';
+
+/**
+ * 本地线程元数据（L2 多线程形态，2026-11-02 用户裁决推翻 v1「单线程、
+ * 历史仅内存」范围）：线程身份 + 列表呈现 + 每线程模型选择。
+ * 线程与消息持久化于本机 SQLite（db/dao/localThreadsDao）；API key 材料
+ * 永不进线程/消息存储——密钥纪律不变，只存 SecureStore（见 LocalProviderSpec）。
+ */
+export interface LocalThreadMeta {
+  id: string;
+  /** 标题（来源见 titleSource；尚无消息时为占位标题） */
+  title: string;
+  /** 标题来源阶梯（自动标题只升不降，user 封顶永不被覆盖） */
+  titleSource: LocalThreadTitleSource;
+  /** 末条消息摘要（列表行呈现；尚无消息时为空串） */
+  preview: string;
+  /** 每线程模型选择（创建时快照全局活动模型；null = 跟随全局活动模型） */
+  modelRef: LocalModelRef | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** 供应商编辑草稿（表单面：models 以 id 列表 + 默认模型表达） */
 export interface LocalProviderDraft {
   /** 展示名 */

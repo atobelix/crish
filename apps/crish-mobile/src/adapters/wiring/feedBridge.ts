@@ -8,9 +8,15 @@
 //   补洞帧不再被「乱序帧先行推进 lastSeq」误判 duplicate（实现波总方案 C1）；
 //   resume.page hasMore 自动续页（M6 §9.3 ③ 增量补齐闭环）；
 // - 窗口卸载策略（R2UX-05-09：≤4 活跃窗口，超出卸载最久未活跃者）——接线层调度位；
-// - 设备在场查询：open 相位 fire-and-forget remote.listDevices → devicePresenceStore。
+// - 设备在场查询：open 相位 fire-and-forget remote.listDevices → devicePresenceStore；
+// - 会话索引同步（M1 可见化 → 2026-11-02 增量口径）：列表常态由 WS 增量事件
+//   （session.updated/removed + 事件流）驱动；全量对账退为连接建立/手动刷新/
+//   updatedAll 信号时的校准兜底，且带差分判定——无差分静默收尾（不写状态、
+//   不置 syncing、不打成功点）；定时退避重试链已删除（用户裁决：无定时自动
+//   刷新），失败只落 error 状态面，等下一次 open/前台/下拉重新校准。对账
+//   成败仍写入 connectionStore（error 浮层 + 重试的数据面），不再呈「同步中」。
 // 注入模式：gateway 实例构造注入（测试 mock；生产由 ReconnectingWsClient.gateway 提供）。
-import { WsGateway } from '@/network/WsGateway';
+import { WsGateway, GatewayError } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { mapWsPhase } from '@/domain/pure/selectors';
@@ -18,12 +24,19 @@ import type { FeedNetwork } from '@/domain/store/eventStore';
 import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
+import {
+  deviceSnapshotStore,
+  markLiveDataFresh,
+} from '@/domain/store/deviceSnapshotStore';
 import type { StoreIngestAction } from '@/domain/store/eventMappers';
 import { extractEnvelope, mapDeviceFrame } from '@/domain/store/eventMappers';
 import { readBool, readRecord } from '@/domain/store/eventReducers';
 import type { SessionIndexEntry } from '@crish/shared-types';
 import { dispatchIngestActions } from './ingestRouter';
 import type { MonitorRepository } from '@/adapters/repositories/monitorRepository';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('wiring');
 
 /** 活跃窗口上限（R2UX-05-09：M5 §9.3 内存预算 5000 条 × ≤4 窗口） */
 export const MAX_ACTIVE_WINDOWS = 4;
@@ -78,6 +91,12 @@ export interface FeedBridgeOptions {
   monitor?: MonitorRepository;
   /** 活跃窗口上限（缺省 4，R2UX-05-09） */
   maxWindows?: number;
+  /**
+   * 本桥的属主设备（M7 盖章穿线）：本桥全部入站写入（帧分发/对账/
+   * 回填）以此为来源设备，store 侧与属主盖章不符即丢弃——旧桥的
+   * 在途异步结果在设备切换后不得落进新设备数据面。缺省 = 不穿线。
+   */
+  ownerDeviceId?: string;
 }
 
 /**
@@ -90,19 +109,29 @@ export class FeedBridge {
   private readonly listSessionsRepo?: ListSessionsRepository;
   private readonly monitor?: MonitorRepository;
   private readonly maxWindows: number;
+  private readonly ownerDeviceId?: string;
   private unsubscribers: Array<() => void> = [];
   /** 窗口活跃度追踪（sessionId → 最近一次帧到达 ms；卸载策略数据面） */
   private readonly activity = new Map<string, number>();
   /** 续传在途会话（防重入：同一会话同时只允许一个 events.resume 请求链） */
   private readonly inflightResume = new Set<string>();
+  /** 续传看门狗定时器（防丢包挂死：超时自动清在途） */
+  private readonly resumeTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   /** 历史回填在途会话（防重入） */
   private readonly inflightBackfill = new Set<string>();
+
+  /** 续传在途看门狗兜底超时（ms） */
+  public static readonly RESUME_INFLIGHT_TIMEOUT_MS = 5000;
 
   constructor(opts: FeedBridgeOptions) {
     this.gateway = opts.gateway;
     this.listSessionsRepo = opts.listSessions;
     this.monitor = opts.monitor;
     this.maxWindows = opts.maxWindows ?? MAX_ACTIVE_WINDOWS;
+    this.ownerDeviceId = opts.ownerDeviceId;
   }
 
   /** 订阅观测面设备帧（幂等：重复 attach 先 detach） */
@@ -122,18 +151,39 @@ export class FeedBridge {
     ];
   }
 
+  /** 释放会话续传在途锁与看门狗 */
+  private clearResumeInflight(sessionId: string): void {
+    const timer = this.resumeTimers.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.resumeTimers.delete(sessionId);
+    }
+    this.inflightResume.delete(sessionId);
+  }
+
   /** 退订全部设备帧（页面/应用卸载时调用，M4 §8.2 退场即退订） */
   detach(): void {
     for (const unsub of this.unsubscribers) {
       unsub();
     }
     this.unsubscribers = [];
+    for (const timer of this.resumeTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.resumeTimers.clear();
+    this.inflightResume.clear();
+    this.inflightBackfill.clear();
+    this.stashBySession.clear();
   }
 
-  /** 帧入口：mapDeviceFrame → dispatchIngestActions；resume.page 续页由专用路径处理 */
+  /** 帧入口：mapDeviceFrame → dispatchIngestActions；resume.page/done 由专用路径处理 */
   private handleFrame(frame: InboundEnvelope): void {
     if (frame.kind === 'events.resume.page') {
       this.handleResumePage(frame);
+      return;
+    }
+    if (frame.kind === 'events.resume.done') {
+      this.handleResumeDone(frame);
       return;
     }
 
@@ -185,11 +235,27 @@ export class FeedBridge {
     this.applyActions(actions);
     if (sessionId) this.drainStash(sessionId);
     if (sessionId && readBool(body, 'hasMore')) {
-      // 续页：以 store 游标（nextAfterSequence 已并入，只升不降）为下一页起点
-      this.resumeSession(sessionId, lastSeqOf(sessionId));
+      // 续页：以 store 游标为下一页起点；若当前已在途则防重入
+      if (!this.inflightResume.has(sessionId)) {
+        this.resumeSession(sessionId, lastSeqOf(sessionId));
+      }
     } else if (sessionId) {
-      this.inflightResume.delete(sessionId);
+      this.clearResumeInflight(sessionId);
     }
+  }
+
+  /** 续传完成：清在途 + drain 乱序暂存 + 游标推进 */
+  private handleResumeDone(frame: InboundEnvelope): void {
+    const body = readRecord(frame.body) ?? {};
+    const sessionId =
+      typeof body['sessionId'] === 'string' ? body['sessionId'] : null;
+    if (sessionId) {
+      this.markActive(sessionId);
+      this.clearResumeInflight(sessionId);
+      this.drainStash(sessionId);
+    }
+    const actions = mapDeviceFrame({ kind: frame.kind, body: frame.body });
+    this.applyActions(actions);
   }
 
   // ── 序列空洞暂存缓冲（实现波总方案 C1）──────────────────────────────────
@@ -240,8 +306,48 @@ export class FeedBridge {
   /** 统一动作执行入口（续页路径与普通路径共用） */
   private applyActions(actions: readonly StoreIngestAction[]): void {
     dispatchIngestActions(actions, {
-      onSessionsRefresh: () => void this.refreshSessions(),
+      onSessionsRefresh: () => void this.refreshSessions(false),
+      ...(this.ownerDeviceId !== undefined
+        ? { sourceDeviceId: this.ownerDeviceId }
+        : {}),
     });
+    this.clearStaleOnLiveIncrement(actions);
+  }
+
+  /**
+   * 增量落地清陈旧（CON-3 清除条件对齐，2026-11-02）：陈旧标记的语义是
+   * 「live 数据面停留在上次同步存量」——只要有真实数据面增量经本桥落地
+   * （事件追加/回填、会话 upsert/移除、run 活动、审批增量、未读更新），
+   * 且本桥仍是现行属主、连接相位为 ready，数据面就是活的，陈旧标记必须
+   * 撤下。此前清除条件只有「全量对账落盘」一条：增量一直在流、列表早已
+   * 实时更新，陈旧标注却赖着不走，呈「连上了还显示未连接」——即误报源。
+   * sessions-refresh 不在此列：它只触发对账，清标归对账落地路径。
+   */
+  private clearStaleOnLiveIncrement(
+    actions: readonly StoreIngestAction[]
+  ): void {
+    if (!deviceSnapshotStore.getState().liveStale) return;
+    const hasIncrement = actions.some(
+      (a) =>
+        a.kind === 'feed-append' ||
+        a.kind === 'feed-hydrate' ||
+        a.kind === 'session-upsert' ||
+        a.kind === 'session-remove' ||
+        a.kind === 'run-active' ||
+        a.kind === 'approval-delta' ||
+        a.kind === 'session-unread-update'
+    );
+    if (!hasIncrement) return;
+    if (!this.isCurrentOwner()) return;
+    if (connectionStore.getState().phase !== 'ready') return;
+    markLiveDataFresh();
+  }
+
+  /** 本桥是否仍是数据面现行属主（未穿线/未盖章 = 放行，与 store 盖章口径同构） */
+  private isCurrentOwner(): boolean {
+    if (this.ownerDeviceId === undefined) return true;
+    const owner = sessionStore.getState().ownerDeviceId;
+    return owner === null || owner === this.ownerDeviceId;
   }
 
   /**
@@ -253,8 +359,22 @@ export class FeedBridge {
   handlePhaseChange(phase: WsPhase): void {
     eventStore.getState().setNetwork(feedNetworkOf(phase));
     connectionStore.getState().setPhase(mapWsPhase(phase, false));
+    if (phase !== 'open') {
+      for (const timer of this.resumeTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.resumeTimers.clear();
+      this.inflightResume.clear();
+      this.inflightBackfill.clear();
+    }
+    if (phase === 'dead') {
+      // 接线已死（重试耗尽）：此后列表内容是上次同步的存量而非实时
+      // 数据，打陈旧标记供呈现层诚实标注（CON-3；判据 = 接线真实
+      // 存活，不看发现快照相位；复活后对账落盘或任一真实增量落地即清标）。
+      deviceSnapshotStore.getState().setLiveStale(true, Date.now());
+    }
     if (phase === 'open') {
-      void this.onOpen();
+      void this.onOpen(false);
     }
   }
 
@@ -283,24 +403,31 @@ export class FeedBridge {
         if (frames.length > 0) {
           eventStore
             .getState()
-            .hydrate(sessionId, frames, result.nextAfterSequence);
+            .hydrate(
+              sessionId,
+              frames,
+              result.nextAfterSequence,
+              undefined,
+              this.ownerDeviceId
+            );
         }
       }
     } catch (error) {
-      console.warn(
-        `[wiring] run 历史回填失败（${runId}）：${error instanceof Error ? error.message : String(error)}`
-      );
+      log.warn(`run 历史回填失败（${runId}）`, error);
     }
   }
 
-  /** 手动刷新（下拉刷新 / 前台恢复）：重拉会话索引并同步订阅 */
+  /**
+   * 手动刷新（下拉刷新 / 错误浮层重试）：用户主动触发——本轮对账可置
+   * syncing 状态面（反馈由下拉刷新原生指示/浮层承载，不另呈同步条）。
+   */
   async refreshNow(): Promise<void> {
-    await this.onOpen();
+    await this.onOpen(true);
   }
 
   /** 连接就绪：拉会话索引 → 订阅 → 回填已打开窗口（顺序执行，避免空订阅）。 */
-  private async onOpen(): Promise<void> {
-    await this.refreshSessions();
+  private async onOpen(userInitiated: boolean): Promise<void> {
+    await this.refreshSessions(userInitiated);
     this.syncSubscriptions();
     for (const sessionId of Object.keys(eventStore.getState().windows)) {
       void this.hydrateSession(sessionId);
@@ -351,55 +478,108 @@ export class FeedBridge {
         if (frames.length > 0) {
           eventStore
             .getState()
-            .hydrate(sessionId, frames, result.nextAfterSequence);
+            .hydrate(
+              sessionId,
+              frames,
+              result.nextAfterSequence,
+              undefined,
+              this.ownerDeviceId
+            );
         }
         if (!result.hasMore || result.nextAfterSequence <= after) break;
         after = result.nextAfterSequence;
       }
     } catch (error) {
-      console.warn(
-        `[wiring] 会话历史回填失败（${sessionId}）：${error instanceof Error ? error.message : String(error)}`
-      );
+      log.warn(`会话历史回填失败（${sessionId}）`, error);
     } finally {
       this.inflightBackfill.delete(sessionId);
     }
   }
 
-  /** 单会话续传请求（在途防重入；失败清在途，下轮投影可重试） */
+  /** 单会话续传请求（在途防重入；send 推流避免 invoke 10s 超时黑洞，M6 §9.3） */
   private resumeSession(sessionId: string, afterSequence: number): void {
     if (this.inflightResume.has(sessionId)) return;
     this.inflightResume.add(sessionId);
-    this.gateway
-      .invoke('events.resume', {
+    try {
+      const sent = this.gateway.send('events.resume', {
         sessionId,
         afterSequence,
         maxEvents: RESUME_PAGE_SIZE,
-      })
-      .catch((err: unknown) => {
-        this.inflightResume.delete(sessionId);
-        console.warn(
-          `[wiring] events.resume 失败（${sessionId}）：${err instanceof Error ? err.message : String(err)}`
-        );
       });
+      if (!sent) {
+        throw new GatewayError(
+          'transport.closed',
+          '连接未就绪，无法发送续传请求',
+          true
+        );
+      }
+      const timer = setTimeout(() => {
+        this.clearResumeInflight(sessionId);
+      }, FeedBridge.RESUME_INFLIGHT_TIMEOUT_MS);
+      this.resumeTimers.set(sessionId, timer);
+    } catch (err: unknown) {
+      this.clearResumeInflight(sessionId);
+      log.warn(`events.resume 失败（${sessionId}）`, err);
+    }
   }
 
-  /** 会话索引全量对账（repository 注入时执行；失败静默留痕——下次重连再收敛） */
-  private async refreshSessions(): Promise<void> {
+  /**
+   * 会话索引对账（repository 注入时执行）——校准兜底，不是列表的常态来源
+   * （常态 = WS 增量事件）。增量静默口径（2026-11-02 用户裁决）：
+   * - 仅用户主动刷新（refreshNow）可置 syncing 状态面；后台对账（open /
+   *   updatedAll 信号）永不置 syncing——呈现层不出现「正在同步…」；
+   * - reconcile 带差分判定：真实差分落盘 → markSessionSyncSucceeded
+   *   （状态 ok + 清错误 + 打点）；后台无差分且无历史错误 → 完全静默
+   *   收尾（connectionStore 零写入）；无差分但此前为 error、或本轮是
+   *   用户主动刷新（已置 syncing，必须收尾回 ok 否则状态面楔住）→
+   *   同样记一次成功（错误浮层撤下，恢复本身是真实事件）；
+   * - 失败 → markSessionSyncFailed + warn 留痕，**不排任何定时重试**
+   *   （定时自动刷新已废除）；恢复靠下一次 open / 前台 / 用户下拉。
+   * - 盖章丢弃（本桥已非现行属主）→ 状态面一概不动（M7/M1 同守此判据）。
+   * 无对账来源（repo/monitor 均未注入）时直接返回，状态保持 idle 不动。
+   */
+  private async refreshSessions(userInitiated: boolean): Promise<void> {
+    if (!this.listSessionsRepo && !this.monitor) return;
+    if (userInitiated) {
+      connectionStore.getState().markSessionSyncStarted();
+    }
     try {
+      // 对账以本桥属主为来源写入（M7）：设备已切换时旧桥的在途对账
+      // 结果会被 store 盖章校验丢弃，不污染新设备列表。
+      const droppedBefore = sessionStore.getState().droppedWriteCount;
+      let changed: boolean;
       if (this.listSessionsRepo) {
         const list = await this.listSessionsRepo(this.gateway);
-        sessionStore.getState().reconcile(list);
-      } else if (this.monitor) {
-        const result = await this.monitor.listSessions({});
-        sessionStore.getState().reconcile(result.sessions);
+        changed = sessionStore
+          .getState()
+          .reconcile(list, undefined, this.ownerDeviceId);
       } else {
-        return;
+        const result = await this.monitor!.listSessions({});
+        changed = sessionStore
+          .getState()
+          .reconcile(result.sessions, undefined, this.ownerDeviceId);
+      }
+      // 对账真正落盘（未被盖章丢弃）→ live 数据面转新鲜（CON-3 陈旧
+      // 标注撤下）；被丢弃说明本桥已不是现行属主，不得清标、不得动
+      // 现行设备的对账状态面。
+      const landed =
+        sessionStore.getState().droppedWriteCount === droppedBefore;
+      if (landed) {
+        markLiveDataFresh();
+        if (
+          changed ||
+          userInitiated ||
+          connectionStore.getState().sessionSyncStatus === 'error'
+        ) {
+          connectionStore.getState().markSessionSyncSucceeded();
+        }
+        // 后台无差分且无历史错误：静默收尾——状态、打点一概不动。
       }
       this.syncSubscriptions();
     } catch (error) {
-      console.warn(
-        `[wiring] 会话索引对账失败：${error instanceof Error ? error.message : String(error)}`
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      connectionStore.getState().markSessionSyncFailed(message);
+      log.warn(`会话索引对账失败：${message}`);
     }
   }
 

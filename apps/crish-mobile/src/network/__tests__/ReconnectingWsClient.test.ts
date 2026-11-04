@@ -237,6 +237,23 @@ describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
     expect(client.phase).toBe('reconnecting');
   });
 
+  test('握手看门狗可注入放大：45s 内不误杀慢握手（票据未回前不记失败，CON-1）', () => {
+    const { client } = makeHarness(
+      { connectTimeoutMs: 45_000 },
+      { autoConnect: false }
+    );
+    client.connect();
+    const firstSocket = MockWebSocket.instances[0]!;
+    // 默认 8s 看门狗到点：注入值下不得关 socket
+    jest.advanceTimersByTime(CONNECT_TIMEOUT_MS);
+    expect(firstSocket.closeSpy).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(45_000 - CONNECT_TIMEOUT_MS - 1);
+    expect(firstSocket.closeSpy).not.toHaveBeenCalled();
+    // 45s 到点才放弃本次握手进入退避
+    jest.advanceTimersByTime(1);
+    expect(client.phase).toBe('reconnecting');
+  });
+
   test('双连接防护：connect 两次只建一个 socket（R2B §4）', () => {
     const { client, factory } = makeHarness();
     client.connect();

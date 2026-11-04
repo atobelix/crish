@@ -1,10 +1,9 @@
-// 账号 v3 流程编排：统一邮箱入口 / 先验证码后设密 / 改密 / 重发。
+// 账号 v3 流程编排：统一邮箱入口 / 先验证码后设密 / 重发。
+// （已登录改密已改为单页直连 accountService，不再经本编排，见 accountSecurity.test。）
 import {
   confirmAccountEmailContinue,
-  confirmAccountPasswordChange,
   continueAccountEmail,
   requestAccountEmailCode,
-  requestAccountPasswordChangeCode,
   setAccountPasswordWithToken,
   verifyAccountResetCode,
 } from '@/adapters/account/accountService';
@@ -17,7 +16,6 @@ import {
   getAccountFlowDraft,
   isValidEmail,
   resendAccountCode,
-  startPasswordChange,
   startPasswordReset,
 } from './accountFlow';
 
@@ -26,8 +24,6 @@ jest.mock('@/adapters/account/accountService', () => ({
   confirmAccountEmailContinue: jest.fn(),
   requestAccountEmailCode: jest.fn(),
   verifyAccountResetCode: jest.fn(),
-  requestAccountPasswordChangeCode: jest.fn(),
-  confirmAccountPasswordChange: jest.fn(),
   setAccountPasswordWithToken: jest.fn(),
 }));
 
@@ -35,8 +31,6 @@ const continueMock = jest.mocked(continueAccountEmail);
 const confirmContinueMock = jest.mocked(confirmAccountEmailContinue);
 const requestMock = jest.mocked(requestAccountEmailCode);
 const verifyResetMock = jest.mocked(verifyAccountResetCode);
-const changeCodeMock = jest.mocked(requestAccountPasswordChangeCode);
-const changeMock = jest.mocked(confirmAccountPasswordChange);
 const setPasswordMock = jest.mocked(setAccountPasswordWithToken);
 
 const NOW = 1_800_000_000_000;
@@ -74,7 +68,6 @@ describe('continueWithEmail', () => {
     expect(getAccountFlowDraft()).toEqual({
       email: 'a@b.co',
       purpose: 'login',
-      password: null,
       setupToken: null,
       resendAt: NOW + RESEND_COOLDOWN_SECONDS * 1000,
       devCode: '123456',
@@ -144,18 +137,6 @@ describe('验证码确认', () => {
     });
     expect(verifyResetMock).toHaveBeenCalledWith('a@b.co', '654321');
     expect(getAccountFlowDraft()?.setupToken).toBe('st-2');
-  });
-
-  it('修改密码：带草稿新密码提交确认', async () => {
-    changeCodeMock.mockResolvedValue({ ok: true, expiresIn: 600 });
-    await startPasswordChange('a@b.co', 'new-password-1', NOW);
-    changeMock.mockResolvedValue(undefined);
-
-    await expect(confirmAccountCode('111111')).resolves.toEqual({
-      kind: 'changed',
-    });
-    expect(changeMock).toHaveBeenCalledWith('111111', 'new-password-1');
-    expect(getAccountFlowDraft()).toBeNull();
   });
 
   it('失败返回可展示文案并保留草稿', async () => {

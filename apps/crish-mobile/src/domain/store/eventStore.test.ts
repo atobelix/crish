@@ -145,3 +145,61 @@ describe('窗口卸载（R2UX-05-09 内存预算）', () => {
     expect(windowOf('s-1').entries).toHaveLength(1);
   });
 });
+
+describe('eventStore 属主盖章（M7 设备分区不变量）', () => {
+  beforeEach(() => {
+    eventStore.getState().reset();
+  });
+
+  it('异源 ingest/setCursor 丢弃并计数，同源放行', () => {
+    const store = eventStore.getState();
+    store.stampOwner('dev-a');
+    store.ingest(
+      's-1',
+      frame({ type: 'message-end', sequence: 5 }),
+      false,
+      NOW,
+      'dev-b'
+    );
+    expect(lastSeqOf('s-1')).toBe(0);
+    expect(eventStore.getState().droppedWriteCount).toBe(1);
+
+    store.ingest(
+      's-1',
+      frame({ type: 'message-end', sequence: 5 }),
+      false,
+      NOW,
+      'dev-a'
+    );
+    expect(lastSeqOf('s-1')).toBe(5);
+
+    store.setCursor('s-1', 9, 'dev-b');
+    expect(lastSeqOf('s-1')).toBe(5);
+    expect(eventStore.getState().droppedWriteCount).toBe(2);
+  });
+
+  it('restoreWindows 整表装入且 network 转 offline（存量非实时）', () => {
+    const store = eventStore.getState();
+    store.restoreWindows({
+      's-1': { entries: [], lastSeq: 7, truncatedCount: 0 },
+    });
+    expect(lastSeqOf('s-1')).toBe(7);
+    expect(eventStore.getState().network).toBe('offline');
+  });
+
+  it('reset 连带清盖章与丢弃计数', () => {
+    const store = eventStore.getState();
+    store.stampOwner('dev-a');
+    store.ingest(
+      's-1',
+      frame({ type: 'message-end', sequence: 1 }),
+      false,
+      NOW,
+      'dev-b'
+    );
+    expect(eventStore.getState().droppedWriteCount).toBe(1);
+    store.reset();
+    expect(eventStore.getState().ownerDeviceId).toBeNull();
+    expect(eventStore.getState().droppedWriteCount).toBe(0);
+  });
+});

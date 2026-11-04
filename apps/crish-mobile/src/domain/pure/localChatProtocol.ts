@@ -17,6 +17,7 @@ import type {
   LocalProviderSpec,
   ProviderDraftIssue,
 } from '../types/localChat';
+import { markdownPreviewText } from './markdown/plainText';
 
 /** 本地对话系统提示（定位：纯对话助手，无工具执行能力——与请求不声明 tools 一致） */
 export const LOCAL_CHAT_SYSTEM_PROMPT =
@@ -117,6 +118,7 @@ export function buildChatRequestBody(input: {
   messages: readonly LocalWireMessage[];
   stream: boolean;
   maxTokens?: number;
+  temperature?: number;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.model,
@@ -124,7 +126,60 @@ export function buildChatRequestBody(input: {
     stream: input.stream,
   };
   if (input.maxTokens !== undefined) body.max_tokens = input.maxTokens;
+  if (input.temperature !== undefined) body.temperature = input.temperature;
   return body;
+}
+
+/** AI 标题长度上限（字符；生成侧 prompt 约束 ≤14 字，此处是消毒侧硬顶） */
+export const AI_TITLE_MAX_CHARS = 16;
+
+/** 成对引号（消毒时剥离包裹标题的外层引号，中英混排都覆盖） */
+const AI_TITLE_QUOTE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['"', '"'],
+  ["'", "'"],
+  ['“', '”'],
+  ['‘', '’'],
+  ['「', '」'],
+  ['『', '』'],
+];
+
+/**
+ * AI 标题消毒（U4）：模型原始输出 → 可落盘标题，异常一律返回 null（视为
+ * 生成失败、保留 derived 截断标题）。步骤：整体去空白 → 多行只取首个
+ * 非空行 → 剥外层成对引号 → markdownPreviewText 单行纯文本化（标记不进
+ * 标题，与列表面 MD3 纪律同源）→ 再剥一次引号（标记剥离后可能新暴露）
+ * → 折叠空白 → 硬截断 AI_TITLE_MAX_CHARS 字；任一步骤后为空 → null。
+ */
+export function sanitizeAiTitle(raw: string): string | null {
+  const stripQuotes = (text: string): string => {
+    let out = text;
+    for (let i = 0; i < 3; i++) {
+      const pair = AI_TITLE_QUOTE_PAIRS.find(
+        ([open, close]) =>
+          out.length > open.length + close.length - 1 &&
+          out.startsWith(open) &&
+          out.endsWith(close) &&
+          out.length > 1
+      );
+      if (!pair) break;
+      out = out.slice(pair[0].length, out.length - pair[1].length).trim();
+    }
+    return out;
+  };
+  const firstLine =
+    raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line !== '') ?? '';
+  if (firstLine === '') return null;
+  const plain = markdownPreviewText(stripQuotes(firstLine))
+    .replace(/\s+/g, ' ')
+    .trim();
+  const cleaned = stripQuotes(plain);
+  if (cleaned === '') return null;
+  return cleaned.length > AI_TITLE_MAX_CHARS
+    ? cleaned.slice(0, AI_TITLE_MAX_CHARS)
+    : cleaned;
 }
 
 /** 解析 /models 响应（OpenAI 形态 { data: [{ id }] }）：提取 id 列表（保序去重） */

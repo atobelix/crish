@@ -1,0 +1,21 @@
+appId: com.crish.mobile
+name: 01 冷启动 → 主页呈现（登录态保持、无崩溃）
+---
+# 前提：设备上 App 处于已登录态（账号会话持久化在 SecureStore）。
+# 冷启动定义：强停后重新拉起（不清数据）。水合闸门（字体 + auth/account）
+# 完成后应落到主页；若落到欢迎页，说明登录态丢失——按 README 的环境排查处理，
+# 不要为了让流变绿而在流内做登录（凭据不入流文件）。
+- launchApp:
+    clearState: false
+    stopApp: true
+# 主页 Composer 出现 = 已过水合闸门且登录态有效、主页完成首帧渲染。
+- extendedWaitUntil:
+    visible:
+      id: 'home-composer'
+    timeout: 60000
+# 主页骨架元素抽查：抽屉入口 + 设备胶囊都在。
+- assertVisible:
+    id: 'header-menu'
+- assertVisible:
+    id: 'device-pill'
+- takeScreenshot: 01-home

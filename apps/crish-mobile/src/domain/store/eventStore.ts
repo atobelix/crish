@@ -11,6 +11,7 @@ import {
   type EventEnvelopeFrame,
   type EventWindow,
 } from './eventReducers';
+import { sourceAllowed } from './sessionStore';
 
 /** 事件流域连接相位（F3 §3.2.1 连接状态机；由接线层投影） */
 export type FeedNetwork = 'live' | 'reconnecting' | 'offline';
@@ -19,27 +20,44 @@ export interface EventState {
   /** 会话 → 事件窗口（M5 §3.1.1 streams；R2UX-05-09 窗口卸载 ≤4 活跃窗口由接线层调度） */
   windows: Record<string, EventWindow>;
   network: FeedNetwork;
+  /**
+   * 数据面属主设备盖章（M7 设备分区，与 sessionStore 同口径）：带
+   * sourceDeviceId 的入站写入与盖章不符 → 直接丢弃（sourceAllowed），
+   * 防旧接线在途帧在设备切换后落进新设备窗口。null = 未盖章不设防。
+   */
+  ownerDeviceId: string | null;
+  /** 盖章不符被丢弃的写入计数（M7 诊断面） */
+  droppedWriteCount: number;
 
   /** events.push 入站 ingest（preview 帧不推进游标，M6 §10.5；nowMs 注入便于测试） */
   ingest: (
     sessionId: string,
     frame: EventEnvelopeFrame,
     preview?: boolean,
-    nowMs?: number
+    nowMs?: number,
+    sourceDeviceId?: string
   ) => void;
   /** events.resume.page / C03 分页合并（快照重建 + 增量续接，M6 §4.1.3） */
   hydrate: (
     sessionId: string,
     events: readonly EventEnvelopeFrame[],
     cursor?: number,
-    nowMs?: number
+    nowMs?: number,
+    sourceDeviceId?: string
   ) => void;
   /** 游标对齐（events.resume.done resumedTo / subscribe.ok nextSequence）：只升不降 */
-  setCursor: (sessionId: string, seq: number) => void;
+  setCursor: (sessionId: string, seq: number, sourceDeviceId?: string) => void;
   setNetwork: (network: FeedNetwork) => void;
   /** 窗口卸载（R2UX-05-09 内存预算：非活跃窗口卸载释放） */
-  unloadWindow: (sessionId: string) => void;
-  /** 解绑 / 换机：清空全部窗口与连接相位 */
+  unloadWindow: (sessionId: string, sourceDeviceId?: string) => void;
+  /** 属主盖章（runtime 接线建立/切换时调用；只改章，不动数据） */
+  stampOwner: (deviceId: string | null) => void;
+  /**
+   * 快照恢复（CON-3）：同设备分区快照的事件窗口整表装入 live
+   * （remoteData 编排专用；恢复的是已断开的存量，network 置 offline）。
+   */
+  restoreWindows: (windows: Record<string, EventWindow>) => void;
+  /** 解绑 / 换机：清空全部窗口与连接相位（连带清盖章与丢弃计数） */
   reset: () => void;
 }
 
@@ -63,19 +81,45 @@ export const eventStore: StoreApi<EventState> = createStore<EventState>()(
   immer((set) => ({
     windows: {},
     network: 'live',
+    ownerDeviceId: null,
+    droppedWriteCount: 0,
 
-    ingest: (sessionId, frame, preview = false, nowMs = nowDefault()) =>
+    ingest: (
+      sessionId,
+      frame,
+      preview = false,
+      nowMs = nowDefault(),
+      sourceDeviceId
+    ) =>
       set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
         appendFeed(ensureWindow(s, sessionId), frame, preview, nowMs);
       }),
 
-    hydrate: (sessionId, events, cursor, nowMs = nowDefault()) =>
+    hydrate: (
+      sessionId,
+      events,
+      cursor,
+      nowMs = nowDefault(),
+      sourceDeviceId
+    ) =>
       set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
         hydrateFeed(ensureWindow(s, sessionId), events, cursor, nowMs);
       }),
 
-    setCursor: (sessionId, seq) =>
+    setCursor: (sessionId, seq, sourceDeviceId) =>
       set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
         advanceCursor(ensureWindow(s, sessionId), seq);
       }),
 
@@ -84,15 +128,32 @@ export const eventStore: StoreApi<EventState> = createStore<EventState>()(
         s.network = network;
       }),
 
-    unloadWindow: (sessionId) =>
+    unloadWindow: (sessionId, sourceDeviceId) =>
       set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
         delete s.windows[sessionId];
+      }),
+
+    stampOwner: (deviceId) =>
+      set((s) => {
+        s.ownerDeviceId = deviceId;
+      }),
+
+    restoreWindows: (windows) =>
+      set((s) => {
+        s.windows = windows;
+        s.network = 'offline';
       }),
 
     reset: () =>
       set((s) => {
         s.windows = {};
         s.network = 'offline';
+        s.ownerDeviceId = null;
+        s.droppedWriteCount = 0;
       }),
   }))
 );

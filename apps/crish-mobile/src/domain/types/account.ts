@@ -27,6 +27,8 @@ export interface AccountSessionInfo {
   expiresAt: number;
   revoked: boolean;
   current: boolean;
+  /** 登录时客户端上报的设备名（服务端可选返回；与桌面 AuthSessionInfo 同字段） */
+  deviceName?: string;
 }
 
 export interface AccountDevice {
@@ -51,5 +53,7 @@ export interface AccountState {
   accessToken: string | null;
   devices: AccountDevice[];
   targetDeviceId: string | null;
+  /** 用户在设备列表显式选了「本机」：本地模式钉住，自动选靶不得改选远端 */
+  localTargetPinned: boolean;
   error: string | null;
 }

@@ -565,6 +565,12 @@ export async function fetchAccountSessions(
           typeof record['expiresAt'] === 'number' ? record['expiresAt'] : 0,
         revoked: record['revoked'] === true,
         current: record['current'] === true,
+        // 设备名（登录时上报；旧服务端可能缺失，缺失时由呈现层回落
+        // 在线目录设备名 / UA 解析，与桌面 buildDeviceRows 同口径）
+        deviceName:
+          typeof record['deviceName'] === 'string'
+            ? record['deviceName']
+            : undefined,
       },
     ];
   });

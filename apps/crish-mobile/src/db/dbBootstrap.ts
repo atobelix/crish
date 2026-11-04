@@ -4,7 +4,7 @@
 //   持久化注入）→ 两个 store hydrate 回填（注入完成后读库，缺省值深合并）；
 // - 失败降级（不阻塞 app 启动）：DB 打开/迁移任一失败 → configureSqlitePersistence(null)
 //   复位默认注入（设置/通知回退纯内存态）+ store hydrate 置位（默认值可展示）+
-//   console.warn 注记「持久化不可用」（诚实化：不静默吞错，也不让启动挂起）；
+//   log.warn 注记「持久化不可用」（诚实化：不静默吞错，也不让启动挂起）；
 // - 装配点语义：本函数不参与 SplashGate——app/_layout.tsx 只等 auth hydrate 渲染首屏
 //   骨架，DB 装配 fire-and-forget 并行执行；settings/notification 的 hydrated 置位
 //   由其 store 内部完成，组件按 hydrated 之前显示默认值即可（与 store 契约一致）；
@@ -25,6 +25,10 @@ import {
 import { settingsStore } from '@/domain/store/settingsStore';
 import { notificationStore } from '@/domain/store/notificationStore';
 import { localChatStore } from '@/domain/store/localChatStore';
+import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('db');
 
 /** 移动端本地数据库文件名（expo-sqlite 打开名） */
 export const MOBILE_DB_NAME = 'crish-mobile.db';
@@ -98,18 +102,18 @@ async function doEnsureDatabaseForApp(
     // hydrate 无注入仅置位 hydrated（默认值可展示，不阻塞启动）
     await hydrateStores();
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(
-      `[dbBootstrap] DB 打开/迁移失败，降级内存态（持久化不可用）：${message}`
-    );
+    log.warn(`DB 打开/迁移失败，降级内存态（持久化不可用）：${message}`);
     return { ok: false, version: 0, reason: message };
   }
 }
 
-/** 持久化注入完成后的 store hydrate 回填（两 store 读取失败各自静默置位） */
+/** 持久化注入完成后的 store hydrate 回填（各 store 读取失败各自静默置位） */
 async function hydrateStores(): Promise<void> {
   await Promise.all([
     settingsStore.getState().hydrate(),
     notificationStore.getState().hydrate(),
     localChatStore.getState().hydrate(),
+    // 本地线程历史（CON-4/L2）：DB 迟到时内存中已有线程会被收编落盘
+    localChatSessionStore.getState().hydrate(),
   ]);
 }

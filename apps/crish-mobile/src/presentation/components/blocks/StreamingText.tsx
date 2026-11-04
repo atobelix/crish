@@ -1,13 +1,14 @@
-// 流式文本渲染组件（R2UX-05-02：preview 帧渐进渲染 + 终值替换 + 静态光标 + 渲染节流）：
+// 流式文本渲染组件（R2UX-05-02 节流语义 + MD2 渲染终点）：
 // - text：数据面最新全文（preview 帧覆盖式）→ useStreamingText 节流后渐进渲染
-//   （18ms 窗口合并 / 100ms 强制刷新 / 终值立即渲染——F3 §3.4.1 语义）；
-// - streaming：流式期行尾渲染静态「▍」光标（R2UX §2.6-3 / 裁决 A3：静态光标不构成
-//   逐字动画，M4 §8.4 禁止条款不冲突）；非流式期无光标；
-// - 同 key 覆盖更新同节点（React 就地复用 Text 节点），无闪烁无跳动；
-// - identity：条目稳定键（同 seq 覆盖保持不变；变化 = 新条目立即渲染）。
+//   （18ms 窗口合并 / 100ms 强制刷新 / 终值立即渲染——F3 §3.4.1 语义不变）；
+// - 渲染终点（MD2 起）：节流后的文本喂给 MarkdownText 做结构化呈现（封口块
+//   最终形态 + 尾块分治），不再单 Text 直出 markdown 原文；流式期静态光标
+//   「▍」经 MarkdownText 落在最后一个块的末尾；
+// - 同 identity 就地更新（React 复用节点），无闪烁无跳动。
 import { memo } from 'react';
-import { Text, type StyleProp, type TextStyle } from 'react-native';
+import type { StyleProp, TextStyle } from 'react-native';
 import { useStreamingText } from './useStreamingText';
+import { MarkdownText } from './MarkdownText';
 
 /** 静态光标符号（R2UX §2.6-3 / 裁决 A3：允许静态光标，无位移无逐字推进） */
 export const STREAMING_CURSOR = '▍';
@@ -15,7 +16,7 @@ export const STREAMING_CURSOR = '▍';
 export interface StreamingTextProps {
   /** 数据面最新全文（preview 帧覆盖式；流式期随预览帧更新） */
   text: string;
-  /** 流式期标记（行尾静态「▍」光标 + 节流渐进渲染；false = 终值立即渲染） */
+  /** 流式期标记（尾部静态「▍」光标 + 节流渐进渲染；false = 终值立即渲染） */
   streaming: boolean;
   /** 条目稳定键（同 seq 覆盖保持不变；变化 = 新条目立即渲染） */
   identity: string;
@@ -29,17 +30,16 @@ export interface StreamingTextProps {
   mergeWindowMs?: number;
   /** 强制刷新边界（ms，缺省 100；测试注入） */
   maxWaitMs?: number;
-  /** 文本样式（透传 RN Text） */
+  /** 正文基础样式（透传 MarkdownText 的 baseStyle) */
   style?: StyleProp<TextStyle>;
-  /** 单行截断（透传 RN Text） */
-  numberOfLines?: number;
   /** 容器 testID */
   testID?: string;
 }
 
 /**
- * 流式文本（memo：同 key 覆盖更新时仅文本节点就地复用，无重挂载闪烁）。
- * 渲染结构：`<Text>{节流后文本}{流式期光标}</Text>`——光标恒定置于文本尾部。
+ * 流式文本（memo：同 key 覆盖更新时仅内容就地更新，无重挂载闪烁）。
+ * 节流由 useStreamingText 承担，结构呈现由 MarkdownText 承担，光标恒定
+ * 置于最后一个块的末尾。
  */
 export const StreamingText = memo(function StreamingText({
   text,
@@ -51,7 +51,6 @@ export const StreamingText = memo(function StreamingText({
   mergeWindowMs,
   maxWaitMs,
   style,
-  numberOfLines,
   testID,
 }: StreamingTextProps) {
   const rendered = useStreamingText(identity, text, streaming, {
@@ -60,13 +59,14 @@ export const StreamingText = memo(function StreamingText({
   });
 
   return (
-    <Text testID={testID} style={style} numberOfLines={numberOfLines}>
-      {rendered}
-      {streaming ? (
-        <Text testID={cursorTestID} style={cursorStyle}>
-          {` ${cursorSymbol}`}
-        </Text>
-      ) : null}
-    </Text>
+    <MarkdownText
+      text={rendered}
+      streaming={streaming}
+      baseStyle={style}
+      cursorSymbol={streaming ? cursorSymbol : undefined}
+      cursorTestID={cursorTestID}
+      cursorStyle={cursorStyle}
+      testID={testID}
+    />
   );
 });
