@@ -11,7 +11,10 @@ use std::time::Duration;
 use agent_provider::config::Endpoint;
 use agent_tools::background::{BackgroundAdoptRequest, BackgroundTaskManager, TaskState};
 use conex_run::core_event_bridge::{Emitter, EventBridge};
-use conex_run::run::{run_control_impl, run_task_impl, CoreRunState, RunTaskOptions};
+use conex_run::core_error::CoreError;
+use conex_run::run::{
+    find_run_by_pending_tool_call, run_control_impl, run_task_impl, CoreRunState, RunTaskOptions,
+};
 use conex_run::status_diagnostics::StatusDiagnostics;
 use orchestrator::persist::LocalDbStore;
 use session_loop::provider::ProviderCall;
@@ -821,4 +824,208 @@ async fn t08_remote_run_ask_mode_dangerous_tool_gated() {
     let hits = wait_approval_requested(&emitter, "write_file", Duration::from_secs(15)).await;
     assert!(hits >= 1, "远程 ask 模式下，write_file 必须触发审批");
     resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+}
+
+// ── 批 C 第 0 件纵深防御：core_approve_tool / core_deny_tool 的 run_id
+//    缺失兜底（run_ipc::resolve_approval_run_id，与 REST 面同语义）──
+
+/// ask 模式写文件 provider：首轮发起 write_file（c1）触发审批，次轮收口
+fn ask_write_provider() -> Arc<TestProvider> {
+    Arc::new(TestProvider::with_scripts(vec![
+        vec![
+            ProviderStreamEvent::text("写文件。"),
+            ProviderStreamEvent::tool_call(
+                Some("c1".to_string()),
+                "write_file",
+                serde_json::json!({ "path": "note.md", "content": "x" }),
+            ),
+            ProviderStreamEvent::stop(StopReason::ToolCall),
+        ],
+        stop_script("写文件结果已收到。"),
+    ]))
+}
+
+fn ask_write_options(run_id: &str, session_id: &str, cwd: &PathBuf) -> RunTaskOptions {
+    let mut options = run_options(run_id, session_id, "写文件");
+    options.permission_mode = Some("ask".to_string());
+    options.cwd = Some(cwd.to_string_lossy().into_owned());
+    options
+}
+
+fn approval_test_cwd(tag: &str) -> PathBuf {
+    let seq = RUN_IPC_TEST_SEQ.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "crish-run-ipc-approval-{}-{tag}-{seq}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).expect("测试工作区");
+    dir
+}
+
+/// 等待 tool_call_id 进入待审批集合（经生产反查函数轮询——与兜底路径
+/// 同一实现，命中即返回所属 run_id）
+async fn wait_pending_lookup(state: &CoreRunState, tool_call_id: &str, window: Duration) -> String {
+    let deadline = tokio::time::Instant::now() + window;
+    loop {
+        if let Some(run_id) = find_run_by_pending_tool_call(state, tool_call_id) {
+            return run_id;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "审批 {tool_call_id} 未在窗口内进入待审批集合"
+        );
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
+}
+
+/// 缺 run_id 批准：按待审批集合反查命中所属 run 并真实落定
+/// （approval-resolved 落地 + 工具真实执行 + run 正常收口）
+#[tokio::test]
+async fn approve_without_run_id_falls_back_to_pending_lookup() {
+    let (state, _db, emitter) = test_state(
+        None,
+        Some(ask_write_provider()),
+        &["sess-fb-approve"],
+    );
+    state.run_restore().await;
+    let cwd = approval_test_cwd("fb-approve");
+    run_task_impl(
+        Arc::clone(&state),
+        ask_write_options("run-fb-approve", "sess-fb-approve", &cwd),
+    )
+    .await
+    .expect("run 发起");
+
+    let found = wait_pending_lookup(&state, "c1", Duration::from_secs(15)).await;
+    assert_eq!(found, "run-fb-approve", "反查必须命中待审批所属 run");
+
+    let response = super::approve_tool_command(&state, None, "c1", Some("approved".to_string()))
+        .await
+        .expect("缺 run_id 批准必须经反查落定");
+    assert!(response.ok);
+    assert_eq!(response.tool_call_id, "c1");
+    assert_eq!(response.decision, "approved");
+    let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        payloads.iter().any(|p| p.contains("approval-resolved")),
+        "兜底批准必须落地 approval-resolved"
+    );
+    wait_run_finished(&state, "run-fb-approve", Duration::from_secs(15)).await;
+    assert!(
+        cwd.join("note.md").exists(),
+        "批准落定后 write_file 必须真实执行（非静默成功）"
+    );
+}
+
+/// 缺 run_id 拒绝：反查落定对称路径（工具不执行，run 正常收口）
+#[tokio::test]
+async fn deny_without_run_id_falls_back_to_pending_lookup() {
+    let (state, _db, _emitter) = test_state(None, Some(ask_write_provider()), &["sess-fb-deny"]);
+    state.run_restore().await;
+    let cwd = approval_test_cwd("fb-deny");
+    run_task_impl(
+        Arc::clone(&state),
+        ask_write_options("run-fb-deny", "sess-fb-deny", &cwd),
+    )
+    .await
+    .expect("run 发起");
+
+    let found = wait_pending_lookup(&state, "c1", Duration::from_secs(15)).await;
+    assert_eq!(found, "run-fb-deny");
+
+    let response = super::deny_tool_command(&state, None, "c1", Some("不需要".to_string()))
+        .await
+        .expect("缺 run_id 拒绝必须经反查落定");
+    assert!(response.ok);
+    assert_eq!(response.tool_call_id, "c1");
+    assert_eq!(response.decision, "denied");
+    wait_run_finished(&state, "run-fb-deny", Duration::from_secs(15)).await;
+    assert!(
+        !cwd.join("note.md").exists(),
+        "拒绝落定后 write_file 不得执行"
+    );
+}
+
+/// 缺 run_id 且反查未命中：明确 NotFound 报错（不静默成功、不猜 run）；
+/// 空白 run_id 同样按缺失处理（与 REST 面同语义）
+#[tokio::test]
+async fn approve_deny_without_run_id_unknown_tool_call_not_found() {
+    let (state, _db, _emitter) = test_state(None, None, &[]);
+
+    let err = super::approve_tool_command(&state, None, "tc-ghost", Some("approved".to_string()))
+        .await
+        .expect_err("反查未命中的批准必须报错");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "反查未命中必须 NotFound，实际：{err:?}"
+    );
+    assert!(
+        err.to_string().contains("不在待审批集合"),
+        "错误文案必须明示审批不存在/已过期：{err}"
+    );
+
+    let err = super::deny_tool_command(&state, Some("  ".to_string()), "tc-ghost", None)
+        .await
+        .expect_err("空白 run_id + 反查未命中的拒绝必须报错");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "空白 run_id 必须按缺失反查并 NotFound，实际：{err:?}"
+    );
+    assert!(err.to_string().contains("不在待审批集合"), "{err}");
+}
+
+/// 带 run_id 路径行为不变：显式正确 run_id 照常落定；显式错误 run_id
+/// 报错且不转反查兜底、不消费待审批条目
+#[tokio::test]
+async fn approve_with_explicit_run_id_path_unchanged() {
+    let (state, _db, _emitter) = test_state(
+        None,
+        Some(ask_write_provider()),
+        &["sess-fb-explicit"],
+    );
+    state.run_restore().await;
+    let cwd = approval_test_cwd("fb-explicit");
+    run_task_impl(
+        Arc::clone(&state),
+        ask_write_options("run-fb-explicit", "sess-fb-explicit", &cwd),
+    )
+    .await
+    .expect("run 发起");
+    wait_pending_lookup(&state, "c1", Duration::from_secs(15)).await;
+
+    // 显式错误 run_id：走 active_run 原路径报错（不静默转反查）
+    let err = super::approve_tool_command(
+        &state,
+        Some("run-nope".to_string()),
+        "c1",
+        Some("approved".to_string()),
+    )
+    .await
+    .expect_err("显式错误 run_id 必须报错");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "显式错误 run_id 必须 NotFound，实际：{err:?}"
+    );
+    assert!(
+        err.to_string().contains("run 不存在或已终态"),
+        "显式路径错误文案必须来自 active_run 原路径：{err}"
+    );
+    assert_eq!(
+        find_run_by_pending_tool_call(&state, "c1").as_deref(),
+        Some("run-fb-explicit"),
+        "显式路径失败不得消费待审批条目"
+    );
+
+    // 显式正确 run_id：与既有行为一致落定
+    let response = super::approve_tool_command(
+        &state,
+        Some("run-fb-explicit".to_string()),
+        "c1",
+        Some("approved".to_string()),
+    )
+    .await
+    .expect("显式正确 run_id 批准必须落定");
+    assert!(response.ok);
+    assert_eq!(response.decision, "approved");
+    wait_run_finished(&state, "run-fb-explicit", Duration::from_secs(15)).await;
 }

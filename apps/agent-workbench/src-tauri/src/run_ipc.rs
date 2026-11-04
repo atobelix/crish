@@ -15,10 +15,10 @@ use conex_fs::trash::TrashService;
 use conex_run::core_error::CoreError;
 use conex_run::run::{
     abort_session_run_impl, approve_tool_impl, cancel_run_impl, compact_now_impl, deny_tool_impl,
-    emit_trash_audit, run_control_impl, run_task_impl, trash_list_at, trash_purge_at,
-    trash_restore_at, ApproveResponse, CancelRunResponse, CompactNowResult, CoreRunState,
-    RunTaskOptions, RunTaskResponse, TrashListResponse, TrashPurgeResponse, TrashRestoreResponse,
-    TrashRootConfig,
+    emit_trash_audit, find_run_by_pending_tool_call, run_control_impl, run_task_impl, trash_list_at,
+    trash_purge_at, trash_restore_at, ApproveResponse, CancelRunResponse, CompactNowResult,
+    CoreRunState, RunTaskOptions, RunTaskResponse, TrashListResponse, TrashPurgeResponse,
+    TrashRestoreResponse, TrashRootConfig,
 };
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 
@@ -296,26 +296,75 @@ pub(crate) async fn workbench_abort_run(
     abort_session_run_impl(state.inner(), &session_id).await
 }
 
-/// `core_approve_tool`：批准工具调用（I-02 pending 校验 + approval-resolved）
+/// 审批 run 归属解析（Tauri 面纵深防御；与 REST 面
+/// `core_backend::state::resolve_approval_run_id` 同语义——M6 C11
+/// 「runId 缺失容错」）：run_id 提供且非空 → 沿用（trim 后比对，与
+/// 既有显式路径逐字一致）；缺失/空白 → 按待审批集合反查
+/// （[find_run_by_pending_tool_call]，与 REST 面同一实现，不复制
+/// 第二份查找逻辑）；反查不到 → NotFound 明确报错（审批不存在 /
+/// 已过期），不静默成功、不猜 run。
+///
+/// 背景：前端曾漏传 run_id，invoke 在参数反序列化层被拒、桌面批准
+/// 全灭（批 C 第 0 件）；前端已修复为必传，本解析是服务端兜底——
+/// 任何调用方漏传时仍落到正确的 run，而不是整条审批静默失效。
+fn resolve_approval_run_id(
+    state: &CoreRunState,
+    run_id: Option<String>,
+    tool_call_id: &str,
+) -> Result<String, CoreError> {
+    match run_id.as_deref() {
+        Some(id) if !id.trim().is_empty() => Ok(id.trim().to_string()),
+        _ => find_run_by_pending_tool_call(state, tool_call_id).ok_or_else(|| {
+            CoreError::NotFound(format!("tool_call_id 不在待审批集合：{tool_call_id}"))
+        }),
+    }
+}
+
+/// `core_approve_tool` 直调体（壳层解包后走此体，测试同入口）：
+/// run 归属解析 → [approve_tool_impl]（裁决语义与既有路径完全一致，
+/// 含 decision 仅接受 approved 的校验）。
+async fn approve_tool_command(
+    state: &CoreRunState,
+    run_id: Option<String>,
+    tool_call_id: &str,
+    decision: Option<String>,
+) -> Result<ApproveResponse, CoreError> {
+    let run_id = resolve_approval_run_id(state, run_id, tool_call_id)?;
+    approve_tool_impl(state, &run_id, tool_call_id, decision).await
+}
+
+/// `core_deny_tool` 直调体（与 [approve_tool_command] 对称）。
+async fn deny_tool_command(
+    state: &CoreRunState,
+    run_id: Option<String>,
+    tool_call_id: &str,
+    reason: Option<String>,
+) -> Result<ApproveResponse, CoreError> {
+    let run_id = resolve_approval_run_id(state, run_id, tool_call_id)?;
+    deny_tool_impl(state, &run_id, tool_call_id, reason.as_deref()).await
+}
+
+/// `core_approve_tool`：批准工具调用（I-02 pending 校验 + approval-resolved；
+/// run_id 可选——缺失时按待审批集合反查兜底，见 [resolve_approval_run_id]）
 #[tauri::command]
 pub(crate) async fn core_approve_tool(
     state: tauri::State<'_, Arc<CoreRunState>>,
-    run_id: String,
+    run_id: Option<String>,
     tool_call_id: String,
     decision: Option<String>,
 ) -> Result<ApproveResponse, CoreError> {
-    approve_tool_impl(state.inner(), &run_id, &tool_call_id, decision).await
+    approve_tool_command(state.inner(), run_id, &tool_call_id, decision).await
 }
 
-/// `core_deny_tool`：拒绝工具调用
+/// `core_deny_tool`：拒绝工具调用（run_id 可选，兜底同 [core_approve_tool]）
 #[tauri::command]
 pub(crate) async fn core_deny_tool(
     state: tauri::State<'_, Arc<CoreRunState>>,
-    run_id: String,
+    run_id: Option<String>,
     tool_call_id: String,
     reason: Option<String>,
 ) -> Result<ApproveResponse, CoreError> {
-    deny_tool_impl(state.inner(), &run_id, &tool_call_id, reason.as_deref()).await
+    deny_tool_command(state.inner(), run_id, &tool_call_id, reason).await
 }
 
 /// `trash_list`：列出回收站条目（误删恢复入口）
