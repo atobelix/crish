@@ -133,6 +133,27 @@ describe('橡皮筋与形态参数空间', () => {
     expect(r.displayTarget).toBeLessThan(100);
     expect(r.displayTarget).toBeGreaterThan(100 - 24);
   });
+
+  it('折叠区：位置目标归 0、沿下限触限形态（绷直/贴靠收起侧/随深度更细更淡）', () => {
+    // raw=60 < min=100：over=40，far=40/160=0.25 → stroke=1.8−0.65×0.25、colorMix=1−0.65×0.25
+    const r = dragMorphTargets(60, 300, 100, 400, P, true);
+    expect(r.displayTarget).toBe(0);
+    expect(r.dir).toBe(-1);
+    expect(r.over).toBe(40);
+    expect(r.morph.bend).toBe(0);
+    expect(r.morph.offsetX).toBeCloseTo(-5.5, 5);
+    expect(r.morph.halfLen).toBeCloseTo(33.5, 5);
+    expect(r.morph.strokeWidth).toBeCloseTo(1.6375, 5);
+    expect(r.morph.colorMix).toBeCloseTo(0.8375, 5);
+  });
+
+  it('折叠区迟滞带（raw 已回到 min 之上）仍归 0，over 钳为 0', () => {
+    const r = dragMorphTargets(130, 300, 100, 400, P, true);
+    expect(r.displayTarget).toBe(0);
+    expect(r.over).toBe(0);
+    expect(r.morph.strokeWidth).toBeCloseTo(1.8, 5);
+    expect(r.morph.colorMix).toBeCloseTo(1, 5);
+  });
 });
 
 describe('颜色插值与端点推导', () => {
@@ -201,6 +222,17 @@ describe('引擎状态机', () => {
     expect(engine.strokeWidthValue).toBeCloseTo(2.5, 1);
   });
 
+  it('折叠区：位置弹簧收至 0（拖拽流中当场收起）；退出折叠区恢复跟随', () => {
+    const engine = new ElasticHandleEngine({ initialValue: 300 });
+    engine.beginDrag(300, 100, 400);
+    engine.updateDrag(60, true);
+    stepMany(engine, 1200);
+    expect(engine.displayValue).toBeCloseTo(0, 1);
+    engine.updateDrag(324, false);
+    stepMany(engine, 1200);
+    expect(engine.displayValue).toBeCloseTo(324, 1);
+  });
+
   it('释放收尾：指针已远时停留 650ms 后淡出至 idle', () => {
     const engine = new ElasticHandleEngine({ initialValue: 300 });
     engine.beginDrag(300, 100, 400);
@@ -232,6 +264,18 @@ describe('引擎状态机', () => {
     expect(engine.opacityValue).toBeCloseTo(0, 2);
   });
 
+  it('拖拽尺寸即时 1:1 跟随（无阻尼追赶延迟），同时手柄保持弹簧平滑过渡', () => {
+    const engine = new ElasticHandleEngine({ initialValue: 300 });
+    engine.beginDrag(300, 100, 400);
+    engine.updateDrag(360);
+    // 尺寸在第 0 帧即刻等于 360，零延迟跟手
+    expect(engine.displayValue).toBe(360);
+    // 单帧步进后尺寸依然精确为 360，而形态弹簧在逐步演进
+    engine.step(16);
+    expect(engine.displayValue).toBe(360);
+    expect(engine.isAtRest()).toBe(false); // 手柄仍在过渡
+  });
+
   it('reducedMotion 引擎：一步直达，无弹簧过程', () => {
     const engine = new ElasticHandleEngine({
       initialValue: 300,
@@ -245,5 +289,44 @@ describe('引擎状态机', () => {
     engine.step(16);
     expect(engine.displayValue).toBe(350);
     expect(engine.isAtRest()).toBe(true);
+  });
+
+  it('圆弧朝向随鼠标瞬时移动方向动态翻转，不记忆最初位置', () => {
+    const engine = new ElasticHandleEngine({ initialValue: 300 });
+    engine.beginDrag(300, 100, 500);
+
+    // 1. 鼠标向右拖拽：300 -> 350 (+50px)，弧向朝右 (bend > 0)
+    engine.updateDrag(350);
+    stepMany(engine, 1200);
+    expect(engine.pathD('vertical')).toContain('Q 22.2 0');
+
+    // 2. 鼠标折返向左移：350 -> 340 (-10px)。
+    // 关键断言：此时 340 仍然大于起始值 300，但由于鼠标是向左移动，弧向必须立刻朝左 (bend < 0)！
+    engine.updateDrag(340);
+    stepMany(engine, 1200);
+    expect(engine.pathD('vertical')).toContain('Q -22.2 0');
+
+    // 3. 鼠标再次向右移：340 -> 345 (+5px)，弧向立即再次朝右
+    engine.updateDrag(345);
+    stepMany(engine, 1200);
+    expect(engine.pathD('vertical')).toContain('Q 22.2 0');
+  });
+
+  it('axisSign = -1（如右侧面板）时，圆弧朝向依然保持与物理指针位移严格同向', () => {
+    // 对于右侧面板：左移增大宽度（axisSign = -1）
+    const engine = new ElasticHandleEngine({ initialValue: 300, axisSign: -1 });
+    engine.beginDrag(300, 100, 500);
+
+    // 指针向左移动 20px → 坞宽增加至 320px
+    // 关键断言：由于指针向左移动，圆弧必须朝左弯曲 (Q -22.2 0)
+    engine.updateDrag(320);
+    stepMany(engine, 1200);
+    expect(engine.pathD('vertical')).toContain('Q -22.2 0');
+
+    // 指针向右移动 10px → 坞宽减小至 310px
+    // 关键断言：由于指针向右移动，圆弧必须朝右弯曲 (Q 22.2 0)
+    engine.updateDrag(310);
+    stepMany(engine, 1200);
+    expect(engine.pathD('vertical')).toContain('Q 22.2 0');
   });
 });

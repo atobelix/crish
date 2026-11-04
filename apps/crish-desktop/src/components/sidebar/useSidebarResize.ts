@@ -1,22 +1,38 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * apps/crish-desktop/src/components/sidebar/useSidebarResize.ts
+ *
+ * 侧栏宽度状态域（分割线统一波次 R1 迁移后形态）：
+ * - 手势 / 键盘 / 呈现全部由统一组件 `ui/SplitResizer` 托管（指针捕获、
+ *   弹性手柄引擎、Esc 取消、折叠阈值判定、双击复位）；本 hook 不再自滚
+ *   pointer 监听，旧 handleSidebarResizeStart 的手势实现已物理删除。
+ * - 本 hook 只保留侧栏域状态：宽度 state（单一真源）、挂载恢复
+ *   （config → preferences）、提交落盘（applySidebarWidth：store 折叠态 +
+ *   根变量 + 事件 + 持久化），以及与手势绑定的全局副作用装配——拖拽期
+ *   body 类（is-resizing / sidebar-resizing：shell-reset 的 iframe 封锁与
+ *   .sidebar 过渡关停）在手势开始时挂上、在呈现静止（组件 onRest）时才
+ *   移除，覆盖回弹收尾全程，杜绝弹簧与 CSS 过渡双轨（与迁移前「松手后
+ *   延帧移除防回弹」同一意图，窗口由一帧扩到弹簧收敛点）。
+ * - 呈现变量分工：拖拽期组件把弹簧值写在 .sidebar 元素自身内联的
+ *   --sidebar-width 上；根（documentElement）变量由本 hook 按已提交状态
+ *   同步，静止撤下内联变量后无缝回落。--sidebar-visible-width 在拖拽期
+ *   由 onLiveChange 逐帧镜像钳制值（SettingsQuickMenu 锚定消费）。
+ */
+
+import { useCallback, useEffect, useState } from 'react';
 import { useLayoutStore } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { configService } from '../../services/ConfigService';
 import { preferencesClient } from '../../api/preferences';
 import {
-  SIDEBAR_RESIZE_STEP,
-  SIDEBAR_RESIZE_STEP_LARGE,
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   clampSidebarExpandedWidth,
-  shouldCollapseSidebar,
 } from './sidebarHelpers';
 
 export function useSidebarResize() {
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_WIDTH_DEFAULT);
-  const resizeEndRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     let unmounted = false;
@@ -75,19 +91,17 @@ export function useSidebarResize() {
     void restoreSidebarWidth();
     return () => {
       unmounted = true;
-      if (resizeEndRafRef.current !== null) {
-        cancelAnimationFrame(resizeEndRafRef.current);
-        resizeEndRafRef.current = null;
-      }
       document.body.classList.remove('is-resizing');
       document.body.classList.remove('sidebar-resizing');
     };
   }, []);
 
   useEffect(() => {
-    if (document.body.classList.contains('is-resizing')) {
-      return;
-    }
+    // 状态 → 根变量同步。迁移后拖拽不再直写根变量（组件把弹簧值写在
+    // .sidebar 元素自身的 --sidebar-width 内联变量上，静止撤下后才回落
+    // 到根变量），故状态变化必须即时同步：提交瞬间写入的已提交值会被
+    // 元素内联变量屏蔽至回弹结束，不与拖拽帧打架。旧实现的 is-resizing
+    // 跳过守卫针对的是「拖拽直写根变量、状态滞后一拍」模型，随迁移退役。
     if (sidebarCollapsed) {
       document.documentElement.style.setProperty('--sidebar-width', '0px');
       document.documentElement.style.setProperty(
@@ -106,6 +120,16 @@ export function useSidebarResize() {
       window.dispatchEvent(new Event('crish-sidebar-resize'));
     }
   }, [sidebarCollapsed, sidebarWidthPx]);
+
+  // 折叠即手势生命周期的终点：折叠提交后 SplitResizer 随折叠卸载，
+  // onRest 不会再来——拖拽类在此收束，避免常驻关停 .sidebar 过渡与
+  // iframe 封锁（折叠后展开侧栏的切换动画需要过渡处于恢复状态）。
+  useEffect(() => {
+    if (sidebarCollapsed) {
+      document.body.classList.remove('is-resizing');
+      document.body.classList.remove('sidebar-resizing');
+    }
+  }, [sidebarCollapsed]);
 
   const persistSidebarWidth = useCallback((px: number) => {
     try {
@@ -150,110 +174,45 @@ export function useSidebarResize() {
     [persistSidebarWidth, sidebarWidthPx]
   );
 
-  const handleSidebarResizeStart = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    if (resizeEndRafRef.current !== null) {
-      cancelAnimationFrame(resizeEndRafRef.current);
-      resizeEndRafRef.current = null;
+  /**
+   * SplitResizer 手势起止透传（组件 onDragStateChange）：
+   * 开始时挂上拖拽期 body 协议类；结束时**不**立即移除——回弹收尾期间
+   * .sidebar 的 width 过渡必须保持关停、iframe 封锁必须保持生效，待组件
+   * 通知呈现静止（handleResizerRest）才统一收束。
+   */
+  const handleResizerDragStateChange = useCallback((dragging: boolean) => {
+    if (dragging) {
+      document.body.classList.add('is-resizing');
+      document.body.classList.add('sidebar-resizing');
     }
-    const handleEl = e.currentTarget as HTMLElement;
-    try {
-      handleEl.setPointerCapture(e.pointerId);
-    } catch {
-      /* jsdom / 非 primary 指针 */
-    }
-    handleEl.classList.add('is-dragging');
-    document.body.classList.add('is-resizing');
-    document.body.classList.add('sidebar-resizing');
-    const startX = e.clientX;
-    // 拖拽起点宽度取自 React state（禁止 getComputedStyle 回读 CSSOM）
-    const startWidth = sidebarWidthPx || SIDEBAR_WIDTH_DEFAULT;
-    const layout = getCompositionRoot().layout;
-    let isCurrentlyCollapsed = layout.getSidebarCollapsed();
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const dx = moveEvent.clientX - startX;
-      let newWidth = startWidth + dx;
-      if (shouldCollapseSidebar(newWidth)) {
-        if (!isCurrentlyCollapsed) {
-          isCurrentlyCollapsed = true;
-          layout.setSidebarCollapsed(true);
-        }
-        document.documentElement.style.setProperty('--sidebar-width', '0px');
-      } else {
-        newWidth = clampSidebarExpandedWidth(newWidth);
-        if (isCurrentlyCollapsed) {
-          isCurrentlyCollapsed = false;
-          layout.setSidebarCollapsed(false);
-        }
-        document.documentElement.style.setProperty(
-          '--sidebar-width',
-          `${newWidth}px`
-        );
-        document.documentElement.style.setProperty(
-          '--sidebar-visible-width',
-          `${newWidth}px`
-        );
-        window.dispatchEvent(new Event('crish-sidebar-resize'));
-      }
-    };
-    const handlePointerUp = (upEvent: PointerEvent) => {
-      try {
-        if (handleEl.hasPointerCapture?.(upEvent.pointerId)) {
-          handleEl.releasePointerCapture(upEvent.pointerId);
-        }
-      } catch {
-        /* ignore */
-      }
-      handleEl.classList.remove('is-dragging');
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-      const finalWidth = startWidth + (upEvent.clientX - startX);
-      if (shouldCollapseSidebar(finalWidth)) {
-        applySidebarWidth(0, { collapse: true, persist: false });
-      } else {
-        applySidebarWidth(finalWidth, { persist: true });
-      }
-      resizeEndRafRef.current = requestAnimationFrame(() => {
-        document.body.classList.remove('is-resizing');
-        document.body.classList.remove('sidebar-resizing');
-        resizeEndRafRef.current = null;
-      });
-    };
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-  };
+  }, []);
 
-  const handleSidebarResizeDoubleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applySidebarWidth(SIDEBAR_WIDTH_DEFAULT);
-  };
+  /** SplitResizer 呈现静止通知（组件 onRest）：收束拖拽期 body 协议类 */
+  const handleResizerRest = useCallback(() => {
+    document.body.classList.remove('is-resizing');
+    document.body.classList.remove('sidebar-resizing');
+  }, []);
 
-  const handleSidebarResizeKeyDown = (e: React.KeyboardEvent) => {
-    const step = e.shiftKey ? SIDEBAR_RESIZE_STEP_LARGE : SIDEBAR_RESIZE_STEP;
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      applySidebarWidth(sidebarWidthPx - step);
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      applySidebarWidth(sidebarWidthPx + step);
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      applySidebarWidth(SIDEBAR_WIDTH_MIN);
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      applySidebarWidth(SIDEBAR_WIDTH_MAX);
-    }
-  };
+  /**
+   * 拖拽期实时值（组件 onLiveChange，rAF 节流后的钳制值）：
+   * --sidebar-visible-width 逐帧镜像（折叠态临时展开与 SettingsQuickMenu
+   * 锚定消费的是它而非呈现变量），并广播 crish-sidebar-resize 供锚定方
+   * 实时跟随。根 --sidebar-width 不在此写入——呈现值归组件的元素内联
+   * 变量，已提交值归状态同步 effect，两者互不踩踏。
+   */
+  const handleResizerLiveChange = useCallback((px: number) => {
+    document.documentElement.style.setProperty(
+      '--sidebar-visible-width',
+      `${px}px`
+    );
+    window.dispatchEvent(new Event('crish-sidebar-resize'));
+  }, []);
 
   return {
     sidebarWidthPx,
     applySidebarWidth,
-    handleSidebarResizeStart,
-    handleSidebarResizeDoubleClick,
-    handleSidebarResizeKeyDown,
+    handleResizerDragStateChange,
+    handleResizerRest,
+    handleResizerLiveChange,
   };
 }

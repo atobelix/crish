@@ -42,7 +42,8 @@ import {
   removeDragOverlay,
 } from '../../utils/dragOverlay';
 import { useI18n } from '../../i18n';
-import { useSplitResize } from '../../hooks/useSplitResize';
+import { useSplitResize } from '../ui/SplitResizer';
+import { ElasticSplitHandle } from '../ui/SplitResizer';
 import styles from './DockResizeSash.module.css';
 
 export interface DockResizeSashProps {
@@ -601,6 +602,10 @@ export const DockResizeSash: React.FC<DockResizeSashProps> = React.memo(
         onKeyDown={handleKeyDown}
       >
         <div className={styles.line} aria-hidden="true" />
+        <ElasticSplitHandle
+          orientation={isHorizontal ? 'vertical' : 'horizontal'}
+          isDragging={dragging}
+        />
       </div>
     );
   },

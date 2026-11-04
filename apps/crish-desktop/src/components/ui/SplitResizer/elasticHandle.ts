@@ -221,15 +221,39 @@ export interface DragMorphResult {
  * - rawValue：未钳制的原始目标尺寸（px）；startValue：拖拽起始尺寸（px）。
  * - 区间内：弧向 = 拖向，拉力随相对起点位移增长；
  * - 触限：bend 归 0（绷直）、向拉拽侧贴靠、随拉远更细更淡，位置走橡皮筋。
+ * - collapsed（实时折叠区）：位置目标直接归 0——面板在拖拽流中由位置
+ *   弹簧动画收起（不瞬断）；形态沿用下限触限形态（绷直、向收起侧贴靠、
+ *   随跌破深度更细更淡），远近以跌破 min 的深度归一化。
  */
 export function dragMorphTargets(
   rawValue: number,
   startValue: number,
   min: number,
   max: number,
-  params: ElasticHandleParams
+  params: ElasticHandleParams,
+  collapsed = false,
+  motionDelta?: number
 ): DragMorphResult {
   const raw = Number.isFinite(rawValue) ? rawValue : startValue;
+  if (collapsed) {
+    const over = Math.max(0, min - raw);
+    const far = Math.min(1, over / params.farFullPx);
+    return {
+      morph: {
+        offsetX: -params.limitOffset,
+        bend: 0,
+        strokeWidth: Math.max(
+          1,
+          params.limitStrokeWidth - params.limitStrokeFade * far
+        ),
+        halfLen: params.limitHalfLen,
+        colorMix: 1 - params.limitColorFade * far,
+      },
+      displayTarget: 0,
+      over,
+      dir: -1,
+    };
+  }
   let over = 0;
   let bound = raw;
   if (raw < min) {
@@ -262,12 +286,13 @@ export function dragMorphTargets(
     };
   }
 
-  const delta = raw - startValue;
+  // 弧向算法依据当前鼠标运动增量（而非记忆静态原点）：鼠标往哪边移，圆弧就朝哪边弯
+  const delta = motionDelta !== undefined ? motionDelta : raw - startValue;
   const dir: -1 | 0 | 1 =
     Math.abs(delta) <= params.directionDeadZonePx ? 0 : delta > 0 ? 1 : -1;
   const pull = Math.min(
     1,
-    Math.abs(delta) / params.pullFullPx + params.pullBase
+    Math.abs(delta) / params.pullFullPx + (dir !== 0 ? params.pullBase : 0)
   );
   return {
     morph: {
@@ -297,6 +322,8 @@ export interface ElasticHandleEngineOptions {
   colors?: { rest: Rgb; active: Rgb };
   /** 初始尺寸（px），位置弹簧起点 */
   initialValue?: number;
+  /** 轴向符号（1 = 正向位移尺寸增加；-1 = 正向位移尺寸减小，如右侧面板） */
+  axisSign?: 1 | -1;
 }
 
 /** 浅色主题 --border-color 的解析回退值（tokens-radius.css） */
@@ -346,6 +373,12 @@ export class ElasticHandleEngine {
 
   private colors: { rest: Rgb; active: Rgb };
 
+  private axisSign: 1 | -1;
+
+  private lastDragValue = 0;
+
+  private dragMotionDelta = 0;
+
   constructor(options: ElasticHandleEngineOptions = {}) {
     this.params = { ...ELASTIC_HANDLE_DEFAULTS, ...(options.params ?? {}) };
     const preset = ELASTIC_SPRING_PRESET;
@@ -370,10 +403,15 @@ export class ElasticHandleEngine {
       rest,
       active: options.colors?.active ?? deriveActiveRgb(rest),
     };
+    this.axisSign = options.axisSign ?? 1;
   }
 
   getMode(): ElasticHandleMode {
     return this.mode;
+  }
+
+  setAxisSign(sign: 1 | -1): void {
+    this.axisSign = sign;
   }
 
   setReducedMotion(on: boolean): void {
@@ -461,23 +499,43 @@ export class ElasticHandleEngine {
     this.mode = 'drag';
     this.settleDeadlineMs = null;
     this.dragStartValue = startValue;
+    this.lastDragValue = startValue;
+    this.dragMotionDelta = 0;
     this.dragMin = min;
     this.dragMax = max;
     this.springs.position.target = startValue;
+    this.springs.position.value = startValue;
+    this.springs.position.velocity = 0;
     this.retarget();
   }
 
-  updateDrag(rawValue: number): void {
+  updateDrag(rawValue: number, collapsed = false, motionDelta?: number): void {
     if (this.mode !== 'drag') return;
+    if (motionDelta !== undefined) {
+      this.dragMotionDelta = motionDelta;
+      this.lastDragValue = rawValue;
+    } else {
+      const step = (rawValue - this.lastDragValue) * this.axisSign;
+      this.lastDragValue = rawValue;
+      if (Math.abs(step) >= this.params.directionDeadZonePx) {
+        this.dragMotionDelta =
+          step > 0 ? this.params.pullFullPx : -this.params.pullFullPx;
+      }
+    }
     const result = dragMorphTargets(
       rawValue,
       this.dragStartValue,
       this.dragMin,
       this.dragMax,
-      this.params
+      this.params,
+      collapsed,
+      this.dragMotionDelta
     );
     this.applyMorph(result.morph);
     this.springs.position.target = result.displayTarget;
+    // 尺寸去弹簧阻尼：拖拽尺寸即时 1:1 跟手，消除延迟与振荡过冲；形态动效由其余弹簧独立呈现
+    this.springs.position.value = result.displayTarget;
+    this.springs.position.velocity = 0;
     this.springs.opacity.target = 1;
   }
 
@@ -516,6 +574,8 @@ export class ElasticHandleEngine {
     if (this.mode === 'drag') return;
     if (Number.isFinite(value)) {
       this.springs.position.target = value;
+      this.springs.position.value = value;
+      this.springs.position.velocity = 0;
     }
   }
 
@@ -533,6 +593,12 @@ export class ElasticHandleEngine {
       this.retarget();
     }
     (Object.keys(this.springs) as ElasticSpringKey[]).forEach((key) => {
+      if (key === 'position') {
+        // 尺寸位置不走阻尼振子，直接吸附 target，实现零迟滞即时响应
+        this.springs.position.value = this.springs.position.target;
+        this.springs.position.velocity = 0;
+        return;
+      }
       stepSpring(this.springs[key], dt, this.reducedMotion);
     });
   }

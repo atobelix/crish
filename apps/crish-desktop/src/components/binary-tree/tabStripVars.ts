@@ -30,11 +30,11 @@ export function paneTabStripVars(effectiveTabWidth: number): CSSProperties {
 
 export function toolTabStripVars(): CSSProperties {
   return {
-    '--pane-header-height': '28px',
+    '--pane-header-height': '38px',
     '--pane-tab-height': `${TAB_HEIGHT_PX}px`,
-    '--pane-tool-tab-height': '24px',
+    '--pane-tool-tab-height': '28px',
     '--pane-tab-gap': `${TAB_GAP_PX}px`,
     '--tool-tab-width-max': `${TOOL_TAB_WIDTH_MAX_PX}px`,
-    '--pane-action-btn-size': '20px',
+    '--pane-action-btn-size': '26px',
   } as CSSProperties;
 }

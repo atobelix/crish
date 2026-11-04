@@ -16,8 +16,8 @@
   flex-direction: column;
   box-sizing: border-box;
   background-color: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 6px);
+  border: none;
+  border-radius: 0;
   transition: border-color var(--duration-fast, 150ms) var(--ease-standard);
 
   /* 窗格根容器声明尺寸包含，供头部与内部组件直接执行 2D 容器查询 */
@@ -25,7 +25,7 @@
   container-name: dock-pane;
 }
 
-/* 激活与聚焦态：克制 5% 文本微混（AGENTS.md §13 铁律：上限 10%，常规 3%~6%，严禁粗黑环与厚阴影） */
+/* 激活与聚焦态：克制无重阴影与粗黑边 */
 .pane:focus-within,
 .pane[data-active='true'],
 .pane[data-focused='true'] {
@@ -34,8 +34,7 @@
     var(--border-subtle) 95%,
     var(--text-primary) 5%
   );
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
+  box-shadow: none;
 }
 
 .pane:focus-visible {

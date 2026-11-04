@@ -24,15 +24,19 @@ import React from 'react';
 import type { FlatBranch } from '../../store/types';
 import {
   useLayoutTreeStore,
+  findNodeById,
   MIN_SPLIT_RATIO,
   MAX_SPLIT_RATIO,
 } from '../../store/storeAccess';
 import type { BranchRect } from '../../hooks/useTreeResize';
 import {
-  clampSplitRatioForParent,
+  branchChildMinSizesPx,
+  clampSplitRatioForChildren,
+  leafMinSizePx,
   parentPxAlongAxis,
-  splitRatioBounds,
+  splitRatioBoundsForChildren,
 } from '../../hooks/treeResizeClamp';
+import { ElasticSplitHandle } from '../ui/SplitResizer';
 import styles from './BinaryTreeWorkspace.module.css';
 
 export interface TreeResizeSashProps {
@@ -59,6 +63,38 @@ export function flatBranchEqual(a: FlatBranch, b: FlatBranch): boolean {
     a.rect.y === b.rect.y &&
     a.rect.width === b.rect.width &&
     a.rect.height === b.rect.height
+  );
+}
+
+/**
+ * 本 branch 两侧的最小尺寸需求（px）：按当前布局树算子树需求；
+ * 节点缺失（树已变更）时退化为两侧叶子下限。与拖拽路径同一钳制源。
+ */
+function childMinSizesPx(
+  branchId: string,
+  direction: 'horizontal' | 'vertical'
+): { first: number; second: number } {
+  const root = useLayoutTreeStore.getState().tree.root;
+  const node = findNodeById(root, branchId);
+  if (node && node.type === 'branch') return branchChildMinSizesPx(node);
+  const leaf = leafMinSizePx(direction);
+  return { first: leaf, second: leaf };
+}
+
+/** 按 canvas 实测尺寸算 branch 沿分割轴的像素尺寸（无 canvas 时 0 → parentPxAlongAxis 兜底） */
+function parentPxOf(
+  rect: { width: number; height: number },
+  direction: 'horizontal' | 'vertical'
+): number {
+  const canvas = document.querySelector<HTMLElement>(
+    '[data-tree-canvas="true"]'
+  );
+  return parentPxAlongAxis(
+    {
+      width: rect.width * (canvas?.clientWidth ?? 0),
+      height: rect.height * (canvas?.clientHeight ?? 0),
+    },
+    direction
   );
 }
 
@@ -105,28 +141,22 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
     }, [isHorizontal, ratio, rect.x, rect.y, rect.width, rect.height]);
 
     // 键盘微调：Arrow 减/加步长，Home/End 跳到像素感知极值。
-    // store 的 resizeBranch 仍会再 clamp 到 [0.12,0.88]；此处先按 branch 像素
-    // 尺寸收紧，避免 Home 在大 parent 上把子面板压到 < MIN_CHILD_PX。
+    // store 的 resizeBranch 仍会再 clamp 到 [0.12,0.88]；此处先按 branch 两侧
+    // 子树的像素需求收紧，避免 Home 在大 parent 上把子面板压到真实最小尺寸之下。
     const handleKeyDown = React.useCallback(
       (e: React.KeyboardEvent) => {
-        const canvas = document.querySelector<HTMLElement>(
-          '[data-tree-canvas="true"]'
+        const parentPx = parentPxOf(rect, branch.direction);
+        const mins = childMinSizesPx(branch.branchId, branch.direction);
+        const bounds = splitRatioBoundsForChildren(
+          parentPx,
+          mins.first,
+          mins.second
         );
-        const canvasW = canvas?.clientWidth ?? 0;
-        const canvasH = canvas?.clientHeight ?? 0;
-        const parentPx = parentPxAlongAxis(
-          {
-            width: rect.width * canvasW,
-            height: rect.height * canvasH,
-          },
-          branch.direction
-        );
-        const bounds = splitRatioBounds(parentPx);
         const step = 0.02; // 2%
         const apply = (next: number) => {
           resizeBranch(
             branch.branchId,
-            clampSplitRatioForParent(next, parentPx)
+            clampSplitRatioForChildren(next, parentPx, mins.first, mins.second)
           );
         };
 
@@ -182,9 +212,15 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
       (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        resizeBranch(branch.branchId, 0.5);
+        // 复位 0.5 同样过子树感知钳制：两侧需求不对称时裸 0.5 可能越界。
+        const parentPx = parentPxOf(rect, branch.direction);
+        const mins = childMinSizesPx(branch.branchId, branch.direction);
+        resizeBranch(
+          branch.branchId,
+          clampSplitRatioForChildren(0.5, parentPx, mins.first, mins.second)
+        );
       },
-      [branch.branchId, resizeBranch]
+      [branch.branchId, branch.direction, rect, resizeBranch]
     );
 
     return (
@@ -209,7 +245,12 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
         onPointerDown={onPointerDown}
         onDoubleClick={onDoubleClick}
         onKeyDown={handleKeyDown}
-      />
+      >
+        <ElasticSplitHandle
+          orientation={isHorizontal ? 'vertical' : 'horizontal'}
+          isDragging={isResizing}
+        />
+      </div>
     );
   },
   sashPropsEqual

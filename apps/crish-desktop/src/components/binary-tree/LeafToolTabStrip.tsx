@@ -364,7 +364,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 >
                   <AppIcon
                     name={isMaxOrSolo ? 'minimize' : 'maximize'}
-                    size={12}
+                    size={14}
                   />
                 </Button>
               </Tooltip>
@@ -378,7 +378,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   onClick={onClosePane}
                   aria-label={t('workspace.pane.closePane')}
                 >
-                  <AppIcon name="x" size={12} />
+                  <AppIcon name="x" size={14} />
                 </Button>
               </Tooltip>
             )}

@@ -177,22 +177,18 @@ describe('标签条动效单一真理路径契约', () => {
     );
   });
 
-  it('节能档与减弱动效全量覆盖归零契约（零幽灵漏网）', () => {
-    // 验证 eco 档清零
-    expect(tokensCss).toMatch(
-      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--duration-spring-snappy:\s*0ms;/
-    );
-    expect(tokensCss).toMatch(
-      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--transition-spring-morph:\s*0ms;/
-    );
-    expect(tokensCss).toMatch(
-      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--stagger-max:\s*0ms;/
-    );
-    expect(tokensCss).toMatch(
-      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--blur-subtle:\s*0px;/
-    );
+  it('性能档与减弱动效分工契约（X1 解耦：eco 只降模糊，归零只属系统减动效）', () => {
+    // eco 档：只许归零高成本绘制（模糊），时长/弹簧/交错 token 不得归零
+    const ecoBlock =
+      tokensCss.match(
+        /html\[data-perf-tier=['"]eco['"]\]\s*\{([\s\S]*?)\n\}/
+      )?.[1] ?? '';
+    expect(ecoBlock).toContain('--blur-subtle: 0px;');
+    expect(ecoBlock).not.toMatch(/--duration-[\w-]+:\s*0ms/);
+    expect(ecoBlock).not.toMatch(/--transition-[\w-]+:\s*0ms/);
+    expect(ecoBlock).not.toMatch(/--stagger-[\w-]+:\s*0ms/);
 
-    // 验证 prefers-reduced-motion 媒体查询全量清零
+    // 验证 prefers-reduced-motion 媒体查询全量清零（系统设置专属通道）
     expect(tokensCss).toMatch(
       /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?--duration-spring-smooth:\s*0ms;/
     );
