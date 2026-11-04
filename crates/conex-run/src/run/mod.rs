@@ -105,6 +105,8 @@ pub(crate) use crate::engine_handle::EngineHandle;
 pub(crate) use crate::run_producer::SessionLoopProducer;
 pub(crate) use crate::status_diagnostics::StatusDiagnostics;
 pub(crate) use crate::task_event_consumer::TaskEventConsumer;
+pub(crate) use crate::tool_background::{ToolBackgroundBridgeSink, ToolBackgroundEventSink};
+pub(crate) use crate::tool_wake_consumer::ToolWakeConsumer;
 pub(crate) use crate::wait_channel::{ControlBusResolver, SubagentWaitRegistry};
 
 // ── 测试面共享符号（仅 cfg(test)：run/tests.rs 与各内联测试使用；

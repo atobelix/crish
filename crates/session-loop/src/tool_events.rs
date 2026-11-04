@@ -216,12 +216,8 @@ pub trait ApprovalGate: Send + Sync {
 pub trait ToolBackgroundHost: Send + Sync + std::fmt::Debug {
     /// 在途去重查询：同 (session, tool, 入参摘要) 已有未落定条目
     /// 时返回其 callId——执行器据此直接以占位收口、不重复执行。
-    fn find_inflight(
-        &self,
-        session_id: &str,
-        tool_name: &str,
-        args_digest: &str,
-    ) -> Option<String>;
+    fn find_inflight(&self, session_id: &str, tool_name: &str, args_digest: &str)
+        -> Option<String>;
 
     /// 在途条目已运行毫秒数（去重占位的 elapsedMs 来源）：Running
     /// 取开始执行至今，Queued 取登记至今；条目不存在/已终态
@@ -546,9 +542,7 @@ impl Default for ToolBatchOptions {
             task_type: None,
             // BG2：未装配宿主 = 永不 detach（BG2 之前的行为）
             tool_background: None,
-            background_after_default: Duration::from_millis(
-                u64::from(DEFAULT_BACKGROUND_AFTER_MS),
-            ),
+            background_after_default: Duration::from_millis(u64::from(DEFAULT_BACKGROUND_AFTER_MS)),
         }
     }
 }

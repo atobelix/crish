@@ -233,8 +233,8 @@ impl ShellCommandTool {
         // waitMsBeforeAsync 显式值（钳制后）：auto-background 的等待窗口
         // 缺省 3000ms（T-AB-02 既有口径）；sync 促进窗口缺省走系统默认
         // 20s（BG4）——两模式缺省值不同，必须分开解析，不得共用一个缺省
-        let wait_explicit = optional_u64(args, "waitMsBeforeAsync")
-            .map(|w| w.clamp(1, MAX_TIMEOUT_MS));
+        let wait_explicit =
+            optional_u64(args, "waitMsBeforeAsync").map(|w| w.clamp(1, MAX_TIMEOUT_MS));
         let wait_ms = wait_explicit.unwrap_or(DEFAULT_WAIT_MS_BEFORE_ASYNC);
         // BG4 促进窗口（sync 专用）：min(timeoutMs, 显式 waitMsBeforeAsync
         // ?? 系统默认）——窗口只决定「何时转后台」；与 timeoutMs 重合时

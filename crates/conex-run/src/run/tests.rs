@@ -2513,6 +2513,40 @@ fn core_state_task_events_consumer_shares_queue() {
     assert_eq!(queue.peek().unwrap().text, "任务 t-a 已完成，退出码 0");
 }
 
+/// 验收（BG3 装配）：tool_wake 消费器在 CoreRunState::new 内与
+/// task_events 同一 pending_queue 实例构造（ptr 级同源，无独立
+/// 队列分叉）；桥 sink 落定扇出真实落入共享队列的 tool-wake 分组。
+#[test]
+fn core_state_tool_wake_consumer_shares_queue() {
+    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+    let task_queue = state.task_events().queue().clone();
+    let tool_queue = state.tool_wake().queue().clone();
+    assert!(
+        Arc::ptr_eq(&task_queue, &tool_queue),
+        "ToolWakeConsumer 与 TaskEventConsumer 必须共享同一 PendingMessageQueue 实例"
+    );
+    assert!(
+        Arc::ptr_eq(&tool_queue, &state.steering_queue()),
+        "tool_wake 队列与 CoreRunState.steering_queue 必须同一实例"
+    );
+    // 行为级证明：经桥 sink 的冷启动面入队 → 共享队列 tool-wake 分组可见
+    let summary = crate::tool_background::ToolBackgroundCallSummary {
+        session_id: "s-bg3".to_string(),
+        call_id: "c-bg3".to_string(),
+        tool_name: "read_file".to_string(),
+    };
+    let result = crate::tool_background::outcome_unknown_tool_batch_result(&summary, 0);
+    state
+        .tool_background_events()
+        .emit_cold_start_unsettled(&summary, &result);
+    let queue = state.steering_queue();
+    let mut queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+    let entries = queue.dequeue_by_group(crate::tool_wake_consumer::TOOL_WAKE_GROUP_ID);
+    assert_eq!(entries.len(), 1, "冷启动合成的 tool-wake 条目必须落入共享队列");
+    assert_eq!(entries[0].session_id, "s-bg3");
+    assert!(entries[0].text.contains("上次会话有后台工具未完成"));
+}
+
 /// 验收（30 方案 P7）：cron_has_enabled 在 CoreRunState::new 内装配——
 /// 真实引擎路径下判定器非 None（SchedulerRegistry 非空封装
 /// has_active；与 timer_has_active 先例对称，A5-H02 生产缺失消除）

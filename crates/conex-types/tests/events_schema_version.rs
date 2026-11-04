@@ -1,12 +1,12 @@
 //! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
 //!
 //! 覆盖：
-//! - v1 golden fixture（tests/fixtures/events-v1/，58 事件每类 ≥1 条，无
+//! - v1 golden fixture（tests/fixtures/events-v1/，59 事件每类 ≥1 条，无
 //!   schemaVersion 的 v1 形状）反序列化全部成功，schemaVersion 缺省补 1；
 //! - 关键字段抽查（含旧 RuntimeError `error: String` 形态）；
 //! - 完整信封帧（runId/sequence）解析；
 //! - 新信封序列化恒带 `schemaVersion: 1`；未来版本号透传不丢弃；
-//! - 变体数一致性断言：58 == 本清单 == 33-event-schema-changelog.md v1 表登记数
+//! - 变体数一致性断言：59 == 本清单 == 33-event-schema-changelog.md v1 表登记数
 //!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁；
 //!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27；I2-S8 新增
 //!   security-audit，27 → 28；I5-M7 新增 subagent 域三事件，28 → 31；
@@ -16,7 +16,9 @@
 //!   2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49；
 //!   2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测事件，
 //!   49 → 57；2026-08-16 T1a 统一输入流收敛战役协议硬约束新增 timeline-truncate，
-//!   57 → 58）；
+//!   57 → 58；同日 R1 tool-update 死契约删除，58 → 57；
+//!   2026-11-02 BG3 后台结果回注兼容新增 tool-backgrounded / tool-settled，
+//!   57 → 59）；
 //! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段；
 //! - 任务域七变体（T-AB-17，01 方案 §4.5 冻结契约）serde roundtrip /
 //!   camelCase / 缺省字段 / 信封 schemaVersion。
@@ -29,7 +31,7 @@ use serde_json::{json, Value};
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 58 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
+/// v1 基线 59 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
 /// 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38，登记于 changelog §四
 /// 1.4 行；2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40，登记于
 /// changelog §四 1.5 行；同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41，
@@ -37,7 +39,9 @@ mod common;
 /// 8 事件，41 → 49，登记于 changelog §四 1.9 行；2026-08-14 D-03 契约窗口
 /// tool-input-repaired 核销删除 + 9 新观测事件，49 → 57，登记于 changelog
 /// §四 1.10 行；2026-08-16 T1a 统一输入流收敛战役新增 timeline-truncate，
-/// 57 → 58，登记于 changelog §四 1.11 行；原 `v1_baseline_has_exactly_31_event_types` /
+/// 57 → 58，登记于 changelog §四 1.11 行；2026-11-02 BG3 后台结果回注兼容
+/// 新增 tool-backgrounded / tool-settled 两事件，57 → 59，登记于 changelog
+/// §四 1.12 行；原 `v1_baseline_has_exactly_31_event_types` /
 /// `v1_baseline_has_exactly_38_event_types` / `v1_baseline_has_exactly_40_event_types` /
 /// `v1_baseline_has_exactly_41_event_types` / `v1_baseline_has_exactly_57_event_types`
 /// 断言随基线演进改名并同步更新——旧名即留痕，见测试体注释）
@@ -111,12 +115,17 @@ const V1_EVENT_TYPES: &[&str] = &[
     // 撤回域（T1a 统一输入流收敛战役兼容新增，2026-08-16；登记于 changelog
     // §四 1.11 行）
     "timeline-truncate",
+    // 工具域 BG3 后台结果回注（渲染整改波 4 兼容新增，2026-11-02；登记于
+    // changelog §四 1.12 行）
+    "tool-backgrounded",
+    "tool-settled",
 ];
 
 // ── 1. 变体数一致性：49 清单 ↔ fixtures ↔ changelog ──
 
-/// v1 基线必须为 57 事件（T1a 统一输入流收敛战役 timeline-truncate 后为 58；
-/// R1 tool-update 死契约删除后 58 → 57）。
+/// v1 基线必须为 59 事件（T1a 统一输入流收敛战役 timeline-truncate 后为 58；
+/// R1 tool-update 死契约删除后 58 → 57；BG3 后台结果回注新增两事件后
+/// 57 → 59）。
 ///
 /// 原断言名 `v1_baseline_has_exactly_31_event_types`（2026-08-03 冻结 31
 /// 事件基线）、`v1_baseline_has_exactly_38_event_types`（2026-08-04 任务域
@@ -126,17 +135,18 @@ const V1_EVENT_TYPES: &[&str] = &[
 /// 窗口净增）与 `v1_baseline_has_exactly_58_event_types`（2026-08-16 T1a
 /// 新增 timeline-truncate）随基线演进改名升级——基线演进留痕：28 → 31 → 38
 /// → 40 → 41 → 49 → 57 → 58（T1a 协议硬约束新增 1）→ 57（R1 tool-update
-/// 死契约删除：前端零消费 + 落库语义错位，决策 1）。
+/// 死契约删除：前端零消费 + 落库语义错位，决策 1）→ 59（2026-11-02 BG3
+/// 后台结果回注兼容新增 tool-backgrounded / tool-settled）。
 #[test]
-fn v1_baseline_has_exactly_57_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（57）
+fn v1_baseline_has_exactly_59_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（59）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        57,
-        "v1 基线必须是 57 事件（R1 tool-update 死契约删除后）"
+        59,
+        "v1 基线必须是 59 事件（BG3 后台结果回注新增两事件后）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 57, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 59, "清单内事件名不得重复");
 }
 
 #[test]
@@ -221,6 +231,23 @@ fn v1_fixture_key_fields_anchored() {
     let t = serde_json::to_value(&terminal.event).unwrap();
     assert_eq!(t["terminal"], "completed");
     assert_eq!(t["runId"], "run-1");
+
+    // 抽查：BG3 后台结果回注两事件的硬依赖字段（callId / elapsedMs /
+    // status / result.id——桌面消费面原位替换占位结果的锚点）
+    let backgrounded: AgentEventEnvelope =
+        serde_json::from_str(&common::v1_fixture("tool-backgrounded")).unwrap();
+    let b = serde_json::to_value(&backgrounded.event).unwrap();
+    assert_eq!(b["callId"], "tc-1");
+    assert_eq!(b["toolName"], "read_file");
+    assert_eq!(b["elapsedMs"], 20000);
+
+    let settled: AgentEventEnvelope =
+        serde_json::from_str(&common::v1_fixture("tool-settled")).unwrap();
+    let st = serde_json::to_value(&settled.event).unwrap();
+    assert_eq!(st["callId"], "tc-1");
+    assert_eq!(st["status"], "ok");
+    assert_eq!(st["result"]["id"], "tc-1");
+    assert_eq!(st["result"]["isError"], false);
 }
 
 // ── 3. 信封帧与 schemaVersion 语义 ──

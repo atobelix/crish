@@ -35,7 +35,7 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBe(0);
-      // 与 Rust COMMAND_MANIFEST（171 = 注册面 171 全实装）保持同步；
+      // 与 Rust COMMAND_MANIFEST（173 = 注册面 173 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 曾接线；**单轨收敛

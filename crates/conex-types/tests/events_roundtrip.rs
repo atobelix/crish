@@ -1,4 +1,4 @@
-//! B1.5 序列化契约测试：57 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：59 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
 //! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
 //! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
@@ -11,7 +11,7 @@ use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, MissAttribution, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
-    ToolMetadata, TurnUsage,
+    ToolMetadata, ToolSettledStatus, TurnUsage,
 };
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
@@ -247,7 +247,7 @@ fn turn_usage() -> TurnUsage {
     }
 }
 
-/// 57 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
+/// 59 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
 /// （03 §1.1-1.6 全清单 + P5 S3 缓存测量域三事件 + I2-S8 安全审计域 +
 /// I5-M7 子代理域三事件 + T-AB-17 任务域七事件 + T-CF-04 定时器域两事件 +
 /// T-CF-08 cron 域一事件 + D8 恢复域五事件 + goal 域三事件 +
@@ -682,6 +682,21 @@ fn all_events() -> Vec<AgentEvent> {
             target_message_id: "msg-9".to_string(),
             timestamp: TS.into(),
         },
+        // BG3 后台结果回注（2026-11-02 渲染整改波 4）：tool 域转后台 /
+        // 落定两事件，与 ALL_TYPE_NAMES 声明序尾部一一对应
+        AgentEvent::ToolBackgrounded {
+            session_id: "s1".to_string(),
+            call_id: "tc-1".to_string(),
+            tool_name: "read_file".to_string(),
+            elapsed_ms: 20_000,
+        },
+        AgentEvent::ToolSettled {
+            session_id: "s1".to_string(),
+            call_id: "tc-1".to_string(),
+            tool_name: "read_file".to_string(),
+            status: ToolSettledStatus::Ok,
+            result: batch_result(),
+        },
     ]
 }
 
@@ -745,6 +760,54 @@ fn type_name_matches_serde_tag_for_all_variants() {
             "type_name 与序列化 tag 不一致（变体 {}）",
             tag
         );
+    }
+}
+
+// ── 1b. BG3 后台结果回注两事件字段锚定（2026-11-02）──
+
+/// tool-backgrounded / tool-settled 的 wire 名与 camelCase 字段锚定；
+/// tool-settled.status 四值（ok / error / cancelled / outcome-unknown，
+/// 与工具后台注册表终态子集 1:1）逐一锚定 + result 与 tool-end 同构。
+#[test]
+fn tool_background_events_wire_fields_anchored() {
+    let backgrounded = AgentEvent::ToolBackgrounded {
+        session_id: "s1".to_string(),
+        call_id: "tc-1".to_string(),
+        tool_name: "read_file".to_string(),
+        elapsed_ms: 20_000,
+    };
+    let json = serde_json::to_value(&backgrounded).unwrap();
+    assert_eq!(json["type"], "tool-backgrounded");
+    assert_eq!(json["sessionId"], "s1");
+    assert_eq!(json["callId"], "tc-1");
+    assert_eq!(json["toolName"], "read_file");
+    assert_eq!(json["elapsedMs"], 20_000);
+
+    for (status, wire) in [
+        (ToolSettledStatus::Ok, "ok"),
+        (ToolSettledStatus::Error, "error"),
+        (ToolSettledStatus::Cancelled, "cancelled"),
+        (ToolSettledStatus::OutcomeUnknown, "outcome-unknown"),
+    ] {
+        let settled = AgentEvent::ToolSettled {
+            session_id: "s1".to_string(),
+            call_id: "tc-1".to_string(),
+            tool_name: "read_file".to_string(),
+            status,
+            result: batch_result(),
+        };
+        let json = serde_json::to_value(&settled).unwrap();
+        assert_eq!(json["type"], "tool-settled");
+        assert_eq!(json["status"], wire, "status wire 值锚定");
+        // result 与 tool-end.result 同构（id / toolName / output / isError /
+        // durationMs 五字段齐备，消费侧原位替换占位结果）
+        assert_eq!(json["result"]["id"], "tc-1");
+        assert!(json["result"].get("toolName").is_some());
+        assert!(json["result"].get("output").is_some());
+        assert!(json["result"].get("isError").is_some());
+        assert!(json["result"].get("durationMs").is_some());
+        let back: AgentEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(back, settled, "tool-settled({wire}) roundtrip 不一致");
     }
 }
 

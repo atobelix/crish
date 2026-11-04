@@ -44,6 +44,7 @@ pub mod timers;
 // （状态机 / 并发排队 / 取消传播）+ session_meta 持久化存储契约；
 // 执行器三方竞速接线在 BG2，本模块不驱动任何工具执行
 pub mod tool_background;
+pub mod tool_wake_consumer;
 pub mod wait_channel;
 pub mod wake_watcher;
 pub mod wakeup_summary;

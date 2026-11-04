@@ -440,6 +440,15 @@ pub struct CoreRunState {
     /// 不经 engine audit_sink）；main.rs 装配轮经
     /// [Self::task_events] 注入 background 注册表）
     pub(crate) task_events: Arc<TaskEventConsumer>,
+    /// BG3：后台工具唤醒消费者（与 [Self::task_events] 共享同一
+    /// [Self::pending_queue] 实例——装配同源断言见 run/tests 的
+    /// core_state_tool_wake_consumer_shares_queue；分组 tool-wake
+    /// 与 task-wake 严格区分）
+    pub(crate) tool_wake: Arc<ToolWakeConsumer>,
+    /// BG3：后台事件桥 sink 单例（事件直发 + 唤醒扇出；装配时注入
+    /// EngineHandle 供宿主逐调用发射，冷启动合成经 run_restore
+    /// 直调 emit_cold_start_unsettled）
+    pub(crate) tool_background_events: Arc<ToolBackgroundBridgeSink>,
     /// T-CF-11：定时器活跃判定器（TimerRegistry 非空封装；None = 未接线
     /// ——收口时不因定时器续 run。生产在 [Self::new] 经
     /// [EngineHandle::timer_registry] 的 list_active 封装注入；测试可替换）
@@ -571,6 +580,18 @@ impl CoreRunState {
             bridge.clone(),
             String::new(), // 空串占位（任务为会话级存活，归属经 payload ownerRunId）
         ));
+        // BG3：工具唤醒消费者（与 task_events 同一 pending_queue
+        // 实例——WakeWatcher 只认这一条队列）+ 后台事件桥 sink
+        // （tool-backgrounded / tool-settled 实时轨直发 + 落定唤醒
+        // 扇出），sink 注入 EngineHandle 供逐调用构造的宿主附着
+        let tool_wake = Arc::new(ToolWakeConsumer::new(Arc::clone(&pending_queue)));
+        let tool_background_events = Arc::new(ToolBackgroundBridgeSink::new(
+            bridge.clone(),
+            Arc::clone(&tool_wake),
+        ));
+        engine.set_tool_background_event_sink(
+            Arc::clone(&tool_background_events) as Arc<dyn ToolBackgroundEventSink>,
+        );
         let timer_registry = engine.timer_registry();
         let timer_has_active: WakeSourceCheck = Arc::new(move || {
             let registry = Arc::clone(&timer_registry);
@@ -660,6 +681,8 @@ impl CoreRunState {
             background,
             pending_queue,
             task_events,
+            tool_wake,
+            tool_background_events,
             timer_has_active: Mutex::new(Some(timer_has_active)),
             cron_has_enabled: Mutex::new(cron_has_enabled),
             resume_empty_streak: Mutex::new(HashMap::new()),
@@ -1015,6 +1038,17 @@ impl CoreRunState {
     /// 消费方 = main.rs 装配轮（已接线））
     pub fn task_events(&self) -> Arc<TaskEventConsumer> {
         Arc::clone(&self.task_events)
+    }
+
+    /// BG3：后台工具唤醒消费者（装配同源断言与冷启动合成测试面；
+    /// 生产消费经共享 steering 队列 + WakeWatcher，不经本访问器）
+    pub fn tool_wake(&self) -> Arc<ToolWakeConsumer> {
+        Arc::clone(&self.tool_wake)
+    }
+
+    /// BG3：后台事件桥 sink（run_restore 冷启动合成直调面）
+    pub fn tool_background_events(&self) -> Arc<ToolBackgroundBridgeSink> {
+        Arc::clone(&self.tool_background_events)
     }
 
     /// 30 方案 P6/P7：Cron 调度注册表（透传引擎句柄；None = 装配降级）。

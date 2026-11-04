@@ -89,7 +89,9 @@ const fn entry(
 /// 后 163 → **164**；外链命令 164 → **165**；首次配对信任引导
 /// `multi_device_export_ca` 登记后 165 → **166**；`core_md_render` 单条渲染
 /// 退役（前端只消费 batch/stream）后 166 → **165**。并行分支各自追加后合并面
-/// 实测 **173**（旧 `Message` 面压缩死链已在各分支 CP-P2 退役）；以本清单
+/// 实测 **172**（旧 `Message` 面压缩死链已在各分支 CP-P2 退役）；BG5
+/// 工具后台 UI 面（core_list_tool_background_tasks /
+/// core_cancel_tool_background_task）+2 → **174**；`core_md_render_stream` 于 2026-11-02 整波收口退役（全仓零调用，前端封装与命令面四方同步移除）174 → **173**；以本清单
 /// 173 条为准，逐条一致性由 `manifest_count_matches_registered_surface` 守护。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -231,6 +233,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_cancel_run", "core", "engine", true),
         entry("core_approve_tool", "core", "engine", true),
         entry("core_deny_tool", "core", "engine", true),
+        // BG5：工具后台轨 UI 面（引擎工具后台注册表，与 shell 进程任务分开）
+        entry("core_list_tool_background_tasks", "core", "engine", true),
+        entry("core_cancel_tool_background_task", "core", "engine", true),
         // ── 会话持久化（B，§2.2）──
         entry("list_sessions", "session", "engine", true),
         entry("load_session_body", "session", "engine", true),
@@ -248,7 +253,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // 前端无会话级产出根消费方；工具侧读取面保留）
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render_batch", "core", "engine", true),
-        entry("core_md_render_stream", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2）──
         entry("core_hash_compute", "core", "engine", true),
         entry("core_base64_encode", "core", "engine", true),

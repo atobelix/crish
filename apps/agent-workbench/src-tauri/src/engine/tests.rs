@@ -2310,6 +2310,7 @@ fn mcp_injection_is_byte_stable_and_lists_tools() {
             input_schema: serde_json::json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         },
         ToolDefinition {
             name: "mcp_files__write".to_string(),
@@ -2317,6 +2318,7 @@ fn mcp_injection_is_byte_stable_and_lists_tools() {
             input_schema: serde_json::json!({ "type": "object" }),
             dangerous: true,
             fatal_on_error: false,
+            background_after_ms: None,
         },
     ];
     let injection = conex_run::context_injection::mcp_context_injection(&defs);
@@ -2348,6 +2350,7 @@ async fn produce_with_skill_injection_sends_skill_segment() {
             input_schema: serde_json::json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
+            background_after_ms: None,
         }]),
     );
     let (producer, provider) = test_producer(None, SessionLoopOptions::default());

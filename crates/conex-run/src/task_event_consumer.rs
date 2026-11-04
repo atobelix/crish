@@ -76,6 +76,12 @@ impl TaskEventConsumer {
         }
     }
 
+    /// 共享 steering 队列实例（BG3 装配同源断言用：ToolWakeConsumer
+    /// 必须与本消费器同队列，见 CoreRunState::new 的 BG3 装配段）
+    pub fn queue(&self) -> &Arc<Mutex<PendingMessageQueue>> {
+        &self.queue
+    }
+
     /// 挂接点入口：task 七事件到达时同步调用（[agent_tools::background] 的
     /// EventBridgeSink::emit 在构造 AgentEvent 后调用；消费器未注入时
     /// （None）仅发射事件不消费——装配前后行为一致）。

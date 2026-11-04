@@ -13,7 +13,49 @@ use orchestrator::session::{SessionRecord, SessionTree};
 use super::{
     CoreRunState, RESTORE_GROUP_PREFIX, RESTORE_MAIN_INJECT_TEXT, SUBAGENT_SESSION_PREFIX,
 };
+
+use crate::tool_background::{
+    outcome_unknown_tool_batch_result, ToolBackgroundCallSummary,
+};
 impl CoreRunState {
+    /// BG3 冷启动合成（run_restore 在会话水合后、门禁放行前调用）：
+    /// 上次进程遗留的未落定后台工具逐条合成 OutcomeUnknown——经
+    /// 注册表 [ToolBackgroundRegistry::synthesize_outcome_unknown]
+    /// 写回终态记录，再逐条经桥 sink 发射 tool-settled
+    /// (outcome-unknown) 并写 tool-wake 条目（文案「上次会话有后台
+    /// 工具未完成」）。新进程的注册表内存为空、落盘清单是唯一原料，
+    /// 故合成走注册表的落盘路径而非进程内 mark 路径。
+    pub(crate) fn synthesize_tool_background_cold_start(
+        &self,
+        sessions: &[SessionRecord],
+    ) {
+        let now_ms = conex_shared::time::now_millis();
+        let registry = self.engine.tool_background_registry();
+        for record in sessions {
+            let synthesized =
+                registry.synthesize_outcome_unknown(&record.session_id, now_ms);
+            if synthesized.is_empty() {
+                continue;
+            }
+            tracing::info!(
+                session_id = %record.session_id,
+                count = synthesized.len(),
+                "冷启动合成：上次会话遗留后台工具已合成结果未知终态（BG3）"
+            );
+            for rec in &synthesized {
+                let summary = ToolBackgroundCallSummary {
+                    session_id: rec.session_id.clone(),
+                    call_id: rec.call_id.clone(),
+                    tool_name: rec.tool_name.clone(),
+                };
+                let result =
+                    outcome_unknown_tool_batch_result(&summary, rec.duration_ms.unwrap_or(0));
+                self.tool_background_events
+                    .emit_cold_start_unsettled(&summary, &result);
+            }
+        }
+    }
+
     /// D6 §3.3：重启恢复条目生成（断点 3 消费端；run_restore 成功路径
     /// 调用）。对 [RestoreOutcome::interrupted] 逐条生成 steering 条目
     /// （group_id = `restore-<run_id>`，is_steering 受保护——容量挤占时
@@ -291,6 +333,12 @@ impl CoreRunState {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .extend(outcome.sessions.clone());
+                // 2.5 BG3 冷启动合成（registry 是全新空实例：落盘侧
+                // 未落定记录 = 上次进程遗留的在飞后台工具——逐会话
+                // 合成 OutcomeUnknown 并发射 tool-settled + tool-wake；
+                // 必须在门禁放行前完成，使唤醒条目与恢复条目同批就绪、
+                // 且 restore 完成后到来的 close_session 不误杀合成面）
+                self.synthesize_tool_background_cold_start(&outcome.sessions);
                 // 3. 门禁放行（必须在 seed 之后：新 run 的 base 从预热值续接）
                 self.restore_ready.store(true, Ordering::SeqCst);
                 // 4. 恢复成功后立即保存快照（restore.rs 文档：

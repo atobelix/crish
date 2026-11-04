@@ -11,26 +11,23 @@
 //! wire 键。改动本注册面（新增/退役/改名）必须同步 command_manifest.rs 条目 +
 //! 前端 commandManifest.ts 快照 + 双端条数公式，并由 command-contract-drift
 //! 测试（前端契约总门禁）与注册面一致性测试守护。
-
 use crate::{
     auth_commands, background, browser, browser_commands, command_manifest, config, core_commands,
     core_query_commands, fs_commands, git, host_openers, lifecycle_commands, markdown_commands,
     mcp_commands, models_yaml, multi_device_commands, note_commands, preferences_commands, probe,
-    process, pty, retraction_commands, run_ipc, session_commands, session_title_commands, updater,
-    usage_commands, window_handshake, window_snap_overlay, workflow_ipc, workspace,
+    process, pty, retraction_commands, run_ipc, session_commands, session_title_commands,
+    tool_background_commands, updater, usage_commands, window_handshake, window_snap_overlay,
+    workflow_ipc, workspace,
 };
-
 macro_rules! command_registry {
     ($(($name:literal, $path:path)),* $(,)?) => {
         pub(crate) const COMMAND_REGISTRY_NAMES: &[&str] = &[$($name),*];
-
         /// 构建 invoke 分发处理器（注册面真源的唯一出口）
         pub(crate) fn build_invoke_handler() -> Box<tauri::ipc::InvokeHandler<tauri::Wry>> {
             Box::new(tauri::generate_handler![$($path),*])
         }
     };
 }
-
 command_registry![
     // ── GUI 专属面（workbench_*，§2.3）──
     ("workbench_run_shell", process::workbench_run_shell),
@@ -228,6 +225,16 @@ command_registry![
         session_title_commands::core_generate_session_title
     ),
     ("core_cancel_run", run_ipc::core_cancel_run),
+    // BG5：工具后台轨 UI 面（查会话未落定快照 / 单条取消；对象 =
+    // conex-run 工具后台注册表，与 shell 进程任务的 workbench_* 分开）
+    (
+        "core_list_tool_background_tasks",
+        tool_background_commands::core_list_tool_background_tasks
+    ),
+    (
+        "core_cancel_tool_background_task",
+        tool_background_commands::core_cancel_tool_background_task
+    ),
     // 会话级 Tier-2 中止（前端级联取消总线；desktopNativeFeatures 契约命名）
     ("workbench_abort_run", run_ipc::workbench_abort_run),
     ("core_approve_tool", run_ipc::core_approve_tool),
@@ -267,8 +274,7 @@ command_registry![
         "multi_device_export_ca",
         multi_device_commands::multi_device_export_ca
     ),
-    // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时
-    // 不 bind 任何端口；状态衔接 multi_device_pair_status）
+    // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时 // 不 bind 任何端口；状态衔接 multi_device_pair_status）
     (
         "multi_device_set_enabled",
         multi_device_commands::multi_device_set_enabled
@@ -323,7 +329,6 @@ command_registry![
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render_batch", markdown_commands::md_render_batch),
-    ("core_md_render_stream", markdown_commands::md_render_stream),
     // ── 工具 Worker 组（E，§2.2）──
     ("core_hash_compute", core_commands::core_hash_compute),
     ("core_base64_encode", core_commands::core_base64_encode),

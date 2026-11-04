@@ -6,14 +6,17 @@
 //! 本测试把映射表与两侧代码双向锁定，任何一侧不同步立即失败：
 //!
 //! - 映射的引擎事件必须存在于 [AgentEvent::ALL_TYPE_NAMES]（enum 变体断言）；
-//! - 无对应清单 + 映射清单必须恰好划分全部引擎事件（57 = 11 + 46，无遗漏无重复；
+//! - 无对应清单 + 映射清单必须恰好划分全部引擎事件（59 = 11 + 48，无遗漏无重复；
 //!   2026-08-05 T-CF-04 定时器域兼容新增 timer-fired/timer-cancelled 两事件，
 //!   38 → 40，均无对应钩子——唤醒走 steering 面，02-CF §4.7「hooks 不扩展」；
 //!   同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41，同样无对应钩子；
 //!   2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49，均无对应钩子——
 //!   recovery-* 走 orchestrator 恢复阶梯面、goal-* 走 D5 投影面，不进插件钩子面；
 //!   2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 观测事件
-//!   （49 → 57），均无对应钩子——观测补全事件走事件总线消费，不进插件钩子面）；
+//!   （49 → 57），均无对应钩子——观测补全事件走事件总线消费，不进插件钩子面；
+//!   2026-11-02 BG3 后台结果回注新增 tool-backgrounded / tool-settled
+//!   （57 → 59），均无对应钩子——桌面事件总线消费 + tool-wake steering
+//!   唤醒面，不进插件钩子面）；
 //! - 14 钩子名清单唯一且与 `packages/shared-types/src/hooks.ts` 的字面量一致
 //!   （TS 侧 hooks.test.ts 再与 HOOK_EVENT_NAMES 类型层双向锁定）；
 //! - 映射事件的背压级别（映射表「背压级别」列）与
@@ -59,7 +62,9 @@ const HOOK_MAPPINGS: &[(&str, &str)] = &[
 /// 恢复域五事件 + goal 域三事件（recovery-*/goal-*，2026-08-11 D8 兼容新增——
 /// 恢复阶梯与 goal 投影走 orchestrator/D5 域，不进插件钩子面）、
 /// D-03 观测补全九事件（2026-08-14 契约窗口：tool-input-repaired 核销删除
-/// + 9 观测事件，均走事件总线消费，不进插件钩子面）。
+/// + 9 观测事件，均走事件总线消费，不进插件钩子面）、
+/// BG3 后台结果回注两事件（2026-11-02：tool-backgrounded / tool-settled，
+/// 桌面事件总线消费 + tool-wake steering 唤醒面，不进插件钩子面）。
 const UNMAPPED_EVENTS: &[&str] = &[
     "agent-end",
     "message-start",
@@ -123,6 +128,11 @@ const UNMAPPED_EVENTS: &[&str] = &[
     // 撤回域（2026-08-16 T1a 统一输入流收敛战役）：timeline-truncate——
     // R1 撤回出站事件走事件总线消费 + 投影重放，不进插件钩子面
     "timeline-truncate",
+    // BG3 后台结果回注两事件（2026-11-02）：tool-backgrounded /
+    // tool-settled——桌面 chat-bridge 事件总线消费，唤醒走 tool-wake
+    // steering 面，不进插件钩子面
+    "tool-backgrounded",
+    "tool-settled",
 ];
 
 /// 14 钩子名全集（与 packages/shared-types/src/hooks.ts 的 HOOK_EVENT_NAMES 一致；
@@ -186,7 +196,7 @@ fn unmapped_engine_events_exist_in_enum() {
     }
 }
 
-// ── 2. 全集划分：57 = 11 映射 + 46 无对应 ──
+// ── 2. 全集划分：59 = 11 映射 + 48 无对应 ──
 
 #[test]
 fn mapping_partitions_all_engine_events() {
@@ -201,19 +211,19 @@ fn mapping_partitions_all_engine_events() {
     );
     assert_eq!(
         unmapped.len(),
-        46,
-        "无对应引擎事件必须为 46 个（R1 tool-update 死契约删除后 47 → 46）"
+        48,
+        "无对应引擎事件必须为 48 个（BG3 新增两事件无对应钩子，46 → 48）"
     );
     assert_eq!(
         registry.len(),
-        57,
-        "AgentEvent enum 必须为 57 种域事件（R1 tool-update 删除）"
+        59,
+        "AgentEvent enum 必须为 59 种域事件（BG3 后台结果回注新增两事件）"
     );
 
     let union: BTreeSet<&str> = mapped.union(&unmapped).copied().collect();
     assert_eq!(
         union, registry,
-        "映射清单 ∪ 无对应清单 必须恰好等于全部引擎事件（58 = 11 + 47）"
+        "映射清单 ∪ 无对应清单 必须恰好等于全部引擎事件（59 = 11 + 48）"
     );
     let overlap: BTreeSet<&str> = mapped.intersection(&unmapped).copied().collect();
     assert!(
@@ -375,10 +385,10 @@ fn mapping_contract_anchors() {
         first_batch.is_subset(&mapped),
         "第一批接 6 个引擎事件必须全部在映射面内"
     );
-    // 全部映射事件数量锚定（58 - 11 = 47 无对应）
+    // 全部映射事件数量锚定（59 - 11 = 48 无对应）
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len() - mapped.len(),
         UNMAPPED_EVENTS.len(),
-        "58 - 映射数 = 无对应数 必须成立"
+        "59 - 映射数 = 无对应数 必须成立"
     );
 }

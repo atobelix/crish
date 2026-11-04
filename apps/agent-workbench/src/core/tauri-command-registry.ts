@@ -469,6 +469,18 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'tool approval',
   },
   { command: 'core_deny_tool', status: 'implemented', feature: 'tool denial' },
+  // BG5：工具后台轨 UI 面（引擎工具后台注册表，与 shell 进程任务分开；
+  // 2026-11-02 整波收口补登记——BG5 落 Rust 注册面与桌面清单时漏记本表）
+  {
+    command: 'core_list_tool_background_tasks',
+    status: 'implemented',
+    feature: 'tool background tasks list',
+  },
+  {
+    command: 'core_cancel_tool_background_task',
+    status: 'implemented',
+    feature: 'tool background task cancel',
+  },
   // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
   // T-F 06 退役：delete_session / touch_session 已从命令面退役（changelog 33；
   // 前端删除走 IndexedDB 本地面，活跃时间戳面无前端依赖）
@@ -604,17 +616,13 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'workflow runs list',
   },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
-  // Markdown 2.0：core_md_render 单条渲染已退役（无前端消费），
-  // 恢复 core_md_render_stream（活跃尾块 Rust 流式渲染），batch/stream 保留。
+  // Markdown 2.0：core_md_render 单条渲染已退役（无前端消费）；
+  // core_md_render_stream 于 2026-11-02 整波收口退役（全仓零调用，
+  // 前端封装与命令面四方同步移除），仅 batch 保留。
   {
     command: 'core_md_render_batch',
     status: 'implemented',
     feature: 'markdown batch render',
-  },
-  {
-    command: 'core_md_render_stream',
-    status: 'implemented',
-    feature: 'markdown streaming render',
   },
   // ── 工具 Worker 组（E，§2.2）──
   {

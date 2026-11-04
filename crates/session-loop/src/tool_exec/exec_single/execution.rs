@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
+use crate::tool_events::{ToolBackgroundAdmission, ToolBackgroundHost, ToolBackgroundRegistration};
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_stream_with_output_policy, ToolExecutionPolicy};
-use crate::tool_events::{
-    ToolBackgroundAdmission, ToolBackgroundHost, ToolBackgroundRegistration,
-};
 
 use super::super::*;
 use super::types::*;
@@ -66,9 +64,9 @@ impl ToolExecutor {
         // 在途条目的占位收口，不重复执行。
         let bg_plan = self.background_plan(tool.as_ref(), call, &exec_ctx, &exec_input, options);
         if let Some(plan) = &bg_plan {
-            if let Some(existing) = plan
-                .host
-                .find_inflight(&ctx.session_id, &call.tool_name, &plan.args_digest)
+            if let Some(existing) =
+                plan.host
+                    .find_inflight(&ctx.session_id, &call.tool_name, &plan.args_digest)
             {
                 if existing != call.id {
                     let elapsed = plan
@@ -440,9 +438,8 @@ pub(super) struct OwnedToolExecution {
     /// loop 竞速脱钩，后台不设时长上限）
     execute: std::pin::Pin<
         Box<
-            dyn std::future::Future<
-                    Output = Result<agent_tools::executor::ToolResult, ToolError>,
-                > + Send,
+            dyn std::future::Future<Output = Result<agent_tools::executor::ToolResult, ToolError>>
+                + Send,
         >,
     >,
     /// 工具本体（后处理上下文用）

@@ -5,15 +5,17 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 57 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-57 连续；2026-08-05 T-CF-04 定时器域兼容新增
+//! - 事件清单：注册表 59 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-59 连续；2026-08-05 T-CF-04 定时器域兼容新增
 //!   timer-fired/timer-cancelled，38 → 40；同日 T-CF-08 cron 域兼容新增
 //!   cron-fired，40 → 41；2026-08-11 任务连续性方案恢复域 + goal 域兼容
 //!   新增 8 变体（recovery-* ×5 + goal-* ×3），41 → 49；
 //!   2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测事件
 //!   （steering-evaluated 等，全 Delta 可丢级），49 → 57；
 //!   2026-08-16 统一输入流收敛战役 T1a：timeline-truncate 追加 58、
-//!   R1 tool-update 死契约删除回落 57）；
+//!   R1 tool-update 死契约删除回落 57；
+//!   2026-11-02 BG3 后台结果回注兼容新增 tool-backgrounded / tool-settled，
+//!   57 → 59）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
@@ -33,7 +35,7 @@ use conex_types::events::{
     AgentEvent, ApprovalDecision, BackpressureLevel, MissAttribution, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
-    ToolMetadata,
+    ToolMetadata, ToolSettledStatus,
 };
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{
@@ -231,16 +233,16 @@ fn registry_event_types_match_enum_declaration_order() {
         "注册表契约名必须为 engine-events"
     );
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 57);
+    assert_eq!(reg.event_count, 59);
     assert_eq!(
         reg.events.len(),
-        57,
-        "事件注册表必须是 57 条（R1 tool-update 删除）"
+        59,
+        "事件注册表必须是 59 条（BG3 后台结果回注新增两事件）"
     );
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 必须是 57 种域事件（R1 tool-update 删除）"
+        59,
+        "AgentEvent enum 必须是 59 种域事件（BG3 后台结果回注新增两事件）"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -566,24 +568,28 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "TimelineTruncateReason", TimelineTruncateReason, 2);
     // I1-α④ 补位（主控裁决）：+ ToolPromiseRecovery / + GoalContinue，5 → 7
     check_enum!(reg, "AgentMessageMetadataKind", AgentMessageMetadataKind, 7);
+    // BG3 后台结果回注（2026-11-02）：tool-settled.status 四值与注册表
+    // 终态子集 1:1
+    check_enum!(reg, "ToolSettledStatus", ToolSettledStatus, 4);
 }
 
-/// 事件总数仍为 57：`operation` 是 security-audit 载荷内的字段值
+/// 事件总数仍为 59：`operation` 是 security-audit 载荷内的字段值
 /// （SecurityAuditOperation 枚举），不是独立事件类型——新增 operation
 /// 值不改变事件清单；本测试锚定「注册表值 ↔ serde 行为」双向不漂移。
 #[test]
 fn security_audit_undeclared_write_operation_stays_in_sync() {
     let reg = registry();
-    // 事件总数保持 57（operation 值是载荷内字段，非独立事件类型；
+    // 事件总数保持 59（operation 值是载荷内字段，非独立事件类型；
     // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
     // 2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40；
     // 同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；
     // 2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49；
     // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测
     // 事件，49 → 57；2026-08-16 统一输入流收敛战役 T1a：timeline-truncate，
-    // 57 → 58；同日 R1 tool-update 死契约删除，58 → 57）
-    assert_eq!(reg.event_count, 57, "新增 operation 值不得改变事件总数");
-    assert_eq!(reg.events.len(), 57);
+    // 57 → 58；同日 R1 tool-update 死契约删除，58 → 57；
+    // 2026-11-02 BG3 后台结果回注兼容新增两事件，57 → 59）
+    assert_eq!(reg.event_count, 59, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 59);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
     let spec = &reg.enums["SecurityAuditOperation"];
@@ -1142,18 +1148,19 @@ fn timer_cancelled_backpressure_is_soft() {
 #[test]
 fn registry_drift_timer_events_registered() {
     let reg = registry();
-    // 累计基线：38 → 40 → 41 → 49 → 57 → 58 → 57（D-03 契约窗口：
+    // 累计基线：38 → 40 → 41 → 49 → 57 → 58 → 57 → 59（D-03 契约窗口：
     // tool-input-repaired 核销 + 9 新观测事件已登记；T1a 统一输入流收敛战役
-    // 追加 timeline-truncate；R1 tool-update 死契约删除回落 57）
+    // 追加 timeline-truncate；R1 tool-update 死契约删除回落 57；BG3 后台
+    // 结果回注兼容新增两事件升至 59）
     assert_eq!(
-        reg.event_count, 57,
-        "累计基线必须为 57（R1 tool-update 死契约删除）"
+        reg.event_count, 59,
+        "累计基线必须为 59（BG3 后台结果回注新增两事件）"
     );
-    assert_eq!(reg.events.len(), 57);
+    assert_eq!(reg.events.len(), 59);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 变体数必须为 57"
+        59,
+        "AgentEvent enum 变体数必须为 59"
     );
 
     // timer-fired（37）：Critical 必达落库，字段 sessionId/timerId/prompt/firedAtMs
@@ -1265,24 +1272,24 @@ fn cron_fired_backpressure_is_critical() {
     assert_eq!(event_backpressure(&event), BackpressureLevel::Critical);
 }
 
-/// cron-fired 登记终态断言（累计 41 → 49 → 57）：编号 39（2026-08-16
+/// cron-fired 登记终态断言（累计 41 → 49 → 59）：编号 39（2026-08-16
 /// R1 tool-update 死契约删除前移 1 位，原 40）、Critical、
 /// 字段形状 sessionId/cronId/prompt/expression/iteration/firedAtMs 全量必填，
 /// 与 serde 行为双向一致（T-CF-08，02-CF §4.7 冻结契约）；
 /// D8 恢复域 + goal 域 8 事件追加在 40-47（见
 /// [registry_drift_recovery_and_goal_events_registered]），D-03 九观测事件
-/// 追加在 48-56。
+/// 追加在 48-56，BG3 两事件追加在 58-59。
 #[test]
 fn registry_drift_cron_fired_registered() {
     let reg = registry();
     // 累计基线终态：40 → 41 → 49 → 57 → 58（T1a 追加 timeline-truncate）
-    // → 57（R1 tool-update 死契约删除）
-    assert_eq!(reg.event_count, 57);
-    assert_eq!(reg.events.len(), 57);
+    // → 57（R1 tool-update 死契约删除）→ 59（BG3 后台结果回注新增两事件）
+    assert_eq!(reg.event_count, 59);
+    assert_eq!(reg.events.len(), 59);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 变体数必须为 57（R1 tool-update 删除）"
+        59,
+        "AgentEvent enum 变体数必须为 59（BG3 后台结果回注新增两事件）"
     );
 
     // cron-fired（39）：Critical 必达落库，字段 sessionId/cronId/prompt/
@@ -1758,23 +1765,23 @@ fn registry_drift_tool_input_repaired_revoked() {
 
 // ── 8.7 统一输入流收敛战役 T1a：timeline-truncate 事件 + 新枚举登记 ──
 
-/// timeline-truncate 事件登记终态断言（累计 57）：编号 57（声明序尾插，
-/// 事件域 retraction）、rustVariant=TimelineTruncate、三决策
-/// Critical+Persist+Critical（default required，决定 3——R1 撤回语义关键事件
-/// 须 over-refuse）、字段形状 sessionId/runId/boundarySeq/reason/
-/// targetMessageId/timestamp 全量必填、与 serde 行为双向一致、seq 归属
-/// `TimelineTruncate.sequence > boundarySeq` 不变量随 schema 锁定。
+/// timeline-truncate 事件登记终态断言（累计 59）：编号 57（声明序尾插后
+/// BG3 两事件续接 58/59，事件域 retraction）、rustVariant=TimelineTruncate、
+/// 三决策 Critical+Persist+Critical（default required，决定 3——R1 撤回
+/// 语义关键事件须 over-refuse）、字段形状 sessionId/runId/boundarySeq/
+/// reason/targetMessageId/timestamp 全量必填、与 serde 行为双向一致、seq
+/// 归属 `TimelineTruncate.sequence > boundarySeq` 不变量随 schema 锁定。
 #[test]
 fn registry_drift_timeline_truncate_registered() {
     let reg = registry();
     // 累计基线终态：57 → 58（T1a 统一输入流收敛战役追加）→ 57
-    // （R1 tool-update 死契约删除）
-    assert_eq!(reg.event_count, 57);
-    assert_eq!(reg.events.len(), 57);
+    // （R1 tool-update 死契约删除）→ 59（BG3 后台结果回注新增两事件）
+    assert_eq!(reg.event_count, 59);
+    assert_eq!(reg.events.len(), 59);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 变体数必须为 57"
+        59,
+        "AgentEvent enum 变体数必须为 59"
     );
 
     // timeline-truncate（57）：Critical 必达落库，字段 sessionId/runId/
@@ -1855,13 +1862,20 @@ fn registry_drift_timeline_truncate_registered() {
         "type_name 与注册表 wire 不一致"
     );
 
-    // seq 归属不变量：枚举声明序中 timeline-truncate 为最后一变体，其自身取号
-    // 在 boundarySeq 之后（`TimelineTruncate.sequence > boundarySeq`）；
-    // 此处锁定 ALL_TYPE_NAMES 尾位即 timeline-truncate
+    // seq 归属不变量：`TimelineTruncate.sequence > boundarySeq` 是运行期
+    // 取号不变量，与声明序位置无关；BG3 两事件（58/59）为桥直发实时轨
+    // 事件（信封 runId/sequence 均缺省，不占会话 sequence），声明序续接在
+    // timeline-truncate 之后不影响本不变量。此处锁定 timeline-truncate
+    // 仍居声明序第 57 位、尾位为 BG3 的 tool-settled。
+    assert_eq!(
+        AgentEvent::ALL_TYPE_NAMES[56],
+        "timeline-truncate",
+        "timeline-truncate 必须居 enum 声明序第 57 位"
+    );
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.last().copied(),
-        Some("timeline-truncate"),
-        "enum 声明序尾位必须为 timeline-truncate（seq 取号在 boundarySeq 之后）"
+        Some("tool-settled"),
+        "enum 声明序尾位必须为 tool-settled（BG3 追加）"
     );
 
     // 新枚举双向锁定（数值已在 enum_values_match_serde_wire 锁定，此处锚定 wire 语义）
@@ -1881,6 +1895,117 @@ fn registry_drift_timeline_truncate_registered() {
             "tool-promise-recovery",
             "goal-continue",
         ]
+    );
+}
+
+// ── 8.8 BG3 后台结果回注：tool-backgrounded / tool-settled 事件 + 新枚举登记 ──
+
+/// BG3 两事件登记终态断言（累计 59）：编号 58/59（声明序尾插，事件域
+/// tool）、rustVariant=ToolBackgrounded/ToolSettled、三决策
+/// Critical+Persist+Critical（policy 默认臂——桥直发实时轨事件不占会话
+/// sequence，但契约分级与 tool-end 同级锁定）、字段形状全量必填、与 serde
+/// 行为双向一致；新枚举 ToolSettledStatus 四值与工具后台注册表终态子集
+/// 1:1（数值已在 enum_values_match_serde_wire 锁定，此处锚定 wire 语义）。
+#[test]
+fn registry_drift_tool_background_events_registered() {
+    let reg = registry();
+    assert_eq!(reg.event_count, 59);
+    assert_eq!(reg.events.len(), 59);
+    assert_eq!(AgentEvent::ALL_TYPE_NAMES.len(), 59);
+
+    // tool-backgrounded（58）：字段 sessionId/callId/toolName/elapsedMs
+    let bg = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "tool-backgrounded")
+        .expect("注册表必须登记 tool-backgrounded");
+    assert_eq!(bg.id, 58, "tool-backgrounded 编号必须为 58（声明序尾插）");
+    assert_eq!(bg.rust_variant, "ToolBackgrounded");
+    assert_eq!(bg.domain, "tool", "tool-backgrounded 必须归属 tool 域");
+    assert_eq!(bg.backpressure, "critical");
+    assert!(bg.persist, "tool-backgrounded 必须 Persist（默认臂口径）");
+    assert_eq!(bg.bridge_priority, "critical");
+    assert!(bg.kind_backpressure.is_none());
+    let bg_fields: Vec<&str> = bg.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        bg_fields,
+        vec!["sessionId", "callId", "toolName", "elapsedMs"],
+        "tool-backgrounded 字段形状与 BG3 定案不符"
+    );
+    assert!(
+        bg.fields.iter().all(|f| f.required),
+        "tool-backgrounded 字段必须全部必填"
+    );
+    let elapsed = bg
+        .fields
+        .iter()
+        .find(|f| f.name == "elapsedMs")
+        .expect("tool-backgrounded 缺 elapsedMs 字段");
+    assert_eq!(elapsed.ts_type, "number");
+    assert_eq!(elapsed.integer, Some(true), "elapsedMs 必须为整数（u64）");
+
+    // tool-settled（59）：字段 sessionId/callId/toolName/status/result，
+    // status 引用 ToolSettledStatus、result 复用 ToolBatchResult
+    let st = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "tool-settled")
+        .expect("注册表必须登记 tool-settled");
+    assert_eq!(st.id, 59, "tool-settled 编号必须为 59（声明序尾位）");
+    assert_eq!(st.rust_variant, "ToolSettled");
+    assert_eq!(st.domain, "tool", "tool-settled 必须归属 tool 域");
+    assert_eq!(st.backpressure, "critical");
+    assert!(st.persist, "tool-settled 必须 Persist（默认臂口径）");
+    assert_eq!(st.bridge_priority, "critical");
+    assert!(st.kind_backpressure.is_none());
+    let st_fields: Vec<&str> = st.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        st_fields,
+        vec!["sessionId", "callId", "toolName", "status", "result"],
+        "tool-settled 字段形状与 BG3 定案不符"
+    );
+    assert!(
+        st.fields.iter().all(|f| f.required),
+        "tool-settled 字段必须全部必填"
+    );
+    let status = st
+        .fields
+        .iter()
+        .find(|f| f.name == "status")
+        .expect("tool-settled 缺 status 字段");
+    assert_eq!(
+        status.ts_type, "ToolSettledStatus",
+        "status 必须引用 ToolSettledStatus"
+    );
+    let result = st
+        .fields
+        .iter()
+        .find(|f| f.name == "result")
+        .expect("tool-settled 缺 result 字段");
+    assert_eq!(
+        result.ts_type, "ToolBatchResult",
+        "result 必须复用 ToolBatchResult（与 tool-end 同构）"
+    );
+
+    // 注册表样本 ↔ serde 行为双向一致
+    for ev in [bg, st] {
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("{} 按注册表样本反序列化失败：{e}", ev.wire));
+        assert_eq!(
+            parsed.type_name(),
+            ev.wire,
+            "type_name 与注册表 wire 不一致"
+        );
+    }
+
+    // 新枚举 wire 语义锚定（四值 = 注册表终态子集 SettledOk/SettledErr/
+    // Cancelled/OutcomeUnknown）
+    let status_spec = &reg.enums["ToolSettledStatus"];
+    assert_eq!(status_spec.wire, "kebab-case");
+    assert_eq!(
+        status_spec.values,
+        vec!["ok", "error", "cancelled", "outcome-unknown"]
     );
 }
 
@@ -2472,14 +2597,15 @@ fn device_registry_capabilities_match_rust_all_capabilities() {
 fn device_registry_events_match_engine_and_sync_whitelist() {
     let reg = device_registry();
     let engine = registry();
-    // 事件段 57 条（49 变体 + D-03 九观测事件 + T1b timeline-truncate；
+    // 事件段 59 条（49 变体 + D-03 九观测事件 + T1b timeline-truncate；
     // 2026-08-14 契约窗口 tool-input-repaired 核销 + 9 新事件 49 → 57；
     // 2026-08-16 统一输入流收敛战役 T1b 补链 timeline-truncate 57 → 58；
-    // 同日 R1 tool-update 死契约删除回落 57）
+    // 同日 R1 tool-update 死契约删除回落 57；
+    // 2026-11-02 BG3 后台结果回注新增两事件 57 → 59）
     assert_eq!(
         reg.events.len(),
-        57,
-        "事件段必须为 57 条（R1 tool-update 删除后）"
+        59,
+        "事件段必须为 59 条（BG3 后台结果回注新增两事件）"
     );
     let mut strategy_counts: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
@@ -2547,7 +2673,10 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
     // → T 14 / R 33 / U 10；
     // 2026-08-16 T1b：timeline-truncate=transparent（event_cross_strategy 同判，
     // Critical 必达会话内事件透传不裁剪，R1 主控裁决）→ T 15 / R 33 / U 10；
-    // 同日 R1：tool-update（redacted）死契约删除 → T 15 / R 32 / U 10）
+    // 同日 R1：tool-update（redacted）死契约删除 → T 15 / R 32 / U 10；
+    // 2026-11-02 BG3：tool-backgrounded / tool-settled 跨端策略未裁决、
+    // 先行登记 fail-closed 元组兜底（对齐未登记变体网关默认）→ U 12，
+    // 策略裁决归 MOB 移动端消费批次）
     assert_eq!(
         strategy_counts.get("transparent").copied().unwrap_or(0),
         15,
@@ -2560,8 +2689,8 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
     );
     assert_eq!(
         strategy_counts.get("tuple").copied().unwrap_or(0),
-        10,
-        "元组下发必须为 10 类（M6 §5.1 10 + D8 goal-continuation-decided - D-03 tool-input-repaired 核销）"
+        12,
+        "元组下发必须为 12 类（M6 §5.1 10 + D8 goal-continuation-decided - D-03 tool-input-repaired 核销 + BG3 两事件 fail-closed 兜底）"
     );
 }
 
@@ -3471,6 +3600,21 @@ fn maximal_event(rust_variant: &str) -> AgentEvent {
             reason: TimelineTruncateReason::UserRequested,
             target_message_id: s.clone(),
             timestamp: s.clone(),
+        },
+        // BG3（2026-11-02）：后台回注两事件的最大样本（字段集断言
+        // 接入——settled 的 result 复用 ToolEnd 的 mx 样本构造）
+        "ToolBackgrounded" => AgentEvent::ToolBackgrounded {
+            session_id: s.clone(),
+            call_id: s.clone(),
+            tool_name: s.clone(),
+            elapsed_ms: 0,
+        },
+        "ToolSettled" => AgentEvent::ToolSettled {
+            session_id: s.clone(),
+            call_id: s.clone(),
+            tool_name: s.clone(),
+            status: ToolSettledStatus::Ok,
+            result: mx_tool_batch_result(),
         },
         other => panic!("注册表含未接入字段集合断言的事件变体 {other}"),
     }

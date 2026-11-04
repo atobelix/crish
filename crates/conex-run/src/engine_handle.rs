@@ -46,7 +46,8 @@ use crate::wait_channel::{
     WaitStore,
 };
 use crate::tool_background::{
-    RegistryBackgroundHost, SessionMetaToolBackgroundStore, ToolBackgroundRegistry,
+    RegistryBackgroundHost, SessionMetaToolBackgroundStore, ToolBackgroundEventSink,
+    ToolBackgroundRegistry,
 };
 use crate::wake_watcher::LastWakeupTracker;
 
@@ -129,6 +130,11 @@ pub struct EngineHandle {
     /// detach 宿主共享同一实例（装配于 [assemble_engine_core]，
     /// 禁止两处各建一份）
     tool_background: Arc<ToolBackgroundRegistry>,
+    /// BG3 后台事件 sink 注入槽（None = 未接线，不发射）：宿主是
+    /// 逐调用构造的薄壳，sink 单例存放在此、由 [Self::
+    /// tool_background_host] 每次构造时附着；装配注入点 =
+    /// CoreRunState::new（桥 sink 与 tool-wake 消费者同批构造）
+    tool_background_event_sink: Mutex<Option<Arc<dyn ToolBackgroundEventSink>>>,
 }
 
 impl EngineHandle {
@@ -191,6 +197,7 @@ impl EngineHandle {
             continuity: core.continuity,
             agent_policy: core.agent_policy,
             tool_background: core.tool_background,
+            tool_background_event_sink: Mutex::new(None),
         }
     }
 
@@ -239,14 +246,46 @@ impl EngineHandle {
     pub fn tool_background_registry(&self) -> &Arc<ToolBackgroundRegistry> {
         &self.tool_background
     }
+    /// BG3 事件 sink 注入（CoreRunState 装配时调用一次；后注入
+    /// 覆盖先注入——sink 单例语义，禁止多 sink 并存双发）
+    pub fn set_tool_background_event_sink(
+        &self,
+        sink: Arc<dyn ToolBackgroundEventSink>,
+    ) {
+        *self
+            .tool_background_event_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(sink);
+    }
+
     /// 执行器 detach 宿主（BG2）：薄适配新建、内含同一注册表
-    /// 单例——ToolBatchOptions 装配注入用（run_launch）
+    /// 单例——ToolBatchOptions 装配注入用（run_launch）；BG3 起
+    /// 附着已注入的事件 sink（未注入时不发射，行为与 BG2 一致）
     pub fn tool_background_host(
         &self,
     ) -> Arc<dyn session_loop::tool_events::ToolBackgroundHost> {
-        Arc::new(RegistryBackgroundHost::new(Arc::clone(
-            &self.tool_background,
-        )))
+        Arc::new(self.registry_background_host())
+    }
+    /// 宿主具体构造（tool_background_host 与命令层通知面共用：
+    /// 同一注册表单例 + 已注入 sink 附着，口径唯一）
+    fn registry_background_host(&self) -> RegistryBackgroundHost {
+        let mut host = RegistryBackgroundHost::new(Arc::clone(&self.tool_background));
+        if let Some(sink) = self
+            .tool_background_event_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
+            host = host.with_event_sink(sink);
+        }
+        host
+    }
+    /// 命令层通知面（BG3 扇出包装的合规入口）：UI 驱动的收口
+    /// （单条取消等）必须经具体宿主的 *_and_notify 包装发射
+    /// tool-settled 并入唤醒通道——trait 视图只暴露执行器接缝，
+    /// 直调注册表裸 cancel 即静默无事件（见 host.rs 发射纪律）
+    pub fn tool_background_notify_host(&self) -> RegistryBackgroundHost {
+        self.registry_background_host()
     }
 
     /// 按模型覆盖解析 provider（None / 与当前一致 → 当前 provider）。

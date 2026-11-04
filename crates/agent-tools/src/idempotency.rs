@@ -645,10 +645,7 @@ mod tests {
         let c = ctx("run-1", "sess-1", "read_file");
         assert_eq!(inflight_digest(&c, &args), execution_key(&c, &args));
         let tagged = json!({ "path": "a.txt", "snapshotTag": "tag-9" });
-        assert_eq!(
-            inflight_digest(&c, &tagged),
-            execution_key(&c, &tagged)
-        );
+        assert_eq!(inflight_digest(&c, &tagged), execution_key(&c, &tagged));
         assert_eq!(inflight_digest(&c, &tagged), "read_file@tag-9");
         let mut probed = ctx("run-1", "sess-1", "read_file");
         probed.extra_key_material = vec!["path:exists=true".to_string()];
