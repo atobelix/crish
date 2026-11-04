@@ -36,6 +36,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   className,
   style,
   onSelect,
+  closeOnCascadeSelect = true,
   onOpen,
   onClose,
   onMouseEnter,
@@ -372,6 +373,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
     anchor,
     triggerRef,
     isOpen,
+    onOpenChange: handleOpenChange,
     onMouseEnter: handleTriggerMouseEnter,
     onMouseLeave: handleTriggerMouseLeave,
     onClickCapture: clearHoverTimers,
@@ -484,6 +486,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                 style={submenuStyle}
                 side={submenuSide}
                 submenuRef={cascadeSubmenuRef}
+                closeOnCascadeSelect={closeOnCascadeSelect}
                 container={
                   dialogOverlay ??
                   (typeof document !== 'undefined' ? document.body : null)!

@@ -10,6 +10,8 @@ export interface SmartPanelTriggerOptions {
   /** 记录真实触发元素（外部点击判定 / 层栈锚点）；原 ref 仍会被转发。 */
   triggerRef: React.MutableRefObject<HTMLElement | null>;
   isOpen: boolean;
+  /** 显式展开/收起回调（驱动触发器点击反复切换闭环） */
+  onOpenChange?: (open: boolean) => void;
   onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
   onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
   /** 点击触发器时先于原 onClick 执行（清理悬停计时器）。 */
@@ -27,6 +29,7 @@ export function renderSmartPanelTrigger({
   anchor,
   triggerRef,
   isOpen,
+  onOpenChange,
   onMouseEnter: handleTriggerMouseEnter,
   onMouseLeave: handleTriggerMouseLeave,
   onClickCapture: clearHoverTimers,
@@ -92,6 +95,9 @@ export function renderSmartPanelTrigger({
         onClick: (e: React.MouseEvent<HTMLElement>) => {
           clearHoverTimers();
           originalProps?.onClick?.(e);
+          if (isOpen && onOpenChange) {
+            onOpenChange(false);
+          }
         },
       } as React.Attributes & {
         ref: (node: HTMLElement | null) => void;

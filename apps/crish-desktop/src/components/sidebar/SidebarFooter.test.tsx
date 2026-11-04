@@ -9,17 +9,31 @@ import { useAuthStore } from '../../store/authStore';
 import { useAccountUiStore } from '../../store/accountUiStore';
 import { AUTH_BASE_URL } from '../../api/authApi';
 
+const signedInUser = { id: 'u1', email: 'lin@example.com', name: 'Lin' };
+
 describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
   const onShowToast = vi.fn();
   const setUpdateAvailableState = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: false,
+      user: null,
+      profile: null,
+    });
   });
 
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: false,
+      user: null,
+      profile: null,
+    });
     useSettingsUiStore.setState({ showSettingsOverlay: false });
   });
 
@@ -64,6 +78,11 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
   });
 
   it('点击左列 UserProfileCard 触发 SettingsQuickMenu 快捷菜单', async () => {
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: true,
+      user: signedInUser,
+    });
     render(
       <UserProfileCard
         onShowToast={onShowToast}
@@ -72,7 +91,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
       />
     );
 
-    expect(screen.getByText('test-user')).toBeInTheDocument();
+    expect(screen.getByText('Lin')).toBeInTheDocument();
     expect(screen.queryByText('My Workspace')).toBeNull();
 
     const cardBtn = screen.getByTestId('user-profile-card');
@@ -80,9 +99,9 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
 
     const menu = await screen.findByRole('menu');
     expect(menu).toBeInTheDocument();
-    expect(screen.getByText('外观')).toBeInTheDocument();
-    expect(screen.getByText('模型与密钥')).toBeInTheDocument();
-    expect(screen.getByText('全部设置')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-settings-theme')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-settings-models')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-settings-all')).toBeInTheDocument();
   });
 
   it('updateAvailable 为 true 时渲染脉冲更新角标与更新按钮', () => {
@@ -116,8 +135,6 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
 });
 
 describe('UserProfileCard 头像：账户入口与展示', () => {
-  const signedInUser = { id: 'u1', email: 'lin@example.com', name: 'Lin' };
-
   beforeEach(() => {
     // 已初始化：避免卡片挂载时 initSession 覆盖测试设定的登录态
     useAuthStore.setState({
@@ -139,12 +156,12 @@ describe('UserProfileCard 头像：账户入口与展示', () => {
 
   it('未登录：中性占位头像，点击直登（应用级登录弹窗单实例），不打开设置', () => {
     render(<UserProfileCard />);
-    const avatar = screen.getByTestId('user-avatar-button');
-    expect(avatar).toHaveAttribute('data-avatar', 'placeholder');
-    expect(avatar).toHaveAttribute('aria-label', '登录或注册 Crish 账号');
+    const card = screen.getByTestId('user-profile-card');
+    const avatarNode = screen.getByTestId('user-avatar-node');
+    expect(avatarNode).toHaveAttribute('data-avatar', 'placeholder');
     expect(screen.getByText('未登录')).toBeInTheDocument();
 
-    fireEvent.click(avatar);
+    fireEvent.click(card);
 
     // 未登录直登：登录弹窗由 AppGlobalDialogs 单实例挂载（loginOpen 驱动），
     // 本组件树不渲染 dialog；设置浮层不打开（账户分区入口是登录后路径）
@@ -155,22 +172,25 @@ describe('UserProfileCard 头像：账户入口与展示', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('已登录无头像图：显示首字母圆与账号名，点击同样进入「账户」', () => {
-    useAuthStore.setState({ isLoggedIn: true, user: signedInUser });
+  it('已登录无头像图：显示首字母圆与账号名，点击同样触发快捷菜单', async () => {
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: true,
+      user: signedInUser,
+    });
     render(<UserProfileCard />);
-    const avatar = screen.getByTestId('user-avatar-button');
-    expect(avatar).toHaveAttribute('data-avatar', 'account');
-    expect(avatar).toHaveAttribute('aria-label', '在设置中管理账号');
-    expect(avatar).toHaveTextContent('L');
+    const avatarNode = screen.getByTestId('user-avatar-node');
+    expect(avatarNode).toHaveAttribute('data-avatar', 'account');
+    expect(avatarNode).toHaveTextContent('L');
     expect(screen.getByText('Lin')).toBeInTheDocument();
 
-    fireEvent.click(avatar);
-    expect(useSettingsUiStore.getState().settingsActiveTab).toBe('profile');
-    expect(useSettingsUiStore.getState().showSettingsOverlay).toBe(true);
+    fireEvent.click(screen.getByTestId('user-profile-card'));
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
   });
 
   it('已登录有头像图：相对路径拼账号中心地址，加载失败回落首字母', () => {
     useAuthStore.setState({
+      initialized: true,
       isLoggedIn: true,
       user: signedInUser,
       profile: {
@@ -182,18 +202,23 @@ describe('UserProfileCard 头像：账户入口与展示', () => {
       },
     });
     render(<UserProfileCard />);
-    const avatar = screen.getByTestId('user-avatar-button');
-    const img = avatar.querySelector('img');
+    const avatarNode = screen.getByTestId('user-avatar-node');
+    const img = avatarNode.querySelector('img');
     expect(img).not.toBeNull();
     expect(img).toHaveAttribute('src', `${AUTH_BASE_URL}/avatars/u1.png`);
     expect(screen.getByText('林')).toBeInTheDocument();
 
     fireEvent.error(img as HTMLImageElement);
-    expect(avatar.querySelector('img')).toBeNull();
-    expect(avatar).toHaveTextContent('林');
+    expect(avatarNode.querySelector('img')).toBeNull();
+    expect(avatarNode).toHaveTextContent('林');
   });
 
-  it('点击名字仍打开快捷设置菜单，不切换「账户」', async () => {
+  it('点击卡片打开快捷设置菜单，不直接打开设置全屏抽屉', async () => {
+    useAuthStore.setState({
+      initialized: true,
+      isLoggedIn: true,
+      user: signedInUser,
+    });
     render(<UserProfileCard />);
     fireEvent.click(screen.getByTestId('user-profile-card'));
     expect(await screen.findByRole('menu')).toBeInTheDocument();

@@ -19,8 +19,10 @@ interface SmartPanelCascadeSubmenuProps {
   /** 指针离开子菜单：触发平滑缓冲延迟关闭。 */
   onPointerLeave?: () => void;
   onSelect: (item: MenuItem) => void;
-  /** 选中后关闭整个面板（closeOnSelect !== false 时）。 */
+  /** 选中后关闭整个面板（closeOnSelect !== false 且 closeOnCascadeSelect !== false 时）。 */
   onRequestClose: () => void;
+  /** 点击级联子菜单条目时是否关闭整个展开面板（默认 true） */
+  closeOnCascadeSelect?: boolean;
 }
 
 /**
@@ -42,6 +44,7 @@ export const SmartPanelCascadeSubmenu: React.FC<
   onPointerLeave,
   onSelect,
   onRequestClose,
+  closeOnCascadeSelect = true,
 }) => {
   // 分离可滚动数据条目区与尾部常驻动作区（如「分割线 + 管理技能...」）
   const { bodyItems, footerItems } = useMemo(() => {
@@ -77,7 +80,10 @@ export const SmartPanelCascadeSubmenu: React.FC<
               subItem.onSelect?.(item, ev);
               subItem.onClick?.();
               onSelect(item);
-              if (subItem.closeOnSelect !== false) {
+              if (
+                subItem.closeOnSelect !== false &&
+                closeOnCascadeSelect !== false
+              ) {
                 onRequestClose();
               }
             }}
@@ -95,7 +101,10 @@ export const SmartPanelCascadeSubmenu: React.FC<
                 footerItem.onSelect?.(item, ev);
                 footerItem.onClick?.();
                 onSelect(item);
-                if (footerItem.closeOnSelect !== false) {
+                if (
+                  footerItem.closeOnSelect !== false &&
+                  closeOnCascadeSelect !== false
+                ) {
                   onRequestClose();
                 }
               }}

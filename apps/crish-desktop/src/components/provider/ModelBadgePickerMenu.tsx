@@ -351,6 +351,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                       key={m.id}
                       type="button"
                       variant="ghost"
+                      size="sm"
                       role="menuitem"
                       data-testid={`model-option-${m.id}`}
                       className={`${styles.modelItem} ${isSelected ? styles.isSelected : ''}`}

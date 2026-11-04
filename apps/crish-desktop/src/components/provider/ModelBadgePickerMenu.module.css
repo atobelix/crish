@@ -132,12 +132,14 @@
   width: 100%;
   border: none;
   background: transparent;
-  padding: 5px 8px;
+  padding: 6px 10px;
   border-radius: var(--sep-item-radius, 8px);
   height: auto;
-  min-height: 28px;
+  min-height: 32px;
   cursor: pointer;
   font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
   text-align: left;
   transition:
     background-color var(--transition-micro, 100ms ease),
@@ -168,6 +170,9 @@
 .modelName {
   flex: 1;
   font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
+  padding-top: 1px;
+  padding-bottom: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

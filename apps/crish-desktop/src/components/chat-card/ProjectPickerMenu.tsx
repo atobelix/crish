@@ -245,7 +245,6 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
             label: t('workspace.project.openLocal'),
             icon: <AppIcon name="folder-open" size={14} />,
             disabled: busy,
-            closeOnSelect: false,
             onSelect: () => void handlePickFolder(),
           },
           {
@@ -253,7 +252,6 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
             label: t('workspace.project.createBlank'),
             icon: <AppIcon name="folder-plus" size={14} />,
             disabled: busy,
-            closeOnSelect: false,
             onSelect: handleCreateEmptyProject,
           },
         ],

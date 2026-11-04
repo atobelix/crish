@@ -178,6 +178,8 @@ export interface SmartPanelProps {
   containerBoundaryRef?: RefObject<HTMLElement | null>;
   /** 项选中事件回调 */
   onSelect?: (item: MenuItem, event?: MouseEvent) => void;
+  /** 点击级联子菜单条目时是否关闭整个展开面板（默认 true：点击即关闭整盘；设为 false 时保持打开） */
+  closeOnCascadeSelect?: boolean;
   /** 面板打开时回调 */
   onOpen?: () => void;
   /** 面板关闭时回调 */

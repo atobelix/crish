@@ -86,6 +86,8 @@ export interface MenuProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   /** 点击菜单项时是否自动关闭菜单（默认 true；复合 children 场景可设 false 由项自身控制） */
   closeOnSelect?: boolean;
+  /** 点击级联子菜单/单选选项时是否关闭整个菜单（默认 true：点击即关闭整盘；特殊场景如主题对比可设为 false） */
+  closeOnCascadeSelect?: boolean;
   /** 自定义外点判定豁免谓词（例如自定义 Portal 浮层内的节点） */
   isDismissIgnoredTarget?: (target: Node | null) => boolean;
   cascade?: {
@@ -139,12 +141,12 @@ export type MenuRadioItemProps = React.ComponentPropsWithoutRef<
 export const MenuRadioItem = React.forwardRef<
   HTMLDivElement,
   MenuRadioItemProps
->(function MenuRadioItem({ closeOnClick = false, className, ...props }, ref) {
+>(function MenuRadioItem({ closeOnClick = true, className, ...props }, ref) {
   return (
     <BaseMenu.RadioItem
       ref={ref}
       closeOnClick={closeOnClick}
-      data-keep-open="true"
+      data-keep-open={closeOnClick ? undefined : 'true'}
       className={className}
       {...props}
     />
@@ -203,6 +205,7 @@ export const Menu: MenuComponent = Object.assign(
     outsideHandlers,
     onKeyDown,
     closeOnSelect = true,
+    closeOnCascadeSelect = true,
     isDismissIgnoredTarget,
     cascade,
   }: MenuProps) {
@@ -262,17 +265,12 @@ export const Menu: MenuComponent = Object.assign(
           return true;
         }
 
-        // 3. 命中 Base UI 菜单架构下的子菜单、级联浮层、Positioner、Popup、MenuItem、RadioItem 等
+        // 3. 命中当前菜单实例派生的子菜单 / 级联浮层（通过 menuId 实例绑定，杜绝全局 role="menu" 跨实例泄漏）
         if (
-          targetEl.closest('[data-base-ui-menu-popup]') ||
-          targetEl.closest('[data-base-ui-menu-positioner]') ||
-          targetEl.closest('[role="menu"]') ||
-          targetEl.closest('[role="menuitem"]') ||
-          targetEl.closest('[role="menuitemradio"]') ||
-          targetEl.closest('[role="menuitemcheckbox"]') ||
-          targetEl.closest('[data-menu-inside="true"]') ||
-          targetEl.closest('.sb-quick-sub-positioner') ||
-          targetEl.closest('.sb-quick-submenu')
+          targetEl.closest(`[data-menu-root-id="${menuId}"]`) ||
+          (contentRef.current &&
+            targetEl.closest('[data-menu-inside="true"]') &&
+            contentRef.current.contains(targetEl))
         ) {
           return true;
         }
@@ -284,7 +282,7 @@ export const Menu: MenuComponent = Object.assign(
 
         return false;
       },
-      [anchor, isDismissIgnoredTarget]
+      [anchor, isDismissIgnoredTarget, menuId]
     );
 
     const handleOpenChange = useCallback(
@@ -529,7 +527,10 @@ export const Menu: MenuComponent = Object.assign(
                     targetEl?.closest(
                       '[role="menuitemradio"], [data-keep-open="true"], [data-close-on-click="false"]'
                     ) != null;
-                  if (isRadioOrKeepOpen || !closeOnSelect) {
+                  if (!closeOnCascadeSelect && isRadioOrKeepOpen) {
+                    return;
+                  }
+                  if (!closeOnSelect && !isRadioOrKeepOpen) {
                     return;
                   }
                 }
@@ -550,6 +551,7 @@ export const Menu: MenuComponent = Object.assign(
               >
                 <BaseMenu.Popup
                   ref={contentRef}
+                  data-menu-root-id={menuId}
                   className={contentClasses}
                   style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
                   onKeyDown={handleKeyDown}

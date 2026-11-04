@@ -382,6 +382,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
       }}
       anchor={anchorRef}
       trigger={anchorRef ? undefined : finalTrigger}
+      closeOnCascadeSelect={false}
       position={{ side: 'top', align: 'start', sideOffset: 6 }}
       panel={{ contentClassName: styles.sbQuickMenu }}
     >
@@ -494,6 +495,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
               <Menu.Popup
                 className={`${styles.sbQuickSubmenu} sb-quick-submenu`}
                 data-menu-inside="true"
+                data-menu-root-id={menuId}
               >
                 <Menu.RadioGroup
                   value={theme}
