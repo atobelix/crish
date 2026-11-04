@@ -68,7 +68,12 @@
   opacity: 0;
 }
 
-/* chat — 严格贯彻 DIM-02 §1.1 契约：确立 [data-chat-scroll-container] 为会话内唯一的 overflow-y: auto 滚动容器 */
+/* chat — DIM-02 §1.1 契约（HC1 修订）：[data-chat-scroll-container] 为会话内唯一的
+ * 【页面级】overflow-y 滚动容器；其内只允许登记在册的受限内容滚动区——
+ * 工具视口（.toolSectionContent / .toolShellCmdViewport）、组聚合区（.groupBodyInner）、
+ * 过程段体（.sectionBodyInner，段内无真实工具组时）、代码块（.md-code-pre）、
+ * 思考区（.reasoningBody）。白名单由 styles/scroll-zones.contract.test.ts 机器看守，
+ * 白名单外在上述治理文件内新增嵌套纵向滚动判契约失败。 */
 .list,
 :global([data-chat-scroll-container]) {
   width: 100%;

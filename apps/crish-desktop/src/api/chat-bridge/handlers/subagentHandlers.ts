@@ -244,7 +244,9 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
     getSessionStoreState().markToolCallLocalStatus(
       parentToolCallId,
       'running',
-      '协作进行中…',
+      // R8：输出留空——分派关系由同组 SubagentDispatchCard 表达，
+      // 禁止再写占位输出冒充分派产出（原占位文案已下线）
+      '',
       {
         sessionId: sid,
       }

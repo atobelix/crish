@@ -153,6 +153,29 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       expect(screen.queryByText(/--- a\/file\.ts/)).toBeNull();
     });
 
+    it('错误行同时带 diffs 时应保留错误文本可见（E1 决策序 3 附带修正）', () => {
+      render(
+        <ToolCallOutputPane
+          toolId="t-out-diff-err"
+          name="replace_file_content"
+          output="Error: patch does not apply"
+          status="error"
+          diffs={[
+            {
+              filePath: 'file.ts',
+              additions: 1,
+              deletions: 1,
+              changes: [{ type: 'addition', content: 'new line' }],
+            },
+          ]}
+        />
+      );
+
+      // diff 预览仍在，但诊断文本不得被 diff 分支吞掉
+      expect(screen.getByText('file.ts')).toBeDefined();
+      expect(screen.getByText('Error: patch does not apply')).toBeDefined();
+    });
+
     it('大输出保护 (RUL-05) 截断时应展示下载日志与终端检查器按钮', () => {
       const onOpenTerminal = vi.fn();
       render(

@@ -8,6 +8,78 @@ export const CHAT_SCROLL_PAD_TOP = 48;
 export const CHAT_SCROLL_PAD_BOTTOM = 16;
 
 /**
+ * R12 尾部缓冲（最新消息上推）：文档尾部在底衬之外再留一段呼吸区，
+ * 使跟随静止点从「物理底」上移为「内容底上方 B 处」，最新一轮停在阅读舒适区。
+ * B 随视口高缩放 clamp(160px, 28% × 视口高, 360px)：
+ * 下限保证整段越过 composer 停靠区（104px）+ 列表底部渐隐（48px）的视觉压迫带；
+ * 上限封顶窗口内 maxScroll 膨胀与大视口下的空白感。
+ * 缓冲只在轮次窗口内存在（见 resolveTailBufferTargetPx），只由窗口与视口高派生，
+ * 不读行高测量、不读 scrollHeight，结构上不可能与测高形成反馈环。
+ */
+export const CHAT_SCROLL_TAIL_BUFFER_MIN_PX = 160;
+export const CHAT_SCROLL_TAIL_BUFFER_RATIO = 0.28;
+export const CHAT_SCROLL_TAIL_BUFFER_MAX_PX = 360;
+
+/** 尾部缓冲目标高度（px）：视口比例 + 上下限钳制，纯函数 */
+export function resolveTailBufferPx(viewportHeight: number): number {
+  const vh =
+    Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 0;
+  return Math.min(
+    CHAT_SCROLL_TAIL_BUFFER_MAX_PX,
+    Math.max(CHAT_SCROLL_TAIL_BUFFER_MIN_PX, vh * CHAT_SCROLL_TAIL_BUFFER_RATIO)
+  );
+}
+
+/**
+ * 尾部缓冲目标（纯函数，宿主在渲染期单点调用）：
+ * R12b 窗口语义——缓冲只在「发送 → 本轮终态」窗口内存在，窗口内目标 =
+ * resolveTailBufferPx（只随视口高）；窗口外（静止 / 阅读态）恒为 0，
+ * 消息可滑到物理真底（R12 的会话闩锁常驻 + 溢出门旧口径自此废止：
+ * 短会话发送同样张开，临时造出的可滚区正是发送上推的本意，窗口结束
+ * 收合后 maxScroll 回到原值，无静止假滚动区残留）。
+ * 窗口信号 turnActive 由宿主从轮次状态单点派生（processing 中的 assistant
+ * 消息为主信号，发送帧由发送闩桥接）；目标不读内容量、不读测高，无反馈环。
+ */
+export function resolveTailBufferTargetPx(params: {
+  turnActive: boolean;
+  viewportHeight: number;
+}): number {
+  return params.turnActive ? resolveTailBufferPx(params.viewportHeight) : 0;
+}
+
+/** 缓冲开启斜坡：单帧增量占当帧内容增量的上限比例（不得主导内容自身位移） */
+export const CHAT_SCROLL_TAIL_BUFFER_RAMP_CONTENT_FRACTION = 0.25;
+/** 缓冲开启斜坡：单帧增量绝对上限（px/帧） */
+export const CHAT_SCROLL_TAIL_BUFFER_RAMP_MAX_STEP_PX = 24;
+/** 缓冲开启斜坡：内容停长时的兜底推进量（px/帧，保证有限帧内开满） */
+export const CHAT_SCROLL_TAIL_BUFFER_RAMP_FALLBACK_STEP_PX = 12;
+
+/**
+ * 斜坡单帧步长（纯函数）：≤ 当帧内容增量的 25%、且 ≤ 24px；
+ * 内容增量不足时以 12px 兜底（仍受 24px 上限与剩余量约束）。
+ */
+export function resolveTailBufferRampStepPx(
+  contentIncrementPx: number,
+  remainingPx: number
+): number {
+  const remaining =
+    Number.isFinite(remainingPx) && remainingPx > 0 ? remainingPx : 0;
+  if (remaining <= 0) return 0;
+  const increment =
+    Number.isFinite(contentIncrementPx) && contentIncrementPx > 0
+      ? contentIncrementPx
+      : 0;
+  const cap = Math.min(
+    CHAT_SCROLL_TAIL_BUFFER_RAMP_MAX_STEP_PX,
+    Math.max(
+      CHAT_SCROLL_TAIL_BUFFER_RAMP_FALLBACK_STEP_PX,
+      increment * CHAT_SCROLL_TAIL_BUFFER_RAMP_CONTENT_FRACTION
+    )
+  );
+  return Math.min(cap, remaining);
+}
+
+/**
  * 运行时从 DOM 元素或全局读取 `--stream-pad-x`（兼容 fallback `--chat-stream-pad-x`, 20px）。
  * CSS 为唯一样式真源，本函数仅供非样式计算场景安全读取。
  */
@@ -60,10 +132,19 @@ export function readStreamPadding(el?: HTMLElement | null): {
   };
 }
 
-export function chatSpacerHeight(contentHeight: number): number {
+/**
+ * 文档总高 = 顶衬 + 内容 + 底衬 + 尾部缓冲（R12 第三项，默认 0 时与原公式逐值一致）。
+ * 全仓生产调用点恰 4 处，必须取同一帧的同一缓冲值（单点注入纪律）。
+ */
+export function chatSpacerHeight(
+  contentHeight: number,
+  tailBufferPx = 0
+): number {
   const h =
     Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 0;
-  return CHAT_SCROLL_PAD_TOP + h + CHAT_SCROLL_PAD_BOTTOM;
+  const tail =
+    Number.isFinite(tailBufferPx) && tailBufferPx > 0 ? tailBufferPx : 0;
+  return CHAT_SCROLL_PAD_TOP + h + CHAT_SCROLL_PAD_BOTTOM + tail;
 }
 
 /** 将 VSM 内容偏移映射到滚动文档坐标（含顶部内衬） */

@@ -154,7 +154,7 @@
 }
 
 .listScroll {
-  max-height: 200px;
+  max-height: var(--expand-max-h-viewport-sm);
   overflow-y: auto;
   padding-right: var(--space-0_5);
 }

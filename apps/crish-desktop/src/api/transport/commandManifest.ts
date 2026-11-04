@@ -11,12 +11,9 @@
  * 运行时对照：拉取成功后由 transport 层调用 commandMap 的
  * `checkCommandMapConsistency`，发现幽灵回归 → logger.warn（不崩）。
  */
-
 import { invokeTyped } from '../tauriInvoke';
-
 /** 契约版本（semver，§2.5 约定；与 Rust COMMAND_MANIFEST_CONTRACT_VERSION 同步） */
 const COMMAND_MANIFEST_CONTRACT_VERSION = '1.0.0';
-
 /** 清单条目（对应 Rust CommandManifestEntry，serde camelCase） */
 interface CommandManifestEntry {
   name: string;
@@ -27,13 +24,11 @@ interface CommandManifestEntry {
   /** 是否已挂入 Rust invoke_handler（登记先行命令为 false） */
   registered: boolean;
 }
-
 /** 命令清单（对应 Rust CommandManifest） */
 export interface CommandManifest {
   contractVersion: string;
   commands: CommandManifestEntry[];
 }
-
 /** 条目构造 helper（内置快照缩排用） */
 function entry(
   name: string,
@@ -43,7 +38,6 @@ function entry(
 ): CommandManifestEntry {
   return { name, family, surface, registered };
 }
-
 /**
  * 内置快照：镜像 Rust `COMMAND_MANIFEST`（173 = 注册面 173 全实装；与
  * command_manifest/mod.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
@@ -53,7 +47,8 @@ function entry(
  * T-F 06 退役登记：delete_session / touch_session / core_md_clear_cache 已随
  * 本快照退役（changelog 33 可查）；F-03（DM-07）已撤销 core_read_run_events
  * 的退役登记；Markdown 2.0 重新启用 core_md_render_stream（流式渲染）——
- * IPC 面恢复激活，本快照同步恢复。
+ * IPC 面恢复激活，本快照同步恢复。其于 2026-11-02 整波收口再次退役
+ * （全仓零调用，前端封装与命令面四方同步移除）。
  */
 export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -180,6 +175,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_cancel_run', 'core', 'engine'),
     entry('core_approve_tool', 'core', 'engine'),
     entry('core_deny_tool', 'core', 'engine'),
+    // BG5：工具后台轨 UI 面（引擎工具后台注册表，与 shell 进程任务分开）
+    entry('core_list_tool_background_tasks', 'core', 'engine'),
+    entry('core_cancel_tool_background_task', 'core', 'engine'),
     // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
     entry('list_sessions', 'session', 'engine'),
     entry('load_session_body', 'session', 'engine'),
@@ -195,7 +193,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('import_from_localstorage', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
     entry('core_md_render_batch', 'core', 'engine'),
-    entry('core_md_render_stream', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2）──
     entry('core_hash_compute', 'core', 'engine'),
     entry('core_base64_encode', 'core', 'engine'),
@@ -290,20 +287,16 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('prefs_delete', 'preferences', 'engine'),
   ],
 };
-
 /** 启动拉取到的真源清单（null = 未拉取成功，回退内置快照） */
 let cachedManifest: CommandManifest | null = null;
 /** 拉取进行中/已完成的 promise（幂等防并发） */
 let manifestInitStarted: Promise<CommandManifest> | null = null;
-
 /** 当前生效清单：拉取成功用真源，否则内置快照 */
 export function getEffectiveManifest(): CommandManifest {
   return cachedManifest ?? BUILTIN_COMMAND_MANIFEST;
 }
-
 /** 已 registered 命令名集合缓存（按清单实例记忆） */
 const registeredNameCache = new WeakMap<CommandManifest, ReadonlySet<string>>();
-
 function registeredNamesOf(manifest: CommandManifest): ReadonlySet<string> {
   let set = registeredNameCache.get(manifest);
   if (!set) {
@@ -314,7 +307,6 @@ function registeredNamesOf(manifest: CommandManifest): ReadonlySet<string> {
   }
   return set;
 }
-
 /**
  * 清单校验：命令名必须在清单内且 registered=true 才可调用。
  * （登记先行命令 registered=false——尚未接线，调用即显式 missing。）
@@ -322,7 +314,6 @@ function registeredNamesOf(manifest: CommandManifest): ReadonlySet<string> {
 export function isRegisteredCommand(name: string): boolean {
   return registeredNamesOf(getEffectiveManifest()).has(name);
 }
-
 /**
  * 启动拉取：`core_list_commands` 拉取真源清单并缓存（幂等）。
  * 失败 / 非 Tauri 环境 / 载荷非法 → 保持内置快照回退（不崩，不重试）。
@@ -346,7 +337,6 @@ export async function initCommandManifest(): Promise<CommandManifest> {
   })();
   return manifestInitStarted;
 }
-
 /**
  * 测试钩子：注入 / 重置清单状态。
  * - 无参或传 null：回退内置快照（默认行为）；

@@ -1,7 +1,8 @@
 /**
  * @vitest-environment jsdom
  * apps/crish-desktop/src/components/chat-message/FoldableProcessSection.test.tsx
- * 覆盖：until-found 属性注入、beforematch 精准触发、单轨测高作废调用、forceExpanded 约束。
+ * 覆盖：until-found 属性注入、beforematch 精准触发、单轨测高作废调用、
+ * R9 组体延迟挂载（二段式占位：组头常驻 + 组体占位）。
  */
 
 import React from 'react';
@@ -10,7 +11,10 @@ import { resolve } from 'node:path';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { FoldableProcessSection } from './FoldableProcessSection';
-import type { ProcessSegmentMetrics } from '../../api/toolPresentation';
+import type {
+  AssistantTimelineItem,
+  ProcessSegmentMetrics,
+} from '../../api/toolPresentation';
 
 function mockMetrics(): ProcessSegmentMetrics {
   return {
@@ -28,6 +32,7 @@ function mockMetrics(): ProcessSegmentMetrics {
     totalDurationMs: 0,
     hasRunning: false,
     hasError: false,
+    errorCount: 0,
     isStreaming: false,
     leadAction: 'read',
   };
@@ -124,34 +129,64 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
     expect(onToggle).toHaveBeenCalledWith('msg-test-proc-0', false);
   });
 
-  it('forceExpanded 为 true 时，折叠禁用且永不设置 hidden 属性', () => {
+  it('R9 组体延迟挂载：组头常驻、组体以等高占位替代条目渲染；撤除延迟后真实挂载', () => {
     const onToggle = vi.fn();
     const onExpand = vi.fn();
+    const renderItem = vi.fn(() => <div data-testid="deferred-item">item</div>);
+    const bodyPlaceholderRef = vi.fn();
+    const fakeItem = {
+      kind: 'tools',
+      key: 'k1',
+      items: [],
+    } as unknown as AssistantTimelineItem;
 
-    render(
+    const { rerender } = render(
       <FoldableProcessSection
-        msgId="msg-303"
-        sectionId="msg-test-proc-subagent"
-        items={[]}
-        metrics={{ ...mockMetrics(), subagentCount: 1, leadAction: 'subagent' }}
-        showWorkTime={false}
-        isExpanded={false}
+        msgId="msg-defer"
+        sectionId="msg-defer-proc-0"
+        items={[fakeItem]}
+        metrics={{ ...mockMetrics(), toolCount: 3, thoughtCount: 2 }}
+        showWorkTime={true}
+        isExpanded={true}
         isFoldable={true}
-        forceExpanded={true}
+        deferredBodyHeight={480}
+        bodyPlaceholderRef={bodyPlaceholderRef}
         onToggle={onToggle}
         onExpand={onExpand}
-        renderItem={() => <div>Subagent task</div>}
+        renderItem={renderItem}
       />
     );
 
-    const slot = screen.getByTestId('process-slot-msg-test-proc-subagent');
-    expect(slot.getAttribute('hidden')).toBeNull();
+    // 组头（控制栏）常驻可见
+    expect(
+      screen.getByTestId('process-toggle-msg-defer-proc-0')
+    ).toBeInTheDocument();
+    // 组体为等高占位，条目未渲染、renderItem 未被调用
+    const placeholder = screen.getByTestId('process-group-body-placeholder');
+    expect(placeholder.style.height).toBe('480px');
+    expect(placeholder.dataset.sectionId).toBe('msg-defer-proc-0');
+    expect(screen.queryByTestId('deferred-item')).toBeNull();
+    expect(renderItem).not.toHaveBeenCalled();
+    expect(bodyPlaceholderRef).toHaveBeenCalled();
 
-    const toggleBtn = screen.getByTestId(
-      'process-toggle-msg-test-proc-subagent'
+    // 宿主预热命中后撤除延迟 → 组体真实挂载
+    rerender(
+      <FoldableProcessSection
+        msgId="msg-defer"
+        sectionId="msg-defer-proc-0"
+        items={[fakeItem]}
+        metrics={{ ...mockMetrics(), toolCount: 3, thoughtCount: 2 }}
+        showWorkTime={true}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={onToggle}
+        onExpand={onExpand}
+        renderItem={renderItem}
+      />
     );
-    fireEvent.click(toggleBtn);
-    expect(onToggle).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('process-group-body-placeholder')).toBeNull();
+    expect(screen.getByTestId('deferred-item')).toBeInTheDocument();
+    expect(renderItem).toHaveBeenCalled();
   });
 
   it('收起过程分段时若顶部已滚出屏幕，触发视口平滑回退保护', () => {
@@ -316,7 +351,13 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
       endTime: 1_700_000_012_500,
     });
     expect(bar.getAttribute('data-live')).toBe('false');
-    expect(bar.textContent).toContain('已完成 12.5 秒');
+    // NumericText 把数字段拆成 AnimatedCounter（srOnly+视觉层），textContent 里小数点可能重复为 "12.5."；
+    // 用折叠空白后去重连续点号的方式验证文案语义完整性
+    const barText =
+      bar.textContent?.replace(/\s+/g, ' ').replace(/\.+/g, '.') ?? '';
+    expect(barText).toContain('已完成');
+    expect(barText).toContain('12.5');
+    expect(barText).toContain('秒');
   });
 
   it('单思考段 → 物理切除控制栏（直接直出思考槽位，绝不渲染已完成/思考外层栏）', () => {
@@ -440,10 +481,10 @@ describe('FoldableProcessSection.module.css 契约', () => {
     expect(hover).not.toMatch(/border/);
   });
 
-  it('控制栏文案与思考 / 工具行同构：14px、字重 400、继承色、严禁裸 Hex', () => {
+  it('控制栏文案与思考 / 工具行同构：13px、字重 400、继承色、严禁裸 Hex（D5 定版 · 2026-11-02）', () => {
     const block = css.match(/\.summaryLabel\s*\{[^}]*\}/)?.[0] ?? '';
     expect(block).not.toBe('');
-    expect(block).toMatch(/font-size:\s*14px/);
+    expect(block).toMatch(/font-size:\s*13px/);
     expect(block).not.toMatch(/font-size:\s*var\(--font-size-(xs|micro|xxs)/);
     expect(block).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(block).not.toMatch(/font-weight:\s*(500|600|700)/);
@@ -456,5 +497,74 @@ describe('FoldableProcessSection.module.css 契约', () => {
     expect(css).not.toMatch(
       /\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/
     );
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 非首组轻量组头（F1 · R-A）+ 段体渐隐接入（F1）
+ *   ① showWorkTime=false 且条目非空 → 渲染轻量组头（动作分布文案），
+ *      与首组同口径可折可重开（覆盖 R8 的渲染层省略口径）；
+ *   ② 段体经 ScrollFadeRegion 接入渐隐：宿主挂 sectionBodyInner、
+ *      内层带 scroll-fade-inner + sectionFadeInner。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+describe('FoldableProcessSection · 非首组轻量组头与段体渐隐（F1）', () => {
+  it('非工作时间段且条目非空 → 轻量组头在位（动作分布文案），点击触发 onToggle', () => {
+    const onToggle = vi.fn();
+    const fakeItem = {
+      kind: 'tools',
+      key: 'k1',
+      items: [],
+    } as unknown as AssistantTimelineItem;
+    render(
+      <FoldableProcessSection
+        msgId="msg-ra"
+        sectionId="msg-ra-proc-1"
+        items={[fakeItem]}
+        metrics={{
+          ...mockMetrics(),
+          toolCount: 2,
+          commandCount: 2,
+          leadAction: 'command',
+        }}
+        showWorkTime={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={onToggle}
+        onExpand={vi.fn()}
+        renderItem={() => <div data-testid="ra-item">item</div>}
+      />
+    );
+    const toggle = screen.getByTestId('process-toggle-msg-ra-proc-1');
+    expect(toggle.textContent).toContain('已运行 2 条命令');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith('msg-ra-proc-1', false);
+  });
+
+  it('段体经 ScrollFadeRegion 接入渐隐：宿主在位、内层带 fade 类与布局承接类', () => {
+    const fakeItem = {
+      kind: 'tools',
+      key: 'k1',
+      items: [],
+    } as unknown as AssistantTimelineItem;
+    const { container } = render(
+      <FoldableProcessSection
+        msgId="msg-ra"
+        sectionId="msg-ra-proc-1"
+        items={[fakeItem]}
+        metrics={{ ...mockMetrics(), toolCount: 2, commandCount: 2 }}
+        showWorkTime={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={vi.fn()}
+        onExpand={vi.fn()}
+        renderItem={() => <div data-testid="ra-item">item</div>}
+      />
+    );
+    const host = container.querySelector('[data-slot="scroll-fade-region"]');
+    expect(host).not.toBeNull();
+    const inner = host?.firstElementChild;
+    expect(inner?.className).toContain('scroll-fade-inner');
+    expect(inner?.className).toContain('sectionFadeInner');
+    expect(screen.getByTestId('ra-item')).toBeInTheDocument();
   });
 });

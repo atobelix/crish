@@ -182,6 +182,8 @@ export interface ActiveRowWindowParams {
   stickToBottom?: boolean;
   isInitialMount?: boolean;
   initialScroll?: 'bottom' | 'top';
+  /** R12 尾部缓冲高（px）：进入文档总高公式第三项；缺省 0 = 无缓冲的原几何 */
+  tailBufferPx?: number;
 }
 
 export interface MessageRowDomPurgeResult {
@@ -304,6 +306,7 @@ export function computeActiveRowWindow(
     stickToBottom = false,
     isInitialMount = false,
     initialScroll,
+    tailBufferPx = 0,
   } = params;
 
   const itemCount = msgIds.length;
@@ -321,7 +324,7 @@ export function computeActiveRowWindow(
     vsManager.getOrderCount() > 0
       ? vsManager.getTotalHeight(itemCount)
       : rawTotalHeight;
-  const totalHeight = chatSpacerHeight(contentHeight);
+  const totalHeight = chatSpacerHeight(contentHeight, tailBufferPx);
   const maxScroll = Math.max(0, totalHeight - viewportHeight);
   const isNearPhysicalBottom =
     maxScroll > 0 && maxScroll - scrollTop <= NEAR_BOTTOM_EPSILON_PX;

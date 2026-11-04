@@ -8,6 +8,7 @@
 import {
   AGENT_END_REASON_VALUES,
   TIMELINE_TRUNCATE_REASON_VALUES,
+  TOOL_SETTLED_STATUS_VALUES,
 } from '../../../../../../packages/shared-types/src/generated/engine';
 import type {
   EngineEvent,
@@ -19,6 +20,7 @@ import type {
   ToolMetadata,
   ToolBatchCall,
   ToolBatchResult,
+  ToolSettledStatus,
   ContextCompressionRecord,
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
@@ -141,6 +143,41 @@ export const CORE_NORMALIZERS: Record<string, Normalizer> = {
       sessionId: str(raw.sessionId),
       batchId: str(raw.batchId),
       timestamp: str(raw.timestamp),
+      result: {
+        id: str(r.toolCallId ?? r.id ?? r.tool_call_id),
+        toolName: str(r.toolName ?? r.name),
+        output:
+          typeof r.output === 'string'
+            ? { text: r.output }
+            : isRecord(r.output)
+              ? (r.output as unknown as ToolBatchResult['output'])
+              : {},
+        isError: r.isError === true || (r.error != null && r.error !== false),
+        durationMs: num(r.durationMs) ?? 0,
+      },
+    };
+  },
+  // BG3 后台结果回注域：引擎实时轨直发（无 runId/sequence 帧）；
+  // settled 的 result 与 tool-end 同构同归一口径（消费侧原位替换
+  // 占位结果），status 走生成规范值校验（非法值整帧拒绝）
+  'tool-backgrounded': (raw) => ({
+    type: 'tool-backgrounded',
+    sessionId: str(raw.sessionId),
+    callId: str(raw.callId),
+    toolName: str(raw.toolName),
+    elapsedMs: num(raw.elapsedMs) ?? 0,
+  }),
+  'tool-settled': (raw) => {
+    const status = str(raw.status).trim() as ToolSettledStatus;
+    if (!(TOOL_SETTLED_STATUS_VALUES as readonly string[]).includes(status))
+      return null;
+    const r = isRecord(raw.result) ? raw.result : {};
+    return {
+      type: 'tool-settled',
+      sessionId: str(raw.sessionId),
+      callId: str(raw.callId),
+      toolName: str(raw.toolName),
+      status,
       result: {
         id: str(r.toolCallId ?? r.id ?? r.tool_call_id),
         toolName: str(r.toolName ?? r.name),

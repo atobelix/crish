@@ -184,9 +184,14 @@ export function applySubagentEventToMessages(
       existing.arguments = args || existing.arguments;
       const exp = explanation || existing.explanation;
       if (exp !== undefined) existing.explanation = exp;
-      // 已终态的不因重放 tool-start 回退为 running
+      // 已终态的不因重放 tool-start 回退为 running；待审批同理——桥接层
+      // R7b 镜像可能先于 tool-start 投影落下 pending 条目（携带
+      // approvalMeta），迟到的 tool-start 只补 startedAt，状态与元数据
+      // 保持不动，待审批由 approval-resolved / tool-end 收口
       if (existing.status !== 'success' && existing.status !== 'error') {
-        existing.status = 'running';
+        if (existing.status !== 'pending_approval') {
+          existing.status = 'running';
+        }
         // 工具时刻补写（R4a）：仅补缺，不覆盖已有值（重放幂等）
         if (existing.startedAt == null) existing.startedAt = Date.now();
       }

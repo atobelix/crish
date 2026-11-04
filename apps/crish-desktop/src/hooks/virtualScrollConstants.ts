@@ -39,9 +39,16 @@ export const MESSAGE_VIEWPORT_OVERSCAN = 8;
 /** 默认容器可视高度兜底值（px） */
 export const DEFAULT_VIEWPORT_HEIGHT_PX = 600;
 
-/** 离底显现“回到底部”悬浮按钮阈值（px） */
+/** 离底显现“回到底部”悬浮按钮阈值（px，R12b 起按距物理底距离计量：scrollHeight − clientHeight − scrollTop） */
 export const SCROLL_BOTTOM_THRESHOLD_PX = 120;
 export const SCROLL_BOTTOM_THRESHOLD = SCROLL_BOTTOM_THRESHOLD_PX;
+
+/** R12 回底（FAB）滚动定时律：视线速度（px/s），时长与距离成比例 */
+export const SCROLL_TO_BOTTOM_SPEED_PX_PER_SEC = 2400;
+/** R12 回底滚动最短时长（ms）：防短距离闪跳式瞬移 */
+export const SCROLL_TO_BOTTOM_MIN_DURATION_MS = 120;
+/** R12 回底滚动最长时长（ms）：防长距离拖沓 */
+export const SCROLL_TO_BOTTOM_MAX_DURATION_MS = 450;
 
 /** 视口顶部亚像素判定容差（px） */
 export const SCROLL_TOP_EPSILON_PX = 2;

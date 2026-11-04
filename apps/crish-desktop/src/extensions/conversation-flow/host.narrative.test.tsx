@@ -4,7 +4,14 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ChatMessageListProps } from '../../components/chat-message-list/chatMessageListProps';
 import type { ChatToolStackSharedProps } from '../../components/chat-tool-call/ChatToolCallBlock';
 import type { SessionMessage } from '../../store/types';
@@ -177,12 +184,19 @@ describe('conversation-flow host 叙事块', () => {
       expect(container.querySelectorAll('[data-flow-purpose]')).toHaveLength(1);
     });
     expect(container.querySelector('pre')).toBeNull();
-    expect(container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    // AN1：全文常驻 DOM——折叠态 full 也在文档中（expanded=false 协调可见性）
+    expect(container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-flow-expanded="false"]')
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="chat-card-fallback"]')
     ).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /思考过程/ }));
     expect(container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-flow-expanded="true"]')
+    ).not.toBeNull();
   });
 });

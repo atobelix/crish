@@ -18,6 +18,23 @@ export const SCROLLBAR_TRACK_HIT_WIDTH_PX = 18;
 /** 折叠/展开交互锚定保护锁窗口持续时间（毫秒） */
 export const ANCHOR_GUARD_LOCK_WINDOW_MS = 500;
 
+/**
+ * 跟随脱离原因（批 B ⑰ 口径成文）：用户展开/折叠折叠区（思考区、工具组、
+ * 长消息、markdown details 等）即脱离贴底跟随，reason 统一命名
+ * `user-toggled-disclosure`，与 Cherry 的 detach 语义对齐。
+ *
+ * 等价性核对（2026-11-03）：桌面以「500ms 锚锁 + isAtBottom 同步置假」实现
+ * 同一规则——activateAnchorLock 是指针命中 / 键盘激活 / 原生 details toggle /
+ * 外部展开状态变更四路入口的唯一落点；锁定期内 handleScroll 的回底准入
+ * （isAtBottom = 物理底 && !isAnchorLocked()）与跟随 effect 的贴底条件
+ * 均被锚锁否决，展开/折叠引发的高度变化绝不把视口拽回底部；重新跟随只可能
+ * 发生在锁过期后、用户后续滚动事件真实落到物理底时。与 Cherry「toggle 即
+ * detach、显式回底才 re-follow」的行为差异仅在实现形态（定时守卫 vs 原因
+ * 枚举），用户可观察行为等价，故本批只成文、不改行为。
+ */
+export const FOLLOW_DETACH_REASON_USER_TOGGLED_DISCLOSURE =
+  'user-toggled-disclosure' as const;
+
 /** 匹配折叠/展开与交互触发器的 DOM 选择器 */
 export const TOGGLE_INTERACTIVE_SELECTOR = [
   'summary',
@@ -98,6 +115,8 @@ export function useScrollAnchoringOnToggle({
     []
   );
 
+  // 跟随脱离的唯一落点（reason = FOLLOW_DETACH_REASON_USER_TOGGLED_DISCLOSURE）：
+  // 四路入口（指针 / 键盘 / 原生 toggle / 外部展开状态）全部经此脱离跟随
   const activateAnchorLock = useCallback(() => {
     anchorLockUntilRef.current = Date.now() + ANCHOR_GUARD_LOCK_WINDOW_MS;
     isAtBottomRef.current = false;

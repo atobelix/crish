@@ -131,14 +131,16 @@ export class TokenRuntimeController {
         surfaceDeep: '#000000',
         elevDirection: isDark ? 1 : -1,
         textBase: fg,
-        borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
-        borderSubtle: `color-mix(in srgb, ${bg} 92%, ${fg} 8%)`,
+        borderColor: `color-mix(in srgb, ${bg} 92.5%, ${fg} 7.5%)`,
+        borderSubtle: `color-mix(in srgb, ${bg} 96%, ${fg} 4%)`,
         // [WAVE2-DEPRECATED]
         bgPrimary: bg,
         bgSecondary: isDark
           ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 95%, hsl(0 0% 100%) 5%)`,
-        bgTertiary: `color-mix(in srgb, ${bg} 90%, ${fg} 10%)`,
+        bgTertiary: isDark
+          ? `color-mix(in srgb, ${bg} 78%, ${fg} 22%)`
+          : `color-mix(in srgb, ${bg} 97.5%, ${fg} 2.5%)`,
         bgCard: isDark
           ? `color-mix(in srgb, ${bg} 95%, hsl(0 0% 100%) 5%)`
           : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
@@ -146,8 +148,8 @@ export class TokenRuntimeController {
           ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
         shellChromeBg: isDark
-          ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
-          : `color-mix(in srgb, ${bg} 88%, hsl(38 8% 70%) 12%)`,
+          ? `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`
+          : `color-mix(in srgb, ${bg} 97.5%, ${fg} 2.5%)`,
         textPrimary: fg,
         textSecondary: `color-mix(in srgb, ${bg} 22%, ${fg} 78%)`,
       };

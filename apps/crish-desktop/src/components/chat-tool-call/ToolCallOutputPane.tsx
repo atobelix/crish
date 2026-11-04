@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 
 import styles from './ChatToolCallBlock.module.css';
-import { Button, Tooltip } from '@/components/ui';
+import { Button, ScrollFadeRegion, Tooltip } from '@/components/ui';
 import type { FileDiff } from '../../store/types';
 import { ToolCallDiffPreview } from './ToolCallDiffPreview';
 import {
@@ -14,6 +14,7 @@ import {
 import { isEditToolName } from '../../api/toolFeedbackDiff';
 import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
+import { useToolOutputReveal } from './useToolOutputReveal';
 
 export interface ToolCallOutputPaneProps {
   toolId?: string;
@@ -21,6 +22,8 @@ export interface ToolCallOutputPaneProps {
   output?: string;
   rawOutput?: string;
   status?: string;
+  /** 工具完成时间戳（AN4 实况门判定用；缺省时不做时间戳门控） */
+  completedAt?: number;
   durationStr?: string | null;
   diffs?: FileDiff[];
   images?: string[];
@@ -40,6 +43,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   output = '',
   rawOutput,
   status = 'success',
+  completedAt,
   durationStr,
   diffs,
   images = [],
@@ -50,6 +54,10 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
 }) => {
   // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
   const { flag: copied, trigger: triggerCopied } = useTransientFlag(2000);
+
+  // HC1/F1：输出视口的边缘渐隐四态——经 ScrollFadeRegion 组件接入
+  // （宿主见下方渲染段；AN4 淡入的 animationend 经 onInnerAnimationEnd
+  // 落内层本体，与原接线口径一致）。
   const isError = status === 'error';
   const isRunning = status === 'running';
   const hasDiffs = Boolean(
@@ -104,6 +112,27 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
     () => formatJsonIfApplicable(output),
     [output]
   );
+
+  // AN4：输出揭示调度（结构判定基于全文解析——排空期解析结果恒定，
+  // 不随前缀翻转分支）。纯文本走行式排空/带外淡入，结构化整块淡入，
+  // 错误即时全量；判定与门控见 useToolOutputReveal / toolRevealState。
+  const isStructuredOutput = Boolean(
+    hasDiffs ||
+    hasImages ||
+    fileStat ||
+    readFile ||
+    (grepSearch && !grepSearch.isEmpty) ||
+    (listDir && !listDir.isEmpty)
+  );
+  const reveal = useToolOutputReveal({
+    toolId,
+    text: formattedOutput,
+    hasContent: !emptyBody,
+    kind: isStructuredOutput ? 'structured' : 'text',
+    isError,
+    status,
+    completedAt,
+  });
 
   // 仅在非单卡模式（有“输出”标签）或存在明确状态标记（执行失败/执行中）时才渲染独立 header 行
   const showHeader = useMemo(() => {
@@ -242,7 +271,13 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
         </div>
       ) : null}
 
-      <div className={styles.toolSectionContent}>
+      <ScrollFadeRegion
+        className={styles.toolSectionContent}
+        innerClassName={
+          reveal.phase === 'fading' ? styles.outputRevealFade : undefined
+        }
+        onInnerAnimationEnd={reveal.handleFadeEnd}
+      >
         {hasDiffs
           ? diffs!.map((d) => (
               <ToolCallDiffPreview
@@ -254,6 +289,15 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
               />
             ))
           : null}
+
+        {/* E1 决策序 3 附带修正：错误行同时带 diffs 时，诊断文本不得
+            被 diff 分支吞掉——预览之后补渲染错误输出全文（错误必须
+            就地可读）。成功改道行不再经行内渲染到达此分支。
+            （本段曾被 F1 的 ScrollFadeRegion 迁移整文件覆写冲掉，
+            已按段落级在其现行版上重新落位。） */}
+        {hasDiffs && isError && formattedOutput ? (
+          <pre className={styles.toolOutputCode}>{reveal.displayText}</pre>
+        ) : null}
 
         {hasImages ? (
           <div className={styles.toolResultImages}>
@@ -361,7 +405,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
               ))}
             </div>
           ) : formattedOutput ? (
-            <pre className={styles.toolOutputCode}>{formattedOutput}</pre>
+            <pre className={styles.toolOutputCode}>{reveal.displayText}</pre>
           ) : null
         ) : null}
 
@@ -387,7 +431,7 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
             ) : null}
           </div>
         ) : null}
-      </div>
+      </ScrollFadeRegion>
     </section>
   );
 };

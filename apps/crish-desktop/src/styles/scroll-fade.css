@@ -1,0 +1,130 @@
+/*
+* 内部滚动区边缘渐隐（HC1 · 容器治理）——全域唯一实现，各容器禁止自调数值。
+*
+* mask-image 作用于滚动宿主的「内容内层」（.scroll-fade-inner），不用覆盖层：
+* 覆盖层须取一块底色盖住内容端部，而本产品表面靠亮度台阶区分、没有标准底色可取，
+* 必然露色差边缘；mask 只消费 alpha 通道，与底色无关，亮/暗主题零适配。
+* mask 加在内层而非宿主本体：滚动条绘制在宿主本体上，不受淡化、全程可见。
+*
+* 宿主 data-fade 由 useScrollFade 四态状态机维护
+* （none=不可滚 / bottom=在顶只显底部 / both=中间上下都显 / top=在底只显顶部），
+* 状态切换不做过渡——滚动中的离散翻转带时长会产生拖影，此为定案口径。
+*
+* 沿用侧栏会话列表先例的三阶语言（全透明 → 0.45 中站 → 全不透明），
+* 带高 --tool-fade-size（28px）；双端渐变以单条 gradient 合成，
+* 不用 mask-composite（规避 WebView2 合成兼容风险，视觉等价）。
+*/
+
+[data-fade='bottom'] > .scroll-fade-inner {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+}
+
+[data-fade='top'] > .scroll-fade-inner {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 100%
+  );
+}
+
+[data-fade='both'] > .scroll-fade-inner {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+}
+
+/*
+* Markdown 代码块：渲染面为 innerHTML（无 React 宿主组件），内层即 pre 的 <code> 子元素；
+* data-fade 由 MarkdownSurface 渲染后经 bindScrollFadesIn 绑定维护，与上同源同值。
+*/
+:is(.conex-markdown, .md-rendered) .md-code-pre[data-fade='bottom'] > code {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-pre[data-fade='top'] > code {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 100%
+  );
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-pre[data-fade='both'] > code {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.45) calc(var(--tool-fade-size, 28px) * 0.36),
+    #000 var(--tool-fade-size, 28px),
+    #000 calc(100% - var(--tool-fade-size, 28px)),
+    rgba(0, 0, 0, 0.45) calc(100% - var(--tool-fade-size, 28px) * 0.36),
+    transparent 100%
+  );
+}

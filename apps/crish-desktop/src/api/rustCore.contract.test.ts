@@ -1,9 +1,11 @@
 /**
  * Markdown IPC 契约与搜索索引三态测试。
  *
- * 前端封装 core_md_render_batch / core_md_render_stream 两条命令，统一携带
+ * 前端封装 core_md_render_batch 命令，统一携带
  * variant（chat/document），统一返回 `{ html, truncated }`。命令缺失或失败
  * 时返回 null（批量返回 null 数组），严禁回退 JS 渲染器。
+ * （core_md_render_stream 已于 2026-11-02 整波收口删除：全仓零调用的死面；
+ * conex-markdown 内核的 render_markdown_stream 仍为库级 API 保留。）
  *
  * 可观测面口径：`logInternalError` 已收敛为唯一走 `logger.warn`
  * （userFacingErrors.ts「删除 console.warn 裸调」），而 LoggerService
@@ -13,11 +15,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invokeResult } from './tauriInvoke';
-import {
-  rebuildSearchIndex,
-  renderMarkdownBatch,
-  renderMarkdownStream,
-} from './rustCore';
+import { rebuildSearchIndex, renderMarkdownBatch } from './rustCore';
 import { logger } from '../services/LoggerService';
 
 vi.mock('./tauriInvoke', async (importOriginal) => {
@@ -96,28 +94,6 @@ describe('core_md_render_batch', () => {
       texts: ['a'],
       variant: 'chat',
     });
-  });
-});
-
-describe('core_md_render_stream', () => {
-  it('ok → 返回 html/truncated 并携带 variant', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({
-      status: 'ok',
-      data: { html: '<p>partial</p>', truncated: false },
-    });
-    await expect(renderMarkdownStream('partial', 'chat')).resolves.toEqual({
-      html: '<p>partial</p>',
-      truncated: false,
-    });
-    expect(mockedInvokeResult).toHaveBeenCalledWith('core_md_render_stream', {
-      text: 'partial',
-      variant: 'chat',
-    });
-  });
-
-  it('missing → null', async () => {
-    mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
-    await expect(renderMarkdownStream('a', 'chat')).resolves.toBeNull();
   });
 });
 

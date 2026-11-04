@@ -27,7 +27,8 @@ import type { ToolRenderItem } from '../../api/toolPresentation';
 import {
   toolCommandType,
   resolveToolRowOpen,
-  toolHasExpandableBody,
+  resolveToolExpansionPolicy,
+  type ToolExpansionPolicy,
 } from '../../api/toolPresentation';
 import { extractFilePathFromToolArgs } from '../../api/workspaceFsApi';
 import { extractToolCommand } from '../../api/toolPresentation';
@@ -46,19 +47,16 @@ export const IN_PLACE_REPLACEMENT_BUFFER_MS = 100;
 /** 100ms 展开/收起防抖冷却窗口（毫秒） */
 export const EXPANSION_DEBOUNCE_MS = 100;
 
-/** 100ms 原地指示翻转动效时长（毫秒） */
-export const IN_PLACE_FLIP_DURATION_MS = 100;
+/** 原地指示动效时长（毫秒）：AN4 起为 150ms opacity 交叉淡化窗
+ * （废 100ms 翻转），状态窗须完整覆盖动画时长，勿改回 100 */
+export const IN_PLACE_FLIP_DURATION_MS = 150;
 
 /** 最大保留的位移记录条数 */
 const MAX_DISPLACEMENT_HISTORY = 50;
 
 /** 工具参数特征类别 */
 export type ToolParameterKind =
-  | 'file'
-  | 'command'
-  | 'search'
-  | 'subagent'
-  | 'generic';
+  'file' | 'command' | 'search' | 'subagent' | 'generic';
 
 /** 原地替换裁决结果 */
 export interface InPlaceReplacementDecision {
@@ -76,7 +74,8 @@ export interface InPlaceReplacementDecision {
 }
 
 /** 原地翻转状态机阶段 */
-export type ToolInPlaceFlipPhase = 'idle' | 'buffering' | 'flipping' | 'settled';
+export type ToolInPlaceFlipPhase =
+  'idle' | 'buffering' | 'flipping' | 'settled';
 
 /** 展开/折叠相对位移度量账本 */
 export interface ToolDisplacementRecord {
@@ -191,10 +190,7 @@ export function isWithinInPlaceBuffer(
   next: MessageToolCall,
   bufferMs: number = IN_PLACE_REPLACEMENT_BUFFER_MS
 ): { within: boolean; elapsedMs: number } {
-  if (
-    prev.completedAt !== undefined &&
-    next.startedAt !== undefined
-  ) {
+  if (prev.completedAt !== undefined && next.startedAt !== undefined) {
     const elapsed = next.startedAt - prev.completedAt;
     return {
       within: elapsed >= 0 && elapsed <= bufferMs,
@@ -323,7 +319,10 @@ export function calculateRelativeDisplacement(
   // 若存在锚点，理想补偿下视口与锚点的相对偏移保持恒定 (relativeDisplacement === 0)
   const relativeDisplacement =
     snapshot.anchor != null
-      ? deltaScrollTop - (deltaHeight > 0 ? deltaHeight : 0) + (deltaHeight > 0 ? deltaHeight : 0) === deltaScrollTop
+      ? deltaScrollTop -
+          (deltaHeight > 0 ? deltaHeight : 0) +
+          (deltaHeight > 0 ? deltaHeight : 0) ===
+        deltaScrollTop
         ? 0
         : deltaScrollTop
       : deltaScrollTop;
@@ -353,10 +352,7 @@ export function findScrollContainer(
     }
     if (typeof window !== 'undefined' && window.getComputedStyle) {
       const style = window.getComputedStyle(curr);
-      if (
-        style.overflowY === 'auto' ||
-        style.overflowY === 'scroll'
-      ) {
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
         return curr;
       }
     }
@@ -401,7 +397,8 @@ export interface UseToolExpansionStateOptions {
   vsm?: VirtualScrollManager | null | undefined;
   debounceMs?: number | undefined;
   bufferMs?: number | undefined;
-  onDisplacementRecorded?: ((record: ToolDisplacementRecord) => void) | undefined;
+  onDisplacementRecorded?:
+    ((record: ToolDisplacementRecord) => void) | undefined;
 }
 
 /**
@@ -410,6 +407,8 @@ export interface UseToolExpansionStateOptions {
 export interface UseToolExpansionStateResult {
   isOpen: boolean;
   canToggle: boolean;
+  /** E1 展开政策三态（唯一真源 resolveToolExpansionPolicy）：canToggle 仅是其 inline 投影 */
+  expansionPolicy: ToolExpansionPolicy;
   isFlipping: boolean;
   flipPhase: ToolInPlaceFlipPhase;
   shouldReplace: boolean;
@@ -442,9 +441,10 @@ export function useToolExpansionState({
   const [lastDisplacement, setLastDisplacement] =
     useState<ToolDisplacementRecord | null>(null);
 
-  // 基础折叠与展开状态解析
+  // 基础折叠与展开状态解析（E1：可否内联展开只经政策函数判定）
   const isOpen = resolveToolRowOpen(expandedTools, tc.id, tc);
-  const canToggle = toolHasExpandableBody(tc);
+  const expansionPolicy = resolveToolExpansionPolicy(tc);
+  const canToggle = expansionPolicy === 'inline';
 
   // 100ms 原地替换契约裁决
   const replacementDecision = useMemo(
@@ -459,7 +459,7 @@ export function useToolExpansionState({
   );
   const isFlipping = flipPhase === 'flipping';
 
-  // 当判定原地替换生效时，触发 100ms 翻转计时器
+  // 当判定原地替换生效时，触发原地指示动效计时器（AN4：150ms 交叉淡化窗）
   useEffect(() => {
     if (!shouldReplace) {
       setFlipPhase('idle');
@@ -576,6 +576,7 @@ export function useToolExpansionState({
   return {
     isOpen,
     canToggle,
+    expansionPolicy,
     isFlipping,
     flipPhase,
     shouldReplace,

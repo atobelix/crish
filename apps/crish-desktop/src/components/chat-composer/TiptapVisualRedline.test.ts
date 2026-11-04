@@ -63,8 +63,12 @@ describe('chat-composer 视觉红线（T10 & P6）', () => {
 
     it(`${name}：克制动效（编辑器无位移；斜杠菜单走微位移与 token 缓动）`, () => {
       if (name === 'TiptapSlashMenu.module.css') {
-        expect(css).toMatch(/var\(--ease-emphasized\)/);
-        expect(css).toMatch(/scale\(0\.985\)/);
+        // AN2 / A6 归队后：斜杠菜单不再自备 keyframes 与缓动，进出场统一走全域
+        // 浮层配方（共享 crish-popover-* keyframes + popover token，缓动/时长在 token 内）
+        expect(css).toMatch(/var\(--transition-popover-enter\)/);
+        expect(css).toMatch(/var\(--transition-popover-exit\)/);
+        expect(css).toMatch(/crish-popover-enter/);
+        expect(css).not.toMatch(/@keyframes/);
         expect(css).not.toMatch(/translateY\([1-9]\d+px\)/);
       } else {
         expect(css).not.toMatch(/transform:/);

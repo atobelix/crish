@@ -136,9 +136,11 @@ describe('openAgentPanel pure helpers', () => {
       expect(resolveAgentPanelStatusLabel('running')).toBe('运行中');
       expect(resolveAgentPanelStatusLabel('failed')).toBe('失败');
       expect(resolveAgentPanelStatusLabel('stopped')).toBe('已停止');
-      expect(resolveAgentPanelStatusLabel('completed')).toBe('完成');
-      expect(resolveAgentPanelStatusLabel(undefined)).toBe('完成');
-      expect(resolveAgentPanelStatusLabel('weird')).toBe('完成');
+      expect(resolveAgentPanelStatusLabel('completed')).toBe('已完成');
+      // R8：未知 / 缺省状态不再臆断为已完成——词表单一来源返回空串，
+      // 由调用方（SubagentDispatchCard）按自身语境兜底
+      expect(resolveAgentPanelStatusLabel(undefined)).toBe('');
+      expect(resolveAgentPanelStatusLabel('weird')).toBe('');
     });
   });
 

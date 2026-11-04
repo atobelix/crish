@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * 组件被虚拟列表回收行、被条件分支卸载、或测试环境 teardown 之后，
  * 挂起的定时器仍会触发 setState；React 内部 `resolveUpdatePriority`
  * 随即访问已拆除的 `window` ⇒ 抛未捕获异常。全量套件曾据此判
- * `ModernToolCall.test.tsx` 失败（isolated 复跑恒绿 ⇒ 并发下才暴露）。
+ * `ToolCallDiffPreview.test.tsx（原 ModernToolCall.test.tsx）` 失败（isolated 复跑恒绿 ⇒ 并发下才暴露）。
  *
  * 统一到单一实现，杜绝同型泄漏复发（SSOT；不再逐组件手写定时器账本）。
  *

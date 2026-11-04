@@ -54,11 +54,11 @@ function getPerfTierSnapshot(): boolean {
 }
 
 /**
- * 综合动效裁决 Hook：汇聚 OS 无障碍偏好与 Conex 节能档
+ * 综合动效裁决 Hook：只认 OS 无障碍偏好
  *
- * 当满足以下任一条件时，返回 true（指示当前应禁用复杂动效）：
- * 1. 用户开启了系统级 prefers-reduced-motion；
- * 2. Conex 运行在 eco 节能性能档。
+ * isReduced 只由系统级 prefers-reduced-motion 决定（X1 解耦口径：
+ * 减动效只响应系统设置）。isEcoTier 仅作信息位，供高成本效果的
+ * 降级决策参考，绝不汇入 isReduced——性能档不是减动效通道。
  */
 export function useEffectiveReducedMotion(): {
   isReduced: boolean;
@@ -73,7 +73,7 @@ export function useEffectiveReducedMotion(): {
   );
 
   return {
-    isReduced: isReducedMotion || isEcoTier,
+    isReduced: isReducedMotion,
     isHydrated: true,
     isEcoTier,
   };

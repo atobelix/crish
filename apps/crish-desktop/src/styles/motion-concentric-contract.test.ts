@@ -232,13 +232,13 @@ describe('契约测试：同心几何圆角与物理动效防回潮门禁 (DIM-0
     // 权威双模超链接蓝色 Token 契约
     expect(
       tokensContent,
-      'tokens.css Light 模式必须定义科技蓝超链接 Token (--color-link: #2563eb 或 hsl(217 91% 54%))'
-    ).toMatch(/--color-link:\s*(?:#2563eb|hsl\(\s*217\s+91%\s+54%\s*\))/i);
+      'tokens.css Light 模式必须定义靛紫超链接 Token (--color-link: #6550b9；2026-11-02 用户裁决弃用科技蓝)'
+    ).toMatch(/--color-link:\s*#6550b9/i);
 
     expect(
       tokensContent,
-      'tokens.css Dark 模式必须定义天幕蓝超链接 Token (--color-link: #60a5fa 或 hsl(212 96% 68%))'
-    ).toMatch(/--color-link:\s*(?:#60a5fa|hsl\(\s*212\s+96%\s+68%\s*\))/i);
+      'tokens.css Dark 模式必须定义提亮靛紫超链接 Token (--color-link: #b3a5f2)'
+    ).toMatch(/--color-link:\s*#b3a5f2/i);
 
     expect(
       tokensContent,

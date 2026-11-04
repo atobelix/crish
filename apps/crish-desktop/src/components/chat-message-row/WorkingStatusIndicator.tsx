@@ -40,7 +40,7 @@ export const WorkingStatusIndicator: React.FC<WorkingStatusIndicatorProps> =
           data-testid="working-status-indicator"
           data-mode="working"
         >
-          <span className={styles.text}>{statusText || '工作中…'}</span>
+          <span className={styles.text}>{statusText || '运行中…'}</span>
         </div>
       );
     }

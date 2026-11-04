@@ -45,6 +45,7 @@ const GUARDED_FILES = [
   'components/settings-extensions/ExtensionDetailModal.module.css',
   'components/settings/ExternalSessionImport.module.css',
   'components/settings/FontSettingsSection.module.css',
+  'components/settings/RunDetailDialog.module.css',
   'components/settings/RunHistoryList.module.css',
   'components/settings/SettingsArchiveTab.module.css',
   'components/settings/SettingsDevicesTab.module.css',
@@ -69,20 +70,23 @@ const GUARDED_FILES = [
  * 烧减记录（2026-11-01）：总数 74 → 52；changePassword、
  * ExtensionDetailModal、SettingsQuickMenu 三文件清零移入 GUARDED_FILES；
  * 其余保留处均已在各 CSS 文件内逐处注明「刻度外裸值……授权保留」的性质。
+ * 烧减记录（2026-11-02，高度分档收编）：RunDetailDialog 三处详情区上限
+ * 入档（--expand-max-h-viewport-sm）清零，移入 GUARDED_FILES；
+ * ModelsSettingsTab 下拉 210 入档（8 → 7）；SkillEditorModal 候选 220
+ * 入档（6 → 5）。
  */
 const DEBT_FILES: Record<string, number> = {
   'components/account/account.module.css': 1,
   'components/account/accountControls.module.css': 1,
   'components/settings-extensions/SettingsExtensionsTab.module.css': 1,
   'components/settings-mcp/McpSettingsTab.module.css': 1,
-  'components/settings-models/ModelsSettingsTab.module.css': 8,
+  'components/settings-models/ModelsSettingsTab.module.css': 7,
   'components/settings-models/ScanResultsModal.module.css': 1,
   'components/settings-models/YamlConfigEditorModal.module.css': 2,
-  'components/settings-skills/SkillEditorModal.module.css': 6,
+  'components/settings-skills/SkillEditorModal.module.css': 5,
   'components/settings-skills/SkillsSettingsTab.module.css': 10,
   'components/settings/FontSelectField.module.css': 3,
   'components/settings/PriceConfigModal.module.css': 1,
-  'components/settings/RunDetailDialog.module.css': 3,
   'components/settings/ScheduledTasksPanel.module.css': 2,
   'components/settings/SettingsAboutTab.module.css': 1,
   'components/settings/SettingsRulesTab.module.css': 2,

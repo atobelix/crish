@@ -2,7 +2,7 @@
  * 编辑与差异统计（Diff / Git Stats）纯函数。
  */
 
-import type { MessageToolCall } from '../../store/layoutStore';
+import type { FileDiff, MessageToolCall } from '../../store/layoutStore';
 import { isEditToolName } from '../toolFeedbackDiff';
 
 /** git shortstat 摘要行 */
@@ -54,6 +54,41 @@ export function isDiffMetaPlusMinusLine(line: string): boolean {
   );
 }
 
+/**
+ * 由已解析的 FileDiff 列表汇总 +N / −M（计数口径一处实现：
+ * 结构化 additions/deletions 优先，缺失时以 changes 逐行计数补齐）。
+ * E1 起行头统计改吃 resolveToolCallDiffs 的一处派生，与本函数共用计数。
+ */
+export function diffStatsFromFileDiffs(
+  diffs: FileDiff[] | undefined | null
+): { add: number; del: number } | null {
+  if (!diffs?.length) return null;
+  let add = 0;
+  let del = 0;
+  for (const d of diffs) {
+    let dAdd = Number.isFinite(d.additions) ? Math.max(0, d.additions) : 0;
+    let dDel = Number.isFinite(d.deletions) ? Math.max(0, d.deletions) : 0;
+    if (d.changes?.length) {
+      let cAdd = 0,
+        cDel = 0;
+      for (const c of d.changes) {
+        if (c.type === 'addition') cAdd += 1;
+        else if (c.type === 'deletion') cDel += 1;
+      }
+      if (dAdd === 0 && dDel === 0) {
+        dAdd = cAdd;
+        dDel = cDel;
+      } else {
+        if (dAdd === 0 && cAdd > 0) dAdd = cAdd;
+        if (dDel === 0 && cDel > 0) dDel = cDel;
+      }
+    }
+    add += dAdd;
+    del += dDel;
+  }
+  return add === 0 && del === 0 ? null : { add, del };
+}
+
 /** 编辑类工具行内 +N / −M */
 export function toolDiffLineStats(
   tc: MessageToolCall
@@ -62,31 +97,8 @@ export function toolDiffLineStats(
   if (!isEditToolName(tc.name)) {
     return null;
   }
-  let add = 0;
-  let del = 0;
   if (tc.diffs?.length) {
-    for (const d of tc.diffs) {
-      let dAdd = Number.isFinite(d.additions) ? Math.max(0, d.additions) : 0;
-      let dDel = Number.isFinite(d.deletions) ? Math.max(0, d.deletions) : 0;
-      if (d.changes?.length) {
-        let cAdd = 0,
-          cDel = 0;
-        for (const c of d.changes) {
-          if (c.type === 'addition') cAdd += 1;
-          else if (c.type === 'deletion') cDel += 1;
-        }
-        if (dAdd === 0 && dDel === 0) {
-          dAdd = cAdd;
-          dDel = cDel;
-        } else {
-          if (dAdd === 0 && cAdd > 0) dAdd = cAdd;
-          if (dDel === 0 && cDel > 0) dDel = cDel;
-        }
-      }
-      add += dAdd;
-      del += dDel;
-    }
-    return add === 0 && del === 0 ? null : { add, del };
+    return diffStatsFromFileDiffs(tc.diffs);
   }
   const out = tc.output || '';
   if (!out.trim()) return null;
@@ -94,6 +106,8 @@ export function toolDiffLineStats(
   if (gs) return gs;
   const lines = out.split('\n');
   if (looksLikeUnifiedOrPatchText(lines)) {
+    let add = 0;
+    let del = 0;
     for (const rawL of lines) {
       const l = rawL.trimEnd();
       if (isDiffMetaPlusMinusLine(l)) continue;

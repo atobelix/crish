@@ -9,6 +9,7 @@ import {
   TOGGLE_INTERACTIVE_SELECTOR,
   SCROLLBAR_TRACK_HIT_WIDTH_PX,
   ANCHOR_GUARD_LOCK_WINDOW_MS,
+  FOLLOW_DETACH_REASON_USER_TOGGLED_DISCLOSURE,
 } from './useScrollAnchoringOnToggle';
 import type { SessionMessage } from '../../store/types';
 
@@ -413,6 +414,52 @@ describe('useScrollAnchoringOnToggle', () => {
 
       expect(result.current.isAnchorLocked()).toBe(false);
       expect(cancelProgrammaticScroll).not.toHaveBeenCalled();
+      expect(isAtBottomRef.current).toBe(true);
+    });
+  });
+
+  // 批 B ⑰：跟随脱离口径成文——reason 命名与等价守卫行为钉住
+  describe('跟随脱离口径（批 B ⑰ user-toggled-disclosure）', () => {
+    it('脱离 reason 常量与 Cherry 口径同名', () => {
+      expect(FOLLOW_DETACH_REASON_USER_TOGGLED_DISCLOSURE).toBe(
+        'user-toggled-disclosure'
+      );
+    });
+
+    it('展开/折叠命中即脱离跟随：锚锁生效 500ms 且 isAtBottom 同步置假', () => {
+      const { result, isAtBottomRef, setIsAtBottom, container } = setup();
+      const toggleBtn = document.createElement('button');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      container.appendChild(toggleBtn);
+
+      act(() => {
+        result.current.handlePointerDownCapture({
+          nativeEvent: { offsetX: 100 },
+          currentTarget: container,
+          target: toggleBtn,
+        } as unknown as React.PointerEvent<HTMLDivElement>);
+      });
+
+      expect(result.current.isAnchorLocked()).toBe(true);
+      expect(isAtBottomRef.current).toBe(false);
+      expect(setIsAtBottom).toHaveBeenCalledWith(false);
+      expect(ANCHOR_GUARD_LOCK_WINDOW_MS).toBe(500);
+    });
+
+    it('普通内容点击不脱离跟随（锚锁不生效）', () => {
+      const { result, isAtBottomRef, container } = setup();
+      const plain = document.createElement('p');
+      container.appendChild(plain);
+
+      act(() => {
+        result.current.handlePointerDownCapture({
+          nativeEvent: { offsetX: 100 },
+          currentTarget: container,
+          target: plain,
+        } as unknown as React.PointerEvent<HTMLDivElement>);
+      });
+
+      expect(result.current.isAnchorLocked()).toBe(false);
       expect(isAtBottomRef.current).toBe(true);
     });
   });

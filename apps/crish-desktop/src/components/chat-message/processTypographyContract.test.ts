@@ -13,6 +13,10 @@
  *   ④ 「工具调用容器里面的元素颜色文字粗细也不一样，花了字体还偏小」
  *      → 字重恒 400（--font-weight-normal），字号恒 14px，禁止 12px / 11px 回流。
  *
+ * 【D5 定版修订 · 2026-11-02 用户裁决】过程区字号由 14px 定版为 13px
+ * （试行后用户验收「还说得过去」转永久生效），覆盖上款 ②④ 的字号部分；
+ * 行高 24px、字重 400、默认浅色、零发丝线等其余条款不变。下文断言已同步。
+ *
  * 本文件只做「源码级负向断言 + 正向契约断言」，不渲染组件——
  * 目的是让上述任何一条被改回去时，CI 立即红。
  */
@@ -50,12 +54,12 @@ const contentCss = readCss(CHAT_MESSAGE, 'MessageContent.module.css');
  * 一、思考行（ReasoningRow）基线
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('思考行排版基线', () => {
-  it('行容器：24px 行高 / 14px 字号 / 默认浅色（--text-tertiary）', () => {
+  it('行容器：24px 行高 / 13px 字号（D5 定版） / 默认浅色（--text-tertiary）', () => {
     const b = block(reasoningCss, '.reasoningRow');
     expect(b).not.toBe('');
     expect(b).toMatch(/height:\s*24px/);
     expect(b).toMatch(/line-height:\s*24px/);
-    expect(b).toMatch(/font-size:\s*14px/);
+    expect(b).toMatch(/font-size:\s*13px/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
     expect(b).toMatch(/padding:\s*0/);
   });
@@ -63,7 +67,7 @@ describe('思考行排版基线', () => {
   it('语义标签「思考」：字重 400 + 颜色继承行状态机，严禁独立硬编码', () => {
     const b = block(reasoningCss, '.reasoningLabel');
     expect(b).not.toBe('');
-    expect(b).toMatch(/font-size:\s*14px/);
+    expect(b).toMatch(/font-size:\s*13px/);
     expect(b).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(b).toMatch(/color:\s*inherit/);
   });
@@ -84,12 +88,12 @@ describe('思考行排版基线', () => {
  * 二、工具调用行（ChatToolCallBlock）与思考行同构
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('工具调用行与思考行同构', () => {
-  it('行头：24px 行高 / 14px 字号 / 字重 400 / 默认浅色，与思考行完全一致', () => {
+  it('行头：24px 行高 / 13px 字号（D5 定版） / 字重 400 / 默认浅色，与思考行完全一致', () => {
     const b = block(toolCss, '.toolRowHead');
     expect(b).not.toBe('');
     expect(b).toMatch(/height:\s*24px/);
     expect(b).toMatch(/line-height:\s*24px/);
-    expect(b).toMatch(/font-size:\s*14px/);
+    expect(b).toMatch(/font-size:\s*13px/);
     expect(b).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(b).toMatch(/color:\s*var\(--text-tertiary\)/);
     expect(b).toMatch(/padding:\s*0/);
@@ -102,7 +106,7 @@ describe('工具调用行与思考行同构', () => {
     expect(b).not.toMatch(/color:\s*var\(--text-secondary\)/);
   });
 
-  it('工具行内所有文本元素字号统一为 14px', () => {
+  it('工具行内所有文本元素字号统一为 13px（D5 定版）', () => {
     for (const sel of [
       '.toolRowSummary',
       '.toolActionText',
@@ -113,7 +117,7 @@ describe('工具调用行与思考行同构', () => {
     ]) {
       const b = block(toolCss, sel);
       expect(b, `${sel} 声明块必须存在`).not.toBe('');
-      expect(b, `${sel} 字号必须为 14px`).toMatch(/font-size:\s*14px/);
+      expect(b, `${sel} 字号必须为 13px`).toMatch(/font-size:\s*13px/);
     }
   });
 
@@ -131,7 +135,7 @@ describe('工具调用行与思考行同构', () => {
         /font-size:\s*var\(--font-size-(xs|micro|xxs)/
       );
       expect(b, `${sel} 不得使用小字号字面量`).not.toMatch(
-        /font-size:\s*(9|10|11|12|13)px/
+        /font-size:\s*(9|10|11|12)px/
       );
     }
   });
@@ -189,11 +193,11 @@ describe('过程区零发丝分割线（用户裁决 · 2026-09-11）', () => {
  * 四、折叠控制栏文案与过程行同构
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('折叠控制栏文案同构', () => {
-  it('控制栏默认浅色，文案 14px / 字重 400 / 继承色', () => {
+  it('控制栏默认浅色，文案 13px / 字重 400 / 继承色（D5 定版）', () => {
     const bar = block(foldCss, '.controlBar');
     expect(bar).toMatch(/color:\s*var\(--text-tertiary\)/);
     const label = block(foldCss, '.summaryLabel');
-    expect(label).toMatch(/font-size:\s*14px/);
+    expect(label).toMatch(/font-size:\s*13px/);
     expect(label).toMatch(/font-weight:\s*var\(--font-weight-normal/);
     expect(label).toMatch(/color:\s*inherit/);
   });
@@ -201,8 +205,63 @@ describe('折叠控制栏文案同构', () => {
   it('负向断言：控制栏文案不得回潮小字号与重字重', () => {
     const label = block(foldCss, '.summaryLabel');
     expect(label).not.toMatch(/font-size:\s*var\(--font-size-(xs|micro|xxs)/);
-    expect(label).not.toMatch(/font-size:\s*(9|10|11|12|13)px/);
+    expect(label).not.toMatch(/font-size:\s*(9|10|11|12)px/);
     expect(label).not.toMatch(/font-weight:\s*(500|600|700)/);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 六、叙述行内联代码去 chip 化（D6 · 2026-11-02 工具呈现排版审计定案）
+ *
+ * 组内叙述（.narrationText）里模型写的反引号代码段——路径、目录名、值——
+ * 原先按全局 markdown 内联代码规则成灰底 chip，用户点名为折叠区最扎眼的灰块。
+ * 定案：只在叙述作用域内重定义 --md-code-inline-*（全局规则全部经变量取值，
+ * 作用域覆盖即生效）——背景透明、字色链接色、内边距与圆角归零。
+ * 作用域红线：覆盖只许出现在 .narrationText 块内；最终答复区（.contentText
+ * 本体，不带 narrationText）与全局 markdown 规则一律不受影响，
+ * 答复区内联代码保持 chip 这一正文排版语汇。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+describe('叙述行内联代码去 chip 化（D6）', () => {
+  it('正向断言：.narrationText 块内四项 --md-code-inline-* 覆盖齐备且取值合定案', () => {
+    const b = block(contentCss, '.narrationText');
+    expect(b).not.toBe('');
+    expect(b).toMatch(/--md-code-inline-bg:\s*transparent/);
+    expect(b).toMatch(/--md-code-inline-fg:\s*var\(--text-primary\)/);
+    // 链接色只属于真正的超链接：叙述内联代码不得借用
+    expect(b).not.toMatch(/--md-code-inline-fg:\s*var\(--color-link\)/);
+    expect(b).toMatch(/--md-code-inline-padding:\s*0\s*;/);
+    expect(b).toMatch(/--md-code-inline-radius:\s*0\s*;/);
+  });
+
+  it('作用域限定：四项覆盖变量在 MessageContent 全文件各只定义一次（即 .narrationText 内）', () => {
+    for (const token of [
+      '--md-code-inline-bg',
+      '--md-code-inline-fg',
+      '--md-code-inline-padding',
+      '--md-code-inline-radius',
+    ]) {
+      const hits = contentCss.match(new RegExp(`${token}\\s*:`, 'g')) ?? [];
+      expect(
+        hits.length,
+        `${token} 只许在 .narrationText 作用域内定义一次`
+      ).toBe(1);
+    }
+    const rest = contentCss.replace(block(contentCss, '.narrationText'), '');
+    expect(rest).not.toMatch(/--md-code-inline-/);
+  });
+
+  it('负向断言：最终答复区本体 .contentText 不得携带内联代码覆盖（答复区 chip 不受影响）', () => {
+    const b = block(contentCss, '.contentText');
+    expect(b).not.toBe('');
+    expect(b).not.toMatch(/--md-code-inline-/);
+  });
+
+  it('全局机制完好：markdown 全局内联代码规则仍经 --md-code-inline-* 取值（去 chip 只靠作用域变量，零规则改动）', () => {
+    const mdCss = readCss(CHAT_MESSAGE, '../../styles/markdown-typography.css');
+    expect(mdCss).toMatch(/background:\s*var\(--md-code-inline-bg\)/);
+    expect(mdCss).toMatch(/color:\s*var\(--md-code-inline-fg\)/);
+    expect(mdCss).toMatch(/padding:\s*var\(--md-code-inline-padding\)/);
+    expect(mdCss).toMatch(/border-radius:\s*var\(--md-code-inline-radius\)/);
   });
 });
 

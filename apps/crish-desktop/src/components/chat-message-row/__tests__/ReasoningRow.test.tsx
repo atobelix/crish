@@ -3,7 +3,13 @@ import React from 'react';
 import fs from 'fs';
 import path from 'path';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from '@testing-library/react';
 
 vi.mock('../../../api/markdown/useMarkdownRender', () => {
   const renderMarkdown = (markdown: string) => {
@@ -20,10 +26,6 @@ vi.mock('../../../api/markdown/useMarkdownRender', () => {
   });
   return {
     useMarkdownResult: vi.fn(
-      (markdown: string, _variant: string, enabled: boolean = true) =>
-        result(markdown, enabled)
-    ),
-    useStreamingMarkdownResult: vi.fn(
       (markdown: string, _variant: string, enabled: boolean = true) =>
         result(markdown, enabled)
     ),
@@ -53,7 +55,10 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
             (typeof fallbackOrParams === 'object'
               ? (fallbackOrParams as Record<string, unknown>).duration
               : params?.duration) ?? '';
-          return `已思考 ${d}s`;
+          // 模板与现行词典一致（'已思考 {duration}'）：duration 已是由
+          // formatDurationLabel 统一产出的带单位标签（如 '3.2 秒'），
+          // 模板不得再拼 's'（R8 B13 单源化后的契约）
+          return `已思考 ${d}`;
         }
         if (key === 'chat.thinking.process') return '思考过程';
         return typeof fallbackOrParams === 'string' ? fallbackOrParams : key;
@@ -82,10 +87,10 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         content: '首行核心主题\n第二行细节',
         t: mockT,
       });
-      expect(pres.badgeText).toBe('已思考 3.2s');
+      expect(pres.badgeText).toBe('已思考 3.2 秒');
       expect(pres.hasLiveDot).toBe(false);
       expect(pres.summaryText).toBe('首行核心主题');
-      expect(pres.ariaLabel).toBe('已思考 3.2s');
+      expect(pres.ariaLabel).toBe('已思考 3.2 秒');
     });
 
     it('终态无耗时稳定兜底已思考', () => {
@@ -186,15 +191,23 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/width:\s*100%/);
     });
 
-    it('负产出刚性红线：绝对不存在 168px 硬编码高度或 overflow-y: auto 局部滚动视口', () => {
+    it('滚动红线（HC1 修订）：无 168px 硬编码与旧无界滚动类；正文是唯一的登记封顶滚动区', () => {
       const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
       const cssContent = fs.readFileSync(cssPath, 'utf-8');
 
-      // 绝对禁止 168px 局部视口与非受控内部滚动
+      // 绝对禁止 168px 局部视口硬编码与旧无界滚动类名
       expect(cssContent).not.toContain('168px');
-      expect(cssContent).not.toContain('overflow-y: auto');
       expect(cssContent).not.toContain('thoughtScrollBody');
       expect(cssContent).not.toContain('thinkingBodyContainer');
+
+      // HC1（用户 2026-11-02 裁决，DIM-02 修订为白名单口径）：思考正文区改为
+      // 登记在册的受限滚动区——封顶走 token，且全文仅此一处纵向滚动声明。
+      // 旧「绝对不存在 overflow-y: auto」红线随契约修订废止。
+      const bodyRule =
+        cssContent.match(/\.reasoningBody\s*\{[^}]*\}/)?.[0] ?? '';
+      expect(bodyRule).toContain('max-height: var(--reasoning-max-h');
+      expect(bodyRule).toContain('overflow-y: auto');
+      expect(cssContent.match(/overflow-y:\s*auto/g) ?? []).toHaveLength(1);
 
       // 展开态也不存在内部滚动容器
       const { container } = render(
@@ -209,7 +222,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     });
   });
 
-  describe('三、流式运行态与扫光微交互：指示灯、@keyframes sweep-shine 与尾窗跟随', () => {
+  describe('三、流式运行态与文字呼吸微交互：指示灯、@keyframes crish-text-breathe（正典登记） 与尾窗跟随', () => {
     it('流式运行态呈现状态指示灯与已解析的尾窗摘要，不暴露 Markdown 源码', () => {
       const { container } = render(
         <ReasoningRow
@@ -235,19 +248,30 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(summaryContainer).not.toBeNull();
       const summaryMarkup = screen.getByTestId('reasoning-summary-markup');
       expect(summaryMarkup?.textContent).toBe('正在流式推理 最后一行');
-      expect(summaryMarkup?.innerHTML).toContain('<strong>最后一行</strong>');
+      // HC1 · L-8：摘要改纯文本渲染并剥除装饰标记——不再经 markdown 引擎，
+      // 旧「渲染出 <strong>」断言随定案翻转为「不产生格式标签、源码不外露」
+      expect(summaryMarkup?.innerHTML).not.toContain('<strong>');
       expect(summaryMarkup?.innerHTML).not.toContain('##');
       expect(summaryMarkup?.innerHTML).not.toContain('**');
     });
 
-    it('CSS 样式验证：包含 @keyframes sweep-shine 与 a11y 降级规范', () => {
+    it('CSS 样式验证：文字呼吸消费正典 crish-text-breathe 与 a11y 降级规范', () => {
       const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
       const cssContent = fs.readFileSync(cssPath, 'utf-8');
 
-      // 扫光微交互动画名称声明
-      expect(cssContent).toMatch(/@keyframes\s+sweep-shine/);
+      // 文字呼吸微交互（AN3 正名）：关键帧定义已迁正典层登记为独立配方，
+      // 本文件只按名消费——旧本地 @keyframes sweep-shine（名实不符）不得回潮
+      expect(cssContent).not.toMatch(/@keyframes\s+sweep-shine/);
       expect(cssContent).toMatch(
-        /animation:\s*sweep-shine\s+var\(--transition-pulse,\s*2\.6s ease-in-out\)/
+        /animation:\s*crish-text-breathe\s+var\(--transition-pulse,\s*2\.6s ease-in-out\)/
+      );
+      const designSystemCss = fs.readFileSync(
+        path.resolve(__dirname, '../../../styles/design-system.css'),
+        'utf-8'
+      );
+      expect(designSystemCss).toMatch(/@keyframes\s+crish-text-breathe/);
+      expect(designSystemCss).toMatch(
+        /@keyframes\s+crish-text-breathe\s*\{\s*0%\s*\{\s*opacity:\s*0\.75/
       );
 
       // 无障碍 a11y 降级声明
@@ -262,14 +286,19 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     });
   });
 
-  describe('四、终态闭合态：已思考 3.2s > 与 tabular-nums 等宽对齐', () => {
-    it('终态展示“已思考 3.2s >”，耗时样式应用 tabular-nums', () => {
+  describe('四、终态闭合态：已思考 3.2 秒 > 与 tabular-nums 等宽对齐', () => {
+    it('终态展示“已思考 3.2 秒 >”，耗时样式应用 tabular-nums', () => {
       const { container } = render(
         <ReasoningRow content="" isLive={false} durationMs={3200} />
       );
 
-      // 终态闭合文案匹配
-      expect(screen.getByText('已思考 3.2s')).toBeDefined();
+      // 终态闭合文案匹配（NumericText 把数字拆成 AnimatedCounter，srOnly+视觉层小数点 → "3.2." 多一点；
+      // 用 regex \.? 容忍尾部冗余点）
+      const badge = container.querySelector('[data-testid="reasoning-badge"]');
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent?.replace(/\s+/g, ' ')).toMatch(
+        /已思考 3\.2\.? 秒/
+      );
 
       // 折叠指示符（> 或 ›）
       const chevron = container.querySelector('[data-testid="chevron"]');
@@ -297,8 +326,16 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      expect(screen.getByText('已思考 2.5s')).toBeDefined();
-      expect(screen.getByText('阶段推理总结')).toBeDefined();
+      // NumericText 把数字段拆成 AnimatedCounter，srOnly+视觉层小数点 → "2.5." 多一点；
+      // 用 regex \.? 容忍尾部冗余点
+      const badge323 = screen.getByTestId('reasoning-badge');
+      expect(badge323.textContent?.replace(/\s+/g, ' ')).toMatch(
+        /已思考 2\.5\.? 秒/
+      );
+      // AN1 常驻后正文也在文档中：摘要断言须定位摘要元素本身（不再全页唯一）
+      expect(screen.getByTestId('reasoning-summary-markup').textContent).toBe(
+        '阶段推理总结'
+      );
     });
 
     it('从流式态平滑跃迁至终态：最新行平滑切换为首行主题', () => {
@@ -320,7 +357,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
       expect(screen.getByText('首行设计方案')).toBeDefined();
-      expect(screen.getByText('已思考 3.2s')).toBeDefined();
+      // NumericText 把数字拆成 AnimatedCounter，srOnly+视觉层小数点 → "3.2." 多一点；用 regex \.? 容忍
+      const badge353 = screen.getByTestId('reasoning-badge');
+      expect(badge353.textContent?.replace(/\s+/g, ' ')).toMatch(
+        /已思考 3\.2\.? 秒/
+      );
     });
 
     it('负向断言：排版严格去符号化，绝不渲染任何 dotSeparator 分割点', () => {
@@ -333,7 +374,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
   });
 
   describe('五、点击展开态与交互：自然流出、受控模式与独立复制', () => {
-    it('非受控模式下点击切换展开状态并渲染 reasoningBody', () => {
+    it('非受控模式下点击切换展开状态，思考体常驻 DOM（AN1 机制）', () => {
       vi.useFakeTimers();
       try {
         const { container } = render(
@@ -343,41 +384,40 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
             durationMs={1800}
           />
         );
+        const body = () =>
+          container.querySelector('[data-testid="reasoning-body"]');
+        const slot = () => body()?.parentElement ?? null;
 
-        // 初始收起态
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
+        // 初始收起态：思考体已在文档中（AN1 常驻），槽位 hidden="until-found"
+        expect(body()).not.toBeNull();
+        expect(slot()?.getAttribute('hidden')).toBe('until-found');
 
-        // 点击展开
+        // 点击展开：摘除 hidden，正文自然呈现
         const btn = screen.getByRole('button');
         fireEvent.click(btn);
-
-        // 展开态自然呈现
-        const body = container.querySelector('[data-testid="reasoning-body"]');
-        expect(body).not.toBeNull();
+        expect(body()).not.toBeNull();
         expect(btn.getAttribute('aria-expanded')).toBe('true');
+        expect(slot()?.hasAttribute('hidden')).toBe(false);
 
         // 负向断言（用户裁决）：彻底切除复制按钮，不得再出现复制按钮
         expect(screen.queryByTestId('copy-thinking-button')).toBeNull();
         expect(screen.queryByRole('button', { name: /复制/i })).toBeNull();
 
-        // 再次点击收起（触发折叠动画过渡态）
+        // 再次点击收起：旧两阶段 data-collapsing 标记已退役，永不出现
         fireEvent.click(btn);
         expect(btn.getAttribute('aria-expanded')).toBe('false');
         const root = container.querySelector(
           '[data-testid="reasoning-container"]'
         );
-        expect(root?.getAttribute('data-collapsing')).toBe('true');
+        expect(root?.hasAttribute('data-collapsing')).toBe(false);
+        expect(body()).not.toBeNull();
 
-        // 220ms 动效结束后注销 DOM
+        // 兜底定时器到点：只补 hidden 属性，思考体不注销
         act(() => {
-          vi.advanceTimersByTime(220);
+          vi.advanceTimersByTime(400);
         });
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
-        expect(root?.getAttribute('data-collapsing')).toBeNull();
+        expect(body()).not.toBeNull();
+        expect(slot()?.getAttribute('hidden')).toBe('until-found');
       } finally {
         vi.useRealTimers();
       }
@@ -478,8 +518,8 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     });
   });
 
-  describe('八、两阶段平滑折叠（Two-Phase Folding）与零测试环境绕行断言', () => {
-    it('当模型工作态结束（isTurnWorking 从 true 转为 false）时，触发两阶段优雅折叠', () => {
+  describe('八、AN1 常驻折叠机制（until-found 隐藏协调）与零测试环境绕行断言', () => {
+    it('当模型工作态结束（isTurnWorking 从 true 转为 false）时，自动折叠且思考体常驻', () => {
       vi.useFakeTimers();
       try {
         const { rerender, container } = render(
@@ -489,11 +529,13 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         const root = container.querySelector(
           '[data-testid="reasoning-container"]'
         );
+        const body = () =>
+          container.querySelector('[data-testid="reasoning-body"]');
+        const slot = () => body()?.parentElement ?? null;
         expect(root?.getAttribute('data-expanded')).toBe('true');
-        expect(root?.getAttribute('data-collapsing')).toBeNull();
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).not.toBeNull();
+        expect(root?.hasAttribute('data-collapsing')).toBe(false);
+        expect(body()).not.toBeNull();
+        expect(slot()?.hasAttribute('hidden')).toBe(false);
 
         // 模型输出完成，整轮工作态结束
         rerender(
@@ -504,23 +546,16 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
           />
         );
 
-        // 阶段一：进入折叠过渡态（保留 DOM 供 CSS Grid 执行 160ms 平滑收缩，避免视口突变跳跃）
+        // 折叠判定即时生效；思考体仍在文档中（hidden 待过渡落定后挂上）
         expect(root?.getAttribute('data-expanded')).toBe('false');
-        expect(root?.getAttribute('data-collapsing')).toBe('true');
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).not.toBeNull();
+        expect(body()).not.toBeNull();
 
-        // 推进 160ms 物理动画周期
+        // 兜底定时器（与收拢同钟）到点：只补 hidden，DOM 不注销
         act(() => {
-          vi.advanceTimersByTime(220);
+          vi.advanceTimersByTime(400);
         });
-
-        // 阶段二：完全卸载态（DOM 安全注销，data-collapsing 标记移除）
-        expect(root?.getAttribute('data-collapsing')).toBeNull();
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
+        expect(slot()?.getAttribute('hidden')).toBe('until-found');
+        expect(body()).not.toBeNull();
       } finally {
         vi.useRealTimers();
       }
@@ -542,7 +577,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         );
         expect(root?.getAttribute('data-expanded')).toBe('true');
 
-        // 2. 生成完自动关闭（220ms 平滑收起）
+        // 2. 生成完自动关闭（平滑收起，思考体常驻、落定挂 hidden）
         rerender(
           <ReasoningRow
             content="正在生成思考过程"
@@ -552,16 +587,20 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
           />
         );
         expect(root?.getAttribute('data-expanded')).toBe('false');
-        expect(root?.getAttribute('data-collapsing')).toBe('true');
         act(() => {
-          vi.advanceTimersByTime(220);
+          vi.advanceTimersByTime(400);
         });
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
+        const bodyAfterClose = container.querySelector(
+          '[data-testid="reasoning-body"]'
+        );
+        expect(bodyAfterClose).not.toBeNull();
+        expect(bodyAfterClose?.parentElement?.getAttribute('hidden')).toBe(
+          'until-found'
+        );
         unmount();
 
-        // 3. 关闭对话再打开（历史消息首次挂载 isTurnWorking=false, defaultExpanded=true）：默认折叠
+        // 3. 关闭对话再打开（历史消息首次挂载 isTurnWorking=false, defaultExpanded=true）：
+        // 默认折叠，思考体常驻且槽位自挂载起即 hidden
         const reopened = render(
           <ReasoningRow
             content="历史对话思考内容"
@@ -574,15 +613,19 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
           '[data-testid="reasoning-container"]'
         );
         expect(reopenedRoot?.getAttribute('data-expanded')).toBe('false');
-        expect(
-          reopened.container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
+        const reopenedBody = reopened.container.querySelector(
+          '[data-testid="reasoning-body"]'
+        );
+        expect(reopenedBody).not.toBeNull();
+        expect(reopenedBody?.parentElement?.getAttribute('hidden')).toBe(
+          'until-found'
+        );
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('手动点击折叠进入平滑 collapsing 动画过渡，并在窗口结束后安全卸载', () => {
+    it('手动折叠由 grid transitionend 主触发挂 hidden（不等兜底定时器）', () => {
       vi.useFakeTimers();
       try {
         const { container } = render(
@@ -592,34 +635,36 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         const btn = screen.getByRole('button');
         // 展开
         fireEvent.click(btn);
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).not.toBeNull();
+        const body = container.querySelector('[data-testid="reasoning-body"]');
+        expect(body).not.toBeNull();
+        const slot = body?.parentElement as HTMLElement;
+        expect(slot.hasAttribute('hidden')).toBe(false);
 
-        // 收起：第一阶段保留 DOM，启动平滑过渡
+        // 收起：合成 transitionend（jsdom 不自动派发）→ 主触发立即挂 hidden
         fireEvent.click(btn);
-        const root = container.querySelector(
-          '[data-testid="reasoning-container"]'
-        );
-        expect(root?.getAttribute('data-collapsing')).toBe('true');
+        const grid = screen.getByTestId('reasoning-grid');
+        fireEvent.transitionEnd(grid, {
+          propertyName: 'grid-template-rows',
+        });
+        expect(slot.getAttribute('hidden')).toBe('until-found');
         expect(
           container.querySelector('[data-testid="reasoning-body"]')
         ).not.toBeNull();
 
-        // 第二阶段：220ms 动效窗口结束后安全注销 DOM
+        // 兜底定时器随后到点：不重复改动、不注销 DOM
         act(() => {
-          vi.advanceTimersByTime(220);
+          vi.advanceTimersByTime(400);
         });
-        expect(root?.getAttribute('data-collapsing')).toBeNull();
+        expect(slot.getAttribute('hidden')).toBe('until-found');
         expect(
           container.querySelector('[data-testid="reasoning-body"]')
-        ).toBeNull();
+        ).not.toBeNull();
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('折叠过渡中途若工作态重新激活，应立即取消折叠并恢复展开', () => {
+    it('折叠落定前工作态重新激活，应取消待挂 hidden 并恢复展开', () => {
       vi.useFakeTimers();
       try {
         const { rerender, container } = render(
@@ -631,52 +676,61 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         const root = container.querySelector(
           '[data-testid="reasoning-container"]'
         );
-        expect(root?.getAttribute('data-collapsing')).toBe('true');
+        const body = () =>
+          container.querySelector('[data-testid="reasoning-body"]');
+        const slot = () => body()?.parentElement ?? null;
+        expect(root?.getAttribute('data-expanded')).toBe('false');
 
-        // 在 80ms 处重新激活工作态
+        // 在 80ms 处（兜底定时器未到）重新激活工作态
         act(() => {
           vi.advanceTimersByTime(80);
         });
         rerender(<ReasoningRow content="思考过程" isTurnWorking={true} />);
 
         expect(root?.getAttribute('data-expanded')).toBe('true');
-        expect(root?.getAttribute('data-collapsing')).toBeNull();
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).not.toBeNull();
+        expect(slot()?.hasAttribute('hidden')).toBe(false);
+        expect(body()).not.toBeNull();
 
-        // 推进剩余时间，确保不会被错误注销
+        // 推进越过原定时器：不得误挂 hidden、不得注销
         act(() => {
-          vi.advanceTimersByTime(200);
+          vi.advanceTimersByTime(400);
         });
-        expect(
-          container.querySelector('[data-testid="reasoning-body"]')
-        ).not.toBeNull();
+        expect(body()).not.toBeNull();
+        expect(slot()?.hasAttribute('hidden')).toBe(false);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('CSS 样式验证：包含 var(--transition-accordion) 的 CSS Grid 平滑收缩契约', () => {
+    it('CSS 样式验证：grid 与 chevron 共读根变量同钟；containment 以 hidden 落定为判据', () => {
       const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
       const cssContent = fs.readFileSync(cssPath, 'utf8');
 
-      // 验证 CSS Grid 折叠容器及过渡定义
+      // 验证 CSS Grid 折叠容器及过渡定义（时长读根元素同钟变量）
       expect(cssContent).toMatch(/\.reasoningExpandGrid\s*\{/);
       expect(cssContent).toMatch(/grid-template-rows:\s*0fr/);
       expect(cssContent).toMatch(
-        /transition:\s*grid-template-rows\s+var\(--transition-accordion\)/
+        /transition:\s*grid-template-rows\s+var\(--accordion-duration,\s*var\(--transition-accordion\)\)/
       );
       expect(cssContent).toMatch(/grid-template-rows:\s*1fr/);
 
-      // 验证 slot 透明度与位移轻量淡出
+      // 验证 slot 基础契约
       expect(cssContent).toMatch(/\.reasoningExpandSlot\s*\{/);
       expect(cssContent).toMatch(/min-height:\s*0/);
 
-      // 验证未折叠态与非过渡态的 24px containment 联合选择器
+      // chevron 与 grid 同钟：同一根变量 --accordion-duration
+      const chevronRule = cssContent.match(/\.chevron\s*\{[^}]*}/)?.[0] ?? '';
+      expect(chevronRule).toContain('var(--accordion-duration');
+
+      // 24px containment 的落定判据 = 槽位 hidden 在位（data-collapsing 已退役）
       expect(cssContent).toMatch(
-        /:not\(\[data-expanded='true'\]\):not\(\[data-collapsing='true'\]\)/
+        /:not\(\[data-expanded='true'\]\):has\(>\s*\.reasoningExpandGrid\s*>\s*\.reasoningExpandSlot\[hidden\]\)/
       );
+      expect(cssContent).not.toContain('data-collapsing');
+
+      // 旧 keyframes 双轨（grid-expand / slot-fade-in）已物理删除，零残留
+      expect(cssContent).not.toContain('reasoning-grid-expand');
+      expect(cssContent).not.toContain('reasoning-slot-fade-in');
     });
 
     it('刚性红线：源码级断言绝不包含任何 NODE_ENV === test 或 typeof window 绕行作弊分支', () => {
@@ -723,7 +777,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       });
     });
 
-    it('展开和折叠阶段注入自适应物理时长 --accordion-duration', () => {
+    it('展开和折叠阶段在根元素注入自适应物理时长 --accordion-duration（AN1 同钟落位）', () => {
       const { getByTestId } = render(
         <ReasoningRow
           content="详细思考步骤"
@@ -732,10 +786,159 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      const grid = getByTestId('reasoning-grid');
-      expect(grid.style.getPropertyValue('--accordion-duration')).toMatch(
+      // AN1：变量挂根元素（reasoning-container），grid 与 chevron 继承共读
+      const root = getByTestId('reasoning-container');
+      expect(root.style.getPropertyValue('--accordion-duration')).toMatch(
         /\d+ms/
       );
+      // grid 自身不再自带变量（只继承根）
+      const grid = getByTestId('reasoning-grid');
+      expect(grid.style.getPropertyValue('--accordion-duration')).toBe('');
+    });
+  });
+
+  describe('九、AN1 机制替换验收：MutationObserver 常驻断言 / beforematch / R13 完成门', () => {
+    // jsdom 约束（写入契约，勿删）：jsdom 不自动派发 transitionend，
+    // beforematch 永不自发——过渡完成由合成 transitionend 事件 + fake
+    // timers 兜底路径驱动；beforematch 以手动 dispatchEvent 覆盖其回调
+    // 路径，真机查找命中验证另行登记（不在本套件口径内）。
+    it('折叠全程（含兜底定时器触发后）思考体节点零移除，槽位落 hidden="until-found"', async () => {
+      vi.useFakeTimers();
+      try {
+        const { container } = render(
+          <ReasoningRow content="常驻验收思考内容" isTurnWorking={false} />
+        );
+        const btn = screen.getByRole('button');
+        fireEvent.click(btn);
+        const body = container.querySelector('[data-testid="reasoning-body"]');
+        expect(body).not.toBeNull();
+        const slot = body?.parentElement as HTMLElement;
+
+        const removals: MutationRecord[] = [];
+        const observer = new MutationObserver((records) => {
+          for (const record of records) {
+            if (record.type === 'childList' && record.removedNodes.length > 0) {
+              removals.push(record);
+            }
+          }
+        });
+        observer.observe(container, { childList: true, subtree: true });
+
+        fireEvent.click(btn);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        // MutationObserver 回调经 microtask 派发，先冲刷再断言
+        await Promise.resolve();
+        observer.disconnect();
+
+        expect(removals).toHaveLength(0);
+        expect(container.contains(body)).toBe(true);
+        expect(slot.getAttribute('hidden')).toBe('until-found');
+
+        // 再展开：hidden 摘除，仍是同一节点
+        fireEvent.click(btn);
+        expect(slot.hasAttribute('hidden')).toBe(false);
+        expect(container.contains(body)).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('中途反转（展开→折叠、折叠→展开各一次）终局属性与目标状态一致', () => {
+      vi.useFakeTimers();
+      try {
+        const { container } = render(
+          <ReasoningRow content="反转验收内容" isTurnWorking={false} />
+        );
+        const btn = screen.getByRole('button');
+        const slot = () =>
+          container.querySelector('[data-testid="reasoning-body"]')
+            ?.parentElement as HTMLElement;
+
+        fireEvent.click(btn); // 展开
+        fireEvent.click(btn); // 立即折叠（反转一：展开→折叠）
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(slot().getAttribute('hidden')).toBe('until-found');
+
+        fireEvent.click(btn); // 再展开（反转二：折叠→展开）
+        expect(slot().hasAttribute('hidden')).toBe(false);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(slot().hasAttribute('hidden')).toBe(false);
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('beforematch 命中隐藏内容时自动展开（回调路径；jsdom 手动派发）', () => {
+      const { container } = render(
+        <ReasoningRow content="查找命中验收内容" isTurnWorking={false} />
+      );
+      const root = container.querySelector(
+        '[data-testid="reasoning-container"]'
+      );
+      const slot = container.querySelector('[data-testid="reasoning-body"]')
+        ?.parentElement as HTMLElement;
+      expect(root?.getAttribute('data-expanded')).toBe('false');
+      expect(slot.getAttribute('hidden')).toBe('until-found');
+
+      act(() => {
+        slot.dispatchEvent(new Event('beforematch'));
+      });
+      expect(root?.getAttribute('data-expanded')).toBe('true');
+      expect(slot.hasAttribute('hidden')).toBe(false);
+    });
+
+    it('R13 完成门：live 思考的未闭合围栏不以源码中间态上屏，闭合后呈现', async () => {
+      const fenceOpen = '先想一下结构\n\n```ts\nconst heldMarker = 41;';
+      const { container, rerender } = render(
+        <ReasoningRow content={fenceOpen} isLive={true} isTurnWorking={true} />
+      );
+      const bodyText = () =>
+        container.querySelector('[data-testid="reasoning-body"]')
+          ?.textContent ?? '';
+      // 已完成前缀（散文）呈现；未闭合围栏整段扣留、零足迹
+      expect(bodyText()).toContain('先想一下结构');
+      expect(bodyText()).not.toContain('heldMarker');
+
+      rerender(
+        <ReasoningRow
+          content={`${fenceOpen}\n\`\`\`\n\n继续想收尾。`}
+          isLive={true}
+          isTurnWorking={true}
+        />
+      );
+      // 两条口径叠加，断言须异步等排空：
+      // (1) R11 定速显现：新到达文本先经 revealed 排空再进入封口呈现；
+      // (2) 完成门活行口径：最后一行恒为活行，围栏须被后续行确认才闭合
+      // ——故闭合相位带一行后续散文（真实流的常态），而非以 ``` 结尾。
+      await waitFor(
+        () => {
+          expect(bodyText()).toContain('heldMarker');
+        },
+        { timeout: 5000 }
+      );
+
+      // 终态（流结束恰停在围栏行）：全新挂载走静态权威路径，
+      // 封口块直接呈现（不用 rerender 缩短文本——定速层输入只追加）
+      const terminal = render(
+        <ReasoningRow
+          content={`${fenceOpen}\n\`\`\``}
+          isLive={false}
+          isTurnWorking={false}
+        />
+      );
+      expect(
+        terminal.container.querySelector('[data-testid="reasoning-body"]')
+          ?.textContent ?? ''
+      ).toContain('heldMarker');
     });
   });
 });

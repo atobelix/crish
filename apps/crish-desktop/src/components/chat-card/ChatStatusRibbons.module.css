@@ -25,7 +25,11 @@
   font-family: inherit;
   cursor: pointer;
   line-height: var(--line-height-none);
-  transition: all var(--transition-fast);
+  /* A10（AN2）：禁全量过渡写法，只过渡 hover/active 实际变化的三属性 */
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   box-shadow: none;
   animation: chipFadeIn var(--transition-popover-enter);
 }
@@ -48,21 +52,13 @@
   border-radius: 50%;
   background: var(--accent-green);
   flex-shrink: 0;
-  animation: pulseDot var(--transition-pulse) infinite;
+  /* 脉冲归队共享定义 crish-pulse-dot（AN1 落位、AN2 归队） */
+  animation: crish-pulse-dot var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
-@keyframes pulseDot {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green) 30%, transparent);
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 0.75;
-    box-shadow: 0 0 4px 1px
-      color-mix(in srgb, var(--accent-green) 35%, transparent);
+@media (prefers-reduced-motion: reduce) {
+  .dynamicChipPulseDot {
+    animation: none;
   }
 }
 

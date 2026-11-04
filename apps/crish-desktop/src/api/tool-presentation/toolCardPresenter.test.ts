@@ -14,6 +14,9 @@ import {
   formatToolDiffStat,
   toolHasDiffStat,
   toolHasExpandableBody,
+  resolveToolExpansionPolicy,
+  resolveToolCallDiffs,
+  deriveFlatScalarSummary,
   isInspectTool,
   toolRowTone,
   extractImageRefs,
@@ -225,7 +228,9 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
         }),
         status: 'success',
       };
-      expect(toolLabelFromArgs(tc)).toBe('查看 main.rs (L10-50)');
+      // 入参派生标签的 read 词干以 HC1 单源为准 =「读取」（2026-11-02
+      // 整波收口裁定；原「查看」为 HC1 统一前的旧口径）
+      expect(toolLabelFromArgs(tc)).toBe('读取 main.rs (L10-50)');
     });
 
     it('4. 文件写入 / 创建 (write_to_file)', () => {
@@ -514,7 +519,8 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
         id: 't-git-diff',
         name: 'run_command',
         arguments: JSON.stringify({ CommandLine: 'git diff HEAD~1' }),
-        output: ' 1 file changed, 10 insertions(+), 5 deletions(-)\n@@ -1,5 +1,10 @@\n+test line',
+        output:
+          ' 1 file changed, 10 insertions(+), 5 deletions(-)\n@@ -1,5 +1,10 @@\n+test line',
         status: 'success',
       };
       expect(toolDiffLineStats(gitDiffCall)).toBeNull();
@@ -582,15 +588,26 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
       ).toBe(false);
     });
 
-    it('toolHasExpandableBody 对有参数或有输出的通用调用返回 true，正常文件读取返回 false', () => {
+    it('toolHasExpandableBody（E1 政策布尔投影）：shell 有输出 true，仅入参终态 false，文件读取 false', () => {
+      // shell 有输出 = 执行记录，保留内联
       expect(
         toolHasExpandableBody({
           id: '1',
           name: 'run_command',
           arguments: JSON.stringify({ CommandLine: 'cargo test' }),
+          output: 'test result: ok. 12 passed',
           status: 'success',
         })
       ).toBe(true);
+      // 仅入参终态（旧「入参长度 > 2 即展开」已退役）→ 无展开体
+      expect(
+        toolHasExpandableBody({
+          id: '1b',
+          name: 'run_command',
+          arguments: JSON.stringify({ CommandLine: 'cargo test' }),
+          status: 'success',
+        })
+      ).toBe(false);
       expect(
         toolHasExpandableBody({
           id: '2',
@@ -617,6 +634,309 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
           status: 'success',
         })
       ).toBe(false);
+    });
+
+    describe('E1 · resolveToolExpansionPolicy 决策序矩阵', () => {
+      const bgPlaceholder = (callId: string) =>
+        JSON.stringify({
+          mode: 'background',
+          callId,
+          toolName: 'web_search',
+          elapsedMs: 20000,
+          note: '该工具已转入后台继续执行，尚未完成。',
+        });
+
+      it('1 审批 → none（不进政策，兜底）', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'p1',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'rm -rf x' }),
+            status: 'pending_approval',
+          })
+        ).toBe('none');
+      });
+
+      it('2 后台活跃（信封 callId 匹配）→ none；不匹配 → 按终态政策', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'bg1',
+            name: 'web_search',
+            arguments: JSON.stringify({ query: 'crish' }),
+            output: bgPlaceholder('bg1'),
+            status: 'success',
+          })
+        ).toBe('none');
+        // callId 不一致 → 不是本行后台态；输出为非平凡 JSON 文本 → inline
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'other',
+            name: 'web_search',
+            arguments: JSON.stringify({ query: 'crish' }),
+            output: bgPlaceholder('bg1'),
+            status: 'success',
+          })
+        ).toBe('inline');
+      });
+
+      it('3 错误：有诊断输出 → inline；平凡/空 → none', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'e1',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'cargo test' }),
+            output: 'error[E0308]: mismatched types',
+            status: 'error',
+          })
+        ).toBe('inline');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'e2',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'cargo test' }),
+            output: '失败',
+            status: 'error',
+          })
+        ).toBe('none');
+        // 错误的读取行同样就地可读（read 规则不压错误）
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'e3',
+            name: 'read_file',
+            arguments: JSON.stringify({ path: 'src/x.rs' }),
+            output: 'Error: file not found',
+            status: 'error',
+          })
+        ).toBe('inline');
+      });
+
+      it('4 可解析 diff 的成功 edit → side-diff（结构化 / 入参合成两路）', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'd1',
+            name: 'replace_file_content',
+            arguments: JSON.stringify({ path: 'src/a.ts' }),
+            output: '完成',
+            status: 'success',
+            diffs: [
+              {
+                filePath: 'src/a.ts',
+                additions: 1,
+                deletions: 1,
+                changes: [
+                  { type: 'deletion', content: 'old' },
+                  { type: 'addition', content: 'new' },
+                ],
+              },
+            ],
+          })
+        ).toBe('side-diff');
+        // 无结构化 diffs：old_string/new_string 入参可合成 → 同样改道
+        const synth: MessageToolCall = {
+          id: 'd2',
+          name: 'str_replace',
+          arguments: JSON.stringify({
+            path: 'src/b.ts',
+            old_string: 'a',
+            new_string: 'b',
+          }),
+          output: '完成',
+          status: 'success',
+        };
+        expect(resolveToolCallDiffs(synth).length).toBe(1);
+        expect(resolveToolExpansionPolicy(synth)).toBe('side-diff');
+        // 无可解析 diff（输出超 40 行时路径级合成亦出局）且有非平凡
+        // 非 diff 输出 → inline 兜底（数据缺口，不假造侧栏内容）
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'd3',
+            name: 'replace_file_content',
+            arguments: JSON.stringify({ path: 'src/c.ts' }),
+            output: Array.from({ length: 45 }, (_, i) => `回执行 ${i}`).join(
+              '\n'
+            ),
+            status: 'success',
+          })
+        ).toBe('inline');
+      });
+
+      it('5 成功 read → none；运行中 read 同样 none（历史口径）', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'r1',
+            name: 'read_file',
+            arguments: JSON.stringify({ path: 'src/main.rs' }),
+            output: 'path: src/main.rs\n---\nfn main() {}',
+            status: 'success',
+          })
+        ).toBe('none');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'r2',
+            name: 'read_file',
+            arguments: JSON.stringify({ path: 'src/main.rs' }),
+            output: 'fn main() {}',
+            status: 'running',
+          })
+        ).toBe('none');
+      });
+
+      it('6 可解析 file_stat 成功 → none；不可解析 → 落后续规则', () => {
+        const statOut =
+          'src/main.rs: file\nsize: 8251 bytes\nmtime: 1785676954141 ms\nreadonly: false';
+        expect(
+          resolveToolExpansionPolicy({
+            id: 's1',
+            name: 'file_stat',
+            arguments: JSON.stringify({ path: 'src/main.rs' }),
+            output: statOut,
+            status: 'success',
+          })
+        ).toBe('none');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 's2',
+            name: 'file_stat',
+            arguments: JSON.stringify({ path: 'src/main.rs' }),
+            output: 'stat 输出格式异常\n第二行诊断信息需要就地查看',
+            status: 'success',
+          })
+        ).toBe('inline');
+      });
+
+      it('7 空结构化结果：grep 无匹配 / list_dir 空 → none；有内容 → inline', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'g1',
+            name: 'grep_search',
+            arguments: JSON.stringify({ pattern: 'foo' }),
+            output: '(no matches)',
+            status: 'success',
+          })
+        ).toBe('none');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'g2',
+            name: 'grep_search',
+            arguments: JSON.stringify({ pattern: 'foo' }),
+            output: 'query: foo\nmatches: 1\n---\nsrc/a.ts:3:1: foo hit',
+            status: 'success',
+          })
+        ).toBe('inline');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'l1',
+            name: 'list_dir',
+            arguments: JSON.stringify({ path: 'src' }),
+            output: '(empty directory)',
+            status: 'success',
+          })
+        ).toBe('none');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'l2',
+            name: 'list_dir',
+            arguments: JSON.stringify({ path: 'src' }),
+            output: '/src\n a.ts\n b.ts',
+            status: 'success',
+          })
+        ).toBe('inline');
+      });
+
+      it('8 仅入参体终态 → none（入参长度不再是展开理由）', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'i1',
+            name: 'web_search',
+            arguments: JSON.stringify({ query: '一个很长的查询字符串' }),
+            output: '',
+            status: 'success',
+          })
+        ).toBe('none');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'i2',
+            name: 'web_search',
+            arguments: JSON.stringify({ query: 'crish' }),
+            output: '完成',
+            status: 'success',
+          })
+        ).toBe('none');
+      });
+
+      it('9 扁平标量：可派生完整摘要 → none；嵌套/长内容 → inline', () => {
+        const flat: MessageToolCall = {
+          id: 'f1',
+          name: 'get_weather',
+          arguments: JSON.stringify({ city: '上海' }),
+          output: '{"temperature": 22, "unit": "celsius"}',
+          status: 'success',
+        };
+        expect(deriveFlatScalarSummary(flat)).toBe(
+          '{"temperature":22,"unit":"celsius"}'
+        );
+        expect(resolveToolExpansionPolicy(flat)).toBe('none');
+        // 单行短文本（ack 类）→ 全文即摘要 → none
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'f2',
+            name: 'delete_note',
+            arguments: JSON.stringify({ id: 'n1' }),
+            output: '已删除笔记 n1',
+            status: 'success',
+          })
+        ).toBe('none');
+        // 嵌套 JSON → 派生不出 → inline
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'f3',
+            name: 'get_weather',
+            arguments: JSON.stringify({ city: '上海' }),
+            output: '{"forecast": {"days": [{"d": 1, "t": 22}]}}',
+            status: 'success',
+          })
+        ).toBe('inline');
+        // shell 单行输出仍是执行记录 → inline（体裁排除）
+        expect(
+          deriveFlatScalarSummary({
+            id: 'f4',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'git rev-parse HEAD' }),
+            output: 'abc1234',
+            status: 'success',
+          })
+        ).toBeNull();
+      });
+
+      it('10 内容保留：shell 输出 / 图片 / 长文本 → inline；运行中有流式输出 → inline', () => {
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'c1',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'ls' }),
+            output: 'file-a\nfile-b\nfile-c',
+            status: 'success',
+          })
+        ).toBe('inline');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'c2',
+            name: 'screenshot',
+            arguments: JSON.stringify({}),
+            output: '已保存 ![shot](/tmp/shot.png)',
+            status: 'success',
+          })
+        ).toBe('inline');
+        expect(
+          resolveToolExpansionPolicy({
+            id: 'c3',
+            name: 'run_command',
+            arguments: JSON.stringify({ CommandLine: 'tail -f log' }),
+            output: 'streaming line',
+            status: 'running',
+          })
+        ).toBe('inline');
+      });
     });
 
     it('toolCommandPreview 提取简洁技术预览', () => {

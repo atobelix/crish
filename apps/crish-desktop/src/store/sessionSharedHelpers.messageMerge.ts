@@ -119,6 +119,21 @@ export function toolCallPatchHasChanges(
     tc.completedAt !== updates.completedAt
   )
     return true;
+  if (updates.finishedAt !== undefined && tc.finishedAt !== updates.finishedAt)
+    return true;
+  if (updates.durationMs !== undefined && tc.durationMs !== updates.durationMs)
+    return true;
+  if (
+    updates.backgrounded !== undefined &&
+    tc.backgrounded !== updates.backgrounded
+  )
+    return true;
+  if (
+    updates.backgroundedElapsedMs !== undefined &&
+    tc.backgroundedElapsedMs !== updates.backgroundedElapsedMs
+  )
+    return true;
+  if (updates.images !== undefined && tc.images !== updates.images) return true;
   if (updates.turnId !== undefined && tc.turnId !== updates.turnId) return true;
   return false;
 }
@@ -156,6 +171,13 @@ export function applyMessageToolCallPatch(
   if (updates.startedAt !== undefined) target.startedAt = updates.startedAt;
   if (updates.completedAt !== undefined)
     target.completedAt = updates.completedAt;
+  if (updates.finishedAt !== undefined) target.finishedAt = updates.finishedAt;
+  if (updates.durationMs !== undefined) target.durationMs = updates.durationMs;
+  if (updates.backgrounded !== undefined)
+    target.backgrounded = updates.backgrounded;
+  if (updates.backgroundedElapsedMs !== undefined)
+    target.backgroundedElapsedMs = updates.backgroundedElapsedMs;
+  if (updates.images !== undefined) target.images = updates.images;
   if (updates.turnId !== undefined) target.turnId = updates.turnId;
 }
 

@@ -526,7 +526,8 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
     });
     const tc = toolCall('m1', 'tc-running');
     expect(tc!.status).toBe('running');
-    expect(tc!.output).toBe('协作进行中…');
+    // R8：父工具卡不写占位输出（分派关系归分派卡）
+    expect(tc!.output ?? '').toBe('');
   });
 
   it('started 全局消费：终态父工具卡不回退为 running', () => {

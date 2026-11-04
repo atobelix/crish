@@ -12,7 +12,6 @@ import { toolHumanLabel } from '../../api/tool-presentation/toolHumanDescription
 import { fullToolOutput } from '../../api/tool-presentation/toolOutputSanitizer';
 import type { MessageToolCall } from '../../store/types';
 import { TOOL_OUTPUT_DOM_CHAR_CAP } from '../../workers';
-import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { ArtifactChip } from './ArtifactChip';
 import { actionPathOf } from './narrativeModel';
 import { Button } from '@/components/ui';
@@ -32,7 +31,7 @@ function capOutput(raw: string): string {
 }
 
 function statusMeta(status: ActionNode['status']): string {
-  if (status === 'running') return '进行中';
+  if (status === 'running') return '运行中';
   if (status === 'error') return '失败';
   if (status === 'pending_approval') return '待确认';
   return '';
@@ -74,8 +73,6 @@ export function ActionRow({
   const meta = [statusMeta(action.status), action.parallelGroupId ? '并行' : '']
     .filter(Boolean)
     .join(' · ');
-  const outputMax = FLOW_OUTPUT_STYLE;
-
   return (
     <div
       className={styles.action}
@@ -133,7 +130,7 @@ export function ActionRow({
         ) : null}
       </div>
       {open && expandable ? (
-        <div className={styles.detail} style={outputMax}>
+        <div className={styles.detail}>
           {command ? (
             <pre className={styles.pre} data-flow-action-command="">
               {command}

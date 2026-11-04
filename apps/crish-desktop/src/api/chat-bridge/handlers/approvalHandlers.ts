@@ -15,7 +15,11 @@ import { logInternalError } from '../../userFacingErrors';
 import { extractApprovalCommandArgs } from '../../engineEventSchema';
 import { parseApprovalRiskMeta } from '../../approvalMeta';
 import { parseApprovalPayload } from '../../approvalPayload';
-import { getSessionById } from '../../../store/storeAccess';
+import {
+  getSessionById,
+  patchAgentTool,
+  upsertAgentToolApproval,
+} from '../../../store/storeAccess';
 import type {
   ApprovalArbiter,
   ApprovalRequesterMeta,
@@ -139,6 +143,25 @@ export function onApprovalRequested(
   } else {
     callbacks.onToolStart(toolCallId, toolName, args, explanation);
   }
+
+  // R7b 子代理路径写穿：经子 agent 发起的审批同步镜像到该 agent 的
+  // 时间线（upsertAgentToolApproval），使 agent.messages 内的工具调用
+  // 带上同一份 approvalMeta——侧栏 ApprovalAskCard 的申请人标注与
+  // countPendingApprovals 的 arbiter 口径过滤据此生效。主时间线分发
+  // （上文）逐字不变；本镜像只补 agent 侧的状态与元数据，不改变待批
+  // 归类（归类仍由 arbiter 与呈现层口径决定；解析不到 agent 时不镜像，
+  // 主时间线副本照常承载，与 R7 的诚实降级一致）。
+  const requesterSubagentId = metaWithAttribution.requester?.subagentId;
+  if (requesterSubagentId) {
+    upsertAgentToolApproval(env.sessionId, requesterSubagentId, {
+      id: toolCallId,
+      name: toolName,
+      arguments: args,
+      explanation,
+      status: 'pending_approval',
+      approvalMeta: metaWithAttribution,
+    });
+  }
 }
 
 export function onApprovalResolved(
@@ -159,6 +182,22 @@ export function onApprovalResolved(
     toolId: toolCallId,
     denied,
   });
+  // R7b：agent 时间线镜像同步收口（与主时间线同一裁决）：仅推进仍处
+  // pending_approval 的镜像条目，文案与 agentStreamCallbacks 的
+  // onApprovalResolved 对齐；已由 tool-end 落终态的条目不触碰。
+  const ownerAgent = getSessionById(env.sessionId)?.agents?.find((a) =>
+    (a.messages || []).some((m) =>
+      (m.toolCalls || []).some(
+        (t) => t.id === toolCallId && t.status === 'pending_approval'
+      )
+    )
+  );
+  if (ownerAgent) {
+    patchAgentTool(env.sessionId, ownerAgent.id, toolCallId, {
+      status: denied ? 'error' : 'running',
+      output: denied ? '未获批准' : '执行中…',
+    });
+  }
   if (callbacks.onApprovalResolved) {
     callbacks.onApprovalResolved(toolCallId, denied ? 'deny' : 'allow');
   }

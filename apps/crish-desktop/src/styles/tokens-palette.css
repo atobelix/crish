@@ -90,9 +90,9 @@ html[data-theme='light'] {
 
   --color-active: #15803d;
 
-  /* 超链接标识（Light） */
-  --color-link: #2563eb;
-  --color-link-hover: #1d4ed8;
+  /* 超链接标识（Light）：靛紫，不与 info 蓝 / 品牌绿 / diff 红绿撞色 */
+  --color-link: #6550b9;
+  --color-link-hover: #4d3b99;
   --link-color: var(--color-link);
   --link-hover-color: var(--color-link-hover);
 
@@ -197,9 +197,9 @@ html[data-theme='dark'] {
 
   --color-active: #16a34a;
 
-  /* 超链接标识（Dark） */
-  --color-link: #60a5fa;
-  --color-link-hover: #93c5fd;
+  /* 超链接标识（Dark）：与 Light 同色相的提亮阶梯 */
+  --color-link: #b3a5f2;
+  --color-link-hover: #d1c9f8;
   --link-color: var(--color-link);
   --link-hover-color: var(--color-link-hover);
 

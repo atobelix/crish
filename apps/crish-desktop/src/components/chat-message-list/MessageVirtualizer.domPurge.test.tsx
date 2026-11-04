@@ -45,7 +45,6 @@ vi.mock('../../api/markdown/useMarkdownRender', () => {
   });
   return {
     useMarkdownResult: vi.fn(result),
-    useStreamingMarkdownResult: vi.fn(result),
     useMarkdownPrewarm: vi.fn(),
   };
 });

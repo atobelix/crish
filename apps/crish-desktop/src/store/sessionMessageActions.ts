@@ -24,6 +24,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
   | 'applyTimelineTruncate'
   | 'respondToApproval'
   | 'updateMessageText'
+  | 'markMessageStoppedByUser'
   | 'updateMessageThinking'
   | 'addMessageToolCall'
   | 'updateMessageToolCall'

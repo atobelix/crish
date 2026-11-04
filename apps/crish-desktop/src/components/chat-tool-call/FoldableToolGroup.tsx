@@ -5,7 +5,7 @@
  *
  * 【核心特性】
  * ① 默认折叠：首屏仅展示一行极简摘要（如「已搜索 2 次 · 已运行 1 条命令 〉」）；
- * ② 24px 高度、400 字重、14px 字号，与 ReasoningRow 严格对齐同构；
+ * ② 24px 高度、400 字重、13px 字号（D5 定版 2026-11-02，原 14px），与 ReasoningRow 严格对齐同构；
  * ③ 整行 Hover 统一变黑（var(--text-primary)），展开后详细结果内容 Hover 不变色；
  * ④ 原生 hidden="until-found" 支持 Ctrl+F 页面穿透搜索并自动唤醒展开；
  * ⑤ 运行中流式态直出展开，收口后自收敛折叠；
@@ -29,37 +29,21 @@ import {
   formatProcessActionsSummary,
 } from '../../api/tool-presentation/processMetricsEngine';
 import { AppIcon, type IconName } from '@/components/ui/icons';
-import { Tooltip } from '@/components/ui';
+import { NumericText, ScrollFadeRegion, Tooltip } from '@/components/ui';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
-import * as motionTokens from '../../utils/motionTokens';
-import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import {
+  calcAccordionDuration,
+  accordionDurationStyle,
+  DURATION_ACCORDION_MS,
+} from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
+import {
+  AUTO_COLLAPSE_DRAIN_WAIT_CAP_MS,
+  hasActiveToolDrain,
+  onAllToolDrainsSettled,
+} from './toolRevealState';
+import { useRevealEntrance } from './useRevealEntrance';
 import styles from './FoldableToolGroup.module.css';
-
-/**
- * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
- */
-function calcAccordionDuration(height: number, isOpening: boolean): number {
-  if (
-    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
-    'function'
-  ) {
-    return (
-      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
-        h: number,
-        o: boolean
-      ) => number
-    )(height, isOpening);
-  }
-  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
-  if (isOpening) {
-    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(480, Math.max(180, raw)));
-  } else {
-    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(350, Math.max(150, raw)));
-  }
-}
 
 export interface FoldableToolGroupProps {
   items: ToolRenderItem[];
@@ -102,11 +86,45 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     }, [items]);
 
     const prevHasRunningRef = useRef(metrics.hasRunning);
+    /** AN4：自动折叠延后等待（排空 settle 订阅 + 硬顶定时器）的清理句柄 */
+    const collapseWaitCleanupRef = useRef<(() => void) | null>(null);
+    const cancelCollapseWait = useCallback(() => {
+      collapseWaitCleanupRef.current?.();
+      collapseWaitCleanupRef.current = null;
+    }, []);
+
+    const groupToolIds = useMemo(() => {
+      const ids: string[] = [];
+      for (const item of items) {
+        if (item.kind === 'single') ids.push(item.tc.id);
+        else for (const t of item.tools) ids.push(t.id);
+      }
+      return ids;
+    }, [items]);
+
+    /** 组内最近一次工具事件时间戳（入场实况门判定用） */
+    const groupEventTs = useMemo(() => {
+      let latest = 0;
+      for (const item of items) {
+        const tools = item.kind === 'single' ? [item.tc] : item.tools;
+        for (const t of tools) {
+          latest = Math.max(latest, t.completedAt ?? 0, t.startedAt ?? 0);
+        }
+      }
+      return latest || undefined;
+    }, [items]);
 
     // 组级折叠门槛：仅 ≥2 个工具才聚合为单行摘要（总方案 §终态收敛「单工具则直出展开」、
     // 分段详案 S08）。单工具的摘要（「已运行 1 条命令」）与工具行同为 24px 单行，
     // 却会抹掉意图说明与真实命令——单工具直接渲染工具行，详情仍由工具行自身默认折叠。
     const isGroupFolding = metrics.toolCount >= 2;
+
+    // AN4：组头形成入场（聚合形成的那一帧淡入；结构「更换」保留——
+    // 单工具行降级/升级为组时容器换挂即播，不做高度动画避免与手风琴叠播）
+    const groupEntrance = useRevealEntrance({
+      key: isGroupFolding ? `group:${_msgId}:${groupToolIds[0] ?? ''}` : '',
+      eventTs: groupEventTs,
+    });
 
     // 默认折叠；当前正在运行则直出展开。
     // （R4b：原「含子代理强制展开（铁律四）」已删——分派在组合根被提取为
@@ -115,28 +133,76 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       () => defaultExpanded || metrics.hasRunning
     );
 
+    // HC1/F1：组体滚动宿主的边缘渐隐四态——经 ScrollFadeRegion 组件
+    // 接入（宿主 JSX 见渲染段；active=isExpanded 透传状态机开关）。
+    // （C1 审计 D-1 恢复：本接线曾被旧基线整文件覆盖致接线丢失、在此
+    //  重落；F1 组件化后由 hc1.contract 的组件契约 + 宿主存在断言守卫。）
+
     // 流式执行中进入 running 时保持展开；全部工具执行完毕后自动收敛折叠（用户手动切换除外）
     useEffect(() => {
       const wasRunning = prevHasRunningRef.current;
       prevHasRunningRef.current = metrics.hasRunning;
       if (metrics.hasRunning) {
+        cancelCollapseWait();
         setIsExpanded(true);
       } else if (wasRunning && !userInteractedRef.current && !defaultExpanded) {
-        const currentHeight =
-          innerRef.current?.getBoundingClientRect().height ?? 0;
-        setTransitionDuration(calcAccordionDuration(currentHeight, false));
-        triggerViewportRecovery();
-        setIsExpanded(false);
-        onInvalidate?.();
+        const performCollapse = () => {
+          const currentHeight =
+            innerRef.current?.getBoundingClientRect().height ?? 0;
+          setTransitionDuration(calcAccordionDuration(currentHeight, false));
+          triggerViewportRecovery();
+          setIsExpanded(false);
+          onInvalidate?.();
+        };
+        // AN4 协调段：组内输出仍在排空揭示时，自动折叠延后至排空
+        // settle 后再启动（用户在未读完时不会被折叠抢走内容）；硬顶
+        // = 排空总时长上限，与时长公式同源。等待期间用户若已切换
+        // 过展开态（userInteractedRef 在 toggle 委托里同步置位），
+        // 触发时复查并放弃本次自动折叠。
+        const pendingDrains = groupToolIds.filter((id) =>
+          hasActiveToolDrain(id)
+        );
+        if (pendingDrains.length === 0) {
+          performCollapse();
+        } else {
+          cancelCollapseWait();
+          let fired = false;
+          const fire = () => {
+            if (fired) return;
+            fired = true;
+            cancelCollapseWait();
+            if (!userInteractedRef.current && !defaultExpanded) {
+              performCollapse();
+            }
+          };
+          const unsubscribe = onAllToolDrainsSettled(pendingDrains, fire);
+          const timer = setTimeout(fire, AUTO_COLLAPSE_DRAIN_WAIT_CAP_MS);
+          collapseWaitCleanupRef.current = () => {
+            unsubscribe();
+            clearTimeout(timer);
+          };
+        }
       }
     }, [
       metrics.hasRunning,
       defaultExpanded,
       onInvalidate,
       triggerViewportRecovery,
+      groupToolIds,
+      cancelCollapseWait,
     ]);
 
+    // AN4：卸载时取消未决的自动折叠等待
+    useEffect(() => {
+      return () => {
+        collapseWaitCleanupRef.current?.();
+        collapseWaitCleanupRef.current = null;
+      };
+    }, []);
+
     const handleToggle = useCallback(() => {
+      // AN4：用户切换即取消未决的排空后自动折叠（人的操作优先）
+      cancelCollapseWait();
       userInteractedRef.current = true;
       setIsExpanded((prev) => {
         const next = !prev;
@@ -150,7 +216,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         onInvalidate?.();
         return next;
       });
-    }, [onInvalidate, triggerViewportRecovery]);
+    }, [onInvalidate, triggerViewportRecovery, cancelCollapseWait]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -261,10 +327,13 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     return (
       <div
         ref={containerRef}
-        className={styles.groupContainer}
+        className={`${styles.groupContainer}${groupEntrance.entering ? ` ${styles.groupEnter}` : ''}`}
         data-testid="foldable-tool-group"
         data-expanded={isExpanded ? 'true' : 'false'}
+        data-entering={groupEntrance.entering ? 'true' : undefined}
+        onAnimationEnd={groupEntrance.handleAnimationEnd}
         onFocusCapture={handleFocusCapture}
+        style={accordionDurationStyle(transitionDuration)}
       >
         <div
           ref={headerRef}
@@ -282,14 +351,19 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
             aria-hidden
             data-testid={`tool-group-icon-${metrics.leadAction}`}
           />
-          <span className={styles.summaryLabel}>{summaryText}</span>
-          {metrics.hasError && (
-            <Tooltip content="包含执行错误">
+          <span className={styles.summaryLabel}>
+            <NumericText text={summaryText} />
+          </span>
+          {metrics.errorCount > 0 && (
+            <Tooltip content={`包含 ${metrics.errorCount} 个执行错误`}>
               <span
                 className={styles.errorBadge}
                 data-testid="tool-group-error-badge"
               >
                 <AppIcon name="alert-triangle" size={12} aria-hidden />
+                <span data-testid="tool-group-error-count">
+                  <NumericText text={String(metrics.errorCount)} />
+                </span>
               </span>
             </Tooltip>
           )}
@@ -306,16 +380,15 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
           ref={slotRef}
           className={styles.groupBody}
           data-expanded={isExpanded ? 'true' : 'false'}
-          style={
-            {
-              '--accordion-duration': `${transitionDuration}ms`,
-            } as React.CSSProperties
-          }
           onTransitionEnd={handleTransitionEnd}
         >
-          <div ref={innerRef} className={styles.groupBodyInner}>
+          <ScrollFadeRegion
+            ref={innerRef}
+            active={isExpanded}
+            className={`${styles.groupBodyInner} tool-group-scroll-host`}
+          >
             <ChatToolStack {...hostProps} />
-          </div>
+          </ScrollFadeRegion>
         </div>
       </div>
     );

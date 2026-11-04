@@ -29,7 +29,7 @@ html[data-theme='light'] {
   --state-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --state-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
   --state-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent);
-  --state-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --state-strong: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --state-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --state-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 

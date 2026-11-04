@@ -2,7 +2,7 @@
 
 .pickerPanel {
   width: 230px;
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-radius-outer, 18px);
   padding: 6px;
 }
 
@@ -10,7 +10,7 @@
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--sep-item-radius, var(--radius-menu-inner, 12px));
   min-height: 28px;
 }
 
@@ -45,7 +45,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: var(--radius-sm, var(--button-radius, 7px));
+  border-radius: var(--radius-control, var(--button-radius, 8px));
   width: 20px;
   height: 20px;
   min-width: unset;
@@ -92,14 +92,14 @@
   width: 100%;
 }
 
-/* 级联子卡片：方案 A 标尺 14px 外圆角 / 6px 内衬 / 8px 条目 (14 = 8 + 6 绝对同心) */
+/* 级联子卡片：现代浮层标尺 18px 外圆角 / 6px 内衬 / 12px 条目 (18 = 12 + 6 绝对同心) */
 .cascadeSubmenu {
   position: absolute;
   left: 100%;
   top: 0;
   margin-left: 4px;
   min-width: 160px;
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-radius-outer, 18px);
   border: 1px solid
     var(--border-panel, var(--sep-border-color, var(--border-color)));
   background: var(--surface-overlay);
@@ -110,7 +110,7 @@
   will-change: transform, opacity;
 }
 
-/* 级联子菜单同心闭环：8px 条目 + 6px 内衬 = 14px 外圆角 (Δ = 0 完美同心) */
+/* 级联子菜单同心闭环：12px 条目 + 6px 内衬 = 18px 外圆角 (Δ = 0 完美同心) */
 .cascadeSubmenu .item {
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--sep-item-radius, var(--radius-menu-inner, 12px));
 }

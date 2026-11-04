@@ -20,7 +20,11 @@
  *   - Callback Ref 原生操纵 `hidden` 属性（规避 React 布尔属性反射陷阱——
  *     `hidden={false}` 会移除属性，`hidden="until-found"` 无法通过 JSX 表达）；
  *   - 监听原生 `beforematch`，命中时精准展开该段并作废宿主测高；
- *   - 【铁律四】`forceExpanded` 段禁用收起交互、且永不挂载 `hidden`。
+ *   - 【R9】段级 `forceExpanded` 已物理删除（铁律四退役完结）：本组件不再有
+ *     强制展开形态，展开态完全由宿主受控字典决定；
+ *   - 【R9 组级窗口化】宿主可传 `deferredBodyHeight`：组头（控制栏）常驻，
+ *     组体先以等高占位替代条目渲染，宿主经 IntersectionObserver 预热后
+ *     撤除该 prop 真实挂载组体（单向闩在宿主侧）。
  */
 
 import * as React from 'react';
@@ -39,42 +43,21 @@ import {
   formatProcessControlLabel,
 } from '../../api/tool-presentation/processMetricsEngine';
 import { AppIcon, type IconName } from '@/components/ui/icons';
-import * as motionTokens from '../../utils/motionTokens';
-import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import { NumericText, ScrollFadeRegion } from '@/components/ui';
+import {
+  calcAccordionDuration,
+  accordionDurationStyle,
+  DURATION_ACCORDION_MS,
+} from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
 import styles from './FoldableProcessSection.module.css';
-
-/**
- * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
- */
-function calcAccordionDuration(height: number, isOpening: boolean): number {
-  if (
-    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
-    'function'
-  ) {
-    return (
-      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
-        h: number,
-        o: boolean
-      ) => number
-    )(height, isOpening);
-  }
-  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
-  if (isOpening) {
-    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(480, Math.max(180, raw)));
-  } else {
-    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(350, Math.max(150, raw)));
-  }
-}
 
 export interface FoldableProcessSectionProps {
   /** 宿主消息唯一 ID */
   msgId: string;
   /** 分段唯一稳定键（由 seg.id 传入，格式 `${msgId}-proc-${index}`） */
   sectionId: string;
-  /** 该分段包含的子项（仅 thought / tools / injection） */
+  /** 该组包含的子项（thought / tools / 组内叙述行 text） */
   items: AssistantTimelineItem[];
   /** 该分段聚合指标（SSOT: processMetricsEngine.aggregateProcessMetrics） */
   metrics: ProcessSegmentMetrics;
@@ -97,8 +80,14 @@ export interface FoldableProcessSectionProps {
   isExpanded: boolean;
   /** 是否允许折叠（透传 seg.foldable，禁止调用方本地推导） */
   isFoldable: boolean;
-  /** 【铁律四】强制展开段（subagent）。true 时收起交互须被禁用 */
-  forceExpanded?: boolean;
+  /**
+   * 【R9 组级窗口化】组体延迟挂载时的占位高度（px）。
+   * 设置时组头常驻、组体以等高占位替代条目渲染；宿主在占位进入预热区后
+   * 撤除本 prop（传 undefined）真实挂载。未设置时行为与既往完全一致。
+   */
+  deferredBodyHeight?: number;
+  /** 组体占位元素的注册回调（宿主 IntersectionObserver 观察用） */
+  bodyPlaceholderRef?: (el: HTMLElement | null) => void;
   /**
    * 段是否处于流式活跃执行态。
    * true → 控制栏跳秒；false → 控制栏定格为「工作 xx 时间」。
@@ -186,7 +175,8 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     showWorkTime,
     isExpanded,
     isFoldable,
-    forceExpanded = false,
+    deferredBodyHeight,
+    bodyPlaceholderRef,
     isLive = false,
     onToggle,
     onExpand,
@@ -208,11 +198,11 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     // 视口保护
     const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
 
-    // 展开态：强制展开段恒为展开（用户级状态不得覆盖）
-    const expanded = forceExpanded ? true : isExpanded;
+    // 展开态完全由宿主受控字典决定（R9：段级强制展开已删除）
+    const expanded = isExpanded;
 
-    // 隐藏判定：可折叠 && 未展开 && 非强制展开
-    const isHidden = isFoldable && !expanded && !forceExpanded;
+    // 隐藏判定：可折叠 && 未展开
+    const isHidden = isFoldable && !expanded;
 
     // ── Callback Ref：挂载时原生注入 hidden="until-found" ──
     const setSlotRef = useCallback(
@@ -311,8 +301,6 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     );
 
     const handleToggle = useCallback(() => {
-      // 铁律四：强制展开段不接受收起
-      if (forceExpanded) return;
       const nextExpanded = !expanded;
       if (!nextExpanded) {
         triggerViewportRecovery();
@@ -321,28 +309,47 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
         innerRef.current?.getBoundingClientRect().height ?? 0;
       setTransitionDuration(calcAccordionDuration(currentHeight, nextExpanded));
       onToggle(sectionId, nextExpanded);
-    }, [forceExpanded, onToggle, sectionId, expanded, triggerViewportRecovery]);
+    }, [onToggle, sectionId, expanded, triggerViewportRecovery]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
-        if (forceExpanded) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           handleToggle();
         }
       },
-      [forceExpanded, handleToggle]
+      [handleToggle]
     );
+
+    // 组体内容：延迟挂载时以等高占位替代条目渲染（组头常驻，R9 二段式占位）
+    const bodyContent =
+      deferredBodyHeight != null ? (
+        <div
+          ref={bodyPlaceholderRef}
+          data-testid="process-group-body-placeholder"
+          data-section-id={sectionId}
+          style={{ height: deferredBodyHeight }}
+        />
+      ) : (
+        items.map((item, index) => (
+          <React.Fragment key={item.key}>
+            {renderItem(item, index)}
+          </React.Fragment>
+        ))
+      );
 
     const isSingleThought =
       metrics.thoughtCount === 1 &&
       metrics.toolCount === 0 &&
       metrics.subagentCount === 0;
 
-    // 单思考段或非工作时间段（子项已由 ReasoningRow / FoldableToolGroup 自带 24px 独立折叠栏）
-    // 直接渲染内容槽位，避免与内部 FoldableToolGroup 产生重复的双层摘要折叠栏
-    const omitOuterControlBar =
-      isSingleThought || (!showWorkTime && items.length > 0 && !forceExpanded);
+    // 单思考组（子项已由 ReasoningRow 自带 24px 独立折叠栏）直接渲染
+    // 内容槽位，避免双层摘要折叠栏。
+    // 【F1 · R-A】非首组（showWorkTime=false）不再省略控制栏：补轻量
+    // 组头（主导图标 + 动作分布文案，即 formatProcessControlLabel 的
+    // 非工作时间分支），与首组同口径可折可重开；分段器 hasGroupHeader
+    // 判定与此同构（无组头组只剩单思考特例）。
+    const omitOuterControlBar = isSingleThought;
 
     if (omitOuterControlBar) {
       return (
@@ -353,42 +360,39 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           data-single-thought={isSingleThought ? 'true' : undefined}
           data-foldable={isFoldable ? 'true' : 'false'}
           data-expanded={expanded ? 'true' : 'false'}
+          style={accordionDurationStyle(transitionDuration)}
         >
           <div
             id={bodyId}
             ref={setSlotRef}
             className={styles.sectionBody}
             data-expanded={expanded ? 'true' : 'false'}
-            style={
-              {
-                '--accordion-duration': `${transitionDuration}ms`,
-              } as React.CSSProperties
-            }
             onTransitionEnd={handleTransitionEnd}
             data-testid={`process-slot-${sectionId}`}
           >
-            <div ref={innerRef} className={styles.sectionBodyInner}>
-              {items.map((item, index) => (
-                <React.Fragment key={item.key}>
-                  {renderItem(item, index)}
-                </React.Fragment>
-              ))}
-            </div>
+            <ScrollFadeRegion
+              ref={innerRef}
+              active={expanded}
+              className={styles.sectionBodyInner}
+              innerClassName={styles.sectionFadeInner}
+            >
+              {bodyContent}
+            </ScrollFadeRegion>
           </div>
         </div>
       );
     }
 
-    const controlInteractive = isFoldable && !forceExpanded;
+    const controlInteractive = isFoldable;
 
     return (
       <div
         ref={containerRef}
         className={`${styles.section} ${className}`}
         data-process-segment={sectionId}
-        data-force-expanded={forceExpanded ? 'true' : 'false'}
         data-foldable={isFoldable ? 'true' : 'false'}
         data-expanded={expanded ? 'true' : 'false'}
+        style={accordionDurationStyle(transitionDuration)}
       >
         {/* 控制栏：主导图标 + 工作时间 + 折叠指示（工作时间即原「已深度思考」位置） */}
         <div
@@ -397,7 +401,6 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           tabIndex={controlInteractive ? 0 : undefined}
           aria-expanded={controlInteractive ? expanded : undefined}
           aria-controls={controlInteractive ? bodyId : undefined}
-          aria-disabled={forceExpanded ? 'true' : undefined}
           data-live={isLive ? 'true' : 'false'}
           data-testid={`process-toggle-${sectionId}`}
           onClick={handleToggle}
@@ -405,7 +408,11 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           style={controlInteractive ? undefined : { cursor: 'default' }}
         >
           {!showWorkTime && <SectionLeadIcon metrics={metrics} />}
-          <span className={styles.summaryLabel}>{summaryText}</span>
+          <span className={styles.summaryLabel}>
+            {/* 运行中 100ms 跳秒：tenths 位永远在换，滚轮会成一团糊，直出文本；
+                落定后的终值才走数字滚轮 */}
+            {isLive ? summaryText : <NumericText text={summaryText} />}
+          </span>
           {controlInteractive ? (
             <span
               className={`${styles.chevron} ${expanded ? styles.rot : ''}`}
@@ -423,21 +430,17 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           ref={setSlotRef}
           className={styles.sectionBody}
           data-expanded={expanded ? 'true' : 'false'}
-          style={
-            {
-              '--accordion-duration': `${transitionDuration}ms`,
-            } as React.CSSProperties
-          }
           onTransitionEnd={handleTransitionEnd}
           data-testid={`process-slot-${sectionId}`}
         >
-          <div ref={innerRef} className={styles.sectionBodyInner}>
-            {items.map((item, index) => (
-              <React.Fragment key={item.key}>
-                {renderItem(item, index)}
-              </React.Fragment>
-            ))}
-          </div>
+          <ScrollFadeRegion
+            ref={innerRef}
+            active={expanded}
+            className={styles.sectionBodyInner}
+            innerClassName={styles.sectionFadeInner}
+          >
+            {bodyContent}
+          </ScrollFadeRegion>
         </div>
       </div>
     );

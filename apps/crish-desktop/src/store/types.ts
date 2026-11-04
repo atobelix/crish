@@ -365,6 +365,9 @@ export interface MessageToolCall {
   turnId?: string | undefined;
   /** 结构化图片输出（替代在 output 字符串中塞图片） */
   images?: MessageImageRef[] | undefined;
+  /** BG3 后台任务标记与已耗时（tool-backgrounded / tool-settled） */
+  backgrounded?: boolean | undefined;
+  backgroundedElapsedMs?: number | undefined;
 }
 
 /** 消息发送方 */
@@ -569,6 +572,14 @@ export interface SessionMessage extends Pick<
   seq?: number | undefined;
   toolCalls?: MessageToolCall[] | undefined;
   status?: SessionMessageStatus | undefined;
+  /**
+   * 用户主动停止本轮生成（批 B ㉖）：仅由 finalizeStopGeneration 的非 silent
+   * 路径写入（silent 停止是内部编排手段，不得冒充用户可见语义）。
+   * 停止终态 status 仍为 'completed'（与自然完成同轨），本字段是呈现层唯一
+   * 区分凭据：无正文时呈现一行弱化「已停止」，有部分正文时按既有形态不加行。
+   * 禁止把「已停止」写进 text（气泡文本禁写系统句的既有铁律）。
+   */
+  stoppedByUser?: boolean | undefined;
   /**
    * 工具调用结果回执：本消息作为某些 toolCall 的结果时，
    * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。

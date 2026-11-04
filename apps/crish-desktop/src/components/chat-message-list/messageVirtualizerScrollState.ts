@@ -8,11 +8,18 @@
  * - useStickToBottomFollow：流式打字与动态测高自动跟随。
  */
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import {
   BOTTOM_STICK_EPSILON_PX,
   DEFAULT_VIEWPORT_HEIGHT_PX,
+  GESTURE_FREEZE_MS,
   SCROLL_BOTTOM_THRESHOLD_PX,
   SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
@@ -21,7 +28,15 @@ import type * as React from 'react';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import type { SessionMessage } from '../../store/types';
 import { reseedAllMessageHeights } from './messageDomPurge';
+import {
+  prefersReducedMotion,
+  resolveScrollToBottomDurationMs,
+  scrollToBottomPositionAt,
+  type ScrollToBottomPlan,
+} from './messageVirtualizerScrollPlan';
 import { chatSpacerHeight } from './chatScrollGeometry';
+import type { PagingAnchor } from './PagingAnchor';
+import { resolveAnchorTargetScrollTop } from './readingAnchorStore';
 
 type VirtualScrollApi = ReturnType<typeof useVirtualScroll>;
 type FastScrollState = ReturnType<typeof useFastScrollPurgeTracker>;
@@ -80,17 +95,37 @@ export function useVirtualizerScrollHandlers({
   setShowFloorButton,
   touchStartYRef,
 }: VirtualizerScrollHandlersParams) {
+  // R12 机制 B：回底动画的计划与 rAF 句柄；物理输入夺权或新计划取代时即取消
+  const scrollToBottomAnimRef = useRef<{
+    rafId: number | null;
+    plan: ScrollToBottomPlan | null;
+    startedAt: number;
+    lastCommitted: number;
+  }>({ rafId: null, plan: null, startedAt: 0, lastCommitted: 0 });
+
+  const cancelScrollToBottomAnim = useCallback(() => {
+    const anim = scrollToBottomAnimRef.current;
+    if (anim.rafId !== null) {
+      cancelAnimationFrame(anim.rafId);
+      anim.rafId = null;
+    }
+    anim.plan = null;
+  }, []);
+
+  useEffect(() => cancelScrollToBottomAnim, [cancelScrollToBottomAnim]);
+
   const handleWheelCapture = useCallback<
     React.WheelEventHandler<HTMLDivElement>
   >(
     (e) => {
       vs.cancelProgrammaticScroll();
+      cancelScrollToBottomAnim();
       if (e.deltaY < 0) {
         isAtBottomRef.current = false;
         setIsAtBottom(false);
       }
     },
-    [vs, isAtBottomRef, setIsAtBottom]
+    [vs, isAtBottomRef, setIsAtBottom, cancelScrollToBottomAnim]
   );
 
   const handleTouchStartCapture = useCallback<
@@ -107,12 +142,13 @@ export function useVirtualizerScrollHandlers({
   >(
     (e) => {
       vs.cancelProgrammaticScroll();
+      cancelScrollToBottomAnim();
       if ((e.touches[0]?.clientY ?? 0) > touchStartYRef.current) {
         isAtBottomRef.current = false;
         setIsAtBottom(false);
       }
     },
-    [vs, isAtBottomRef, setIsAtBottom, touchStartYRef]
+    [vs, isAtBottomRef, setIsAtBottom, touchStartYRef, cancelScrollToBottomAnim]
   );
 
   const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
@@ -132,13 +168,17 @@ export function useVirtualizerScrollHandlers({
       const isUserScrolledUp =
         currentScrollTop < prevObservedTop - BOTTOM_STICK_EPSILON_PX;
 
-      // 1. 评估与物理底部的亚像素距离
+      // 1. 评估与物理底的距离（R12b：计量改回物理底单一参照。R12 的内容底
+      // 换算是为常驻缓冲打的补丁，缓冲窗口化后不再需要：窗口内跟随静止点
+      // 即物理底、判定恒真；用户主动停在缓冲带中段按离底论处——其后内容
+      // 生长不拽走他，窗口结束收合时该位置被钳到真底，语义自洽；
+      // FAB 阈值同参照同值）
       const distanceToBottom = maxScrollTop - currentScrollTop;
-      const isPhysicallyAtBottom =
+      const isAtPhysicalBottom =
         maxScrollTop <= BOTTOM_STICK_EPSILON_PX ||
-        Math.abs(distanceToBottom) <= BOTTOM_STICK_EPSILON_PX;
+        distanceToBottom <= BOTTOM_STICK_EPSILON_PX;
 
-      if (isPhysicallyAtBottom) {
+      if (isAtPhysicalBottom) {
         if (!isAtBottomRef.current && !isAnchorLocked()) {
           isAtBottomRef.current = true;
           setIsAtBottom(true);
@@ -184,25 +224,87 @@ export function useVirtualizerScrollHandlers({
   const handleScrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    const totalHeight = totalHeightRef.current;
-    const scrollH = container.scrollHeight || totalHeight;
-    const clientH =
-      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
-    const maxScroll = Math.max(0, scrollH - clientH);
-    vs.performProgrammaticScroll(container, maxScroll, () => {
-      if (typeof container.scrollTo === 'function') {
-        container.scrollTo({ top: maxScroll, behavior: 'smooth' });
-      } else {
-        container.scrollTop = maxScroll;
-      }
-    });
-    isAtBottomRef.current = true;
-    setIsAtBottom(true);
-    if (maxScroll > SCROLL_TOP_EPSILON_PX) {
-      isAtTopRef.current = false;
-      setIsAtTop(false);
-    }
+    cancelScrollToBottomAnim();
     setShowFloorButton(false);
+
+    const readMaxScroll = () => {
+      const scrollH = container.scrollHeight || totalHeightRef.current;
+      const clientH =
+        container.clientHeight ||
+        vs.viewportHeight ||
+        DEFAULT_VIEWPORT_HEIGHT_PX;
+      return Math.max(0, scrollH - clientH);
+    };
+    const settleAtBottom = (target: number) => {
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+      if (target > SCROLL_TOP_EPSILON_PX) {
+        isAtTopRef.current = false;
+        setIsAtTop(false);
+      }
+    };
+
+    const maxScroll = readMaxScroll();
+    const distance = maxScroll - container.scrollTop;
+
+    // 距离可忽略或系统减少动效：单次同步提交（原生 behavior:'smooth' 例外自此退休）
+    if (distance <= BOTTOM_STICK_EPSILON_PX || prefersReducedMotion()) {
+      vs.performProgrammaticScroll(container, maxScroll);
+      settleAtBottom(maxScroll);
+      return;
+    }
+
+    // R12 机制 B：距离比例定时 + ease-out 三次，逐帧经令牌通道同步提交终值；
+    // 贴底状态在落点帧才置真（动画途中跟随 effect 不介入，不出现两段式落点）；
+    // 靶心每帧按当前几何重算，内容生长时剩余距离按同一定时律重新求值。
+    const anim = scrollToBottomAnimRef.current;
+    const plan: ScrollToBottomPlan = {
+      from: container.scrollTop,
+      target: maxScroll,
+      startTime: performance.now(),
+      durationMs: resolveScrollToBottomDurationMs(distance),
+    };
+    anim.plan = plan;
+    anim.startedAt = plan.startTime;
+    anim.lastCommitted = plan.from;
+
+    const tick = () => {
+      if (anim.plan !== plan) return; // 已被取消或被新计划取代
+      // 物理夺权判定：滚动位置偏离上一帧提交值（滚轮/触摸已在 Capture 同步取消，
+      // 此处兜住滚动条拖拽等不经 Capture 处理器的移动），或动画已越过起始
+      // 手势冻结窗（FAB 自身 pointerdown 的冻结不算夺权）后手势仍活跃
+      const deviated =
+        Math.abs(container.scrollTop - anim.lastCommitted) >
+        BOTTOM_STICK_EPSILON_PX;
+      const gestureStolen =
+        performance.now() - anim.startedAt > GESTURE_FREEZE_MS &&
+        vs.isGestureActive();
+      if (deviated || gestureStolen) {
+        cancelScrollToBottomAnim();
+        return;
+      }
+      const now = performance.now();
+      const liveMaxScroll = readMaxScroll();
+      if (liveMaxScroll !== plan.target) {
+        plan.from = container.scrollTop;
+        plan.target = liveMaxScroll;
+        plan.startTime = now;
+        plan.durationMs = resolveScrollToBottomDurationMs(
+          Math.max(0, liveMaxScroll - plan.from)
+        );
+      }
+      const { position, done } = scrollToBottomPositionAt(plan, now);
+      anim.lastCommitted = position;
+      vs.performProgrammaticScroll(container, position);
+      if (done) {
+        anim.plan = null;
+        anim.rafId = null;
+        settleAtBottom(plan.target);
+        return;
+      }
+      anim.rafId = requestAnimationFrame(tick);
+    };
+    anim.rafId = requestAnimationFrame(tick);
   }, [
     containerRef,
     vs,
@@ -212,6 +314,7 @@ export function useVirtualizerScrollHandlers({
     setIsAtBottom,
     setIsAtTop,
     setShowFloorButton,
+    cancelScrollToBottomAnim,
   ]);
 
   return {
@@ -325,6 +428,10 @@ export interface SessionSwitchGeometryResetParams {
   setIsAtTop: React.Dispatch<React.SetStateAction<boolean>>;
   observedTopRef: React.RefObject<number>;
   sessionMeasurePassesRef: React.RefObject<number>;
+  /** R12 当前已张开的尾部缓冲高（切会话渲染期已复位为 0，与其余几何点位同值） */
+  tailBufferRef: React.RefObject<number>;
+  /** 批 B ⑱ 待恢复阅读锚点（宿主按保存记录裁决）：非空时重置改走锚点恢复 */
+  restoreAnchorRef?: React.RefObject<PagingAnchor | null>;
 }
 
 /**
@@ -351,6 +458,8 @@ export function useSessionSwitchGeometryReset(
     setIsAtTop,
     observedTopRef,
     sessionMeasurePassesRef,
+    tailBufferRef,
+    restoreAnchorRef,
   } = params;
 
   useLayoutEffect(() => {
@@ -368,25 +477,46 @@ export function useSessionSwitchGeometryReset(
 
     // 会话切换立即直达目标吸底位置，绝不向 0 归零引发顶底往复跳动
     const estimatedContentHeight = manager.getTotalHeight(messages.length);
-    const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
+    const estimatedTotalHeight = chatSpacerHeight(
+      estimatedContentHeight,
+      tailBufferRef.current
+    );
     const container = vs.containerRef.current;
     const viewH =
       container?.clientHeight ||
       vs.viewportHeight ||
       DEFAULT_VIEWPORT_HEIGHT_PX;
     const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
-    fastScroll.reset(targetBottomScrollTop);
 
-    const isTop = targetBottomScrollTop <= SCROLL_TOP_EPSILON_PX;
+    // 批 B ⑱：有待恢复锚点时改走锚点落点（resolveAnchorTargetScrollTop，
+    // 与 restorePagingAnchor 路径 B 同式；提交仍走 performProgrammaticScroll
+    // 令牌通道）。跟随态不进此分支，R12 静止真底口径不变；逐遍校正由宿主
+    // 测高 effect 以 restorePagingAnchor 双径接管至收敛。
+    const anchorTarget = resolveAnchorTargetScrollTop(
+      manager,
+      restoreAnchorRef?.current ?? null
+    );
+    const targetScrollTop = anchorTarget ?? targetBottomScrollTop;
+    if (anchorTarget !== null) {
+      isAtBottomRef.current = false;
+      setIsAtBottom(false);
+      setShowFloorButton(
+        targetBottomScrollTop - targetScrollTop > SCROLL_BOTTOM_THRESHOLD_PX
+      );
+    }
+
+    fastScroll.reset(targetScrollTop);
+
+    const isTop = targetScrollTop <= SCROLL_TOP_EPSILON_PX;
     isAtTopRef.current = isTop;
     setIsAtTop(isTop);
 
     if (container) {
-      vs.performProgrammaticScroll(container, targetBottomScrollTop);
+      vs.performProgrammaticScroll(container, targetScrollTop);
     } else {
-      vs.performProgrammaticScroll(targetBottomScrollTop);
+      vs.performProgrammaticScroll(targetScrollTop);
     }
-    observedTopRef.current = targetBottomScrollTop;
+    observedTopRef.current = targetScrollTop;
     sessionMeasurePassesRef.current = 2;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);

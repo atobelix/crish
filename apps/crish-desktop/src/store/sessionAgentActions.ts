@@ -190,6 +190,7 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
   | 'patchSessionAgent'
   | 'appendSessionAgentMessage'
   | 'patchAgentTool'
+  | 'upsertAgentToolApproval'
   | 'patchSessionAgentMessage'
   | 'applySubagentEventToAgent'
   | 'patchSessionAgentToolStatus'
@@ -263,6 +264,37 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
           if (!toolCallPatchHasChanges(tc, effective)) return;
           applyMessageToolCallPatch(tc, effective);
           return;
+        }
+      }),
+
+    upsertAgentToolApproval: (sessionId, agentId, toolCall) =>
+      set((state) => {
+        const sess = getSessionById(state, sessionId);
+        if (!sess) return;
+        const ag = getSessionAgent(sess, agentId);
+        if (!ag) return;
+        if (!ag.messages) ag.messages = [];
+        for (const msg of ag.messages) {
+          if (!msg.toolCalls) continue;
+          const tc = msg.toolCalls.find((t) => t.id === toolCall.id);
+          if (tc) {
+            Object.assign(tc, toolCall);
+            return;
+          }
+        }
+        const lastMsg = ag.messages[ag.messages.length - 1];
+        if (lastMsg && lastMsg.sender === 'assistant') {
+          if (!lastMsg.toolCalls) lastMsg.toolCalls = [];
+          lastMsg.toolCalls.push(toolCall);
+        } else {
+          ag.messages.push({
+            id: `msg-${Date.now()}-${toolCall.id}`,
+            sender: 'assistant',
+            text: '',
+            timestamp: Date.now(),
+            status: 'processing',
+            toolCalls: [toolCall],
+          });
         }
       }),
 
@@ -373,7 +405,6 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
         if (snapshots.length > 0) {
           archiveFinalAgentsToSession(sess, snapshots, false);
         }
-
 
         // 走 Dual-Latch 双帧物理交接后精确清理当前 Agent 关联的消息流，严禁调用 clearSession(sessionId)
         if (finalizedMsgIds.length > 0) {

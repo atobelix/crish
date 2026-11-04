@@ -20,7 +20,11 @@ function collect(dir: string): string[] {
       out.push(...collect(full));
       continue;
     }
-    if (extname(name) === '.ts' || extname(name) === '.tsx' || extname(name) === '.css') {
+    if (
+      extname(name) === '.ts' ||
+      extname(name) === '.tsx' ||
+      extname(name) === '.css'
+    ) {
       out.push(full);
     }
   }
@@ -28,7 +32,9 @@ function collect(dir: string): string[] {
 }
 
 describe('conversation-flow 叙事块源码锁', () => {
-  const files = collect(DIR).filter((p) => !p.endsWith('.test.ts') && !p.endsWith('.test.tsx'));
+  const files = collect(DIR).filter(
+    (p) => !p.endsWith('.test.ts') && !p.endsWith('.test.tsx')
+  );
 
   it('无 FlowTimelineRail / getBoundingClientRect / innerHTML 清空', () => {
     for (const file of files) {
@@ -42,7 +48,9 @@ describe('conversation-flow 叙事块源码锁', () => {
   it('CSS 无 --brand / rail / --accent-blue', () => {
     for (const file of files.filter((p) => p.endsWith('.css'))) {
       const src = readFileSync(file, 'utf8');
-      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      const code = src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
       expect(code, file).not.toMatch(/--brand/);
       expect(code, file).not.toMatch(/--accent-blue/);
       expect(code, file).not.toMatch(/--rail/);
@@ -85,11 +93,14 @@ describe('conversation-flow 叙事块源码锁', () => {
 
   it('S8：计划模式不自动开插件；无演示 Hub / 五步剧本 / 竖轨 ::after', () => {
     const activateSrc = readFileSync(join(DIR, 'activate.ts'), 'utf8');
-    expect(activateSrc).not.toMatch(/selectPlanModeEnabled|planModeEnabled|inPlanMode/);
+    expect(activateSrc).not.toMatch(
+      /selectPlanModeEnabled|planModeEnabled|inPlanMode/
+    );
 
     const demo =
       /摸清 crates\/session-loop|IPC 通道瓶颈|虚拟流式渲染管线|cargo test --workspace|IPC 性能优化评审/;
-    const hub = /plan-progress-bar|plan-collapsed|plan-mode-badge|FlowTimelineRail/;
+    const hub =
+      /plan-progress-bar|plan-collapsed|plan-mode-badge|FlowTimelineRail/;
     for (const file of files) {
       const src = readFileSync(file, 'utf8');
       expect(src, file).not.toMatch(demo);
@@ -99,5 +110,18 @@ describe('conversation-flow 叙事块源码锁', () => {
     const css = readFileSync(join(DIR, 'narrative.module.css'), 'utf8');
     const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
     expect(code).not.toMatch(/::after/);
+  });
+
+  it('AN1/R13：ThinkingBlock 全文常驻 + 完成门呈现，禁草稿结构合成与预览解析', () => {
+    const src = readFileSync(join(DIR, 'ThinkingBlock.tsx'), 'utf8');
+    // live 呈现走 R13 完成门（已完成前缀 + 静态权威路径）
+    expect(src).toMatch(/splitDraftForPresentation/);
+    // 草稿结构合成的唯一入口（流式渲染 hook）已物理删除，思考面只经完成门呈现
+    // 预览降级为头部纯文本摘要：旧预览挂载分支已物理删除
+    expect(src).not.toMatch(/previewWrap/);
+    expect(src).toMatch(/thinkingSummary/);
+    // 折叠同钟：根变量 + 正典时长函数
+    expect(src).toMatch(/calcAccordionDuration/);
+    expect(src).toMatch(/--accordion-duration/);
   });
 });

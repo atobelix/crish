@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import type { FileDiff } from '../../store/types';
-import styles from './ModernToolCall.module.css';
+import styles from './ToolCallDiffPreview.module.css';
 import { escapeHtml, langFromFilename } from '../../api/codeHighlight';
 import {
   useDiffHighlightMap,
   type DiffHighlightItem,
 } from '../../api/codeHighlightBatch';
-import { Button, Tooltip } from '@/components/ui';
+import { Button, NumericText, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
@@ -116,8 +116,12 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
         <div className={styles.diffRightSection}>
           {/* +A -R 变动统计 */}
           <div className={styles.diffBadge}>
-            <span className={styles.diffStatAdd}>+{diff.additions}</span>
-            <span className={styles.diffStatDel}>-{diff.deletions}</span>
+            <span className={styles.diffStatAdd}>
+              <NumericText text={`+${diff.additions}`} />
+            </span>
+            <span className={styles.diffStatDel}>
+              <NumericText text={`-${diff.deletions}`} />
+            </span>
           </div>
 
           <div className={styles.diffActions}>

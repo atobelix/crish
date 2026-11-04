@@ -77,7 +77,7 @@ export function onMessageStart(
  * R6：已见过思考增量的轮次登记（按 run state 对象身份键控，随 state 回收）。
  * onThought 改传 delta 后，handler 不再维护累计全文回放；仅需判定「本轮首个
  * 思考增量」以便下游以 set 语义覆写上一轮的累积（轮次切换语义与旧全文覆写
- * 逐项一致）。state.turnStreamedThoughts 因此停用（字段保留待状态类型清理）。
+ * 逐项一致）。原 state.turnStreamedThoughts 账本已随之停用并删除。
  */
 const thoughtTurnsSeenByState = new WeakMap<object, Set<number>>();
 

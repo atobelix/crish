@@ -15,6 +15,7 @@
 import { getCompositionRoot } from '../app/compositionRoot';
 import { emitUiEvent } from './uiEvents';
 import { mapSubagentRoleWireName } from './tool-presentation/agentRoleLabel';
+import { agentStatusZh } from '../components/chat-tool-call/chatToolCallUtils';
 
 /** 侧栏「聊天」面板 card id（关 tab 用；禁止当主对话 chat 处理） */
 export const AGENT_SIDE_PANEL_CARD_ID = 'agent' as const;
@@ -167,22 +168,18 @@ export function resolveAgentPanelLabel(
   return fallback;
 }
 
-/** 状态徽标文案（与 AgentCard / SubagentDispatchCard 一致） */
+/**
+ * 状态徽标文案（与 AgentCard / SubagentDispatchCard 一致）。
+ *
+ * R8：状态词表单一来源在 chatToolCallUtils（工具 / 子 agent 共用，
+ * 见 STATUS_WORD / agentStatusZh），本函数只做转调；未知状态返回
+ * 空串，由调用方按自身语境兜底（旧口径默认回落「完成」已废除——
+ * 缺省状态臆断为完成会把未启动误报为已完成）。
+ */
 export function resolveAgentPanelStatusLabel(
   status: string | null | undefined
 ): string {
-  switch (status) {
-    case 'running':
-      return '运行中';
-    case 'failed':
-      return '失败';
-    case 'stopped':
-      return '已停止';
-    case 'completed':
-      return '完成';
-    default:
-      return '完成';
-  }
+  return agentStatusZh(status);
 }
 
 /**

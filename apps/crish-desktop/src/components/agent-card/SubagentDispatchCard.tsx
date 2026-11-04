@@ -47,7 +47,9 @@ import {
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
+import { useRevealEntrance } from '../chat-tool-call/useRevealEntrance';
 import { useI18n } from '../../i18n';
+import { formatDurationLabel } from '../../api/tool-presentation/processMetricsEngine';
 import { Button } from '@/components/ui';
 
 export interface SubagentDispatchCardProps {
@@ -119,6 +121,12 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
 
   const running = live.status === 'running';
 
+  // AN4：整卡入场（实况分派才播，与消息行/工具行同语言；历史回放直出）
+  const entrance = useRevealEntrance({
+    key: live.id ? `agent:${live.id}` : '',
+    eventTs: live.startedAt,
+  });
+
   useEffect(() => {
     if (!running) {
       setLiveSec(0);
@@ -129,7 +137,9 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
       setLiveSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
     };
     tick();
-    const id = window.setInterval(tick, 1000);
+    // 活时长走字 tick 口径钉死 500ms（2026-11-02 整波收口裁定：与工具行
+    // 同口径；共享格式化呈现 0.1s，500ms 为保住亚秒位走字的最粗节律）
+    const id = window.setInterval(tick, 500);
     return () => window.clearInterval(id);
   }, [running, live.startedAt]);
 
@@ -139,7 +149,10 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
   const statusText = useMemo(() => {
     if (running) {
       return liveSec > 0
-        ? t('chat.agentCard.dispatch.statusWorkingSec', { sec: liveSec })
+        ? t('chat.agentCard.dispatch.statusWorkingSec', {
+            // B13：时长走 formatDurationLabel 单一口径（禁止裸秒数拼装）
+            duration: formatDurationLabel(liveSec * 1000),
+          })
         : t('chat.agentCard.dispatch.statusWorking');
     }
     if (live.status === 'completed')
@@ -155,22 +168,22 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
   const durationLabel = formatAgentDuration(live);
   const pendingApprovals = countPendingApprovals(live);
 
-  /** 第二行（状态分工）：见文件头契约 */
-  const line2 = useMemo(() => {
+  /** 第二行（状态分工）：见文件头契约。
+   * AN4 拆分呈现：运行态的「当前动作」单独成段（变更时交叉淡化），
+   * 进度/用时属状态类、即时跳换不加过渡（分析 §三 #7/#8）。 */
+  const line2Parts = useMemo(() => {
     if (running) {
-      const parts: string[] = [];
-      const action = currentActionLabel(live);
-      if (action) parts.push(action);
+      const rest: string[] = [];
       if (progress.total > 0) {
-        parts.push(
+        rest.push(
           t('chat.agentCard.dispatch.progress', {
             done: progress.done,
             total: progress.total,
           })
         );
       }
-      if (durationLabel) parts.push(durationLabel);
-      return parts.join(' · ');
+      if (durationLabel) rest.push(durationLabel);
+      return { action: currentActionLabel(live), rest: rest.join(' · ') };
     }
     if (live.status === 'completed') {
       const parts: string[] = [];
@@ -182,10 +195,16 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
         parts.push(
           t('chat.agentCard.dispatch.toolCount', { count: progress.total })
         );
-      return parts.join(' · ');
+      return { action: '', rest: parts.join(' · ') };
     }
-    return '';
+    return { action: '', rest: '' };
   }, [running, live, progress, durationLabel, t]);
+
+  const line2 = line2Parts.action
+    ? line2Parts.rest
+      ? `${line2Parts.action} · ${line2Parts.rest}`
+      : line2Parts.action
+    : line2Parts.rest;
 
   const conclusion = useMemo(
     () =>
@@ -259,8 +278,10 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
 
   return (
     <div
-      className={`${styles.card} ${running ? styles.isRunning : ''} ${sideFocused ? styles.sideFocused : ''}`}
+      className={`${styles.card} ${running ? styles.isRunning : ''} ${sideFocused ? styles.sideFocused : ''}${entrance.entering ? ` ${styles.cardEnter}` : ''}`}
       data-dispatch-card="1"
+      data-entering={entrance.entering ? 'true' : undefined}
+      onAnimationEnd={entrance.handleAnimationEnd}
       data-agent-id={live.id}
       data-parent-tool-call-id={anchorToolCallId}
       data-agent-open-target="side-panel-only"
@@ -304,17 +325,32 @@ export const SubagentDispatchCard: React.FC<SubagentDispatchCardProps> = ({
           <span className={styles.traceLead} aria-hidden>
             ›
           </span>
-          <span className={styles.trace}>{line2}</span>
+          <span className={styles.trace}>
+            {line2Parts.action ? (
+              <>
+                <span key={line2Parts.action} className={styles.traceFade}>
+                  {line2Parts.action}
+                </span>
+                {line2Parts.rest ? ' · ' : ''}
+              </>
+            ) : null}
+            {line2Parts.rest}
+          </span>
         </div>
       ) : null}
 
-      {/* 完成/停止：结论首行 */}
+      {/* 完成/停止：结论首行（出现时同 fade-in） */}
       {conclusion ? (
         <div className={styles.line2}>
           <span className={styles.traceLead} aria-hidden>
             ›
           </span>
-          <span className={styles.trace}>{conclusion}</span>
+          <span
+            key={conclusion}
+            className={`${styles.trace} ${styles.traceFade}`}
+          >
+            {conclusion}
+          </span>
         </div>
       ) : null}
 

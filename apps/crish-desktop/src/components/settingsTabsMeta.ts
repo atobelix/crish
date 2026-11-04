@@ -43,7 +43,6 @@ const FORMAL_TAB_IDS: TabType[] = [
   'models',
   'usage',
   'devices',
-  'loginDevices',
   'rules',
   'schedule',
   'plugins',
@@ -58,12 +57,13 @@ export function allowedTabIds(_mcpAvailable: boolean): TabType[] {
   return [...FORMAL_TAB_IDS];
 }
 
-/** 深链/旧入口：skills|mcp → 扩展中心 */
+/** 深链/旧入口：skills|mcp → 扩展中心；loginDevices → 设备管理 */
 export function normalizeSettingsTabId(
   raw: string | null | undefined
 ): TabType | null {
   if (!raw) return null;
   if (raw === 'skills' || raw === 'mcp') return 'plugins';
+  if (raw === 'loginDevices') return 'devices';
   if ((FORMAL_TAB_IDS as readonly string[]).includes(raw))
     return raw as TabType;
   // 兼容：仍允许内部挂载 skills/mcp（扩展内嵌），但不在侧栏展示
@@ -203,14 +203,17 @@ export const TAB_META: TabMeta[] = [
   },
   {
     id: 'devices',
-    label: '多端互通',
-    icon: 'smartphone',
+    label: '设备管理',
+    icon: 'monitor',
     group: '工作',
     keywords: [
+      '设备管理',
       '多端互通',
+      '登录设备',
       '设备',
       '配对',
       '手机',
+      '电脑',
       '扫码',
       '二维码',
       'companion',
@@ -219,24 +222,8 @@ export const TAB_META: TabMeta[] = [
       'pair',
       'pairing',
       'qr',
-      '局域网',
-      '证书',
-      '导出证书',
       '配对码',
-    ],
-  },
-  {
-    id: 'loginDevices',
-    label: '登录设备',
-    icon: 'monitor',
-    group: '工作',
-    keywords: [
-      '登录设备',
-      '设备',
-      '登录记录',
       '会话',
-      '退出设备',
-      'signed-in',
       'session',
       'sessions',
     ],

@@ -19,6 +19,9 @@ import type { StreamState } from './streamState';
 
 vi.mock('../../../store/storeAccess', () => ({
   getSessionById: vi.fn(),
+  // R7b：handler 新增 agent 时间线镜像门面，mock 需覆盖其导出面
+  patchAgentTool: vi.fn(),
+  upsertAgentToolApproval: vi.fn(),
 }));
 
 const mockGetSessionById = vi.mocked(getSessionById);

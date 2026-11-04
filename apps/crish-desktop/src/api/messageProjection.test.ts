@@ -124,3 +124,27 @@ describe('projectAgentMessageContent · image 块不贡献文本', () => {
     ).toEqual({ text: '正文', thought: '思路' });
   });
 });
+
+describe('projectAgentMessageContent · thought 段间分隔（HC1 · D-5）', () => {
+  it('多段 thought 以换行分隔，段标题不粘连成无界长句', () => {
+    expect(
+      projectAgentMessageContent({
+        blocks: [
+          { type: 'thought', text: '第一段标题' },
+          { type: 'thought', text: '第二段标题' },
+        ],
+      })
+    ).toEqual({ text: '', thought: '第一段标题\n第二段标题' });
+  });
+
+  it('空 thought 段不产生多余分隔符', () => {
+    expect(
+      projectAgentMessageContent({
+        blocks: [
+          { type: 'thought', text: '' },
+          { type: 'thought', text: '唯一一段' },
+        ],
+      })
+    ).toEqual({ text: '', thought: '唯一一段' });
+  });
+});

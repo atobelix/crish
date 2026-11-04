@@ -68,7 +68,14 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-width var(--transition-fast),
+    border-style var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    font-weight var(--transition-fast);
 }
 
 .toggleTab:hover:not(:disabled) {
@@ -108,7 +115,10 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .actBtn:hover {
@@ -287,7 +297,7 @@
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   border-radius: 0;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .historyWorkingItem:hover {
@@ -321,7 +331,7 @@
   border: none;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   border-radius: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .historyItem:hover {
@@ -349,7 +359,9 @@
   line-height: 1.4;
   color: var(--text-primary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .hashBadge:hover {

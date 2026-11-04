@@ -435,6 +435,28 @@ const NORMALIZER_SAMPLES: Record<string, Record<string, unknown>> = {
     targetMessageId: 'm1',
     timestamp: 't1',
   },
+  // ── BG3 后台结果回注域（实时轨宽容形态：无信封 runId/sequence）──
+  'tool-backgrounded': {
+    type: 'tool-backgrounded',
+    sessionId: 's1',
+    callId: 'tc1',
+    toolName: 'read_file',
+    elapsedMs: 20000,
+  },
+  'tool-settled': {
+    type: 'tool-settled',
+    sessionId: 's1',
+    callId: 'tc1',
+    toolName: 'read_file',
+    status: 'ok',
+    result: {
+      id: 'tc1',
+      toolName: 'read_file',
+      output: { text: '文件内容' },
+      isError: false,
+      durationMs: 61000,
+    },
+  },
 };
 
 describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () => {
@@ -513,6 +535,70 @@ describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () =>
         expectTypeOf(event).toMatchTypeOf<EngineEvent>();
       }
     }
+  });
+});
+
+describe('BG3：tool-backgrounded / tool-settled 归一字段锁定', () => {
+  it('tool-backgrounded：callId/toolName/elapsedMs 原样归一（实时轨无 timestamp 补造）', () => {
+    const out = ENGINE_NORMALIZERS['tool-backgrounded'](
+      {
+        type: 'tool-backgrounded',
+        sessionId: 's1',
+        callId: 'tc9',
+        toolName: 'shell',
+        elapsedMs: 45000,
+      } as Record<string, unknown>,
+      'tool-backgrounded'
+    );
+    expect(out).toEqual({
+      type: 'tool-backgrounded',
+      sessionId: 's1',
+      callId: 'tc9',
+      toolName: 'shell',
+      elapsedMs: 45000,
+    });
+  });
+
+  it('tool-settled：四种 status 规范值全放行，result 与 tool-end 同归一口径', () => {
+    for (const status of ['ok', 'error', 'cancelled', 'outcome-unknown']) {
+      const out = ENGINE_NORMALIZERS['tool-settled'](
+        {
+          type: 'tool-settled',
+          sessionId: 's1',
+          callId: 'tc9',
+          toolName: 'shell',
+          status,
+          result: {
+            id: 'tc9',
+            toolName: 'shell',
+            output: { text: 'done' },
+            isError: status === 'error',
+            durationMs: 3000,
+          },
+        } as Record<string, unknown>,
+        'tool-settled'
+      );
+      expect(out).toMatchObject({
+        type: 'tool-settled',
+        status,
+        result: { id: 'tc9', output: { text: 'done' }, durationMs: 3000 },
+      });
+    }
+  });
+
+  it('tool-settled：非法 status 整帧拒绝（返回 null，不落兜底值）', () => {
+    const out = ENGINE_NORMALIZERS['tool-settled'](
+      {
+        type: 'tool-settled',
+        sessionId: 's1',
+        callId: 'tc9',
+        toolName: 'shell',
+        status: 'bogus',
+        result: { id: 'tc9' },
+      } as Record<string, unknown>,
+      'tool-settled'
+    );
+    expect(out).toBeNull();
   });
 });
 

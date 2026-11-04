@@ -162,6 +162,7 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
         output={displayOutput}
         rawOutput={full || raw}
         status={tc.status}
+        completedAt={tc.completedAt}
         durationStr={durationStr}
         diffs={tc.diffs}
         images={images}

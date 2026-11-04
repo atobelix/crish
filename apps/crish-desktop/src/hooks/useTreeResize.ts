@@ -25,7 +25,11 @@ import {
   ResizeObserverManager,
   WindowBlurWatchdog,
 } from '../utils/ResizeObserverManager';
-import { clampSplitRatioForParent, parentPxAlongAxis } from './treeResizeClamp';
+import {
+  branchChildMinSizesPx,
+  clampSplitRatioForChildren,
+  parentPxAlongAxis,
+} from './treeResizeClamp';
 
 // ── Hook 签名 ───────────────────────────────────────────────────────
 
@@ -59,6 +63,9 @@ interface ResizeCtx {
   affectedLeafIds: string[];
   /** branch 在屏幕上的像素 rect（启动时一次性计算） */
   pixelRect: { left: number; top: number; width: number; height: number };
+  /** 两侧子树的最小尺寸需求 px（手势开始时按当前树算定，手势期结构不变） */
+  minFirstPx: number;
+  minSecondPx: number;
   /** 手势开始时的 splitRatio（取消时无需写 store） */
   startRatio: number;
   /** 最近一次 rAF 应用的 ratio（pointerup 提交用） */
@@ -245,12 +252,15 @@ export function useTreeResize(): UseTreeResizeResult {
       const restoreIframes = disableIframePointerEvents();
       const liveCssVar = liveRatioVarName(branchId);
       const startRatio = clampSplitRatio(node.splitRatio);
+      const childMins = branchChildMinSizesPx(node);
 
       resizeCtxRef.current = {
         branchId,
         direction: node.direction,
         affectedLeafIds,
         pixelRect,
+        minFirstPx: childMins.first,
+        minSecondPx: childMins.second,
         startRatio,
         lastRatio: startRatio,
         didMove: false,
@@ -283,7 +293,7 @@ export function useTreeResize(): UseTreeResizeResult {
     []
   );
 
-  // ── 计算 ratio（像素感知 min child + store 绝对上下限） ─────
+  // ── 计算 ratio（子树感知像素下限 + store 绝对上下限） ─────
 
   const ratioFromEvent = useCallback(
     (e: PointerEvent, ctx: ResizeCtx): number => {
@@ -292,7 +302,12 @@ export function useTreeResize(): UseTreeResizeResult {
         ctx.direction === 'horizontal'
           ? (e.clientX - ctx.pixelRect.left) / parentPx
           : (e.clientY - ctx.pixelRect.top) / parentPx;
-      return clampSplitRatioForParent(raw, parentPx);
+      return clampSplitRatioForChildren(
+        raw,
+        parentPx,
+        ctx.minFirstPx,
+        ctx.minSecondPx
+      );
     },
     []
   );

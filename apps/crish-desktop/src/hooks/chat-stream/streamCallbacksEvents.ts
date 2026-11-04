@@ -50,7 +50,7 @@ type SubagentEndedInfo =
     ? T
     : never;
 
-/** 子 agent 启动：侧栏 agent 行 upsert + 父工具卡「协作进行中」即时态。 */
+/** 子 agent 启动：侧栏 agent 行 upsert + 父工具卡置 running 即时态。 */
 export function applySubagentStarted(opts: {
   sid: string;
   info: SubagentStartedInfo;
@@ -94,7 +94,7 @@ export function applySubagentStarted(opts: {
       {
         id: info.parentToolCallId,
         status: 'running',
-        output: '协作进行中…',
+        // R8：不写占位输出——分派关系由 SubagentDispatchCard 表达
       },
       true
     );

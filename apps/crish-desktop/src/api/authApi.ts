@@ -72,6 +72,7 @@ export interface AuthSessionInfo {
   expiresAt: number;
   revoked: boolean;
   current: boolean;
+  deviceName?: string;
 }
 
 /**

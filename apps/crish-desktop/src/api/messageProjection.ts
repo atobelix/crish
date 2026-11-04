@@ -39,12 +39,17 @@ export function projectAgentMessageContent(agent: {
 }): { text: string; thought: string } {
   const blocks = Array.isArray(agent.blocks) ? agent.blocks : [];
   let text = '';
-  let thought = '';
+  const thoughtParts: string[] = [];
   for (const bl of blocks) {
     const b = bl as unknown as Record<string, unknown>;
-    if (b.type === 'thought' || b.kind === 'thought') thought += blockText(b);
-    else if (b.type === 'text') text += blockText(b);
+    if (b.type === 'thought' || b.kind === 'thought') {
+      const part = blockText(b);
+      if (part) thoughtParts.push(part);
+    } else if (b.type === 'text') text += blockText(b);
   }
+  // HC1 · D-5：thought 段间以 '\n' 分隔（原为无分隔直拼，多段思考标题熔成
+  // 一串无界长句，折叠摘要的首行提取也取不到段界）；保住 extractFirstLine 语义。
+  let thought = thoughtParts.join('\n');
   text = text.trim();
   thought = thought.trim();
   if (!text && typeof agent.content === 'string' && agent.content) {

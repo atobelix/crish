@@ -204,7 +204,7 @@ describe('ChatScrollFloorSlot 零高度 Sticky 到底卡槽规范', () => {
       expect(screen.queryByTestId('chat-scroll-floor-btn')).toBeNull();
     });
 
-    it('当用户向上滑动超过阈值时触发 onScroll，回底按钮显现；点击后触发回底并恢复吸底', () => {
+    it('当用户向上滑动超过阈值时触发 onScroll，回底按钮显现；点击后触发回底并恢复吸底', async () => {
       const messages = [
         createMockMessage('m1', 'user', '第一条消息'),
         createMockMessage('m2', 'assistant', '第二条回答'),
@@ -240,12 +240,17 @@ describe('ChatScrollFloorSlot 零高度 Sticky 到底卡槽规范', () => {
       const floorBtn = screen.getByTestId('chat-scroll-floor-btn');
       expect(floorBtn).toBeInTheDocument();
 
-      // 点击回底浮钮
+      // 点击回底浮钮：R12 机制 B 接管——原生 behavior:'smooth' 已退休，
+      // 改走距离比例定时（T = clamp(D/2400px·s⁻¹, 120, 450ms)）+ ease-out 三次
+      // 逐帧提交，末帧精确落到 maxScroll=2400；scrollTo 全程零调用
       fireEvent.click(floorBtn);
-      expect(scrollToSpy).toHaveBeenCalledWith({
-        top: 2400,
-        behavior: 'smooth',
-      });
+      await vi.waitFor(
+        () => {
+          expect(scrollContainer.scrollTop).toBe(2400);
+        },
+        { timeout: 5000, interval: 50 }
+      );
+      expect(scrollToSpy).not.toHaveBeenCalled();
 
       // 模拟滑回底部（scrollTop = 2400）
       scrollContainer.scrollTop = 2400;

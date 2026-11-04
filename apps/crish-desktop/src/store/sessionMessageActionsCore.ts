@@ -33,6 +33,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
   | 'applyTimelineTruncate'
   | 'respondToApproval'
   | 'updateMessageText'
+  | 'markMessageStoppedByUser'
   | 'updateMessageThinking'
 > {
   return {
@@ -177,6 +178,14 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const tc = hit?.message.toolCalls?.find((t) => t.id === toolCallId);
         if (hit && tc && tc.approvalDecision !== decision) {
           tc.approvalDecision = decision;
+        }
+      }),
+
+    markMessageStoppedByUser: (sessionId, messageId) =>
+      set((state) => {
+        const hit = getSessionMessage(state, sessionId, messageId);
+        if (hit && hit.message.stoppedByUser !== true) {
+          hit.message.stoppedByUser = true;
         }
       }),
 

@@ -20,6 +20,8 @@
   text-align: left;
   color: var(--text-primary);
   box-sizing: border-box;
+  /* 入场与状态缎带同级（AN2 / A4）：popover-enter 口径，只动 opacity + ≤4px 位移 */
+  animation: crish-popover-enter-top var(--transition-popover-enter);
 }
 
 .approvalDock.slim {
@@ -52,21 +54,10 @@
   background: var(--accent-orange);
   flex-shrink: 0;
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 45%, transparent);
-  animation: approval-dock-dot-pulse var(--transition-pulse) infinite;
-}
-
-@keyframes approval-dock-dot-pulse {
-  0% {
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--accent-orange) 45%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 6px
-      color-mix(in srgb, var(--accent-orange) 0%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 0%, transparent);
-  }
+  /* 脉冲归队共享定义 crish-pulse-dot（AN2）；其光环色取 --accent-color，
+   * 本点为警示橙，故在点元素作用域内把该变量收敛为橙，身份色不变 */
+  --accent-color: var(--accent-orange);
+  animation: crish-pulse-dot var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
 .approvalDockLabel {
@@ -82,6 +73,7 @@
 .approvalDockGoIcon {
   flex-shrink: 0;
   color: var(--text-tertiary);
+  transition: color var(--transition-micro);
 }
 
 .approvalDock:hover .approvalDockGoIcon {

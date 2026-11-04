@@ -2,6 +2,7 @@
  * apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts
  * 负责发送前置校验、本地斜杠命令路由与多模态 Payload 组装（单一职责叶）
  */
+import { formatCompactNumber } from '../../i18n/SafeIntl';
 import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
 import { resolveSendThinkingFields } from '../../api/chat-bridge/readiness';
 import { useSessionStore } from '../../store/sessionStore';
@@ -290,7 +291,7 @@ export async function runPreflightChecks(
         targetTokens: slash.tokens ?? null,
       });
       if (res.status === 'ok') {
-        const fmt = (n: number) => n.toLocaleString();
+        const fmt = (n: number) => formatCompactNumber(n);
         const stateLabel =
           res.data.summaryState === 'committed'
             ? '摘要已生成'

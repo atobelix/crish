@@ -42,12 +42,36 @@ export const LEGACY_EVENT_TYPES: readonly LegacyEventType[] = [
   'error',
 ];
 
-export interface EngineEnvelope<ET extends EngineEventType = EngineEventType> {
+export interface ToolBackgroundedEvent {
+  type: 'tool-backgrounded';
+  sessionId: string;
+  callId: string;
+  toolName?: string;
+  elapsedMs?: number;
+}
+
+export interface ToolSettledEvent {
+  type: 'tool-settled';
+  sessionId: string;
+  callId: string;
+  toolName?: string;
+  status?: string;
+  result?: Record<string, unknown>;
+}
+
+export type AnyEngineEvent =
+  EngineEvent | ToolBackgroundedEvent | ToolSettledEvent;
+
+export type AnyEngineEventType = AnyEngineEvent['type'];
+
+export interface EngineEnvelope<
+  ET extends AnyEngineEventType = EngineEventType,
+> {
   kind: 'engine';
   type: ET;
   /** 原始 type 字段（宽容归一前的别名，如 run-cancelled），供 handler 区分行为 */
   originalType: string;
-  event: Extract<EngineEvent, { type: ET }>;
+  event: Extract<AnyEngineEvent, { type: ET }>;
   raw: Record<string, unknown>;
 }
 
@@ -67,9 +91,7 @@ export interface ResolvedEventEnvelope {
 }
 
 /** 纯信封类型抽取：type/event/kind 别名，trim 后返回；非对象/空 type 返回 null */
-export function resolveEventType(
-  event: unknown
-): ResolvedEventEnvelope | null {
+export function resolveEventType(event: unknown): ResolvedEventEnvelope | null {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
   const raw = event as Record<string, unknown>;
   const type = String(raw.type ?? raw.event ?? raw.kind ?? '').trim();

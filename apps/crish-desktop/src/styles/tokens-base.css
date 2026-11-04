@@ -45,6 +45,13 @@ html[data-theme='light'] {
   --transition-popover-exit: 120ms var(--ease-accelerate);
   --transition-modal-enter: 220ms var(--ease-decelerate);
   --transition-accordion: var(--duration-accordion) var(--ease-decelerate);
+  /* B 类运行期量静态默认（登记见 scripts/token-registry.json）：--accordion-duration
+   * 由折叠族 JS 按内容高度注入纯 ms 时长（AN1 同钟），此默认与消费方既有
+   * fallback（var(--transition-accordion)）展开同构，未注入时行为不变；
+   * --reveal-delay 为 AN4 工具行入场交错延迟，默认无延迟。 */
+  --accordion-duration: var(--duration-accordion) var(--ease-decelerate);
+  --reveal-delay: 0ms;
+  --divider-length: 14px;
   --transition-accordion-fade: var(--duration-accordion-fade)
     var(--ease-decelerate);
   --transition-landing-settle: var(--duration-landing-settle)
@@ -121,6 +128,32 @@ html[data-theme='light'] {
   --blur-soft: 4px;
   --blur-text: 8px;
 
+  /* ── 展开高度档位（正典 · 高度分档定案） ──
+   * 按角色归档而非嵌套深度逐级算：档1 聚合（一轮内容在消息流中的最外层
+   * 展开容器）/ 档2 内容（独立呈现的长内容体）/ 档3 嵌套（嵌在流程内部
+   * 的阅读面，思考为代表）/ 档4 视口（工具行体内的叶级视口，出/入两步）。
+   * 新增受限滚动区必须引用 --expand-max-h-*，不得新写裸值（DIM-02 口径）。
+   * vh 联动保证小窗自动收紧。 */
+  --expand-max-h-aggregate: min(560px, 60vh);
+  --expand-max-h-content: min(480px, 50vh);
+  --expand-max-h-nested: min(360px, 40vh);
+  --expand-max-h-viewport: 380px;
+  --expand-max-h-viewport-sm: 180px;
+  /* ── 工具容器布局阶梯（HC1 容器治理 token，保留为引用链 → 档位正典） ──
+   * 既有 token 名已被契约与多文件引用，按「非必要不改名」保留并指向正典：
+   * 思考经 --reasoning-max-h 落档3、单工具出参经 --tool-viewport-output-single
+   * 落档2，其余归档值与原值一致；渐变带高与侧栏三阶 mask 语言同源
+   * （scroll-fade.css 消费）。 */
+  --tool-viewport-input: var(--expand-max-h-viewport-sm);
+  --tool-viewport-output: var(--expand-max-h-viewport);
+  --tool-viewport-output-single: var(--expand-max-h-content);
+  --tool-aggregate-max-h: var(--expand-max-h-aggregate);
+  --code-block-max-h: var(--expand-max-h-content);
+  --reasoning-max-h: var(--expand-max-h-nested);
+  --tool-fade-size: 28px;
+  /* 过程行间呼吸（V2 A 案：2–4px 区间取值，行高/字号同构口径不变） */
+  --tool-row-gap: 3px;
+
   --opacity-disabled: 0.5;
 
   color-scheme: light;
@@ -140,7 +173,6 @@ html[data-theme='dark'] {
   --sidebar-visible-width: 260px;
   --font-mono-features: normal;
   --files-list-ratio: 35%;
-  --flow-output-max: 600px;
   --anchor-width: auto;
   --transform-origin: center;
   --composer-dock-block: 104px;
@@ -153,45 +185,10 @@ html[data-perf-tier='high'][data-theme='dark'] {
 }
 
 html[data-perf-tier='eco'] {
-  --duration-snappy: 0ms;
-  --transition-micro: 0ms;
-  --transition-snappy: 0ms;
-  --transition-fast: 0ms;
-  --transition-normal: 0ms;
-  --transition-smooth: 0ms;
-  --transition-popover-enter: 0ms;
-  --transition-popover-exit: 0ms;
-  --transition-modal-enter: 0ms;
-  --duration-accordion: 0ms;
-  --transition-accordion: 0ms;
-  --duration-accordion-fade: 0ms;
-  --transition-accordion-fade: 0ms;
-  --duration-landing-settle: 0ms;
-  --transition-landing-settle: 0ms;
-  --duration-landing-fade: 0ms;
-  --transition-landing-fade: 0ms;
-  --transition-chevron: 0ms;
-
-  /* 弹簧时长归零 */
-  --duration-spring-snappy: 0ms;
-  --duration-spring-smooth: 0ms;
-  --duration-spring-morph: 0ms;
-  --duration-spring: 0ms;
-
-  /* 弹簧过渡速记归零 */
-  --transition-spring-snappy: 0ms;
-  --transition-spring-smooth: 0ms;
-  --transition-spring-morph: 0ms;
-  --transition-spring: 0ms;
-
-  /* 交错步长归零 */
-  --stagger-char: 0ms;
-  --stagger-item: 0ms;
-  --stagger-word: 0ms;
-  --stagger-line: 0ms;
-  --stagger-max: 0ms;
-
-  /* 动态模糊滤镜归零（杜绝低功耗环境的离屏渲染） */
+  /* X1 口径：eco 只降高成本绘制——模糊滤镜是离屏渲染大头，归零它
+   * 不改变任何时序。一切时长 / 过渡 / 弹簧 / 交错 token 与其它档位
+   * 完全一致：动效时序只由系统减动效通道（下方 @media 段）裁决，
+   * 性能档不得冒充减动效。 */
   --blur-subtle: 0px;
   --blur-soft: 0px;
   --blur-text: 0px;

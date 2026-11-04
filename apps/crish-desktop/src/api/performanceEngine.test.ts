@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { detectPerformanceTier, initPerformanceAttributes } from './performanceEngine';
+import {
+  detectPerformanceTier,
+  initPerformanceAttributes,
+} from './performanceEngine';
 
 describe('Performance Tiering Engine', () => {
   beforeEach(() => {
@@ -28,13 +31,22 @@ describe('Performance Tiering Engine', () => {
     expect(['high', 'balanced', 'eco']).toContain(tier);
   });
 
-  it('drops to eco tier when prefers-reduced-motion is matched', async () => {
+  it('does not drop to eco when prefers-reduced-motion is matched (tier is hardware-only)', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query.includes('reduce'),
     }));
+    // 强硬件 + 高帧率桩：每帧 +10ms，150ms 窗内 16 帧 ≈ 100 FPS
+    let t = performance.now();
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      Promise.resolve().then(() => {
+        t += 10;
+        cb(t);
+      });
+    });
 
     const tier = await detectPerformanceTier();
-    expect(tier).toBe('eco');
+    // 减动效只走其独立通道，不得把性能档强制为 eco（X1 解耦口径）
+    expect(tier).toBe('high');
   });
 
   it('defaults and overrides html attributes correctly', () => {

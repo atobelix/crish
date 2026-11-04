@@ -2,7 +2,7 @@
  * 调用目的：默认合上，不挂 Action DOM；展开才按需挂载。
  * 人话主文案为前端派生（explanation 归一 / humanize）。
  */
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import type { PurposeNode } from '@crish/conversation-flow';
 import { Button } from '@/components/ui';
 import { findAgentForTool } from '../../components/chat-tool-call/chatToolCallUtils';
@@ -24,7 +24,7 @@ export interface PurposeBlockProps {
 function purposeMeta(status: PurposeNode['status'], n: number): string {
   const count = n > 1 ? `${n} 步` : '';
   if (status === 'running')
-    return [count, '进行中'].filter(Boolean).join(' · ');
+    return [count, '运行中'].filter(Boolean).join(' · ');
   if (status === 'error')
     return [count, '未完全成功'].filter(Boolean).join(' · ');
   if (status === 'partial')
@@ -43,7 +43,16 @@ export function PurposeBlock({
   // 用户可以按需展开历史步骤。这与 DeepSeek harness 的 streaming flow 一致。
   defaultOpen = purpose.status === 'running',
 }: PurposeBlockProps): ReactElement {
-  const [open, setOpen] = useState(defaultOpen);
+  // R8 双轨收敛：默认开合派生自状态而非挂载时快照——running 展开、
+  // 终态自动收拢，与经典轨 §3.3 条目级 / FoldableToolGroup 同构；
+  // 用户手动开合后钉住，永不被状态变化覆盖
+  const [userOpen, setUserOpen] = useState(false);
+  const userInteractedRef = useRef(false);
+  const open = userInteractedRef.current ? userOpen : defaultOpen;
+  const toggleOpen = () => {
+    userInteractedRef.current = true;
+    setUserOpen(!open);
+  };
   const n = purpose.actions.length;
   const meta = purposeMeta(purpose.status, n);
 
@@ -63,7 +72,7 @@ export function PurposeBlock({
         type="button"
         className={styles.head}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
       >
         {purpose.status === 'running' ? (
           <span className={styles.pulse} aria-hidden />

@@ -17,8 +17,8 @@
   opacity: 0.8;
 }
 
-/* 闪光流动文字（与「正在思考」ReasoningRow 同一视觉语言：
-   background-clip:text + 渐变位移动画） */
+/* 闪光流动文字（background-clip:text + 渐变位移动画；
+   动画已归队共享定义 crish-shine-sweep（AN1 落位、AN2 归队），本文件不再自带 keyframes） */
 .statusText {
   background: linear-gradient(
     90deg,
@@ -33,17 +33,8 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  animation: inflow-status-shimmer var(--transition-pulse, 1.8s ease-in-out)
+  animation: crish-shine-sweep var(--transition-pulse, 1.6s ease-in-out)
     infinite;
-}
-
-@keyframes inflow-status-shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

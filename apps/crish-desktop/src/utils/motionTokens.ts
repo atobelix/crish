@@ -8,6 +8,7 @@
  */
 
 import type { Transition } from 'motion/react';
+import type { CSSProperties } from 'react';
 
 /** 标准缓动：色彩 / 透明度 / 常规过渡（对应 --ease-standard） */
 export const EASE_STANDARD = 'cubic-bezier(0.4, 0, 0.2, 1)';
@@ -286,4 +287,16 @@ export function calcAccordionDuration(
     const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
     return Math.round(Math.min(350, Math.max(150, raw)));
   }
+}
+
+/**
+ * --accordion-duration 的唯一写入点（token-ssot B 类登记口径，登记见
+ * scripts/token-registry.json）：折叠族组件经此把 calcAccordionDuration
+ * 的结果注入自身根元素，组件内禁止再自带该变量字面量——多文件写同一
+ * 运行期量会被 a_class_multi_writer 拦截。
+ */
+export function accordionDurationStyle(durationMs: number): CSSProperties {
+  return {
+    '--accordion-duration': `${durationMs}ms`,
+  } as CSSProperties;
 }

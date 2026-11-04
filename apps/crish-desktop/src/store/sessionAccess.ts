@@ -222,6 +222,16 @@ export function patchAgentTool(
   getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
 }
 
+export function upsertAgentToolApproval(
+  sessionId: string,
+  agentId: string,
+  toolCall: MessageToolCall
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().upsertAgentToolApproval(sid, agentId, toolCall);
+}
+
 export function withdrawMessage(
   wsId: string,
   sessionId: string,

@@ -28,6 +28,7 @@ import { isDeveloperEngineUiEnabled } from './api/productMode';
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
 import { SidebarToggle } from './components/sidebar/SidebarHeader';
+import { SidebarSplitResizer } from './components/sidebar/SidebarSplitResizer';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
 import { AppMotionProvider } from './components/motion/AppMotionProvider';
@@ -67,6 +68,7 @@ function DevHealthOverlayMount() {
 
 function App() {
   const { t } = useI18n();
+  const sidebarWrapperRef = useRef<HTMLDivElement | null>(null);
   const { isHydrated } = usePreferencesHydration();
   const activeWorkspaceId = useWorkspaceStore(
     (s) => s.workspaces[s.activeWorkspaceIndex]?.id || 'ws-0'
@@ -178,6 +180,7 @@ function App() {
 
             <div
               id="crish-sidebar"
+              ref={sidebarWrapperRef}
               className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
               role="navigation"
               aria-label="会话侧栏"
@@ -199,6 +202,11 @@ function App() {
                 </Suspense>
               </AppErrorBoundary>
             </div>
+
+            {/* 统一侧栏分界拖拽手柄：置于侧栏与工作区之间，居中展示无裁剪，实时联动两侧 */}
+            {!sidebarCollapsed && (
+              <SidebarSplitResizer targetRef={sidebarWrapperRef} />
+            )}
 
             <div
               className="workspaces-column"

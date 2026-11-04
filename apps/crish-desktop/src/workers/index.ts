@@ -37,4 +37,3 @@ export type { WorkerType };
 export const THINKING_DOM_CHAR_CAP = 4000;
 export const THINKING_INLINE_CHAR_CAP = 10000;
 export const TOOL_OUTPUT_DOM_CHAR_CAP = 8000;
-export const TOOL_OUTPUT_PIXEL_CAP = 600;

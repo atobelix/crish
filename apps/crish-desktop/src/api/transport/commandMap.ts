@@ -60,6 +60,9 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   // ── 运行生命周期类（core_*）──
   'core_run_task',
   'core_cancel_run',
+  // BG5：工具后台轨 UI 面（invokeTyped 直调；对象 = 引擎工具后台注册表）
+  'core_list_tool_background_tasks',
+  'core_cancel_tool_background_task',
   // 运行时权限切换（会话主 run 活单元；子代理随父链同步）
   'core_set_run_permission_mode',
   // ── 规范配置事务与会话 ──

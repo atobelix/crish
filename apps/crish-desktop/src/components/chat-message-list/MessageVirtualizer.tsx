@@ -1,4 +1,10 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
@@ -22,16 +28,33 @@ import {
   useVirtualizerScrollRefs,
 } from './messageVirtualizerScrollState';
 import {
+  deriveTailBufferWindow,
+  type ScrollToBottomPlan,
+  type TailBufferWindowState,
+} from './messageVirtualizerScrollPlan';
+import {
   memoizeMessageVirtualizer,
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
-import { CHAT_SCROLL_PAD_TOP, chatSpacerHeight } from './chatScrollGeometry';
+import {
+  CHAT_SCROLL_PAD_TOP,
+  chatSpacerHeight,
+  resolveTailBufferTargetPx,
+} from './chatScrollGeometry';
+import { useTailBufferAnimation } from './messageVirtualizerTailBuffer';
 import {
   DEFAULT_VIEWPORT_HEIGHT_PX,
   MESSAGE_VIEWPORT_OVERSCAN,
+  SCROLL_BOTTOM_THRESHOLD_PX,
   SIGNIFICANT_HEIGHT_DELTA_PX,
 } from '../../hooks/virtualScrollConstants';
+import { computePagingAnchor, restorePagingAnchor } from './PagingAnchor';
+import { resolveAnchorTargetScrollTop } from './readingAnchorStore';
+import { computeTimeSeparatorHosts } from './chatTimeSeparatorLib';
+import { ChatTimeSeparator } from './ChatTimeSeparator';
+import { SessionReadyCover } from './SessionReadyCover';
+import { useSessionOpenAnchor } from './useSessionOpenAnchor';
 import { useScrollAnchoringOnToggle } from './useScrollAnchoringOnToggle';
 import {
   PurgedMessageRowSkeleton,
@@ -185,6 +208,36 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   // 文档坐标系总高度（滚动回调运行时读取；赋值见 computeActiveRowWindow 之后）
   const totalHeightRef = useRef(0);
 
+  // R12b 尾部缓冲：已张开值（state 驱动渲染几何）+ 回调镜像 ref。
+  // 目标由轮次窗口单点裁决（派生与复位在 computeActiveRowWindow 之前的
+  // 渲染期块内完成，见下方）；张开走斜坡 effect、退出走收合 effect，
+  // 静止 / 阅读态恒 0（R12 的会话闩锁常驻已废止）。
+  const [tailBufferPx, setTailBufferPx] = useState(0);
+  const tailBufferRef = useRef(0);
+  const tailPrevSessionIdRef = useRef<string | null>(activeSessionId);
+  /** 窗口信号状态机（发送闩 + 尾行基线），渲染期逐帧推进 */
+  const tailWindowRef = useRef<TailBufferWindowState>({
+    baselineTailUserId: undefined,
+    sendLatchUserId: null,
+  });
+  /** 收合计划（rAF 定时律）：turnActive 转假时由收合 effect 建立 */
+  const tailCollapseRef = useRef<{
+    rafId: number | null;
+    plan: ScrollToBottomPlan | null;
+  }>({ rafId: null, plan: null });
+  const cancelTailCollapse = () => {
+    const collapse = tailCollapseRef.current;
+    if (collapse.rafId !== null) {
+      cancelAnimationFrame(collapse.rafId);
+      collapse.rafId = null;
+    }
+    collapse.plan = null;
+  };
+  /** 内容高镜像（斜坡帧间增量计量；渲染期赋值，与 totalHeightRef 同模式） */
+  const tailContentHeightRef = useRef(0);
+  /** 斜坡上一帧计量时的内容高基线 */
+  const tailRampBaselineRef = useRef(0);
+
   // 滚动状态 refs/state（实现见 messageVirtualizerScrollState）
   const {
     isAtBottom,
@@ -202,6 +255,16 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const isFirstMountRef = useRef(true);
   // 切会话后最多再量两遍已挂载行，把估高纠正赶在首帧绘制之前。
   const sessionMeasurePassesRef = useRef(0);
+
+  // 批 B ⑱/⑳：会话开局编排（锚点恢复裁决 + 阅读位捕获 + 就绪遮罩，
+  // 实现见 useSessionOpenAnchor；待恢复锚点供切会话重置/首挂载/测高消费）
+  const { anchorRestoreTargetRef, sessionCover } = useSessionOpenAnchor({
+    activeSessionId,
+    containerRef,
+    manager,
+    isAtBottomRef,
+    sessionMeasurePassesRef,
+  });
 
   // W3-3: 快速滚动状态与超视距 DOM 回收控制器
   const fastScroll = useFastScrollPurgeTracker();
@@ -224,6 +287,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     setIsAtTop,
     observedTopRef,
     sessionMeasurePassesRef,
+    tailBufferRef,
+    restoreAnchorRef: anchorRestoreTargetRef,
   });
 
   const uiSize = useLayoutStore((s) => s.uiSize);
@@ -233,6 +298,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     if (!uiSizeSeededRef.current) {
       uiSizeSeededRef.current = true;
       return;
+    }
+    // 批 B ⑱：分栏宽度变化后按锚点恢复阅读位（仅非跟随态）——清高前先以
+    // 当前 DOM 几何捕获锚点并武装待恢复目标 + 测高遍数，宽度变更引发的
+    // 高度重排由测高 effect 以该锚点逐遍校正；跟随态仍以真底为准。
+    if (!isAtBottomRef.current && !anchorRestoreTargetRef.current) {
+      const container = containerRef.current;
+      const liveAnchor = container
+        ? computePagingAnchor(container, manager)
+        : null;
+      if (liveAnchor) {
+        anchorRestoreTargetRef.current = liveAnchor;
+        sessionMeasurePassesRef.current = 2;
+      }
     }
     manager.clearRememberedHeights();
     clearHeights();
@@ -261,6 +339,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const pinnedIdSet = useMemo(
     () => new Set(pinnedItems.map((p) => p.id)),
     [pinnedItems]
+  );
+
+  // 批 B ㉑：时间分隔行宿主集（间隔 ≥5 分钟才挂，口径见 chatTimeSeparator）
+  const timeSeparatorHosts = useMemo(
+    () => computeTimeSeparatorHosts(messages),
+    [messages]
   );
 
   const { handlePointerDownCapture, handleKeyDownCapture, isAnchorLocked } =
@@ -298,12 +382,49 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
 
   const isSessionSwitch = prevSessionIdRef.current !== activeSessionId;
 
+  // R12b 尾部缓冲·渲染期单点派生（与 totalHeightRef 同为渲染期镜像模式）：
+  // - 切会话先复位：收合计划取消、发送闩清零、已张开值本帧按 0 计（setState 同步
+  //   收敛，提交帧即一致），新会话 idle 开局、直达真底，会话重置 hook 读到的
+  //   tailBufferRef 亦为 0；
+  // - 窗口信号由 deriveTailBufferWindow 单点裁决（主信号 thinkingMsgId + 发送闩
+  //   桥接），目标由 resolveTailBufferTargetPx 按窗口与视口高裁决；本帧几何
+  //   使用「已张开值」，张开走下方斜坡 effect、退出走收合 effect；
+  // - 四个几何点位（本窗口计算 / 首挂载 / 测高收敛 / 会话重置）同帧同值。
+  const tailSessionChanged = tailPrevSessionIdRef.current !== activeSessionId;
+  if (tailSessionChanged) {
+    tailPrevSessionIdRef.current = activeSessionId;
+    tailRampBaselineRef.current = modelContentHeight;
+    cancelTailCollapse();
+    if (tailBufferPx !== 0) setTailBufferPx(0);
+  }
+  const tailLastMessage = messages[messages.length - 1];
+  const tailWindow = deriveTailBufferWindow(tailWindowRef.current, {
+    sessionChanged: tailSessionChanged,
+    tailUserId:
+      tailLastMessage && tailLastMessage.sender === 'user'
+        ? tailLastMessage.id
+        : null,
+    thinkingMsgId,
+    isAtBottom: isAtBottomRef.current,
+  });
+  tailWindowRef.current = tailWindow.state;
+  const turnActive = tailWindow.turnActive;
+  const effectiveTailBufferPx = tailSessionChanged ? 0 : tailBufferPx;
+  const tailBufferTargetPx = resolveTailBufferTargetPx({
+    turnActive,
+    viewportHeight:
+      vs.viewportHeight > 0 ? vs.viewportHeight : DEFAULT_VIEWPORT_HEIGHT_PX,
+  });
+  tailBufferRef.current = effectiveTailBufferPx;
+  tailContentHeightRef.current = modelContentHeight;
+
   // VS-04 & W3-3：计算活跃行裁剪窗口、文档坐标系总高度与每行超视距回收状态
   const { startOffset, totalHeight, activeRows } = computeActiveRowWindow({
     visibleRange: vs.visibleRange,
     scrollTop: vs.scrollTop,
     viewportHeight: vs.viewportHeight,
     totalHeight: vs.totalHeight,
+    tailBufferPx: effectiveTailBufferPx,
     vsManager: manager,
     messages,
     msgIds,
@@ -337,28 +458,54 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     observedTopRef,
   });
 
+  // R12b 尾部缓冲张开斜坡 + 终态收合 + 卸载清理（实现见 messageVirtualizerTailBuffer）
+  useTailBufferAnimation({
+    tailBufferPx,
+    tailBufferTargetPx,
+    turnActive,
+    isAtBottom,
+    isAtBottomRef,
+    tailContentHeightRef,
+    tailRampBaselineRef,
+    tailCollapseRef,
+    setTailBufferPx,
+  });
+
   // 初次挂载若指定 initialScroll='bottom'（真实对话界面落地），同步吸底至最新消息
   useLayoutEffect(() => {
     if (!isFirstMountRef.current) return;
     if (initialScroll === 'bottom' && messages.length > 0) {
       isFirstMountRef.current = false;
       const estimatedContentHeight = manager.getTotalHeight(messages.length);
-      const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
+      const estimatedTotalHeight = chatSpacerHeight(
+        estimatedContentHeight,
+        tailBufferRef.current
+      );
       const container = containerRef.current;
       const viewH =
         container?.clientHeight ||
         vs.viewportHeight ||
         DEFAULT_VIEWPORT_HEIGHT_PX;
       const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
-      isAtBottomRef.current = true;
-      setIsAtBottom(true);
-      setShowFloorButton(false);
+      // 批 B ⑱：首挂载同样适用锚点恢复（有保存且非跟随态时改走锚点落点）
+      const anchorTarget = resolveAnchorTargetScrollTop(
+        manager,
+        anchorRestoreTargetRef.current
+      );
+      const restored = anchorTarget !== null;
+      const targetScrollTop = anchorTarget ?? targetBottomScrollTop;
+      isAtBottomRef.current = !restored;
+      setIsAtBottom(!restored);
+      setShowFloorButton(
+        restored &&
+          targetBottomScrollTop - targetScrollTop > SCROLL_BOTTOM_THRESHOLD_PX
+      );
       if (container) {
-        performProgrammaticScroll(container, targetBottomScrollTop);
+        performProgrammaticScroll(container, targetScrollTop);
       } else {
-        performProgrammaticScroll(targetBottomScrollTop);
+        performProgrammaticScroll(targetScrollTop);
       }
-      observedTopRef.current = targetBottomScrollTop;
+      observedTopRef.current = targetScrollTop;
       sessionMeasurePassesRef.current = 2;
     }
   }, [
@@ -396,21 +543,44 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       setActual(id, measured);
       queued = true;
     }
+    // 批 B ⑱：恢复窗口内本 effect 以锚点而非 maxScroll 校正（见下方分支）
+    const restoreTarget = anchorRestoreTargetRef.current;
     sessionMeasurePassesRef.current -= 1;
     if (!queued) {
       sessionMeasurePassesRef.current = 0;
+      if (restoreTarget) {
+        // 高度已收敛：双径锚点做最后一遍校正并落定待恢复目标
+        restorePagingAnchor(container, restoreTarget, manager);
+        observedTopRef.current = container.scrollTop;
+        anchorRestoreTargetRef.current = null;
+      }
       return;
     }
     flushPendingGeometry();
     // 同一次布局里直接改占位和滚动。等下一帧再绘，第一眼就是错的高度。
-    const nextTotal = chatSpacerHeight(manager.getTotalHeight(messages.length));
+    // R12：与渲染几何同值（含尾部缓冲），漏带会把 scrollTop 写到无缓冲的
+    // maxScroll、与跟随 effect 隔帧对打（列表先沉 B 再弹回）。
+    const nextTotal = chatSpacerHeight(
+      manager.getTotalHeight(messages.length),
+      tailBufferRef.current
+    );
     const inner = container.querySelector<HTMLElement>(
       '[data-chat-list-inner]'
     );
     if (inner) inner.style.height = `${nextTotal}px`;
-    const maxScroll = Math.max(0, nextTotal - container.clientHeight);
-    container.scrollTop = maxScroll;
-    observedTopRef.current = maxScroll;
+    if (restoreTarget) {
+      // 恢复窗口：逐遍以双径锚点校正（高度逐遍收敛、落点随之收敛），
+      // 遍数走完即落定；此窗口内绝不写 maxScroll（否则把读者拽回底部）
+      restorePagingAnchor(container, restoreTarget, manager);
+      observedTopRef.current = container.scrollTop;
+      if (sessionMeasurePassesRef.current <= 0) {
+        anchorRestoreTargetRef.current = null;
+      }
+    } else {
+      const maxScroll = Math.max(0, nextTotal - container.clientHeight);
+      container.scrollTop = maxScroll;
+      observedTopRef.current = maxScroll;
+    }
   }, [
     activeSessionId,
     modelContentHeight,
@@ -493,6 +663,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                     title="消息出错"
                   >
                     <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
+                      {timeSeparatorHosts.has(msg.id) && (
+                        <ChatTimeSeparator
+                          timestamp={timeSeparatorHosts.get(msg.id)!}
+                        />
+                      )}
                       <ChatUserMessageRow
                         msg={msg}
                         isPinned={row.isPinnedMsg}
@@ -533,6 +708,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                   title="消息出错"
                 >
                   <div data-vindex={msg.id} ref={rowMeasureRef(msg.id)}>
+                    {timeSeparatorHosts.has(msg.id) && (
+                      <ChatTimeSeparator
+                        timestamp={timeSeparatorHosts.get(msg.id)!}
+                      />
+                    )}
                     <StreamingAssistantRow
                       msg={msg}
                       isFollowUp={row.isFollowUp}
@@ -583,6 +763,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current
         }
       />
+      {/* 批 B ⑳：就绪遮罩（数据已到、布局未稳时盖住首帧；与 Loading 出口互斥不叠画） */}
+      {sessionCover && <SessionReadyCover fading={sessionCover.fading} />}
     </div>
   );
 };

@@ -15,7 +15,13 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, renderHook, act, fireEvent, cleanup } from '@testing-library/react';
+import {
+  render,
+  renderHook,
+  act,
+  fireEvent,
+  cleanup,
+} from '@testing-library/react';
 import type { MessageToolCall } from '../../../store/types';
 import type { ToolRenderItem } from '../../../api/toolPresentation';
 import { VirtualScrollManager } from '../../../api/VirtualScrollManager';
@@ -272,17 +278,17 @@ describe('toolExpansionState — 工具卡片原地替换与展开防抖测试�
       const baseTime = 10000;
 
       // 0ms 紧随前次调用：防抖拦截
-      expect(isExpansionDebounced(baseTime, baseTime + 10, EXPANSION_DEBOUNCE_MS)).toBe(
-        true
-      );
+      expect(
+        isExpansionDebounced(baseTime, baseTime + 10, EXPANSION_DEBOUNCE_MS)
+      ).toBe(true);
       // 50ms 仍在窗口内：防抖拦截
-      expect(isExpansionDebounced(baseTime, baseTime + 50, EXPANSION_DEBOUNCE_MS)).toBe(
-        true
-      );
+      expect(
+        isExpansionDebounced(baseTime, baseTime + 50, EXPANSION_DEBOUNCE_MS)
+      ).toBe(true);
       // 99ms 边界防护：防抖拦截
-      expect(isExpansionDebounced(baseTime, baseTime + 99, EXPANSION_DEBOUNCE_MS)).toBe(
-        true
-      );
+      expect(
+        isExpansionDebounced(baseTime, baseTime + 99, EXPANSION_DEBOUNCE_MS)
+      ).toBe(true);
 
       // 100ms 恰好冷却：放行
       expect(
@@ -532,9 +538,9 @@ describe('toolExpansionState — 工具卡片原地替换与展开防抖测试�
       expect(rowEl?.getAttribute('data-in-place-replace')).toBe('true');
       expect(rowEl?.getAttribute('data-in-place-flipping')).toBe('true');
 
-      // 推进 100ms 计时器
+      // 推进至原地指示动效时长（AN4 起 150ms 交叉淡化窗）
       act(() => {
-        vi.advanceTimersByTime(100);
+        vi.advanceTimersByTime(IN_PLACE_FLIP_DURATION_MS);
       });
 
       // 翻转完成后，flipping 属性被安全清除
@@ -553,10 +559,7 @@ describe('toolExpansionState — 工具卡片原地替换与展开防抖测试�
         output: 'line 1\nline 2',
       };
 
-      const props = createMockProps(
-        [{ kind: 'single', tc }],
-        toggleFn
-      );
+      const props = createMockProps([{ kind: 'single', tc }], toggleFn);
 
       const { container } = render(
         React.createElement(CompactToolRow, {

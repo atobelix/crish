@@ -168,8 +168,8 @@ export async function rebuildSearchIndex(): Promise<boolean> {
 }
 
 // ===== Markdown API =====
-// Rust 侧注册 3 个 Markdown 命令（Markdown 2.0）：
-//   core_md_render / core_md_render_batch / core_md_render_stream
+// Rust 侧 Markdown 命令（Markdown 2.0）：
+//   core_md_render_batch（core_md_render 与 core_md_render_stream 已退役）
 // 全部走 tokio::task::spawn_blocking。返回值是 { html, truncated }：
 // 输入超过 5MB 时 Rust 按 UTF-8 边界截断，truncated=true 由前端提示。
 // raw HTML 已在 Rust 侧逐片段白名单清洗；渲染器生成 HTML 可信。
@@ -216,30 +216,6 @@ export async function renderMarkdownBatch(
       truncated: Boolean(result.truncated),
     };
   });
-}
-
-/**
- * 流式渲染 markdown → HTML（core_md_render_stream）。
- * 跳过 syntect 高亮、不写 Rust 缓存；HTML 外壳与完成态一致。
- */
-export async function renderMarkdownStream(
-  text: string,
-  variant: MarkdownVariant
-): Promise<MarkdownRenderResult | null> {
-  const res = await invokeResult<MarkdownRenderResult>(
-    'core_md_render_stream',
-    {
-      text,
-      variant,
-    }
-  );
-  if (res.status === 'ok' && res.data && typeof res.data.html === 'string') {
-    return {
-      html: res.data.html,
-      truncated: Boolean(res.data.truncated),
-    };
-  }
-  return null;
 }
 
 // ===== Worker 池下沉 API (Stream E) =====

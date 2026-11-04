@@ -11,8 +11,12 @@
   min-width: 0;
 }
 
-/* 未展开且未处于过渡折叠中时，严格执行 24px 硬件级尺寸隔离，切断流式回流风暴 */
-.reasoningContainer:not([data-expanded='true']):not([data-collapsing='true']) {
+/* 折叠已落定（槽位 hidden="until-found" 在位）时，严格执行 24px 硬件级尺寸隔离，
+ * 切断流式测高风暴；过渡进行中（hidden 尚未挂上）容器高度跟随 grid 动画，
+ * 不得提前钳制——落定判据由 AN1 隐藏协调维护（原过渡态标记判据退役） */
+.reasoningContainer:not([data-expanded='true']):has(
+    > .reasoningExpandGrid > .reasoningExpandSlot[hidden]
+  ) {
   contain: size layout;
   height: 24px;
   min-height: 24px;
@@ -21,67 +25,35 @@
   overflow: hidden;
 }
 
-/* 思维链平滑折叠外层 Grid 容器：优雅收拢展开，消灭视口跳跃 */
-@keyframes reasoning-grid-expand {
-  from {
-    grid-template-rows: 0fr;
-  }
-  to {
-    grid-template-rows: 1fr;
-  }
-}
-
+/* 思维链平滑折叠外层 Grid 容器：优雅收拢展开，消灭视口跳跃。
+ * AN1：grid 行高过渡是唯一的高度动效（旧 grid 展开 keyframes 已删——它与
+ * transition 叠加会双轨驱动同一属性）；时长读根元素同钟变量。 */
 .reasoningExpandGrid {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion);
-  transition-duration: var(--accordion-duration, var(--transition-accordion));
+  transition: grid-template-rows
+    var(--accordion-duration, var(--transition-accordion));
   margin: 0;
   padding: 0;
   border: none;
   overflow: hidden;
 }
 
-.reasoningContainer[data-expanded='true']:not([data-collapsing='true'])
-  .reasoningExpandGrid {
-  animation: reasoning-grid-expand
-    var(--accordion-duration, var(--transition-accordion)) forwards;
-  grid-template-rows: 1fr;
-}
-
 .reasoningContainer[data-expanded='true'] .reasoningExpandGrid {
   grid-template-rows: 1fr;
 }
 
-@keyframes reasoning-slot-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+/* AN1：槽位淡变只保留 opacity（旧 slot 淡入 keyframes 带 -4px 位移已删；
+ * 折叠内层不再混入位移，与 grid 同钟单轨） */
 .reasoningExpandSlot {
   min-height: 0;
   overflow: hidden;
   opacity: 0;
-  transform: translateY(-2px);
-  transition:
-    opacity var(--transition-accordion-fade),
-    transform var(--transition-accordion-fade);
-}
-
-.reasoningContainer[data-expanded='true']:not([data-collapsing='true'])
-  .reasoningExpandSlot {
-  animation: reasoning-slot-fade-in var(--transition-accordion-fade) forwards;
+  transition: opacity var(--transition-accordion-fade);
 }
 
 .reasoningContainer[data-expanded='true'] .reasoningExpandSlot {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */
@@ -110,7 +82,7 @@
   overflow: hidden;
   user-select: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   color: var(--text-tertiary);
   text-align: left;
@@ -166,10 +138,11 @@
  * 否则与工具调用行产生「花了、字体偏小」的视觉割裂。
  * 颜色改为 `inherit`：交由 .reasoningRow 的状态机统一驱动
  *   （默认 tertiary → 悬停 primary → 活跃 secondary）。
+ * 【D5 定版 · 2026-11-02】字号随折叠/过程内容定版为 13px（覆盖上款字号部分）。
  */
 .reasoningLabel {
   font-weight: var(--font-weight-normal);
-  font-size: 14px;
+  font-size: 13px;
   color: inherit;
   flex-shrink: 0;
   pointer-events: none;
@@ -182,7 +155,7 @@
   overflow: hidden;
   flex: 1 1 auto;
   color: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   white-space: nowrap;
 }
@@ -192,7 +165,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
   color: inherit;
 }
 
@@ -241,29 +214,20 @@
   text-align: left;
 }
 
-/* 极简微交互动画契约声明 */
-@keyframes sweep-shine {
-  0% {
-    opacity: 0.75;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.75;
-  }
-}
-
-/* 流式尾窗柔和纯净字色（中性微交互） */
-.sweepShine {
+/* 流式尾窗柔和纯净字色（中性微交互）：整段文字 opacity 呼吸，
+ * 关键帧消费共享层正典 crish-text-breathe（styles/design-system.css，
+ * AN3 登记的独立配方——非背景扫光，勿与 crish-shine-sweep 合并）；
+ * 原本地同名定义（旧名 sweep-shine，名实不符）已删除。 */
+.textBreathe {
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
-  animation: sweep-shine var(--transition-pulse, 2.6s ease-in-out) infinite;
+  animation: crish-text-breathe var(--transition-pulse, 2.6s ease-in-out)
+    infinite;
 }
 
-/* 无障碍降级：系统偏好减弱动态效果时关停扫光 */
+/* 无障碍降级：系统偏好减弱动态效果时关停文字呼吸 */
 @media (prefers-reduced-motion: reduce) {
-  .sweepShine {
+  .textBreathe {
     animation: none;
     background: none;
     -webkit-background-clip: border-box;
@@ -285,7 +249,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-normal);
   color: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -301,7 +265,7 @@
   margin-left: auto;
   color: var(--text-tertiary);
   transition:
-    transform var(--transition-accordion),
+    transform var(--accordion-duration, var(--transition-accordion)),
     color var(--transition-fast, 150ms ease);
   flex-shrink: 0;
   font-size: 14px;
@@ -316,7 +280,12 @@
   transform: rotate(90deg);
 }
 
-/* 展开态自然文档流：解除所有固定高度与局部视口限制，零内部滚动条 */
+/*
+ * 展开态思考体（HC1 封顶，覆盖旧「自然文档流零内部滚动」口径）：
+ * --reasoning-max-h 纵向封顶 + 内部滚动（DIM-02 白名单受限滚动区「思考区」），
+ * 滚轮到界链式穿透；data-fade 四态由 useScrollFade 维护，mask 作用于
+ * 内层 .reasoningContent。展开 = 进入受限滚动区，不是全高展开（用户裁决）。
+ */
 /* 展开态文字始终以柔和灰色呈现，hover 严禁加深颜色（2026-09-11 用户裁决） */
 .reasoningBody {
   width: 100%;
@@ -325,9 +294,11 @@
   padding: 4px 0 8px 12px;
   margin-left: 6px;
   border-left: 2px solid var(--border-subtle);
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
   height: auto;
-  max-height: none;
+  max-height: var(--reasoning-max-h);
   color: var(--text-tertiary);
 }
 
@@ -335,7 +306,7 @@
   width: 100%;
   box-sizing: border-box;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.65;
   user-select: text;
   overflow: visible;

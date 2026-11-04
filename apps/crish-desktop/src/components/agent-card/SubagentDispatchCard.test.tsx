@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 describe('SubagentDispatchCard', () => {
-  it('运行态：角色名标题 + 工作中 + 当前动作与已完成 N/M 步', () => {
+  it('运行态：角色名标题 + 运行中 + 当前动作与已完成 N/M 步', () => {
     const agent = makeAgent({
       messages: toolMsg([
         { id: 'c1', name: 'read_file', status: 'success' },
@@ -95,7 +95,7 @@ describe('SubagentDispatchCard', () => {
     expect(card?.getAttribute('data-parent-tool-call-id')).toBe('t-sub-1');
     expect(card?.getAttribute('data-status')).toBe('running');
     expect(card?.textContent).toContain('研究员');
-    expect(card?.textContent).toContain('工作中');
+    expect(card?.textContent).toContain('运行中');
     expect(card?.textContent).toContain('已完成 1/2 步');
   });
 
@@ -137,7 +137,7 @@ describe('SubagentDispatchCard', () => {
       <SubagentDispatchCard agent={agent} parentSessionId="sess-1" />
     );
     const card = container.querySelector('[data-dispatch-card="1"]');
-    expect(card?.textContent).toContain('已就绪');
+    expect(card?.textContent).toContain('已完成');
     expect(card?.textContent).toContain('结论第一行');
     expect(card?.textContent).not.toContain('细节第二行不应上卡');
     expect(card?.textContent).toContain('共 3 个工具');
@@ -154,7 +154,7 @@ describe('SubagentDispatchCard', () => {
       <SubagentDispatchCard agent={agent} parentSessionId="sess-1" />
     );
     const card = container.querySelector('[data-dispatch-card="1"]');
-    expect(card?.textContent).toContain('执行失败');
+    expect(card?.textContent).toContain('失败');
     expect(card?.textContent).toContain('执行异常');
     expect(card?.textContent).toContain('连接超时未能完成');
     fireEvent.click(getByRole('button', { name: '重试恢复' }));

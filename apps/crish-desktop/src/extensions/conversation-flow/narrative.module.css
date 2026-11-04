@@ -119,6 +119,13 @@
   }
 }
 
+/* 收口登记的独立配方（AN2 脉冲归队裁定，禁止合并）：flowPulse 是
+ * 「纯透明」脉冲（仅 50% 处 opacity 0.25，无 transform、无阴影），
+ * 供叙事流运行指示；无位移通道为本面口径，与其余四处脉冲
+ * （tool-dot-pulse / agentDotPulse / sync-dot-pulse / pulseDot）的
+ * 语义不同，强行合并会改变叙事流已验收的体感，故独立登记、独立
+ * 演进。唯一消费方：本文件流式指示（周期经 var(--transition-pulse)
+ * 驱动，fallback 1.6s 为本面自有口径）。 */
 @keyframes flowPulse {
   50% {
     opacity: 0.25;
@@ -199,10 +206,12 @@
   );
 }
 
+/* 高度分档：详情/子代理体落档2（内容）；思考体在下方自有规则覆写为档3（嵌套）。
+ * 旧本地限高变量（600px 倒挂源）已退役，封顶一律走档位正典 token。 */
 .detail,
 .thinkingFull,
 .subagentBody {
-  max-height: var(--flow-output-max, 600px);
+  max-height: var(--expand-max-h-content);
   overflow: auto;
   margin: 0 8px 4px 20px;
   padding: 0;
@@ -225,36 +234,50 @@
   word-break: break-word;
 }
 
-.previewWrap {
-  position: relative;
-  overflow: hidden;
-  margin: 0 8px 2px 20px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.previewText {
-  display: block;
-  overflow: hidden;
-  text-overflow: clip;
-}
-
-.previewFade {
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: 56px;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--bg-primary) 0%, transparent),
-    var(--bg-primary)
-  );
-  pointer-events: none;
-}
-
 .thinkingFull {
+  /* 思考落档3，覆盖上方共用规则的档2 值（同特异性、后声明胜出） */
+  max-height: var(--expand-max-h-nested);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* AN1：思考块折叠族对齐——grid > slot > 全文常驻，根变量同钟；
+ * 头部摘要为纯文本截断（旧 .previewWrap/.previewText/.previewFade 预览
+ * markdown 三件套随预览解析退役一并删除） */
+.thinkingGrid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows
+    var(--accordion-duration, var(--transition-accordion));
+  overflow: hidden;
+}
+
+.thinking[data-flow-expanded='true'] .thinkingGrid {
+  grid-template-rows: 1fr;
+}
+
+.thinkingSlot {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--transition-accordion-fade);
+}
+
+.thinking[data-flow-expanded='true'] .thinkingSlot {
+  opacity: 1;
+}
+
+.thinkingSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .inspectorBtn,
@@ -287,7 +310,7 @@
 }
 
 .subagent {
-  max-height: var(--flow-output-max, 600px);
+  max-height: var(--expand-max-h-content);
   overflow: auto;
 }
 
@@ -308,7 +331,7 @@
   display: flex;
   flex-direction: column;
   width: min(28rem, 100%);
-  max-height: 360px;
+  max-height: var(--expand-max-h-nested);
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -336,9 +359,9 @@
 }
 
 .notebookBody {
+  /* 不再自带独立上限：flex 填充 .notebook 的档3 封顶并在其内滚动 */
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 320px;
   overflow: auto;
   padding: 8px 10px;
 }

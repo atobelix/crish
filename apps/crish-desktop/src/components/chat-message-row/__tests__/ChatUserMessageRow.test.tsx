@@ -13,7 +13,7 @@ import {
 } from '../../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../../api/userFacingErrors';
 import { DEFAULT_DELAY_SHOW_MS } from '../../ui/Tooltip/Tooltip';
-import { _resetAnimatedMessageIdsForTesting } from '../useUserBubbleEntrance';
+import { _resetAnimatedMessageIdsForTesting } from '../useMessageRowEntrance';
 
 // Mock 全局 Toast 上下文
 vi.mock('../../../services/toast/ToastContext', () => ({
@@ -423,7 +423,7 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     expect(cronBadge?.textContent).toContain('定时计划唤醒');
   });
 
-  it('用户消息气泡入场动画：新发送消息挂载 data-entering，并在 animationEnd 后卸载 GPU will-change', () => {
+  it('用户消息入场动画（AN2 单层化）：新消息在行根挂 data-entering，行级 animationEnd 后清除', () => {
     const freshMsg = createMockUserMessage({
       id: 'fresh-glide-msg',
       text: '新消息滑入测试',
@@ -432,20 +432,25 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     const { container } = render(
       <ChatUserMessageRow {...defaultProps} msg={freshMsg} />
     );
+    const row = container.querySelector(
+      '[data-testid="chat-user-message-row"]'
+    );
     const bubble = container.querySelector(`.${styles.userBubble}`);
+    expect(row).not.toBeNull();
     expect(bubble).not.toBeNull();
+    // 入场语义挂在行根（行级 fade-slide 为唯一入场）；气泡只保留 data-entering 供首条上浮选择器使用
+    expect(row?.getAttribute('data-entering')).toBe('true');
     expect(bubble?.getAttribute('data-entering')).toBe('true');
-    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(true);
 
-    // 触发 animationEnd（兼容 jsdom 缺少标准 AnimationEvent 时 React 监听 webkitAnimationEnd），剥离 GPU 图层
+    // 触发行级 animationEnd（兼容 jsdom 缺少标准 AnimationEvent 时 React 监听 webkitAnimationEnd）
     act(() => {
-      fireEvent(bubble!, new Event('webkitAnimationEnd', { bubbles: true }));
+      fireEvent(row!, new Event('webkitAnimationEnd', { bubbles: true }));
     });
+    expect(row?.getAttribute('data-entering')).toBeNull();
     expect(bubble?.getAttribute('data-entering')).toBeNull();
-    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(false);
   });
 
-  it('历史消息不触发入场动画：旧消息不挂载 data-entering', () => {
+  it('历史消息不触发入场动画：旧消息行与气泡均不挂 data-entering', () => {
     const oldMsg = createMockUserMessage({
       id: 'old-glide-msg',
       text: '历史已归档消息',
@@ -454,18 +459,26 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     const { container } = render(
       <ChatUserMessageRow {...defaultProps} msg={oldMsg} />
     );
+    const row = container.querySelector(
+      '[data-testid="chat-user-message-row"]'
+    );
     const bubble = container.querySelector(`.${styles.userBubble}`);
+    expect(row).not.toBeNull();
     expect(bubble).not.toBeNull();
+    expect(row?.getAttribute('data-entering')).toBeNull();
     expect(bubble?.getAttribute('data-entering')).toBeNull();
-    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(false);
   });
 
-  it('CSS 动效契约守门：.userBubbleEntering 包含 14px glideUp 与 220ms 缓动', () => {
+  it('CSS 动效契约守门（AN2 单层化）：行级 fade-slide 门控 + 首条上浮保留 + 气泡 glide 已删除', () => {
     const cssPath = path.resolve(__dirname, '../ChatMessageRow.module.css');
     const cssContent = fs.readFileSync(cssPath, 'utf-8');
-    expect(cssContent).toContain('@keyframes userBubbleGlideUp');
-    expect(cssContent).toContain('translateY(14px)');
-    expect(cssContent).toContain('var(--duration-accordion, 220ms)');
+    expect(cssContent).toContain('@keyframes messageRowFadeSlideIn');
+    expect(cssContent).toContain(".rowUser[data-entering='true']");
+    expect(cssContent).toContain(".rowAssistant[data-entering='true']");
+    expect(cssContent).not.toContain('userBubbleGlideUp');
+    expect(cssContent).toContain('@keyframes userBubbleFirstMessageFloatUp');
+    expect(cssContent).toContain('translateY(54px)');
+    expect(cssContent).toContain('var(--duration-smooth, 300ms)');
     expect(cssContent).toContain('will-change: transform, opacity');
   });
 });

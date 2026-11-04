@@ -28,7 +28,8 @@ import { FileActions } from './FileActions';
 import { AppIcon } from '@/components/ui/icons';
 import { preferencesClient } from '../../api/preferences';
 import { useFileListRatio } from './hooks/useFileListRatio';
-import { useSplitResize } from '../../hooks/useSplitResize';
+import { useSplitResize } from '../ui/SplitResizer';
+import { ElasticSplitHandle } from '../ui/SplitResizer';
 import {
   shouldConsumeScopedEvent,
   useLeafScope,
@@ -604,7 +605,12 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 aria-valuemax={FILES_LIST_RATIO_MAX}
                 aria-valuenow={Math.round(listWidthRatio)}
                 onKeyDown={handleSplitKeyDown}
-              />
+              >
+                <ElasticSplitHandle
+                  orientation="vertical"
+                  isDragging={splitDragging}
+                />
+              </div>
               <FilePreview
                 targetSessionId={scopedSessionId}
                 file={{

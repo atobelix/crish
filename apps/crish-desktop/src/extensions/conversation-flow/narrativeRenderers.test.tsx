@@ -8,7 +8,10 @@ import {
   useNarrativeRenderSlots,
 } from '../../components/chat-message/narrativeRenderSlots';
 import type { MessageToolCall, SessionMessage } from '../../store/types';
-import { createNarrativeRenderers, renderNarrativeTools } from './narrativeRenderers';
+import {
+  createNarrativeRenderers,
+  renderNarrativeTools,
+} from './narrativeRenderers';
 
 vi.mock('../../store/storeAccess', () => ({
   openToolInSession: vi.fn(),
@@ -90,8 +93,12 @@ describe('narrativeRenderers', () => {
         })}
       </>
     );
-    expect(container.querySelector('[data-purpose-status="running"]')).not.toBeNull();
-    expect(container.querySelector('[data-flow-expanded="true"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-purpose-status="running"]')
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-flow-expanded="true"]')
+    ).not.toBeNull();
     expect(container.querySelector('[data-flow-action]')).not.toBeNull();
   });
 
@@ -116,12 +123,25 @@ describe('narrativeRenderers', () => {
         <Probe />
       </NarrativeRenderSlotsContext.Provider>
     );
-    expect(on.container.querySelectorAll('[data-flow-purpose]')).toHaveLength(1);
+    expect(on.container.querySelectorAll('[data-flow-purpose]')).toHaveLength(
+      1
+    );
     expect(on.container.querySelector('[data-flow-thinking]')).not.toBeNull();
-    expect(on.container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    // AN1：全文常驻 DOM——折叠态 full 也在文档中，可见性由 expanded/hidden 协调
+    expect(
+      on.container.querySelector('[data-flow-thinking-full]')
+    ).not.toBeNull();
+    expect(
+      on.container.querySelector('[data-flow-expanded="false"]')
+    ).not.toBeNull();
     expect(on.container.querySelector('pre')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /思考过程/ }));
-    expect(on.container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
+    expect(
+      on.container.querySelector('[data-flow-thinking-full]')
+    ).not.toBeNull();
+    expect(
+      on.container.querySelector('[data-flow-expanded="true"]')
+    ).not.toBeNull();
     on.unmount();
 
     const off = render(<Probe />);
@@ -134,10 +154,16 @@ describe('narrativeRenderers', () => {
     const { renderThought } = createNarrativeRenderers([msg]);
     const long = '甲'.repeat(80);
     const open = render(
-      <>{renderThought({ content: long, messageId: msg.id, defaultOpen: true })}</>
+      <>
+        {renderThought({ content: long, messageId: msg.id, defaultOpen: true })}
+      </>
     );
-    expect(open.container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
-    expect(open.container.querySelector('[data-flow-expanded="true"]')).not.toBeNull();
+    expect(
+      open.container.querySelector('[data-flow-thinking-full]')
+    ).not.toBeNull();
+    expect(
+      open.container.querySelector('[data-flow-expanded="true"]')
+    ).not.toBeNull();
     open.unmount();
 
     const closed = render(
@@ -149,8 +175,13 @@ describe('narrativeRenderers', () => {
         })}
       </>
     );
-    expect(closed.container.querySelector('[data-flow-thinking-full]')).toBeNull();
-    expect(closed.container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
+    // AN1：全文常驻 DOM——defaultOpen=false 时 full 在文档中但处于折叠态
+    expect(
+      closed.container.querySelector('[data-flow-thinking-full]')
+    ).not.toBeNull();
+    expect(
+      closed.container.querySelector('[data-flow-expanded="false"]')
+    ).not.toBeNull();
   });
 
   it('开插件：pending 不画流内审批卡', () => {

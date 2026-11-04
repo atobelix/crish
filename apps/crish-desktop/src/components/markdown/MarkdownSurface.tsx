@@ -14,6 +14,7 @@ import type { TranslationKey } from '../../i18n/types';
 import { hash16 } from '../../api/markdown/markdownChunker';
 import type { MarkdownVariant } from '../../api/rustCore';
 import { IslandPortal } from './islands/IslandPortal';
+import { bindScrollFadesIn } from '../ui/ScrollFadeRegion/useScrollFade';
 
 const TOOLTIP_KEY_MAP: Record<string, TranslationKey> = {
   'markdown.code.copy': 'common.markdownCopy',
@@ -424,6 +425,9 @@ export function MarkdownSurface({
       if (scopes.length > 0) enhanceScopes(scopes);
       appliedRef.current = { root, html, enhance, isActive };
       rebuildIslands(root, scopes, freshRoot);
+      // HC1：为新渲染的代码块绑定边缘渐隐状态机（data-fade 维护在 .md-code-pre，
+      // mask 作用于内层 <code>；已绑定节点跨增量补丁复用，幂等）
+      bindScrollFadesIn(root);
       return;
     }
 

@@ -180,6 +180,8 @@ export interface SessionActions {
     messageId: string,
     text: string
   ) => void;
+  /** 批 B ㉖：标记某条助手消息为「用户主动停止」（呈现层据此出弱化已停止行） */
+  markMessageStoppedByUser: (sessionId: string, messageId: string) => void;
   updateMessageThinking: (
     sessionId: string,
     messageId: string,
@@ -212,6 +214,11 @@ export interface SessionActions {
     agentId: string,
     toolCallId: string,
     patch: Partial<MessageToolCall>
+  ) => void;
+  upsertAgentToolApproval: (
+    sessionId: string,
+    agentId: string,
+    toolCall: MessageToolCall
   ) => void;
   pinMessage: (sessionId: string, messageId: string, color?: string) => void;
   unpinMessage: (sessionId: string, messageId: string) => void;

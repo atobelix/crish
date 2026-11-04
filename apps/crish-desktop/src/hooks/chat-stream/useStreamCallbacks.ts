@@ -309,18 +309,21 @@ export function useStreamCallbacks(
         });
       }
     } else {
-      // 无正文：清空占位（不写 assistant 正文）；停止提示走全局 toast（单轨收敛 §2.4）
+      // 无正文：清空占位（不写 assistant 正文）。停止反馈自批 B ㉖ 起单轨
+      // 收敛到流内弱化「已停止」行（markMessageStoppedByUser 标记驱动），
+      // 本分支不再弹 toast，避免行内行与全局提示双重呈现。
       st.updateMessageText(sid, cur.assistantMsgId, '');
       scheduleDualRafClearStream(sid, cur.assistantMsgId);
-      if (!silent) {
-        toast.show(force ? '已强制停止本轮生成。' : '已停止本轮生成。', {
-          type: 'info',
-        });
-      }
     }
     const asst = buildMessageIndex(getSessionById(sid)).get(cur.assistantMsgId);
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
     st.setSessionMessageStatus(sid, cur.assistantMsgId, 'completed');
+    // 批 B ㉖：用户主动停止（非 silent）落呈现标记——silent 停止是内部
+    // 编排手段（编辑重发先行停止等），不得冒充用户可见语义，故不标记。
+    // 渲染门控在 MessageContent：无正文才出「已停止」行，有部分正文不加行。
+    if (!silent) {
+      st.markMessageStoppedByUser(sid, cur.assistantMsgId);
+    }
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
       // T-E 步骤 3（U5）：raw setState → applyToolCallPatches action（批量终态）

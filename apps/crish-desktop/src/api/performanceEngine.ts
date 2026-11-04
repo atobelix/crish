@@ -5,13 +5,9 @@ import { logger } from '../services/LoggerService';
 export async function detectPerformanceTier(): Promise<PerfTier> {
   if (typeof window === 'undefined') return 'balanced';
 
-  const isReducedMotion = window.matchMedia(
-    '(prefers-reduced-motion: reduce)'
-  ).matches;
-  if (isReducedMotion) {
-    return 'eco';
-  }
-
+  // 性能档只由硬件与实测帧率决定。系统减动效（prefers-reduced-motion）
+  // 不再强制 eco——减动效有其独立通道（tokens 的 @media 段与各 JS 判定），
+  // 性能档不得冒充减动效（X1 解耦口径）。
   const cores = navigator.hardwareConcurrency || 4;
   const memoryGigs =
     (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 4;
@@ -67,8 +63,11 @@ export function initPerformanceAttributes() {
 
   detectPerformanceTier().then((tier) => {
     html.setAttribute('data-perf-tier', tier);
-    logger.info(`[conex] System booted in [${tier.toUpperCase()}] performance tier (tier=${tier})`, {
-      module: 'performanceEngine',
-    });
+    logger.info(
+      `[conex] System booted in [${tier.toUpperCase()}] performance tier (tier=${tier})`,
+      {
+        module: 'performanceEngine',
+      }
+    );
   });
 }

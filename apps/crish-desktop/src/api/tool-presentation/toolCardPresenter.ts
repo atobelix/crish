@@ -3,21 +3,14 @@
  */
 
 import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
-import {
-  isEditToolName,
-  isShellToolName,
-  sanitizeToolDisplayOutput,
-} from '../toolFeedback';
+import { isEditToolName, isShellToolName } from '../toolFeedback';
 import type { ToolRowTone } from './toolPresentationTypes';
 import { extractToolCommand } from './toolArgsNormalizer';
 import { unwrapPowerShellCommand } from './toolCommandExtractor';
 import { toolHumanLabel } from './toolHumanDescriptions';
-import {
-  isPlaceholderToolOutput,
-  isTrivialToolOutput,
-  truncateToolOutput,
-} from './toolOutputSanitizer';
+import { truncateToolOutput } from './toolOutputSanitizer';
 import { toolDiffLineStats } from './toolDiffStats';
+import { resolveToolExpansionPolicy } from './toolExpansionPolicy';
 
 // 重导出子模块所有能力（保持 100% 向后兼容，严格单文件 ≤ 250 行）
 export * from './toolLabelSanitizer';
@@ -27,6 +20,7 @@ export * from './toolHumanDescriptions';
 export * from './toolPresentationTypes';
 export * from './toolOutputSanitizer';
 export * from './toolDiffStats';
+export * from './toolExpansionPolicy';
 export { isShellToolName } from '../toolFeedback';
 
 export function normalizeToolDiffStat(stats: { add: number; del: number }): {
@@ -90,30 +84,20 @@ export function isReadFileToolName(name: string): boolean {
     n === 'read_text' ||
     n === 'read_file_content' ||
     n === 'workbench_read_file_content' ||
-    (n.includes('read') && !n.includes('url') && !n.includes('resource') && !n.includes('log')) ||
+    (n.includes('read') &&
+      !n.includes('url') &&
+      !n.includes('resource') &&
+      !n.includes('log')) ||
     (n.includes('view') && !n.includes('preview') && !n.includes('diff'))
   );
 }
 
 export function toolHasExpandableBody(tc: MessageToolCall): boolean {
-  if (tc.status === 'pending_approval') return false;
-  // 文件读取类工具正常情况下无需在聊天流内展开大块文件源码，
-  // 用户点击路径超链接直接在右侧边栏文件管理器/查看器中检视
-  if (isReadFileToolName(tc.name || '') && tc.status !== 'error') {
-    return false;
-  }
-  if (tc.status === 'running') {
-    return Boolean(
-      (tc.arguments && tc.arguments.trim().length > 2) ||
-      (tc.output && tc.output.trim())
-    );
-  }
-  if (tc.diffs && tc.diffs.length > 0) return true;
-  if (extractImageRefs(tc.output || '').length > 0) return true;
-  if (tc.arguments && tc.arguments.trim().length > 2) return true;
-  const raw = tc.output || '';
-  if (isPlaceholderToolOutput(raw) || isTrivialToolOutput(raw)) return false;
-  return Boolean(sanitizeToolDisplayOutput(raw).trim());
+  // E1：展开判定唯一真源 = resolveToolExpansionPolicy（决策序十条，
+  // 见 toolExpansionPolicy.ts）；本函数仅保留其「是否内联展开」的
+  // 布尔投影。旧谓词的「入参长度 > 2 即展开」已随政策物理退役——
+  // 属性/摘要行不再长出展开体，可解析 diff 改道侧栏（side-diff）。
+  return resolveToolExpansionPolicy(tc) === 'inline';
 }
 
 export function isInspectTool(tc: MessageToolCall): boolean {

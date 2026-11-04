@@ -4,11 +4,14 @@
  *
  * 核心特性：
  * - 严格固定 24px 高度（未展开态 contain: size layout，彻底阻断流式测高风暴）；
- * - 流式运行态：极简状态指示灯 + 扫光微交互（@keyframes sweep-shine）+ 512B 尾窗打字追踪；
- * - 终态闭合态：`已思考 3.2s >`，数字等宽对齐 font-variant-numeric: tabular-nums；
- * - 点击展开态：自然向下融入主文档流，零内部滚动条，无 168px 限制，滚动交由外层唯一滚动宿主；
+ * - 流式运行态：极简状态指示灯 + 文字呼吸微交互（共享 @keyframes crish-text-breathe）+ 512B 尾窗打字追踪；
+ * - 终态闭合态：`已思考 3.2 秒 >`，数字等宽对齐 font-variant-numeric: tabular-nums；
+ * - 点击展开态：思考体 --reasoning-max-h 封顶 + 内部滚动（HC1 受限滚动区，
+ *   展开 = 进入受限滚动区而非全高展开），流式期间贴底跟随、用户上滚后不抢滚；
  * - 独立一键复制纯净思考思维链；
- * - 两阶段平滑收敛：流式思考结束时 160ms CSS Grid 高度收缩，合拢后容器高度自然收敛于 24px，消除视口跳跃。
+ * - 思考体 DOM 常驻（AN1 机制替换）：折叠只收 grid 行高，收拢完成后槽位挂
+ *   hidden="until-found"（浏览器查找命中经 beforematch 自动展开）；不再有
+ *   「过渡完卸载 DOM」的两阶段机制，折叠全程零节点移除。
  */
 import React, {
   useState,
@@ -17,64 +20,55 @@ import React, {
   useRef,
   useEffect,
 } from 'react';
-import { Button } from '@/components/ui';
+import { Button, NumericText, ScrollFadeRegion } from '@/components/ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
-import { useStreamingMarkdownResult } from '../../api/markdown/useMarkdownRender';
-import { MarkdownSurface } from '../markdown/MarkdownSurface';
-import * as motionTokens from '../../utils/motionTokens';
-import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import {
+  calcAccordionDuration,
+  accordionDurationStyle,
+  DURATION_ACCORDION_MS,
+} from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
 import { useI18n } from '../../i18n';
+import { formatDurationLabel } from '../../api/tool-presentation/processMetricsEngine';
 
 /**
- * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
+ * 折叠摘要 = 纯文本渲染（HC1 治 L-8）：摘要是标题文本而非正文，
+ * 不再走 markdown 解析——段标题中的反引号/星号按字面呈现，
+ * 与工具行的纯文本口径一致（D-5 的段间分隔由投影层保证）。
  */
-function calcAccordionDuration(height: number, isOpening: boolean): number {
-  if (
-    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
-    'function'
-  ) {
-    return (
-      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
-        h: number,
-        o: boolean
-      ) => number
-    )(height, isOpening);
-  }
-  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
-  if (isOpening) {
-    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(480, Math.max(180, raw)));
-  } else {
-    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
-    return Math.round(Math.min(350, Math.max(150, raw)));
-  }
+/**
+ * 摘要行纯文本化（HC1 · L-8）：剥除行内 markdown 装饰标记（标题前缀、
+ * 加粗/斜体/删除线/行内代码），只留字面文本——不再把纯标题文本送进
+ * markdown 引擎解析（段标题中的反引号/星号曾被当格式吞掉），与工具行
+ * 的纯文本口径一致；「不暴露 Markdown 源码」的可见契约保持不变。
+ */
+export function stripInlineMarkdownMarkers(line: string): string {
+  return line
+    .replace(/^\s{0,3}#{1,6}\s+/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
 }
 
-function ReasoningSummaryMarkup({
-  markdown,
+function ReasoningSummaryText({
+  text,
   isLive,
 }: {
-  markdown: string;
+  text: string;
   isLive: boolean;
 }) {
-  const { html } = useStreamingMarkdownResult(
-    markdown,
-    'chat',
-    Boolean(markdown)
-  );
-
   return (
-    <MarkdownSurface
-      as="span"
-      variant="chat"
-      isActive={isLive}
-      className={`${styles.summaryText} ${isLive ? styles.sweepShine : ''}`}
-      html={html}
-      dataAttributes={{ 'data-testid': 'reasoning-summary-markup' }}
-    />
+    <span
+      className={`${styles.summaryText} ${isLive ? styles.textBreathe : ''}`}
+      data-testid="reasoning-summary-markup"
+    >
+      {stripInlineMarkdownMarkers(text)}
+    </span>
   );
 }
 
@@ -154,11 +148,12 @@ export function resolveReasoningPresentation(
   }
 
   // 2. 终态收敛：格式化耗时与身份徽标
+  // B13：耗时统一 formatDurationLabel（与组头同一口径），禁止本地拼 `${x}s`
   let badgeText = t('chat.thinking.completed', '已思考');
   if (durationMs != null && durationMs > 0) {
-    const sec = (durationMs / 1000).toFixed(1);
-    badgeText = t('chat.thinking.durationShort', `已思考 ${sec}s`, {
-      duration: sec,
+    const label = formatDurationLabel(durationMs);
+    badgeText = t('chat.thinking.durationShort', `已思考 ${label}`, {
+      duration: label,
     });
   }
 
@@ -269,7 +264,6 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [userInteracted, setUserInteracted] = useState(false);
   const [userExpanded, setUserExpanded] = useState(false);
-  const [isCollapsing, setIsCollapsing] = useState(false);
   const [prevTurnWorking, setPrevTurnWorking] = useState(isTurnWorking);
   const [accordionDuration, setAccordionDuration] = useState<number>(
     DURATION_ACCORDION_MS
@@ -278,10 +272,10 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   // 视口保护：长思维链收拢时防迷失
   const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
 
-  // 终态跃迁状态同步：当模型整轮工作态结束（isTurnWorking 从 true 转为 false）
-  // 且未被外部显式受控或用户手动交互覆盖时，进入第一阶段折叠过渡态（isCollapsing: true），
-  // 保留 DOM 结构由 CSS Grid 执行平滑收缩，彻底消除视口跳跃。
-  // 天然兼容生产环境与既有单元测试，零测试环境特判分支。
+  // 终态跃迁时长同步：当模型整轮工作态结束（isTurnWorking 从 true 转为 false）
+  // 且未被外部显式受控或用户手动交互覆盖时，按思考体实测高度预置收拢时长，
+  // 使随后的 grid 收缩与 chevron 旋转同钟完成；折叠判定本身由 isExpanded
+  // 派生承担，本块只管时长与视口保护，不再驱动任何挂载/卸载状态。
   if (prevTurnWorking !== isTurnWorking) {
     setPrevTurnWorking(isTurnWorking);
     if (
@@ -294,9 +288,6 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
       setAccordionDuration(calcAccordionDuration(h, false));
       triggerViewportRecovery();
-      setIsCollapsing(true);
-    } else if (isTurnWorking && isCollapsing) {
-      setIsCollapsing(false);
     }
   }
 
@@ -306,26 +297,11 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
       setAccordionDuration(calcAccordionDuration(h, false));
       triggerViewportRecovery();
-      setIsCollapsing(true);
     } else if (isOpen === true) {
       setAccordionDuration(calcAccordionDuration(400, true));
-      setIsCollapsing(false);
     }
     prevIsOpenRef.current = isOpen;
   }, [isOpen, triggerViewportRecovery]);
-
-  // 第二阶段完全卸载：物理过渡完成后解除 DOM 挂载
-  useEffect(() => {
-    if (!isCollapsing) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      setIsCollapsing(false);
-    }, accordionDuration);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [isCollapsing, accordionDuration]);
 
   // 默认开合策略（2026-09-18 / 2026-10-13 用户裁决）：
   // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
@@ -339,19 +315,128 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     return false;
   }, [isOpen, userInteracted, userExpanded, isTurnWorking, defaultExpanded]);
 
+  // R11 §5.1：折叠摘要从已显现文本派生——展开体（StreamingMarkdownView）
+  // 经 onRevealedTextChange 回传同一 revealed 前缀，摘要不单独定速、
+  // 不领先于正文的实际显现进度（派生一致性优先）。
+  const [revealedText, setRevealedText] = useState(content);
+  const handleRevealedTextChange = useCallback((revealed: string) => {
+    setRevealedText(revealed);
+  }, []);
+
   // 派发单一真相源呈现契约（纯逻辑解耦，零 JSX 补丁，零标点噪点）
-  const presentation = useMemo(
-    () =>
-      resolveReasoningPresentation({
-        isLive,
-        isExpanded,
-        durationMs,
-        turnIndex,
-        content,
-        t,
-      }),
-    [isLive, isExpanded, durationMs, turnIndex, content, t]
+  const presentation = useMemo(() => {
+    const base = resolveReasoningPresentation({
+      isLive,
+      isExpanded,
+      durationMs,
+      turnIndex,
+      content,
+      t,
+    });
+    if (!isLive || isExpanded) return base;
+    // live 折叠态：摘要尾窗改从已显现前缀取最新行（与展开体同源）
+    return { ...base, summaryText: extractLatestLine(revealedText) };
+  }, [isLive, isExpanded, durationMs, turnIndex, content, t, revealedText]);
+
+  // ── AN1 隐藏协调（与 FoldableProcessSection 同构的已验证模式）──
+  // 思考体常驻 DOM：展开时摘除 hidden；折叠的 grid transitionend
+  // （grid-template-rows）是挂 hidden="until-found" 的主触发，同钟定时器
+  // 只是兜底触发——兜底定时器只补 hidden 属性，永不卸载任何 DOM 节点
+  // （思考体在折叠态保持挂载，勿改回过渡后卸载的旧两阶段路线）；
+  // 浏览器在 until-found 内容中命中查找时发 beforematch → 自动展开。
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const slotRef = useRef<HTMLDivElement | null>(null);
+  const collapseTimerRef = useRef<number | null>(null);
+  const expandedRef = useRef(isExpanded);
+  expandedRef.current = isExpanded;
+
+  const setSlotRef = useCallback((node: HTMLDivElement | null) => {
+    slotRef.current = node;
+    if (!node) return;
+    if (expandedRef.current) node.removeAttribute('hidden');
+    else node.setAttribute('hidden', 'until-found');
+  }, []);
+
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return undefined;
+    if (isExpanded) {
+      if (collapseTimerRef.current !== null) {
+        window.clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+      slot.removeAttribute('hidden');
+      return undefined;
+    }
+    collapseTimerRef.current = window.setTimeout(() => {
+      collapseTimerRef.current = null;
+      if (!expandedRef.current) {
+        slotRef.current?.setAttribute('hidden', 'until-found');
+      }
+    }, accordionDuration);
+    return () => {
+      if (collapseTimerRef.current !== null) {
+        window.clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+    };
+  }, [isExpanded, accordionDuration]);
+
+  const handleGridTransitionEnd = useCallback(
+    (event: React.TransitionEvent<HTMLDivElement>) => {
+      if (event.target !== gridRef.current) return;
+      if (event.propertyName !== 'grid-template-rows') return;
+      if (expandedRef.current) return;
+      if (collapseTimerRef.current !== null) {
+        window.clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+      slotRef.current?.setAttribute('hidden', 'until-found');
+    },
+    []
   );
+
+  // 浏览器查找命中 until-found 隐藏内容 → 自动展开（受控模式只通知上层）
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return undefined;
+    const handleBeforeMatch = () => {
+      if (isOpen === undefined) {
+        setUserInteracted(true);
+        setUserExpanded(true);
+        setAccordionDuration(calcAccordionDuration(400, true));
+      }
+      onToggle?.();
+    };
+    slot.addEventListener('beforematch', handleBeforeMatch);
+    return () => {
+      slot.removeEventListener('beforematch', handleBeforeMatch);
+    };
+  }, [isOpen, onToggle]);
+
+  // HC1/F1：思考体滚动宿主的边缘渐隐四态——经 ScrollFadeRegion 组件
+  // 接入（渲染段的 reasoningBody 即组件宿主，bodyRef 经 ref 转发落
+  // 宿主，测高 / 滚动跟随的既有消费方不变；active=isExpanded）。
+
+  // HC1：思考体封顶后的流式贴底跟随——距底 <48px 视为贴底意图，
+  // 用户手动上滚离开底部后不再抢滚（与消息列表 follow 纪律同构）
+  const stickToBottomRef = useRef(true);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      stickToBottomRef.current =
+        el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || !isLive || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [content, isLive]);
 
   const handleToggle = useCallback(() => {
     if (!presentation.interactive) return;
@@ -361,11 +446,9 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       setAccordionDuration(calcAccordionDuration(h, false));
       triggerViewportRecovery();
       setUserExpanded(false);
-      setIsCollapsing(true);
     } else {
       setAccordionDuration(calcAccordionDuration(400, true));
       setUserExpanded(true);
-      setIsCollapsing(false);
     }
     onToggle?.();
   }, [isExpanded, onToggle, presentation.interactive, triggerViewportRecovery]);
@@ -375,10 +458,10 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       ref={containerRef}
       className={`${styles.reasoningContainer} ${isLive ? styles.isLive : ''} ${className}`}
       data-expanded={isExpanded ? 'true' : 'false'}
-      data-collapsing={isCollapsing ? 'true' : undefined}
       data-live={isLive ? 'true' : undefined}
       data-message-id={messageId}
       data-testid="reasoning-container"
+      style={accordionDurationStyle(accordionDuration)}
     >
       <Button
         type="button"
@@ -404,13 +487,13 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
           }
           data-testid="reasoning-badge"
         >
-          {presentation.badgeText}
+          <NumericText text={presentation.badgeText} />
         </span>
 
         {presentation.summaryText ? (
           <span className={styles.reasoningSummary} data-follow-end="true">
-            <ReasoningSummaryMarkup
-              markdown={presentation.summaryText}
+            <ReasoningSummaryText
+              text={presentation.summaryText}
               isLive={isLive}
             />
           </span>
@@ -425,34 +508,33 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         </span>
       </Button>
 
-      {(isExpanded || isCollapsing) && (
-        <div
-          className={styles.reasoningExpandGrid}
-          style={
-            {
-              '--accordion-duration': `${accordionDuration}ms`,
-            } as React.CSSProperties
-          }
-          data-testid="reasoning-grid"
-        >
-          <div className={styles.reasoningExpandSlot}>
-            <div
-              ref={bodyRef}
-              className={styles.reasoningBody}
-              data-testid="reasoning-body"
-            >
-              <div className={styles.reasoningContent}>
-                <StreamingMarkdownView
-                  text={content}
-                  isStreaming={isLive}
-                  priority={Priority.Low}
-                  messageId={messageId ? `${messageId}-reasoning` : undefined}
-                />
-              </div>
-            </div>
-          </div>
+      {/* 思考体常驻 DOM（AN1）：grid > slot > body 三层与 testid 保持不变，
+          折叠只收行高 + 槽位 hidden="until-found"，永不卸载 */}
+      <div
+        ref={gridRef}
+        className={styles.reasoningExpandGrid}
+        data-testid="reasoning-grid"
+        onTransitionEnd={handleGridTransitionEnd}
+      >
+        <div ref={setSlotRef} className={styles.reasoningExpandSlot}>
+          <ScrollFadeRegion
+            ref={bodyRef}
+            active={isExpanded}
+            className={styles.reasoningBody}
+            innerClassName={styles.reasoningContent}
+            data-testid="reasoning-body"
+          >
+            <StreamingMarkdownView
+              text={content}
+              isStreaming={isLive}
+              priority={Priority.Low}
+              messageId={messageId ? `${messageId}-reasoning` : undefined}
+              pacingProfile="thinking"
+              onRevealedTextChange={handleRevealedTextChange}
+            />
+          </ScrollFadeRegion>
         </div>
-      )}
+      </div>
     </div>
   );
 };

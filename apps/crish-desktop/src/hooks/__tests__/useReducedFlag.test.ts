@@ -23,21 +23,24 @@ describe('useReducedFlag & useEffectiveReducedMotion', () => {
     expect(result.current.isEcoTier).toBe(false);
   });
 
-  it('当 documentElement 设置 data-perf-tier=eco 时响应式更新 isEcoTier', async () => {
+  it('当 documentElement 设置 data-perf-tier=eco 时响应式更新 isEcoTier，但 isReduced 不受 eco 影响', async () => {
     const { result } = renderHook(() => useEffectiveReducedMotion());
     expect(result.current.isEcoTier).toBe(false);
+    const reducedBefore = result.current.isReduced;
 
     document.documentElement.setAttribute('data-perf-tier', 'eco');
 
     await waitFor(() => {
       expect(result.current.isEcoTier).toBe(true);
-      expect(result.current.isReduced).toBe(true);
     });
+    // X1 解耦口径：eco 只是性能档信息位，减动效只认系统设置
+    expect(result.current.isReduced).toBe(reducedBefore);
 
     document.documentElement.setAttribute('data-perf-tier', 'high');
 
     await waitFor(() => {
       expect(result.current.isEcoTier).toBe(false);
     });
+    expect(result.current.isReduced).toBe(reducedBefore);
   });
 });

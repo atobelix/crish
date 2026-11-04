@@ -16,21 +16,23 @@ function markAnimated(id: string): void {
   animatedMessageIds.add(id);
 }
 
-export interface UserBubbleEntranceResult {
+export interface MessageRowEntranceResult {
   isEntering: boolean;
   handleAnimationEnd: (e?: React.AnimationEvent) => void;
 }
 
 /**
- * 用户消息气泡入场动画状态机 (14px Glide Up)
+ * 消息行入场动画状态机（AN2 单层化：用户行 / 助手行共用同一份「新消息」语义）
  * - 时间窗口守卫：仅对创建时间在 [-500ms, 2000ms] 内的全新消息触发入场动画
  * - FIFO Ring Set 守卫：至多缓存 500 个已动画 ID，防止虚拟滚动复用/回滚时重复触发
  * - 动画结束立即剔除 will-change 与 GPU 合成图层
+ * 呈现侧：行根元素挂 data-entering，行级 fade-slide 为唯一入场；
+ * 用户首条消息的气泡 54px 上浮为唯一特殊入场（行级让位，见 ChatMessageRow.module.css）。
  */
-export function useUserBubbleEntrance(
+export function useMessageRowEntrance(
   messageId: string,
   timestamp?: number
-): UserBubbleEntranceResult {
+): MessageRowEntranceResult {
   const [isEntering, setIsEntering] = useState<boolean>(() => {
     if (!messageId || animatedMessageIds.has(messageId)) {
       return false;

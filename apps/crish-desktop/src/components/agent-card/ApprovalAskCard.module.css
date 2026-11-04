@@ -11,6 +11,8 @@
   max-width: 100%;
   box-sizing: border-box;
   color: var(--text-primary);
+  /* 入场与状态缎带同级（AN2 / A4）：popover-enter 口径，只动 opacity + ≤4px 位移 */
+  animation: crish-popover-enter-top var(--transition-popover-enter);
 }
 
 .approvalCardTop {

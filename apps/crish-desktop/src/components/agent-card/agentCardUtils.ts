@@ -1,5 +1,6 @@
 import type { SessionAgent } from '../../store/types';
 import { mapSubagentRoleWireName } from '../../api/tool-presentation/agentRoleLabel';
+import { formatDurationLabel } from '../../api/tool-presentation/processMetricsEngine';
 
 /**
  * 例外声明（T05.5.1 tokens 唯一源）：
@@ -31,7 +32,9 @@ export function sortAgentsForBrowse(agents: SessionAgent[]): SessionAgent[] {
   });
 }
 
-/** 紧凑时长：侧栏密度用 */
+/** 紧凑时长：侧栏密度用。起止毫秒计算后委托全仓唯一耗时格式化入口
+ * formatDurationLabel（processMetricsEngine SSOT），本地不再自造格式
+ * （2026-11-02 整波收口去重裁定）。 */
 export function formatAgentDuration(agent: SessionAgent): string | null {
   const start = agent.startedAt;
   if (!start || !Number.isFinite(start)) return null;
@@ -39,16 +42,7 @@ export function formatAgentDuration(agent: SessionAgent): string | null {
     agent.endedAt && Number.isFinite(agent.endedAt)
       ? agent.endedAt
       : Date.now();
-  const sec = Math.max(0, Math.round((end - start) / 1000));
-  if (sec < 60) return `${sec} 秒`;
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分钟`;
-  }
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return m > 0 ? `${h} 小时 ${m} 分` : `${h} 小时`;
+  return formatDurationLabel(Math.max(0, end - start));
 }
 
 /** 展示名：displayLabel → description → mode → id → 默认（T-D-05 label 优先）；
@@ -70,10 +64,10 @@ export function agentDisplayName(agent: SessionAgent): string {
  * 待用户审批计数（R7 口径）：仅 `arbiter !== 'main-agent'` 计入用户待办——
  * arbiter='user' 或字段缺省（主 agent 发起、默认用户裁决）计入；经主 agent
  * 裁决的子 agent 审批不打扰用户。
- * 注记：子 agent 路径（subagentHandlers / subagentTimeline /
- * useAgentToolApproval）目前不写 approvalMeta，agent.messages 内的工具调用
- * 暂无 arbiter 可过滤（缺省 → 计入，与主 agent 发起同口径）；待该路径写通
- * approvalMeta 后本过滤自动生效，无需再改本函数。
+ * 注记：子 agent 路径的 approvalMeta 已由桥接层 R7b 写穿（approvalHandlers
+ * 在 approval-requested 时把归因 meta 镜像 upsert 到 agent 时间线），本
+ * 过滤对 agent.messages 内的待批同样生效；meta 缺省（镜像未及落地的极少
+ * 数时序）仍按计入处理，与主 agent 发起同口径（安全方向不变）。
  */
 export function countPendingApprovals(agent: SessionAgent): number {
   let n = 0;

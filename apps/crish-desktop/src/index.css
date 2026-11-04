@@ -7,6 +7,7 @@
 @import './styles/shell/shell-reset.css' layer(reset);
 @import './styles/shell/shell-layout.css' layer(base);
 @import './styles/overlay-scrollbar.css' layer(base);
+@import './styles/scroll-fade.css' layer(base);
 @import './styles/focus-visible.css' layer(base);
 @import './styles/reduced-motion.css' layer(base);
 @import './styles/sr-only.css' layer(base);

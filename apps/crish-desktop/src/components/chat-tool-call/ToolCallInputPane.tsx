@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 
 import styles from './ChatToolCallBlock.module.css';
-import { Button, Tooltip } from '@/components/ui';
+import { Button, ScrollFadeRegion, Tooltip } from '@/components/ui';
 import {
   parseToolArgsSafe,
   isShellToolName,
@@ -53,6 +53,10 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
   const [viewMode, setViewMode] = useState<'formatted' | 'raw'>('formatted');
 
   const shellTool = useMemo(() => isShellToolName(name), [name]);
+
+  // HC1/F1：入参视口 / Shell 命令视口的边缘渐隐四态——经
+  // ScrollFadeRegion 组件接入（两分支互斥渲染，各自宿主在自身分支内
+  // 恒为启用态，与原 hook 的 active 互斥口径等价）。
   const parsedArgs = useMemo<ExtractedToolArgs>(
     () => parseToolArgsSafe(argumentsStr),
     [argumentsStr]
@@ -99,7 +103,14 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
             <span className={styles.terminalPrompt} aria-hidden>
               $
             </span>
-            <pre className={styles.toolResultPreCmd}>{commandDisplay}</pre>
+            {/* HC1 封口：命令入参并入入参视口同口径（180px 封顶 + 内部滚动） */}
+            <ScrollFadeRegion
+              className={styles.toolShellCmdViewport}
+              innerAs="pre"
+              innerClassName={styles.toolResultPreCmd}
+            >
+              {commandDisplay}
+            </ScrollFadeRegion>
           </div>
           <div className={styles.terminalLineEndSlot}>
             {parsedArgs.props.cwd ? (
@@ -196,7 +207,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
         </div>
       </header>
 
-      <div className={styles.toolSectionContent}>
+      <ScrollFadeRegion className={styles.toolSectionContent}>
         {viewMode === 'raw' || !hasProps ? (
           <pre className={styles.toolInputCode}>{rawDisplay}</pre>
         ) : (
@@ -228,7 +239,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
             })}
           </div>
         )}
-      </div>
+      </ScrollFadeRegion>
     </section>
   );
 };

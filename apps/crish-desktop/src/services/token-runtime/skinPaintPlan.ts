@@ -365,15 +365,15 @@ export function deriveSkinPaintPlan(input: SkinPaintInput): SkinPaintPlan {
   let darkLayersShifted = false;
   if (!isDark && skinKey === 'warm-gray') {
     const layers = shiftWarmLayers(
-      { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' },
+      { outer: '#f9f9f9', main: '#ffffff', input: '#ffffff' },
       adjust,
       false
     );
     bgPrimary = layers.main;
     bgSecondary = layers.outer;
     bgCard = '#ffffff';
-    borderColor = '#e2e1e0';
-    borderSubtle = '#f0efee';
+    borderColor = '#ececec';
+    borderSubtle = '#f2f2f2';
   } else if (isDark && skinKey === 'dark-cozy') {
     const layers = shiftWarmLayers(
       {
