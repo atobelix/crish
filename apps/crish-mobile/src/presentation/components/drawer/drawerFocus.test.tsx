@@ -10,6 +10,8 @@ import {
   type DrawerController,
   useDrawerActions,
 } from './DrawerContext';
+import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
+import { sessionStore } from '@/domain/store/sessionStore';
 
 jest.mock('expo-router', () => ({
   usePathname: () => '/',
@@ -248,5 +250,49 @@ describe('CrishDrawerContent 搜索框焦点与键盘收起', () => {
     } finally {
       dismissSpy.mockRestore();
     }
+  });
+});
+
+describe('CrishDrawerContent 新建对话协议接入 (维度 1)', () => {
+  it('点击抽屉底部新建对话，触发双模槽位重置、收起抽屉并导航至主屏', async () => {
+    // 注入历史活动状态
+    localChatSessionStore.setState({
+      threads: [
+        {
+          id: 'lth-1',
+          title: '旧会话',
+          titleSource: 'derived',
+          preview: '',
+          modelRef: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeThreadId: 'lth-1',
+      messages: [{ id: 'm-1', role: 'user', content: '旧提问' }],
+      streaming: false,
+      error: null,
+      inactive: {},
+    });
+    sessionStore.setState({ selectedSessionId: 's-remote-1' });
+
+    const view = await render(<CrishDrawerContent />, {
+      wrapper: OpenDrawerWrapper,
+    });
+
+    const newChatBtn = view.getByTestId('drawer-new-chat');
+    await act(async () => {
+      await fireEvent.press(newChatBtn);
+    });
+
+    // 验证本地槽位已重置
+    expect(localChatSessionStore.getState().activeThreadId).toBeNull();
+    expect(localChatSessionStore.getState().messages).toEqual([]);
+
+    // 验证远端选中已清空
+    expect(sessionStore.getState().selectedSessionId).toBeNull();
+
+    // 验证抽屉收起
+    expect(openController.close).toHaveBeenCalled();
   });
 });

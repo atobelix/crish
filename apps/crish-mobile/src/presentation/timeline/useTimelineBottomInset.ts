@@ -10,7 +10,8 @@
 //    附件条（68px）+ 错误条/停止胶囊等条件层 + 容器内边距 + 底部 safeAreaInset + 阴影出血；
 // 3. 几何冲突解耦：列表底部 inset 仅按「有效浮层高 + gap」避让；键盘弹起时由 KeyboardStickyView
 //    在 UI 线程执行 translateY 向上平移，不再在列表 paddingBottom 叠加键盘高度，消除双重垫高；
-// 4. 浮层总占高：同时产出 floatingHeight（含键盘高），供上下羽化（EdgeFade）与回底按钮（ScrollToBottomButton）统一消费。
+// 4. 浮层总占高与物理高：产出 floatingHeight（含键盘高，专供 EdgeFade 底部羽化遮罩消费）与
+//    overlayHeight（实测纯物理高，专供 ScrollToBottomButton 锚定输入框左上角）。
 import { useCallback, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
@@ -49,11 +50,11 @@ export interface UseTimelineBottomInsetOptions {
 export interface UseTimelineBottomInsetResult {
   /** 时间线列表 contentContainerStyle.paddingBottom 与 scrollIndicatorInsets 消费的 inset */
   timelineBottomInset: number;
-  /** 包含键盘高度的浮层总高（供 EdgeFade 和 ScrollToBottomButton 消费） */
+  /** 包含键盘高度的浮层总高（仅供 EdgeFade 底部遮罩消费，严禁用于按钮绝对定位） */
   floatingHeight: number;
   /** 供悬浮输入区容器（KeyboardStickyView）挂载的 onLayout 监听函数 */
   handleOverlayLayout: (event: LayoutChangeEvent) => void;
-  /** 实测或估算的有效浮层高度（不含键盘） */
+  /** 实测或估算的有效浮层物理高度（不含键盘，专供 ScrollToBottomButton 锚定输入框左上角） */
   overlayHeight: number;
   /** 当前软键盘高度 */
   keyboardHeight: number;

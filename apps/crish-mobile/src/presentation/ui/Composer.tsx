@@ -670,12 +670,14 @@ export function Composer({
     permissionOnPress: contextBar?.onPermissionPress,
   };
   const handleSubmitPress = useCallback(() => {
-    // 发送消息生命周期闭环：输入框失焦并收起软键盘，让输入框平滑回到最下面
+    if (!canSubmit) return;
+    // 发送消息生命周期闭环：触感反馈 + 强制失焦并收起软键盘，让输入框平滑回到最下面
+    haptics.tap();
     inputRef.current?.blur();
     Keyboard.dismiss();
     setIsFocused(false);
     latestCallbacksRef.current.onSubmit();
-  }, []);
+  }, [canSubmit]);
   const handleAttachPress = useCallback(() => {
     latestCallbacksRef.current.onAttachPress?.();
   }, []);
@@ -770,8 +772,10 @@ export function Composer({
     return Gesture.Exclusive(voiceSimultaneous, tap);
   }, [voiceGestureEnabled]);
 
-  // 锁定态恒实心（原型）；玻璃仅 iOS + 非减通透 + 非锁定
-  const glassActive = Platform.OS === 'ios' && !reduceTransparency && !locked;
+  // 仅在深色模式且 iOS 环境下保留玻璃质感；浅色模式下强制禁用 glassActive！
+  // 浅色模式下输入框必须是坚实纯净的纯白实体（#ffffff / colors.surface），杜绝图层混合发灰发脏
+  const glassActive =
+    Platform.OS === 'ios' && !reduceTransparency && !locked && theme.dark;
   const toolsDimmed = locked ? 0.35 : 1;
 
   // 输入卡软阴影（SVG 软阴影收编定案）：本卡是原型点名的悬浮面之一——
@@ -863,6 +867,7 @@ export function Composer({
         />
       ) : null}
       <View
+        testID={testID ? `${testID}-shell` : 'composer-shell'}
         onLayout={handleCardLayout}
         collapsable={false}
         style={[
@@ -870,8 +875,10 @@ export function Composer({
           {
             minHeight: size.composerMin,
             borderRadius: radius.composer,
-            backgroundColor: glassActive
-              ? colors.surfaceTranslucent
+            backgroundColor: theme.dark
+              ? glassActive
+                ? colors.surfaceTranslucent
+                : colors.surface
               : colors.surface,
             // 描边（2026-11-03 降重调优）：浅色走 2.5% 极柔微描边（从 6% 进一步降低），
             // 彻底柔和融于背景；深色走 borderStrong
@@ -901,6 +908,7 @@ export function Composer({
         ) : null}
         {glassActive ? (
           <BlurView
+            testID={testID ? `${testID}-blur` : 'composer-blur'}
             intensity={GLASS_BLUR_INTENSITY}
             tint={theme.dark ? 'dark' : 'light'}
             style={styles.glassFill}
@@ -941,6 +949,10 @@ export function Composer({
               placeholder={placeholder}
               contextMenuHidden={voiceGestureEnabled}
               selectTextOnFocus={false}
+              blurOnSubmit={true}
+              onSubmitEditing={() => {
+                if (canSubmit) handleSubmitPress();
+              }}
               placeholderTextColor={
                 // 原型：单行占位 text-2、两行（展开）视图占位 text-3
                 locked || expanded || twoRow

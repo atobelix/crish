@@ -89,27 +89,36 @@ describe('deriveTimelineBottomInset', () => {
 });
 
 describe('evaluateFollowState 迟滞带状态机', () => {
-  it('处于跟随态 (follow = true) 时，只有离开超过 64dp 才释放跟随', () => {
-    // 微小离开 15dp、32dp、50dp、64dp 依然锁定跟随态
-    expect(evaluateFollowState(0, true)).toBe(true);
-    expect(evaluateFollowState(32, true)).toBe(true);
-    expect(evaluateFollowState(50, true)).toBe(true);
-    expect(evaluateFollowState(64, true)).toBe(true);
-
-    // 离开超过 64dp（如 65dp、120dp），解除跟随
-    expect(evaluateFollowState(65, true)).toBe(false);
-    expect(evaluateFollowState(120, true)).toBe(false);
+  it('用户未交互（isUserInteracting = false，流式打字/Yoga 测高自然撑大距离）时，绝不误杀跟随态', () => {
+    // 即使距底距离因突发长文本撑大到 100dp、300dp 甚至 1000dp，依然恒返回 true 维持跟随
+    expect(evaluateFollowState(100, true, false)).toBe(true);
+    expect(evaluateFollowState(300, true, false)).toBe(true);
+    expect(evaluateFollowState(1000, true, false)).toBe(true);
   });
 
-  it('处于离底自由浏览态 (follow = false) 时，只有贴近到 32dp 以内才重新吸附', () => {
-    // 距离较大 100dp、65dp、50dp、33dp 依然不吸附，保护用户自由阅读历史
-    expect(evaluateFollowState(100, false)).toBe(false);
-    expect(evaluateFollowState(50, false)).toBe(false);
-    expect(evaluateFollowState(33, false)).toBe(false);
+  it('用户手势交互中（isUserInteracting = true）且处于跟随态时，离开超过 64dp 才释放跟随', () => {
+    // 微小离开 15dp、32dp、50dp、64dp 依然锁定跟随态
+    expect(evaluateFollowState(0, true, true)).toBe(true);
+    expect(evaluateFollowState(32, true, true)).toBe(true);
+    expect(evaluateFollowState(50, true, true)).toBe(true);
+    expect(evaluateFollowState(64, true, true)).toBe(true);
 
-    // 贴近到 <= 32dp，重新吸底
-    expect(evaluateFollowState(32, false)).toBe(true);
-    expect(evaluateFollowState(10, false)).toBe(true);
-    expect(evaluateFollowState(0, false)).toBe(true);
+    // 离开超过 64dp（如 65dp、120dp），解除跟随
+    expect(evaluateFollowState(65, true, true)).toBe(false);
+    expect(evaluateFollowState(120, true, true)).toBe(false);
+  });
+
+  it('处于离底自由浏览态 (follow = false) 时，只要贴近到 32dp 以内自动重新吸附', () => {
+    // 距离较大 100dp、65dp、50dp、33dp 依然不吸附，保护用户自由阅读历史
+    expect(evaluateFollowState(100, false, true)).toBe(false);
+    expect(evaluateFollowState(50, false, true)).toBe(false);
+    expect(evaluateFollowState(33, false, true)).toBe(false);
+    expect(evaluateFollowState(100, false, false)).toBe(false);
+
+    // 贴近到 <= 32dp，重新吸底（无论是否正在交互）
+    expect(evaluateFollowState(32, false, true)).toBe(true);
+    expect(evaluateFollowState(10, false, true)).toBe(true);
+    expect(evaluateFollowState(0, false, true)).toBe(true);
+    expect(evaluateFollowState(30, false, false)).toBe(true);
   });
 });

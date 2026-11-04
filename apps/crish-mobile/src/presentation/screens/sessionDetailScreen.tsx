@@ -8,7 +8,6 @@
 // 占位不换文，锁定以容器实心 + 工具图标变淡的形态表达）。
 import { useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useTheme } from '@/adapters/platform/theme';
@@ -16,6 +15,7 @@ import type { TimelineRow } from '@/presentation/timeline/insertTimeSeparators';
 import { TimelineView } from '@/presentation/timeline/TimelineView';
 import { ConversationHeader } from '@/presentation/components/chat/SessionHeader';
 import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
+import { useNewConversation } from '@/presentation/navigation/newConversation';
 import type { ConversationEngine } from '@/adapters/conversation/types';
 import { useTimelineBottomInset } from '@/presentation/timeline/useTimelineBottomInset';
 import { useRemoteConversationEngine } from '@/adapters/conversation/useRemoteConversationEngine';
@@ -50,8 +50,8 @@ export function ConversationScreen({
 }: ConversationScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const openDrawer = useOpenDrawer();
+  const handleNewConversation = useNewConversation();
   const [menuOpen, setMenuOpen] = useState(false);
   // 停止生成 pill 按压反馈（按压过渡统一批口径）
   const stopPress = usePressFade();
@@ -61,20 +61,24 @@ export function ConversationScreen({
   // 由 useTimelineBottomInset 单一真源管理——实测优先、刚性拦截 <= 0 的初次挂载无效帧、
   // 并以 Composer 实际两行高（98px）/ 单行高（52px）+ 快捷条 + 安全区 + 附件条进行精确物理保底。
   // 保证尾部消息在键盘未激活与激活时，距输入框顶部均保持 16~24px 的舒适空隙（2026-11-03 修复）。
-  const { timelineBottomInset, floatingHeight, handleOverlayLayout } =
-    useTimelineBottomInset({
-      bottomSafeArea: insets.bottom,
-      hasContextBar: Boolean(engine.composer.contextBar),
-      hasModelControl: Boolean(engine.composer.modelControl),
-      hasAttachments: Boolean(engine.composer.hasAttachments),
-      hasError: Boolean(engine.error),
-      isBusyWithStop: Boolean(engine.busy && engine.stop),
-      gap: theme.space.xl,
-    });
+  const {
+    timelineBottomInset,
+    floatingHeight,
+    overlayHeight,
+    handleOverlayLayout,
+  } = useTimelineBottomInset({
+    bottomSafeArea: insets.bottom,
+    hasContextBar: Boolean(engine.composer.contextBar),
+    hasModelControl: Boolean(engine.composer.modelControl),
+    hasAttachments: Boolean(engine.composer.hasAttachments),
+    hasError: Boolean(engine.error),
+    isBusyWithStop: Boolean(engine.busy && engine.stop),
+    gap: theme.space.xl,
+  });
 
   return (
     <Screen>
-      {/* 全屏消息流（头栏与 Composer 均悬浮其上） */}
+      {/* 全屏消息流（头栏与 Composer 均悬浮其上，内置 KeyboardChatScrollView 满页联动平移） */}
       <TimelineView
         blocks={engine.blocks}
         follow={follow}
@@ -85,6 +89,8 @@ export function ConversationScreen({
         emptyActionLabel={engine.emptyState.actionLabel}
         onEmptyAction={engine.emptyState.onAction}
         headerClearance={insets.top + theme.size.header + theme.space.lg}
+        floatingOverlayHeight={overlayHeight}
+        bottomGap={theme.space.xl}
         bottomInset={timelineBottomInset}
         busy={engine.busy}
         anchorKey={`${engine.kind}:${engine.id}`}
@@ -105,18 +111,17 @@ export function ConversationScreen({
       <ConversationHeader
         title={engine.title ?? '会话'}
         onOpenDrawer={openDrawer}
-        onNewConversation={() => router.navigate('/')}
+        onNewConversation={() => handleNewConversation({ closeDrawer: false })}
         onMore={() => setMenuOpen(true)}
       />
 
       {!follow ? (
         <ScrollToBottomButton
           alignment="left"
-          bottomOffset={floatingHeight + theme.space.sm}
-          followKeyboard
+          bottomOffset={overlayHeight + theme.space.sm}
           onPress={() => {
-            listRef.current?.scrollToEnd({ animated: true });
             onFollowChange(true);
+            listRef.current?.scrollToEnd({ animated: true });
           }}
           testID="session-back-to-bottom"
         />

@@ -146,8 +146,9 @@ describe('useTimelineBottomInset', () => {
       />
     );
 
-    // 173 (浮层) + 336 (键盘) = 509 (floatingHeight，供 EdgeFade / ScrollToBottomButton 消费)
-    // 173 (浮层) + 336 (键盘) + 20 (gap) = 529 (timelineBottomInset，消除 316dp 遮挡盲区)
+    // 173 (浮层) + 336 (键盘) = 509 (floatingHeight，供 EdgeFade 消费)
+    // overlayHeight 保持为纯物理浮层高度 173，不受键盘高度影响，专供 ScrollToBottomButton 消费
+    expect(probeResult?.overlayHeight).toBe(173);
     expect(probeResult?.floatingHeight).toBe(509);
     expect(probeResult?.timelineBottomInset).toBe(529);
   });

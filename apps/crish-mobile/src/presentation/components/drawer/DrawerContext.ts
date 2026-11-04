@@ -43,5 +43,9 @@ export function useDrawerController(): DrawerController {
 
 /** 抽屉动作（稳定 identity；容器外调用返回 no-op，深链安全） */
 export function useDrawerActions(): DrawerActions {
-  return useContext(DrawerActionsContext) ?? NOOP_ACTIONS;
+  return (
+    useContext(DrawerActionsContext) ??
+    useContext(DrawerControllerContext) ??
+    NOOP_ACTIONS
+  );
 }

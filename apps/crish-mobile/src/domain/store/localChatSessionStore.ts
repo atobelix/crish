@@ -75,6 +75,13 @@ export interface LocalChatSessionState {
   /** 活动线程最近一次失败（横幅呈现；下一次发送时清除） */
   error: LocalChatError | null;
 
+  /**
+   * 重置当前活动线程指针至纯净空态（维度 1 根治）：
+   * 1. 若当前活动线程本身无任何消息且不在流式中，物理从 threads 列表中剔除（防空线程堆积）；
+   * 2. 若当前活动线程已有消息或正在生成，将其整表归拢至 inactive 隔离表；
+   * 3. activeThreadId 设为 null，顶层运行时投影（messages/streaming/error）彻底清空。
+   */
+  resetActiveThread: () => void;
   /** 启动水合：从 DAO 读齐线程+历史；内存中已有内容（装配迟到）时收编落盘 */
   hydrate: (dao?: LocalThreadsDao) => Promise<void>;
   /** 新建线程并激活（modelRef = 创建时模型快照，null = 跟随全局）；返回线程 id。
@@ -232,6 +239,33 @@ export function threadRuntimeSnapshot(
     : { messages: [], streaming: false };
 }
 
+/**
+ * 判定某线程是否为尚未产生任何实质交互的幽灵空线程（维度 1 根治）：
+ * 条件：消息列表为空、非流式中、标题来源仍为占位 placeholder、且无摘要无完成打点。
+ */
+export function isEmptyPlaceholderThread(
+  state: LocalChatSessionState,
+  threadId: string
+): boolean {
+  const meta = state.threads.find((t) => t.id === threadId);
+  if (!meta) return true;
+  if (meta.titleSource !== 'placeholder' || meta.preview !== '') {
+    return false;
+  }
+  if (state.completedAtByThread[threadId] !== undefined) {
+    return false;
+  }
+  const runtimeMessages =
+    threadId === state.activeThreadId
+      ? state.messages
+      : (state.inactive[threadId]?.messages ?? []);
+  const runtimeStreaming =
+    threadId === state.activeThreadId
+      ? state.streaming
+      : (state.inactive[threadId]?.streaming ?? false);
+  return runtimeMessages.length === 0 && !runtimeStreaming;
+}
+
 export const localChatSessionStore: StoreApi<LocalChatSessionState> =
   createStore<LocalChatSessionState>()(
     immer((set, get) => ({
@@ -364,13 +398,37 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
         });
       },
 
+      resetActiveThread: () => {
+        set((s) => {
+          if (s.activeThreadId === null) return;
+          const currentId = s.activeThreadId;
+
+          // 防空线程堆积：若当前线程为未产生任何实质交互的幽灵空线程，物理剔除
+          if (isEmptyPlaceholderThread(s, currentId)) {
+            s.threads = s.threads.filter((t) => t.id !== currentId);
+            delete s.inactive[currentId];
+          } else {
+            // 否则暂存到 inactive 表中，完整保全消息流与流式生成态
+            s.inactive[currentId] = {
+              messages: s.messages,
+              streaming: s.streaming,
+              error: s.error,
+            };
+          }
+
+          s.activeThreadId = null;
+          s.messages = [];
+          s.streaming = false;
+          s.error = null;
+        });
+      },
+
       createThread: (modelRef) => {
         const state = get();
         // 活动线程为空且未生成 → 复用（避免连续点「新建」堆积空线程）
         if (
           state.activeThreadId !== null &&
-          state.messages.length === 0 &&
-          !state.streaming
+          isEmptyPlaceholderThread(state, state.activeThreadId)
         ) {
           const existingId = state.activeThreadId;
           if (modelRef !== undefined) {
@@ -391,11 +449,17 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
         };
         set((s) => {
           if (s.activeThreadId !== null) {
-            s.inactive[s.activeThreadId] = {
-              messages: s.messages,
-              streaming: s.streaming,
-              error: s.error,
-            };
+            // 切换前同样检查前一个线程是否为空，为空则清理，不为空则入 inactive
+            if (isEmptyPlaceholderThread(s, s.activeThreadId)) {
+              s.threads = s.threads.filter((t) => t.id !== s.activeThreadId);
+              delete s.inactive[s.activeThreadId];
+            } else {
+              s.inactive[s.activeThreadId] = {
+                messages: s.messages,
+                streaming: s.streaming,
+                error: s.error,
+              };
+            }
           }
           s.threads = sortThreadMetas([meta, ...s.threads]);
           s.activeThreadId = id;
@@ -411,13 +475,23 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
         set((s) => {
           if (threadId === s.activeThreadId) return;
           if (!s.threads.some((t) => t.id === threadId)) return;
-          if (s.activeThreadId !== null) {
+
+          // 切走前清理可能遗留的未用空线程
+          if (
+            s.activeThreadId !== null &&
+            isEmptyPlaceholderThread(s, s.activeThreadId)
+          ) {
+            const emptyId = s.activeThreadId;
+            s.threads = s.threads.filter((t) => t.id !== emptyId);
+            delete s.inactive[emptyId];
+          } else if (s.activeThreadId !== null) {
             s.inactive[s.activeThreadId] = {
               messages: s.messages,
               streaming: s.streaming,
               error: s.error,
             };
           }
+
           const next = s.inactive[threadId] ?? {
             messages: [],
             streaming: false,

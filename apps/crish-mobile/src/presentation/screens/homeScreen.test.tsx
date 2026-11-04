@@ -495,6 +495,70 @@ describe('HomeScreen 本地模式（CON-2 + hub 同列）', () => {
     expect(mockOpenLocalThread).toHaveBeenCalledWith(threadId);
     expect(mockRunTask).not.toHaveBeenCalled();
   });
+
+  it('当本地 Store 已有活动历史会话时，主页发送依然无条件创建全新独立线程，绝不污染历史', async () => {
+    connectionStore.setState({ phase: 'disconnected', lastError: null });
+    await configureOneLocalProvider();
+
+    // 模拟存在历史会话，且当前 activeThreadId 指向它
+    localChatSessionStore.setState({
+      threads: [
+        {
+          id: 'lth-history-1',
+          title: '历史会话',
+          titleSource: 'user',
+          preview: '旧内容',
+          modelRef: null,
+          createdAt: NOW - 100_000,
+          updatedAt: NOW - 50_000,
+        },
+      ],
+      activeThreadId: 'lth-history-1',
+      messages: [
+        {
+          id: 'm-old',
+          role: 'user',
+          content: '旧提问',
+        },
+      ],
+      streaming: false,
+      error: null,
+      inactive: {},
+      hydrated: true,
+      completedAtByThread: {},
+    });
+
+    const view = await renderHome();
+
+    // 在主页输入新提问
+    await fireEvent.changeText(
+      view.getByTestId('home-composer'),
+      '这是主页发起的全新提问'
+    );
+    await act(async () => {
+      await fireEvent.press(view.getByTestId('home-composer-send'));
+    });
+
+    const state = localChatSessionStore.getState();
+    // 必须生成新的线程 ID，绝非 lth-history-1
+    const newThreadId = state.activeThreadId;
+    expect(newThreadId).toBeTruthy();
+    expect(newThreadId).not.toBe('lth-history-1');
+
+    // 新线程中的首条消息仅包含当前全新提问，绝无旧提问
+    expect(state.messages[0]?.role).toBe('user');
+    expect(state.messages[0]?.content).toBe('这是主页发起的全新提问');
+    expect(state.messages.some((m) => m.content === '旧提问')).toBe(false);
+
+    // 历史会话依然在 inactive 中完好无损，未受任何污染
+    expect(state.inactive['lth-history-1']?.messages).toHaveLength(1);
+    expect(state.inactive['lth-history-1']?.messages[0]?.content).toBe(
+      '旧提问'
+    );
+
+    // 导航回调直达新线程
+    expect(mockOpenLocalThread).toHaveBeenCalledWith(newThreadId);
+  });
 });
 
 describe('HomeScreen 陈旧标注（CON-3）', () => {

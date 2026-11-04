@@ -364,8 +364,8 @@ describe('批 B · 阅读锚点（⑱）', () => {
   });
 });
 
-describe('批 B · 离屏流式尾部冻结（㉕）', () => {
-  it('尾块离屏 >320px 后冻结旧快照；滚回迟滞带内解冻换新', async () => {
+describe('批 B · 流式文本单一真理源直出渲染（彻底废除 tailFreeze 截断快照）', () => {
+  it('即使尾块离屏且处于非跟随态，流式尾块更新时无条件实时渲染最新内容，绝不截取陈旧快照', async () => {
     const v1 = [
       msg('u-1', 'user', '问题', 0),
       msg('a-1', 'assistant', '尾巴第一版', 0, true),
@@ -388,12 +388,12 @@ describe('批 B · 离屏流式尾部冻结（㉕）', () => {
     await fireEvent(rowWrapperOf(tailNode), 'layout', {
       nativeEvent: { layout: { x: 0, y: 2000, width: 390, height: 120 } },
     });
-    // 停在顶部滚动 → 尾块距视口底 1300px > 320 → 冻结
+    // 停在顶部滚动（尾块距视口底 1300px）
     await fireEvent.scroll(list, scrollEvent(0, 2120));
-    // 流式尾块换新文本：冻结中仍渲染旧快照
+    // 流式尾块换新文本：废除冻结后直接渲染最新实体，杜绝短文本硬墙
     const v2 = [
       msg('u-1', 'user', '问题', 0),
-      msg('a-1', 'assistant', '尾巴第二版', 0, true),
+      msg('a-1', 'assistant', '尾巴第二版新内容', 0, true),
     ];
     await view.rerender(
       <TimelineView
@@ -405,14 +405,8 @@ describe('批 B · 离屏流式尾部冻结（㉕）', () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
     });
-    expect(view.getByText(/尾巴第一版/)).toBeTruthy();
-    expect(view.queryByText(/尾巴第二版/)).toBeNull();
-    // 滚回尾块附近（距视口底 <160）→ 解冻，新文本上屏
-    await fireEvent.scroll(list, scrollEvent(1900, 2120));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    });
-    expect(view.getByText(/尾巴第二版/)).toBeTruthy();
+    expect(view.getByText(/尾巴第二版新内容/)).toBeTruthy();
+    expect(view.queryByText(/尾巴第一版/)).toBeNull();
     await view.unmount();
   });
 });

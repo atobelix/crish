@@ -260,7 +260,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
     await view.unmount();
   });
 
-  it('用户上翻超过 FOLLOW_THRESHOLD 阈值时触发 onFollowChange(false)', async () => {
+  it('用户手势上翻（scrollBeginDrag）超过 64dp 阈值时触发 onFollowChange(false)', async () => {
     const onFollowChange = jest.fn();
     const view = await wrap(
       <TimelineView
@@ -271,8 +271,12 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
     );
 
     const { act, fireEvent } = require('@testing-library/react-native');
-    // 模拟向上滚动 500px，距底部 700px（远超 40px 阈值）
     await act(async () => {
+      // 模拟用户手指触摸拖拽
+      fireEvent(view.getByTestId('session-timeline'), 'scrollBeginDrag', {
+        nativeEvent: {},
+      });
+      // 模拟向上滚动，距底部 700px（远超 64px 退出阈值）
       fireEvent.scroll(view.getByTestId('session-timeline'), {
         nativeEvent: {
           contentOffset: { y: 100, x: 0 },
@@ -283,6 +287,59 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
     });
 
     expect(onFollowChange).toHaveBeenCalledWith(false);
+    await view.unmount();
+  });
+
+  it('内容自然膨胀导致距底距离暴增时（用户未触屏交互），绝不脱离跟随态（防 Follow 猝死）', async () => {
+    const onFollowChange = jest.fn();
+    const view = await wrap(
+      <TimelineView
+        blocks={blocks}
+        follow={true}
+        onFollowChange={onFollowChange}
+      />
+    );
+
+    const { act, fireEvent } = require('@testing-library/react-native');
+    // 模拟 Yoga 测高或内容膨胀引起 onScroll，此时用户双手未碰屏幕（无 scrollBeginDrag）
+    await act(async () => {
+      fireEvent.scroll(view.getByTestId('session-timeline'), {
+        nativeEvent: {
+          contentOffset: { y: 100, x: 0 },
+          contentSize: { height: 1000, width: 390 },
+          layoutMeasurement: { height: 200, width: 390 },
+        },
+      });
+    });
+
+    // 关键守卫：未发生手势交互，坚决不退出 follow！
+    expect(onFollowChange).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('自由浏览态下向下滑动贴近底部 <=32dp 时自动重新吸附贴底', async () => {
+    const onFollowChange = jest.fn();
+    const view = await wrap(
+      <TimelineView
+        blocks={blocks}
+        follow={false}
+        onFollowChange={onFollowChange}
+      />
+    );
+
+    const { act, fireEvent } = require('@testing-library/react-native');
+    await act(async () => {
+      // 向下滑动到距离底部仅 20px（<= 32px 吸附阈值）
+      fireEvent.scroll(view.getByTestId('session-timeline'), {
+        nativeEvent: {
+          contentOffset: { y: 780, x: 0 },
+          contentSize: { height: 1000, width: 390 },
+          layoutMeasurement: { height: 200, width: 390 },
+        },
+      });
+    });
+
+    expect(onFollowChange).toHaveBeenCalledWith(true);
     await view.unmount();
   });
 });

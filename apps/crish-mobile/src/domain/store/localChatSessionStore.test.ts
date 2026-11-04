@@ -388,3 +388,85 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
     });
   });
 });
+
+describe('localChatSessionStore 槽位隔离与重置 (维度 1)', () => {
+  it('resetActiveThread：存在消息的活动线程归入 inactive 表，前台运行时彻底清空', () => {
+    const s = localChatSessionStore.getState();
+    const threadId = s.createThread();
+    s.appendUser(userMsg('u1', '会话一内容'));
+    s.beginAssistant(assistantMsg('a1'));
+    s.appendAssistantDelta('a1', '助手回复一');
+
+    expect(localChatSessionStore.getState().activeThreadId).toBe(threadId);
+    expect(localChatSessionStore.getState().messages).toHaveLength(2);
+
+    // 执行槽位重置
+    localChatSessionStore.getState().resetActiveThread();
+
+    const state = localChatSessionStore.getState();
+    expect(state.activeThreadId).toBeNull();
+    expect(state.messages).toEqual([]);
+    expect(state.streaming).toBe(false);
+    expect(state.error).toBeNull();
+
+    // 历史完整保留在 inactive 表中
+    expect(state.inactive[threadId]?.messages).toHaveLength(2);
+    expect(state.inactive[threadId]?.messages[0]?.content).toBe('会话一内容');
+  });
+
+  it('resetActiveThread：未产生任何消息的空白空线程被物理剔除，防止堆积幽灵线程', () => {
+    const s = localChatSessionStore.getState();
+    const emptyId = s.createThread();
+    expect(
+      localChatSessionStore.getState().threads.some((t) => t.id === emptyId)
+    ).toBe(true);
+
+    // 未发送任何消息即执行重置
+    localChatSessionStore.getState().resetActiveThread();
+
+    const state = localChatSessionStore.getState();
+    expect(state.activeThreadId).toBeNull();
+    // threads 中已被彻底清理
+    expect(state.threads.some((t) => t.id === emptyId)).toBe(false);
+    expect(state.inactive[emptyId]).toBeUndefined();
+  });
+
+  it('后台流式生成中执行 resetActiveThread，后续 delta 仍能精准追加进 inactive 表', () => {
+    const s = localChatSessionStore.getState();
+    const threadId = s.createThread();
+    s.appendUser(userMsg('u1', '正在生成的任务'));
+    s.beginAssistant(assistantMsg('a1'));
+
+    // 切走重置
+    s.resetActiveThread();
+    expect(localChatSessionStore.getState().activeThreadId).toBeNull();
+
+    // 后台收到流式数据
+    localChatSessionStore
+      .getState()
+      .appendAssistantDelta('a1', '后台追加的内容');
+    localChatSessionStore.getState().finishAssistant('a1');
+
+    const state = localChatSessionStore.getState();
+    const saved = state.inactive[threadId]?.messages[1];
+    expect(saved?.content).toBe('后台追加的内容');
+    expect(state.inactive[threadId]?.streaming).toBe(false);
+  });
+
+  it('切走空线程（openThread / createThread）：未产生任何消息的空白空线程同样被物理剔除', () => {
+    const s = localChatSessionStore.getState();
+    const nonEmpty = s.createThread();
+    s.appendUser(userMsg('u1', '已有消息'));
+    const empty = localChatSessionStore.getState().createThread();
+    expect(
+      localChatSessionStore.getState().threads.some((t) => t.id === empty)
+    ).toBe(true);
+
+    // 此时 empty 为活动空线程；切回 nonEmpty 时，empty 应被物理剔除
+    localChatSessionStore.getState().openThread(nonEmpty);
+    expect(
+      localChatSessionStore.getState().threads.some((t) => t.id === empty)
+    ).toBe(false);
+    expect(localChatSessionStore.getState().inactive[empty]).toBeUndefined();
+  });
+});

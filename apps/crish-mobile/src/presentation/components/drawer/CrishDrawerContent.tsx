@@ -1,8 +1,8 @@
 // 抽屉面板内容（原型 crish-mobile-drawer 移植，去底色与轻量化重构）：
-// 顶部吸顶【搜索胶囊 + 叉号 + 扫一扫 + 通知极简图标（variant="plain"）】——点搜索原地展开为输入态，
+// 顶部吸顶【搜索胶囊 + 叉号 + 扫一扫 + 通知白底圆盘微气垫悬浮钮（variant="floating"）】——点搜索原地展开为输入态，
 // 右侧动作钮平滑收拢、叉号展开（键盘弹起永不遮挡）；
 // 中部【待审批（仅有待办时）/ 审批记录 + 会话列表，全透明选项行】；
-// 底部单行通栏【头像昵称 → 设置 / 新对话通透极简图标（variant="plain"，无底色块）】。全部样式走 theme token，零描边。
+// 底部单行通栏【头像昵称 → 设置 / 新对话白底圆盘微气垫悬浮钮（variant="floating"）】。全部样式走 theme token，零描边。
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
@@ -42,6 +42,7 @@ import {
   usePressFade,
 } from '@/presentation/ui/pressFeedback';
 import { useDelayedFlag } from '@/presentation/ui/useDelayedFlag';
+import { useNewConversation } from '@/presentation/navigation/newConversation';
 import {
   deriveDrawerListState,
   DRAWER_LIST_LOADING_DELAY_MS,
@@ -265,11 +266,13 @@ export function CrishDrawerContent({
     },
     [actions, searching, toggleSearch]
   );
+  const handleNewConversation = useNewConversation();
+
+  // 统一新建会话（维度 1 根治）：执行双模槽位重置并平滑关闭抽屉
   const newChat = useCallback(() => {
     if (searching) toggleSearch(false);
-    router.navigate('/');
-    actions.close();
-  }, [actions, searching, toggleSearch]);
+    handleNewConversation({ closeDrawer: true });
+  }, [handleNewConversation, searching, toggleSearch]);
 
   const identityName = displayNameOf({
     displayName: profile?.displayName,
@@ -361,10 +364,10 @@ export function CrishDrawerContent({
             ),
           ]}
         >
-          {/* 顶部动作钮：通透极简图标（variant="plain"，彻底去除白底圆盘与阴影） */}
+          {/* 顶部动作钮：白底圆盘微气垫按钮（variant="floating"，恢复软阴影与触感） */}
           <IconButton
             name="qr-code"
-            variant="plain"
+            variant="floating"
             diameter={theme.size.iconButton}
             accessibilityLabel="扫码连接桌面"
             onPress={() => openRootPage('/pair/scan')}
@@ -372,7 +375,7 @@ export function CrishDrawerContent({
           />
           <IconButton
             name="bell"
-            variant="plain"
+            variant="floating"
             diameter={theme.size.iconButton}
             accessibilityLabel="通知中心"
             onPress={() => openRootPage('/notifications')}
@@ -393,7 +396,7 @@ export function CrishDrawerContent({
         >
           <IconButton
             name="x"
-            variant="plain"
+            variant="floating"
             diameter={theme.size.iconButton}
             accessibilityLabel="取消搜索"
             onPress={() => toggleSearch(false)}
@@ -495,14 +498,16 @@ export function CrishDrawerContent({
         </AnimatedPressable>
         <IconButton
           name="settings"
-          variant="plain"
+          variant="floating"
+          diameter={theme.size.iconButton}
           accessibilityLabel="设置"
           onPress={() => openRootPage('/settings')}
           testID="drawer-settings"
         />
         <IconButton
           name="add"
-          variant="plain"
+          variant="floating"
+          diameter={theme.size.iconButton}
           accessibilityLabel="新建对话"
           onPress={newChat}
           testID="drawer-new-chat"
@@ -647,11 +652,10 @@ function SearchPill({
     };
   }, []);
 
-  // 搜索框通透化（融入抽屉底板）：浅色走微弱凹槽质感（rgba(0, 0, 0, 0.03)），深色走 surfaceRaised，
-  // 配合 SoftShadow 空气微气垫，通透融入 canvasDrawer。
+  // 搜索框纯白质感：浅色模式强制采用纯白 surface 实体，配合 SoftShadow 浮雕微气垫
   const pillFill = theme.dark
     ? theme.colors.surfaceRaised
-    : 'rgba(0, 0, 0, 0.03)';
+    : theme.colors.surface;
 
   return (
     <Pressable

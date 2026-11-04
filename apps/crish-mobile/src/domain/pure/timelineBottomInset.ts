@@ -52,16 +52,24 @@ export const DEFAULT_FOLLOW_THRESHOLDS: FollowThresholds = {
 };
 
 /**
- * 迟滞带触底跟随状态判定器（纯函数）：
- * - 当前处于跟随态（follow === true）：只要离开距离 <= exit (64dp)，继续维持跟随；
- * - 当前处于离底态（follow === false）：只有逼近到距离 <= enter (32dp)，才重新吸附。
+ * 迟滞带触底跟随状态判定器 2.0（支持手势意图识别的纯函数）：
+ * - 当前处于跟随态（currentFollow === true）：
+ *   - 关键守卫：若用户未与屏幕发生手势交互（isUserInteracting === false），任何 distance 增加
+ *     均为内容自然膨胀或原生测高微滞后，坚决维持 follow = true，严禁误杀跟随态；
+ *   - 仅当用户明确施加手势操作且划离底部超过 exit 阈值（64dp）时，才脱离跟随；
+ * - 当前处于离底自由浏览态（currentFollow === false）：
+ *   - 只要逼近到距离 <= enter 阈值（32dp），自动重新吸附贴底。
  */
 export function evaluateFollowState(
   distanceToBottom: number,
   currentFollow: boolean,
+  isUserInteracting = true,
   thresholds: FollowThresholds = DEFAULT_FOLLOW_THRESHOLDS
 ): boolean {
   if (currentFollow) {
+    if (!isUserInteracting) {
+      return true;
+    }
     return distanceToBottom <= thresholds.exit;
   }
   return distanceToBottom <= thresholds.enter;

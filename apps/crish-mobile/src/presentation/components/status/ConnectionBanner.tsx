@@ -69,6 +69,7 @@ export function ConnectionBanner({
           gap: theme.space.sm,
           flexDirection: 'row',
           alignItems: 'center',
+          width: '100%',
         }}
       >
         <Icon
@@ -150,11 +151,27 @@ export function ConnectionBanner({
 }
 
 const styles = StyleSheet.create({
-  banner: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center' },
-  surface: { flex: 1, width: '100%' },
-  textContainer: { flex: 1, minWidth: 0 },
-  bannerText: { fontWeight: '500' },
-  switchCapsule: { alignItems: 'center', justifyContent: 'center' },
+  banner: {
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  surface: {
+    width: '100%',
+  },
+  textContainer: {
+    flex: 1,
+    flexShrink: 1,
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  bannerText: {
+    fontWeight: '500',
+  },
+  switchCapsule: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
 });
 
 export default ConnectionBanner;

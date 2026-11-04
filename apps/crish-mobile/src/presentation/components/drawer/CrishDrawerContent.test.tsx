@@ -5,6 +5,7 @@ import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { accountStore } from '@/domain/store/accountStore';
 import type { AccountProfile, AccountUser } from '@/domain/types/account';
+import { lightTheme } from '@/adapters/platform/theme';
 import { CrishDrawerContent, isMainScreenRoute } from './CrishDrawerContent';
 
 let mockPathname = '/';
@@ -161,20 +162,55 @@ describe('CrishDrawerContent 身份行头像', () => {
   });
 });
 
-describe('CrishDrawerContent 纯净轻量化视觉（去底色钉案）', () => {
-  it('搜索胶囊融入抽屉底板，动作按钮与选项行通透在位', async () => {
+describe('CrishDrawerContent 按钮微气垫与纯白质感（方案 12 钉案）', () => {
+  it('动作按钮全面恢复 floating 白底圆盘微气垫形态，搜索胶囊纯白在位', async () => {
     const view = await render(<CrishDrawerContent />, { wrapper: Wrapper });
     const pill = view.getByTestId('drawer-search-pill');
     expect(pill.props.style).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ backgroundColor: 'rgba(0, 0, 0, 0.03)' }),
+        expect.objectContaining({ backgroundColor: lightTheme.colors.surface }),
       ])
     );
-    // 顶部动作按钮与底部按钮均通透在位（variant="plain"）
-    expect(view.getByTestId('drawer-scan')).toBeTruthy();
-    expect(view.getByTestId('drawer-notifications')).toBeTruthy();
-    expect(view.getByTestId('drawer-settings')).toBeTruthy();
-    expect(view.getByTestId('drawer-new-chat')).toBeTruthy();
+
+    const buttonIds = [
+      'drawer-scan',
+      'drawer-notifications',
+      'drawer-search-cancel',
+      'drawer-settings',
+      'drawer-new-chat',
+    ];
+
+    for (const testId of buttonIds) {
+      const button = view.getByTestId(testId);
+      expect(button).toBeTruthy();
+      // 验证外层尺寸为 40dp (theme.size.iconButton)
+      expect(button.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            width: lightTheme.size.iconButton,
+            height: lightTheme.size.iconButton,
+          }),
+        ])
+      );
+      // 验证包含圆盘填充节点（borderRadius === 20 且包含背景色）
+      const disc = button.children.find((child: any) => {
+        const styles = Array.isArray(child?.props?.style)
+          ? child.props.style
+          : [child?.props?.style];
+        return styles.some(
+          (s: any) =>
+            s &&
+            s.borderRadius === lightTheme.size.iconButton / 2 &&
+            s.backgroundColor
+        );
+      });
+      expect(disc).toBeTruthy();
+    }
+
+    // 整树零 elevation、零 shadow*
+    const rootJson = JSON.stringify(view.toJSON());
+    expect(rootJson).not.toMatch(/"elevation":/);
+    expect(rootJson).not.toMatch(/"shadow(Color|Offset|Opacity|Radius)":/);
   });
 });
 

@@ -5,6 +5,9 @@
 // 圆角铁律（圆形按钮缺陷审计）：Ø36dp 正圆圆角恒为 BUTTON_SIZE / 2 实值（18dp），
 // 严禁使用 radius.pill 避免 Android 八边形阴影畸变。
 // 触控热区：hitSlop 补足至 44dp 满足无障碍触控标准。
+// 键盘解耦（Wave 4 裁决，2026-11-04）：彻底废除 followKeyboard 上推位移，
+// 软键盘弹起前 40dp 原地平滑淡出至 0 并置 pointerEvents="none"，打字态静默避让；
+// 按钮底距纯静态锚定输入框（overlayHeight + 8dp）。
 import { useCallback } from 'react';
 import { StyleSheet, type ViewStyle } from 'react-native';
 import Animated, {
@@ -22,16 +25,21 @@ import { AnimatedPressable, usePressFade } from './pressFeedback';
 
 export interface ScrollToBottomButtonProps {
   onPress: () => void;
-  /** 底部偏移（Tab 页传 tabBar 高度 + 安全区；详情页传 floatingHeight + 8） */
+  /** 底部偏移（Tab 页传 tabBar 高度 + 安全区；详情页传 overlayHeight + 8） */
   bottomOffset?: number;
   /** 水平对齐模式：'left' 为输入框左上角（默认对齐 16dp），'center' 为通用居中 */
   alignment?: 'left' | 'center';
   /** 左侧偏移（alignment='left' 时生效，缺省为 insets.left + theme.space.lg） */
   leftOffset?: number;
   /**
-   * 底距跟随键盘逐帧值（批 B ㉔）：键盘升起时按钮同步上浮键盘高度，
-   * 与 Composer 同吃 keyboard-controller 逐帧高度（单时钟源口径，
-   * 批 A 成文）；缺省关闭——其他宿主维持静态底距。
+   * 软键盘弹起时是否自动原地淡出隐藏（打字解耦铁律，2026-11-04 用户裁决）：
+   * 键盘升起时按钮在原位平滑淡出并禁用触摸，绝不上推遮挡视觉与输入；
+   * 缺省开启（true）；收起后平滑恢复。
+   */
+  hideOnKeyboard?: boolean;
+  /**
+   * @deprecated 已废弃。根据用户裁决，打字态下按钮绝不上推，统一走原地静默淡出。
+   * @see hideOnKeyboard
    */
   followKeyboard?: boolean;
   testID?: string;
@@ -45,7 +53,8 @@ export function ScrollToBottomButton({
   bottomOffset,
   alignment = 'left',
   leftOffset,
-  followKeyboard = false,
+  hideOnKeyboard = true,
+  followKeyboard: _deprecatedFollowKeyboard,
   testID,
 }: ScrollToBottomButtonProps) {
   const theme = useTheme();
@@ -62,12 +71,18 @@ export function ScrollToBottomButton({
     onPress();
   }, [onPress]);
 
-  // keyboard.height.value ≤ 0（0 = 收起 → −键盘高 = 升起），底距 =
-  // 静态底距 + 键盘高度；followKeyboard 关闭时返回空样式，静态底距生效
-  const keyboardFollowStyle = useAnimatedStyle(() => {
+  // 键盘解耦动效 Worklet：键盘升起时原地淡出至 0，绝不上移推高；收起后恢复
+  const keyboardFadeStyle = useAnimatedStyle(() => {
     'worklet';
-    if (!followKeyboard) return {};
-    return { bottom: baseBottom - keyboard.height.value };
+    if (!hideOnKeyboard) return {};
+    // keyboard.height.value <= 0 (0 = 完全收起, -336 = 完全升起)
+    // 在键盘弹起最初 40dp 范围平滑插值淡出
+    const kbHeight = -keyboard.height.value;
+    const opacity = kbHeight <= 0 ? 1 : Math.max(0, 1 - kbHeight / 40);
+    return {
+      opacity,
+      pointerEvents: opacity <= 0 ? 'none' : 'box-none',
+    };
   });
 
   const positionStyle: ViewStyle =
@@ -79,7 +94,7 @@ export function ScrollToBottomButton({
     <Animated.View
       entering={FadeIn.duration(theme.motion.duration.fast)}
       exiting={FadeOut.duration(theme.motion.duration.snappy)}
-      style={styles.host}
+      style={[styles.host, keyboardFadeStyle]}
       pointerEvents="box-none"
     >
       <AnimatedPressable
@@ -96,12 +111,7 @@ export function ScrollToBottomButton({
         onPress={handlePress}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
-        style={[
-          styles.button,
-          positionStyle,
-          press.fadeStyle,
-          keyboardFollowStyle,
-        ]}
+        style={[styles.button, positionStyle, press.fadeStyle]}
       >
         <SoftShadowSurface
           preset="button"

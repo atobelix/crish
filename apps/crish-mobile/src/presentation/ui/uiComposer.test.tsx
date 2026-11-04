@@ -1,7 +1,13 @@
 // Composer 测试：输入回调与发送可用态。
-import { Keyboard, StyleSheet } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { Keyboard, Platform, StyleSheet } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { Gesture } from 'react-native-gesture-handler';
+import {
+  darkTheme,
+  lightTheme,
+  resetThemeModeForTest,
+  setThemeMode,
+} from '@/adapters/platform/theme';
 import { haptics } from '@/adapters/platform/haptics';
 import { Composer } from '@/presentation/ui';
 import {
@@ -607,5 +613,82 @@ describe('Composer 几何（原型 composer.css 对齐 + 2026-11-03 校准）', 
     } finally {
       exclusive.mockRestore();
     }
+  });
+
+  describe('Composer 纯白质感与结构断言（方案 12 钉案）', () => {
+    const originalOS = Platform.OS;
+
+    afterEach(async () => {
+      jest.replaceProperty(Platform, 'OS', originalOS);
+      await act(async () => {
+        resetThemeModeForTest();
+      });
+    });
+
+    it('浅色模式输入框外壳纯白实体断言：backgroundColor 严格为 surface (#ffffff)，overflow 为 visible，内部无 BlurView', async () => {
+      await act(async () => {
+        setThemeMode('light');
+      });
+      const { element } = renderComposer(false);
+      const view = await render(element);
+      const shell = view.getByTestId('composer-shell');
+      const flat = StyleSheet.flatten(shell.props.style);
+
+      expect(flat.backgroundColor).toBe(lightTheme.colors.surface);
+      expect(flat.overflow).toBe('visible');
+      expect(view.queryByTestId('composer-blur')).toBeNull();
+    });
+
+    it('iOS 浅色隔离断言：Mock Platform.OS = ios，浅色模式下不渲染 BlurView，backgroundColor 依然保持 surface', async () => {
+      jest.replaceProperty(Platform, 'OS', 'ios');
+      await act(async () => {
+        setThemeMode('light');
+      });
+      const { element } = renderComposer(false);
+      const view = await render(element);
+      const shell = view.getByTestId('composer-shell');
+      const flat = StyleSheet.flatten(shell.props.style);
+
+      expect(flat.backgroundColor).toBe(lightTheme.colors.surface);
+      expect(flat.overflow).toBe('visible');
+      expect(view.queryByTestId('composer-blur')).toBeNull();
+    });
+
+    it('iOS 深色模式激活 glassActive：渲染 BlurView，backgroundColor 为 surfaceTranslucent', async () => {
+      jest.replaceProperty(Platform, 'OS', 'ios');
+      await act(async () => {
+        setThemeMode('dark');
+      });
+      const { element } = renderComposer(false);
+      const view = await render(element);
+      const shell = view.getByTestId('composer-shell');
+      const flat = StyleSheet.flatten(shell.props.style);
+
+      expect(flat.backgroundColor).toBe(darkTheme.colors.surfaceTranslucent);
+      expect(flat.overflow).toBe('hidden');
+      expect(view.getByTestId('composer-blur')).toBeTruthy();
+    });
+
+    it('Android 软阴影挂载断言：Mock Platform.OS = android，layout 后以 variant="composer" 挂载 SoftShadow', async () => {
+      jest.replaceProperty(Platform, 'OS', 'android');
+      await act(async () => {
+        setThemeMode('light');
+      });
+      const { element } = renderComposer(false);
+      const view = await render(element);
+      const shell = view.getByTestId('composer-shell');
+
+      // 触发 layout 事件以提交尺寸并挂载 SoftShadow
+      await act(async () => {
+        fireEvent(shell, 'layout', {
+          nativeEvent: { layout: { width: 360, height: 52 } },
+        });
+      });
+
+      // 验证渲染树包含 SoftShadow 的 SVG 节点
+      const rootJson = JSON.stringify(view.toJSON());
+      expect(rootJson).toContain('soft-shadow');
+      expect(view.queryByTestId('composer-blur')).toBeNull();
+    });
   });
 });

@@ -49,7 +49,7 @@ async function renderBar(props: Partial<MessageActionBarProps> = {}) {
   );
 }
 
-describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
+describe('MessageActionBar (移动端助手消息操作工具栏 - 纯图标精进版)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -63,7 +63,7 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
     expect(AssistantMessageActionBar).toBe(MessageActionBar);
   });
 
-  describe('渲染守卫', () => {
+  describe('渲染守卫与纯图标化验证', () => {
     it('处于流式生成中（streaming === true）时不渲染工具栏', async () => {
       const view = await renderBar({ streaming: true });
       expect(view.queryByTestId('assistant-message-action-bar')).toBeNull();
@@ -85,8 +85,9 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
       expect(view.queryByTestId('assistant-message-action-bar')).toBeNull();
     });
 
-    it('收口且正文有效时正常渲染复制、分享、更多三项操作', async () => {
+    it('收口且正文有效时正常渲染复制、分享、更多纯图标操作，且不渲染多余文字', async () => {
       const view = await renderBar();
+      // 工具栏容器与各按钮存在
       expect(view.getByTestId('assistant-message-action-bar')).toBeTruthy();
       expect(
         view.getByTestId('assistant-message-action-bar-copy')
@@ -97,13 +98,20 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
       expect(
         view.getByTestId('assistant-message-action-bar-more')
       ).toBeTruthy();
-      expect(view.getByText('复制')).toBeTruthy();
-      expect(view.getByText('分享')).toBeTruthy();
+
+      // 无障碍标签语义健全
+      expect(view.getByLabelText('复制正文')).toBeTruthy();
+      expect(view.getByLabelText('分享回答')).toBeTruthy();
+      expect(view.getByLabelText('更多操作')).toBeTruthy();
+
+      // 纯图标化硬断言：界面上绝对不包含常驻的“复制”、“分享”字样
+      expect(view.queryByText('复制')).toBeNull();
+      expect(view.queryByText('分享')).toBeNull();
     });
   });
 
-  describe('复制（Copy）链路', () => {
-    it('点击复制触发触感振动、写入剪贴板，并在 1500ms 内展示对号回弹态', async () => {
+  describe('复制（Copy）纯图标链路与状态回弹', () => {
+    it('点击复制触发触感振动、写入剪贴板，并在 1500ms 内展示已复制无障碍状态，超时自动恢复', async () => {
       jest.spyOn(clipboard, 'copyTextToClipboard').mockResolvedValue(true);
 
       const view = await renderBar({
@@ -112,7 +120,7 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
       });
 
       const copyBtn = view.getByTestId('assistant-message-action-bar-copy');
-      expect(view.getByText('复制')).toBeTruthy();
+      expect(view.getByLabelText('复制正文')).toBeTruthy();
 
       await act(async () => {
         fireEvent.press(copyBtn);
@@ -124,14 +132,16 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
         '待复制的正文'
       );
 
-      // 视觉状态回弹为已复制
-      expect(view.getByText('已复制')).toBeTruthy();
+      // 状态回弹为已复制（通过 accessibilityLabel 表达）
+      expect(view.getByLabelText('已复制')).toBeTruthy();
+      expect(view.queryByLabelText('复制正文')).toBeNull();
 
       // 1500ms 定时器超时后自动恢复为原样
       await act(async () => {
         jest.advanceTimersByTime(1500);
       });
-      expect(view.getByText('复制')).toBeTruthy();
+      expect(view.getByLabelText('复制正文')).toBeTruthy();
+      expect(view.queryByLabelText('已复制')).toBeNull();
 
       // 推进时间让 Toast 正常收起，避免跨用例定时器残留
       await act(async () => {
@@ -153,12 +163,12 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
       });
 
       expect(haptics.selection).toHaveBeenCalledTimes(1);
-      expect(view.getByText('复制')).toBeTruthy();
-      expect(view.queryByText('已复制')).toBeNull();
+      expect(view.getByLabelText('复制正文')).toBeTruthy();
+      expect(view.queryByLabelText('已复制')).toBeNull();
     });
   });
 
-  describe('分享（Share）链路', () => {
+  describe('分享（Share）纯图标链路', () => {
     it('点击分享按钮触发触感并调用系统原生 Share.share', async () => {
       const shareSpy = jest
         .spyOn(Share, 'share')
@@ -292,7 +302,7 @@ describe('MessageActionBar (移动端助手消息操作工具栏)', () => {
         fireEvent.press(copyBtn);
       });
 
-      expect(view.getByText('已复制')).toBeTruthy();
+      expect(view.getByLabelText('已复制')).toBeTruthy();
     });
   });
 });

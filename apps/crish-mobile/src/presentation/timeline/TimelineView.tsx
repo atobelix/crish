@@ -16,6 +16,7 @@ import {
   type ViewToken,
 } from 'react-native';
 import type { RefObject } from 'react';
+import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -56,7 +57,6 @@ import {
 import {
   anchorOffsetWithinBlock,
   restoreScrollOffset,
-  shouldFreezeTail,
 } from './timelineScrollRules';
 import {
   clearScrollAnchor,
@@ -111,6 +111,12 @@ export interface TimelineViewProps {
    * 尾部内容能否完整滚到浮层上方，只由这个值决定。
    */
   bottomInset?: number;
+  /**
+   * 底部悬浮输入区净高 (不含键盘，方案 16 满页联动专用)
+   */
+  floatingOverlayHeight?: number;
+  /** 尾部呼吸间隙 (默认 20dp) */
+  bottomGap?: number;
   /** 引擎生成中：等待占位行（首个过程块落地前）的显隐信号 */
   busy?: boolean;
   /**
@@ -141,6 +147,8 @@ export function TimelineView({
   onEmptyAction,
   headerClearance,
   bottomInset,
+  floatingOverlayHeight,
+  bottomGap,
   busy = false,
   anchorKey,
   readyCover = false,
@@ -151,13 +159,56 @@ export function TimelineView({
   const reducedMotion = useReducedMotion();
   const internalRef = useRef<FlatList<TimelineRow> | null>(null);
   const targetRef = listRef ?? internalRef;
+
+  const effectiveBottomInset =
+    floatingOverlayHeight !== undefined
+      ? floatingOverlayHeight + (bottomGap ?? theme.space.xl)
+      : bottomInset !== undefined && bottomInset > 0
+        ? bottomInset
+        : theme.space.xxl;
+
+  // 底部额外内衬共享值（驱动 KeyboardChatScrollView 的 extraContentPadding）
+  const extraPaddingSV = useSharedValue(effectiveBottomInset);
+  useEffect(() => {
+    extraPaddingSV.value = effectiveBottomInset;
+  }, [effectiveBottomInset, extraPaddingSV]);
+
+  // 编程式滚动互斥锁：防止平滑回底动画期间 handleScroll 误判脱离跟随（方案 16）
+  const isProgrammaticScrollingRef = useRef(false);
+  const programmaticScrollTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  // 拦截并保护平滑滚动
+  useEffect(() => {
+    const list = targetRef.current;
+    if (!list) return;
+    const originalScrollToEnd = list.scrollToEnd.bind(list);
+    list.scrollToEnd = (params?: { animated?: boolean | null }) => {
+      const animated = params?.animated ?? true;
+      if (animated) {
+        isProgrammaticScrollingRef.current = true;
+        if (programmaticScrollTimerRef.current !== null) {
+          clearTimeout(programmaticScrollTimerRef.current);
+        }
+        programmaticScrollTimerRef.current = setTimeout(() => {
+          isProgrammaticScrollingRef.current = false;
+          programmaticScrollTimerRef.current = null;
+        }, 350);
+      }
+      originalScrollToEnd(params);
+    };
+    return () => {
+      if (programmaticScrollTimerRef.current !== null) {
+        clearTimeout(programmaticScrollTimerRef.current);
+        programmaticScrollTimerRef.current = null;
+      }
+      list.scrollToEnd = originalScrollToEnd;
+    };
+  }, [targetRef]);
   const display = useMemo(() => groupToolRuns(blocks), [blocks]);
   const rows = useMemo(() => insertTimeSeparators(display), [display]);
-  const tail = blocks[blocks.length - 1];
-  const tailSignal =
-    tail?.kind === 'message' ? tail.text.length : blocks.length;
-
-  // ── 批 B 状态面：折叠选择 / 锚点 / 尾部冻结 / 就绪遮罩 ─────────────
+  // ── 批 B 状态面：折叠选择 / 锚点 / 就绪遮罩 ─────────────
   // 折叠区展开选择按块 id 记忆：FlatList 回收重挂载不丢用户在该块上
   // 的选择（Map 由本组件持有、引用稳定，不进渲染状态）。
   const disclosureRef = useRef(new Map<string, boolean>());
@@ -168,7 +219,7 @@ export function TimelineView({
   anchorKeyRef.current = anchorKey;
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
-  // 行布局图（key → 内容坐标 y/高）：锚点存取与尾部冻结的共同地基，
+  // 行布局图（key → 内容坐标 y/高）：锚点存取的地基，
   // 由每行外层 View 的 onLayout 回填（见 renderItem）。
   const layoutMapRef = useRef(new Map<string, { y: number; height: number }>());
   const scrollYRef = useRef(0);
@@ -182,9 +233,6 @@ export function TimelineView({
   const anchorPhaseRef = useRef<AnchorPhase>(anchorKey ? 'loading' : 'done');
   const savedAnchorRef = useRef<ScrollAnchor | null>(null);
   const [anchorSettled, setAnchorSettled] = useState(!anchorKey);
-  // 离屏流式尾部冻结快照（冻结的行以捕获时的块对象渲染，见 ㉕）
-  const [frozenTail, setFrozenTail] = useState<DisplayBlock | null>(null);
-  const frozenTailKeyRef = useRef<string | null>(null);
   // 就绪遮罩：列表首帧布局完成（listLaidOut）+ 锚点 settle 后淡出
   const [listLaidOut, setListLaidOut] = useState(false);
   const [coverGone, setCoverGone] = useState(false);
@@ -305,47 +353,6 @@ export function TimelineView({
     [targetRef]
   );
 
-  /** ㉕ 离屏流式尾部冻结评估：仅在迟滞带跨越时改状态，滚动热路径零重渲染 */
-  const evaluateTailFreeze = useCallback(() => {
-    const clear = () => {
-      if (frozenTailKeyRef.current !== null) {
-        frozenTailKeyRef.current = null;
-        setFrozenTail(null);
-      }
-    };
-    const currentRows = rowsRef.current;
-    const tailRow = currentRows[currentRows.length - 1];
-    if (!tailRow || tailRow.kind === 'timeSeparator') {
-      clear();
-      return;
-    }
-    const freezable =
-      (tailRow.kind === 'message' && tailRow.streaming) ||
-      (tailRow.kind === 'reasoning' &&
-        (tailRow.streaming || tailRow.isThinking));
-    // 跟随态尾部恒在屏内（贴底），冻结无意义且会挡住流式呈现
-    if (!freezable || followRef.current) {
-      clear();
-      return;
-    }
-    const key = rowKey(tailRow);
-    const layout = layoutMapRef.current.get(key);
-    if (!layout) {
-      clear();
-      return;
-    }
-    const distanceBelow =
-      layout.y - (scrollYRef.current + viewportHeightRef.current);
-    if (shouldFreezeTail(distanceBelow, frozenTailKeyRef.current === key)) {
-      if (frozenTailKeyRef.current !== key) {
-        frozenTailKeyRef.current = key;
-        setFrozenTail(tailRow);
-      }
-    } else {
-      clear();
-    }
-  }, []);
-
   // 锚点读盘（anchorKey 变更即重走恢复链）
   useEffect(() => {
     if (!anchorKey) {
@@ -427,11 +434,6 @@ export function TimelineView({
     });
   }, [windowWidth, targetRef]);
 
-  // 尾行变化（新流式尾块出现/封口）时重评冻结
-  useEffect(() => {
-    evaluateTailFreeze();
-  }, [display, evaluateTailFreeze]);
-
   // 就绪遮罩退出：布局 + 锚点双就绪 → 淡出后卸载（卸载由 JS 计时器
   // 驱动，与 reanimated 淡出同长——测试环境无 UI 线程亦不残留遮罩）
   const coverReady = listLaidOut && anchorSettled;
@@ -484,6 +486,7 @@ export function TimelineView({
         !follow ||
         isDraggingRef.current ||
         isMomentumRef.current ||
+        isProgrammaticScrollingRef.current ||
         blocks.length === 0
       )
         return;
@@ -499,6 +502,7 @@ export function TimelineView({
           !follow ||
           isDraggingRef.current ||
           isMomentumRef.current ||
+          isProgrammaticScrollingRef.current ||
           blocks.length === 0
         )
           return;
@@ -523,54 +527,80 @@ export function TimelineView({
       !follow ||
       isDraggingRef.current ||
       isMomentumRef.current ||
+      isProgrammaticScrollingRef.current ||
       blocks.length === 0
     )
       return;
     scheduleScrollToEnd(false);
     // bottomInset 入 deps：浮层增厚（错误条/停止胶囊出现、键盘弹起）
     // 时跟随态须重新贴底，否则尾部会被新浮层压住一截
-  }, [follow, blocks.length, tailSignal, scheduleScrollToEnd, bottomInset]);
+  }, [
+    follow,
+    blocks.length,
+    scheduleScrollToEnd,
+    bottomInset,
+    effectiveBottomInset,
+  ]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     scrollYRef.current = contentOffset.y;
     viewportHeightRef.current = layoutMeasurement.height;
+
+    // 关键守卫：如果在编程式平滑回底过程中，绝对禁止逆向翻转 follow 状态！（方案 16）
+    if (isProgrammaticScrollingRef.current) {
+      const distance =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distance <= 32) {
+        // 已经提前平滑到达底部，提前释放互斥锁
+        isProgrammaticScrollingRef.current = false;
+        if (programmaticScrollTimerRef.current !== null) {
+          clearTimeout(programmaticScrollTimerRef.current);
+          programmaticScrollTimerRef.current = null;
+        }
+      }
+      return; // 屏蔽后续的 evaluateFollowState，防止动画半途中被误杀
+    }
+
     const distance =
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    const following = evaluateFollowState(distance, follow);
+    const isInteracting = isDraggingRef.current || isMomentumRef.current;
+    // 传入 isInteracting：仅当用户明确手势滑动且离开底部 >64dp 时退出跟随；内容自然膨胀绝不退出
+    const following = evaluateFollowState(distance, follow, isInteracting);
     if (following !== follow) onFollowChange(following);
-    // 锚点节流落盘 + 尾部冻结重评（均为 ref 级计算，跨阈值才改状态）
+    // 锚点节流落盘（仅非跟随态，见 persistAnchorThrottled）
     persistAnchorThrottled();
-    evaluateTailFreeze();
   };
 
   const handleContentSizeChange = useCallback(
     (_w: number, _h: number) => {
       // 内容尺寸到位是锚点落位的最早可信时机（布局图随行 onLayout 同批补齐）
       attemptAnchorRestore();
-      evaluateTailFreeze();
       // 原生 Yoga 测高完成且处于 follow 状态时，通过 requestAnimationFrame 安排 scrollToEnd，
       // 彻底解决文本换行或新块渲染后尺寸增加留在视口外“划不动”的断裂
       if (
         follow &&
         !isDraggingRef.current &&
         !isMomentumRef.current &&
+        !isProgrammaticScrollingRef.current &&
         blocks.length > 0
       ) {
         scheduleScrollToEnd(false);
       }
     },
-    [
-      follow,
-      blocks.length,
-      scheduleScrollToEnd,
-      attemptAnchorRestore,
-      evaluateTailFreeze,
-    ]
+    [follow, blocks.length, scheduleScrollToEnd, attemptAnchorRestore]
   );
 
   const handleScrollBeginDrag = useCallback(
     (_event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      // 用户手指介入拖拽，立即释放编程式滚动锁并让手势绝对优先
+      if (isProgrammaticScrollingRef.current) {
+        isProgrammaticScrollingRef.current = false;
+        if (programmaticScrollTimerRef.current !== null) {
+          clearTimeout(programmaticScrollTimerRef.current);
+          programmaticScrollTimerRef.current = null;
+        }
+      }
       // 锁定手势：用户手动拖拽期间严禁流式更新或 Yoga 排版重排打断手势响应链
       isDraggingRef.current = true;
       isMomentumRef.current = false;
@@ -584,10 +614,10 @@ export function TimelineView({
 
   const handleScrollEndDrag = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      isDraggingRef.current = false;
       const vy = Math.abs(event.nativeEvent?.velocity?.y ?? 0);
       isMomentumRef.current = vy > 0.05;
       handleScroll(event);
+      isDraggingRef.current = false;
     },
     [handleScroll]
   );
@@ -634,6 +664,13 @@ export function TimelineView({
         testID="session-timeline"
         data={rows}
         keyExtractor={(row) => rowKey(row)}
+        renderScrollComponent={(props) => (
+          <KeyboardChatScrollView
+            {...props}
+            keyboardLiftBehavior="whenAtEnd"
+            extraContentPadding={extraPaddingSV}
+          />
+        )}
         // 滚动复用免动画（实现波总方案 F5/N04：删除每项 FadeIn 包裹——
         // 回收再挂载反复淡入是高刷滚动闪烁根因）；首击不吞噬 + 滑动收键盘
         // 每行包一层 onLayout 壳回填布局图（锚点/尾部冻结地基）；壳无
@@ -647,16 +684,10 @@ export function TimelineView({
               </View>
             );
           }
-          // ㉕ 冻结中的尾行以捕获快照渲染（冻结块封口/回屏/跟随即解冻，
-          // 由 evaluateTailFreeze 清快照后自动换回实时块）
-          const shown =
-            frozenTail !== null && frozenTailKeyRef.current === key
-              ? frozenTail
-              : item;
           return (
             <View onLayout={(event) => handleRowLayout(key, event)}>
               <TimelineBlockView
-                block={shown}
+                block={item}
                 onOpenTools={onOpenTools}
                 disclosureStore={disclosureRef.current}
                 onToggleDisclosure={handleToggleDisclosure}
@@ -689,20 +720,14 @@ export function TimelineView({
         onMomentumScrollEnd={handleMomentumScrollEnd}
         scrollIndicatorInsets={{
           top: headerClearance ?? 0,
-          bottom:
-            bottomInset !== undefined && bottomInset > 0
-              ? bottomInset
-              : theme.space.xxl,
+          bottom: effectiveBottomInset,
         }}
         contentContainerStyle={[
           {
             // 原型 conv-message-list：左右 18、消息 gap 16（token 无 18 档，定值落位）
             paddingHorizontal: 18,
             paddingTop: headerClearance ?? theme.space.lg,
-            paddingBottom:
-              bottomInset !== undefined && bottomInset > 0
-                ? bottomInset
-                : theme.space.xxl,
+            paddingBottom: effectiveBottomInset,
             gap: theme.space.lg,
           },
           blocks.length === 0 && styles.emptyContent,

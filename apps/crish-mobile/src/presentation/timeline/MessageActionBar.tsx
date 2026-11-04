@@ -1,11 +1,12 @@
-// 助手消息轻量底部操作工具栏（移动端交互精进方案 05 落地）：
+// 助手消息轻量底部操作工具栏（移动端交互精进方案 13 纯图标化与尺寸精进落地）：
 // - 专属于助手消息（role === 'assistant'）底部的轻量操作工具栏；
-// - 视觉规范遵循 Subtle & Lightweight：
-//   · 采用 theme.colors.textTertiary 浅色文字与图标，避免抢占正文视觉焦点；
-//   · 无外边框、无矩形卡片背景、无阴影；
-//   · 按钮高度约 28dp，间距适度；
+// - 视觉规范遵循 Subtle & Lightweight（纯图标化 + 尺寸精进）：
+//   · 纯图标化：彻底移除按钮伴随文本（“复制”、“分享”等），纯粹克制留白；
+//   · 尺寸标准：图标尺寸提升至系统标准 theme.size.icon（20dp），与全 App 标准对齐；
+//   · 满血触控：按钮实体采用 width: 32, height: 32（居中对齐），结合 hitSlop: 6 实现 44×44dp 理想触控盒；
+//   · 色彩克制：保持浅灰 theme.colors.textTertiary；复制成功态切换为 check 绿勾（theme.colors.success）并保持 1500ms；
 // - 核心操作：
-//   · 复制（Copy）：触感选择反馈 + 写入剪贴板 + 1500ms 绿意对号回弹 + 轻量 Toast；
+//   · 复制（Copy）：触感选择反馈 + 写入剪贴板 + 1500ms 绿意对号（check）平滑切换与回弹 + 轻量 Toast；
 //   · 分享（Share）：触感选择反馈 + 系统原生 Share.share 面板；
 //   · 更多（More ···）：呼出轻量 DropdownMenu；
 //   · 防误触二级防护：点击“重新生成回答”呼出确认 Dialog，确认后才触发 onRegenerate(messageId)。
@@ -18,13 +19,7 @@ import {
   AnimatedPressable,
   usePressFade,
 } from '@/presentation/ui/pressFeedback';
-import {
-  AppText,
-  Dialog,
-  DropdownMenu,
-  Icon,
-  useToast,
-} from '@/presentation/ui';
+import { Dialog, DropdownMenu, Icon, useToast } from '@/presentation/ui';
 import type { DropdownMenuEntry } from '@/presentation/ui/DropdownMenu';
 
 export interface MessageActionBarProps {
@@ -202,7 +197,7 @@ export const MessageActionBar = memo(function MessageActionBar({
 
   return (
     <View testID={testID} style={styles.container}>
-      {/* 复制操作项 */}
+      {/* 纯图标复制按钮 */}
       <AnimatedPressable
         testID={`${testID}-copy`}
         accessibilityRole="button"
@@ -215,23 +210,12 @@ export const MessageActionBar = memo(function MessageActionBar({
       >
         <Icon
           name={copied ? 'check' : 'copy'}
-          size={13}
+          size={theme.size.icon}
           color={copied ? theme.colors.success : theme.colors.textTertiary}
         />
-        <AppText
-          variant="caption"
-          style={[
-            styles.actionText,
-            {
-              color: copied ? theme.colors.success : theme.colors.textTertiary,
-            },
-          ]}
-        >
-          {copied ? '已复制' : '复制'}
-        </AppText>
       </AnimatedPressable>
 
-      {/* 分享操作项 */}
+      {/* 纯图标分享按钮 */}
       <AnimatedPressable
         testID={`${testID}-share`}
         accessibilityRole="button"
@@ -242,16 +226,14 @@ export const MessageActionBar = memo(function MessageActionBar({
         onPress={handleShare}
         style={[styles.actionItem, sharePress.fadeStyle]}
       >
-        <Icon name="share" size={13} color={theme.colors.textTertiary} />
-        <AppText
-          variant="caption"
-          style={[styles.actionText, { color: theme.colors.textTertiary }]}
-        >
-          分享
-        </AppText>
+        <Icon
+          name="share"
+          size={theme.size.icon}
+          color={theme.colors.textTertiary}
+        />
       </AnimatedPressable>
 
-      {/* 更多按钮（···） */}
+      {/* 纯图标更多按钮 */}
       <View ref={moreButtonRef} collapsable={false}>
         <AnimatedPressable
           testID={`${testID}-more`}
@@ -263,7 +245,11 @@ export const MessageActionBar = memo(function MessageActionBar({
           onPress={handleOpenMore}
           style={[styles.actionItem, morePress.fadeStyle]}
         >
-          <Icon name="more" size={13} color={theme.colors.textTertiary} />
+          <Icon
+            name="more"
+            size={theme.size.icon}
+            color={theme.colors.textTertiary}
+          />
         </AnimatedPressable>
       </View>
 
@@ -314,25 +300,20 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
     marginTop: 8,
     marginBottom: 4,
   },
   actionItem: {
-    flexDirection: 'row',
+    width: 32,
+    height: 32,
     alignItems: 'center',
-    gap: 4,
-    minHeight: 28,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-  },
-  actionText: {
-    fontWeight: '400',
+    justifyContent: 'center',
   },
   hitSlop: {
-    top: 8,
-    bottom: 8,
-    left: 8,
-    right: 8,
+    top: 6,
+    bottom: 6,
+    left: 6,
+    right: 6,
   },
 });

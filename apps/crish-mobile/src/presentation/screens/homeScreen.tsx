@@ -65,6 +65,7 @@ import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
 import { selectStatusBoardRows, type HubRow } from '@/domain/pure/hubRows';
 import { connectionStore } from '@/domain/store/connectionStore';
+import { sessionStore } from '@/domain/store/sessionStore';
 import { approvalStore } from '@/domain/store/approvalStore';
 import { SNAPSHOT_STALE_LABEL } from '@/domain/pure/selectors';
 import { formatRelativeTime } from '@/domain/pure/time';
@@ -170,13 +171,16 @@ export default function HomeScreen({
   // 落点（界面统一 U3）：壳内 /thread/<target>，经宿主 onOpenLocalThread
   // 以 replace 换 (main) 槽位内容——与远端发送同一条路径，无根栈压栈
   // 的「明显切换」；消息在 submit 同步入 store，线程屏挂载首帧即已在列。
+  // 【维度 1 核心重塑】：主页发送永远代表全新对话！严禁复用 session.activeThreadId！
+  // 必须无条件调用 session.createThread(activeModel) 获取纯净新线程槽位（若前一线程为空则自动复用），
+  // 彻底阻断消息向历史对话倒灌！
   const submitLocalFromHome = useCallback(
     (text: string) => {
       if (text.trim() === '') return;
       const session = localChatSessionStore.getState();
-      const target =
-        session.activeThreadId ??
-        session.createThread(localChatStore.getState().config.activeModel);
+      const target = session.createThread(
+        localChatStore.getState().config.activeModel
+      );
       if (sendLocalChatMessage(target, text)) quickRun.setPrompt('');
       onOpenLocalThread(target);
     },
@@ -238,6 +242,19 @@ export default function HomeScreen({
   const skillsEverOpened = useEverOpened(skillsOpen);
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
   const { feedback } = quickRun;
+
+  // 【维度 1 保护】：当主屏挂载或用户回到主屏时，若当前存在非空白的活动历史会话，
+  // 自动将槽位重置为纯净无选中态，确保抽屉高亮与会话状态完全与主屏新对话语义对齐。
+  useEffect(() => {
+    const localState = localChatSessionStore.getState();
+    if (localState.activeThreadId !== null) {
+      localState.resetActiveThread();
+    }
+    const remoteSelected = sessionStore.getState().selectedSessionId;
+    if (remoteSelected !== null) {
+      sessionStore.getState().setSelected(null);
+    }
+  }, []);
 
   // 键盘弹起 = 输入态：中段（状态板/问候）随键盘升起联动变淡上移
   // （原型 composer-expanded-state）。M6 定案口径（巡检后裁决）：

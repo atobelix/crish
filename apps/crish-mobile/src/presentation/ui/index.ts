@@ -21,7 +21,11 @@ export { default as DropdownMenu } from './DropdownMenu';
 export type {
   DropdownMenuProps,
   DropdownMenuItem,
+  DropdownMenuDivider,
   DropdownMenuEntry,
+  AnchorRect,
+  DropdownPlacement,
+  DropdownAlign,
 } from './DropdownMenu';
 export { default as EdgeFade } from './EdgeFade';
 export type { EdgeFadeProps } from './EdgeFade';
