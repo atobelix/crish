@@ -209,7 +209,8 @@ export function useOverviewState(
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…', a.runId);
-    void engineApproveTool(id)
+    // runId 必填（core_approve_tool 契约）：条目自带的挂起 run 直传
+    void engineApproveTool(id, a.runId ?? '')
       .catch(() => {
         markLocalTool(id, 'error', '批准失败', a.runId);
         showActionErr('批准失败，请重试');
@@ -227,7 +228,7 @@ export function useOverviewState(
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝', a.runId);
-    void engineDenyTool(id)
+    void engineDenyTool(id, a.runId ?? '')
       .catch(() => showActionErr('拒绝失败，请重试'))
       .finally(() => setApprovalBusyId(null));
   };

@@ -16,6 +16,7 @@ import {
   shouldSkipApprovalRollback,
   shouldSkipDenyRollback,
 } from '../api/chat-approval/approvalRollbackGuard';
+import { resolveApprovalRunId } from '../api/chat-approval/approvalRunId';
 import { toast } from '../services/toast/ToastContext';
 
 function findAgentTool(
@@ -90,7 +91,22 @@ export function useAgentToolApproval(
           output: '执行中…',
         });
 
-        await engineApproveTool(tid);
+        // runId 必填（core_approve_tool 契约）：申请人快照 → 本 agent 的
+        // subagentRunId → 父会话活动 run 顺序解析
+        const { ag: agForRun, t: tcForRun } = findAgentTool(
+          parentSessionId,
+          agentId,
+          mid,
+          tid
+        );
+        await engineApproveTool(
+          tid,
+          resolveApprovalRunId({
+            sessionId: parentSessionId,
+            toolCall: tcForRun,
+            agentRunId: agForRun?.subagentRunId,
+          })
+        );
       } catch (_err) {
         // 关键防倒退守卫：核对当前 Store 中该工具的最新状态
         const { t: currentTc } = findAgentTool(
@@ -140,7 +156,20 @@ export function useAgentToolApproval(
           output: '已拒绝',
         });
 
-        await engineDenyTool(tid);
+        const { ag: agForRun, t: tcForRun } = findAgentTool(
+          parentSessionId,
+          agentId,
+          mid,
+          tid
+        );
+        await engineDenyTool(
+          tid,
+          resolveApprovalRunId({
+            sessionId: parentSessionId,
+            toolCall: tcForRun,
+            agentRunId: agForRun?.subagentRunId,
+          })
+        );
       } catch (_err) {
         // 关键防倒退守卫：核对当前 Store 中该工具的最新状态
         const { t: currentTc } = findAgentTool(

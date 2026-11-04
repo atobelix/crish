@@ -3,10 +3,23 @@
  *
  * - Prefer calm, short copy for connectivity / setup issues.
  * - Agent runtime detail stays out of the bubble unless we classify a soft setup hint.
+ * - 失败呈现文案（标题/一句话/动作）的单一真源是 failureTaxonomy.ts 的
+ *   封闭分类表（批 C 第 2 件）：本模块只负责「分类」（kebab 码/域/文本
+ *   软分类三路检测器），分类结果一律经分类表投影出文案，不再散写字面量。
  */
 
 import { errorStore } from '../services/ErrorStore';
 import { logger } from '../services/LoggerService';
+import {
+  DOMAIN_TO_FAMILY,
+  FAILURE_FAMILIES,
+  FAMILY_TO_DOMAIN,
+  FAMILY_TO_SOFT,
+  KEBAB_CODE_TO_FAMILY,
+  SOFT_TO_FAMILY,
+  type FailureAction,
+  type FailureFamily,
+} from './failureTaxonomy';
 
 const NETWORK_RE =
   /network|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|unable to connect|proxy|dns|net::|fetch failed|socket/i;
@@ -66,27 +79,22 @@ export function isNetworkishError(input: unknown): boolean {
  */
 const RUST_PROVIDER_WRAPPER_RE = /provider\s*错误\s*（([^）]+)）\s*：/;
 
-/** kebab 错误码 → 前端软失败分类（未登记码回落到文本正则兜底） */
+/**
+ * kebab 错误码 → 前端软失败分类（未登记码回落到文本正则兜底）。
+ * 批 C 第 2 件起由分类表派生：码 → 家族（KEBAB_CODE_TO_FAMILY）→ 软分类
+ * 投影（FAMILY_TO_SOFT），与 KEBAB_TO_DOMAIN 同源，杜绝两表漂移。
+ * `unknown` 故意不登记：兜底码，classifySoftFailure 兜底路径处理
+ * （kebab-codes-drift.test.ts 豁免断言 + 兜底断言锁定）。
+ * `aborted` 不登记为失败家族：用户取消/中断语义，显式落 ended 静默收口。
+ */
 const KEBAB_KIND_TO_SOFT: Record<string, SoftFailureKind> = {
-  auth: 'auth',
-  'endpoint-unavailable': 'network',
-  network: 'network',
-  timeout: 'network',
-  quota: 'blocked',
-  // S5 域（provider 侧故障）：从 blocked 拆出独立分类，quota → blocked 保持不变
-  'server-error': 'provider_fault',
-  'rate-limit': 'provider_fault',
-  'gateway-challenge': 'provider_fault',
-  // T-F 06（T3.2）补码：13 码全覆盖
-  // context-length-exceeded：专属 context 分类（高频路径，此前回落文本正则误判）
-  'context-length-exceeded': 'context',
-  // aborted：用户取消/中断语义（S6 域）
+  ...Object.fromEntries(
+    Object.entries(KEBAB_CODE_TO_FAMILY).flatMap(([code, family]) => {
+      const soft = FAMILY_TO_SOFT[family];
+      return soft ? [[code, soft] as const] : [];
+    })
+  ),
   aborted: 'ended',
-  // payload-too-large / invalid-request：provider 侧故障（S5 域，沿用文案）
-  'payload-too-large': 'provider_fault',
-  'invalid-request': 'provider_fault',
-  // unknown 故意不登记：兜底码，classifySoftFailure 兜底路径处理
-  // （kebab-codes-drift.test.ts 豁免断言 + 兜底断言锁定）
 };
 
 function classifyByKebabCode(text: string): SoftFailureKind | null {
@@ -137,19 +145,18 @@ export type ErrorDomain =
 export const DOMAIN_MESSAGES: Readonly<
   Record<ErrorDomain, string> & { S7_EXHAUSTED: string }
 > = {
-  S1: '软件服务正在启动，请稍候片刻。',
-  S2: '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。',
-  S3: '正在恢复上次的会话数据，稍后即可发送。',
-  S4: '模型服务商暂时无法连接（网络问题），请检查网络后重发。',
-  S5: '模型服务商侧出现故障，请稍后重试或切换模型。',
-  S6: '软件内部错误，请稍后重试；若反复出现请重启应用。',
-  S7: '当前会话上一轮任务仍在收尾中，已自动为您排队。',
-  S8: '本地会话存储正在同步数据，请稍候片刻。',
+  S1: FAILURE_FAMILIES['local-core-not-ready'].guidanceZh,
+  S2: FAILURE_FAMILIES['not-configured'].guidanceZh,
+  S3: FAILURE_FAMILIES.restoring.guidanceZh,
+  S4: FAILURE_FAMILIES.network.guidanceZh,
+  S5: FAILURE_FAMILIES.server.guidanceZh,
+  S6: FAILURE_FAMILIES.internal.guidanceZh,
+  S7: FAILURE_FAMILIES['session-busy'].guidanceZh,
+  S8: FAILURE_FAMILIES['storage-busy'].guidanceZh,
   S7_EXHAUSTED: '上一轮任务长时间未结束，本条消息未能发出，请稍后点击重试。',
   // T5-1：崩溃域——只给「自动重连 / 查看崩溃日志」，不给「重启引擎」
   // 按钮（进程内架构重启 = 整个 Tauri 重启，产品待决明示不做）
-  engine_crash:
-    '引擎无响应，可能已崩溃；任务可能已中断，请检查崩溃日志或重启应用。',
+  engine_crash: FAILURE_FAMILIES['engine-crash'].guidanceZh,
 };
 
 /**
@@ -173,30 +180,33 @@ function stripTrailingPunct(text: string): string {
  * `onThought(DOMAIN_MESSAGES.S7)` 遗留）。前缀由 DOMAIN_MESSAGES.S7 推导，
  * 不另写字面量。每一非空行都必须是该文案（或登记的旧变体）才判真。
  */
-export function isLegacyDomainNoticeThought(text: string | undefined | null): boolean {
+export function isLegacyDomainNoticeThought(
+  text: string | undefined | null
+): boolean {
   if (!text || !text.trim()) return false;
   const known = [DOMAIN_MESSAGES.S7, ...LEGACY_DOMAIN_NOTICE_VARIANTS]
     .map(stripTrailingPunct)
     .filter(Boolean);
-  const lines = text.split(/\r?\n/).map((l) => stripTrailingPunct(l)).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => stripTrailingPunct(l))
+    .filter(Boolean);
   if (lines.length === 0) return false;
   return lines.every((line) => known.some((k) => line === k));
 }
 
-/** kebab 错误码 → 域（Rust provider 包装 `provider 错误（{kind}）：{message}`） */
-const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = {
-  network: 'S4',
-  timeout: 'S4',
-  'endpoint-unavailable': 'S4',
-  'server-error': 'S5',
-  'rate-limit': 'S5',
-  'gateway-challenge': 'S5',
-  // T-F 06（T3.2）补码：context-length-exceeded / payload-too-large /
-  // invalid-request → S5（provider 侧故障）；aborted 剥离并显式返回 null（静默收口）
-  'context-length-exceeded': 'S5',
-  'payload-too-large': 'S5',
-  'invalid-request': 'S5',
-};
+/**
+ * kebab 错误码 → 域（Rust provider 包装 `provider 错误（{kind}）：{message}`）。
+ * 批 C 第 2 件起由分类表派生：码 → 家族 → 域投影（FAMILY_TO_DOMAIN）；
+ * auth/quota/unknown 无域投影（既有分类接管），aborted 显式返回 null
+ * （classifyErrorDomain 内处理，用户取消静默收口）。
+ */
+const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = Object.fromEntries(
+  Object.entries(KEBAB_CODE_TO_FAMILY).flatMap(([code, family]) => {
+    const domain = FAMILY_TO_DOMAIN[family];
+    return domain ? [[code, domain] as const] : [];
+  })
+);
 
 const SESSION_BUSY_RE = /SESSION_BUSY|已有活动 run|串行守卫/i;
 const STORAGE_BUSY_RE =
@@ -317,24 +327,80 @@ export function softFailureMessage(
     case 'network':
       return networkUserMessage(detail);
     case 'no_key':
-      return DOMAIN_MESSAGES.S2;
+      return FAILURE_FAMILIES['not-configured'].guidanceZh;
     case 'auth':
-      return '模型密钥无效或已过期，请打开设置 → 模型检查密钥与服务商地址。';
+      return FAILURE_FAMILIES.auth.guidanceZh;
     case 'no_project':
-      return '请先选择项目工作区，再继续对话。';
-    case 'blocked':
-      return '该操作未获允许（可能被安全策略或计划模式拦截）。';
+      return FAILURE_FAMILIES['no-project'].guidanceZh;
+    case 'blocked': {
+      // quota 经软分类同落 blocked：detail 带 kebab 码时按家族出文案
+      // （额度用尽 ≠ 策略拦截，旧实现一律出拦截文案是归一前的混淆点）
+      if (detail !== undefined && detail !== null) {
+        const wrapper = RUST_PROVIDER_WRAPPER_RE.exec(
+          normalizeErrorText(detail)
+        );
+        if (wrapper && KEBAB_CODE_TO_FAMILY[wrapper[1]!] === 'quota') {
+          return FAILURE_FAMILIES.quota.guidanceZh;
+        }
+      }
+      return FAILURE_FAMILIES.blocked.guidanceZh;
+    }
     case 'provider_fault':
       // S5 域：provider 侧故障（server-error/rate-limit/gateway-challenge）
-      return DOMAIN_MESSAGES.S5;
+      return FAILURE_FAMILIES.server.guidanceZh;
     case 'context':
       // T-F 06（T3.2）：context-length-exceeded 专属文案
-      return '上下文已超限：本轮对话过长，系统已自动压缩或需新建会话。';
+      return FAILURE_FAMILIES['context-length'].guidanceZh;
     case 'ended':
       return null;
     default:
       return null;
   }
+}
+
+/** 失败呈现（分类表查表结果）：内联面只许标题 + 一句话 + 至多一个动作 */
+export interface FailurePresentation {
+  family: FailureFamily;
+  title: string;
+  guidance: string;
+  action: FailureAction | null;
+}
+
+function presentationOf(family: FailureFamily): FailurePresentation {
+  const copy = FAILURE_FAMILIES[family];
+  return {
+    family,
+    title: copy.titleZh,
+    guidance: copy.guidanceZh,
+    action: copy.action,
+  };
+}
+
+/**
+ * 任意失败输入 → 分类表呈现（批 C 第 2 件的查表入口）。
+ * 判定顺序：kebab 错误码（权威结构化信号）→ 差异化域 → 文本软分类。
+ * aborted（用户取消）与完全无法分类的输入返回 null：前者静默收口，
+ * 后者由调用方走通用兜底文案——原始错误串永不经本函数内联出面。
+ */
+export function presentFailure(input: unknown): FailurePresentation | null {
+  const text = normalizeErrorText(input);
+  if (text) {
+    const wrapper = RUST_PROVIDER_WRAPPER_RE.exec(text);
+    if (wrapper) {
+      const code = wrapper[1]!;
+      if (code === 'aborted') return null;
+      const family = KEBAB_CODE_TO_FAMILY[code];
+      if (family) return presentationOf(family);
+    }
+  }
+  const domain = classifyErrorDomain(input);
+  if (domain) return presentationOf(DOMAIN_TO_FAMILY[domain]);
+  const soft = classifySoftFailure(input);
+  if (soft) {
+    const family = SOFT_TO_FAMILY[soft];
+    if (family) return presentationOf(family);
+  }
+  return null;
 }
 
 /**

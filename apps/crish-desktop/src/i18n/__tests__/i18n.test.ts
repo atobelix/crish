@@ -243,10 +243,10 @@ describe('i18n 国际化子系统', () => {
       );
       expect(resolveDictionaryKey(enUS, 'settings.language')).toBe('Language');
       expect(resolveDictionaryKey(zhCN, 'error.provider.network.title')).toBe(
-        '网络错误'
+        '网络连接失败'
       );
       expect(resolveDictionaryKey(enUS, 'error.provider.network.title')).toBe(
-        'Network error'
+        'Network connection failed'
       );
       expect(resolveDictionaryKey(zhCN, 'nonexistent.key')).toBeUndefined();
     });
@@ -393,14 +393,14 @@ describe('i18n 国际化子系统', () => {
       const zhError = toUserVisibleError(payload, (key, fallback) =>
         zhT(key, fallback)
       );
-      expect(zhError.title).toBe('网络错误');
+      expect(zhError.title).toBe('网络连接失败');
       expect(zhError.action).toBe('服务暂时不可用，请稍后重试。');
 
       // 英文翻译
       const enError = toUserVisibleError(payload, (key, fallback) =>
         enT(key, fallback)
       );
-      expect(enError.title).toBe('Network error');
+      expect(enError.title).toBe('Network connection failed');
       expect(enError.action).toBe(
         'Service is temporarily unavailable. Please try again later.'
       );

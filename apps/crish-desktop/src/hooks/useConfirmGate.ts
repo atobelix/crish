@@ -14,11 +14,16 @@
  *   挂起式调用语义 = window.confirm 的异步等价；
  * - 桥与 ui/ConfirmDialog 解耦：基座只承诺确定回调语义（onConfirm/onCancel），
  *   桥负责 Promise 化——消费点只接触 confirmGate，不接触基座细节；
- * - 并发调用语义：**后调覆盖前调**（前调按「取消」结算，防旧调用点悬挂）——
- *   当前 04 消费面无并发场景，此语义仅作兜底登记（03-detail T15 测试清单第 2 条）；
- * - 卸载保护：组件卸载时挂起中的调用以「取消」结算（resolve(false)），不泄漏；
- * - 渲染点渲染物为单例：同一时刻最多一个 pending，重复调用 renderConfirmGate
- *   不重复挂载 ConfirmDialog。
+ * - 并发调用语义：**FIFO 队列**（2026-11-03 批 C 第 3 件改判，取代原
+ *   「后调覆盖前调」）：多个调用依次排队呈现，无静默消失；每个调用方
+ *   的 Promise 只由其对应条目的决定落定——先者被取消不影响排队者，
+ *   排队者也不会被先者的决定连带结算。原覆盖语义下先者的对话框永不
+ *   出现且其调用方按「取消」继续（FN-4），对「确认后才执行」的非危险
+ *   流程等于静默跳过确认，故废弃；
+ * - 卸载保护：组件卸载时当前条目与全部排队条目一并以「取消」结算
+ *   （resolve(false)），不泄漏；
+ * - 渲染点渲染物为单例：同一时刻最多呈现一个条目（队列头），重复调用
+ *   renderConfirmGate 不重复挂载 ConfirmDialog。
  *
  * 分层契约：hooks/ 业务层依赖 ui/ 原子层（类型 import），反向不成立。
  */
@@ -47,52 +52,68 @@ interface PendingGate {
 }
 
 export function useConfirmGate(): [ConfirmGate, ConfirmGateRender] {
-  const [pending, setPending] = useState<PendingGate | null>(null);
-  // ref 镜像：settle 与卸载清理不依赖渲染闭包，避免 setState 时序竞态
-  const pendingRef = useRef<PendingGate | null>(null);
-  // 挂起期间渲染物单例缓存：同一 pending 重复调用 renderConfirmGate 不重复挂载
+  const [current, setCurrent] = useState<PendingGate | null>(null);
+  // ref 镜像：当前条目与等待队列不依赖渲染闭包，避免 setState 时序竞态
+  const currentRef = useRef<PendingGate | null>(null);
+  const queueRef = useRef<PendingGate[]>([]);
+  // 呈现期间渲染物单例缓存：同一条目重复调用 renderConfirmGate 不重复挂载
   const viewCacheRef = useRef<React.ReactElement<ConfirmDialogProps> | null>(
     null
   );
 
-  const settle = useCallback((ok: boolean) => {
-    const p = pendingRef.current;
-    pendingRef.current = null;
+  // 队列头推进：当前条目结算/卸载后调用；无排队者则回到空闲
+  const promote = useCallback(() => {
+    const next = queueRef.current.shift() ?? null;
+    currentRef.current = next;
     viewCacheRef.current = null;
-    setPending(null);
-    p?.resolve(ok);
+    setCurrent(next);
   }, []);
 
+  const settle = useCallback(
+    (ok: boolean) => {
+      const p = currentRef.current;
+      if (!p) return;
+      // 先推进队列再 resolve 本条目：resolve 的同步重入（调用方紧接着
+      // 再次 confirmGate）看到的是已推进的状态，不会踩到旧条目
+      promote();
+      p.resolve(ok);
+    },
+    [promote]
+  );
+
   const confirmGate = useCallback((request: ConfirmGateRequest) => {
-    // 后调覆盖前调：前调按「取消」结算（安全回落，调用点不会悬挂）
-    const prev = pendingRef.current;
-    pendingRef.current = null;
-    viewCacheRef.current = null;
-    setPending(null);
-    prev?.resolve(false);
     return new Promise<boolean>((resolve) => {
-      const p: PendingGate = { request, resolve };
-      pendingRef.current = p;
-      setPending(p);
+      const entry: PendingGate = { request, resolve };
+      if (currentRef.current) {
+        // FIFO：已有呈现中的条目 → 排队等待，绝不覆盖（FN-4）
+        queueRef.current.push(entry);
+      } else {
+        currentRef.current = entry;
+        viewCacheRef.current = null;
+        setCurrent(entry);
+      }
     });
   }, []);
 
-  // 卸载保护：挂起中的调用不 resolve 泄漏 → 以「取消」结算
+  // 卸载保护：当前 + 全部排队条目以「取消」结算，不 resolve 泄漏
   useEffect(() => {
     return () => {
-      const p = pendingRef.current;
-      pendingRef.current = null;
+      const p = currentRef.current;
+      currentRef.current = null;
+      const queued = queueRef.current;
+      queueRef.current = [];
       viewCacheRef.current = null;
       p?.resolve(false);
+      for (const entry of queued) entry.resolve(false);
     };
   }, []);
 
   const renderConfirmGate = useCallback<ConfirmGateRender>(
     (view) => {
-      if (!pending) return null;
-      // 单例：同一 pending 期间首次调用生成渲染物，重复调用返回 null（不重复挂载）
+      if (!current) return null;
+      // 单例：同一条目呈现期间首次调用生成渲染物，重复调用返回 null（不重复挂载）
       if (viewCacheRef.current) return null;
-      const { request } = pending;
+      const { request } = current;
       viewCacheRef.current = React.cloneElement(view, {
         open: true,
         title: view.props.title ?? request.title,
@@ -107,7 +128,7 @@ export function useConfirmGate(): [ConfirmGate, ConfirmGateRender] {
       });
       return viewCacheRef.current;
     },
-    [pending, settle]
+    [current, settle]
   );
 
   return [confirmGate, renderConfirmGate];

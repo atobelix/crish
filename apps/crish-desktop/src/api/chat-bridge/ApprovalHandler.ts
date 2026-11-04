@@ -53,19 +53,48 @@ export function parseApprovalResolvedFields(
 /**
  * 批准工具：乐观 fire-and-forget，不阻塞 UI 8s。
  * IPC 通道：transport.send('core_approve_tool') 命令名直发（T18 后无 WS type 翻译）。
- * 引擎若队列无此项会静默忽略；状态以 approval-resolved / tool-end 为准。
+ *
+ * 契约（2026-11-03 批 C 第 0 件钉死）：Rust 命令
+ * `core_approve_tool(state, run_id: String, tool_call_id: String, decision)`
+ * （apps/agent-workbench/src-tauri/src/run_ipc.rs）的 `run_id` 为**必填**
+ * 参数——Tauri 在参数反序列化层就会拒绝缺 `runId` 的 invoke，命令体
+ * 根本不执行。此前本函数只发 `{ toolCallId, scope }`（WS 时代残留：
+ * scope 对现行命令无意义、已被删除），导致一切用户批准/拒绝在到达
+ * 引擎前即失败、审批只能等 120s 超时过期。runId 由调用方经
+ * `api/chat-approval/approvalRunId.ts` 的 resolveApprovalRunId 解析
+ * （申请人 run → 会话活动 run → 会话最近 run）；为空时在此显式抛错，
+ * 由调用方既有 catch 走回滚 + 失败 toast，绝不静默发出必死请求。
+ * 引擎侧状态仍以 approval-resolved / tool-end 为准。
  */
 export async function engineApproveTool(
   toolCallId: string,
-  scope?: string
+  runId: string
 ): Promise<void> {
+  const rid = String(runId ?? '').trim();
+  if (!rid) {
+    throw new Error(
+      `core_approve_tool: runId 缺失（toolCallId=${toolCallId}），裁决未发出`
+    );
+  }
   await getTransport().send('core_approve_tool', {
+    runId: rid,
     toolCallId,
-    ...(scope ? { scope } : { scope: 'project' }),
   });
 }
 
 /** 拒绝工具：同样不阻塞 UI（transport.send('core_deny_tool') 命令名直发） */
-export async function engineDenyTool(toolCallId: string): Promise<void> {
-  await getTransport().send('core_deny_tool', { toolCallId });
+export async function engineDenyTool(
+  toolCallId: string,
+  runId: string
+): Promise<void> {
+  const rid = String(runId ?? '').trim();
+  if (!rid) {
+    throw new Error(
+      `core_deny_tool: runId 缺失（toolCallId=${toolCallId}），裁决未发出`
+    );
+  }
+  await getTransport().send('core_deny_tool', {
+    runId: rid,
+    toolCallId,
+  });
 }

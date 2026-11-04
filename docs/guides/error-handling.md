@@ -482,3 +482,4 @@ function backoffMs(attempt: number): number {
 - 插件开发：[`./plugin-development.md`](./plugin-development.md)
 - 子代理开发：[`./subagent-development.md`](./subagent-development.md)
 - 守卫约束：[`../ANTI_OVERENGINEERING_GUARDRAILS.md`](../ANTI_OVERENGINEERING_GUARDRAILS.md)
+- 反馈路由宪法（错误该出现在哪种面）：[`./feedback-routing.md`](./feedback-routing.md)

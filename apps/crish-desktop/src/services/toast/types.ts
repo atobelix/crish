@@ -1,12 +1,12 @@
+/**
+ * Toast 变体与载荷类型（桌面正典规格见 docs/guides/feedback-routing.md
+ * §5：6 型变体、默认 TTL 5000ms、队列上限 3、loading 型 Infinity）。
+ * 呈现只走本类型面 + ToastStore/ToastContext 单例，禁止另挂宿主。
+ */
 import type * as React from 'react';
 
 export type ToastType =
-  | 'info'
-  | 'success'
-  | 'warning'
-  | 'error'
-  | 'recovery'
-  | 'loading';
+  'info' | 'success' | 'warning' | 'error' | 'recovery' | 'loading';
 
 export type ToastPosition =
   | 'top-left'
@@ -78,7 +78,10 @@ export interface ToastContextValue {
     options?: ShowToastOptions
   ) => void;
   success: {
-    (message: React.ReactNode, options?: Omit<ShowToastOptions, 'type'>): string;
+    (
+      message: React.ReactNode,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
     (
       message: React.ReactNode,
       onUndo?: () => void,
@@ -86,7 +89,10 @@ export interface ToastContextValue {
     ): string;
   };
   error: {
-    (message: React.ReactNode, options?: Omit<ShowToastOptions, 'type'>): string;
+    (
+      message: React.ReactNode,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
     (
       message: React.ReactNode,
       onUndo?: () => void,
@@ -94,7 +100,10 @@ export interface ToastContextValue {
     ): string;
   };
   warning: {
-    (message: React.ReactNode, options?: Omit<ShowToastOptions, 'type'>): string;
+    (
+      message: React.ReactNode,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
     (
       message: React.ReactNode,
       onUndo?: () => void,
@@ -102,7 +111,10 @@ export interface ToastContextValue {
     ): string;
   };
   info: {
-    (message: React.ReactNode, options?: Omit<ShowToastOptions, 'type'>): string;
+    (
+      message: React.ReactNode,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
     (
       message: React.ReactNode,
       onUndo?: () => void,

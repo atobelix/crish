@@ -57,19 +57,27 @@ describe('ApprovalHandler', () => {
   });
 
   describe('engineApproveTool and engineDenyTool', () => {
-    it('core_approve_tool 经 transport.send 命令名直发', async () => {
-      await engineApproveTool('tc-999', 'project');
+    it('core_approve_tool 经 transport.send 命令名直发（runId 必填，批 C 第 0 件）', async () => {
+      await engineApproveTool('tc-999', 'run-9');
       expect(fakeTransport.send).toHaveBeenCalledWith('core_approve_tool', {
+        runId: 'run-9',
         toolCallId: 'tc-999',
-        scope: 'project',
       });
     });
 
-    it('core_deny_tool 经 transport.send 命令名直发', async () => {
-      await engineDenyTool('tc-888');
+    it('core_deny_tool 经 transport.send 命令名直发（runId 必填）', async () => {
+      await engineDenyTool('tc-888', 'run-8');
       expect(fakeTransport.send).toHaveBeenCalledWith('core_deny_tool', {
+        runId: 'run-8',
         toolCallId: 'tc-888',
       });
+    });
+
+    it('runId 缺失 → 显式抛错且不发出必死请求（「批准失败」回归钉）', async () => {
+      fakeTransport.send.mockClear();
+      await expect(engineApproveTool('tc-1', '')).rejects.toThrow(/runId/);
+      await expect(engineDenyTool('tc-1', '   ')).rejects.toThrow(/runId/);
+      expect(fakeTransport.send).not.toHaveBeenCalled();
     });
   });
 });

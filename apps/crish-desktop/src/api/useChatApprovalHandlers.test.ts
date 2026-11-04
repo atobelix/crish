@@ -72,6 +72,8 @@ function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
         isPinned: false,
         isArchived: false,
         timestamp: String(Date.now()),
+        // 批 C 第 0 件：裁决 runId 经会话最近 run 兜底解析，夹具钉死
+        engineLastRunId: 'run-test',
         messages,
         agents,
       },
@@ -201,7 +203,10 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     });
 
     expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-test'
+    );
     expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('running');
     expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('执行中…');
     expect(result.current.approvalBusy).toBe(false);
@@ -217,7 +222,10 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     });
 
     expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledTimes(1);
-    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-test'
+    );
     expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('error');
     expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('已拒绝');
     expect(result.current.approvalBusy).toBe(false);
@@ -394,8 +402,14 @@ describe('useChatApprovalHandlers 批量批准 / 拒绝', () => {
     });
 
     expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(2);
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-2');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-test'
+    );
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-2',
+      'run-test'
+    );
     expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('running');
     expect(readTool(sid, 'm2', 'tc-2')?.status).toBe('running');
   });
@@ -449,7 +463,10 @@ describe('useChatApprovalHandlers 批量批准 / 拒绝', () => {
     });
 
     expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-test'
+    );
   });
 });
 

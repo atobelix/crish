@@ -140,10 +140,11 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
     );
 
     // 3. 用户 approve → transport 直发 core_approve_tool
-    await engineApproveTool('tc-1');
+    // 批 C 第 0 件：runId 为 Rust 命令必填参数，载荷必须携带挂起 run 的 id
+    await engineApproveTool('tc-1', RUN_ID);
     expect(fakeTransport.send).toHaveBeenCalledWith('core_approve_tool', {
+      runId: RUN_ID,
       toolCallId: 'tc-1',
-      scope: 'project',
     });
 
     // 4. approval-resolved（放行）→ pending 清除、inflight 保留（工具继续跑）
@@ -186,9 +187,10 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
     router.onMsg(approvalRequestedEvent('tc-2', 'node build.js'));
     expect(approvalFlow.shouldBlockTerminal()).toBe(true);
 
-    // 用户拒绝 → transport 直发 core_deny_tool
-    await engineDenyTool('tc-2');
+    // 用户拒绝 → transport 直发 core_deny_tool（runId 必填，同上）
+    await engineDenyTool('tc-2', RUN_ID);
     expect(fakeTransport.send).toHaveBeenCalledWith('core_deny_tool', {
+      runId: RUN_ID,
       toolCallId: 'tc-2',
     });
 

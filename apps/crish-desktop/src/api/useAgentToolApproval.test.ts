@@ -126,7 +126,10 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
     });
 
     expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'sr-1'
+    );
     expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('running');
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('执行中…');
     expect(result.current.approvalBusy).toBe(false);
@@ -150,7 +153,7 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
     });
 
     expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledTimes(1);
-    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1', 'sr-1');
     expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('error');
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('已拒绝');
     expect(result.current.approvalBusy).toBe(false);
@@ -289,7 +292,10 @@ describe('useAgentToolApproval 绑定与解绑', () => {
       await vi.advanceTimersByTimeAsync(200);
     });
 
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'sr-1'
+    );
     expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('running');
   });
 
@@ -408,7 +414,10 @@ describe('useAgentToolApproval 绑定与解绑', () => {
       releaseA?.();
       await vi.advanceTimersByTimeAsync(200);
     });
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-b');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-b',
+      'sr-b'
+    );
     expect(hookA.result.current.approvalBusy).toBe(false);
   });
 });

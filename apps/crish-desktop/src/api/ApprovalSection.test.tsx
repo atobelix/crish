@@ -56,6 +56,8 @@ const approval = (
   toolCallId: 'tc-1',
   toolName: 'shell',
   summary: '运行命令',
+  // 批 C 第 0 件：裁决命令 runId 必填，夹具带挂起 run 并钉死直传
+  runId: 'run-1',
   ...overrides,
 });
 
@@ -71,6 +73,9 @@ function seedPendingSession() {
         isPinned: false,
         isArchived: false,
         timestamp: String(Date.now()),
+        // 与 approval() 夹具的 runId 对齐：markLocalTool 的 runId scope
+        // 扫描按 engineLastRunId 命中本会话（与生产匹配口径一致）
+        engineLastRunId: 'run-1',
         messages: [
           {
             id: 'm1',
@@ -150,7 +155,10 @@ describe('ApprovalSection 允许 / 拒绝按钮行为', () => {
     renderSection([approval()]);
 
     fireEvent.click(screen.getByRole('button', { name: '允许 shell' }));
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-1'
+    );
     expect(readToolStatus(sid, 'tc-1')?.status).toBe('running');
     expect(readToolStatus(sid, 'tc-1')?.output).toBe('执行中…');
 
@@ -164,7 +172,7 @@ describe('ApprovalSection 允许 / 拒绝按钮行为', () => {
     renderSection([approval()]);
 
     fireEvent.click(screen.getByRole('button', { name: '拒绝 shell' }));
-    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1', 'run-1');
     expect(readToolStatus(sid, 'tc-1')?.status).toBe('error');
     expect(readToolStatus(sid, 'tc-1')?.output).toBe('已拒绝');
 
@@ -253,7 +261,10 @@ describe('ApprovalSection 行点击聚焦会话', () => {
     await act(async () => {});
 
     expect(onFocusSession).not.toHaveBeenCalled();
-    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith(
+      'tc-1',
+      'run-1'
+    );
     void sid;
   });
 });

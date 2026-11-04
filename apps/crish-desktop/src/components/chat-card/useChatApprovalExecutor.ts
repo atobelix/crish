@@ -7,6 +7,7 @@ import {
   shouldSkipDenyRollback,
 } from '../../api/chat-approval/approvalRollbackGuard';
 import { resolveBatchApprovalPairs } from '../../api/chat-approval/approvalBatchResolver';
+import { resolveApprovalRunId } from '../../api/chat-approval/approvalRunId';
 import { inFlightApprovalRegistry } from '../../api/chat-approval/inFlightApprovalRegistry';
 
 function findChatTool(sessionId: string, msgId: string, toolId: string) {
@@ -59,7 +60,15 @@ export function useChatApprovalExecutor(activeSessionId: string | null) {
             });
           }
         }
-        await engineApproveTool(tid);
+        // runId 必填（core_approve_tool 契约）：按申请人/活动 run 解析
+        const { t: tcForRun } = findChatTool(activeSessionId, mid, tid);
+        await engineApproveTool(
+          tid,
+          resolveApprovalRunId({
+            sessionId: activeSessionId,
+            toolCall: tcForRun,
+          })
+        );
       } catch (_err) {
         const { t: currentTc } = findChatTool(activeSessionId, mid, tid);
         if (shouldSkipApprovalRollback(currentTc)) return;
@@ -90,7 +99,14 @@ export function useChatApprovalExecutor(activeSessionId: string | null) {
           status: 'error',
           output: '已拒绝',
         });
-        await engineDenyTool(tid);
+        const { t: tcForRun } = findChatTool(activeSessionId, mid, tid);
+        await engineDenyTool(
+          tid,
+          resolveApprovalRunId({
+            sessionId: activeSessionId,
+            toolCall: tcForRun,
+          })
+        );
       } catch (_err) {
         const { t: currentTc } = findChatTool(activeSessionId, mid, tid);
         if (shouldSkipDenyRollback(currentTc)) return;
@@ -127,7 +143,15 @@ export function useChatApprovalExecutor(activeSessionId: string | null) {
 
       try {
         const results = await Promise.allSettled(
-          runnablePairs.map(({ toolId }) => engineApproveTool(toolId))
+          runnablePairs.map(({ toolId, msgId }) =>
+            engineApproveTool(
+              toolId,
+              resolveApprovalRunId({
+                sessionId: activeSessionId,
+                toolCall: findChatTool(activeSessionId, msgId, toolId).t,
+              })
+            )
+          )
         );
         let failCount = 0;
         results.forEach((r, i) => {
@@ -190,7 +214,15 @@ export function useChatApprovalExecutor(activeSessionId: string | null) {
 
       try {
         const results = await Promise.allSettled(
-          runnablePairs.map(({ toolId }) => engineDenyTool(toolId))
+          runnablePairs.map(({ toolId, msgId }) =>
+            engineDenyTool(
+              toolId,
+              resolveApprovalRunId({
+                sessionId: activeSessionId,
+                toolCall: findChatTool(activeSessionId, msgId, toolId).t,
+              })
+            )
+          )
         );
         let failCount = 0;
         results.forEach((r, i) => {
