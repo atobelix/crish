@@ -1,10 +1,12 @@
 // settingsReducers（R2-14 第三波 · R4 批次2 收敛）：设置键值纯函数层（jest 直测，无 zustand 依赖）
 // 分组按 F6 规格收敛为**实际接线消费面**（R4 裁决：非必要不留投机配置面——
 // 未接线到 UI/行为的分组字段不预置，未来落地时按组追加，merge-with-defaults 天然兼容）：
-// - 通知 notification：总开关 + 场景级开关（F6 §10.1/§10.2；prefsGate 通道映射消费）；
+// - 通知 notification：总开关 + 场景级开关（F6 §10.1/§10.2；prefsGate 事件级门禁消费）；
 // - 外观 appearance：主题四选（F6 §9 本机偏好，不回写桌面；useTheme 投影消费）；
 // - 输入 composer：权限模式（G1 追加；与桌面 permissionModes 同三档同默认，
 //   发起 run 时经 domain/pure/permissionMode 映射透传，本机偏好不回写桌面）。
+// - 触感 haptics：震动反馈开关 + 强度三档（2026-11-03 用户裁决追加：震感必须
+//   由设置控制、默认关；adapters/platform/haptics 门面是唯一消费面）。
 // 组合纪律（M5 §1.3）：不复制契约字段——本机偏好自有字段（无跨端契约副本）。
 // 类型安全：SettingsGroups 分组→类型映射，store 动作泛型约束。
 import type { PermissionMode } from '@crish/shared-types';
@@ -37,7 +39,13 @@ export type NotifyScene =
 export interface NotifyPrefs {
   /** 通知总开关（关闭后仅保留离线队列提示；prefsGate 一票否决） */
   masterOn: boolean;
-  /** 场景级开关（默认：消息/任务完成/审批请求/异常开，设备离线关，F6 §10.2） */
+  /**
+   * 场景级开关（默认：消息/任务完成/审批请求/异常开，设备离线关，F6 §10.2）。
+   * 注（通知分寸批 2026-11-03）：error 值仅作数据兼容保留——失败类事件在
+   * prefsGate 事件级门禁中恒放行、不读此值（失败必达不可关，设置页该行
+   * 已改为「始终提醒」说明行）；deviceOffline 已接真（本地离线边沿产生，
+   * 受此开关门禁）。五值结构不变，存量持久化数据无需迁移。
+   */
   sceneFlags: Record<NotifyScene, boolean>;
 }
 
@@ -59,11 +67,24 @@ export interface ComposerPrefs {
   permissionMode: PermissionMode;
 }
 
+/** 震感强度三档（门面映射到 VibrationEffect 的 amplitude + 时长双轨，
+ * 无 amplitude 控制的机型靠时长分档；见 adapters/platform/haptics.ts） */
+export type HapticsStrength = 'light' | 'standard' | 'strong';
+
+/** 触感组（2026-11-03 用户裁决：震感由设置控制，默认关） */
+export interface HapticsPrefs {
+  /** 震动反馈总开关（默认关——用户点名「而不是默认就是提供震感反馈」） */
+  enabled: boolean;
+  /** 强度三档（默认标准） */
+  strength: HapticsStrength;
+}
+
 /** 分组 → 类型映射（组合纪律：类型安全唯一真源，store 动作泛型 K 走此映射） */
 export interface SettingsGroups {
   notification: NotifyPrefs;
   appearance: AppearancePrefs;
   composer: ComposerPrefs;
+  haptics: HapticsPrefs;
 }
 
 export type SettingsGroupName = keyof SettingsGroups;
@@ -88,6 +109,10 @@ export function defaultSettingsGroups(): SettingsGroups {
     },
     composer: {
       permissionMode: 'smart',
+    },
+    haptics: {
+      enabled: false,
+      strength: 'standard',
     },
   };
 }

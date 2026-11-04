@@ -7,8 +7,11 @@
 //   幂等覆盖，前台/后台一致）→ 按 AppState 路由：
 //   · 前台（active）：只入应用内通知中心，不弹系统通知（与 foreground handler 同语义，
 //     避免双通知——D7 §7.2「竞态去重」）；
-//   · 后台/最小化（background/inactive）：scheduleNotificationAsync 系统通知（Android
-//     四类渠道立即呈现，iOS 无渠道即时时展示）；
+//   · 后台/最小化（background/inactive）：先经 prefsGate 事件级偏好门禁（通知分寸
+//     批 2026-11-03 接线：此前门禁只有定义与单测、消费点从未调用，设置开关实际
+//     不拦系统通知；现失败类恒放行、完成类归 taskDone 开关）→ 放行才
+//     scheduleNotificationAsync 系统通知（Android 四类渠道立即呈现，iOS 无渠道
+//     即时时展示）；门禁只拦系统通知面，应用内 ingest 恒保留（prefsGate 语义）；
 // - 双通道去重（D7 §6.4-2 / §3.4.1）：PresentedKeyTracker 记录已呈现 dedupeKey（24h TTL，
 //   有界内存）——同键二次到达只呈现一条；呈现失败撤回去重登记（重推可再尝试，审批不能漏）；
 //   离开配对态清表（新配对会话允许重呈现）；
@@ -26,7 +29,11 @@ import { authStore } from '@/domain/store/authStore';
 import { ingestPushIntoStore } from './foreground';
 import { TARGET_ID_PARAM_KEYS } from './foreground';
 import { channelIdOf } from './channels';
+import { shouldShowSystemNotificationForPushLive } from './prefsGate';
 import type { PushMessage, PushTarget } from './types';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('push');
 
 // ── 载荷读取（对齐 foreground.ts asString/asNumber 风格，不猜测） ──
 
@@ -327,8 +334,17 @@ export class PushWiring {
     );
     if (route === 'in-app') return; // 前台：应用内已展示，不弹系统通知（双通道去重）
     if (route === 'deduped') {
-      console.debug(
-        `[push] 去重跳过（${push.dedupeKey} 已呈现，同键只呈现一条，D7 §6.4-2）`
+      log.debug(
+        `去重跳过（${push.dedupeKey} 已呈现，同键只呈现一条，D7 §6.4-2）`
+      );
+      return;
+    }
+    // 偏好门禁（事件级，prefsGate）：被场景开关过滤 → 不弹系统通知且不登记
+    // 呈现（用户日后开开关，同键重推仍可呈现）；应用内通知中心已先行 ingest，
+    // 不受门禁影响（双通道「应用内保留」语义）。
+    if (!shouldShowSystemNotificationForPushLive(push)) {
+      log.debug(
+        `偏好门禁跳过（${push.dedupeKey} 被场景开关过滤，仅保留应用内通知）`
       );
       return;
     }
@@ -336,9 +352,7 @@ export class PushWiring {
     this.tracker.mark(push.dedupeKey);
     void this.presentSystemFn(push).catch((err: unknown) => {
       this.tracker.remove(push.dedupeKey);
-      console.warn(
-        `[push] 系统通知呈现失败（${push.dedupeKey}）：${err instanceof Error ? err.message : String(err)}`
-      );
+      log.warn(`系统通知呈现失败（${push.dedupeKey}）`, err);
     });
   }
 }

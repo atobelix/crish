@@ -2,10 +2,12 @@
 // N05 裁定：前置彩色圆盘图标删除（标题摘要明确 + 未读红点已足够），列表平整。
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { formatRelativeTime } from '@/domain/pure/time';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
 import { AppText, Badge } from '@/presentation/ui';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 import {
   NOTIFICATION_CATEGORY_LABEL,
   notificationKindCategory,
@@ -31,6 +33,7 @@ export const NotificationRow = memo(function NotificationRow({
       : category === 'system'
         ? theme.colors.danger
         : theme.colors.info;
+  const press = usePressFade();
 
   return (
     <Pressable
@@ -38,15 +41,24 @@ export const NotificationRow = memo(function NotificationRow({
       accessibilityRole="button"
       accessibilityLabel={`${NOTIFICATION_CATEGORY_LABEL[category]}：${item.title}${unread ? '，未读' : ''}`}
       onPress={() => onPress(item)}
-      style={({ pressed }) => [
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[
         styles.row,
         {
           borderBottomColor: theme.colors.hairline,
           borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
         },
-        pressed && { backgroundColor: theme.colors.fillPressed },
       ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: theme.colors.fillPressed },
+          press.overlayStyle,
+        ]}
+      ></Animated.View>
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <AppText variant="caption" style={{ color: categoryColor }}>

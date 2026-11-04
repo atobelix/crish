@@ -30,6 +30,9 @@ import {
   getLastNotificationResponseAsyncSafe,
   hasPushModule,
 } from './expoNotificationsFacade';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('notifications');
 
 export interface NotificationLayerOptions {
   /** 深链导航注入（expo-router router.push 包装；缺省不导航仅已读） */
@@ -51,9 +54,7 @@ export async function initNotificationLayer(
   // 不可用 → 跳过系统通知面整体装配（建渠道/权限/监听/深链），仅保留应用内通知
   const pushAvailable = await hasPushModule();
   if (!pushAvailable) {
-    console.warn(
-      '[notifications] 系统通知面不可用（Expo Go 环境）——降级为应用内通知 only'
-    );
+    log.warn('系统通知面不可用（Expo Go 环境）——降级为应用内通知 only');
     return {
       permissionStatus: 'undetermined',
       dispose: () => {},

@@ -22,6 +22,9 @@ declare const require: (id: string) => unknown;
 import type { PermissionStatusLike } from './permissions';
 import type { SystemNotificationLike } from './foreground';
 import type { NotificationResponseLike } from './deepLink';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('notifications');
 
 /** Android 渠道重要性枚举键（对齐 expo AndroidImportance 键；注册时经模块取值） */
 export type AndroidImportanceKey =
@@ -98,8 +101,9 @@ async function loadApi(): Promise<ExpoNotificationsRuntime | null> {
     return apiCache;
   } catch (err) {
     apiCache = null;
-    console.warn(
-      `[notifications] 系统通知面不可用（expo-notifications 加载失败，Expo Go 环境按应用内通知降级）：${err instanceof Error ? err.message : String(err)}`
+    log.warn(
+      '系统通知面不可用（expo-notifications 加载失败，Expo Go 环境按应用内通知降级）',
+      err
     );
     return null;
   }
@@ -140,7 +144,7 @@ export async function getPermissionsAsyncSafe(): Promise<PermissionStatusLike | 
   try {
     return await api.getPermissionsAsync();
   } catch (err) {
-    console.warn('[NotificationsFacade] getPermissionsAsyncSafe failed:', err);
+    log.warn('getPermissionsAsyncSafe failed', err);
     return null;
   }
 }
@@ -152,10 +156,7 @@ export async function requestPermissionsAsyncSafe(): Promise<PermissionStatusLik
   try {
     return await api.requestPermissionsAsync();
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] requestPermissionsAsyncSafe failed:',
-      err
-    );
+    log.warn('requestPermissionsAsyncSafe failed', err);
     return null;
   }
 }
@@ -171,10 +172,7 @@ export async function setNotificationChannelAsyncSafe(
     await api.setNotificationChannelAsync(channelId, channel);
     return true;
   } catch (err) {
-    console.warn(
-      `[NotificationsFacade] setNotificationChannelAsyncSafe(${channelId}) failed:`,
-      err
-    );
+    log.warn(`setNotificationChannelAsyncSafe(${channelId}) failed`, err);
     return false;
   }
 }
@@ -191,10 +189,7 @@ export async function setNotificationHandlerSafe(handler: {
     api.setNotificationHandler(handler);
     return true;
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] setNotificationHandlerSafe failed:',
-      err
-    );
+    log.warn('setNotificationHandlerSafe failed', err);
     return false;
   }
 }
@@ -209,10 +204,7 @@ export async function addNotificationReceivedListenerSafe(
     const sub = api.addNotificationReceivedListener(listener);
     return () => sub.remove();
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] addNotificationReceivedListenerSafe failed:',
-      err
-    );
+    log.warn('addNotificationReceivedListenerSafe failed', err);
     return null;
   }
 }
@@ -227,10 +219,7 @@ export async function addNotificationResponseReceivedListenerSafe(
     const sub = api.addNotificationResponseReceivedListener(listener);
     return () => sub.remove();
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] addNotificationResponseReceivedListenerSafe failed:',
-      err
-    );
+    log.warn('addNotificationResponseReceivedListenerSafe failed', err);
     return null;
   }
 }
@@ -242,10 +231,7 @@ export async function getLastNotificationResponseAsyncSafe(): Promise<Notificati
   try {
     return await api.getLastNotificationResponseAsync();
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] getLastNotificationResponseAsyncSafe failed:',
-      err
-    );
+    log.warn('getLastNotificationResponseAsyncSafe failed', err);
     return null;
   }
 }
@@ -259,10 +245,7 @@ export async function scheduleNotificationAsyncSafe(
   try {
     return await api.scheduleNotificationAsync(request);
   } catch (err) {
-    console.warn(
-      '[NotificationsFacade] scheduleNotificationAsyncSafe failed:',
-      err
-    );
+    log.warn('scheduleNotificationAsyncSafe failed', err);
     return null;
   }
 }

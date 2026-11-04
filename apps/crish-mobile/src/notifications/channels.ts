@@ -15,6 +15,9 @@ import {
   type AndroidImportanceKey,
   type NotificationChannelInputLike,
 } from './expoNotificationsFacade';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('notifications');
 
 /** 通道 id 归一目标（Z0 §7.4 四类；常量供断言复用） */
 export type PushChannelId = 'approval' | 'run' | 'security' | 'general';
@@ -122,7 +125,7 @@ export async function registerChannelsAsync(): Promise<number> {
     if (ok) {
       count += 1;
     } else {
-      console.warn(`[Notifications] 渠道 ${def.id} 注册失败，已安全降级`);
+      log.warn(`渠道 ${def.id} 注册失败，已安全降级`);
     }
   }
   return count;

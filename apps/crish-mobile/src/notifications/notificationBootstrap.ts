@@ -17,6 +17,9 @@ import { Platform } from 'react-native';
 import { connectNotificationPrefs } from './prefsBinding';
 import { initNotificationLayer } from './index';
 import type { NotificationLayerHandle } from './index';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('notifications');
 
 /** 通知层装配选项（深链导航注入；缺省不导航仅已读） */
 export interface NotificationBootstrapOptions {
@@ -39,9 +42,7 @@ export async function ensureNotificationsForApp(
     return await initNotificationLayer(options);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(
-      `[notifications] 通知层装配失败，降级为应用内通知 only（不阻塞启动）：${message}`
-    );
+    log.warn(`通知层装配失败，降级为应用内通知 only（不阻塞启动）：${message}`);
     return {
       permissionStatus: 'undetermined',
       dispose: () => {},

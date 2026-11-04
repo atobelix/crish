@@ -24,6 +24,11 @@ import {
   recognizePushPayload,
   routePresentation,
 } from './pushConsumer';
+import {
+  bindNotificationPrefs,
+  unbindNotificationPrefsForTest,
+  type NotificationPrefs,
+} from './prefsGate';
 import type { PushMessage } from './types';
 
 function makePush(overrides: Partial<PushMessage> = {}): PushMessage {
@@ -403,5 +408,82 @@ describe('presentSystemPushAsync / pushSystemNotificationData（后台系统通�
     expect(data['screen']).toBe('home');
     expect(data['sessionId']).toBeNull();
     expect(data['toolCallId']).toBeUndefined();
+  });
+});
+
+describe('PushWiring 偏好门禁接线（通知分寸批：消费点真实生效）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetNotificationsForTest();
+    authStore.setState({ pairState: 'unpaired', host: null });
+  });
+
+  afterEach(() => {
+    unbindNotificationPrefsForTest();
+  });
+
+  /** taskDone 关的偏好（其余默认） */
+  const TASK_DONE_OFF_PREFS: NotificationPrefs = {
+    masterOn: true,
+    sceneFlags: {
+      message: true,
+      taskDone: false,
+      approval: true,
+      error: true,
+      deviceOffline: false,
+    },
+  };
+
+  function runPush(
+    id: string,
+    severity: PushMessage['severity'],
+    dedupeKey: string
+  ): PushMessage {
+    return makePush({
+      id,
+      eventType: 'run-terminal',
+      severity,
+      category: 'run',
+      channelId: 'run',
+      dedupeKey,
+      target: { screen: 'session', sessionId: 's-7', params: {} },
+    });
+  }
+
+  it('后台 + 任务完成关：完成推送只入通知中心、不呈现系统通知', () => {
+    bindNotificationPrefs(() => TASK_DONE_OFF_PREFS);
+    const { gateway, emit } = makeGateway();
+    const { presentSystem } = makeWiring({ gateway, appState: 'background' });
+    emit(pushFrame(runPush('push-done', 'important', 'run-terminal:r-done')));
+    expect(presentSystem).not.toHaveBeenCalled();
+    // 门禁只拦系统通知面：应用内通知中心恒保留
+    expect(notificationStore.getState().items).toHaveLength(1);
+  });
+
+  it('后台 + 任务完成关：失败推送（run 终态 critical）照常呈现（失败必达）', () => {
+    bindNotificationPrefs(() => TASK_DONE_OFF_PREFS);
+    const { gateway, emit } = makeGateway();
+    const { presentSystem } = makeWiring({ gateway, appState: 'background' });
+    emit(
+      pushFrame(runPush('push-fail', 'critical', 'run-terminal:r-fail:failed'))
+    );
+    expect(presentSystem).toHaveBeenCalledTimes(1);
+    expect(notificationStore.getState().items).toHaveLength(1);
+  });
+
+  it('门禁拦截不登记呈现：拦截后开开关，同键重推可呈现', () => {
+    let prefs = TASK_DONE_OFF_PREFS;
+    bindNotificationPrefs(() => prefs);
+    const { gateway, emit } = makeGateway();
+    const { presentSystem } = makeWiring({ gateway, appState: 'background' });
+    const done = runPush('push-done', 'important', 'run-terminal:r-done');
+    emit(pushFrame(done));
+    expect(presentSystem).not.toHaveBeenCalled();
+    prefs = {
+      ...TASK_DONE_OFF_PREFS,
+      sceneFlags: { ...TASK_DONE_OFF_PREFS.sceneFlags, taskDone: true },
+    };
+    emit(pushFrame({ ...done, id: 'push-done-2', tsMs: done.tsMs + 1 }));
+    expect(presentSystem).toHaveBeenCalledTimes(1);
   });
 });
