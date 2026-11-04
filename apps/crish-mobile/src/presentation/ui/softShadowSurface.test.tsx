@@ -79,4 +79,28 @@ describe('SoftShadowSurface：渲染契约', () => {
     expect(fillStyle.backgroundColor).toBe('#ffffff');
     expect(view.getByText('按钮')).toBeTruthy();
   });
+
+  it('shadowVisible=false 时不渲染任何 SVG 滤镜节点（动静解耦零 GPU 负担）', async () => {
+    const view = await render(
+      <SoftShadowSurface
+        testID="surface-motion"
+        preset="sheetUp"
+        borderRadius={28}
+        fill="#ffffff"
+        shadowVisible={false}
+      >
+        <Text>动效中内容</Text>
+      </SoftShadowSurface>
+    );
+    expect(view.getByTestId('surface-motion-fill')).toBeTruthy();
+    expect(view.getByText('动效中内容')).toBeTruthy();
+    const hostNode = view.getByTestId('surface-motion');
+    const hasSvgChild = hostNode.children.some(
+      (child: any) =>
+        child &&
+        typeof child === 'object' &&
+        (child.type === 'RNSVGSvgView' || child.type === 'Svg')
+    );
+    expect(hasSvgChild).toBe(false);
+  });
 });

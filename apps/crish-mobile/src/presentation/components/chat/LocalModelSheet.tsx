@@ -10,6 +10,26 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useLocalChatStore } from '@/adapters/hooks/useAppStore';
 import { localChatStore } from '@/domain/store/localChatStore';
 import { AppText, Button, Sheet, SheetOptionRow } from '@/presentation/ui';
+import { VendorLogo } from '@/presentation/components/localChat/ui/VendorLogo';
+import {
+  isLocalVendorKey,
+  type LocalVendorKey,
+} from '@/presentation/components/localChat/ui/vendorLogosData';
+
+function resolveVendorKey(providerId?: string | null): LocalVendorKey {
+  if (!providerId) return 'custom';
+  const normalized = providerId.toLowerCase().trim();
+  if (isLocalVendorKey(normalized)) return normalized;
+  if (normalized.includes('openai')) return 'openai';
+  if (normalized.includes('anthropic') || normalized.includes('claude'))
+    return 'anthropic';
+  if (normalized.includes('google') || normalized.includes('gemini'))
+    return 'google';
+  if (normalized.includes('deepseek')) return 'deepseek';
+  if (normalized.includes('ollama')) return 'ollama';
+  if (normalized.includes('siliconflow')) return 'siliconflow';
+  return 'custom';
+}
 
 export interface LocalModelSheetProps {
   visible: boolean;
@@ -64,15 +84,21 @@ export function LocalModelSheet({
       testID={testID}
     >
       {options.length > 0 ? (
-        <View style={{ gap: theme.space.sm }}>
+        <View style={[styles.list, { gap: theme.space.xxs }]}>
           {options.map((option) => {
             const key = `${option.providerId}::${option.modelId}`;
             return (
               <SheetOptionRow
                 key={key}
                 testID={`${testID}-option-${option.providerId}-${option.modelId}`}
+                leading={
+                  <VendorLogo
+                    vendor={resolveVendorKey(option.providerId)}
+                    size={28}
+                    borderRadius={7}
+                  />
+                }
                 label={option.modelName}
-                hint={option.providerName}
                 selected={
                   active?.providerId === option.providerId &&
                   active?.modelId === option.modelId
@@ -104,6 +130,9 @@ export function LocalModelSheet({
 }
 
 const styles = StyleSheet.create({
+  list: {
+    flexDirection: 'column',
+  },
   center: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -20,6 +20,26 @@ import {
   SheetOptionRow,
 } from '@/presentation/ui';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
+import { VendorLogo } from '@/presentation/components/localChat/ui/VendorLogo';
+import {
+  isLocalVendorKey,
+  type LocalVendorKey,
+} from '@/presentation/components/localChat/ui/vendorLogosData';
+
+function resolveVendorKey(providerId?: string | null): LocalVendorKey {
+  if (!providerId) return 'custom';
+  const normalized = providerId.toLowerCase().trim();
+  if (isLocalVendorKey(normalized)) return normalized;
+  if (normalized.includes('openai')) return 'openai';
+  if (normalized.includes('anthropic') || normalized.includes('claude'))
+    return 'anthropic';
+  if (normalized.includes('google') || normalized.includes('gemini'))
+    return 'google';
+  if (normalized.includes('deepseek')) return 'deepseek';
+  if (normalized.includes('ollama')) return 'ollama';
+  if (normalized.includes('siliconflow')) return 'siliconflow';
+  return 'custom';
+}
 
 export interface ModelSheetProps {
   visible: boolean;
@@ -50,8 +70,8 @@ export function ModelSheet({
   models,
   status,
   activeModelId,
-  activeModel,
-  activeModelSelectable,
+  activeModel: _activeModel,
+  activeModelSelectable: _activeModelSelectable,
   switching,
   errorCode,
   onSelectModel,
@@ -63,7 +83,7 @@ export function ModelSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
-      title="模型选择"
+      title="选择模型"
       size="large"
       testID={testID}
     >
@@ -71,13 +91,6 @@ export function ModelSheet({
         <View style={styles.center}>
           <AppText variant="body" color="textSecondary">
             未连接桌面
-          </AppText>
-          <AppText
-            variant="caption"
-            color="textTertiary"
-            style={styles.centerText}
-          >
-            连接桌面后可查看并切换全局默认模型
           </AppText>
         </View>
       ) : status === 'loading' || status === 'idle' ? (
@@ -88,77 +101,60 @@ export function ModelSheet({
           title={`无法获取模型列表${errorCode ? `（${errorCode}）` : ''}`}
           onRetry={onRetry}
         />
-      ) : (
+      ) : models && models.length > 0 ? (
         <>
-          {/* 口径行（M3）：先把「当前对话使用的模型 = 全局默认」这层等价
-              说清——有默认呈其名，未设默认独立成态，默认不可选加注脚 */}
-          <View style={{ gap: theme.space.xxs, marginBottom: theme.space.md }}>
-            {activeModel ? (
-              <>
-                <AppText variant="body">
-                  当前全局默认：{activeModel.displayName}
-                </AppText>
-                {!activeModelSelectable && models && models.length > 0 ? (
-                  <AppText variant="caption" color="danger">
-                    当前默认已停用/不可选，下方列表为可选模型
-                  </AppText>
-                ) : null}
-              </>
-            ) : (
-              <AppText variant="body" color="textSecondary">
-                桌面未设全局默认
-              </AppText>
-            )}
-          </View>
-          {models && models.length > 0 ? (
-            <>
-              <View style={{ gap: theme.space.sm }}>
-                {models.map((model) => {
-                  const key = modelRefKey(model.providerId, model.modelId);
-                  return (
-                    <SheetOptionRow
-                      key={key}
-                      testID={`${testID}-option-${model.providerId}-${model.modelId}`}
-                      label={model.displayName}
-                      hint={model.providerDisplayName ?? model.providerId}
-                      selected={key === activeModelId}
-                      onPress={() =>
-                        onSelectModel(model.providerId, model.modelId)
-                      }
+          <View style={[styles.list, { gap: theme.space.xxs }]}>
+            {models.map((model) => {
+              const key = modelRefKey(model.providerId, model.modelId);
+              return (
+                <SheetOptionRow
+                  key={key}
+                  testID={`${testID}-option-${model.providerId}-${model.modelId}`}
+                  leading={
+                    <VendorLogo
+                      vendor={resolveVendorKey(model.providerId)}
+                      size={28}
+                      borderRadius={7}
                     />
-                  );
-                })}
-              </View>
-              {switching ? (
-                <AppText
-                  variant="caption"
-                  color="textTertiary"
-                  style={{ marginTop: theme.space.md }}
-                >
-                  正在切换…
-                </AppText>
-              ) : errorCode ? (
-                <AppText
-                  variant="caption"
-                  color="danger"
-                  style={{ marginTop: theme.space.md }}
-                >
-                  切换失败（{errorCode}），当前模型未变更，请重试
-                </AppText>
-              ) : null}
-            </>
-          ) : (
-            <AppText variant="body" color="textSecondary">
-              桌面端尚未配置可用模型，请在桌面端添加并启用。
+                  }
+                  label={model.displayName}
+                  selected={key === activeModelId}
+                  onPress={() => onSelectModel(model.providerId, model.modelId)}
+                />
+              );
+            })}
+          </View>
+          {switching ? (
+            <AppText
+              variant="caption"
+              color="textTertiary"
+              style={{ marginTop: theme.space.md }}
+            >
+              正在切换…
             </AppText>
-          )}
+          ) : errorCode ? (
+            <AppText
+              variant="caption"
+              color="danger"
+              style={{ marginTop: theme.space.md }}
+            >
+              切换失败（{errorCode}），当前模型未变更，请重试
+            </AppText>
+          ) : null}
         </>
+      ) : (
+        <AppText variant="body" color="textSecondary">
+          桌面端尚未配置可用模型
+        </AppText>
       )}
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
+  list: {
+    flexDirection: 'column',
+  },
   center: {
     alignItems: 'center',
     justifyContent: 'center',

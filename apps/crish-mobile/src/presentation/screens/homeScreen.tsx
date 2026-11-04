@@ -22,7 +22,7 @@
 // 保持可见——连接异常与审批信息不得因打字而消失。
 // 同步呈现口径：无「正在同步…」呈现（静默同步零呈现）；同步错误只经
 // 悬浮面板 + 重试；用户主动下拉刷新走 RefreshControl 原生指示。
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import {
   FlatList,
@@ -60,6 +60,7 @@ import { useLocalHubEntryVm } from '@/adapters/viewmodels/useLocalHubEntryVm';
 import { useComposerContextVm } from '@/adapters/viewmodels/useComposerContextVm';
 import { useSkillsVm } from '@/adapters/viewmodels/useSkillsVm';
 import { useComposerAttachments } from '@/adapters/viewmodels/useComposerAttachments';
+import type { ComposerAttachment } from '@/domain/pure/attachments';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { lastPreviewOfWindow } from '@/domain/pure/sessionPreview';
@@ -73,7 +74,6 @@ import type { SessionSummary } from '@/domain/store/sessionReducers';
 import {
   AppText,
   Composer,
-  ComposerAmbientVeil,
   DEFAULT_COMPOSER_PLACEHOLDER,
   DropdownMenu,
   IconButton,
@@ -114,16 +114,21 @@ function dismissKeyboardForOutsideTap(): void {
 }
 
 /**
- * Sheet 懒挂载闩（PERF #3）：open 首次为 true 后闩住 true——Sheet 子树
- * 在首次打开前不进主页常驻面；一旦挂载不再卸载，关闭动画与再次打开
- * 的时序与常驻挂载完全一致。
+ * Sheet 同步懒挂载闩（PERF-LATCH 彻底修复版）：
+ * 消除旧实现中 useState + useEffect 导致的人为 1 帧/1 个 Commit 周期的挂载滞后。
+ *
+ * 核心机制：
+ * 1. 当 open 首次为 true 时，在当前 Render 执行流中同步将闩锁置为 true 并立即返回；
+ * 2. 宿主在 Commit 1 阶段即刻挂载 Sheet 子树，绝不产生空白过渡帧；
+ * 3. 闩锁一旦打开永不复位，关闭时组件仍在树内播放 exit 退出动效；
+ * 4. 0 次额外的 React 状态调度，不引发布局抖动。
  */
-function useEverOpened(open: boolean): boolean {
-  const [ever, setEver] = useState(open);
-  useEffect(() => {
-    if (open) setEver(true);
-  }, [open]);
-  return ever;
+export function useEverOpened(open: boolean): boolean {
+  const everRef = useRef(open);
+  if (open) {
+    everRef.current = true;
+  }
+  return everRef.current;
 }
 
 export interface HomeScreenProps {
@@ -164,12 +169,13 @@ export default function HomeScreen({
   const attachments = useComposerAttachments({ notify: showToast });
   const clearAttachments = attachments.clear;
   const hasAttachments = attachments.attachments.length > 0;
-  // 本地模式提交（CON-2）：文本交给本地发送引擎（localChatEngine，
-  // 与本地页同一份实现），随即导航进本地线程面看流式呈现。落点线程 =
-  // 当前活动线程；尚无线程时先建（模型快照 = 全局活动模型，与线程页
-  // 发送同口径）。发送成功才清稿；未配置时引擎已把错误写入该线程的
-  // error 槽（线程页横幅呈现），主页仍导航——发送永远有明确去向，
-  // 不静默吞稿；空文本无操作。
+  // 本地模式提交（CON-2）：文本（+ 已选附件，本地附件接线后同路）
+  // 交给本地发送引擎（localChatEngine，与本地页同一份实现），随即
+  // 导航进本地线程面看流式呈现。落点线程 = 当前活动线程；尚无线程
+  // 时先建（模型快照 = 全局活动模型，与线程页发送同口径）。发送成功
+  // 才清稿与已选区；未配置/超限时引擎已把错误写入该线程的 error 槽
+  // （线程页横幅呈现），主页仍导航——发送永远有明确去向，不静默
+  // 吞稿；空文本且无附件无操作。
   // 落点（界面统一 U3）：壳内 /thread/<target>，经宿主 onOpenLocalThread
   // 以 replace 换 (main) 槽位内容——与远端发送同一条路径，无根栈压栈
   // 的「明显切换」；消息在 submit 同步入 store，线程屏挂载首帧即已在列。
@@ -177,26 +183,31 @@ export default function HomeScreen({
   // 必须无条件调用 session.createThread(activeModel) 获取纯净新线程槽位（若前一线程为空则自动复用），
   // 彻底阻断消息向历史对话倒灌！
   const submitLocalFromHome = useCallback(
-    (text: string) => {
-      if (text.trim() === '') return;
+    (text: string, atts?: readonly ComposerAttachment[]) => {
+      if (text.trim() === '' && (atts === undefined || atts.length === 0))
+        return;
       const session = localChatSessionStore.getState();
       const target = session.createThread(
         localChatStore.getState().config.activeModel
       );
-      if (sendLocalChatMessage(target, text)) quickRun.setPrompt('');
+      if (sendLocalChatMessage(target, text, atts)) {
+        quickRun.setPrompt('');
+        if (atts !== undefined && atts.length > 0) clearAttachments();
+      }
       onOpenLocalThread(target);
     },
-    [quickRun, onOpenLocalThread]
+    [quickRun, onOpenLocalThread, clearAttachments]
   );
   // 离线语音输入（W-D）：松开直发——先回填输入框再以显式文本提交；
   // G5b：有已选附件时语音文本走富路径一并发出（附件不滞留）；
   // CON-2：本地模式下识别结果走本地发送（ASR 本就是端侧离线能力，
-  // 此前随 editable 被连接态连带误杀，现随模式解封）
+  // 此前随 editable 被连接态连带误杀，现随模式解封）；本地附件
+  // 接线后本地分支同口径：已选附件随语音文本一并发出
   const voice = useVoiceInput({
     onFillText: quickRun.setPrompt,
     onSubmitText: (text) => {
       if (mode === 'local') {
-        submitLocalFromHome(text);
+        submitLocalFromHome(text, attachments.attachments);
       } else if (attachments.attachments.length > 0) {
         quickRun.submitWithAttachments(
           text,
@@ -277,6 +288,21 @@ export default function HomeScreen({
     ],
   }));
 
+  // 键盘避让与底部 padding 协调（P0 交互调优）：
+  // 键盘收起时恢复 Math.max(insets.bottom, theme.space.sm)，升起时自然收敛至 theme.space.sm（8dp），
+  // 消除全面屏手势条在键盘升起后的空闲断层，使输入框贴合软键盘顶缘。
+  const composerAreaAnimatedStyle = useAnimatedStyle(() => {
+    const closedPadding = Math.max(insets.bottom, theme.space.sm);
+    const openedPadding = theme.space.sm;
+    return {
+      paddingBottom: interpolate(
+        keyboardProgress.value,
+        [0, 1],
+        [closedPadding, openedPadding]
+      ),
+    };
+  });
+
   // 状态板行进出（S3）：行出现/消失走 layout 级过渡——下方行平滑
   // 补位，不再瞬时跳位；问候空态↔列表切换整体交叉淡化。口径与时间线
   // 明确区分：时间线是回收面（条目回收再挂载会闪烁，故明令禁条目
@@ -350,13 +376,13 @@ export default function HomeScreen({
   );
 
   // 发送分发（CON-2 按模式）：local → 本地发送 + 导航进本地线程页
-  // （附件是远程面能力，本地模式不渲染附件入口，此处不处理附件）；
+  // （已选附件随文本经本地引擎组装发送，与线程页同一条链）；
   // remote → 既有管线（G5b：有已选附件走富路径，否则纯文本）
   const handleSubmit = useCallback(() => {
     // 发送即收附件菜单（锚定 Popover 的关闭路径之一，批 A）
     setAttachOpen(false);
     if (mode === 'local') {
-      submitLocalFromHome(quickRun.prompt);
+      submitLocalFromHome(quickRun.prompt, attachments.attachments);
       return;
     }
     if (hasAttachments) {
@@ -566,15 +592,14 @@ export default function HomeScreen({
         style={[
           styles.composerArea,
           {
+            backgroundColor: theme.colors.canvas,
             paddingHorizontal: theme.space.lg,
             paddingTop: theme.space.sm,
             paddingBottom: Math.max(insets.bottom, theme.space.sm),
           },
+          composerAreaAnimatedStyle as any,
         ]}
       >
-        {/* 宏观贯穿环境遮蔽大软阴影：位于最底层，贯穿全宽，自输入框容器顶缘向上消散 28dp */}
-        <ComposerAmbientVeil testID="composer-ambient-veil" />
-
         {/* 附件菜单（批 A 锚定 Popover 形态）：渲染在 StickyView 内、
             composer 正上方——开合不收键盘（双政策的保键盘面）；
             everOpened 门保留（首开前不挂载，同 Sheet 族先例） */}
@@ -613,7 +638,8 @@ export default function HomeScreen({
             remoteMode
               ? quickRun.canSubmit ||
                 (quickRun.connected && !quickRun.busy && hasAttachments)
-              : quickRun.prompt.trim().length > 0 && !localEntry.streaming
+              : (quickRun.prompt.trim().length > 0 || hasAttachments) &&
+                !localEntry.streaming
           }
           // 仅在明确忙碌时锁定编辑；未连接状态下放开编辑草稿与语音录制（方案 01 解耦）
           editable={
@@ -624,16 +650,12 @@ export default function HomeScreen({
           }
           maxLength={4096}
           voice={voice}
-          onAttachPress={
-            remoteMode
-              ? // ＋ = 附件菜单开关（toggle：锚定 Popover 无全屏关闭层，
-                // 再点 ＋ 收起，批 A 双政策）
-                () => setAttachOpen((v) => !v)
-              : () =>
-                  // 输入框形态不分模式（用户裁定）：附件钮在本地也在场。
-                  // 附件随消息发往桌面执行，本地对话不承载——点按给诚实
-                  // 提示，不藏钮、不假装可用。
-                  showToast('本地对话暂不支持附件', 'info')
+          onAttachPress={() =>
+            // ＋ = 附件菜单开关（toggle：锚定 Popover 无全屏关闭层，
+            // 再点 ＋ 收起，批 A 双政策）。输入框形态不分模式（用户
+            // 裁定）：本地模式同路——菜单与已选区不分模式，发送经
+            // 本地引擎组装（视觉门禁读本地模型 spec）。
+            setAttachOpen((v) => !v)
           }
           hasAttachments={hasAttachments}
           contextBar={

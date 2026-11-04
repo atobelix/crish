@@ -63,10 +63,11 @@ function renderSheet(props: Partial<ModelSheetProps> = {}) {
   );
 }
 
-describe('ModelSheet 口径呈现（M3）', () => {
-  it('有默认且可选：口径行呈默认名与等价说明，无注脚，列表选中行在位', async () => {
+describe('ModelSheet 纯净模型呈现', () => {
+  it('有默认且可选：标题为选择模型，无多余说教口径文案，列表选中行在位', async () => {
     const view = await renderSheet();
-    expect(view.getByText('当前全局默认：Claude Sonnet')).toBeTruthy();
+    expect(view.getByText('选择模型')).toBeTruthy();
+    expect(view.queryByText(/当前全局默认：/)).toBeNull();
     expect(
       view.queryByText('当前默认已停用/不可选，下方列表为可选模型')
     ).toBeNull();
@@ -76,29 +77,19 @@ describe('ModelSheet 口径呈现（M3）', () => {
     ).toBeTruthy();
   });
 
-  it('有默认但已停用（不在可选集）：口径行呈其名 + 注脚说明，无行选中', async () => {
+  it('未设默认或默认已停用：纯净平铺可选列表，无冗余说明文本', async () => {
     const view = await renderSheet({
       activeModel: ACTIVE_GONE,
       activeModelId: modelRefKey(ACTIVE_GONE.providerId, ACTIVE_GONE.modelId),
       activeModelSelectable: false,
     });
-    expect(view.getByText('当前全局默认：已退役模型')).toBeTruthy();
-    expect(
-      view.getByText('当前默认已停用/不可选，下方列表为可选模型')
-    ).toBeTruthy();
-  });
-
-  it('未设默认：独立态文案，不呈口径行与注脚', async () => {
-    const view = await renderSheet({
-      activeModel: null,
-      activeModelId: null,
-      activeModelSelectable: false,
-    });
-    expect(view.getByText('桌面未设全局默认')).toBeTruthy();
     expect(view.queryByText(/当前全局默认：/)).toBeNull();
     expect(
       view.queryByText('当前默认已停用/不可选，下方列表为可选模型')
     ).toBeNull();
+    expect(
+      view.getByTestId('model-sheet-option-anthropic-claude-sonnet')
+    ).toBeTruthy();
   });
 });
 
@@ -120,5 +111,24 @@ describe('ModelSheet 失败面（M2）', () => {
     const view = await renderSheet({ connected: false });
     expect(view.getByText('未连接桌面')).toBeTruthy();
     expect(view.queryByText(/无法获取模型列表/)).toBeNull();
+  });
+});
+
+describe('ModelSheet 纯净平铺与厂商徽标呈现', () => {
+  it('渲染官方厂商徽标、模型精简名称与选中状态', async () => {
+    const onSelectModel = jest.fn();
+    const view = await renderSheet({ onSelectModel });
+
+    // 验证厂商矢量徽标（Anthropic 与 OpenAI）在位
+    expect(view.getByLabelText('Anthropic logo')).toBeTruthy();
+    expect(view.getByLabelText('OpenAI logo')).toBeTruthy();
+
+    // 验证模型名称精炼展示
+    expect(view.getByText('Claude Sonnet')).toBeTruthy();
+    expect(view.getByText('GPT X')).toBeTruthy();
+
+    // 点选行触发切换
+    await fireEvent.press(view.getByTestId('model-sheet-option-openai-gpt-x'));
+    expect(onSelectModel).toHaveBeenCalledWith('openai', 'gpt-x');
   });
 });

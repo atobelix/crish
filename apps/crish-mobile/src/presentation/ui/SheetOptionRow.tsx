@@ -1,9 +1,10 @@
-// Sheet 内统一选项行（原型 sheet-clean-item）：浅灰圆角面、左标题 + 右侧对号/箭头。
-// 激活态只以绿色对号表达，行本身不加高亮底色（原型裁定）。
+// Sheet 内统一选项行（纯净极简无界行）：纯透明底色、左标题 + 右侧对号/箭头。
+// 默认不带灰底色卡，按压时仅浮现细腻半透明 overlay 交互反馈。
 // 状态文（如设备「在线」）按原型 device-status-text 口径：标题后内联小字，
 // 在线为纯绿字 12，其余状态为弱灰字 12——不占右侧、不与对号互斥。
-// 按压反馈（按压过渡统一批，2026-11-02）：按压叠层 120ms 淡入淡出，
+// 按压反馈：按压叠层 120ms 淡入淡出（fillPressed 叠层），
 // 取代瞬时换色（fillPressed 叠层 ListRow 同款）。
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -15,6 +16,8 @@ import { usePressFade } from './pressFeedback';
 export interface SheetOptionRowProps {
   label: string;
   onPress: () => void;
+  /** 选项左侧自定义元素（如厂商矢量 Logo） */
+  leading?: ReactNode;
   /** 选中：右侧显示品牌色对号 */
   selected?: boolean;
   /** 危险动作（红字；与 DropdownMenu 条目的 danger 口径一致，G3 删除行用） */
@@ -34,6 +37,7 @@ export interface SheetOptionRowProps {
 export function SheetOptionRow({
   label,
   onPress,
+  leading,
   selected = false,
   danger = false,
   hint,
@@ -59,9 +63,9 @@ export function SheetOptionRow({
         styles.row,
         {
           borderRadius: theme.radius.md,
-          backgroundColor: theme.colors.fillSubtle,
-          paddingHorizontal: theme.space.md + theme.space.xxs,
-          paddingVertical: theme.space.md + 1,
+          backgroundColor: 'transparent',
+          paddingHorizontal: theme.space.sm,
+          paddingVertical: theme.space.md,
           gap: theme.space.sm,
           opacity: disabled ? 0.45 : 1,
         },
@@ -79,6 +83,7 @@ export function SheetOptionRow({
           press.overlayStyle,
         ]}
       />
+      {leading ? <View style={styles.leading}>{leading}</View> : null}
       <View style={[styles.left, { gap: theme.space.xs }]}>
         <AppText
           variant="body"
@@ -116,6 +121,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48,
+  },
+  leading: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   left: {
     flex: 1,

@@ -1,7 +1,7 @@
 // 主屏测试：问候、空态、平铺会话列表（状态/时间/摘要）、更多下拉与提交回执。
 // CON-2 起补：本地模式（未连接）解封、提交分发两路；hub 同列接线后，
 // 本地行断言改逐线程形态（每线程一行、点按直达线程页、发送直达线程页）。
-import { Keyboard } from 'react-native';
+import { Keyboard, View } from 'react-native';
 import {
   act,
   fireEvent,
@@ -32,7 +32,7 @@ import {
 } from '@/adapters/localChat/localChatWiring';
 import { resetLocalChatEngineForTest } from '@/adapters/localChat/localChatEngine';
 import { ToastProvider } from '@/presentation/ui';
-import HomeScreen, { greetingFor } from './homeScreen';
+import HomeScreen, { greetingFor, useEverOpened } from './homeScreen';
 
 const mockRunTask = jest.fn<Promise<RunTaskResult>, [RunTaskParams]>();
 const mockRouterPush = jest.fn();
@@ -659,5 +659,43 @@ describe('HomeScreen 点外失焦（2026-11-03）', () => {
     } finally {
       dismiss.mockRestore();
     }
+  });
+});
+
+describe('useEverOpened 同步闩断言（方案 03 §3.1）', () => {
+  it('当 open 从 false 变为 true 时，必须在 Commit 1 阶段立即返回 true，绝不延后至 Commit 2', async () => {
+    let currentEver: boolean | null = null;
+    function TestComponent({ open }: { open: boolean }) {
+      currentEver = useEverOpened(open);
+      return <View testID={currentEver ? 'mounted' : 'unmounted'} />;
+    }
+
+    const { rerender, getByTestId } = await render(
+      <TestComponent open={false} />
+    );
+    expect(currentEver).toBe(false);
+    expect(getByTestId('unmounted')).toBeTruthy();
+
+    // 同步更新 open 为 true
+    await rerender(<TestComponent open={true} />);
+    // 刚性断言：不依赖 act 刷新 effect，必须在当前渲染帧即刻同步挂载！
+    expect(currentEver).toBe(true);
+    expect(getByTestId('mounted')).toBeTruthy();
+  });
+
+  it('当 open 恢复为 false 时，ever 恒保持 true 以便退出动画正常渲染', async () => {
+    function TestComponent({ open }: { open: boolean }) {
+      const ever = useEverOpened(open);
+      return <View testID={ever ? 'mounted' : 'unmounted'} />;
+    }
+
+    const { rerender, getByTestId } = await render(
+      <TestComponent open={true} />
+    );
+    expect(getByTestId('mounted')).toBeTruthy();
+
+    await rerender(<TestComponent open={false} />);
+    // 依然保持 mounted
+    expect(getByTestId('mounted')).toBeTruthy();
   });
 });

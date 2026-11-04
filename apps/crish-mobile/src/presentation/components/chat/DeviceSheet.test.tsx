@@ -52,11 +52,12 @@ async function renderSheet(
 }
 
 describe('DeviceSheet · 本机行（恒在）', () => {
-  it('非账号模式：本机行在场，本地生效时选中', async () => {
+  it('非账号模式：本机行在场，本地生效时选中（无多余 subtitle）', async () => {
     const vm = makeVm({ pairedHost: '192.168.1.2' });
     const { view } = await renderSheet(vm);
     const localRow = view.getByTestId('device-sheet-local');
     expect(localRow.props.accessibilityState.selected).toBe(true);
+    expect(view.queryByText('当前设备')).toBeNull();
   });
 
   it('非账号模式远端在效时点本机行 = onUseLocal 导航（不解绑配对）', async () => {
@@ -118,6 +119,10 @@ describe('DeviceSheet · 账号模式多设备', () => {
     expect(offlineRow.props.accessibilityState.disabled).toBe(true);
     const targetRow = view.getByTestId('device-sheet-device-desk-a');
     expect(targetRow.props.accessibilityState.selected).toBe(true);
+    // 纯净极简：无冗余状态字（在线/离线/当前设备）
+    expect(view.queryByText('在线')).toBeNull();
+    expect(view.queryByText('离线')).toBeNull();
+    expect(view.queryByText('当前设备')).toBeNull();
     // 中继接管时配对行让位（不把非当前连接误报为当前设备）
     expect(view.queryByTestId('device-sheet-current')).toBeNull();
   });
@@ -151,10 +156,13 @@ describe('DeviceSheet · 账号模式多设备', () => {
     expect(vm.switchDevice).not.toHaveBeenCalled();
   });
 
-  it('空目录：诚实空态（不编造设备）', async () => {
+  it('空目录：纯净极简（无多余文字，仅本机行与扫码行）', async () => {
     const vm = makeVm({ accountMode: true, devices: [] });
     const { view } = await renderSheet(vm);
-    expect(view.getByText('暂无已知电脑')).toBeTruthy();
+    expect(view.queryByText('暂无已知电脑')).toBeNull();
+    expect(view.queryByText('登录同一账号的电脑将显示在此')).toBeNull();
+    expect(view.queryByText('当前设备')).toBeNull();
+    expect(view.getByTestId('device-sheet-local')).toBeTruthy();
     expect(view.getByTestId('device-sheet-scan')).toBeTruthy();
   });
 

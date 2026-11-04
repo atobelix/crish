@@ -1,17 +1,19 @@
-// Sheet 键盘交接的回归网（批 A）：jest 键盘桩为收起态——呈现请求
-// 到达时键盘不在场，交接门必须立即放行（内容同帧可达），不得把所有
-// Sheet 平白扣一帧/扣一轮超时；visible=false 时内容不挂载。
+// Sheet 键盘瞬发交接与即时呈现回归网（2026-11-04 动效重构，深治方案 01-1）：
+// 彻底废除 SHEET_KEYBOARD_HANDOFF_TIMEOUT_MS = 1000 阻塞门与串行等待；
+// 呈现请求到达时内容同帧立即可达（零毫秒阻塞）；visible=false 时内容不挂载。
 // 批 D 追加：语义档位、dismissible=false 诚实口径、backAction 钻取
-// 返回分发、搜索升档、关闭末帧冻结。
+// 返回分发、搜索升档、关闭末帧冻结；防瞬移初始估高平滑度。
 import { fireEvent, render } from '@testing-library/react-native';
-import { TextInput } from 'react-native';
+import { StyleSheet, TextInput } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { ReactElement, ReactNode } from 'react';
 import {
   AppText,
   nextSheetSize,
   SHEET_SIZE_RATIOS,
+  sheetPanelTranslateY,
   Sheet,
+  SheetOptionRow,
   useSheetSearchRaise,
 } from '@/presentation/ui';
 import { handleOverlayBack } from '@/presentation/ui/overlayStack';
@@ -31,20 +33,20 @@ async function renderWithProviders(element: ReactElement) {
   return await render(element, { wrapper: Providers });
 }
 
-describe('Sheet 键盘交接（收起态）', () => {
-  it('visible 时内容可达（交接门立即放行）', async () => {
+describe('Sheet 键盘瞬发交接与即时呈现', () => {
+  it('visible 时内容即刻呈现（零毫秒阻塞门，无需等待键盘归零或 1000ms 超时）', async () => {
     const view = await renderWithProviders(
       <Sheet
         visible
         onClose={() => undefined}
-        title="测试"
+        title="瞬时呈现测试"
         testID="sheet-under-test"
       >
-        <AppText>面板内容</AppText>
+        <AppText>面板内容立即就绪</AppText>
       </Sheet>
     );
     expect(view.getByTestId('sheet-under-test')).toBeTruthy();
-    expect(view.getByText('面板内容')).toBeTruthy();
+    expect(view.getByText('面板内容立即就绪')).toBeTruthy();
   });
 
   it('visible=false 时不挂载内容', async () => {
@@ -55,6 +57,37 @@ describe('Sheet 键盘交接（收起态）', () => {
     );
     expect(view.queryByTestId('sheet-hidden')).toBeNull();
     expect(view.queryByText('不应出现')).toBeNull();
+  });
+});
+
+describe('Sheet 初始估高与位移平滑度（防瞬移）', () => {
+  it('未测量时按语义档位推导兜底位移，不采用全屏高度', () => {
+    // 窗口高度 844，compact 档比例 0.4 -> fallbackHeight = 338
+    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
+    expect(compactFallback).toBe(338);
+    // 验证初始状态位移（整块藏于屏外）
+    expect(sheetPanelTranslateY(0, 0, compactFallback)).toBe(338);
+    // 验证展开中途位移（平滑插值）
+    expect(sheetPanelTranslateY(0.5, 0, compactFallback)).toBe(169);
+    // 验证完全展开位移归零
+    expect(sheetPanelTranslateY(1, 0, compactFallback)).toBe(0);
+  });
+
+  it('测得面板真实高度后按真实高度位移', () => {
+    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
+    expect(sheetPanelTranslateY(0, 240, compactFallback)).toBe(240);
+    expect(sheetPanelTranslateY(0.5, 240, compactFallback)).toBe(120);
+    expect(sheetPanelTranslateY(1, 240, compactFallback)).toBe(0);
+  });
+
+  it('兼容 4 参数签名 (progress, panelHeight, windowHeight, fallbackHeight)', () => {
+    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
+    // 未测得 panelHeight 时优先 fallbackHeight 替代 windowHeight，彻底消除沉底 570dp 虚空
+    expect(sheetPanelTranslateY(0, 0, 844, compactFallback)).toBe(338);
+    expect(sheetPanelTranslateY(0.5, 0, 844, compactFallback)).toBe(169);
+    expect(sheetPanelTranslateY(1, 0, 844, compactFallback)).toBe(0);
+    // 测得真实高度后按真实高度位移
+    expect(sheetPanelTranslateY(0, 240, 844, compactFallback)).toBe(240);
   });
 });
 
@@ -236,5 +269,58 @@ describe('Sheet 关闭末帧冻结（批 D）', () => {
     expect(view.getByText('第一帧内容')).toBeTruthy();
     expect(view.queryByText('关闭后内容')).toBeNull();
     expect(view.getByText('第一帧标题')).toBeTruthy();
+  });
+});
+
+describe('SheetOptionRow 纯净极简视觉重塑', () => {
+  it('默认透明底色、48dp 最小触控热区与按压禁用状态正确', async () => {
+    const onPlainPress = jest.fn();
+    const onDisabledPress = jest.fn();
+    const view = await renderWithProviders(
+      <Sheet visible onClose={() => undefined} title="选项测试">
+        <SheetOptionRow
+          testID="row-plain"
+          label="纯净无界选项"
+          onPress={onPlainPress}
+        />
+        <SheetOptionRow
+          testID="row-disabled"
+          label="离线设备"
+          disabled
+          onPress={onDisabledPress}
+        />
+        <SheetOptionRow
+          testID="row-selected"
+          label="选中设备"
+          selected
+          hint="在线"
+          hintTone="success"
+          onPress={jest.fn()}
+        />
+      </Sheet>
+    );
+
+    // 默认透明背景与 48dp 最小高度（彻底移除灰色卡片底 fillSubtle）
+    const plainNode = view.getByTestId('row-plain');
+    const plainStyle = StyleSheet.flatten(plainNode.props.style);
+    expect(plainStyle.backgroundColor).toBe('transparent');
+    expect(plainStyle.minHeight).toBe(48);
+    expect(plainStyle.opacity).toBe(1);
+
+    // 触发点按
+    fireEvent.press(plainNode);
+    expect(onPlainPress).toHaveBeenCalledTimes(1);
+
+    // 禁用态弱化呈现（0.45 透明度）且不可点
+    const disabledNode = view.getByTestId('row-disabled');
+    const disabledStyle = StyleSheet.flatten(disabledNode.props.style);
+    expect(disabledStyle.opacity).toBe(0.45);
+    fireEvent.press(disabledNode);
+    expect(onDisabledPress).not.toHaveBeenCalled();
+
+    // 选中态对号与内联提示文案
+    expect(view.getByTestId('row-selected')).toBeTruthy();
+    expect(view.getByText('选中设备')).toBeTruthy();
+    expect(view.getByText('在线')).toBeTruthy();
   });
 });

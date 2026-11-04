@@ -14,14 +14,11 @@
 // 拖动归 ScrollView，滚回顶部后的下滑才接管面板（manualActivation 仲裁）。
 // 减动效（手感基建批）：系统 Reduce Motion 开启时手势禁用，面板位移塌缩为
 // opacity 交叉淡化（共享信号 useReducedMotion）。
-// 键盘交接协议（批 A，2026-11-03；浮层双政策的换上下文面，深比 01-3）：
-// Sheet 属「换上下文」浮层——呈现请求到达时若软键盘还升着，先主动收起
-// 键盘、等其 settle（离散高度归零）后再留 1 帧让旧 UI 失效才挂载面板，
-// 不再是「面板与键盘下落同帧硬叠」。关闭后不自动重弹键盘（本组件从不
-// 代宿主聚焦输入框），键盘跟踪在下一次真实聚焦时由宿主的
-// KeyboardStickyView 自然重连。此等待只驱动呈现时序（时序门），不驱动
-// 任何逐帧定位——逐帧面仍只吃键盘逐帧源（键盘单时钟源正典，见
-// adapters/platform/theme.ts 的 motion 成文）。
+// 键盘瞬发交接（2026-11-04 动效重构，深治方案 01-1）：
+// Sheet 呈现请求到达时若软键盘升起，立即非阻塞发起 KeyboardController.dismiss()，
+// 绝不阻塞面板挂载与进场动画（彻底废除 1000ms 阻塞门与串行等待）；
+// effectiveVisible 直接与 visible 同步，面板与键盘下沉并发进行，体验瞬发无延迟。
+// 关闭后不自动重弹键盘（本组件从不代宿主聚焦输入框）。
 // 语义档位 + 浮层纪律（批 D，2026-11-03；深比 02-2/02-3）：
 // - 高度改语义档位（size：compact/medium/large/full → SHEET_SIZE_
 //   RATIOS 的比例上限，内容仍实测高、档位只是上限），调用点按内容
@@ -58,6 +55,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import {
   KeyboardAvoidingView,
@@ -171,10 +169,6 @@ export const SHEET_CLOSE_VELOCITY_Y = 800;
 export const SHEET_CLOSE_FRACTION = 0.3;
 /** 手势认领的纵向意图阈值（dp：小于此值不与点击/滚动抢手势） */
 const SHEET_DRAG_ACTIVATION_DY = 10;
-/** 键盘交接安全超时（ms）：键盘 settle 事件万一不达，面板也必须在
- * 此限内呈现——交接是时序优化，绝不能把面板扣死。此为时序门常量，
- * 非动画时长（不入 theme.motion）。 */
-const SHEET_KEYBOARD_HANDOFF_TIMEOUT_MS = 1000;
 
 /**
  * 手势释放判定（纯函数，显式 worklet；单测共用同一真理）：
@@ -192,8 +186,10 @@ export function sheetDragCloseDecision(
 }
 
 /**
- * 面板纵向位移（纯函数，显式 worklet）：展开进度 0 → 整块藏于屏外，1 → 归位。
- * 面板高度未测得（首帧 onLayout 未回）时以窗口高度兜底。
+ * 面板纵向位移（纯函数，显式 worklet；单测与 UI 线程共用同一真理）：
+ * 展开进度 0 → 整块藏于屏外，1 → 归位。
+ * 面板高度未测得（首帧 onLayout 未回）时，以基于语义档位推导的 fallbackHeight 兜底，
+ * 绝不使用全屏 windowHeight，彻底消除沉底 570dp 虚空与单帧突变瞬移。
  *
  * ⚠️ worklet 内禁止调用 JS 线程模块对象的方法（如 Dimensions.get）：这类对象
  * 被克隆进 worklet 运行时后方法即丢失，调用抛 TypeError: undefined is not a
@@ -205,10 +201,16 @@ export function sheetDragCloseDecision(
 export function sheetPanelTranslateY(
   progress: number,
   panelHeight: number,
-  windowHeight: number
+  fallbackHeightOrWindowHeight: number,
+  explicitFallbackHeight?: number
 ): number {
   'worklet';
-  return (1 - progress) * (panelHeight > 0 ? panelHeight : windowHeight);
+  const effectiveFallback =
+    explicitFallbackHeight !== undefined
+      ? explicitFallbackHeight
+      : fallbackHeightOrWindowHeight;
+  const effectiveHeight = panelHeight > 0 ? panelHeight : effectiveFallback;
+  return (1 - progress) * effectiveHeight;
 }
 
 export function Sheet({
@@ -246,46 +248,25 @@ export function Sheet({
   const maxHeightRatio = SHEET_SIZE_RATIOS[effectiveSize];
   // 窗口高度在 JS 线程取得（纯数字），供 panelStyle worklet 捕获——见 sheetPanelTranslateY 注释
   const { height: windowHeight } = useWindowDimensions();
-  // 键盘交接（文件头协议）：presentReady 是 visible 经过交接门后的
-  // 有效呈现信号；handoffFromKeyboard 标记本轮呈现是否经历过键盘
-  // 收起（经历过才需要 settle 后再留 1 帧；键盘本就收起时立即呈现，
-  // 不让所有 Sheet 平白慢一帧）；handoffDismissed 保证每轮只发一次
-  // 收起命令。
+  const fallbackHeight = Math.round(windowHeight * maxHeightRatio);
+  // 键盘处理：若软键盘处于开启状态，非阻塞发起收起，抽屉直接并行展开，不再等待键盘 settle，彻底杜绝 1000ms 冻结
   const keyboardHeight = useKeyboardHeight();
-  const [presentReady, setPresentReady] = useState(false);
-  const handoffFromKeyboard = useRef(false);
   const handoffDismissed = useRef(false);
   useEffect(() => {
     if (!visible) {
-      handoffFromKeyboard.current = false;
       handoffDismissed.current = false;
-      if (presentReady) setPresentReady(false);
-      return undefined;
+      return;
     }
-    if (presentReady) return undefined;
-    if (keyboardHeight > 0) {
-      handoffFromKeyboard.current = true;
-      if (!handoffDismissed.current) {
-        handoffDismissed.current = true;
-        void KeyboardController.dismiss();
-      }
-      const timer = setTimeout(
-        () => setPresentReady(true),
-        SHEET_KEYBOARD_HANDOFF_TIMEOUT_MS
-      );
-      return () => clearTimeout(timer);
+    if (keyboardHeight > 0 && !handoffDismissed.current) {
+      handoffDismissed.current = true;
+      void KeyboardController.dismiss();
     }
-    if (handoffFromKeyboard.current) {
-      // 键盘已 settle：再留 1 帧让旧 UI 失效才呈现
-      const raf = requestAnimationFrame(() => setPresentReady(true));
-      return () => cancelAnimationFrame(raf);
-    }
-    setPresentReady(true);
-    return undefined;
-  }, [visible, presentReady, keyboardHeight]);
-  const effectiveVisible = visible && presentReady;
+  }, [visible, keyboardHeight]);
+  const effectiveVisible = visible;
   // 关闭时先播出场动画再卸载 Modal（进场则立即挂载）
   const [mounted, setMounted] = useState(false);
+  // 动效落定状态：位移动画进行期间置 false（避让 Android SVG 大半径高斯模糊软光栅化），完全落位后置 true 恢复极软阴影
+  const [animSettled, setAnimSettled] = useState(false);
   // 覆盖层登记（批 D）：挂载期间（含出场动画）在栈，Android 返回
   // 由 Modal onRequestClose 汇入栈顶裁决；钻取在场时先退钻取。
   useOverlayRegistration(overlayId, mounted, {
@@ -309,6 +290,19 @@ export function Sheet({
   const [panelHeight, setPanelHeight] = useState(0);
   const backdropProgress = useSharedValue(0);
   const panelProgress = useSharedValue(0);
+  // 动效基线高度共享值（UI 线程）：飞行过程中锁定基线，杜绝 onLayout 回包突变瞬移
+  const baselineHeight = useSharedValue(fallbackHeight);
+
+  // 当布局测量真实高度送达时，若已处于稳态（panelProgress >= 0.99）才更新基线；
+  // 动效飞行中途保持基线锁定（Baseline Latching），杜绝空中突变瞬移
+  const handlePanelLayout = useCallback((event: LayoutChangeEvent) => {
+    const h = event.nativeEvent.layout.height;
+    setPanelHeight(h);
+    if (panelProgress.value >= 0.99) {
+      baselineHeight.value = h;
+    }
+  }, []);
+
   // 拖拽状态（UI 线程）：内容滚动偏移（>0 时纵向拖动归滚动）、抓手起始进度、
   // 起始触点纵坐标、释放判定是否已由 onEnd 处理（onFinalize 兜底回位用）
   const scrollOffset = useSharedValue(0);
@@ -327,21 +321,35 @@ export function Sheet({
   useEffect(() => {
     if (effectiveVisible) {
       setMounted(true);
+      setAnimSettled(false);
+      // 进场前锁定基线高度（若已有测量高则用测量高，否则用确定性估高）
+      baselineHeight.value = panelHeight > 0 ? panelHeight : fallbackHeight;
       backdropProgress.value = withTiming(1, {
         duration: reduceMotion
           ? theme.motion.duration.fast
           : theme.motion.duration.settle,
         easing: Easing.bezier(...theme.motion.easing.emphasized),
       });
-      panelProgress.value = withTiming(1, {
-        duration: reduceMotion
-          ? theme.motion.duration.fast
-          : theme.motion.duration.expand,
-        easing: Easing.bezier(...theme.motion.easing.emphasized),
-      });
+      panelProgress.value = withTiming(
+        1,
+        {
+          duration: reduceMotion
+            ? theme.motion.duration.fast
+            : theme.motion.duration.expand,
+          easing: Easing.bezier(...theme.motion.easing.emphasized),
+        },
+        (finished) => {
+          if (finished) {
+            baselineHeight.value =
+              panelHeight > 0 ? panelHeight : fallbackHeight;
+            runOnJS(setAnimSettled)(true);
+          }
+        }
+      );
       return;
     }
     if (!mounted) return;
+    setAnimSettled(false);
     backdropProgress.value = withTiming(0, {
       duration: reduceMotion
         ? theme.motion.duration.fast
@@ -376,18 +384,23 @@ export function Sheet({
         transform: [{ translateY: 0 }],
       };
     }
+    const currentHeight =
+      panelProgress.value >= 0.99 && panelHeight > 0
+        ? panelHeight
+        : baselineHeight.value;
     return {
       transform: [
         {
           translateY: sheetPanelTranslateY(
             panelProgress.value,
-            panelHeight,
-            windowHeight
+            currentHeight,
+            windowHeight,
+            fallbackHeight
           ),
         },
       ],
     };
-  }, [panelHeight, windowHeight, reduceMotion]);
+  }, [panelHeight, windowHeight, fallbackHeight, reduceMotion]);
 
   // 手势吸附关闭的 JS 侧收尾：触感与关闭回调同帧（门面纪律）
   const notifyGestureClose = () => {
@@ -418,10 +431,11 @@ export function Sheet({
       }
     })
     .onStart(() => {
+      runOnJS(setAnimSettled)(false);
       dragStartProgress.value = panelProgress.value;
     })
     .onUpdate((event) => {
-      const height = panelHeight > 0 ? panelHeight : windowHeight;
+      const height = panelHeight > 0 ? panelHeight : fallbackHeight;
       const next = dragStartProgress.value - event.translationY / (height || 1);
       const clamped = Math.min(Math.max(next, 0), 1);
       panelProgress.value = clamped;
@@ -429,7 +443,7 @@ export function Sheet({
     })
     .onEnd((event) => {
       dragEndHandled.value = true;
-      const height = panelHeight > 0 ? panelHeight : windowHeight;
+      const height = panelHeight > 0 ? panelHeight : fallbackHeight;
       // 速度换算为进度/秒（下滑为正 → 进度速度为负），播种进弹簧
       const velocity = -event.velocityY / (height || 1);
       const draggedFraction = dragStartProgress.value - panelProgress.value;
@@ -443,7 +457,13 @@ export function Sheet({
         );
         backdropProgress.value = withSpring(0, { ...sheetSpring, velocity });
       } else {
-        panelProgress.value = withSpring(1, { ...sheetSpring, velocity });
+        panelProgress.value = withSpring(
+          1,
+          { ...sheetSpring, velocity },
+          (finished) => {
+            if (finished) runOnJS(setAnimSettled)(true);
+          }
+        );
         backdropProgress.value = withSpring(1, { ...sheetSpring, velocity });
       }
     })
@@ -451,7 +471,9 @@ export function Sheet({
       // 手势被系统取消且 onEnd 未达：回位到展开态，不留半开面板
       if (dragEndHandled.value) return;
       if (panelProgress.value > 0 && panelProgress.value < 1) {
-        panelProgress.value = withSpring(1, { ...sheetSpring });
+        panelProgress.value = withSpring(1, { ...sheetSpring }, (finished) => {
+          if (finished) runOnJS(setAnimSettled)(true);
+        });
         backdropProgress.value = withSpring(1, { ...sheetSpring });
       }
     });
@@ -501,9 +523,7 @@ export function Sheet({
               <GestureDetector gesture={panGesture}>
                 <Animated.View
                   testID={testID}
-                  onLayout={(event) =>
-                    setPanelHeight(event.nativeEvent.layout.height)
-                  }
+                  onLayout={handlePanelLayout}
                   style={[
                     styles.panelHost,
                     {
@@ -513,9 +533,11 @@ export function Sheet({
                   ]}
                 >
                   {/* 面板软阴影面（sheetUp 上向档）：填充/圆角/裁剪/内衬归内层，
-                    拖拽位移挂外层随面板同动；外层不裁剪保阴影出血 */}
+                    拖拽位移挂外层随面板同动；外层不裁剪保阴影出血；
+                    动效避让（批 E）：位移滑入中避让 SVG 软光栅化，落定后展示 */}
                   <SoftShadowSurface
                     preset="sheetUp"
+                    shadowVisible={animSettled}
                     borderRadius={theme.radius.sheet}
                     fill={
                       Platform.OS === 'ios'

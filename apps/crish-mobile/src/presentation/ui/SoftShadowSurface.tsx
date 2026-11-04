@@ -148,6 +148,8 @@ export interface SoftShadowSurfaceProps {
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /** 控制阴影是否渲染（动效避让用：滑移期间置 false 彻底免除 SVG 高斯模糊光栅化，落位后置 true） */
+  shadowVisible?: boolean;
 }
 
 /**
@@ -172,6 +174,7 @@ export function SoftShadowSurface({
   children,
   style,
   testID,
+  shadowVisible = true,
 }: SoftShadowSurfaceProps) {
   const theme = useTheme();
   const spec = PRESETS[preset];
@@ -184,8 +187,9 @@ export function SoftShadowSurface({
   }, []);
   const w = width ?? measured.w;
   const h = height ?? measured.h;
-  // 短路口径同 SoftShadow：仅 Android 浅色渲染投影；尺寸未测得（首帧）先不画
-  const showShadow = Platform.OS === 'android' && !theme.dark && w > 0 && h > 0;
+  // 短路口径同 SoftShadow：仅 Android 浅色渲染投影；尺寸未测得（首帧）先不画；动效避让时亦不画
+  const showShadow =
+    shadowVisible && Platform.OS === 'android' && !theme.dark && w > 0 && h > 0;
   // 滤镜 id 按实例唯一化（同 SoftShadow：useId 剔除非字母数字，url(#) 寻址需净化）
   const filterId = `soft-surface-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
