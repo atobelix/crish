@@ -95,7 +95,12 @@ export default function FilesScreen() {
         }}
         onRetry={vm.openWorkspaceList}
       />
-      <Sheet visible={sortOpen} onClose={() => setSortOpen(false)} title="排序">
+      <Sheet
+        visible={sortOpen}
+        onClose={() => setSortOpen(false)}
+        title="排序"
+        size="medium"
+      >
         {SORT_OPTIONS.map((option, index) => {
           const active = vm.sortMode === option.mode;
           return (

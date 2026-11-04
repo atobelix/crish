@@ -21,7 +21,7 @@ export function ConnectionHelpSheet({
 }: ConnectionHelpSheetProps) {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="连接帮助">
+    <Sheet visible={visible} onClose={onClose} title="连接帮助" size="medium">
       <View style={styles.list}>
         {STEPS.map((step, index) => (
           <View key={step} style={styles.row}>

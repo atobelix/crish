@@ -7,10 +7,19 @@
 import { eventStore } from '@/domain/store/eventStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import type { StoreIngestAction } from '@/domain/store/eventMappers';
+import { createLogger } from '@/adapters/platform/logger';
+
+const log = createLogger('wiring');
 
 export interface IngestDispatchOptions {
   /** sessions-refresh 信号回调（索引全量拉取由接线层 repository 执行，M6 §10.5） */
   onSessionsRefresh?: () => void;
+  /**
+   * 本批帧的来源设备（M7 盖章穿线）：由 FeedBridge 按其接线属主注入，
+   * 透传给每个 store 写动作；与属主盖章不符的写入在 store 侧丢弃。
+   * 缺省 = 无来源（不设防，兼容未穿线调用与测试）。
+   */
+  sourceDeviceId?: string;
 }
 
 /**
@@ -24,28 +33,41 @@ export function dispatchIngestActions(
   actions: readonly StoreIngestAction[],
   opts: IngestDispatchOptions = {}
 ): void {
+  const source = opts.sourceDeviceId;
   for (const action of actions) {
     switch (action.kind) {
       case 'feed-append':
         eventStore
           .getState()
-          .ingest(action.sessionId, action.frame, action.preview);
+          .ingest(
+            action.sessionId,
+            action.frame,
+            action.preview,
+            undefined,
+            source
+          );
         break;
       case 'feed-hydrate':
         eventStore
           .getState()
-          .hydrate(action.sessionId, action.events, action.cursor);
+          .hydrate(
+            action.sessionId,
+            action.events,
+            action.cursor,
+            undefined,
+            source
+          );
         break;
       case 'feed-set-cursor':
-        eventStore.getState().setCursor(action.sessionId, action.seq);
+        eventStore.getState().setCursor(action.sessionId, action.seq, source);
         break;
       case 'session-upsert':
-        sessionStore.getState().upsert(action.session);
+        sessionStore.getState().upsert(action.session, undefined, source);
         break;
       case 'session-remove':
-        sessionStore.getState().remove(action.sessionId);
+        sessionStore.getState().remove(action.sessionId, source);
         // 投影清理连带事件窗口卸载（M6 §9.3 ② cleanup 同口径，内存回收）
-        eventStore.getState().unloadWindow(action.sessionId);
+        eventStore.getState().unloadWindow(action.sessionId, source);
         break;
       case 'sessions-refresh':
         opts.onSessionsRefresh?.();
@@ -53,17 +75,24 @@ export function dispatchIngestActions(
       case 'run-active':
         sessionStore
           .getState()
-          .applyRunActive(action.sessionId, action.runId, true);
+          .applyRunActive(action.sessionId, action.runId, true, source);
         break;
       case 'run-terminal':
+        // terminal 三态随行（批 D）：失败打点的数据面在此入店，
+        // 不再于接线层丢弃
         sessionStore
           .getState()
-          .applyRunActive(action.sessionId, action.runId, false);
+          .applyRunTerminal(
+            action.sessionId,
+            action.runId,
+            action.terminal,
+            source
+          );
         break;
       case 'approval-delta':
         sessionStore
           .getState()
-          .applyApprovalDelta(action.sessionId, action.delta);
+          .applyApprovalDelta(action.sessionId, action.delta, source);
         break;
       case 'session-unread-update':
         sessionStore
@@ -71,12 +100,13 @@ export function dispatchIngestActions(
           .applyLatestSeq(
             action.sessionId,
             action.latestSeq,
-            action.isAssistant
+            action.isAssistant,
+            source
           );
         break;
       case 'ignore':
         // 宽容跳过留痕（未知 type / 域外 kind / 解析失败，D3 §10.3 不打断连接）
-        console.debug(`[wiring] 忽略入站动作：${action.reason}`);
+        log.debug(`忽略入站动作：${action.reason}`);
         break;
     }
   }

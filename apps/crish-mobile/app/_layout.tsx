@@ -1,4 +1,7 @@
 // 根布局：安全区 / 主题 / Toast / 启动装配 / 认证水合闸门（纯本地）/ 导航栈 / 全局审批悬浮卡。
+// 键盘：KeyboardProvider 是全仓唯一的键盘高度/状态生产者（键盘审计 §4.2 单源
+// 纪律）；系统栏在本 app 为全透明 edge-to-edge 形态，故两个 translucent 标志
+// 均按真值开启，让库按含系统栏的窗口坐标计算键盘帧。
 // 启动时序（实现波总方案 维 A）：本地水合 ≤50ms 即放行首屏；远程校正、DB 装配、
 // 通知层全部后台并行，不经闸门。原生 Splash 由 preventAutoHideAsync 保持到首帧渲染，
 // 无 JS 自绘中间帧（无 BrandMark、无 Spinner）。
@@ -18,10 +21,12 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { authStore } from '@/domain/store/authStore';
 import { useTheme } from '@/adapters/platform/theme';
+import { createLogger } from '@/adapters/platform/logger';
 import { ensureDatabaseForApp } from '@/db/dbBootstrap';
 import { startAppRuntime } from '@/adapters/runtime/appRuntime';
 import { ensurePairingWiringForApp } from '@/adapters/pairing/pairingController';
@@ -32,7 +37,11 @@ import {
 import { ErrorBoundary } from '@/presentation/components/ErrorBoundary';
 import { ApprovalFloat } from '@/presentation/components/approval/ApprovalFloat';
 import { ToastProvider } from '@/presentation/ui';
+import { useOverlayBackHandler } from '@/presentation/ui/overlayStack';
 import { useAndroidBackGuard } from '@/presentation/navigation/useSafeBack';
+
+const log = createLogger('startup');
+const notificationsLog = createLogger('notifications');
 
 // 原生开屏保持：JS 首帧渲染完成前不自动隐藏（模块顶层一次性调用）
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -55,15 +64,17 @@ function RootShell() {
   const fontsReady = fontsLoaded || fontError != null;
   useEffect(() => {
     if (fontError) {
-      console.warn(
-        `[startup] 等宽字体加载失败，已回落系统字体：${fontError.message}`
-      );
+      log.warn(`等宽字体加载失败，已回落系统字体：${fontError.message}`);
     }
   }, [fontError]);
   const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
   const splashHiddenRef = useRef(false);
   // Android 深链冷启动单屏：物理返回键兜底回首页，不直接退出应用
   useAndroidBackGuard();
+  // 覆盖层返回分发（批 D）：订阅顺序在 back guard 之后（BackHandler
+  // 后订阅先调用）——非 Modal 浮层（菜单/锚点 Popover）打开时返回
+  // 先关栈顶浮层，栈空不消费、落回 guard 的导航兜底
+  useOverlayBackHandler();
 
   // 字体就绪 + 首帧布局完成才淡出原生开屏：此后闸门放行前后均无中间帧
   useLayoutEffect(() => {
@@ -78,9 +89,7 @@ function RootShell() {
     let cancelled = false;
     void ensurePairingWiringForApp()
       .catch((error: unknown) => {
-        console.warn(
-          `[startup] 配对接线装配失败，回退未配对态：${error instanceof Error ? error.message : String(error)}`
-        );
+        log.warn('配对接线装配失败，回退未配对态', error);
         return authStore.getState().hydrate();
       })
       .finally(() => {
@@ -114,9 +123,7 @@ function RootShell() {
         else notificationLayerRef.current = handle;
       })
       .catch((error: unknown) => {
-        console.warn(
-          `[notifications] 通知层装配失败：${error instanceof Error ? error.message : String(error)}`
-        );
+        notificationsLog.warn('通知层装配失败', error);
       });
     return () => {
       cancelled = true;
@@ -190,15 +197,17 @@ function RootShell() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.flex}>
-      <View style={styles.flex}>
-        <SafeAreaProvider>
-          <ToastProvider>
-            <ErrorBoundary>
-              <RootShell />
-            </ErrorBoundary>
-          </ToastProvider>
-        </SafeAreaProvider>
-      </View>
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+        <View style={styles.flex}>
+          <SafeAreaProvider>
+            <ToastProvider>
+              <ErrorBoundary>
+                <RootShell />
+              </ErrorBoundary>
+            </ToastProvider>
+          </SafeAreaProvider>
+        </View>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

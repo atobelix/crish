@@ -9,7 +9,7 @@
 import { StyleSheet, View } from 'react-native';
 import type { SkillEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, Button, Sheet, Spinner } from '@/presentation/ui';
+import { AppText, ErrorState, LoadingState, Sheet } from '@/presentation/ui';
 import {
   skillScopeLabel,
   skillScopeOrder,
@@ -59,7 +59,13 @@ export function SkillsSheet({
 }: SkillsSheetProps) {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="技能" testID={testID}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="技能"
+      size="large"
+      testID={testID}
+    >
       {!connected ? (
         <View style={styles.center}>
           <AppText variant="body" color="textSecondary">
@@ -74,16 +80,13 @@ export function SkillsSheet({
           </AppText>
         </View>
       ) : status === 'loading' || status === 'idle' ? (
-        <View style={styles.center}>
-          <Spinner />
-        </View>
+        <LoadingState compact />
       ) : status === 'error' ? (
-        <View style={styles.center}>
-          <AppText variant="body" color="textSecondary">
-            无法获取技能列表{errorCode ? `（${errorCode}）` : ''}
-          </AppText>
-          <Button label="重试" variant="secondary" onPress={onRetry} />
-        </View>
+        <ErrorState
+          compact
+          title={`无法获取技能列表${errorCode ? `（${errorCode}）` : ''}`}
+          onRetry={onRetry}
+        />
       ) : skills && skills.length > 0 ? (
         <View style={{ gap: theme.space.lg }}>
           {groupByScope(skills).map((group) => (
@@ -127,24 +130,8 @@ export function SkillsSheet({
           <AppText variant="body" color="textSecondary">
             桌面端暂无技能
           </AppText>
-          <AppText
-            variant="caption"
-            color="textTertiary"
-            style={styles.centerText}
-          >
-            技能文件位于工作区或主目录的 .conex/skills
-            目录中，可在桌面端查看与管理
-          </AppText>
         </View>
       )}
-      <AppText
-        variant="caption"
-        color="textTertiary"
-        style={{ marginTop: theme.space.md }}
-      >
-        技能的启用与禁用在桌面端「设置 → 扩展 →
-        技能」中管理；此处仅浏览目录，启停状态以桌面端为准。
-      </AppText>
     </Sheet>
   );
 }

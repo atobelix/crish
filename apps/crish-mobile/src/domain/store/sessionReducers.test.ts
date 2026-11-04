@@ -140,7 +140,7 @@ describe('removeSessionItem / reconcileSessions（对账兜底，F5 §2.1）', (
     const local = [
       summary({ id: 's-1', lastReadSequence: 9, activeRunIds: ['r-1'] }),
     ];
-    const merged = reconcileSessions(
+    const { items: merged, changed } = reconcileSessions(
       local,
       [
         session({ id: 's-1', title: '新', updatedAt: NOW + 1 }),
@@ -148,11 +148,65 @@ describe('removeSessionItem / reconcileSessions（对账兜底，F5 §2.1）', (
       ],
       NOW
     );
+    expect(changed).toBe(true);
     expect(merged.map((s) => s.id)).toEqual(['s-1', 's-2']);
     expect(merged[0]!.title).toBe('新');
     expect(merged[0]!.lastReadSequence).toBe(9);
     expect(merged[0]!.activeRunIds).toEqual(['r-1']);
     expect(merged[1]!.lastReadSequence).toBe(0);
+  });
+
+  it('无差分对账：changed=false 且返回入参原引用（静默同步的数据面）', () => {
+    const local = [
+      summary({ id: 's-1', title: '甲', updatedAt: NOW - 5 }),
+      summary({ id: 's-2', title: '乙', updatedAt: NOW - 9 }),
+    ];
+    const result = reconcileSessions(
+      local,
+      [
+        session({ id: 's-1', title: '甲', updatedAt: NOW - 5 }),
+        session({ id: 's-2', title: '乙', updatedAt: NOW - 9 }),
+      ],
+      NOW
+    );
+    expect(result.changed).toBe(false);
+    expect(result.items).toBe(local);
+  });
+
+  it('差分判定面：任一契约字段变化（标题/计数/置顶）或成员增减 → changed=true', () => {
+    const local = [summary({ id: 's-1', title: '甲', updatedAt: NOW })];
+    expect(
+      reconcileSessions(
+        local,
+        [session({ id: 's-1', title: '改', updatedAt: NOW })],
+        NOW
+      ).changed
+    ).toBe(true);
+    expect(
+      reconcileSessions(
+        local,
+        [session({ id: 's-1', title: '甲', updatedAt: NOW, messageCount: 3 })],
+        NOW
+      ).changed
+    ).toBe(true);
+    expect(
+      reconcileSessions(
+        local,
+        [session({ id: 's-1', title: '甲', updatedAt: NOW, isPinned: true })],
+        NOW
+      ).changed
+    ).toBe(true);
+    expect(reconcileSessions(local, [], NOW).changed).toBe(true);
+  });
+
+  it('对账保留完成打点（completedAtMs 是本地附加，不被权威列表冲掉）', () => {
+    const local = [summary({ id: 's-1', completedAtMs: NOW - 100 })];
+    const { items } = reconcileSessions(
+      local,
+      [session({ id: 's-1', updatedAt: NOW + 1 })],
+      NOW
+    );
+    expect(items[0]!.completedAtMs).toBe(NOW - 100);
   });
 });
 
@@ -178,6 +232,27 @@ describe('未读模型（F5 §6.3）', () => {
 });
 
 describe('活动与审批计数派生（F1 §4.4 / §5.3）', () => {
+  it('applyRunActive 完成打点：terminal 写 completedAtMs、新 run 开始清除', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', true, NOW);
+    expect(item.completedAtMs).toBeNull();
+    item = applyRunActive(item, 'r-1', false, NOW + 500);
+    expect(item.completedAtMs).toBe(NOW + 500);
+    // 新一轮运行开始 → 完成打点清除（回到运行中口径）
+    item = applyRunActive(item, 'r-2', true, NOW + 900);
+    expect(item.completedAtMs).toBeNull();
+    expect(item.activeRunIds).toEqual(['r-2']);
+  });
+
+  it('applyRunActive：未见 start 的 terminal 亦打点（连接前启动、连接内完成）', () => {
+    const item = summary({ id: 's-1' });
+    const done = applyRunActive(item, 'r-x', false, NOW + 42);
+    expect(done.activeRunIds).toEqual([]);
+    expect(done.completedAtMs).toBe(NOW + 42);
+    // 无 nowMs 的旧调用形态保持幂等 no-op（不打点）
+    expect(applyRunActive(item, 'r-x', false)).toBe(item);
+  });
+
   it('applyRunActive：置活跃幂等 / 清除幂等', () => {
     let item = summary({ id: 's-1' });
     item = applyRunActive(item, 'r-1', true);
@@ -216,5 +291,63 @@ describe('活动与审批计数派生（F1 §4.4 / §5.3）', () => {
       activeRunIds: [],
       pendingApprovalCount: 0,
     });
+  });
+});
+
+describe('失败打点（批 D：run-terminal 三态 → lastRunFailedAtMs）', () => {
+  it('terminal=failed 打点；completedAtMs 照常写（两打点分工）', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', true, NOW);
+    item = applyRunActive(item, 'r-1', false, NOW + 100, 'failed');
+    expect(item.lastRunFailedAtMs).toBe(NOW + 100);
+    expect(item.completedAtMs).toBe(NOW + 100);
+    expect(item.activeRunIds).toEqual([]);
+  });
+
+  it('terminal=completed / cancelled 清失败打点', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', false, NOW, 'failed');
+    expect(item.lastRunFailedAtMs).toBe(NOW);
+    item = applyRunActive(item, 'r-2', false, NOW + 10, 'completed');
+    expect(item.lastRunFailedAtMs).toBeNull();
+    item = applyRunActive(item, 'r-3', false, NOW + 20, 'failed');
+    item = applyRunActive(item, 'r-4', false, NOW + 30, 'cancelled');
+    expect(item.lastRunFailedAtMs).toBeNull();
+  });
+
+  it('terminal=unknown / 缺省不表态：保留既有失败打点', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', false, NOW, 'failed');
+    item = applyRunActive(item, 'r-2', false, NOW + 10, 'unknown');
+    expect(item.lastRunFailedAtMs).toBe(NOW);
+    item = applyRunActive(item, 'r-3', false, NOW + 20);
+    expect(item.lastRunFailedAtMs).toBe(NOW);
+  });
+
+  it('新一轮 run 开始清失败打点（旧失败不压新运行）', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', false, NOW, 'failed');
+    expect(item.lastRunFailedAtMs).toBe(NOW);
+    item = applyRunActive(item, 'r-2', true, NOW + 50);
+    expect(item.lastRunFailedAtMs).toBeNull();
+  });
+
+  it('未见 start 的 failed terminal 亦打点（连接前启动、连接内失败）', () => {
+    const item = summary({ id: 's-1' });
+    const done = applyRunActive(item, 'r-x', false, NOW + 42, 'failed');
+    expect(done.lastRunFailedAtMs).toBe(NOW + 42);
+  });
+
+  it('upsert / reconcile 保留失败打点（本地附加不被权威列表冲掉）', () => {
+    let item = summary({ id: 's-1' });
+    item = applyRunActive(item, 'r-1', false, NOW, 'failed');
+    const upserted = upsertSessionItem([item], session({ id: 's-1' }), NOW + 1);
+    expect(upserted.items[0]!.lastRunFailedAtMs).toBe(NOW);
+    const reconciled = reconcileSessions(
+      [item],
+      [session({ id: 's-1' })],
+      NOW + 2
+    );
+    expect(reconciled.items[0]!.lastRunFailedAtMs).toBe(NOW);
   });
 });

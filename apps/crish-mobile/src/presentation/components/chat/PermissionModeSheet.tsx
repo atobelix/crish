@@ -7,7 +7,8 @@
 // 脚注为远程生效口径的如实说明：远程发起的 run 在桌面执行侧会把「完全允许」
 // 按桌面安全规则处理（网关 apply_remote_mode：full → ask），本机发起不受影响；
 // 文案只陈述该事实，不承诺降级之外的效果。
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import {
   PERMISSION_MODE_OPTIONS,
   type PermissionMode,
@@ -15,6 +16,7 @@ import {
 import { useTheme } from '@/adapters/platform/theme';
 import Icon from '@/presentation/ui/Icon';
 import { Sheet } from '@/presentation/ui/Sheet';
+import { usePressFade } from '@/presentation/ui/pressFeedback';
 
 export interface PermissionModeSheetProps {
   visible: boolean;
@@ -32,97 +34,125 @@ export function PermissionModeSheet({
   testID = 'permission-sheet',
 }: PermissionModeSheetProps) {
   const theme = useTheme();
-  const t = theme.type;
   return (
-    <Sheet visible={visible} onClose={onClose} title="权限模式" testID={testID}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="权限模式"
+      size="medium"
+      testID={testID}
+    >
       <View style={{ gap: theme.space.sm }}>
-        {PERMISSION_MODE_OPTIONS.map((option) => {
-          const selected = option.id === value;
-          return (
-            <Pressable
-              key={option.id}
-              testID={`${testID}-option-${option.id}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onSelect(option.id)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.space.md,
-                borderRadius: theme.radius.md,
-                paddingHorizontal: 14,
-                paddingVertical: 13,
-                backgroundColor: pressed
-                  ? theme.colors.fillPressed
-                  : theme.colors.fillSubtle,
-              })}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: theme.space.sm,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: t.body.fontSize,
-                      lineHeight: t.body.lineHeight,
-                      fontWeight: '500',
-                      color: theme.colors.textPrimary,
-                    }}
-                  >
-                    {option.label}
-                  </Text>
-                  {option.recommended ? (
-                    <View
-                      style={{
-                        borderRadius: theme.radius.sm,
-                        paddingHorizontal: theme.space.xs,
-                        paddingVertical: 1,
-                        backgroundColor: theme.colors.brandSoft,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: t.caption.fontSize,
-                          lineHeight: t.caption.lineHeight,
-                          color: theme.colors.brand,
-                        }}
-                      >
-                        推荐
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text
-                  style={{
-                    fontSize: t.caption.fontSize,
-                    lineHeight: t.caption.lineHeight,
-                    color: theme.colors.textTertiary,
-                  }}
-                >
-                  {option.description}
-                </Text>
-              </View>
-              {selected ? (
-                <Icon name="check" size={15} color={theme.colors.brand} />
-              ) : null}
-            </Pressable>
-          );
-        })}
+        {PERMISSION_MODE_OPTIONS.map((option) => (
+          <PermissionModeOption
+            key={option.id}
+            testID={`${testID}-option-${option.id}`}
+            option={option}
+            selected={option.id === value}
+            onPress={() => onSelect(option.id)}
+          />
+        ))}
       </View>
-      <Text
-        style={{
-          marginTop: theme.space.md,
-          fontSize: t.caption.fontSize,
-          lineHeight: t.caption.lineHeight,
-          color: theme.colors.textTertiary,
-        }}
-      >
-        通过手机远程发起的任务，桌面端会按其安全规则执行：选择「完全允许」时，桌面会以「每次询问」的方式逐条确认；其余档位按所选模式执行。
-      </Text>
     </Sheet>
+  );
+}
+
+/** 权限档位行（列表项内独立组件：按压叠层 hook 不得进 map 回调） */
+function PermissionModeOption({
+  testID,
+  option,
+  selected,
+  onPress,
+}: {
+  testID: string;
+  option: (typeof PERMISSION_MODE_OPTIONS)[number];
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const t = theme.type;
+  const press = usePressFade();
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.space.md,
+        borderRadius: theme.radius.md,
+        paddingHorizontal: 14,
+        paddingVertical: 13,
+        backgroundColor: theme.colors.fillSubtle,
+      }}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.fillPressed,
+          },
+          press.overlayStyle,
+        ]}
+      />
+      <View style={{ flex: 1, gap: 2 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.space.sm,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: t.body.fontSize,
+              lineHeight: t.body.lineHeight,
+              fontWeight: '500',
+              color: theme.colors.textPrimary,
+            }}
+          >
+            {option.label}
+          </Text>
+          {option.recommended ? (
+            <View
+              style={{
+                borderRadius: theme.radius.sm,
+                paddingHorizontal: theme.space.xs,
+                paddingVertical: 1,
+                backgroundColor: theme.colors.brandSoft,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: t.caption.fontSize,
+                  lineHeight: t.caption.lineHeight,
+                  color: theme.colors.brand,
+                }}
+              >
+                推荐
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <Text
+          style={{
+            fontSize: t.caption.fontSize,
+            lineHeight: t.caption.lineHeight,
+            color: theme.colors.textTertiary,
+          }}
+        >
+          {option.description}
+        </Text>
+      </View>
+      {selected ? (
+        <Icon name="check" size={15} color={theme.colors.brand} />
+      ) : null}
+    </Pressable>
   );
 }

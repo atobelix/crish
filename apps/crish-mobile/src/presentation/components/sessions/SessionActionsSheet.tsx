@@ -35,7 +35,13 @@ export function SessionActionsSheet({
   if (!session) return null;
   const title = session.title?.trim() || '未命名会话';
   return (
-    <Sheet visible={visible} onClose={onClose} title={title} testID={testID}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      size="medium"
+      testID={testID}
+    >
       <View style={{ gap: theme.space.sm }}>
         <SheetOptionRow
           testID={`${testID}-pin`}

@@ -4,15 +4,20 @@
 // 树 activeModel）；用户裁决 Q3：切换 = 改桌面全局默认，含桌面端生效，
 // 不是手机本地覆盖。状态诚实呈现：未连接 / 加载中 / 列表失败（可重试）/
 // 空列表 / 切换失败五者分开，不编造模型名、不伪造成功。
+// 口径呈现（M3）：会话不钉模型是协议事实（per-session 钉定为待裁决的 M4），
+// 「当前对话使用的模型」只能等于全局默认——Sheet 首行把这层等价明说
+// （当前全局默认名 + 本对话后续消息将使用它）；未设默认独立成态；默认
+// 已停用/不在可选集时加注脚，不再静默无选中。列表失败面呈现错误码（M2，
+// 与切换失败面同口径），不再只有一个无解释的「无法获取」。
 import { StyleSheet, View } from 'react-native';
-import type { ModelEntry } from '@crish/shared-types';
+import type { ActiveModelInfo, ModelEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
 import {
   AppText,
-  Button,
+  ErrorState,
+  LoadingState,
   Sheet,
   SheetOptionRow,
-  Spinner,
 } from '@/presentation/ui';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
 
@@ -26,8 +31,12 @@ export interface ModelSheetProps {
   status: 'idle' | 'loading' | 'loaded' | 'error';
   /** 当前全局默认的身份键（modelRefKey(providerId, modelId)），无默认 = null */
   activeModelId: string | null;
+  /** 当前全局默认（桌面真源投影；口径行呈现其名，未设置 = null） */
+  activeModel: ActiveModelInfo | null;
+  /** 当前全局默认是否在可选集内（false 且有默认 = 已停用/不可选，呈注脚） */
+  activeModelSelectable: boolean;
   switching: boolean;
-  /** 最近一次命令错误码（切换失败时呈现；列表失败走 status='error' 面） */
+  /** 最近一次命令错误码（列表失败面与切换失败面都呈现，与状态面分工见各分支） */
   errorCode: string | null;
   onSelectModel: (providerId: string, modelId: string) => void;
   onRetry: () => void;
@@ -41,6 +50,8 @@ export function ModelSheet({
   models,
   status,
   activeModelId,
+  activeModel,
+  activeModelSelectable,
   switching,
   errorCode,
   onSelectModel,
@@ -49,7 +60,13 @@ export function ModelSheet({
 }: ModelSheetProps) {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="模型选择" testID={testID}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="模型选择"
+      size="large"
+      testID={testID}
+    >
       {!connected ? (
         <View style={styles.center}>
           <AppText variant="body" color="textSecondary">
@@ -64,63 +81,79 @@ export function ModelSheet({
           </AppText>
         </View>
       ) : status === 'loading' || status === 'idle' ? (
-        <View style={styles.center}>
-          <Spinner />
-        </View>
+        <LoadingState compact />
       ) : status === 'error' ? (
-        <View style={styles.center}>
-          <AppText variant="body" color="textSecondary">
-            无法获取模型列表
-          </AppText>
-          <Button label="重试" variant="secondary" onPress={onRetry} />
-        </View>
-      ) : models && models.length > 0 ? (
-        <>
-          <View style={{ gap: theme.space.sm }}>
-            {models.map((model) => {
-              const key = modelRefKey(model.providerId, model.modelId);
-              return (
-                <SheetOptionRow
-                  key={key}
-                  testID={`${testID}-option-${model.providerId}-${model.modelId}`}
-                  label={model.displayName}
-                  hint={model.providerDisplayName ?? model.providerId}
-                  selected={key === activeModelId}
-                  onPress={() => onSelectModel(model.providerId, model.modelId)}
-                />
-              );
-            })}
-          </View>
-          {switching ? (
-            <AppText
-              variant="caption"
-              color="textTertiary"
-              style={{ marginTop: theme.space.md }}
-            >
-              正在切换…
-            </AppText>
-          ) : errorCode ? (
-            <AppText
-              variant="caption"
-              color="danger"
-              style={{ marginTop: theme.space.md }}
-            >
-              切换失败（{errorCode}），当前模型未变更，请重试
-            </AppText>
-          ) : null}
-        </>
+        <ErrorState
+          compact
+          title={`无法获取模型列表${errorCode ? `（${errorCode}）` : ''}`}
+          onRetry={onRetry}
+        />
       ) : (
-        <AppText variant="body" color="textSecondary">
-          桌面端尚未配置可用模型，请先在桌面端「设置 → 模型」中添加并启用模型。
-        </AppText>
+        <>
+          {/* 口径行（M3）：先把「当前对话使用的模型 = 全局默认」这层等价
+              说清——有默认呈其名，未设默认独立成态，默认不可选加注脚 */}
+          <View style={{ gap: theme.space.xxs, marginBottom: theme.space.md }}>
+            {activeModel ? (
+              <>
+                <AppText variant="body">
+                  当前全局默认：{activeModel.displayName}
+                </AppText>
+                {!activeModelSelectable && models && models.length > 0 ? (
+                  <AppText variant="caption" color="danger">
+                    当前默认已停用/不可选，下方列表为可选模型
+                  </AppText>
+                ) : null}
+              </>
+            ) : (
+              <AppText variant="body" color="textSecondary">
+                桌面未设全局默认
+              </AppText>
+            )}
+          </View>
+          {models && models.length > 0 ? (
+            <>
+              <View style={{ gap: theme.space.sm }}>
+                {models.map((model) => {
+                  const key = modelRefKey(model.providerId, model.modelId);
+                  return (
+                    <SheetOptionRow
+                      key={key}
+                      testID={`${testID}-option-${model.providerId}-${model.modelId}`}
+                      label={model.displayName}
+                      hint={model.providerDisplayName ?? model.providerId}
+                      selected={key === activeModelId}
+                      onPress={() =>
+                        onSelectModel(model.providerId, model.modelId)
+                      }
+                    />
+                  );
+                })}
+              </View>
+              {switching ? (
+                <AppText
+                  variant="caption"
+                  color="textTertiary"
+                  style={{ marginTop: theme.space.md }}
+                >
+                  正在切换…
+                </AppText>
+              ) : errorCode ? (
+                <AppText
+                  variant="caption"
+                  color="danger"
+                  style={{ marginTop: theme.space.md }}
+                >
+                  切换失败（{errorCode}），当前模型未变更，请重试
+                </AppText>
+              ) : null}
+            </>
+          ) : (
+            <AppText variant="body" color="textSecondary">
+              桌面端尚未配置可用模型，请在桌面端添加并启用。
+            </AppText>
+          )}
+        </>
       )}
-      <AppText
-        variant="caption"
-        color="textTertiary"
-        style={{ marginTop: theme.space.md }}
-      >
-        此处切换的是桌面端的全局默认模型，桌面与手机后续任务都会使用所选模型。
-      </AppText>
     </Sheet>
   );
 }

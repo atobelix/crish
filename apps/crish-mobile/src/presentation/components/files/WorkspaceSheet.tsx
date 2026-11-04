@@ -1,14 +1,13 @@
 // 工作区选择 Sheet：已授权根列表 + 当前活动标记。
-import { StyleSheet, View } from 'react-native';
 import type { WorkspaceEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
 import {
   AppText,
-  Button,
+  ErrorState,
   Icon,
   ListRow,
+  LoadingState,
   Sheet,
-  Spinner,
 } from '@/presentation/ui';
 
 export interface WorkspaceSheetProps {
@@ -34,18 +33,11 @@ export function WorkspaceSheet({
 }: WorkspaceSheetProps) {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="工作区">
+    <Sheet visible={visible} onClose={onClose} title="工作区" size="large">
       {status === 'loading' || status === 'idle' ? (
-        <View style={styles.center}>
-          <Spinner />
-        </View>
+        <LoadingState compact />
       ) : status === 'error' ? (
-        <View style={styles.center}>
-          <AppText variant="body" color="textSecondary">
-            无法获取工作区
-          </AppText>
-          <Button label="重试" variant="secondary" onPress={onRetry} />
-        </View>
+        <ErrorState compact title="无法获取工作区" onRetry={onRetry} />
       ) : workspaces && workspaces.length > 0 ? (
         workspaces.map((workspace, index) => {
           const active = workspace.root === activeRoot;
@@ -76,14 +68,5 @@ export function WorkspaceSheet({
     </Sheet>
   );
 }
-
-const styles = StyleSheet.create({
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 32,
-    gap: 12,
-  },
-});
 
 export default WorkspaceSheet;

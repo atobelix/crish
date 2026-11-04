@@ -15,6 +15,21 @@ export interface SessionSummary extends SessionIndexEntry {
   activeRunIds: string[];
   /** 本地附加：待审批计数（approval-requested +1 / resolved −1，F1 §5.3 角标口径） */
   pendingApprovalCount: number;
+  /**
+   * 本地附加：本机观察到的最近一次运行完成时刻 ms（run-terminal 落地打点，
+   * applyRunActive(false) 写入；新一轮运行开始即清）。null/缺省 = 未观察到完成。
+   * 主界面状态板「本次连接后完成」资格 = completedAtMs >= 连接纪元起点——
+   * 连接前就完成的历史会话没有这个本地打点，天然不进状态板。
+   */
+  completedAtMs?: number | null;
+  /**
+   * 本地附加：最近一次运行以失败终结的时刻 ms（run-terminal 的
+   * terminal='failed' 落地打点，批 D 抽屉行失败态的数据面；非失败
+   * 终结（completed/cancelled）与新一轮运行开始均清零）。null/缺省 =
+   * 最近一次终结不是失败（或未亲历终结）。与 completedAtMs 分工：
+   * 那个记「完成过」，这个记「最近一次是失败」。
+   */
+  lastRunFailedAtMs?: number | null;
 }
 
 /** 会话活跃判定（F1 §4.4：有活动 run 或待审批 → 置顶） */
@@ -34,6 +49,8 @@ export function createSessionSummary(
     unreadCount: 0,
     activeRunIds: [],
     pendingApprovalCount: 0,
+    completedAtMs: null,
+    lastRunFailedAtMs: null,
   };
 }
 
@@ -94,6 +111,8 @@ export function upsertSessionItem(
     unreadCount: existing.unreadCount,
     activeRunIds: existing.activeRunIds,
     pendingApprovalCount: existing.pendingApprovalCount,
+    completedAtMs: existing.completedAtMs ?? null,
+    lastRunFailedAtMs: existing.lastRunFailedAtMs ?? null,
   };
   const next = [...items];
   next[index] = merged;
@@ -113,14 +132,42 @@ export function removeSessionItem(
 }
 
 /**
- * 全量对账（session.updatedAll 信号后的 list_sessions 重拉 / 下拉刷新，F5 §2.1 收敛漂移）：
- * 以权威列表为准替换，本地附加按 id 合并保留（未读游标/活动标记不丢）。
+ * 契约字段相等（对账差分判定面）：SessionSummary 的展示数据只来自这些字段，
+ * 任一不同即真实差分；本地附加由对账保留，不参与判定。
+ */
+function sessionEntryEqual(
+  a: SessionIndexEntry,
+  b: SessionIndexEntry
+): boolean {
+  return (
+    a.id === b.id &&
+    (a.title ?? null) === (b.title ?? null) &&
+    (a.folder ?? null) === (b.folder ?? null) &&
+    (a.isPinned ?? null) === (b.isPinned ?? null) &&
+    (a.isArchived ?? null) === (b.isArchived ?? null) &&
+    (a.timestamp ?? null) === (b.timestamp ?? null) &&
+    (a.updatedAt ?? null) === (b.updatedAt ?? null) &&
+    (a.messageCount ?? null) === (b.messageCount ?? null)
+  );
+}
+
+export interface ReconcileSessionsResult {
+  items: SessionSummary[];
+  /** true = 权威列表与现状存在真实差分；false = 无差分（items 为入参原引用，调用方不得写状态） */
+  changed: boolean;
+}
+
+/**
+ * 全量对账（连接建立校准 / session.updatedAll 信号后的重拉 / 下拉刷新，F5 §2.1 收敛漂移）：
+ * 以权威列表为准，本地附加按 id 合并保留（未读游标/活动标记/完成打点不丢）。
+ * 增量口径（2026-11-02）：逐条比对契约字段算差分——无差分时返回入参原引用 +
+ * changed=false，上层据此静默收尾（不写状态、不置同步标志、不打成功点）。
  */
 export function reconcileSessions(
   items: readonly SessionSummary[],
   list: readonly SessionIndexEntry[],
   nowMs: number
-): SessionSummary[] {
+): ReconcileSessionsResult {
   const byId = new Map(items.map((s) => [s.id, s]));
   const merged = list.map((session) => {
     const local = byId.get(session.id);
@@ -132,10 +179,19 @@ export function reconcileSessions(
       unreadCount: local.unreadCount,
       activeRunIds: local.activeRunIds,
       pendingApprovalCount: local.pendingApprovalCount,
+      completedAtMs: local.completedAtMs ?? null,
+      lastRunFailedAtMs: local.lastRunFailedAtMs ?? null,
     };
     return next;
   });
-  return sortSessions(merged);
+  const sorted = sortSessions(merged);
+  const changed =
+    sorted.length !== items.length ||
+    sorted.some((entry, i) => !sessionEntryEqual(entry, items[i]!));
+  if (!changed) {
+    return { items: items as SessionSummary[], changed: false };
+  }
+  return { items: sorted, changed: true };
 }
 
 /**
@@ -169,20 +225,52 @@ export function applyLatestSeq(
   return { ...item, unreadCount: unread };
 }
 
-/** 活动 run 标记（agent-start 置活跃 / run-terminal 清除；幂等） */
+/**
+ * 活动 run 标记（agent-start 置活跃 / run-terminal 清除；幂等）。
+ * 完成打点（nowMs 在场时）：run-terminal 落地 = 本机亲历的一次完成 → 写
+ * completedAtMs（哪怕该 run 的 start 没被观察到——如连接前已启动、本次连接内
+ * 才结束）；新一轮 run 开始 → 清 completedAtMs（回到运行中口径）。
+ * 失败打点（terminal 在场时，批 D）：run-terminal 的三态透传——
+ * 'failed' 写 lastRunFailedAtMs、'completed'/'cancelled' 清之（最近
+ * 一次终结不是失败）；'unknown'/缺省不表态、保留原值。新一轮 run
+ * 开始与完成打点同律清失败打点（旧失败不压新运行）。
+ */
 export function applyRunActive(
   item: SessionSummary,
   runId: string,
-  active: boolean
+  active: boolean,
+  nowMs?: number,
+  terminal?: string
 ): SessionSummary {
+  const failedAt = item.lastRunFailedAtMs ?? null;
   if (active) {
-    if (item.activeRunIds.includes(runId)) return item;
-    return { ...item, activeRunIds: [...item.activeRunIds, runId] };
+    const hasRun = item.activeRunIds.includes(runId);
+    const completed = item.completedAtMs ?? null;
+    if (hasRun && completed === null && failedAt === null) return item;
+    return {
+      ...item,
+      activeRunIds: hasRun ? item.activeRunIds : [...item.activeRunIds, runId],
+      completedAtMs: null,
+      lastRunFailedAtMs: null,
+    };
   }
-  if (!item.activeRunIds.includes(runId)) return item;
+  const hasRun = item.activeRunIds.includes(runId);
+  if (!hasRun && nowMs === undefined && terminal === undefined) return item;
+  const nextFailedAt =
+    terminal === 'failed'
+      ? (nowMs ?? failedAt)
+      : terminal === 'completed' ||
+          terminal === 'cancelled' ||
+          terminal === 'canceled'
+        ? null
+        : failedAt;
   return {
     ...item,
-    activeRunIds: item.activeRunIds.filter((r) => r !== runId),
+    activeRunIds: hasRun
+      ? item.activeRunIds.filter((r) => r !== runId)
+      : item.activeRunIds,
+    completedAtMs: nowMs ?? item.completedAtMs ?? null,
+    lastRunFailedAtMs: nextFailedAt,
   };
 }
 

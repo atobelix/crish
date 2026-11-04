@@ -5,6 +5,9 @@
 //   不是只改选中态。当前目标带对号；目标行在未连通时点击 = 重连。
 // - 局域网配对行：中继未接管且已配对时呈现（= 历史单设备形态，语义不变）；
 //   中继接管后配对行让位账号设备行，避免把非当前连接误报为当前设备。
+// - 「本机」行恒在首位（手机自身 = 本地模式）：账号模式点选即清目标 +
+//   本地钉住（真实切换，不是只改选中态）；本地生效时呈选中态。非账号模式
+//   且远端在效时点选 = 「现在用本地」导航（onUseLocal），不解绑配对。
 // - 扫码添加新设备行两种模式都在（配对新桌面走既有扫码链）。
 // 行距按原型 sheet-clean-list 的 6；「在线」按原型 device-status-text 纯绿字内联呈现。
 import { useEffect } from 'react';
@@ -19,6 +22,8 @@ export interface DeviceSheetProps {
   device: DeviceStatusVm;
   /** 扫码添加新设备（→ /pair/scan） */
   onOpenScan: () => void;
+  /** 非账号模式点「本机」且远端在效时：「现在用本地」（导航本地对话页） */
+  onUseLocal?: () => void;
   testID?: string;
 }
 
@@ -27,6 +32,7 @@ export function DeviceSheet({
   onClose,
   device,
   onOpenScan,
+  onUseLocal,
   testID,
 }: DeviceSheetProps) {
   const theme = useTheme();
@@ -42,22 +48,42 @@ export function DeviceSheet({
   const pairedHint = device.connected ? '在线' : device.phaseLabel;
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="连接设备" testID={testID}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="连接设备"
+      size="large"
+      testID={testID}
+    >
       <View style={[styles.list, { gap: theme.space.xs + theme.space.xxs }]}>
+        <SheetOptionRow
+          testID="device-sheet-local"
+          label={device.localDevice.name}
+          selected={device.localDevice.selected}
+          hint={device.localDevice.selected ? '当前设备' : undefined}
+          onPress={() => {
+            if (accountMode) {
+              device.switchToLocal();
+              onClose();
+              return;
+            }
+            onClose();
+            if (!device.localDevice.selected) onUseLocal?.();
+          }}
+        />
         {accountMode ? (
           <>
             {device.devices.length === 0 ? (
               <View style={styles.empty}>
                 <AppText variant="body" color="textSecondary">
-                  暂无已知设备
+                  暂无已知电脑
                 </AppText>
                 <AppText
                   variant="caption"
                   color="textTertiary"
                   style={styles.emptyText}
                 >
-                  在电脑上打开 Crish
-                  并登录同一账号后，在线的电脑会自动出现在这里。
+                  登录同一账号的电脑将显示在此
                 </AppText>
               </View>
             ) : (
@@ -100,7 +126,7 @@ export function DeviceSheet({
           <SheetOptionRow
             testID="device-sheet-current"
             label={pairedHost ?? '已配对桌面'}
-            selected
+            selected={!device.localDevice.selected}
             hint={pairedHint}
             hintTone={device.connected ? 'success' : 'muted'}
             onPress={() => {
@@ -119,16 +145,6 @@ export function DeviceSheet({
           }}
         />
       </View>
-      {accountMode && device.devices.length > 0 ? (
-        <AppText
-          variant="caption"
-          color="textTertiary"
-          style={{ marginTop: theme.space.md }}
-        >
-          点选在线设备即可切换要控制的电脑；切换后，会话、项目与模型都会跟随所选电脑。离线设备需先在电脑上打开
-          Crish 并登录同一账号。
-        </AppText>
-      ) : null}
     </Sheet>
   );
 }
