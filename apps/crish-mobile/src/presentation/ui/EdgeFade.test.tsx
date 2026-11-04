@@ -68,3 +68,53 @@ describe('EdgeFade - 紧凑化与动态渐变锚定（方案 16 钉案）', () =
     expect(gradient?.props.y2).toBe(20);
   });
 });
+
+describe('EdgeFade - Reanimated 共享值驱动 120fps 动态贴合（方案 19）', () => {
+  it('传入 keyboardHeightSV 时，底部羽化高度实时跟随 baseHeight + 键盘高度微秒级贴合', async () => {
+    const kbSV = { value: 300 };
+    const view = await render(
+      <EdgeFade side="bottom" baseHeight={120} keyboardHeightSV={kbSV as any} />
+    );
+    const json = view.toJSON() as ReactTestRendererJSON;
+    // 根节点为 Animated.View，包含了动态 height 计算样式
+    const style = Array.isArray(json?.props?.style)
+      ? Object.assign({}, ...json.props.style)
+      : json?.props?.style;
+    expect(style.height).toBe(420); // 120 + 300
+
+    // 内部顶缘羽化条带 SVG 的 height 始终锁定为 FADE_SPAN_BOTTOM (36dp)
+    const svg = findNode(
+      json,
+      (n) => n.type === 'RNSVGSvgView' || n.type === 'svg'
+    );
+    expect(svg?.props.height).toBe(36);
+  });
+
+  it('键盘收起时（keyboardHeightSV 从 300 降为 0），底部羽化高度无级回退至 baseHeight', async () => {
+    const kbSV = { value: 0 };
+    const view = await render(
+      <EdgeFade side="bottom" baseHeight={138} keyboardHeightSV={kbSV as any} />
+    );
+    const json = view.toJSON() as ReactTestRendererJSON;
+    const style = Array.isArray(json?.props?.style)
+      ? Object.assign({}, ...json.props.style)
+      : json?.props?.style;
+    expect(style.height).toBe(138); // 138 + 0
+  });
+
+  it('同时支持 animatedAdditionalHeight 别名与负数键盘值安全处理', async () => {
+    const kbSV = { value: -336 };
+    const view = await render(
+      <EdgeFade
+        side="bottom"
+        baseHeight={100}
+        animatedAdditionalHeight={kbSV as any}
+      />
+    );
+    const json = view.toJSON() as ReactTestRendererJSON;
+    const style = Array.isArray(json?.props?.style)
+      ? Object.assign({}, ...json.props.style)
+      : json?.props?.style;
+    expect(style.height).toBe(436); // 100 + |-336|
+  });
+});

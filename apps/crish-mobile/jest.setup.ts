@@ -205,6 +205,11 @@ jest.mock('react-native-reanimated', () => {
       value: typeof fn === 'function' ? fn() : fn,
     }),
     useAnimatedReaction: () => {},
+    scrollTo: jest.fn(),
+    useAnimatedRef: () => {
+      const ref = React.useRef(null);
+      return ref;
+    },
     useAnimatedKeyboard: () => ({ height: { value: 0 }, state: { value: 0 } }),
     useReducedMotion: () => false,
     interpolate: (_v: number, _input: number[], output: number[]) => output[0],

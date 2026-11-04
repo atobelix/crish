@@ -1,23 +1,27 @@
 // 会话时间线底部避让推导与跟随状态机判定（纯函数）。
 //
 // 统一会话屏的输入区是绝对定位悬浮于全屏时间线之上的浮层：
-// 列表尾部内容要能完整滚出到悬浮物上方并保留呼吸间距，
-// 底部垫高必须等于「悬浮物自身高度 + 软键盘高度 + 呼吸间距」！
+// 在 KeyboardChatScrollView 架构下，列表底部内边距仅需物理浮层高 + gap；
+// 键盘高度由 KeyboardChatScrollView 在 UI 线程与 KeyboardStickyView 联动处理，
+// 绝对严禁在 timelineBottomInset 再次叠加 keyboardHeight！
 //
-// 1. 消除 316dp 遮挡盲区：全屏无外层避让的 FlatList，当软键盘升起时，
-//    软键盘直接覆盖屏幕下方，因此列表可滚动的底部内衬必须加上 keyboardHeight；
+// 1. 消除双重垫高与底部巨大空白：列表内衬仅计算有效物理浮层高度 + gap，
+//    软键盘平移完全委托给 KeyboardChatScrollView（extraContentPadding）；
 // 2. 避免误报与穿透：实测 overlayHeight 缺失或误报 <=0 时，由 minOverlayHeight 保底；
 // 3. 双阈值迟滞带（Hysteresis Band）：消除触底临界点上下滑动打架。
 
 export interface TimelineBottomInsetInput {
   /** 悬浮输入区实测或估算总高（含 Composer 卡体、条件层、快捷条与安全边距） */
   overlayHeight: number;
-  /** 软键盘实际高度（0 或 280~380dp） */
-  keyboardHeight?: number;
   /** 尾部内容与浮层顶部的呼吸间隙（建议 theme.space.xl = 20dp） */
   gap: number;
   /** 最小保底物理高度（实测缺失或误报 <=0 时的强力兜底） */
   minOverlayHeight?: number;
+  /**
+   * @deprecated 键盘高度已由 KeyboardChatScrollView 在 UI 线程接管，本纯函数不再叠加
+   * @see useSmoothKeyboardTimelineLinkage
+   */
+  keyboardHeight?: number;
 }
 
 function sane(value: number | undefined): number {
@@ -27,7 +31,7 @@ function sane(value: number | undefined): number {
 }
 
 /**
- * 推导时间线 FlatList 的 contentContainerStyle.paddingBottom。
+ * 推导时间线 FlatList 的物理底部避让高度（纯物理浮层有效高度 + gap）。
  */
 export function deriveTimelineBottomInset(
   input: TimelineBottomInsetInput
@@ -35,10 +39,10 @@ export function deriveTimelineBottomInset(
   const minOverlay = sane(input.minOverlayHeight);
   const measuredOverlay = sane(input.overlayHeight);
   const effectiveOverlay = Math.max(minOverlay, measuredOverlay);
-  const keyboard = sane(input.keyboardHeight);
   const gap = sane(input.gap);
 
-  return effectiveOverlay + keyboard + gap;
+  // 纯粹且精确：物理浮层有效高度 + 呼吸空隙
+  return effectiveOverlay + gap;
 }
 
 export interface FollowThresholds {

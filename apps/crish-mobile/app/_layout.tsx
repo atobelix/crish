@@ -7,6 +7,7 @@
 // 无 JS 自绘中间帧（无 BrandMark、无 Spinner）。
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { enableFreeze, enableScreens } from 'react-native-screens';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -42,6 +43,10 @@ import { useAndroidBackGuard } from '@/presentation/navigation/useSafeBack';
 
 const log = createLogger('startup');
 const notificationsLog = createLogger('notifications');
+
+// 全局启用原生屏幕与后台视口冰冻（方案 21：转场期间后台页面 React Suspense 冻结，消灭退栈幽灵重绘）
+enableScreens(true);
+enableFreeze(true);
 
 // 原生开屏保持：JS 首帧渲染完成前不自动隐藏（模块顶层一次性调用）
 void SplashScreen.preventAutoHideAsync().catch(() => {

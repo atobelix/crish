@@ -73,6 +73,8 @@ import type { SessionSummary } from '@/domain/store/sessionReducers';
 import {
   AppText,
   Composer,
+  ComposerAmbientVeil,
+  DEFAULT_COMPOSER_PLACEHOLDER,
   DropdownMenu,
   IconButton,
   Screen,
@@ -570,6 +572,9 @@ export default function HomeScreen({
           },
         ]}
       >
+        {/* 宏观贯穿环境遮蔽大软阴影：位于最底层，贯穿全宽，自输入框容器顶缘向上消散 28dp */}
+        <ComposerAmbientVeil testID="composer-ambient-veil" />
+
         {/* 附件菜单（批 A 锚定 Popover 形态）：渲染在 StickyView 内、
             composer 正上方——开合不收键盘（双政策的保键盘面）；
             everOpened 门保留（首开前不挂载，同 Sheet 族先例） */}
@@ -597,11 +602,9 @@ export default function HomeScreen({
         <Composer
           testID="home-composer"
           placeholder={
-            remoteMode
-              ? '点击发消息、长按语音输入'
-              : localEntry.configured
-                ? '本地对话 · 点击发消息、长按语音输入'
-                : '先配置本地供应商后即可对话'
+            remoteMode || localEntry.configured
+              ? DEFAULT_COMPOSER_PLACEHOLDER
+              : '先配置本地供应商后即可对话'
           }
           value={quickRun.prompt}
           onChangeText={quickRun.setPrompt}

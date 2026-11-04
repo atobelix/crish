@@ -108,6 +108,40 @@ describe('MessageActionBar (移动端助手消息操作工具栏 - 纯图标精�
       expect(view.queryByText('复制')).toBeNull();
       expect(view.queryByText('分享')).toBeNull();
     });
+
+    it('按钮外形轻量居中（32dp）且结合 hitSlop 实现 44dp 触控盒，图标精进为 16dp', async () => {
+      const view = await renderBar();
+      const buttonIds = [
+        'assistant-message-action-bar-copy',
+        'assistant-message-action-bar-share',
+        'assistant-message-action-bar-more',
+      ];
+
+      for (const id of buttonIds) {
+        const btn = view.getByTestId(id);
+        expect(btn.props.style).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              width: 32,
+              height: 32,
+            }),
+          ])
+        );
+        expect(btn.props.hitSlop).toEqual({
+          top: 6,
+          bottom: 6,
+          left: 6,
+          right: 6,
+        });
+
+        // 验证内部 Icon 尺寸为 16dp (theme.size.iconSmall)
+        const svgChild = btn.children.find(
+          (child: any) => child?.props?.width === 16
+        ) as any;
+        expect(svgChild).toBeTruthy();
+        expect(svgChild?.props?.height).toBe(16);
+      }
+    });
   });
 
   describe('复制（Copy）纯图标链路与状态回弹', () => {

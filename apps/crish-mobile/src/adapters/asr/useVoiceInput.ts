@@ -21,6 +21,7 @@ import {
   voiceDisplayText,
   voiceFinalText,
   voicePhaseForTranslation,
+  voicePhaseForTranslation2D,
   voiceReleaseOutcome,
   type VoicePhase,
   type VoiceTextState,
@@ -68,7 +69,8 @@ export interface VoiceInputApi {
   /** 模型总字节数（下载门文案用，由适配层注入，UI 不直依赖模型清单） */
   modelTotalBytes: number;
   pressStart: () => void;
-  pressMove: (translationY: number) => void;
+  /** 手势位移更新：支持纯 Y（1D 上滑）或 X+Y（2D 左右扇区与中央走廊） */
+  pressMove: (translationXOrY: number, translationY?: number) => void;
   pressEnd: () => void;
   confirmDownload: () => void;
   dismissGate: () => void;
@@ -118,7 +120,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
   );
 
   const finishSession = useCallback(
-    async (outcome: 'submit' | 'discard') => {
+    async (outcome: 'submit' | 'discard' | 'edit') => {
       if (finishingRef.current) return;
       finishingRef.current = true;
       if (outcome === 'discard') {
@@ -138,7 +140,9 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
       finishingRef.current = false;
       if (text.length > 0) {
         optionsRef.current.onFillText(text);
-        optionsRef.current.onSubmitText(text);
+        if (outcome === 'submit') {
+          optionsRef.current.onSubmitText(text);
+        }
       } else {
         optionsRef.current.notify('没有听清，请重试', 'info');
       }
@@ -230,10 +234,25 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
   }, [setErrorBoth]);
 
   const pressMove = useCallback(
-    (translationY: number) => {
+    (translationXOrY: number, translationY?: number) => {
       const current = phaseRef.current;
-      if (current !== 'recording' && current !== 'cancelling') return;
-      const next = voicePhaseForTranslation(current, translationY);
+      if (
+        current !== 'recording' &&
+        current !== 'cancelling' &&
+        current !== 'editing'
+      ) {
+        return;
+      }
+      let next: VoicePhase;
+      if (typeof translationY === 'number') {
+        next = voicePhaseForTranslation2D(
+          current,
+          translationXOrY,
+          translationY
+        );
+      } else {
+        next = voicePhaseForTranslation(current, translationXOrY);
+      }
       if (next !== current) setPhaseBoth(next);
     },
     [setPhaseBoth]
@@ -245,6 +264,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInputApi {
     const outcome = voiceReleaseOutcome(phaseRef.current);
     if (outcome === 'submit') void finishSession('submit');
     else if (outcome === 'discard') void finishSession('discard');
+    else if (outcome === 'edit') void finishSession('edit');
   }, [finishSession]);
 
   const confirmDownload = useCallback(() => {

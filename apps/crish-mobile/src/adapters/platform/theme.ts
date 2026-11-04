@@ -284,7 +284,7 @@ export interface ThemeMotion {
     spin: number;
     /** 光标呼吸半周期（CodeCells 验证码光标 0.4s 往返） */
     blink: number;
-    /** 抽屉开合（原型 0.35s emphasized 定时；M2 消费，替代弹簧口径） */
+    /** 抽屉开合（方案 20/21 钉死 250ms settle 极速扑面而来） */
     drawer: number;
     /** 搜索展开 / 键盘联动（原型 0.28s emphasized 定时；M2/M3 消费） */
     expand: number;
@@ -846,7 +846,7 @@ const motion: ThemeMotion = {
     settle: 260,
     spin: 1500,
     blink: 400,
-    drawer: 350,
+    drawer: 250,
     expand: 280,
   },
   easing: {

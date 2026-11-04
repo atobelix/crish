@@ -3,7 +3,7 @@
 // 按压反馈（按压过渡统一批，2026-11-02）：账号卡/退出胶囊缩放 1→motion.pressScale
 // 走 120ms 过渡；退出胶囊底色 dangerSoft 为叠层过渡（不再瞬时换色）。
 import { useEffect, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { InteractionManager, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -54,6 +54,19 @@ export interface SettingsScreenViewProps {
   onOpenHaptics?: () => void;
 }
 
+/**
+ * 原生 Modal 懒挂载闩（方案 21 性能铁律）：
+ * 初始为 false 时绝对不向原生系统申请 Native Modal 句柄，
+ * 仅在首次 open=true 时进入 JSX 树，卸载时也不反复申请/销毁。
+ */
+function useEverOpened(open: boolean): boolean {
+  const [ever, setEver] = useState(open);
+  useEffect(() => {
+    if (open) setEver(true);
+  }, [open]);
+  return ever;
+}
+
 export default function SettingsScreenView({
   vm,
   onBack,
@@ -75,6 +88,8 @@ export default function SettingsScreenView({
   const profile = useAccountStore((s) => s.profile);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const removeEverOpened = useEverOpened(removeOpen);
+  const helpEverOpened = useEverOpened(helpOpen);
   const appVersion = Constants.expoConfig?.version ?? '0.1.0';
   const loggedIn = accountStatus === 'loggedIn' && accountUser !== null;
   const accountName =
@@ -96,7 +111,7 @@ export default function SettingsScreenView({
       : Object.keys(localConfig.providers).length > 0
         ? '未选当前供应商'
         : '未配置';
-  // 语音行摘要：模型就绪态（check 是尺寸+标记的廉价读，进页异步补齐）
+  // 语音行摘要：模型就绪态（方案 21：文件 I/O 延后至 InteractionManager 释放后执行，不抢占转场帧）
   const [voiceSummary, setVoiceSummary] = useState('');
   useEffect(() => {
     if (!onOpenVoice) return;
@@ -105,20 +120,25 @@ export default function SettingsScreenView({
       return;
     }
     let alive = true;
-    void asrModelManager()
-      .check()
-      .then((state) => {
-        if (!alive) return;
-        setVoiceSummary(
-          state.kind === 'ready'
-            ? '已就绪'
-            : state.kind === 'error'
-              ? '下载失败'
-              : '未下载'
-        );
-      });
+    const task = InteractionManager.runAfterInteractions(() => {
+      void asrModelManager()
+        .check()
+        .then((state) => {
+          if (!alive) return;
+          setVoiceSummary(
+            state.kind === 'ready'
+              ? '已就绪'
+              : state.kind === 'error'
+                ? '下载失败'
+                : '未下载'
+          );
+        });
+    });
     return () => {
       alive = false;
+      if (typeof task?.cancel === 'function') {
+        task.cancel();
+      }
     };
   }, [onOpenVoice]);
 
@@ -374,34 +394,38 @@ export default function SettingsScreenView({
         </SettingsGroup>
       </ScrollView>
 
-      <ConnectionHelpSheet
-        visible={helpOpen}
-        onClose={() => setHelpOpen(false)}
-      />
-      <Dialog
-        visible={removeOpen}
-        title="解除配对？"
-        description="将清除本机的配对信息，需要重新配对才能连接。"
-        onDismiss={() => setRemoveOpen(false)}
-        actions={[
-          {
-            label: '取消',
-            variant: 'secondary',
-            onPress: () => setRemoveOpen(false),
-            testID: 'settings-remove-cancel',
-          },
-          {
-            label: '解除配对',
-            variant: 'danger',
-            onPress: () => {
-              setRemoveOpen(false);
-              void onConfirmRemove();
+      {helpEverOpened ? (
+        <ConnectionHelpSheet
+          visible={helpOpen}
+          onClose={() => setHelpOpen(false)}
+        />
+      ) : null}
+      {removeEverOpened ? (
+        <Dialog
+          visible={removeOpen}
+          title="解除配对？"
+          description="将清除本机的配对信息，需要重新配对才能连接。"
+          onDismiss={() => setRemoveOpen(false)}
+          actions={[
+            {
+              label: '取消',
+              variant: 'secondary',
+              onPress: () => setRemoveOpen(false),
+              testID: 'settings-remove-cancel',
             },
-            testID: 'settings-remove-confirm',
-          },
-        ]}
-        testID="settings-remove-dialog"
-      />
+            {
+              label: '解除配对',
+              variant: 'danger',
+              onPress: () => {
+                setRemoveOpen(false);
+                void onConfirmRemove();
+              },
+              testID: 'settings-remove-confirm',
+            },
+          ]}
+          testID="settings-remove-dialog"
+        />
+      ) : null}
     </Screen>
   );
 }

@@ -181,8 +181,15 @@ describe('TimelineView 编程式滚动互斥锁（方案 16 钉案）', () => {
     ) as { paddingBottom?: number }[];
     const hit = flat.find((entry) => entry.paddingBottom !== undefined);
 
-    // 120 + 24 = 144
-    expect(hit?.paddingBottom).toBe(144);
+    // 方案 18：contentContainerStyle.paddingBottom 恒定为 0，防止与 KeyboardChatScrollView 双重叠加
+    expect(hit?.paddingBottom).toBe(0);
+
+    // effectiveBottomInset (120 + 24 = 144) 由 extraContentPadding 唯一托管
+    const flatList = view.getByTestId('session-timeline');
+    const scrollComponent = flatList.props.renderScrollComponent({
+      children: null,
+    });
+    expect(scrollComponent.props.extraContentPadding.value).toBe(144);
     await view.unmount();
   });
 });

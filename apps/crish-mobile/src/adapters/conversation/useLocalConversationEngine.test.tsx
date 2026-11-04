@@ -193,6 +193,10 @@ describe('useLocalConversationEngine', () => {
     );
     expect(result.current.composer.modelControl.label).toBe('测试供应商 · m1');
     expect(result.current.emptyState).toEqual({ title: '本地助手已就绪' });
+    expect(result.current.composer.placeholder).toBe(
+      '点击发消息、长按语音输入'
+    );
+    expect(result.current.composer.placeholder).not.toMatch(/^本地对话/);
 
     await act(async () => {
       result.current.composer.setPrompt('第一问');

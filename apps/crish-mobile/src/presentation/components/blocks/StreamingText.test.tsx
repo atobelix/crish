@@ -183,3 +183,79 @@ describe('节流调度（帧合并 / 强制刷新 / 终值 flush 组件面）', 
     expect(screen.queryByText(`帧2 ${STREAMING_CURSOR}`)).toBeNull();
   });
 });
+
+describe('末端模糊渐显与光标淘汰（方案 25）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('默认启用 tailGradient 时且无显式光标注入：淘汰机械打字机光标，渲染渐变梯级', async () => {
+    const longText =
+      '回望历史，中华文明是人类历史上唯一绵延不断、从未中断的伟大文明。四大发明的璀璨光芒曾照亮人类文明的暗夜。';
+    await render(
+      <StreamingText
+        identity="seq:gradient-test"
+        text={longText}
+        streaming
+        testID="stream-container"
+      />
+    );
+
+    // 1. 机械打字机光标彻底被淘汰，不出现 ▍
+    expect(screen.queryByText(new RegExp(STREAMING_CURSOR))).toBeNull();
+
+    // 2. 梯级节点成功挂载
+    const tier0 = screen.getByTestId('tail-tier-0');
+    expect(tier0).toBeTruthy();
+    expect(tier0.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ opacity: expect.any(Number) }),
+      ])
+    );
+  });
+
+  it('终态收口（streaming=false）：销毁所有渐显梯级节点，回归纯净静态文本', async () => {
+    const longText =
+      '回望历史，中华文明是人类历史上唯一绵延不断、从未中断的伟大文明。四大发明的璀璨光芒曾照亮人类文明的暗夜。';
+    const { rerender } = await render(
+      <StreamingText
+        identity="seq:gradient-test"
+        text={longText}
+        streaming
+        testID="stream-container"
+      />
+    );
+
+    expect(screen.getByTestId('tail-tier-0')).toBeTruthy();
+
+    await rerender(
+      <StreamingText
+        identity="seq:gradient-test"
+        text={longText}
+        streaming={false}
+        testID="stream-container"
+      />
+    );
+
+    // 梯级节点已完全销毁
+    expect(screen.queryByTestId('tail-tier-0')).toBeNull();
+    // 纯文本完整显示
+    expect(screen.getByText(longText)).toBeTruthy();
+  });
+
+  it('显式 tailGradient=false 时：平滑回退传统打字机光标', async () => {
+    await render(
+      <StreamingText
+        identity="seq:gradient-fallback"
+        text="回退传统光标"
+        streaming
+        tailGradient={false}
+      />
+    );
+
+    expect(screen.getByText(`回退传统光标 ${STREAMING_CURSOR}`)).toBeTruthy();
+  });
+});

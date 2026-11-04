@@ -6,9 +6,9 @@ import type { SessionSyncStatus } from '@/domain/store/connectionStore';
 import {
   useConnectionStore,
   useDeviceSnapshotStore,
-  useEventStore,
   useSessionStore,
 } from '@/adapters/hooks/useAppStore';
+import { eventStore } from '@/domain/store/eventStore';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import type { EventWindow } from '@/domain/store/eventReducers';
 import {
@@ -57,7 +57,9 @@ export interface SessionsVm {
 
 export function useSessionsVm(): SessionsVm {
   const sessions = useSessionStore((s) => s.sessions);
-  const windows = useEventStore((s) => s.windows);
+  // 【流畅度方案 21·精准订阅】：废除 windows 全量字典响应式订阅！
+  // 任何单会话的数据回填不再唤醒 useSessionsVm 与抽屉重绘；
+  // 仅在被显式访问时从 eventStore 快照按需读取。
   const connected = useConnectionStore(
     (s) => selectEffectiveChatMode(s.phase) === 'remote'
   );
@@ -84,7 +86,9 @@ export function useSessionsVm(): SessionsVm {
   }, []);
   return {
     sessions,
-    windows,
+    get windows() {
+      return eventStore.getState().windows;
+    },
     connected,
     snapshotStale,
     snapshotAt,

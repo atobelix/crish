@@ -637,11 +637,19 @@ export function Composer({
       // 3. 呼起语音录音管线
       voiceRef.current?.pressStart();
     },
-    onPanMove: (translationY: number) => {
-      voiceRef.current?.pressMove(translationY);
+    onPanMove: (translationX: number, translationY: number) => {
+      voiceRef.current?.pressMove(translationX, translationY);
     },
     onLongPressEnd: () => {
+      const wasEditing = voiceRef.current?.phase === 'editing';
       voiceRef.current?.pressEnd();
+      if (wasEditing) {
+        // 右滑松手落入框内编辑：自动聚焦输入框并调起键盘供二次修改
+        setTimeout(() => {
+          inputRef.current?.focus();
+          setIsFocused(true);
+        }, 50);
+      }
     },
     onTap: () => {
       // 点击分流：调用原生输入框聚焦，调起键盘
@@ -751,7 +759,10 @@ export function Composer({
       .enabled(voiceGestureEnabled)
       .onUpdate((event) => {
         'worklet';
-        runOnJS(voiceBridgeRef.current.onPanMove)(event.translationY);
+        runOnJS(voiceBridgeRef.current.onPanMove)(
+          event.translationX,
+          event.translationY
+        );
       })
       .onFinalize(() => {
         'worklet';

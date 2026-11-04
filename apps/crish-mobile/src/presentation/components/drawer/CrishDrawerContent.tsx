@@ -114,44 +114,42 @@ export function CrishDrawerContent({
   // 优先级：显式 prop 优先，回退到 context 控制器状态
   const isOpen = propIsOpen ?? controller.isOpen;
 
-  // 【流畅度方案 08·核心优化】：抽屉闭合静默门
-  // 当抽屉处于闭合状态（isOpen === false 或当前页面不在主屏）时，
-  // 彻底绝缘外部路由变动（如从 /settings 返回 /）对抽屉内部的重算响应；
-  // 阻断返回转场动画期间隐式触发的 buildDrawerRows 批量对象分配与 20+ 会话行组件重排重绘；
-  // 保证仅当抽屉由手势拉开（isOpen === true 或手势位移 > 0）且处于主屏路由时，才触发一次性的列表项有效激活。
+  // 【流畅度方案 20/21·核心优化】：抽屉闭合静默门与状态机
+  // 只要处于 closing 或 idle 态，彻底切断外部路由变动、数据更新对抽屉内部的重算响应；
+  // 阻断会话切换与返回转场动画期间隐式触发的 buildDrawerRows 批量对象分配与 20+ 会话行组件重排重绘；
+  // 保证仅当抽屉真正处于展开态时，才响应当前路由变化。
+  const isInteractive =
+    propIsOpen !== undefined
+      ? propIsOpen && controller.phase !== 'closing'
+      : controller.phase === 'open';
+
   const [activePathname, setActivePathname] = useState(() =>
-    isOpen && isMainScreenRoute(rawPathname) ? rawPathname : '/'
+    isInteractive && isMainScreenRoute(rawPathname) ? rawPathname : '/'
   );
 
   useEffect(() => {
-    if (isOpen && isMainScreenRoute(rawPathname)) {
+    if (isInteractive && isMainScreenRoute(rawPathname)) {
       setActivePathname(rawPathname);
     }
-  }, [isOpen, rawPathname]);
+  }, [isInteractive, rawPathname]);
 
-  // 解析结果按 activePathname 记忆，且闭合态恒为 null：
+  // 解析结果按 activePathname 记忆，且闭合态或非交互态恒为 null：
   // 闭合态不计算选中态，防止路由变动击穿 DrawerSessionList 的 memo。
   const selected = useMemo(
-    () => (isOpen ? selectedConversationOf(activePathname ?? '') : null),
-    [activePathname, isOpen]
+    () =>
+      isInteractive && isOpen
+        ? selectedConversationOf(activePathname ?? '')
+        : null,
+    [activePathname, isInteractive, isOpen]
   );
   const accountUser = useAccountStore((s) => s.user);
   const profile = useAccountStore((s) => s.profile);
   const pending = useApprovalStore((s) => s.pending);
   const approvalCount = useMemo(() => countUserDecisions(pending), [pending]);
 
-  // 展开重算时钟：仅在 isOpen 翻转为 true 的瞬间刷新 nowMs，关闭期间完全冻结，转场中途保持不变
-  const [clock, setClock] = useState(() => ({
-    open: isOpen,
-    nowMs: Date.now(),
-  }));
-  if (clock.open !== isOpen) {
-    setClock({
-      open: isOpen,
-      nowMs: isOpen ? Date.now() : clock.nowMs,
-    });
-  }
-  const vm = useSessionListVm(clock.nowMs);
+  // 静态时钟基准：挂载时初始化一次，避免每次 isOpen 状态翻转触发 render 阶段二次重绘
+  const [mountNowMs] = useState(() => Date.now());
+  const vm = useSessionListVm(mountNowMs);
   // 会话操作（G3）：远端行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）。
   // 回调稳定化（C-PERF）：行组件已 memo，回调逐渲染换新引用会把 memo
   // 击穿——本区全部行回调 useCallback 化，依赖只取行数组与控制器内
@@ -262,7 +260,9 @@ export function CrishDrawerContent({
     (href: string) => {
       if (searching) toggleSearch(false);
       router.push(href as '/approvals');
-      actions.closeImmediate();
+      requestAnimationFrame(() => {
+        actions.closeImmediate();
+      });
     },
     [actions, searching, toggleSearch]
   );
@@ -319,6 +319,17 @@ export function CrishDrawerContent({
     rawListState.kind === 'loading' && !loadingSettled
       ? { kind: 'blank' }
       : rawListState;
+
+  // 抽屉收起静默门（方案 21）：处于 closing 期间冻结列表内容和状态，消除转场期间不必要的 DOM diff
+  const isClosing = controller.phase === 'closing';
+  const savedSectionsRef = useRef(sections);
+  const savedListStateRef = useRef(listState);
+  if (!isClosing) {
+    savedSectionsRef.current = sections;
+    savedListStateRef.current = listState;
+  }
+  const displaySections = isClosing ? savedSectionsRef.current : sections;
+  const displayListState = isClosing ? savedListStateRef.current : listState;
 
   return (
     <View
@@ -440,8 +451,8 @@ export function CrishDrawerContent({
 
       {/* 会话列表（memo 段：入参未变时整段跳过，见 DrawerSessionList） */}
       <DrawerSessionList
-        sections={sections}
-        listState={listState}
+        sections={displaySections}
+        listState={displayListState}
         onRetry={vm.refresh}
         selected={selected}
         onOpenSession={openSession}

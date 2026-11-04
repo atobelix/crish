@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { accountStore } from '@/domain/store/accountStore';
 import type { AccountProfile, AccountUser } from '@/domain/types/account';
 import { lightTheme } from '@/adapters/platform/theme';
+import { DrawerActionsContext, DrawerControllerContext } from './DrawerContext';
 import { CrishDrawerContent, isMainScreenRoute } from './CrishDrawerContent';
 
 let mockPathname = '/';
@@ -253,6 +254,51 @@ describe('CrishDrawerContent 闭合静默门（08 方案流畅度保护）', () 
 
     // 展开激活断言：展开后真正同步当前路由并激活列表渲染（selected 变为选中态）
     expect(mockLocalRowRenders).toBeGreaterThan(1);
+  });
+
+  it('抽屉处于 phase=closing 阶段时，阻断 pathname 变动与列表项重排（方案 21 瞬时静默门）', async () => {
+    mockPathname = '/';
+    const actions = {
+      open: jest.fn(),
+      close: jest.fn(),
+      closeImmediate: jest.fn(),
+    };
+    const controller = {
+      ...actions,
+      isOpen: true,
+      phase: 'open' as const,
+    };
+
+    const view = await render(
+      <DrawerActionsContext.Provider value={actions}>
+        <DrawerControllerContext.Provider value={controller}>
+          <CrishDrawerContent />
+        </DrawerControllerContext.Provider>
+      </DrawerActionsContext.Provider>,
+      { wrapper: Wrapper }
+    );
+    const initialRenderCount = mockLocalRowRenders;
+
+    // 抽屉触发关闭，进入 closing 阶段（此时 isOpen 仍为 true）
+    const closingController = {
+      ...actions,
+      isOpen: true,
+      phase: 'closing' as const,
+    };
+    mockPathname = '/session/s-2';
+
+    await act(async () => {
+      view.rerender(
+        <DrawerActionsContext.Provider value={actions}>
+          <DrawerControllerContext.Provider value={closingController}>
+            <CrishDrawerContent />
+          </DrawerControllerContext.Provider>
+        </DrawerActionsContext.Provider>
+      );
+    });
+
+    // 瞬时静默门断言：处于 closing 阶段时，即便 pathname 变更，LocalSessionListItem 的渲染计数保持不变！
+    expect(mockLocalRowRenders).toBe(initialRenderCount);
   });
 
   it('isMainScreenRoute 工具函数正确识别主屏与子路由', () => {

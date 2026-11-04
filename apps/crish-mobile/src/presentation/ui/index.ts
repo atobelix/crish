@@ -11,8 +11,14 @@ export { default as Card } from './Card';
 export type { CardProps, CardTone } from './Card';
 export { default as Collapsible } from './Collapsible';
 export type { CollapsibleProps } from './Collapsible';
-export { default as Composer } from './Composer';
+export { default as Composer, DEFAULT_COMPOSER_PLACEHOLDER } from './Composer';
 export type { ComposerProps } from './Composer';
+export {
+  ComposerAmbientVeil,
+  DEFAULT_VEIL_HEIGHT,
+  VEIL_STOPS,
+} from './ComposerAmbientVeil';
+export type { ComposerAmbientVeilProps } from './ComposerAmbientVeil';
 export { LoadingState, ErrorState } from './ContentState';
 export type { LoadingStateProps, ErrorStateProps } from './ContentState';
 export { default as Dialog } from './Dialog';

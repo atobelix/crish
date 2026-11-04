@@ -30,6 +30,11 @@ const ALLOWLIST: Record<string, string> = {
   // 同上：容器外阴影批的浮层投影规格表（flood 黑 + 形状白，五档预设），
   // 常量值由 noShadow 守卫的 SoftShadowSurface 钉版块看管（2026-11-02）
   'src/presentation/ui/SoftShadowSurface.tsx': 'SVG 阴影规格常数',
+  // 宏观贯穿环境遮蔽光晕规格常数（方案 24：纯黑多阶停点环境天光投影）
+  'src/presentation/ui/ComposerAmbientVeil.tsx': 'SVG 环境光晕规格常数',
+  // 流式尾端发光弥散常数（方案 25：微扩散光学景深文字投影）
+  'src/presentation/components/blocks/StreamingTailText.tsx':
+    '流式发光弥散常数',
   // WebView 渲染库生成物（批 E，2026-11-03)：katex / mermaid 官方 dist
   // 产物的字节内嵌字符串，非本仓样式消费面；来源与版本钉版见各文件头
   // 与 scripts/generate-webview-libs.mjs，生成物勿手改
@@ -342,7 +347,7 @@ describe('与原型同值（防走样 fixture)', () => {
   it('动效口径：emphasized 曲线与抽屉/展开时长（原型）', () => {
     const { motion } = lightTheme;
     expect(motion.easing.emphasized).toEqual([0.16, 1, 0.3, 1]);
-    expect(motion.duration.drawer).toBe(350);
+    expect(motion.duration.drawer).toBe(250);
     expect(motion.duration.expand).toBe(280);
     expect(motion.toast.displayMs).toBe(2500);
   });

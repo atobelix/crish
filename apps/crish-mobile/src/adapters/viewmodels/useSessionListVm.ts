@@ -25,6 +25,7 @@ import {
   type DrawerRow,
 } from '@/domain/pure/drawerRows';
 import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
+import { eventStore } from '@/domain/store/eventStore';
 import type { EventWindow } from '@/domain/store/eventReducers';
 
 export interface SessionListVm {
@@ -59,7 +60,7 @@ export interface SessionListVm {
 }
 
 export function useSessionListVm(nowMs: number): SessionListVm {
-  const { sessions, windows, connected, refresh, syncStatus, lastReconcileAt } =
+  const { sessions, connected, refresh, syncStatus, lastReconcileAt } =
     useSessionsVm();
   // 分区判定与主页设备胶囊同源（useDeviceStatusVm 的设备身份派生）：
   // 本机当前生效 → 本地分区；远端设备当值 → 远端分区。
@@ -97,9 +98,12 @@ export function useSessionListVm(nowMs: number): SessionListVm {
     [sessions]
   );
 
+  // 预览文本提取（方案 21 精准化）：按需从 eventStore 读取快照，
+  // 保持 useCallback 引用绝对稳定（[] 依赖），杜绝 windows 全量变动击穿 rows 的 memo
   const previewOf = useCallback(
-    (sessionId: string) => lastPreviewOfWindow(windows[sessionId]),
-    [windows]
+    (sessionId: string) =>
+      lastPreviewOfWindow(eventStore.getState().windows[sessionId]),
+    []
   );
 
   const localThreads = useMemo<DrawerLocalThreadInput[]>(
@@ -140,7 +144,9 @@ export function useSessionListVm(nowMs: number): SessionListVm {
     earlier: rows.earlier,
     query,
     setQuery,
-    windows,
+    get windows() {
+      return eventStore.getState().windows;
+    },
     remoteTotal: rows.remoteTotal,
     localTotal: rows.localTotal,
     hasSessions:

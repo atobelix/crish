@@ -17,9 +17,13 @@ export interface DrawerActions {
   closeImmediate: () => void;
 }
 
+export type DrawerPhase = 'idle' | 'opening' | 'open' | 'closing';
+
 export interface DrawerController extends DrawerActions {
   /** 响应式开合状态（驱动点击关闭层与返回键订阅） */
   isOpen: boolean;
+  /** 细粒度动画阶段（静默门机制：closing 瞬间切断所有外部更新穿透） */
+  phase: DrawerPhase;
 }
 
 export const DrawerControllerContext = createContext<DrawerController | null>(
@@ -37,7 +41,11 @@ const NOOP_ACTIONS: DrawerActions = {
 /** 抽屉控制器（汉堡按钮/内容区消费；容器外调用返回 no-op，深链安全） */
 export function useDrawerController(): DrawerController {
   return (
-    useContext(DrawerControllerContext) ?? { ...NOOP_ACTIONS, isOpen: false }
+    useContext(DrawerControllerContext) ?? {
+      ...NOOP_ACTIONS,
+      isOpen: false,
+      phase: 'idle',
+    }
   );
 }
 

@@ -68,6 +68,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 
 const openController: DrawerController = {
   isOpen: true,
+  phase: 'open',
   open: jest.fn(),
   close: jest.fn(),
   closeImmediate: jest.fn(),

@@ -67,6 +67,31 @@ describe('useSessionsVm', () => {
     expect(latest?.windows).toHaveProperty('s-1');
   });
 
+  it('eventStore 中的 windows 变更不会触发 useSessionsVm 重新渲染（方案 21 细化数据订阅）', async () => {
+    let renderCount = 0;
+    function CountProbe(): React.ReactElement {
+      latest = useSessionsVm();
+      renderCount += 1;
+      return <Pressable testID="count" />;
+    }
+
+    sessionStore.setState({ sessions: [session()] });
+    await render(<CountProbe />);
+    expect(renderCount).toBe(1);
+
+    // 模拟后台数据回填（hydrate）导致 eventStore 内部 windows 引用变更
+    await act(async () => {
+      eventStore.setState({
+        windows: { 's-2': { sessionId: 's-2' } } as never,
+      });
+    });
+
+    // 细化订阅断言：useSessionsVm 不因此次 windows 变动而重绘，避免抽屉关闭期间击穿渲染树
+    expect(renderCount).toBe(1);
+    // 按需读取断言：仍可通过 getter 实时获取到最新的 windows 数据
+    expect(latest?.windows).toHaveProperty('s-2');
+  });
+
   it('connected 仅由 phase=ready 决定', async () => {
     connectionStore.setState({ phase: 'ready' });
     await render(<Probe />);

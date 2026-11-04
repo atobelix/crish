@@ -2,7 +2,7 @@
 // - 专属于助手消息（role === 'assistant'）底部的轻量操作工具栏；
 // - 视觉规范遵循 Subtle & Lightweight（纯图标化 + 尺寸精进）：
 //   · 纯图标化：彻底移除按钮伴随文本（“复制”、“分享”等），纯粹克制留白；
-//   · 尺寸标准：图标尺寸提升至系统标准 theme.size.icon（20dp），与全 App 标准对齐；
+//   · 尺寸标准：图标尺寸精简微调至 16dp（theme.size.iconSmall），轻量克制精致；
 //   · 满血触控：按钮实体采用 width: 32, height: 32（居中对齐），结合 hitSlop: 6 实现 44×44dp 理想触控盒；
 //   · 色彩克制：保持浅灰 theme.colors.textTertiary；复制成功态切换为 check 绿勾（theme.colors.success）并保持 1500ms；
 // - 核心操作：
@@ -210,7 +210,7 @@ export const MessageActionBar = memo(function MessageActionBar({
       >
         <Icon
           name={copied ? 'check' : 'copy'}
-          size={theme.size.icon}
+          size={theme.size.iconSmall}
           color={copied ? theme.colors.success : theme.colors.textTertiary}
         />
       </AnimatedPressable>
@@ -228,7 +228,7 @@ export const MessageActionBar = memo(function MessageActionBar({
       >
         <Icon
           name="share"
-          size={theme.size.icon}
+          size={theme.size.iconSmall}
           color={theme.colors.textTertiary}
         />
       </AnimatedPressable>
@@ -247,7 +247,7 @@ export const MessageActionBar = memo(function MessageActionBar({
         >
           <Icon
             name="more"
-            size={theme.size.icon}
+            size={theme.size.iconSmall}
             color={theme.colors.textTertiary}
           />
         </AnimatedPressable>

@@ -28,6 +28,9 @@ const ALLOWLIST: Record<string, string> = {
     'WebView 库生成物',
   'src/presentation/components/blocks/webview/generated/mermaid.ts':
     'WebView 库生成物',
+  // 方案 20/21 钉死 250ms settle 极陡纯减速贝塞尔直驱
+  'src/presentation/components/drawer/CrishDrawerLayout.tsx':
+    '方案 20/21 钉死 250ms settle 极陡纯减速贝塞尔直驱',
 };
 
 // 规则 5 的单独豁免：RUNNING_PULSE_PERIOD_MS 是导出的命名正典常量

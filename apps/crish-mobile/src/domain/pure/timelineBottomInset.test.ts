@@ -3,25 +3,24 @@ import {
   evaluateFollowState,
 } from './timelineBottomInset';
 
-describe('deriveTimelineBottomInset', () => {
-  it('键盘弹起时正确叠加键盘高度，彻底消除 316dp 的对话文字被键盘/输入框遮挡盲区', () => {
-    // 无键盘：浮层 150 + gap 16 = 166
+describe('deriveTimelineBottomInset 纯函数 (SSOT 规范)', () => {
+  it('严格只计算有效物理浮层高度 + gap，坚决不叠加键盘高度', () => {
+    // 浮层 150 + gap 20 = 170
     expect(
       deriveTimelineBottomInset({
         overlayHeight: 150,
-        keyboardHeight: 0,
-        gap: 16,
+        gap: 20,
       })
-    ).toBe(166);
+    ).toBe(170);
 
-    // 键盘弹起 320dp：浮层 68 + 键盘 320 + gap 16 = 404，保证列表内容完整滚到输入框上方
+    // 即使传入历史残余的 keyboardHeight，也绝不叠加，防止双重垫高
     expect(
       deriveTimelineBottomInset({
-        overlayHeight: 68,
-        keyboardHeight: 320,
-        gap: 16,
+        overlayHeight: 150,
+        keyboardHeight: 336,
+        gap: 20,
       })
-    ).toBe(404);
+    ).toBe(170);
   });
 
   it('条件层增厚（错误条/停止胶囊在场）由实测高自然带入', () => {
@@ -66,7 +65,7 @@ describe('deriveTimelineBottomInset', () => {
       })
     ).toBe(168);
 
-    // 场景 2：键盘弹起 336px，实测仍为 0 时保底生效（保底 148 + 键盘 336 + gap 20 = 504）
+    // 场景 2：即使传入键盘 336px，实测仍为 0 时保底生效（坚决不叠加键盘高度，维持 148 + 20 = 168）
     expect(
       deriveTimelineBottomInset({
         overlayHeight: 0,
@@ -74,7 +73,7 @@ describe('deriveTimelineBottomInset', () => {
         gap: 20,
         minOverlayHeight: 148,
       })
-    ).toBe(504);
+    ).toBe(168);
 
     // 场景 3：实测值大于保底值（如展开多行或有附件），采用实测值
     expect(

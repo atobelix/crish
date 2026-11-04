@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useStore } from 'zustand';
-import { useToast } from '@/presentation/ui';
+import { DEFAULT_COMPOSER_PLACEHOLDER, useToast } from '@/presentation/ui';
 import { localChatStore } from '@/domain/store/localChatStore';
 import {
   loadComposerDraft,
@@ -304,7 +304,7 @@ export function useLocalConversationEngine(
       editable: true,
       locked: false,
       placeholder: configured
-        ? '本地对话 · 点击发消息、长按语音输入'
+        ? DEFAULT_COMPOSER_PLACEHOLDER
         : '先配置供应商后即可发送',
       // contextBar 不供：工作区 / 权限是远端概念，本地不渲染。
       modelControl: {

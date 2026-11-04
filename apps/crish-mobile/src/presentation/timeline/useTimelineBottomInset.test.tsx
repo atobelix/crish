@@ -134,7 +134,7 @@ describe('useTimelineBottomInset', () => {
     expect(probeResult?.timelineBottomInset).toBe(215); // 195 + 20
   });
 
-  it('键盘弹起时 floatingHeight 包含 keyboardHeight，且 timelineBottomInset 亦正确叠加以消除遮挡盲区', async () => {
+  it('键盘弹起时 floatingHeight 包含 keyboardHeight 供 EdgeFade 消费，但 timelineBottomInset 保持纯净', async () => {
     (useKeyboardHeight as jest.Mock).mockReturnValue(336);
 
     await render(
@@ -150,7 +150,8 @@ describe('useTimelineBottomInset', () => {
     // overlayHeight 保持为纯物理浮层高度 173，不受键盘高度影响，专供 ScrollToBottomButton 消费
     expect(probeResult?.overlayHeight).toBe(173);
     expect(probeResult?.floatingHeight).toBe(509);
-    expect(probeResult?.timelineBottomInset).toBe(529);
+    // timelineBottomInset 严格不含键盘高度，由 KeyboardChatScrollView 接管键盘平移
+    expect(probeResult?.timelineBottomInset).toBe(193);
   });
 
   it('包含附件条展开时带入 ATTACHMENT_STRIP_HEIGHT (68px)', async () => {

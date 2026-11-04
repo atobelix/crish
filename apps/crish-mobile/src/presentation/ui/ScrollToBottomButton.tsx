@@ -71,13 +71,13 @@ export function ScrollToBottomButton({
     onPress();
   }, [onPress]);
 
-  // 键盘解耦动效 Worklet：键盘升起时原地淡出至 0，绝不上移推高；收起后恢复
+  // 键盘解耦动效 Worklet：键盘升起时原地淡出至 0，绝不上移推高；收起后平滑恢复（方案 19）
   const keyboardFadeStyle = useAnimatedStyle(() => {
     'worklet';
     if (!hideOnKeyboard) return {};
-    // keyboard.height.value <= 0 (0 = 完全收起, -336 = 完全升起)
+    // 兼容正负值（iOS/Android 在部分版本中符号不同，0 = 完全收起, 336 = 完全升起）
     // 在键盘弹起最初 40dp 范围平滑插值淡出
-    const kbHeight = -keyboard.height.value;
+    const kbHeight = Math.abs(keyboard.height.value);
     const opacity = kbHeight <= 0 ? 1 : Math.max(0, 1 - kbHeight / 40);
     return {
       opacity,

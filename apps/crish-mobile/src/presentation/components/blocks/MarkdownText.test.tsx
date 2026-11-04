@@ -3,9 +3,12 @@
 // - 代码块 / 表格按 testID 可查，独立成段图真加载（批 E 口径）；
 // - 链接 press 走 openLink 统一出口；任务列表不可交互；
 // - 超限降级有可见标注；流式回放中间帧无表格节点、终态成型。
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { MarkdownText } from './MarkdownText';
 import { openLink } from '@/adapters/platform/openLink';
+import * as clipboardModule from '@/adapters/platform/clipboard';
+import { haptics } from '@/adapters/platform/haptics';
 import {
   GOLDEN_MARKDOWN,
   STREAM_DOC,
@@ -14,6 +17,20 @@ import {
 
 jest.mock('@/adapters/platform/openLink', () => ({
   openLink: jest.fn(async () => true),
+}));
+
+jest.mock('@/adapters/platform/clipboard', () => ({
+  copyTextToClipboard: jest.fn(async () => true),
+}));
+
+jest.mock('@/adapters/platform/haptics', () => ({
+  haptics: {
+    selection: jest.fn(),
+    tap: jest.fn(),
+    snap: jest.fn(),
+    success: jest.fn(),
+    failure: jest.fn(),
+  },
 }));
 
 const openLinkMock = openLink as jest.MockedFunction<typeof openLink>;
@@ -274,5 +291,161 @@ describe('MarkdownText · 批 E 封口增强（高亮 / 公式 / 图 / 封顶）
     await render(<MarkdownText text={'能量公式 $E = mc^2$ 很重要'} />);
     expect(screen.queryByTestId('markdown-web-math')).toBeNull();
     expect(screen.getByText(/\$E = mc\^2\$/)).toBeTruthy();
+  });
+});
+
+describe('MarkdownText · 代码块顶栏复制与极浅分割线', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('渲染代码块时展示语言标签、复制按钮与居中极浅分割线', async () => {
+    await render(
+      <MarkdownText text={'```typescript\nconst a: number = 42;\n```'} />
+    );
+
+    // 1. 代码块容器存在
+    expect(screen.getByTestId('markdown-code-block')).toBeTruthy();
+
+    // 2. 语言标签正确展示
+    expect(screen.getByText('typescript')).toBeTruthy();
+
+    // 3. 复制按钮与初始无障碍语义存在
+    const copyBtn = screen.getByTestId('markdown-code-copy-btn');
+    expect(copyBtn).toBeTruthy();
+    expect(copyBtn.props.accessibilityLabel).toBe('复制代码');
+
+    // 4. 居中发丝级分割线存在且样式符合规范（width 94%, alignSelf center, hairlineWidth）
+    const divider = screen.getByTestId('markdown-code-divider');
+    expect(divider).toBeTruthy();
+    const flatStyle = StyleSheet.flatten(divider.props.style);
+    expect(flatStyle.width).toBe('94%');
+    expect(flatStyle.alignSelf).toBe('center');
+    expect(flatStyle.height).toBe(StyleSheet.hairlineWidth);
+  });
+
+  it('无语言标记的代码块降级显示 code，复制按钮与分割线依然正常在场', async () => {
+    await render(<MarkdownText text={'```\nplain snippet\n```'} />);
+    expect(screen.getByText('code')).toBeTruthy();
+    expect(screen.getByTestId('markdown-code-copy-btn')).toBeTruthy();
+    expect(screen.getByTestId('markdown-code-divider')).toBeTruthy();
+  });
+
+  it('点击复制触发剪贴板写入与触感反馈，1500ms 后自动复位', async () => {
+    const copySpy = jest.spyOn(clipboardModule, 'copyTextToClipboard');
+    await render(<MarkdownText text={'```python\nprint("hello")\n```'} />);
+
+    const copyBtn = screen.getByTestId('markdown-code-copy-btn');
+    await act(async () => {
+      fireEvent.press(copyBtn);
+    });
+
+    // 剪贴板入参为完整文本
+    expect(copySpy).toHaveBeenCalledWith('print("hello")');
+    // 触发选择触感
+    expect(haptics.selection).toHaveBeenCalled();
+
+    // 状态切换为已复制
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 快进 1500ms，状态自动恢复
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('复制代码');
+  });
+
+  it('1500ms 内再次点击重新计时，防抖稳定', async () => {
+    await render(<MarkdownText text={'```python\nprint("hello")\n```'} />);
+    const copyBtn = screen.getByTestId('markdown-code-copy-btn');
+
+    await act(async () => {
+      fireEvent.press(copyBtn);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 前进 1000ms（尚未超时）
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 再次点击重新计时
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('markdown-code-copy-btn'));
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 再过 1000ms（距离第二次点击只有 1000ms，若没重置则已 2000ms 恢复了）
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 再过 500ms（达到第二次点击的 1500ms）
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('复制代码');
+  });
+
+  it('组件卸载时安全清理定时器，不发生悬空回调', async () => {
+    const { unmount } = await render(
+      <MarkdownText text={'```python\nprint("hello")\n```'} />
+    );
+    const copyBtn = screen.getByTestId('markdown-code-copy-btn');
+    await act(async () => {
+      fireEvent.press(copyBtn);
+    });
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('已复制代码');
+
+    // 卸载组件
+    await act(async () => {
+      unmount();
+    });
+
+    // 卸载后再快进定时器，无任何异常抛出
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+  });
+
+  it('剪贴板返回 false 时不进入已复制状态', async () => {
+    const copySpy = jest
+      .spyOn(clipboardModule, 'copyTextToClipboard')
+      .mockResolvedValueOnce(false);
+    await render(<MarkdownText text={'```python\nprint("failed")\n```'} />);
+    const copyBtn = screen.getByTestId('markdown-code-copy-btn');
+
+    await act(async () => {
+      fireEvent.press(copyBtn);
+    });
+
+    expect(copySpy).toHaveBeenCalledWith('print("failed")');
+    expect(haptics.selection).toHaveBeenCalled();
+    // 状态仍为未复制
+    expect(
+      screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
+    ).toBe('复制代码');
   });
 });

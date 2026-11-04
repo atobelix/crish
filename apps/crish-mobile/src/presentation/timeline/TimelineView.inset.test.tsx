@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-// 时间线底部避让（2026-11-03「尾部内容被挡」修复）：
-// 宿主传入 bottomInset 时 contentContainer 的 paddingBottom 必须等于它；
-// 不传时保持旧缺省（space.xxl = 24，runDetail 等无悬浮输入区的宿主）。
+// 时间线底部避让（SSOT 契约：彻底清除双重叠加）：
+// contentContainerStyle.paddingBottom 恒定为 0，底部避让完全交由 KeyboardChatScrollView
+// 的 extraContentPadding 在原生层托管，scrollIndicatorInsets.bottom 恒定为 0。
 import { render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import { TimelineView } from './TimelineView';
@@ -33,6 +33,16 @@ function paddingBottomOf(view: Awaited<ReturnType<typeof render>>): number {
   return hit?.paddingBottom ?? -1;
 }
 
+function extraContentPaddingOf(
+  view: Awaited<ReturnType<typeof render>>
+): number {
+  const flatList = view.getByTestId('session-timeline');
+  const scrollComponent = flatList.props.renderScrollComponent({
+    children: null,
+  });
+  return (scrollComponent?.props?.extraContentPadding?.value ?? -1) as number;
+}
+
 function scrollIndicatorInsetsOf(view: Awaited<ReturnType<typeof render>>): {
   top?: number;
   bottom?: number;
@@ -55,8 +65,29 @@ async function wrap(element: React.ReactElement) {
   });
 }
 
-describe('TimelineView 底部避让', () => {
-  it('传入 bottomInset 时 paddingBottom 与 scrollIndicatorInsets.bottom 均等于实测推导值', async () => {
+describe('TimelineView 底部避让与单一真源 (SSOT)', () => {
+  it('使用了 KeyboardChatScrollView 时，contentContainerStyle.paddingBottom 恒定为 0', async () => {
+    const view = await wrap(
+      <TimelineView
+        blocks={blocks}
+        follow={false}
+        onFollowChange={() => undefined}
+        headerClearance={88}
+        floatingOverlayHeight={132}
+        bottomGap={20}
+      />
+    );
+
+    // 断言 contentContainerStyle 中 paddingBottom 必须为 0，彻底消除 152dp 双重叠加
+    expect(paddingBottomOf(view)).toBe(0);
+    expect(scrollIndicatorInsetsOf(view)).toEqual({ top: 88, bottom: 0 });
+
+    // 断言 extraContentPadding 接收到 152 (132 + 20)
+    expect(extraContentPaddingOf(view)).toBe(152);
+    await view.unmount();
+  });
+
+  it('传入 bottomInset 时 paddingBottom 依然恒为 0，避让高度由 extraContentPadding 唯一托管', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
@@ -66,12 +97,13 @@ describe('TimelineView 底部避让', () => {
         bottomInset={166}
       />
     );
-    expect(paddingBottomOf(view)).toBe(166);
-    expect(scrollIndicatorInsetsOf(view)).toEqual({ top: 88, bottom: 166 });
+    expect(paddingBottomOf(view)).toBe(0);
+    expect(scrollIndicatorInsetsOf(view)).toEqual({ top: 88, bottom: 0 });
+    expect(extraContentPaddingOf(view)).toBe(166);
     await view.unmount();
   });
 
-  it('bottomInset 变化时 paddingBottom 跟随（浮层增厚重贴底的前提）', async () => {
+  it('bottomInset 变化时 extraContentPadding 跟随，contentContainerStyle 保持为 0', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
@@ -80,7 +112,9 @@ describe('TimelineView 底部避让', () => {
         bottomInset={84}
       />
     );
-    expect(paddingBottomOf(view)).toBe(84);
+    expect(paddingBottomOf(view)).toBe(0);
+    expect(extraContentPaddingOf(view)).toBe(84);
+
     await view.rerender(
       <TimelineView
         blocks={blocks}
@@ -89,11 +123,12 @@ describe('TimelineView 底部避让', () => {
         bottomInset={190}
       />
     );
-    expect(paddingBottomOf(view)).toBe(190);
+    expect(paddingBottomOf(view)).toBe(0);
+    expect(extraContentPaddingOf(view)).toBe(190);
     await view.unmount();
   });
 
-  it('不传 bottomInset 时保持缺省内衬 24（space.xxl)', async () => {
+  it('不传 bottomInset 与 floatingOverlayHeight 时保持缺省内衬 24（space.xxl）', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
@@ -101,12 +136,13 @@ describe('TimelineView 底部避让', () => {
         onFollowChange={() => undefined}
       />
     );
-    expect(paddingBottomOf(view)).toBe(24);
-    expect(scrollIndicatorInsetsOf(view).bottom).toBe(24);
+    expect(paddingBottomOf(view)).toBe(0);
+    expect(scrollIndicatorInsetsOf(view).bottom).toBe(0);
+    expect(extraContentPaddingOf(view)).toBe(24);
     await view.unmount();
   });
 
-  it('传入 bottomInset 为 0 或负数时回退到缺省内衬 24，避免列表尾部被贴底遮挡', async () => {
+  it('传入 bottomInset 为 0 或负数时 extraContentPadding 回退到缺省内衬 24', async () => {
     const viewZero = await wrap(
       <TimelineView
         blocks={blocks}
@@ -115,8 +151,8 @@ describe('TimelineView 底部避让', () => {
         bottomInset={0}
       />
     );
-    expect(paddingBottomOf(viewZero)).toBe(24);
-    expect(scrollIndicatorInsetsOf(viewZero).bottom).toBe(24);
+    expect(paddingBottomOf(viewZero)).toBe(0);
+    expect(extraContentPaddingOf(viewZero)).toBe(24);
     await viewZero.unmount();
 
     const viewNegative = await wrap(
@@ -127,8 +163,8 @@ describe('TimelineView 底部避让', () => {
         bottomInset={-15}
       />
     );
-    expect(paddingBottomOf(viewNegative)).toBe(24);
-    expect(scrollIndicatorInsetsOf(viewNegative).bottom).toBe(24);
+    expect(paddingBottomOf(viewNegative)).toBe(0);
+    expect(extraContentPaddingOf(viewNegative)).toBe(24);
     await viewNegative.unmount();
   });
 });

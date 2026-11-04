@@ -54,6 +54,7 @@ const NAMED_FILES = [
   'src/presentation/screens/sessionDetailScreen.tsx',
   'src/presentation/timeline/TimelineView.tsx',
   'src/presentation/ui/Composer.tsx',
+  'src/presentation/ui/ComposerAmbientVeil.tsx',
   'src/presentation/ui/Dialog.tsx',
   'src/presentation/ui/DropdownMenu.tsx',
   'src/presentation/ui/IconButton.tsx',
@@ -137,9 +138,9 @@ describe('SoftShadow：唯一合法阴影路径（收编定案）', () => {
     // button 档：近 0 0px 6px α0.008 + 远 0 0px 16px α0.012（四向严格均匀散射，对标原型 --btn-shadow）
     expect(code).toContain('dy: 0, sigma: 3, alpha: 0.008');
     expect(code).toContain('dy: 0, sigma: 8, alpha: 0.012');
-    // composer 档：各向同性 360° 均匀温润弥散（近 σ3 α0.010 + 远 σ8 α0.014，内渗彻底切除，通透空气微气垫）
-    expect(code).toContain('dy: 0, sigma: 3, alpha: 0.01');
-    expect(code).toContain('dy: 0, sigma: 8, alpha: 0.014');
+    // composer 档：方案 24 输入框升级（近 σ3 α0.016 + 远 dy-1 σ9 α0.022，合成峰值 3.76% 极软边界，内渗彻底切除，通透微上扬气垫）
+    expect(code).toContain('dy: 0, sigma: 3, alpha: 0.016');
+    expect(code).toContain('dy: -1, sigma: 9, alpha: 0.022');
     // 出血 PAD 适度收敛为 36（容纳远层 σ8 的 3σ=24px 出血口径，彻底杜绝 GPU 显存卡顿）
     expect(code).toContain('const PAD = 36');
     // 旧过渡档值不得回潮

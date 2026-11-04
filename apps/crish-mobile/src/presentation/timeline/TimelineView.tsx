@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import type { RefObject } from 'react';
 import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import { useSmoothKeyboardTimelineLinkage } from './useSmoothKeyboardTimelineLinkage';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -172,6 +173,19 @@ export function TimelineView({
   useEffect(() => {
     extraPaddingSV.value = effectiveBottomInset;
   }, [effectiveBottomInset, extraPaddingSV]);
+
+  // 方案 19：120fps UI 线程 useKeyboardHandler 平滑插值与平移动态联动引擎
+  const linkage = useSmoothKeyboardTimelineLinkage(targetRef, {
+    follow,
+    overlayHeight:
+      floatingOverlayHeight ??
+      (bottomInset !== undefined && bottomInset > 0
+        ? bottomInset
+        : theme.space.xxl),
+    gap: bottomGap ?? theme.space.xl,
+    headerClearance,
+    onFollowChange,
+  });
 
   // 编程式滚动互斥锁：防止平滑回底动画期间 handleScroll 误判脱离跟随（方案 16）
   const isProgrammaticScrollingRef = useRef(false);
@@ -532,20 +546,20 @@ export function TimelineView({
     )
       return;
     scheduleScrollToEnd(false);
-    // bottomInset 入 deps：浮层增厚（错误条/停止胶囊出现、键盘弹起）
-    // 时跟随态须重新贴底，否则尾部会被新浮层压住一截
-  }, [
-    follow,
-    blocks.length,
-    scheduleScrollToEnd,
-    bottomInset,
-    effectiveBottomInset,
-  ]);
+    // 净化依赖：仅响应浮层物理尺寸本身变化（如输入框换行或折叠状态改变），
+    // 坚决移除 bottomInset 依赖，阻断键盘升降与收起期间的非法贴底抢跑与反向跳跃！
+  }, [follow, blocks.length, scheduleScrollToEnd, effectiveBottomInset]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     scrollYRef.current = contentOffset.y;
     viewportHeightRef.current = layoutMeasurement.height;
+    // 同步给动力学联动控制器（方案 19）
+    linkage.notifyScroll(
+      contentOffset.y,
+      layoutMeasurement.height,
+      contentSize.height
+    );
 
     // 关键守卫：如果在编程式平滑回底过程中，绝对禁止逆向翻转 follow 状态！（方案 16）
     if (isProgrammaticScrollingRef.current) {
@@ -574,6 +588,7 @@ export function TimelineView({
 
   const handleContentSizeChange = useCallback(
     (_w: number, _h: number) => {
+      linkage.notifyContentHeight(_h);
       // 内容尺寸到位是锚点落位的最早可信时机（布局图随行 onLayout 同批补齐）
       attemptAnchorRestore();
       // 原生 Yoga 测高完成且处于 follow 状态时，通过 requestAnimationFrame 安排 scrollToEnd，
@@ -667,7 +682,7 @@ export function TimelineView({
         renderScrollComponent={(props) => (
           <KeyboardChatScrollView
             {...props}
-            keyboardLiftBehavior="whenAtEnd"
+            keyboardLiftBehavior="never"
             extraContentPadding={extraPaddingSV}
           />
         )}
@@ -701,6 +716,7 @@ export function TimelineView({
         onViewableItemsChanged={handleViewableItemsChanged}
         onLayout={(event) => {
           viewportHeightRef.current = event.nativeEvent.layout.height;
+          linkage.notifyLayout(event.nativeEvent.layout.height);
           setListLaidOut(true);
         }}
         onScrollToIndexFailed={handleScrollToIndexFailed}
@@ -720,14 +736,14 @@ export function TimelineView({
         onMomentumScrollEnd={handleMomentumScrollEnd}
         scrollIndicatorInsets={{
           top: headerClearance ?? 0,
-          bottom: effectiveBottomInset,
+          bottom: 0, // 由 KeyboardChatScrollView 内部 indicatorPadding 统一托管
         }}
         contentContainerStyle={[
           {
             // 原型 conv-message-list：左右 18、消息 gap 16（token 无 18 档，定值落位）
             paddingHorizontal: 18,
             paddingTop: headerClearance ?? theme.space.lg,
-            paddingBottom: effectiveBottomInset,
+            paddingBottom: 0, // 核心改动：彻底归零！完全交由 extraContentPadding 在原生层处理，严禁双重叠加
             gap: theme.space.lg,
           },
           blocks.length === 0 && styles.emptyContent,
@@ -1003,3 +1019,5 @@ const styles = StyleSheet.create({
 });
 
 export default TimelineView;
+export { useSmoothKeyboardTimelineLinkage } from './useSmoothKeyboardTimelineLinkage';
+export { useKeyboardHandler } from 'react-native-keyboard-controller';

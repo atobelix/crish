@@ -9,7 +9,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import {
+  KeyboardStickyView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import { useTheme } from '@/adapters/platform/theme';
 import type { TimelineRow } from '@/presentation/timeline/insertTimeSeparators';
 import { TimelineView } from '@/presentation/timeline/TimelineView';
@@ -26,6 +29,7 @@ import {
 import {
   AppText,
   Composer,
+  ComposerAmbientVeil,
   DropdownMenu,
   EdgeFade,
   Screen,
@@ -56,25 +60,23 @@ export function ConversationScreen({
   // 停止生成 pill 按压反馈（按压过渡统一批口径）
   const stopPress = usePressFade();
   const listRef = useRef<FlatList<TimelineRow> | null>(null);
+  // 消费 Reanimated 共享键盘值（方案 19：120fps UI 线程微秒级同步拉伸与回缩）
+  const keyboardAnimation = useReanimatedKeyboardAnimation();
 
   // 悬浮 Composer 占高与时间线底部避让推导：
   // 由 useTimelineBottomInset 单一真源管理——实测优先、刚性拦截 <= 0 的初次挂载无效帧、
   // 并以 Composer 实际两行高（98px）/ 单行高（52px）+ 快捷条 + 安全区 + 附件条进行精确物理保底。
   // 保证尾部消息在键盘未激活与激活时，距输入框顶部均保持 16~24px 的舒适空隙（2026-11-03 修复）。
-  const {
-    timelineBottomInset,
-    floatingHeight,
-    overlayHeight,
-    handleOverlayLayout,
-  } = useTimelineBottomInset({
-    bottomSafeArea: insets.bottom,
-    hasContextBar: Boolean(engine.composer.contextBar),
-    hasModelControl: Boolean(engine.composer.modelControl),
-    hasAttachments: Boolean(engine.composer.hasAttachments),
-    hasError: Boolean(engine.error),
-    isBusyWithStop: Boolean(engine.busy && engine.stop),
-    gap: theme.space.xl,
-  });
+  const { floatingHeight, overlayHeight, handleOverlayLayout } =
+    useTimelineBottomInset({
+      bottomSafeArea: insets.bottom,
+      hasContextBar: Boolean(engine.composer.contextBar),
+      hasModelControl: Boolean(engine.composer.modelControl),
+      hasAttachments: Boolean(engine.composer.hasAttachments),
+      hasError: Boolean(engine.error),
+      isBusyWithStop: Boolean(engine.busy && engine.stop),
+      gap: theme.space.xl,
+    });
 
   return (
     <Screen>
@@ -91,7 +93,6 @@ export function ConversationScreen({
         headerClearance={insets.top + theme.size.header + theme.space.lg}
         floatingOverlayHeight={overlayHeight}
         bottomGap={theme.space.xl}
-        bottomInset={timelineBottomInset}
         busy={engine.busy}
         anchorKey={`${engine.kind}:${engine.id}`}
         readyCover
@@ -99,13 +100,18 @@ export function ConversationScreen({
       />
 
       {/* 上下羽化：内容临近边缘渐隐（含头栏/输入框背后的过渡区；
-          底部 EdgeFade 高度严格对齐 floatingHeight，严禁越界进入
-          timelineBottomInset 的 gap 呼吸区，保证最后一条消息完整可见） */}
+          底部 EdgeFade 消费 Reanimated 共享值，120fps 贴合 Composer，
+          严禁越界进入 timelineBottomInset 的 gap 呼吸区，保证最后一条消息完整可见） */}
       <EdgeFade
         side="top"
         height={insets.top + theme.size.header + theme.space.lg}
       />
-      <EdgeFade side="bottom" height={Math.max(0, floatingHeight)} />
+      <EdgeFade
+        side="bottom"
+        baseHeight={overlayHeight}
+        keyboardHeightSV={keyboardAnimation.height}
+        height={Math.max(0, floatingHeight)}
+      />
 
       {/* 悬浮头栏（通透，无底色）：汉堡开抽屉 + 标题胶囊 + 新建 + 更多 */}
       <ConversationHeader
@@ -141,6 +147,9 @@ export function ConversationScreen({
           },
         ]}
       >
+        {/* 宏观贯穿环境遮蔽大软阴影：位于最底层，贯穿全宽，自输入框容器顶缘向上消散 28dp */}
+        <ComposerAmbientVeil testID="composer-ambient-veil" />
+
         {engine.error ? (
           // 常驻错误条（与语音错误条同形态：dangerSoft 底、无阴影、
           // 文案占满整行，detail 续行呈现；关闭独立成行置于右端，

@@ -217,4 +217,58 @@ describe('ScrollToBottomButton - 键盘解耦与打字态原地淡出（Wave 4 �
       expect.arrayContaining([expect.not.objectContaining({ opacity: 0 })])
     );
   });
+
+  it('方案 19 兼容性：支持正数键盘高度（+300dp）在原位平滑淡出并置 pointerEvents="none"', async () => {
+    mockAnim.mockReturnValue({
+      progress: { value: 1 },
+      height: { value: 300 },
+    });
+
+    const view = await render(
+      <ScrollToBottomButton
+        onPress={jest.fn()}
+        bottomOffset={148}
+        testID="test-scroll-bottom-kb-pos-300"
+      />,
+      { wrapper: Providers }
+    );
+
+    const btn = view.getByTestId('test-scroll-bottom-kb-pos-300');
+    // 底距仍恒为 148
+    expect(btn.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ bottom: 148 })])
+    );
+
+    const host = btn.parent;
+    // 原地淡出至 0 并置 pointerEvents = 'none'
+    expect(host?.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ opacity: 0, pointerEvents: 'none' }),
+      ])
+    );
+  });
+
+  it('方案 19 双向平滑：键盘收起回退到 20dp 时平滑淡入至 0.5', async () => {
+    mockAnim.mockReturnValue({
+      progress: { value: 0.1 },
+      height: { value: 20 },
+    });
+
+    const view = await render(
+      <ScrollToBottomButton
+        onPress={jest.fn()}
+        bottomOffset={148}
+        testID="test-scroll-bottom-kb-pos-20"
+      />,
+      { wrapper: Providers }
+    );
+
+    const btn = view.getByTestId('test-scroll-bottom-kb-pos-20');
+    const host = btn.parent;
+    expect(host?.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ opacity: 0.5, pointerEvents: 'box-none' }),
+      ])
+    );
+  });
 });

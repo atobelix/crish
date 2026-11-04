@@ -125,12 +125,15 @@ export function useTimelineBottomInset(
       ? overlayHeight
       : estimatedOverlayHeight;
 
-  // 4. 浮层总占高与时间线底部内边距推导
+  // 4. 浮层总占高与时间线底部内边距推导（架构收敛：解耦键盘高度）
   const floatingHeight = effectiveOverlayHeight + keyboardHeight;
+
+  // 关键修正：在 KeyboardChatScrollView 架构下，列表底部内衬仅需物理浮层高 + gap，
+  // 键盘高度由 KeyboardChatScrollView 在 UI 线程与 KeyboardStickyView 联动处理，
+  // 绝对严禁在 timelineBottomInset 再次叠加 keyboardHeight！
   const timelineBottomInset = deriveTimelineBottomInset({
     overlayHeight: effectiveOverlayHeight,
     minOverlayHeight,
-    keyboardHeight,
     gap,
   });
 

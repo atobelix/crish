@@ -3,7 +3,7 @@
 // 五种 Sheet）收进适配器，向统一 ConversationScreen 供能力面。
 // U1 为接线平移：行为、时序、文案与迁移前逐项等价，不改任何呈现。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { InteractionManager, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/adapters/platform/theme';
 import {
@@ -123,12 +123,35 @@ export function useRemoteConversationEngine(
     summary?.engineLastRunId ?? null
   );
 
+  // 转场落定状态标志（方案 21：双阶段挂载，避开抽屉向左平移动画期间的 CPU 抢占）
+  const [transitionSettled, setTransitionSettled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (!cancelled) {
+        setTransitionSettled(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (typeof task?.cancel === 'function') {
+        task.cancel();
+      }
+    };
+  }, [sessionId]);
+
   const blocks = useMemo(() => {
+    if (!transitionSettled) {
+      // 快速首帧：最多展示最新 3 条轻量文本，零长列表负担
+      const recentEntries = window.entries.slice(-3);
+      return buildSessionTimeline(recentEntries);
+    }
     const base = buildSessionTimeline(window.entries);
     const prompts = localPrompts.map<TimelineBlock>((prompt) => echoOf(prompt));
     if (prompts.length === 0) return base;
     return [...base, ...prompts].sort((a, b) => a.atMs - b.atMs);
-  }, [window.entries, localPrompts]);
+  }, [window.entries, localPrompts, transitionSettled]);
   const hasTools = blocks.some((block) => block.kind === 'tool');
 
   // 生成进行中判定（批 C ② 排队触发面）：块流中任一消息/思考流式
@@ -252,8 +275,9 @@ export function useRemoteConversationEngine(
   const undelivered = useUndeliveredVm(sessionId);
 
   useEffect(() => {
+    if (!transitionSettled) return;
     ensureSessionHistory(sessionId);
-  }, [sessionId]);
+  }, [sessionId, transitionSettled]);
 
   // 打开即退休（批 C ⑫）：经任何入口打开本会话 → 该会话的通知中心
   // 未读条目一并退休（归属判定与幂等在 retireNotificationsForSession）

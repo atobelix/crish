@@ -7,15 +7,23 @@
 // - 超限降级：全文超 MARKDOWN_DEGRADE_THRESHOLD 时降级纯文本 + 可见标注
 //   （不静默），原文仍可长按选择；
 // - 链接一律经 openLink 统一出口（协议白名单在出口层），呈现层不裸调 openURL；
-// - 代码块：封口后词法高亮（批 E；domain/pure/markdown/highlight，色走
-//   theme.syntax)，流式尾块保持等宽原文；内容 selectable 长按选择（独立
-//   复制按钮需 expo-clipboard，待裁决，不在本批假装实现）；
+// - 代码块：常驻顶栏（语言标签 + 14dp 复制按钮）+ 居中极浅发丝分割线 +
+//   封口后词法高亮（批 E；domain/pure/markdown/highlight，色走 theme.syntax)，
+//   流式尾块保持等宽原文；复制成功 1500ms 翡翠绿对勾反馈 + 触感，支持长按选择；
 // - 公式 / Mermaid：封口后经本地 WebView 渲染（WebContentBlock，批 E)，
 //   尾块 / 失败回落原文；整段展示公式在 AST 层识别（displayMath)，与正文
 //   混排的行内公式保持原文（RN Text 内无块级渲染面，诚实口径）；
 // - markdown 独立成段图：真加载（MarkdownImage，批 E；几何见 FN-3 口径），
 //   与正文混排的行内图仍为文字标（同上，无块级面可嵌）。
-import { memo, useMemo, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -27,6 +35,12 @@ import {
 } from 'react-native';
 import { useTheme, type Theme } from '@/adapters/platform/theme';
 import { openLink } from '@/adapters/platform/openLink';
+import { copyTextToClipboard } from '@/adapters/platform/clipboard';
+import { haptics } from '@/adapters/platform/haptics';
+import {
+  AnimatedPressable,
+  usePressFade,
+} from '@/presentation/ui/pressFeedback';
 import { parseMarkdown } from '@/domain/pure/markdown/parseMarkdown';
 import { prepareStreamingMarkdown } from '@/domain/pure/markdown/closeDraft';
 import {
@@ -42,6 +56,7 @@ import type { MdBlock, MdListItem, MdSpan } from '@/domain/pure/markdown/types';
 import { AppText, Icon } from '@/presentation/ui';
 import { MarkdownImage } from './MarkdownImage';
 import { WebContentBlock } from './WebContentBlock';
+import { StreamingTailText } from './StreamingTailText';
 
 /** 超限降级线（字符数）：超过即纯文本 + 标注（审计 C.4，真机定标后写死） */
 export const MARKDOWN_DEGRADE_THRESHOLD = 50_000;
@@ -50,6 +65,8 @@ export interface MarkdownTextProps {
   text: string;
   /** 流式期：走草稿分治（封口块定型 + 尾块分治）；false = 终态全量解析 */
   streaming?: boolean;
+  /** 是否开启末端模糊渐显 (缺省 false；由 StreamingText 显式传入控制) */
+  tailGradient?: boolean;
   /** 正文基础样式（缺省 theme.type.chat + textPrimary；气泡等场景由调用方透传既有 Text 样式） */
   baseStyle?: StyleProp<TextStyle>;
   /** 流式光标符号（由 StreamingText 透传；落在最后一个块的末尾） */
@@ -101,6 +118,7 @@ function blockSignature(block: MdBlock): string {
 export function MarkdownText({
   text,
   streaming = false,
+  tailGradient = false,
   baseStyle,
   cursorSymbol,
   cursorTestID,
@@ -156,12 +174,13 @@ export function MarkdownText({
         >
           内容过长，已按纯文本显示
         </AppText>
-        <Text
+        <StreamingTailText
           selectable
+          text={text}
+          streaming={streaming}
+          tailGradient={tailGradient}
           style={[theme.type.chat, { color: ctx.color }, flatBase]}
-        >
-          {text}
-        </Text>
+        />
         {cursorBox.node}
       </View>
     );
@@ -172,17 +191,19 @@ export function MarkdownText({
   const cursorInline = !!lastBlock && blockConsumesCursor(lastBlock);
   return (
     <View testID={testID} style={{ gap: theme.space.md }}>
-      {list.map((block, index) => (
-        <MarkdownBlockView
-          key={index}
-          block={block}
-          ctx={ctx}
-          sealed={index < sealedCount}
-          cursorBox={
-            index === list.length - 1 && cursorInline ? cursorBox : null
-          }
-        />
-      ))}
+      {list.map((block, index) => {
+        const isLast = index === list.length - 1;
+        return (
+          <MarkdownBlockView
+            key={index}
+            block={block}
+            ctx={ctx}
+            sealed={index < sealedCount}
+            tailGradient={isLast && streaming ? tailGradient : false}
+            cursorBox={isLast && cursorInline ? cursorBox : null}
+          />
+        );
+      })}
       {cursorBox.node && !cursorInline ? cursorBox.node : null}
     </View>
   );
@@ -196,11 +217,13 @@ const MarkdownBlockView = memo(
     ctx,
     cursorBox,
     sealed,
+    tailGradient,
   }: {
     block: MdBlock;
     ctx: RenderCtx;
     cursorBox: CursorBox | null;
     sealed: boolean;
+    tailGradient?: boolean;
   }) {
     return (
       <BlockNode
@@ -208,6 +231,7 @@ const MarkdownBlockView = memo(
         ctx={ctx}
         cursorBox={cursorBox}
         sealed={sealed}
+        tailGradient={tailGradient}
       />
     );
   },
@@ -216,6 +240,7 @@ const MarkdownBlockView = memo(
     prev.ctx.color === next.ctx.color &&
     prev.ctx.inBubble === next.ctx.inBubble &&
     prev.sealed === next.sealed &&
+    prev.tailGradient === next.tailGradient &&
     (prev.cursorBox?.node ?? null) === (next.cursorBox?.node ?? null)
 );
 
@@ -224,11 +249,13 @@ function BlockNode({
   ctx,
   cursorBox,
   sealed,
+  tailGradient,
 }: {
   block: MdBlock;
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
+  tailGradient?: boolean;
 }) {
   const theme = useTheme();
   switch (block.type) {
@@ -248,7 +275,11 @@ function BlockNode({
       }
       return (
         <Text style={[theme.type.chat, { color: ctx.color }]}>
-          <SpanNodes spans={block.spans} ctx={ctx} />
+          <SpanNodes
+            spans={block.spans}
+            ctx={ctx}
+            tailGradient={tailGradient}
+          />
           {consumeCursor(cursorBox)}
         </Text>
       );
@@ -256,7 +287,11 @@ function BlockNode({
     case 'heading':
       return (
         <Text style={[headingStyle(theme, block.level), { color: ctx.color }]}>
-          <SpanNodes spans={block.spans} ctx={ctx} />
+          <SpanNodes
+            spans={block.spans}
+            ctx={ctx}
+            tailGradient={tailGradient}
+          />
           {consumeCursor(cursorBox)}
         </Text>
       );
@@ -280,7 +315,14 @@ function BlockNode({
           />
         );
       }
-      return <CodeBlock lang={block.lang} text={block.text} sealed={sealed} />;
+      return (
+        <CodeBlock
+          lang={block.lang}
+          text={block.text}
+          sealed={sealed}
+          tailGradient={tailGradient}
+        />
+      );
     case 'list':
       return (
         <ListBlock
@@ -290,6 +332,7 @@ function BlockNode({
           ctx={ctx}
           cursorBox={cursorBox}
           sealed={sealed}
+          tailGradient={tailGradient}
         />
       );
     case 'quote':
@@ -299,6 +342,7 @@ function BlockNode({
           ctx={ctx}
           cursorBox={cursorBox}
           sealed={sealed}
+          tailGradient={tailGradient}
         />
       );
     case 'table':
@@ -348,13 +392,44 @@ function headingStyle(theme: Theme, level: 1 | 2 | 3 | 4 | 5 | 6): TextStyle {
 }
 
 /** 行内 span 树 → 嵌套 Text（strong/em/del/code/link/image/break) */
-function SpanNodes({ spans, ctx }: { spans: MdSpan[]; ctx: RenderCtx }) {
+function SpanNodes({
+  spans,
+  ctx,
+  tailGradient,
+}: {
+  spans: MdSpan[];
+  ctx: RenderCtx;
+  tailGradient?: boolean;
+}) {
   const theme = useTheme();
+
+  // 若开启末端渐显，定位到最后一个可承载渐变的 text span
+  let lastTextSpanIndex = -1;
+  if (tailGradient) {
+    for (let i = spans.length - 1; i >= 0; i--) {
+      if (spans[i]!.type === 'text') {
+        lastTextSpanIndex = i;
+        break;
+      }
+    }
+  }
+
   return (
     <>
       {spans.map((span, index) => {
+        const isLastSpan = index === spans.length - 1;
         switch (span.type) {
           case 'text':
+            if (tailGradient && index === lastTextSpanIndex) {
+              return (
+                <StreamingTailText
+                  key={index}
+                  text={span.text}
+                  streaming
+                  tailGradient
+                />
+              );
+            }
             // 纯文本直接以字符串作子节点：少建节点，文本查询口径与单 Text 一致
             return span.text;
           case 'break':
@@ -362,19 +437,31 @@ function SpanNodes({ spans, ctx }: { spans: MdSpan[]; ctx: RenderCtx }) {
           case 'strong':
             return (
               <Text key={index} style={{ fontWeight: '700' }}>
-                <SpanNodes spans={span.children} ctx={ctx} />
+                <SpanNodes
+                  spans={span.children}
+                  ctx={ctx}
+                  tailGradient={isLastSpan ? tailGradient : false}
+                />
               </Text>
             );
           case 'em':
             return (
               <Text key={index} style={{ fontStyle: 'italic' }}>
-                <SpanNodes spans={span.children} ctx={ctx} />
+                <SpanNodes
+                  spans={span.children}
+                  ctx={ctx}
+                  tailGradient={isLastSpan ? tailGradient : false}
+                />
               </Text>
             );
           case 'del':
             return (
               <Text key={index} style={{ textDecorationLine: 'line-through' }}>
-                <SpanNodes spans={span.children} ctx={ctx} />
+                <SpanNodes
+                  spans={span.children}
+                  ctx={ctx}
+                  tailGradient={isLastSpan ? tailGradient : false}
+                />
               </Text>
             );
           case 'code':
@@ -400,7 +487,11 @@ function SpanNodes({ spans, ctx }: { spans: MdSpan[]; ctx: RenderCtx }) {
                   void openLink(span.href);
                 }}
               >
-                <SpanNodes spans={span.children} ctx={ctx} />
+                <SpanNodes
+                  spans={span.children}
+                  ctx={ctx}
+                  tailGradient={isLastSpan ? tailGradient : false}
+                />
               </Text>
             );
           case 'image':
@@ -428,50 +519,126 @@ function codeRoleColor(theme: Theme, role: CodeTokenRole): string | undefined {
   }
 }
 
-/** 代码块：定型容器（亮度台阶底、无边框）+ 头栏（语言名，无复制钮——移动
- * 无复制钮裁决）+ 双轴内滚（横滑不折行、纵向封顶 layout.codeBlockMaxHeight)
- * + 可长按选择。着色只对封口块（sealed)：尾块保持等宽原文，封口一次性着色 */
-function CodeBlock({
-  lang,
-  text,
-  sealed,
-}: {
+/** 复制成功后对号图标驻留时长（ms） */
+const COPIED_RESET_DELAY_MS = 1500;
+
+interface CodeBlockProps {
   lang: string | null;
   text: string;
   sealed: boolean;
-}) {
+  tailGradient?: boolean;
+}
+
+/** 代码块：定型容器（亮度台阶底、无边框）+ 常驻顶栏（语言标签 + 14dp 复制按钮）
+ * + 居中极浅发丝级分割线 + 双轴内滚（横滑不折行、纵向封顶 layout.codeBlockMaxHeight)
+ * + 可长按选择。着色只对封口块（sealed)：尾块保持等宽原文，封口一次性着色 */
+const CodeBlock = memo(function CodeBlock({
+  lang,
+  text,
+  sealed,
+  tailGradient,
+}: CodeBlockProps) {
   const theme = useTheme();
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyPress = usePressFade();
+
+  // 组件卸载时安全清理定时器，杜绝内存泄漏
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // 复制代码动作：触感反馈 + 写入剪贴板 + 状态机流转
+  const handleCopy = useCallback(async () => {
+    if (!text) return;
+    haptics.selection();
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimerRef.current = null;
+      }, COPIED_RESET_DELAY_MS);
+    }
+  }, [text]);
+
   const tokens = useMemo(
     () => (sealed ? tokenizeCode(lang, text) : null),
     [lang, text, sealed]
   );
+
+  const displayLang = lang && lang.trim() ? lang.trim().toLowerCase() : 'code';
+
   return (
     <View
       testID="markdown-code-block"
-      style={{
-        backgroundColor: theme.colors.surfaceGrouped,
-        borderRadius: theme.radius.control,
-        padding: theme.space.md,
-        gap: theme.space.xs,
-      }}
+      style={[
+        codeBlockStyles.codeContainer,
+        {
+          backgroundColor: theme.colors.surfaceGrouped,
+          borderRadius: theme.radius.control,
+        },
+      ]}
     >
-      {lang ? (
-        <View style={{ flexDirection: 'row' }}>
-          <Text
-            style={[
-              theme.type.caption,
-              {
-                fontFamily: theme.type.mono.fontFamily,
-                color: theme.colors.textTertiary,
-              },
-            ]}
-          >
-            {lang}
-          </Text>
-        </View>
-      ) : null}
+      {/* 1. 顶栏区域：语言标签 + 复制按钮 */}
+      <View style={codeBlockStyles.codeHeader}>
+        <Text
+          style={[
+            theme.type.caption,
+            codeBlockStyles.langLabel,
+            {
+              fontFamily: theme.type.mono.fontFamily,
+              color: theme.colors.textTertiary,
+            },
+          ]}
+        >
+          {displayLang}
+        </Text>
+        <AnimatedPressable
+          testID="markdown-code-copy-btn"
+          accessibilityRole="button"
+          accessibilityLabel={copied ? '已复制代码' : '复制代码'}
+          hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+          onPress={handleCopy}
+          onPressIn={copyPress.onPressIn}
+          onPressOut={copyPress.onPressOut}
+          style={[codeBlockStyles.copyBtn, copyPress.fadeStyle]}
+        >
+          <Icon
+            name={copied ? 'check' : 'copy'}
+            size={14}
+            color={copied ? theme.colors.success : theme.colors.textTertiary}
+          />
+        </AnimatedPressable>
+      </View>
+
+      {/* 2. 居中极浅分割线：宽度 94%、发丝线、对齐设置页极浅质感 */}
+      <View
+        testID="markdown-code-divider"
+        style={[
+          codeBlockStyles.codeDivider,
+          {
+            backgroundColor: theme.dark
+              ? 'rgba(255, 255, 255, 0.06)'
+              : theme.colors.hairline,
+          },
+        ]}
+      />
+
+      {/* 3. 代码双轴内滚区域 */}
       <ScrollView
-        style={{ maxHeight: theme.layout.codeBlockMaxHeight }}
+        style={[
+          codeBlockStyles.codeScroll,
+          { maxHeight: theme.layout.codeBlockMaxHeight },
+        ]}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
@@ -480,24 +647,64 @@ function CodeBlock({
             selectable
             style={[theme.type.mono, { color: theme.colors.textPrimary }]}
           >
-            {tokens
-              ? tokens.map((token, index) => {
-                  const color = codeRoleColor(theme, token.role);
-                  return color ? (
-                    <Text key={index} style={{ color }}>
-                      {token.text}
-                    </Text>
-                  ) : (
-                    token.text
-                  );
-                })
-              : text}
+            {tokens ? (
+              tokens.map((token, index) => {
+                const color = codeRoleColor(theme, token.role);
+                return color ? (
+                  <Text key={index} style={{ color }}>
+                    {token.text}
+                  </Text>
+                ) : (
+                  token.text
+                );
+              })
+            ) : tailGradient ? (
+              <StreamingTailText
+                text={text}
+                streaming
+                tailGradient
+                style={[theme.type.mono, { color: theme.colors.textPrimary }]}
+              />
+            ) : (
+              text
+            )}
           </Text>
         </ScrollView>
       </ScrollView>
     </View>
   );
-}
+});
+
+const codeBlockStyles = StyleSheet.create({
+  codeContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  codeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 22,
+    paddingBottom: 6,
+  },
+  langLabel: {
+    textTransform: 'lowercase',
+  },
+  copyBtn: {
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  codeDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: '94%',
+    alignSelf: 'center',
+  },
+  codeScroll: {
+    marginTop: 8,
+  },
+});
 
 function ListBlock({
   ordered,
@@ -506,6 +713,7 @@ function ListBlock({
   ctx,
   cursorBox,
   sealed,
+  tailGradient,
 }: {
   ordered: boolean;
   start: number;
@@ -513,12 +721,13 @@ function ListBlock({
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
+  tailGradient?: boolean;
 }) {
   const theme = useTheme();
   return (
     <View style={{ gap: theme.space.xxs }}>
       {items.map((item, index) => {
-        const isLast = index === items.length - 1;
+        const isLastItem = index === items.length - 1;
         return (
           <View
             key={index}
@@ -549,19 +758,20 @@ function ListBlock({
                   : '•'}
             </Text>
             <View style={{ flex: 1, gap: theme.space.xs }}>
-              {item.blocks.map((child, childIndex) => (
-                <MarkdownBlockView
-                  key={childIndex}
-                  block={child}
-                  ctx={ctx}
-                  sealed={sealed}
-                  cursorBox={
-                    isLast && childIndex === item.blocks.length - 1
-                      ? cursorBox
-                      : null
-                  }
-                />
-              ))}
+              {item.blocks.map((child, childIndex) => {
+                const isLastChild =
+                  isLastItem && childIndex === item.blocks.length - 1;
+                return (
+                  <MarkdownBlockView
+                    key={childIndex}
+                    block={child}
+                    ctx={ctx}
+                    sealed={sealed}
+                    tailGradient={isLastChild ? tailGradient : false}
+                    cursorBox={isLastChild ? cursorBox : null}
+                  />
+                );
+              })}
             </View>
           </View>
         );
@@ -576,11 +786,13 @@ function QuoteBlock({
   ctx,
   cursorBox,
   sealed,
+  tailGradient,
 }: {
   blocks: MdBlock[];
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
+  tailGradient?: boolean;
 }) {
   const theme = useTheme();
   const quoteCtx: RenderCtx = {
@@ -597,15 +809,19 @@ function QuoteBlock({
         }}
       />
       <View style={{ flex: 1, gap: theme.space.sm }}>
-        {blocks.map((child, index) => (
-          <MarkdownBlockView
-            key={index}
-            block={child}
-            ctx={quoteCtx}
-            sealed={sealed}
-            cursorBox={index === blocks.length - 1 ? cursorBox : null}
-          />
-        ))}
+        {blocks.map((child, index) => {
+          const isLastChild = index === blocks.length - 1;
+          return (
+            <MarkdownBlockView
+              key={index}
+              block={child}
+              ctx={quoteCtx}
+              sealed={sealed}
+              tailGradient={isLastChild ? tailGradient : false}
+              cursorBox={isLastChild ? cursorBox : null}
+            />
+          );
+        })}
       </View>
     </View>
   );

@@ -6,6 +6,7 @@ import {
   voiceDisplayText,
   voiceFinalText,
   voicePhaseForTranslation,
+  voicePhaseForTranslation2D,
   voiceReleaseOutcome,
   waveformLevelOf,
 } from './voiceInputMachine';
@@ -25,10 +26,40 @@ describe('voicePhaseForTranslation', () => {
   });
 });
 
+describe('voicePhaseForTranslation2D', () => {
+  it('handles left-slide to cancel with hysteresis buffer', () => {
+    // 划过 58px 进入 cancelling
+    expect(voicePhaseForTranslation2D('recording', -59, 0)).toBe('cancelling');
+    expect(voicePhaseForTranslation2D('recording', -58, 0)).toBe('cancelling');
+    // 在 58px 以内保持 recording
+    expect(voicePhaseForTranslation2D('recording', -50, 0)).toBe('recording');
+
+    // 在 cancelling 下，必须滑回 -42px 以内才退回 recording
+    expect(voicePhaseForTranslation2D('cancelling', -50, 0)).toBe('cancelling');
+    expect(voicePhaseForTranslation2D('cancelling', -40, 0)).toBe('recording');
+  });
+
+  it('handles right-slide to edit with hysteresis buffer', () => {
+    // 划过 58px 进入 editing
+    expect(voicePhaseForTranslation2D('recording', 59, 0)).toBe('editing');
+    expect(voicePhaseForTranslation2D('recording', 58, 0)).toBe('editing');
+    expect(voicePhaseForTranslation2D('recording', 50, 0)).toBe('recording');
+
+    // 在 editing 下，必须滑回 42px 以内才退回 recording
+    expect(voicePhaseForTranslation2D('editing', 50, 0)).toBe('editing');
+    expect(voicePhaseForTranslation2D('editing', 40, 0)).toBe('recording');
+  });
+
+  it('preserves vertical upward cancel threshold as fallback', () => {
+    expect(voicePhaseForTranslation2D('recording', 0, -85)).toBe('cancelling');
+  });
+});
+
 describe('voiceReleaseOutcome', () => {
-  it('maps phases to submit / discard / ignore', () => {
+  it('maps phases to submit / discard / edit / ignore', () => {
     expect(voiceReleaseOutcome('recording')).toBe('submit');
     expect(voiceReleaseOutcome('cancelling')).toBe('discard');
+    expect(voiceReleaseOutcome('editing')).toBe('edit');
     expect(voiceReleaseOutcome('idle')).toBe('ignore');
     expect(voiceReleaseOutcome('finishing')).toBe('ignore');
   });

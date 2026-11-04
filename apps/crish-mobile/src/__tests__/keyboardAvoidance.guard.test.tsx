@@ -202,10 +202,12 @@ describe('键盘避让守卫 · 全仓扫描', () => {
     }
     const home = read('src/presentation/screens/homeScreen.tsx');
     expect(home).toContain('keyboardDismissMode="on-drag"');
-    // 方案 16 契约断言：TimelineView 挂载 KeyboardChatScrollView 且配置 whenAtEnd
+    // 方案 19 契约断言：TimelineView 挂载 KeyboardChatScrollView 并注入 120fps UI 线程 useKeyboardHandler / useSmoothKeyboardTimelineLinkage 平滑联动
     const timeline = read('src/presentation/timeline/TimelineView.tsx');
     expect(timeline).toContain('KeyboardChatScrollView');
-    expect(timeline).toContain('keyboardLiftBehavior="whenAtEnd"');
+    expect(timeline).toContain('keyboardLiftBehavior="never"');
+    expect(timeline).toContain('useSmoothKeyboardTimelineLinkage');
+    expect(timeline).toContain('useKeyboardHandler');
     // 本地对话已并入统一会话屏（sessionDetailScreen），其键盘纪律
     // 由上方会话断言（KeyboardStickyView）覆盖（U5 删除旧本地视图）。
   });

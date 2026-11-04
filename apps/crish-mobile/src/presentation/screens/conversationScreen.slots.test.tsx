@@ -138,3 +138,21 @@ describe('ConversationScreen · 点外失焦（2026-11-03）', () => {
     }
   });
 });
+
+describe('ConversationScreen · 宏观环境遮蔽大软阴影（方案 24 钉案）', () => {
+  it('composerArea 装配 ComposerAmbientVeil 且位于 KeyboardStickyView 首个子节点（最底层）', async () => {
+    const view = await renderScreen(fakeEngine());
+    const veil = view.getByTestId('composer-ambient-veil', {
+      includeHiddenElements: true,
+    });
+    const composer = view.getByTestId('session-composer');
+
+    expect(veil).toBeTruthy();
+    expect(composer).toBeTruthy();
+
+    // 验证在 KeyboardStickyView 容器中的首位层级：veil 为首个子节点，处于最底层
+    const stickyContainer = veil.parent;
+    expect(stickyContainer).toBeTruthy();
+    expect(stickyContainer?.children[0]).toBe(veil);
+  });
+});

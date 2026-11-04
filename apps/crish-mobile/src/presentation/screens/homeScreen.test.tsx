@@ -211,10 +211,13 @@ describe('HomeScreen 空态', () => {
     // 横幅整卡消失：文案与排障入口都不再常驻（设备身份由设备胶囊承载）
     expect(view.queryByText('桌面未连接 · 正在使用本地对话')).toBeNull();
     expect(view.queryByLabelText('重新连接')).toBeNull();
-    // 本地能力本身不受影响：输入框仍可编辑、placeholder 走已配置口径
+    // 本地能力本身不受影响：输入框仍可编辑、placeholder 彻底切除冗余前缀
     expect(view.getByTestId('home-composer').props.editable).toBe(true);
     expect(view.getByTestId('home-composer').props.placeholder).toBe(
-      '本地对话 · 点击发消息、长按语音输入'
+      '点击发消息、长按语音输入'
+    );
+    expect(view.getByTestId('home-composer').props.placeholder).not.toContain(
+      '本地对话 · '
     );
   });
 
@@ -458,9 +461,9 @@ describe('HomeScreen 本地模式（CON-2 + hub 同列）', () => {
     connectionStore.setState({ phase: 'disconnected', lastError: null });
     await configureOneLocalProvider();
     const view = await renderHome();
-    // 已配置：placeholder 切本地口径
+    // 已配置：placeholder 切本地口径（无冗余前缀）
     expect(view.getByTestId('home-composer').props.placeholder).toBe(
-      '本地对话 · 点击发消息、长按语音输入'
+      '点击发消息、长按语音输入'
     );
     await fireEvent.changeText(
       view.getByTestId('home-composer'),
