@@ -36,3 +36,5 @@ export const SKILLS_CACHE_KEY = 'crish_skills_cache_v1';
 export const SKILL_KNOWN_IDS_KEY = 'crish_skill_known_ids_v1';
 /** Note 页面应急草稿暂存前缀 */
 export const NOTE_EMERGENCY_DRAFT_PREFIX = 'crish_note_emergency_draft_';
+/** 阅读锚点持久化前缀（批 B ⑱；后接 sessionId，值见 chat-message-list/readingAnchorStore） */
+export const READING_ANCHOR_PREFIX = 'crish_reading_anchor_';

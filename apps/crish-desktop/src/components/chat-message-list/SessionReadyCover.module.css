@@ -1,0 +1,36 @@
+/* 就绪遮罩：与消息流同底色（--bg-card 回落 --bg-primary，与流面渐隐同源），
+   盖住首帧未稳布局；淡出走 --transition-popover-enter（180ms decelerate）。
+   spinner 与 ui/ContentState 同规格（20px 环、--transition-spin 周期）。 */
+
+.cover {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card, var(--bg-primary));
+  opacity: 1;
+  transition: opacity var(--transition-popover-enter);
+}
+
+.coverFading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--text-secondary);
+  animation: sessionReadyCoverSpin var(--transition-spin) infinite;
+  flex-shrink: 0;
+}
+
+@keyframes sessionReadyCoverSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

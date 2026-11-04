@@ -1,0 +1,12 @@
+/* 时间分隔行：居中弱化小字，无底色无边框（灰阶分层口径）。
+   渲染在宿主行测量容器内，padding 计入行高测量。 */
+
+.separator {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) 0 var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-meta);
+  line-height: var(--lh-prose);
+  user-select: none;
+}

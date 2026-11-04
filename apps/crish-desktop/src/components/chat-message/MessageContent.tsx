@@ -43,6 +43,7 @@ import {
 
 import { ProcessItemRenderer } from './ProcessItemRenderer';
 import { logInternalError } from '../../api/userFacingErrors';
+import { TurnStoppedMark } from './TurnStoppedMark';
 
 export interface MessageContentProps {
   /**
@@ -228,6 +229,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           回复中断
         </div>
       ) : null;
+    // 批 B ㉖：用户主动停止且无正文时呈现「已停止」行（仅分支 α；
+    // 有部分正文的停止轮次按既有形态收口，β/γ 不追加）——见 TurnStoppedMark
+    const stoppedMark = msg.stoppedByUser === true ? <TurnStoppedMark /> : null;
 
     // timeline 签名缓存
     const timelineCacheRef = useRef<{
@@ -636,7 +640,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           </div>
         );
       }
-      return null;
+      // 批 B ㉖：零内容的用户停止轮次呈现「已停止」行；其余空消息仍为 null
+      return stoppedMark;
     }
 
     // 分支 β：时间线为空但有降级正文（首 Token 到达前 / 纯错误态）

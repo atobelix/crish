@@ -95,6 +95,34 @@
   overflow-wrap: break-word;
 }
 
+/*
+ * 【R9 · 2026-11-02 复裁】组内叙述行：模型写给用户看的中间正文，
+ * 是过程组里的「正文」——用主字色 + 正文字号立起来，与工具行 / 思考行
+ * （13px · --text-tertiary 的小灰字）在字号与明度上拉开一档；上下各留
+ * 一道呼吸间距，让它与前后的过程行成段而不是挤成一排。
+ * 全文不截断（它是模型真实产出，只是归属过程组）。
+ */
+.narrationText {
+  color: var(--text-primary);
+  margin-block: var(--space-1_5, 6px);
+  /*
+   * 叙述作用域内内联代码去 chip 化（D6 保留）：markdown 内联代码规则全部
+   * 经 --md-code-inline-* 取值，在此重定义即生效——背景透明、内边距与
+   * 圆角归零，仅靠等宽字体区分。字色取正文色，不再借用链接色：链接色
+   * 只属于真正的超链接（用户复裁：「超链接才应该是这种颜色」）。
+   * 作用域严格限于组内叙述：最终答复区的内联代码 chip 是正文排版语汇，不动。
+   */
+  --md-code-inline-bg: transparent;
+  --md-code-inline-fg: var(--text-primary);
+  --md-code-inline-padding: 0;
+  --md-code-inline-radius: 0;
+}
+
+/* 叙述末段的 md 段后间距归零：间距统一由 .narrationText 的 margin-block 承担 */
+.narrationText :global(.md-p:last-child) {
+  margin-bottom: 0;
+}
+
 /* 工具调用/过程段与回复正文之间稍作拉开（微调 +4px，整体 12px 节奏） */
 .assistantTimelineStream > :not(.contentText) + .contentText,
 .assistantTimelineStream > :not(.contentText) + :global([data-kind='text']) {
@@ -142,5 +170,16 @@
   font-size: var(--font-size-xs, 12px);
   line-height: 20px;
   color: var(--text-tertiary);
+  user-select: none;
+}
+
+/* 批 B ㉖：无正文用户停止轮次的弱化「已停止」行（居中灰字 polite 档，
+   独占该消息的全部呈现；与 interruptedMark 同灰阶但语义独立——停止非失败） */
+.stoppedMark {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-meta);
+  line-height: var(--lh-prose);
+  color: var(--text-tertiary);
+  text-align: center;
   user-select: none;
 }

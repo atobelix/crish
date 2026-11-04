@@ -588,7 +588,7 @@ describe('VS-01 ~ VS-05：虚拟滚动首帧测高保护、跨会话 scrollTop �
     );
     const reseedIndex = ssSrc.indexOf('reseedAllMessageHeights(');
     const programmaticScrollIndex = ssSrc.lastIndexOf(
-      'vs.performProgrammaticScroll(container, targetBottomScrollTop)'
+      'vs.performProgrammaticScroll(container, targetScrollTop)'
     );
     expect(sessionClearIndex).toBeGreaterThan(0);
     expect(reseedIndex).toBeGreaterThan(sessionClearIndex);
