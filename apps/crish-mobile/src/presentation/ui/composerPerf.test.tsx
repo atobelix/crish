@@ -137,3 +137,56 @@ describe('Composer 动效与多行自适应性能（方案 05）', () => {
     expect(hasHardwareTexture).toBe(false);
   });
 });
+
+describe('Composer 内部原生缓冲隔离与 UI 纯净 Memo 化', () => {
+  it('连续输入时 hasText 恒为 true 不触发额外重绘，submit 时读取 textRef 并原生清空', async () => {
+    const onSubmit = jest.fn();
+    const onChangeText = jest.fn();
+
+    const view = await render(
+      <Composer
+        testID="composer"
+        value=""
+        onChangeText={onChangeText}
+        onSubmit={onSubmit}
+        canSubmit={true}
+        editable
+      />
+    );
+
+    const input = view.getByTestId('composer');
+
+    // 1. 首个字符输入：从空变非空（hasText 翻转 false -> true），发送按钮显现
+    await fireEvent.changeText(input, 'a');
+    expect(onChangeText).toHaveBeenCalledWith('a');
+    expect(view.getByTestId('composer-send')).toBeTruthy();
+
+    const iconsAfterFirstChar = mockIconRenders;
+
+    // 2. 连续输入字符：'a' -> 'ab' -> 'abc'（hasText 恒为 true），无状态翻转，子树不重绘
+    await fireEvent.changeText(input, 'ab');
+    await fireEvent.changeText(input, 'abc');
+    expect(onChangeText).toHaveBeenCalledWith('abc');
+
+    // 图标渲染数无新增（SendButton 未被重新执行渲染）
+    expect(mockIconRenders).toBe(iconsAfterFirstChar);
+
+    // 3. 提交：从 textRef 读取最新文本 'abc' 传递给 onSubmit，并触发原生 clear
+    await fireEvent.press(view.getByTestId('composer-send'));
+    expect(onSubmit).toHaveBeenCalledWith('abc');
+
+    // 4. 受控 value 回填兼容性（如语音识别结果落入）：更新 textRef 并驱动发送按钮
+    await view.rerender(
+      <Composer
+        testID="composer"
+        value="语音输入结果"
+        onChangeText={onChangeText}
+        onSubmit={onSubmit}
+        canSubmit={true}
+        editable
+      />
+    );
+    await fireEvent.press(view.getByTestId('composer-send'));
+    expect(onSubmit).toHaveBeenCalledWith('语音输入结果');
+  });
+});

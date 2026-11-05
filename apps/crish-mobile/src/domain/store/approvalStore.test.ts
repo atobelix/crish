@@ -4,6 +4,7 @@
 // failed/conflict/resolved/expired）/ outbox 计数 / 对账时间戳 / busy 位镜像。
 import type { PermissionRequest } from '@crish/shared-types';
 import type { ApprovalItem } from '../types/domain';
+import type { OutboxItem } from '../data/outbox';
 import { approvalStore } from './approvalStore';
 
 const NOW = 1_000_000;
@@ -35,6 +36,22 @@ function makeItem(overrides: Partial<ApprovalItem> = {}): ApprovalItem {
     status: 'pending',
     decisionStatus: 'idle',
     decisionBusy: false,
+    ...overrides,
+  };
+}
+
+function makeOutboxItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
+  return {
+    id: 'ob-1',
+    toolCallId: 'call-1',
+    decision: 'approved',
+    msgId: 'msg-1',
+    status: 'pending',
+    attempts: 0,
+    lastError: null,
+    nextRetryAtMs: null,
+    createdAtMs: NOW,
+    updatedAtMs: NOW,
     ...overrides,
   };
 }
@@ -280,5 +297,36 @@ describe('approvalStore outbox 持久化故障面（收口批）', () => {
     store.setOutboxPersistError('离线决策恢复失败');
     store.reset();
     expect(approvalStore.getState().outboxPersistError).toBeNull();
+  });
+});
+
+describe('approvalStore outbox 等值防护与浅比较', () => {
+  it('setOutboxCount: 等值时不触发广播', () => {
+    approvalStore.getState().setOutboxCount(3);
+    const listener = jest.fn();
+    const unsub = approvalStore.subscribe(listener);
+    approvalStore.getState().setOutboxCount(3);
+    expect(listener).not.toHaveBeenCalled();
+    approvalStore.getState().setOutboxCount(4);
+    expect(listener).toHaveBeenCalled();
+    unsub();
+  });
+
+  it('setOutboxItems: 浅比较元素未变时不触发更新', () => {
+    const item = makeOutboxItem();
+    approvalStore.getState().setOutboxItems([item]);
+    const listener = jest.fn();
+    const unsub = approvalStore.subscribe(listener);
+
+    // 传入属性相同的镜像数组（如 snapshotOutbox 拷贝后的新引用）
+    approvalStore.getState().setOutboxItems([{ ...item }]);
+    expect(listener).not.toHaveBeenCalled();
+
+    // 传入发生变化的条目
+    approvalStore
+      .getState()
+      .setOutboxItems([{ ...item, status: 'sent', attempts: 1 }]);
+    expect(listener).toHaveBeenCalled();
+    unsub();
   });
 });

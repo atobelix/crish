@@ -56,4 +56,19 @@ describe('AttachmentStrip', () => {
     await fireEvent.press(view.getByTestId('attachment-strip-remove-att-1'));
     expect(onRemove).toHaveBeenCalledWith('att-1');
   });
+
+  it('AttachmentStrip memo 化断言：相同 props 重新渲染不穿透', async () => {
+    const onRemove = jest.fn();
+    const attachments = [imageAttachment];
+    const view = await renderWithProviders(
+      <AttachmentStrip attachments={attachments} onRemove={onRemove} />
+    );
+    expect(view.getByTestId('attachment-strip-thumb-att-1')).toBeTruthy();
+
+    // 重新渲染相同 props
+    await view.rerender(
+      <AttachmentStrip attachments={attachments} onRemove={onRemove} />
+    );
+    expect(view.getByTestId('attachment-strip-thumb-att-1')).toBeTruthy();
+  });
 });

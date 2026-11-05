@@ -4,7 +4,7 @@
 // 到手才渲染，口径同抽屉搜索胶囊），填充由本组件 backgroundColor 单一承担
 // （surfaceRaised）；深色 SoftShadow 内部短路、区分回归亮度台阶；iOS 无
 // 阴影，走 BlurView + glass 磨砂。
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/adapters/platform/theme';
@@ -22,7 +22,9 @@ export interface DevicePillProps {
   onPress: () => void;
 }
 
-export function DevicePill({ onPress }: DevicePillProps) {
+export const DevicePill = memo(function DevicePill({
+  onPress,
+}: DevicePillProps) {
   const theme = useTheme();
   const device = useDeviceStatusVm();
   const label = deviceLineOf(device);
@@ -127,7 +129,7 @@ export function DevicePill({ onPress }: DevicePillProps) {
       />
     </AnimatedPressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   pill: {

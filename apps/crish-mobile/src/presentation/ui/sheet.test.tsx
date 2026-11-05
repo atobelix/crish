@@ -3,8 +3,8 @@
 // 呈现请求到达时内容同帧立即可达（零毫秒阻塞）；visible=false 时内容不挂载。
 // 批 D 追加：语义档位、dismissible=false 诚实口径、backAction 钻取
 // 返回分发、搜索升档、关闭末帧冻结；防瞬移初始估高平滑度。
-import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet, TextInput } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { ReactElement, ReactNode } from 'react';
 import {
@@ -14,6 +14,7 @@ import {
   sheetPanelTranslateY,
   Sheet,
   SheetOptionRow,
+  useOverlayHost,
   useSheetSearchRaise,
 } from '@/presentation/ui';
 import { handleOverlayBack } from '@/presentation/ui/overlayStack';
@@ -322,5 +323,158 @@ describe('SheetOptionRow 纯净极简视觉重塑', () => {
     expect(view.getByTestId('row-selected')).toBeTruthy();
     expect(view.getByText('选中设备')).toBeTruthy();
     expect(view.getByText('在线')).toBeTruthy();
+  });
+});
+
+describe('Sheet 退场物理卸载与 onCloseComplete', () => {
+  it('visible 从 true 变为 false 时，退场完成调用 onCloseComplete 且物理卸载', async () => {
+    const onCloseComplete = jest.fn();
+    const view = await renderWithProviders(
+      <Sheet
+        visible
+        onClose={() => undefined}
+        onCloseComplete={onCloseComplete}
+        testID="sheet-exit-test"
+      >
+        <AppText>面板内容</AppText>
+      </Sheet>
+    );
+
+    expect(view.getByTestId('sheet-exit-test')).toBeTruthy();
+    expect(onCloseComplete).not.toHaveBeenCalled();
+
+    jest.useFakeTimers();
+    try {
+      // 宿主将 visible 置为 false
+      await view.rerender(
+        <Sheet
+          visible={false}
+          onClose={() => undefined}
+          onCloseComplete={onCloseComplete}
+          testID="sheet-exit-test"
+        >
+          <AppText>面板内容</AppText>
+        </Sheet>
+      );
+
+      // 动画未播完期间仍在树中（末帧冻结）
+      expect(view.getByTestId('sheet-exit-test')).toBeTruthy();
+      expect(onCloseComplete).not.toHaveBeenCalled();
+
+      // 快进退场动画耗时（300ms 兜底）
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+
+      // 退场播完：onCloseComplete 被调用且内部 Modal 卸载
+      expect(onCloseComplete).toHaveBeenCalledTimes(1);
+      expect(view.queryByTestId('sheet-exit-test')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('handleDismiss 交互触发关闭，退场后调用 onCloseComplete', async () => {
+    const onClose = jest.fn();
+    const onCloseComplete = jest.fn();
+    const view = await renderWithProviders(
+      <Sheet
+        visible
+        onClose={onClose}
+        onCloseComplete={onCloseComplete}
+        testID="sheet-dismiss-test"
+      >
+        <AppText>面板内容</AppText>
+      </Sheet>
+    );
+
+    // 点击遮罩
+    await fireEvent.press(view.getByTestId('sheet-backdrop'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    jest.useFakeTimers();
+    try {
+      // 宿主响应 onClose 将 visible 置为 false
+      await view.rerender(
+        <Sheet
+          visible={false}
+          onClose={onClose}
+          onCloseComplete={onCloseComplete}
+          testID="sheet-dismiss-test"
+        >
+          <AppText>面板内容</AppText>
+        </Sheet>
+      );
+
+      // 快进退场
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+
+      expect(onCloseComplete).toHaveBeenCalledTimes(1);
+      expect(view.queryByTestId('sheet-dismiss-test')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('useOverlayHost 与 Sheet 联动生命周期闭环', () => {
+  function TestHost() {
+    const host = useOverlayHost<'sampleSheet'>();
+    return (
+      <View>
+        <Pressable
+          testID="btn-open"
+          onPress={() => host.openOverlay('sampleSheet')}
+        />
+        <Pressable testID="btn-close" onPress={() => host.closeOverlay()} />
+        {host.isMounted('sampleSheet') && (
+          <Sheet
+            visible={host.isOpen('sampleSheet')}
+            onClose={host.closeOverlay}
+            onCloseComplete={() => host.onOverlayExited('sampleSheet')}
+            testID="integrated-sheet"
+          >
+            <AppText>集成内容</AppText>
+          </Sheet>
+        )}
+      </View>
+    );
+  }
+
+  it('完整闭环：openOverlay 挂载呈现 -> closeOverlay 退场中仍挂载 -> 播完物理彻底卸载', async () => {
+    const view = await renderWithProviders(<TestHost />);
+
+    // 1. 初始：未挂载
+    expect(view.queryByTestId('integrated-sheet')).toBeNull();
+
+    // 2. 点击打开
+    await act(async () => {
+      fireEvent.press(view.getByTestId('btn-open'));
+    });
+    expect(view.getByTestId('integrated-sheet')).toBeTruthy();
+    expect(view.getByText('集成内容')).toBeTruthy();
+
+    // 3. 点击关闭：逻辑关闭，Sheet 收到 visible=false，但宿主 isMounted 仍为 true，内容仍挂载（末帧冻结）
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        fireEvent.press(view.getByTestId('btn-close'));
+      });
+      expect(view.getByTestId('integrated-sheet')).toBeTruthy();
+      expect(view.getByText('集成内容')).toBeTruthy();
+
+      // 4. 退场动画耗时流逝 -> Sheet 触发 onCloseComplete -> host.onOverlayExited -> isMounted 变为 false
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+
+      // 5. 宿主物理卸载完全清空，React 树中不再有 Sheet
+      expect(view.queryByTestId('integrated-sheet')).toBeNull();
+      expect(view.queryByText('集成内容')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

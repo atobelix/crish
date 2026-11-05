@@ -116,6 +116,38 @@ function nowDefault(): number {
   return Date.now();
 }
 
+function isOutboxItemEqual(a: OutboxItem, b: OutboxItem): boolean {
+  if (a === b) return true;
+  return (
+    a.id === b.id &&
+    a.toolCallId === b.toolCallId &&
+    a.decision === b.decision &&
+    a.reason === b.reason &&
+    a.runId === b.runId &&
+    a.msgId === b.msgId &&
+    a.status === b.status &&
+    a.attempts === b.attempts &&
+    a.lastError === b.lastError &&
+    a.nextRetryAtMs === b.nextRetryAtMs &&
+    a.createdAtMs === b.createdAtMs &&
+    a.updatedAtMs === b.updatedAtMs
+  );
+}
+
+function areOutboxItemsEqual(
+  a: readonly OutboxItem[],
+  b: readonly OutboxItem[]
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!isOutboxItemEqual(a[i]!, b[i]!)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // 显式 StoreApi 标注：immer 中间件组合链的推断类型引用了外部模块 draft 类型，
 // 无法在导出声明中命名（TS4023/TS2883），公共面以 StoreApi<ApprovalState> 收敛
 export const approvalStore: StoreApi<ApprovalState> =
@@ -258,11 +290,13 @@ export const approvalStore: StoreApi<ApprovalState> =
 
       setOutboxCount: (n) =>
         set((s) => {
+          if (s.outboxCount === n) return;
           s.outboxCount = n;
         }),
 
       setOutboxItems: (items) =>
         set((s) => {
+          if (areOutboxItemsEqual(s.outboxItems, items)) return;
           // 镜像数组在 store 内独立持有（接线层入参为只读快照）
           s.outboxItems = [...items];
         }),

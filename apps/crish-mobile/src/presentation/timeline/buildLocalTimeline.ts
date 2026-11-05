@@ -135,10 +135,10 @@ function blocksForLocalMessage(message: LocalChatMessage): TimelineBlock[] {
   }
   const blocks: TimelineBlock[] = [];
   if (message.role === 'user' || message.role === 'assistant') {
-    const cleanReasoning = reasoning
+    const cleanReasoning = (reasoning ?? '')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
       .trim();
-    const cleanContent = message.content
+    const cleanContent = (message.content ?? '')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
       .trim();
 
@@ -236,16 +236,130 @@ function blocksForLocalMessage(message: LocalChatMessage): TimelineBlock[] {
   return blocks;
 }
 
+/**
+ * 本地时间线折叠状态：已封口前缀消息的引用列表 + 投影出的 blocks 扁平数组。
+ * 以会话首条消息对象为键存入 WeakMap（foldStates）——不同线程首消息各异，独立延续；
+ * 线程销毁或首消息 GC 时自动回收。
+ */
+interface LocalTimelineFoldState {
+  /** 已封口前缀消息的引用列表 */
+  sealedMessages: LocalChatMessage[];
+  /** 已封口前缀消息投影出的 blocks 扁平数组 */
+  sealedBlocks: TimelineBlock[];
+  /** 上轮输入的完整 messages 引用快照（用于快速等价复用） */
+  lastMessages?: readonly LocalChatMessage[];
+  /** 上轮输出的 blocks 数组引用 */
+  lastOutput?: TimelineBlock[];
+}
+
+let foldStates = new WeakMap<LocalChatMessage, LocalTimelineFoldState>();
+export const _foldStatesForTest = () => foldStates;
+
+export function resetLocalTimelineFoldStatesForTest(): void {
+  foldStates = new WeakMap<LocalChatMessage, LocalTimelineFoldState>();
+}
+
+function isMessageDirty(message: LocalChatMessage): boolean {
+  const cached = localBlocksCache.get(message);
+  if (!cached) return true;
+  const streaming = message.streaming === true;
+  const stopped = message.stopped === true;
+  const reasoning =
+    typeof message.reasoning === 'string'
+      ? message.reasoning
+      : typeof message.thought === 'string'
+        ? message.thought
+        : typeof message.reasoningContent === 'string'
+          ? message.reasoningContent
+          : '';
+  const isThinking = message.isThinking === true;
+  const toolCalls = message.toolCalls;
+  return !(
+    cached.id === message.id &&
+    cached.role === message.role &&
+    cached.content === message.content &&
+    cached.streaming === streaming &&
+    cached.stopped === stopped &&
+    areToolCallsEqual(cached.toolCallsSnapshot, toolCalls) &&
+    cached.reasoning === reasoning &&
+    cached.isThinking === isThinking
+  );
+}
+
 export function buildLocalTimeline(
   messages: readonly LocalChatMessage[]
 ): TimelineBlock[] {
-  const blocks: TimelineBlock[] = [];
-  for (const message of messages) {
-    for (const block of blocksForLocalMessage(message)) {
-      blocks.push(block);
+  if (messages.length === 0) {
+    return [];
+  }
+
+  const anchor = messages[0]!;
+  let state = foldStates.get(anchor);
+
+  const lastIndex = messages.length - 1;
+  const lastMessage = messages[lastIndex]!;
+  const isLastGrowing =
+    lastMessage.role === 'assistant' && lastMessage.streaming === true;
+
+  // 检查已缓存的前缀消息是否仍然完全匹配当前 messages 的前缀
+  if (state) {
+    const sealed = state.sealedMessages;
+    let prefixValid = messages.length >= sealed.length;
+    if (prefixValid) {
+      for (let i = 0; i < sealed.length; i++) {
+        if (messages[i] !== sealed[i]) {
+          prefixValid = false;
+          break;
+        }
+        // 非流式生长阶段（如重渲染或单元测试模拟）：核对就地变异快照
+        if (!isLastGrowing && isMessageDirty(sealed[i]!)) {
+          prefixValid = false;
+          break;
+        }
+      }
+    }
+    if (!prefixValid) {
+      // 历史前缀发生分歧或就地变异：废弃该状态，重新折叠
+      foldStates.delete(anchor);
+      state = undefined;
     }
   }
-  return blocks;
+
+  if (!state) {
+    state = {
+      sealedMessages: [],
+      sealedBlocks: [],
+    };
+    foldStates.set(anchor, state);
+  }
+
+  // 推进已封口的历史消息前缀：
+  // 规则：除最后一条正在生长的 Assistant 消息外，其余未封口消息逐一进入 sealedBlocks；
+  // 若最后一条消息不是正在流式的 Assistant，则整条时间线的所有消息均已封口。
+  const sealUntil = isLastGrowing ? lastIndex : messages.length;
+
+  for (let i = state.sealedMessages.length; i < sealUntil; i++) {
+    const msg = messages[i]!;
+    state.sealedMessages.push(msg);
+    const msgBlocks = blocksForLocalMessage(msg);
+    for (let b = 0; b < msgBlocks.length; b++) {
+      state.sealedBlocks.push(msgBlocks[b]!);
+    }
+  }
+
+  let result: TimelineBlock[];
+  if (isLastGrowing) {
+    // 仅对最后一条正在生长的 Assistant 消息构造新 block，与已封口前缀拼接
+    const growingBlocks = blocksForLocalMessage(lastMessage);
+    result = state.sealedBlocks.concat(growingBlocks);
+  } else {
+    // 全量已封口：直接使用 sealedBlocks 的切片（浅拷贝保障外层不可变）
+    result = state.sealedBlocks.slice();
+  }
+
+  state.lastMessages = messages;
+  state.lastOutput = result;
+  return result;
 }
 
 export default buildLocalTimeline;

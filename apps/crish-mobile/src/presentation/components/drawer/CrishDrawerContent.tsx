@@ -98,7 +98,7 @@ export interface CrishDrawerContentProps {
   isOpen?: boolean;
 }
 
-export function CrishDrawerContent({
+export const CrishDrawerContent = memo(function CrishDrawerContent({
   registerCloseListener,
   isOpen: propIsOpen,
 }: CrishDrawerContentProps = {}) {
@@ -320,16 +320,17 @@ export function CrishDrawerContent({
       ? { kind: 'blank' }
       : rawListState;
 
-  // 抽屉收起静默门（方案 21）：处于 closing 期间冻结列表内容和状态，消除转场期间不必要的 DOM diff
-  const isClosing = controller.phase === 'closing';
+  // 【流畅度方案 20/21·双重静默门】：覆盖完全闭合常驻态（idle）与 closing 态，
+  // 在后台彻底切断外部数据对不可见抽屉的 VDOM diff；仅在打开或 opening 期间放行渲染。
+  const isQuiet = !isOpen && controller.phase !== 'opening';
   const savedSectionsRef = useRef(sections);
   const savedListStateRef = useRef(listState);
-  if (!isClosing) {
+  if (!isQuiet) {
     savedSectionsRef.current = sections;
     savedListStateRef.current = listState;
   }
-  const displaySections = isClosing ? savedSectionsRef.current : sections;
-  const displayListState = isClosing ? savedListStateRef.current : listState;
+  const displaySections = isQuiet ? savedSectionsRef.current : sections;
+  const displayListState = isQuiet ? savedListStateRef.current : listState;
 
   return (
     <View
@@ -531,7 +532,7 @@ export function CrishDrawerContent({
       {localOps.layer}
     </View>
   );
-}
+});
 
 /**
  * 会话列表段（C-PERF memo 化）：行组件（SessionListItem /

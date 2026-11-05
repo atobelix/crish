@@ -72,6 +72,48 @@ describe('accountStore', () => {
     expect(accountStore.getState().targetDeviceId).toBe('desk-a');
   });
 
+  it('设备列表内容完全相同时直接返回原 state，不触发广播（阻断定时心跳重绘）', () => {
+    const dev = device('desk-a', true);
+    accountStore.getState().setDevices([dev]);
+    const listener = jest.fn();
+    const unsub = accountStore.subscribe(listener);
+
+    // 传入相同关键属性的新对象数组（模拟 15s 定时心跳）
+    accountStore.getState().setDevices([
+      {
+        id: 'desk-a',
+        name: 'desk-a',
+        platform: 'desktop',
+        lastSeenAt: Date.now() + 15_000,
+        online: true,
+      },
+    ]);
+
+    expect(listener).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it('设备关键属性（如在线状态或名称）改变时正常触发广播', () => {
+    const dev = device('desk-a', true);
+    accountStore.getState().setDevices([dev]);
+    const listener = jest.fn();
+    const unsub = accountStore.subscribe(listener);
+
+    // 在线状态变化
+    accountStore.getState().setDevices([
+      {
+        id: 'desk-a',
+        name: 'desk-a',
+        platform: 'desktop',
+        lastSeenAt: Date.now() + 15_000,
+        online: false,
+      },
+    ]);
+
+    expect(listener).toHaveBeenCalled();
+    unsub();
+  });
+
   it('reset 清空账号态并标记 hydrated', () => {
     accountStore.getState().setStatus('loggedIn');
     accountStore.getState().selectLocalTarget();

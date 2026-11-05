@@ -157,6 +157,8 @@ export interface SheetProps {
   dismissible?: boolean;
   /** 面板内钻取返回（标题槽左侧；系统返回先退钻取） */
   backAction?: SheetBackAction;
+  /** 退场动画完成（物理卸载）回调 */
+  onCloseComplete?: () => void;
   testID?: string;
 }
 
@@ -222,6 +224,7 @@ export function Sheet({
   size = 'large',
   dismissible = true,
   backAction,
+  onCloseComplete,
   testID,
 }: SheetProps) {
   const theme = useTheme();
@@ -264,7 +267,23 @@ export function Sheet({
   }, [visible, keyboardHeight]);
   const effectiveVisible = visible;
   // 关闭时先播出场动画再卸载 Modal（进场则立即挂载）
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) {
+    setMounted(true);
+  }
+  const exitCalledRef = useRef(false);
+  useEffect(() => {
+    if (effectiveVisible) {
+      exitCalledRef.current = false;
+    }
+  }, [effectiveVisible]);
+
+  const handleExitFinished = useCallback(() => {
+    if (exitCalledRef.current) return;
+    exitCalledRef.current = true;
+    runOnJS(setMounted)(false);
+    if (onCloseComplete) runOnJS(onCloseComplete)();
+  }, [onCloseComplete]);
   // 覆盖层登记（批 D）：挂载期间（含出场动画）在栈，Android 返回
   // 由 Modal onRequestClose 汇入栈顶裁决；钻取在场时先退钻取。
   useOverlayRegistration(overlayId, mounted, {
@@ -321,11 +340,11 @@ export function Sheet({
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
-        if (finished) runOnJS(setMounted)(false);
+        if (finished) handleExitFinished();
       }
     );
     onClose();
-  }, [dismissible, onClose, reduceMotion, theme]);
+  }, [dismissible, handleExitFinished, onClose, reduceMotion, theme]);
 
   // 拖拽状态（UI 线程）：内容滚动偏移（>0 时纵向拖动归滚动）、抓手起始进度、
   // 起始触点纵坐标、释放判定是否已由 onEnd 处理（onFinalize 兜底回位用）
@@ -388,13 +407,13 @@ export function Sheet({
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
-        if (finished) runOnJS(setMounted)(false);
+        if (finished) handleExitFinished();
       }
     );
     // 兜底卸载：动画被打断/测试环境回调不达时不留挂载
-    const timer = setTimeout(() => setMounted(false), 300);
+    const timer = setTimeout(() => handleExitFinished(), 300);
     return () => clearTimeout(timer);
-  }, [effectiveVisible]);
+  }, [effectiveVisible, handleExitFinished]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropProgress.value,

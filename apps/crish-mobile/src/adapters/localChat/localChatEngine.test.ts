@@ -402,17 +402,13 @@ describe('思考档位决策与流式编排（Thinking Orchestration）', () => 
     await waitFor(() => expect(streamSpy).toHaveBeenCalled());
     const [, callbacks] = streamSpy.mock.calls[0]!;
 
-    // 触发思考增量回调
+    // 触发思考增量回调：在微批窗口内密集合并
     callbacks.onReasoningDelta?.('步骤 1：分析输入参数...');
-    expect(appendReasoningSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      '步骤 1：分析输入参数...'
-    );
-
     callbacks.onReasoningDelta?.('步骤 2：完成推导。');
+    await waitFor(() => expect(appendReasoningSpy).toHaveBeenCalledTimes(1));
     expect(appendReasoningSpy).toHaveBeenCalledWith(
       expect.any(String),
-      '步骤 2：完成推导。'
+      '步骤 1：分析输入参数...步骤 2：完成推导。'
     );
 
     // 验证 store 中的助手消息状态
@@ -423,7 +419,7 @@ describe('思考档位决策与流式编排（Thinking Orchestration）', () => 
     );
     expect(assistantMsg?.isThinking).toBe(true);
 
-    // 模拟正文增量到达与完成
+    // 模拟正文增量到达与完成（onComplete 强制立即 flush 未派发的增量）
     callbacks.onTextDelta('最终结论：证明成立。');
     await callbacks.onComplete({
       content: '最终结论：证明成立。',
@@ -443,6 +439,125 @@ describe('思考档位决策与流式编排（Thinking Orchestration）', () => 
 
     streamSpy.mockRestore();
     appendReasoningSpy.mockRestore();
+  });
+});
+
+describe('时间线流式微批调度器（StreamBatchScheduler）', () => {
+  it('生成中密集吐词在 33ms 缓冲窗口内微批合并推入 store，削减状态派发', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '微批合并测试')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+    const handlers = streamHandlers!;
+
+    let notifyCount = 0;
+    const unsub = localChatSessionStore.subscribe(() => {
+      notifyCount++;
+    });
+
+    // 连续密集吐出 4 个 SSE chunk
+    handlers.onChunk(
+      sse({ choices: [{ delta: { content: '微' }, finish_reason: null }] })
+    );
+    handlers.onChunk(
+      sse({ choices: [{ delta: { content: '批' }, finish_reason: null }] })
+    );
+    handlers.onChunk(
+      sse({ choices: [{ delta: { content: '调' }, finish_reason: null }] })
+    );
+    handlers.onChunk(
+      sse({ choices: [{ delta: { content: '度' }, finish_reason: null }] })
+    );
+
+    // 此时在 33ms 缓冲窗口内，未向 store 派发
+    expect(threadRuntimeSnapshot(threadId)?.messages[1]?.content).toBe('');
+    expect(notifyCount).toBe(0);
+
+    // 33ms 窗口超时后，合并为 1 次派发
+    await waitFor(() =>
+      expect(threadRuntimeSnapshot(threadId)?.messages[1]?.content).toBe(
+        '微批调度'
+      )
+    );
+    expect(notifyCount).toBe(1);
+
+    handlers.onDone();
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+    unsub();
+  });
+
+  it('生成完成 onDone 时强制同步立即 flush 未派发的缓冲增量，确保 100% 内容无损落盘', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '完成刷新测试')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+    const handlers = streamHandlers!;
+
+    handlers.onChunk(
+      sse({
+        choices: [
+          { delta: { content: '未出缓冲区的尾巴' }, finish_reason: 'stop' },
+        ],
+      })
+    );
+    // 立即结束流，不等 33ms 定时器
+    handlers.onDone();
+
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+    const snap = threadRuntimeSnapshot(threadId);
+    expect(snap?.messages[1]?.content).toBe('未出缓冲区的尾巴');
+  });
+
+  it('用户主动停止 stopLocalChatMessage 时强制同步立即 flush 未派发的缓冲增量', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '停止刷新测试')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+    const handlers = streamHandlers!;
+
+    handlers.onChunk(
+      sse({
+        choices: [
+          {
+            delta: { content: '停止前缓冲区内的内容' },
+            finish_reason: null,
+          },
+        ],
+      })
+    );
+    // 立即停止
+    stopLocalChatMessage(threadId);
+
+    expect(isLocalThreadStreaming(threadId)).toBe(false);
+    const snap = threadRuntimeSnapshot(threadId);
+    expect(snap?.messages[1]?.content).toBe('停止前缓冲区内的内容');
+    expect(snap?.messages[1]?.stopped).toBe(true);
+  });
+
+  it('流式异常 onHttpError 时强制同步立即 flush 未派发的缓冲增量', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '异常刷新测试')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+    const handlers = streamHandlers!;
+
+    handlers.onChunk(
+      sse({
+        choices: [
+          {
+            delta: { content: '错误发生前的有效文字' },
+            finish_reason: null,
+          },
+        ],
+      })
+    );
+    // 立即触发错误
+    handlers.onHttpError(500, 'Internal Server Error');
+
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+    const snap = threadRuntimeSnapshot(threadId);
+    expect(snap?.messages[1]?.content).toBe('错误发生前的有效文字');
+    expect(snap?.messages[1]?.streaming).toBeFalsy();
   });
 });
 

@@ -53,7 +53,14 @@ export { default as SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
 export { default as Sheet } from './Sheet';
 export type { SheetProps, SheetSize, SheetBackAction } from './Sheet';
-export { nextSheetSize, SHEET_SIZE_RATIOS, useSheetSearchRaise } from './Sheet';
+export {
+  nextSheetSize,
+  SHEET_SIZE_RATIOS,
+  sheetPanelTranslateY,
+  useSheetSearchRaise,
+} from './Sheet';
+export { useOverlayHost } from './useOverlayHost';
+export type { OverlayHostState } from './useOverlayHost';
 export { default as SheetOptionRow } from './SheetOptionRow';
 export type { SheetOptionRowProps } from './SheetOptionRow';
 export { default as Spinner } from './Spinner';

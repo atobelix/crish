@@ -9,6 +9,7 @@
 // - 导入进度（批 A，2026-11-03）：picking 在途时行尾出一枚导入中
 //   tile（Spinner + 文案）——选取/压缩是异步长尾，进度必须可见、
 //   不许静默（旧形态只有 VM 里的 picking 布尔，界面零呈现）。
+import { memo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
@@ -31,7 +32,7 @@ export interface AttachmentStripProps {
   testID?: string;
 }
 
-export function AttachmentStrip({
+export const AttachmentStrip = memo(function AttachmentStrip({
   attachments,
   onRemove,
   picking = false,
@@ -137,7 +138,7 @@ export function AttachmentStrip({
       </ScrollView>
     </Collapsible>
   );
-}
+});
 
 /** 附件移除钮（列表项内独立组件：按压叠层 hook 不得进 map 回调） */
 function RemoveAttachmentButton({

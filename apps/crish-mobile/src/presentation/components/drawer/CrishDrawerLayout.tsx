@@ -33,6 +33,7 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   Extrapolation,
   interpolate,
@@ -65,8 +66,8 @@ export {
 
 /** 激活阈值：横向位移达到即认领手势 */
 const ACTIVATION_DX = 14;
-/** 纵向失效阈值：纵向位移达到且横向不占优 → 让位给列表滚动 */
-const FAIL_DY = 26;
+/** 纵向失效阈值：纵向位移达到 12dp 且大于横向 → 极速让位给列表滚动，消除粘滞感 */
+const FAIL_DY = 12;
 /** 提交行程：自起始进度再拖过该进度量松手即翻转开合（抽屉宽 320dp 时 ≈80dp） */
 const COMMIT_TRAVEL = 0.25;
 /** 快速轻扫速度阈值（dp/s，双向对称） */
@@ -168,14 +169,11 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
         .manualActivation(true)
         .onTouchesDown((event) => {
           'worklet';
+          cancelAnimation(progress);
           const touch = event.allTouches[0];
           if (touch) {
             touchStartX.value = touch.x;
             touchStartY.value = touch.y;
-          }
-          if (progress.value === 0) {
-            runOnJS(mountContent)();
-            runOnJS(dismissKeyboardAndBlur)();
           }
           startProgress.value = progress.value;
         })
@@ -188,24 +186,40 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           const absDx = Math.abs(dx);
           const absDy = Math.abs(dy);
 
-          // 纵向滚动优先：垂直位移明显大于横向时让位给列表滚动
-          if (absDy > FAIL_DY && absDy > absDx * 1.2) {
+          // 纵向滑动极速让位：垂直位移达到 12dp 且大于横向位移时立即放弃
+          if (absDy > FAIL_DY && absDy > absDx) {
             stateManager.fail();
             return;
           }
 
           if (progress.value === 0) {
-            // 关闭态：向右拖动且纵向不占优时激活
+            // 关闭态：超出左侧 75% 区域直接放弃手势
+            if (touchStartX.value > width * 0.75) {
+              stateManager.fail();
+              return;
+            }
+            // 左滑快速失败
+            if (dx < -10) {
+              stateManager.fail();
+              return;
+            }
+            // 向右拖动且横向占优时激活
             if (dx > ACTIVATION_DX && dx > absDy * 0.7) {
               stateManager.activate();
-            } else if (dx < -ACTIVATION_DX) {
-              stateManager.fail();
             }
           } else {
-            // 打开态：任意明显的横向拖动均激活
-            if (absDx > ACTIVATION_DX) {
+            // 打开态限定仅向左收起：
+            if (dx < -ACTIVATION_DX && absDx > absDy * 0.7) {
               stateManager.activate();
+            } else if (dx > ACTIVATION_DX) {
+              stateManager.fail();
             }
+          }
+        })
+        .onStart(() => {
+          'worklet';
+          if (progress.value === 0) {
+            runOnJS(dismissKeyboardAndBlur)();
           }
         })
         .onUpdate((event) => {
@@ -247,13 +261,13 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
     [
       handleDrawerClose,
       maxTranslate,
-      mountContent,
       onAnimationFinished,
       progress,
       reduceMotion,
       startProgress,
       theme.motion.duration.drawer,
       theme.motion.easing.emphasized,
+      width,
     ]
   );
 

@@ -15,17 +15,14 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { localChatStore } from '@/domain/store/localChatStore';
-import {
-  localChatSessionStore,
-  previewOfContent,
-} from '@/domain/store/localChatSessionStore';
+import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
 import { resolveActiveSelection } from '@/domain/pure/localChatProtocol';
 import type { HubLocalThreadInput } from '@/domain/pure/hubRows';
 
 export interface LocalHubEntryVm {
   /** hub 逐线程行输入（线程元数据 + 该线程生成态；store 既有 updatedAt 降序） */
   localThreads: HubLocalThreadInput[];
-  /** 逐线程行摘要：生成中线程取其实时内容经纯文本摘取（标记不泄漏，MD3），尚无内容时为生成中文案；否则取 meta.preview */
+  /** 逐线程行摘要：生成中线程返回 '正在生成…' 标量（避免逐 Token 轰炸主屏）；否则取 meta.preview */
   snippetOf: (threadId: string) => string;
   /** 是否有任一本地线程正在生成（主页本地模式 composer 忙态） */
   streaming: boolean;
@@ -42,7 +39,6 @@ export function useLocalHubEntryVm(): LocalHubEntryVm {
     localChatSessionStore,
     (s) => s.activeThreadId
   );
-  const activeMessages = useStore(localChatSessionStore, (s) => s.messages);
   const activeStreaming = useStore(localChatSessionStore, (s) => s.streaming);
   const inactive = useStore(localChatSessionStore, (s) => s.inactive);
   const completedAtByThread = useStore(
@@ -89,19 +85,16 @@ export function useLocalHubEntryVm(): LocalHubEntryVm {
     (threadId: string): string => {
       const meta = threads.find((t) => t.id === threadId);
       if (!meta) return '';
-      const runtime =
+      const isStreaming =
         threadId === activeThreadId
-          ? { messages: activeMessages, streaming: activeStreaming }
-          : inactive[threadId];
-      if (runtime?.streaming) {
-        const last = runtime.messages[runtime.messages.length - 1];
-        // 实时内容是 markdown 原文且多行：经摘要派生摘为纯文本单行（与
-        // meta.preview 同口径），标记不泄漏到列表行（MD3 列表面纪律）。
-        return last?.content ? previewOfContent(last.content) : '正在生成…';
+          ? activeStreaming
+          : (inactive[threadId]?.streaming ?? false);
+      if (isStreaming) {
+        return '正在生成…';
       }
       return meta.preview;
     },
-    [threads, activeThreadId, activeMessages, activeStreaming, inactive]
+    [threads, activeThreadId, activeStreaming, inactive]
   );
 
   return {

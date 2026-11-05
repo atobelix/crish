@@ -66,6 +66,8 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { haptics } from '@/adapters/platform/haptics';
@@ -112,7 +114,7 @@ const VOICE_LONG_PRESS_MAX_DISTANCE = 10_000;
 export interface ComposerProps {
   value: string;
   onChangeText: (text: string) => void;
-  onSubmit: () => void;
+  onSubmit: (text?: string) => void;
   canSubmit: boolean;
   editable: boolean;
   placeholder?: string;
@@ -456,6 +458,8 @@ export const ComposerVoiceOverlays = memo(function ComposerVoiceOverlays({
   starting,
   displayText,
   level,
+  dragX,
+  dragY,
   gateVisible,
   gateState,
   modelTotalBytes,
@@ -466,6 +470,8 @@ export const ComposerVoiceOverlays = memo(function ComposerVoiceOverlays({
   starting: boolean;
   displayText: string;
   level: number;
+  dragX?: SharedValue<number>;
+  dragY?: SharedValue<number>;
   gateVisible: boolean;
   gateState: VoiceInputApi['gateState'];
   modelTotalBytes: VoiceInputApi['modelTotalBytes'];
@@ -479,6 +485,8 @@ export const ComposerVoiceOverlays = memo(function ComposerVoiceOverlays({
         starting={starting}
         displayText={displayText}
         level={level}
+        dragX={dragX}
+        dragY={dragY}
       />
       <VoiceModelGate
         visible={gateVisible}
@@ -534,7 +542,7 @@ export function inputVoiceGestureEnabled(args: {
 
 export const DEFAULT_COMPOSER_PLACEHOLDER = '点击发消息、长按语音输入';
 
-export function Composer({
+export const Composer = memo(function Composer({
   value,
   onChangeText,
   onSubmit,
@@ -554,23 +562,33 @@ export function Composer({
   const { colors, radius, size, space } = theme;
   const reduceTransparency = useReduceTransparency();
 
+  // 原生输入框实例与文本镜像引用（缓冲隔离设计）：
+  // textRef 实时镜像原生 TextInput 的当前内容，用于提交时直接读取最新文本并清空原生输入；
+  const inputRef = useRef<TextInput | null>(null);
+  const textRef = useRef(value ?? '');
+
   // 发送钮显隐按「有无内容」：受控 value 之外再记内部态——
-  // 输入回调先于父级回填 value，内部态让切换不慢一拍（测试的受控桩亦然）。
-  // 逐键守卫（C-PERF）：旧实现逐键无条件 setHasText——布尔未翻转时也
-  // 排一次重渲染，与回显往返叠乘成输入卡顿的一环。改走 ref 比对，
-  // 只在真翻转时提交（语义不变：两路写入——输入回调先行、value 回填
-  // 随后——都经同一守卫收敛到同一布尔）。
-  const [hasText, setHasText] = useState(() => value.trim().length > 0);
+  // 逐键守卫（C-PERF）：改走 ref 比对，仅在 hasText 布尔值发生真实翻转（空 -> 非空 或 非空 -> 空）时
+  // 才触发内部状态重新计算（控制发送按钮颜色/显隐）；在连续敲击字母时，hasText 恒为 true，
+  // 不触发组件额外重绘！
+  const [hasText, setHasText] = useState(() => (value ?? '').trim().length > 0);
   const hasTextRef = useRef(hasText);
   const applyHasText = useCallback((next: boolean) => {
     if (hasTextRef.current === next) return;
     hasTextRef.current = next;
     setHasText(next);
   }, []);
+
+  // 保持受控属性 value 更新（如语音输入回填、外部重置草稿）的兼容性：
+  // 当外部传入的 value 发生变更时，同步更新 textRef 与 hasText 翻转状态
   useEffect(() => {
-    applyHasText(value.trim().length > 0);
+    const nextText = value ?? '';
+    textRef.current = nextText;
+    applyHasText(nextText.trim().length > 0);
   }, [value, applyHasText]);
+
   const handleChangeText = (text: string) => {
+    textRef.current = text;
     applyHasText(text.trim().length > 0);
     onChangeText(text);
   };
@@ -617,10 +635,6 @@ export function Composer({
   // 触发吸附触感并唤醒语音；聚焦打字态（isFocused）透明层让出直通权（pointerEvents="none"），
   // 保证光标移动、选字与文字输入直通原生 TextInput。
   const [isFocused, setIsFocused] = useState(false);
-
-  // 输入框实例：用于手势分流——短按调起软键盘 focus，长按触发语音录入
-  // 时主动 blur 并收起键盘（Keyboard.dismiss），避免录音浮层与软键盘/原生光标同屏
-  const inputRef = useRef<TextInput | null>(null);
 
   // 手势回调经 ref 桥接最新 voice 实例（worklet → runOnJS，模式同
   // SlideToConfirm）：手势对象本身不随渲染重建而失联。
@@ -679,13 +693,17 @@ export function Composer({
   };
   const handleSubmitPress = useCallback(() => {
     if (!canSubmit) return;
+    const text = textRef.current;
+    textRef.current = '';
+    applyHasText(false);
+    inputRef.current?.clear();
     // 发送消息生命周期闭环：触感反馈 + 强制失焦并收起软键盘，让输入框平滑回到最下面
     haptics.tap();
     inputRef.current?.blur();
     Keyboard.dismiss();
     setIsFocused(false);
-    latestCallbacksRef.current.onSubmit();
-  }, [canSubmit]);
+    latestCallbacksRef.current.onSubmit(text);
+  }, [canSubmit, applyHasText]);
   const handleAttachPress = useCallback(() => {
     latestCallbacksRef.current.onAttachPress?.();
   }, []);
@@ -731,6 +749,12 @@ export function Composer({
     voicePresent: Boolean(voice),
     locked,
   });
+
+  // 手势位移 Reanimated 共享变量（驱动流光大球水滴磁吸形变，120Hz 纯 UI 线程）
+  const voiceDragX = useSharedValue(0);
+  const voiceDragY = useSharedValue(0);
+
+  const springConfig = theme.motion.spring.bouncy;
   const shuntingGesture = useMemo(() => {
     const longPress = Gesture.LongPress()
       .minDuration(200)
@@ -745,10 +769,14 @@ export function Composer({
       .enabled(voiceGestureEnabled)
       .onStart(() => {
         'worklet';
+        voiceDragX.value = 0;
+        voiceDragY.value = 0;
         runOnJS(voiceBridgeRef.current.onLongPressStart)();
       })
       .onFinalize(() => {
         'worklet';
+        voiceDragX.value = withSpring(0, springConfig);
+        voiceDragY.value = withSpring(0, springConfig);
         runOnJS(voiceBridgeRef.current.onLongPressEnd)();
       });
 
@@ -759,6 +787,8 @@ export function Composer({
       .enabled(voiceGestureEnabled)
       .onUpdate((event) => {
         'worklet';
+        voiceDragX.value = event.translationX;
+        voiceDragY.value = event.translationY;
         runOnJS(voiceBridgeRef.current.onPanMove)(
           event.translationX,
           event.translationY
@@ -766,6 +796,8 @@ export function Composer({
       })
       .onFinalize(() => {
         'worklet';
+        voiceDragX.value = withSpring(0, springConfig);
+        voiceDragY.value = withSpring(0, springConfig);
         runOnJS(voiceBridgeRef.current.onLongPressEnd)();
       });
 
@@ -781,7 +813,7 @@ export function Composer({
     // 2. 短按未满 200ms 松手：LongPress 失败，Tap 胜出，触发 inputRef.focus() 聚焦发消息。
     const voiceSimultaneous = Gesture.Simultaneous(longPress, pan);
     return Gesture.Exclusive(voiceSimultaneous, tap);
-  }, [voiceGestureEnabled]);
+  }, [voiceGestureEnabled, springConfig]);
 
   // 仅在深色模式且 iOS 环境下保留玻璃质感；浅色模式下强制禁用 glassActive！
   // 浅色模式下输入框必须是坚实纯净的纯白实体（#ffffff / colors.surface），杜绝图层混合发灰发脏
@@ -1027,6 +1059,8 @@ export function Composer({
           starting={voice.starting}
           displayText={voice.displayText}
           level={voice.level}
+          dragX={voiceDragX}
+          dragY={voiceDragY}
           gateVisible={voice.gateVisible}
           gateState={voice.gateState}
           modelTotalBytes={voice.modelTotalBytes}
@@ -1036,7 +1070,7 @@ export function Composer({
       ) : null}
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   shell: {

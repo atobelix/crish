@@ -68,6 +68,7 @@ import { selectStatusBoardRows, type HubRow } from '@/domain/pure/hubRows';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { approvalStore } from '@/domain/store/approvalStore';
+import { eventStore } from '@/domain/store/eventStore';
 import { SNAPSHOT_STALE_LABEL } from '@/domain/pure/selectors';
 import { formatRelativeTime } from '@/domain/pure/time';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
@@ -78,6 +79,7 @@ import {
   DropdownMenu,
   IconButton,
   Screen,
+  useOverlayHost,
   useToast,
 } from '@/presentation/ui';
 import { ConnectionBanner } from '@/presentation/components/status/ConnectionBanner';
@@ -150,7 +152,7 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { showToast } = useToast();
-  const { sessions, windows, refresh, syncStatus, syncError, snapshotStale } =
+  const { sessions, refresh, syncStatus, syncError, snapshotStale } =
     useSessionsVm();
   const quickRun = useQuickRunVm();
   // 有效对话模式（CON-2 中央派生）：本屏一切模式判定只消费此值，
@@ -228,31 +230,29 @@ export default function HomeScreen({
   // 返回对象每次渲染换引用使本回调与状态板 memo 墙失效（PERF #3）。
   const sessionOps = useSessionOpsController();
   const openSessionActionsFn = sessionOps.openActions;
+  // 【流畅度方案·引用绝对稳定】：从 sessionStore 按需读取最新会话，杜绝依赖 sessions 全量数组引发的状态板 memo 穿透
   const openSessionActions = useCallback(
     (sessionId: string) => {
-      const target = sessions.find((s) => s.id === sessionId);
+      const target = sessionStore
+        .getState()
+        .sessions.find((s) => s.id === sessionId);
       if (target) openSessionActionsFn(target);
     },
-    [sessions, openSessionActionsFn]
+    [openSessionActionsFn]
   );
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [deviceOpen, setDeviceOpen] = useState(false);
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [permissionOpen, setPermissionOpen] = useState(false);
-  const [modelOpen, setModelOpen] = useState(false);
-  const [localModelOpen, setLocalModelOpen] = useState(false);
+  // 覆盖层统一状态机（SSOT + 退出动画完成后物理卸载，闭合时 0 内存 / 0 JSI 共享节点）
+  const { openOverlay, closeOverlay, onOverlayExited, isOpen, isMounted } =
+    useOverlayHost<
+      | 'menu'
+      | 'device'
+      | 'workspace'
+      | 'permission'
+      | 'model'
+      | 'localModel'
+      | 'skills'
+    >();
   const [attachOpen, setAttachOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
-  // Sheet 懒挂载（PERF #3）：首次打开后才挂载、挂载后保持——主页常驻
-  // 面不再背 7 个 Sheet 的完整子树；打开/关闭时序与动画口径不变
-  // （关闭仍走 visible=false 的退出动画，组件已在场）。
-  const deviceEverOpened = useEverOpened(deviceOpen);
-  const workspaceEverOpened = useEverOpened(workspaceOpen);
-  const permissionEverOpened = useEverOpened(permissionOpen);
-  const modelEverOpened = useEverOpened(modelOpen);
-  const localModelEverOpened = useEverOpened(localModelOpen);
   const attachEverOpened = useEverOpened(attachOpen);
-  const skillsEverOpened = useEverOpened(skillsOpen);
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
   const { feedback } = quickRun;
 
@@ -322,7 +322,9 @@ export default function HomeScreen({
     if (feedback.kind === 'success') {
       // 发送成功才清空已选附件（失败保留，用户可改后重发）
       clearAttachments();
-      onOpenSession(feedback.sessionId);
+      if (feedback.sessionId) {
+        onOpenSession(feedback.sessionId);
+      }
     } else if (feedback.kind === 'error') showToast(feedback.message, 'error');
   }, [feedback, onOpenSession, showToast, clearAttachments]);
 
@@ -370,38 +372,116 @@ export default function HomeScreen({
 
   // 相对时间随滚动/交互刷新（不挂定时器，避免常驻唤醒）
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // 【流畅度方案·引用绝对稳定】：直接取 eventStore 的 windows 快照，依赖清空，维持状态板 memo 边界
   const previewOf = useCallback(
-    (sessionId: string) => lastPreviewOfWindow(windows[sessionId]),
-    [windows]
+    (sessionId: string) =>
+      lastPreviewOfWindow(eventStore.getState().windows[sessionId]),
+    []
   );
 
   // 发送分发（CON-2 按模式）：local → 本地发送 + 导航进本地线程页
   // （已选附件随文本经本地引擎组装发送，与线程页同一条链）；
   // remote → 既有管线（G5b：有已选附件走富路径，否则纯文本）
-  const handleSubmit = useCallback(() => {
-    // 发送即收附件菜单（锚定 Popover 的关闭路径之一，批 A）
-    setAttachOpen(false);
-    if (mode === 'local') {
-      submitLocalFromHome(quickRun.prompt, attachments.attachments);
-      return;
-    }
-    if (hasAttachments) {
-      quickRun.submitWithAttachments(
-        quickRun.prompt,
-        attachments.attachments,
-        composerCtx.activeModelVisionSupported
-      );
-    } else {
-      quickRun.submit();
-    }
+  // 性能重塑：接收 Composer 原生缓冲层传递的 explicitText，打字过程 0 重绘主屏
+  const handleSubmit = useCallback(
+    (explicitText?: string) => {
+      // 发送即收附件菜单（锚定 Popover 的关闭路径之一，批 A）
+      setAttachOpen(false);
+      const text = explicitText ?? quickRun.prompt;
+      if (mode === 'local') {
+        submitLocalFromHome(text, attachments.attachments);
+        return;
+      }
+      if (hasAttachments) {
+        quickRun.submitWithAttachments(
+          text,
+          attachments.attachments,
+          composerCtx.activeModelVisionSupported
+        );
+      } else if (explicitText !== undefined && explicitText.length > 0) {
+        quickRun.submitText(explicitText);
+      } else {
+        quickRun.submit();
+      }
+    },
+    [
+      mode,
+      submitLocalFromHome,
+      hasAttachments,
+      quickRun,
+      attachments.attachments,
+      composerCtx.activeModelVisionSupported,
+    ]
+  );
+
+  const handleWorkspacePress = useCallback(() => {
+    composerCtx.openWorkspaceList();
+    openOverlay('workspace');
+  }, [composerCtx, openOverlay]);
+
+  const handlePermissionPress = useCallback(() => {
+    openOverlay('permission');
+  }, [openOverlay]);
+
+  const contextBar = useMemo(() => {
+    if (!remoteMode) return undefined;
+    return {
+      workspaceLabel: composerCtx.workspaceLabel,
+      permissionLabel: composerCtx.permissionLabel,
+      onWorkspacePress: handleWorkspacePress,
+      onPermissionPress: handlePermissionPress,
+    };
   }, [
-    mode,
-    submitLocalFromHome,
-    hasAttachments,
-    quickRun,
-    attachments.attachments,
-    composerCtx.activeModelVisionSupported,
+    remoteMode,
+    composerCtx.workspaceLabel,
+    composerCtx.permissionLabel,
+    handleWorkspacePress,
+    handlePermissionPress,
   ]);
+
+  const handleModelPress = useCallback(() => {
+    if (remoteMode) {
+      composerCtx.openModelList();
+      openOverlay('model');
+    } else if (localEntry.configured) {
+      openOverlay('localModel');
+    } else {
+      router.push('/settings-local-providers');
+    }
+  }, [remoteMode, composerCtx, localEntry.configured, openOverlay, router]);
+
+  const model = useMemo(
+    () => ({
+      label: remoteMode
+        ? composerCtx.modelLabel
+        : (localEntry.activeLabel ?? '未配置供应商'),
+      onPress: handleModelPress,
+    }),
+    [
+      remoteMode,
+      composerCtx.modelLabel,
+      localEntry.activeLabel,
+      handleModelPress,
+    ]
+  );
+
+  const menuEntries = useMemo(
+    () => [
+      {
+        key: 'notifications',
+        label: '通知中心',
+        icon: 'bell' as const,
+        onPress: onOpenNotifications,
+      },
+      {
+        key: 'settings',
+        label: '偏好设置',
+        icon: 'settings' as const,
+        onPress: () => router.push('/settings'),
+      },
+    ],
+    [onOpenNotifications, router]
+  );
 
   return (
     <Screen avoidKeyboard={false}>
@@ -419,13 +499,13 @@ export default function HomeScreen({
         {/* 原型 header-left-group gap 10 */}
         <View style={[styles.headerGroup, { gap: theme.space.sm + 2 }]}>
           <MenuButton onPress={onOpenDrawer} />
-          <DevicePill onPress={() => setDeviceOpen(true)} />
+          <DevicePill onPress={() => openOverlay('device')} />
         </View>
         <IconButton
           name="more"
           variant="floating"
           accessibilityLabel="更多选项"
-          onPress={() => setMenuOpen(true)}
+          onPress={() => openOverlay('menu')}
           testID="home-more"
         />
       </View>
@@ -507,7 +587,7 @@ export default function HomeScreen({
               phaseLabel="桌面未连接 · 正在使用本地对话"
               lastError={device.lastError}
               onRetry={device.reconnect}
-              onSwitch={() => setDeviceOpen(true)}
+              onSwitch={() => openOverlay('device')}
             />
           ) : null}
           {remoteMode ? (
@@ -612,8 +692,9 @@ export default function HomeScreen({
             onPickFile={attachments.pickFromFiles}
             skillsCount={skillsVm.skillsCount}
             onOpenSkills={() => {
+              setAttachOpen(false);
               skillsVm.openList();
-              setSkillsOpen(true);
+              openOverlay('skills');
             }}
             testID="home-attachment-sheet"
           />
@@ -658,81 +739,33 @@ export default function HomeScreen({
             setAttachOpen((v) => !v)
           }
           hasAttachments={hasAttachments}
-          contextBar={
-            // 工作区/权限是连上电脑才有的概念（用户 2026-11-02 22:05
-            // 裁决细化，净化 M-删9/10）：本地模式不注入 contextBar——
-            // Composer 未注入即不渲染选择行，不再假显示 + 点按弹解释
-            // toast。输入框的两行形态（输入行 + 工具/模型行）不分模式，
-            // 不受影响；远端模式注入真实选择行，口径不变。
-            remoteMode
-              ? {
-                  workspaceLabel: composerCtx.workspaceLabel,
-                  permissionLabel: composerCtx.permissionLabel,
-                  onWorkspacePress: () => {
-                    composerCtx.openWorkspaceList();
-                    setWorkspaceOpen(true);
-                  },
-                  onPermissionPress: () => setPermissionOpen(true),
-                }
-              : undefined
-          }
-          model={
-            remoteMode
-              ? {
-                  label: composerCtx.modelLabel,
-                  onPress: () => {
-                    composerCtx.openModelList();
-                    setModelOpen(true);
-                  },
-                }
-              : {
-                  // 本地模式：模型钮改指本地 selection（localChatStore）；
-                  // 未配置时点按直达供应商配置，不冒充可选模型
-                  label: localEntry.activeLabel ?? '未配置供应商',
-                  onPress: () => {
-                    if (localEntry.configured) setLocalModelOpen(true);
-                    else router.push('/settings-local-providers');
-                  },
-                }
-          }
+          contextBar={contextBar}
+          model={model}
         />
       </KeyboardStickyView>
 
       {/* 右上更多下拉：真实入口（通知中心 / 偏好设置） */}
-      <DropdownMenu
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        top={insets.top + theme.size.header + theme.space.md}
-        right={theme.space.md}
-        testID="home-menu"
-        entries={[
-          {
-            key: 'notifications',
-            label: '通知中心',
-            icon: 'bell',
-            onPress: onOpenNotifications,
-          },
-          {
-            key: 'settings',
-            label: '偏好设置',
-            icon: 'settings',
-            onPress: () => router.push('/settings'),
-          },
-        ]}
-      />
+      {isMounted('menu') ? (
+        <DropdownMenu
+          visible={isOpen('menu')}
+          onClose={closeOverlay}
+          top={insets.top + theme.size.header + theme.space.md}
+          right={theme.space.md}
+          testID="home-menu"
+          entries={menuEntries}
+        />
+      ) : null}
 
-      {/* 连接设备 Sheet（懒挂载：首次打开后才进常驻面，PERF #3） */}
-      {deviceEverOpened ? (
+      {/* 连接设备 Sheet（统一状态机：0ms 挂载 + 退场物理彻底卸载） */}
+      {isMounted('device') ? (
         <DeviceSheet
-          visible={deviceOpen}
-          onClose={() => setDeviceOpen(false)}
+          visible={isOpen('device')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('device')}
           device={device}
           onOpenScan={() => router.push('/pair/scan')}
           onUseLocal={() => {
-            // 「现在用本地」落点（界面统一 U3）：回主页即本地能力面
-            // （本地对话不再有独立页），关 Sheet 并 navigate 回既有
-            // 主页路由，不压新栈
-            setDeviceOpen(false);
+            closeOverlay();
             router.navigate('/');
           }}
           testID="home-device-sheet"
@@ -740,41 +773,44 @@ export default function HomeScreen({
       ) : null}
 
       {/* 项目选择 Sheet（G1：复用文件页 WorkspaceSheet 数据面） */}
-      {workspaceEverOpened ? (
+      {isMounted('workspace') ? (
         <WorkspaceSheet
-          visible={workspaceOpen}
-          onClose={() => setWorkspaceOpen(false)}
+          visible={isOpen('workspace')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('workspace')}
           workspaces={composerCtx.workspaces ?? []}
           status={composerCtx.workspacesStatus}
           activeRoot={composerCtx.activeWorkspaceRoot ?? ''}
           switching={composerCtx.switchingWorkspace}
           onSelect={(root) => {
             composerCtx.selectWorkspace(root);
-            setWorkspaceOpen(false);
+            closeOverlay();
           }}
           onRetry={composerCtx.retryWorkspaces}
         />
       ) : null}
 
       {/* 权限模式 Sheet（G1：桌面三档对齐，选择即持久化） */}
-      {permissionEverOpened ? (
+      {isMounted('permission') ? (
         <PermissionModeSheet
-          visible={permissionOpen}
-          onClose={() => setPermissionOpen(false)}
+          visible={isOpen('permission')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('permission')}
           value={composerCtx.permissionMode}
           onSelect={(mode) => {
             composerCtx.setPermissionMode(mode);
-            setPermissionOpen(false);
+            closeOverlay();
           }}
           testID="home-permission-sheet"
         />
       ) : null}
 
       {/* 模型选择 Sheet（G2：真实列表 + 全局默认切换，桌面同一真源） */}
-      {modelEverOpened ? (
+      {isMounted('model') ? (
         <ModelSheet
-          visible={modelOpen}
-          onClose={() => setModelOpen(false)}
+          visible={isOpen('model')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('model')}
           connected={composerCtx.connected}
           models={composerCtx.models}
           status={composerCtx.modelsStatus}
@@ -785,7 +821,7 @@ export default function HomeScreen({
           errorCode={composerCtx.modelsError}
           onSelectModel={(providerId, modelId) => {
             void composerCtx.selectModel(providerId, modelId).then((ok) => {
-              if (ok) setModelOpen(false);
+              if (ok) closeOverlay();
             });
           }}
           onRetry={composerCtx.retryModels}
@@ -794,26 +830,25 @@ export default function HomeScreen({
       ) : null}
 
       {/* 本地模型选择 Sheet（CON-2：本地模式模型钮；本机供应商配置面） */}
-      {localModelEverOpened ? (
+      {isMounted('localModel') ? (
         <LocalModelSheet
-          visible={localModelOpen}
-          onClose={() => setLocalModelOpen(false)}
+          visible={isOpen('localModel')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('localModel')}
           onOpenProviders={() => {
-            setLocalModelOpen(false);
+            closeOverlay();
             router.push('/settings-local-providers');
           }}
           testID="home-local-model-sheet"
         />
       ) : null}
 
-      {/* 附件菜单已移入上方 KeyboardStickyView 内（批 A 锚定 Popover
-          形态，见 composer 区注释）——此处不再渲染 */}
-
       {/* 技能目录 Sheet（G7：宿主技能发现只读浏览，桌面同一真源） */}
-      {skillsEverOpened ? (
+      {isMounted('skills') ? (
         <SkillsSheet
-          visible={skillsOpen}
-          onClose={() => setSkillsOpen(false)}
+          visible={isOpen('skills')}
+          onClose={closeOverlay}
+          onCloseComplete={() => onOverlayExited('skills')}
           connected={skillsVm.connected}
           skills={skillsVm.skills}
           status={skillsVm.status}

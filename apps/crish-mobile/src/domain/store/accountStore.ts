@@ -36,6 +36,31 @@ const EMPTY: AccountState = {
   error: null,
 };
 
+function isSameDevice(a: AccountDevice, b: AccountDevice): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.platform === b.platform &&
+    a.online === b.online &&
+    (a as { isOnline?: boolean }).isOnline ===
+      (b as { isOnline?: boolean }).isOnline
+  );
+}
+
+function areDevicesEqual(
+  prev: readonly AccountDevice[],
+  next: readonly AccountDevice[]
+): boolean {
+  if (prev === next) return true;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    if (!isSameDevice(prev[i]!, next[i]!)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export const accountStore: StoreApi<AccountStoreState> =
   createStore<AccountStoreState>()((set) => ({
     ...EMPTY,
@@ -47,6 +72,12 @@ export const accountStore: StoreApi<AccountStoreState> =
     setAccessToken: (accessToken) => set({ accessToken }),
     setDevices: (devices) =>
       set((state) => {
+        // 增设数组等值比较（对比元素长度及每一项关键属性）：若与当前
+        // state.devices 完全相同，则直接返回原 state，不触发 Zustand 广播，
+        // 彻底阻断 15 秒定时心跳全屏重绘！
+        if (areDevicesEqual(state.devices, devices)) {
+          return state;
+        }
         // 用户显式选了「本机」（本地钉住）：目标恒为 null——自动选靶不得
         // 把用户改选到远端，否则「选本机」会在下一轮发现心跳（≤15s）内被
         // 静默撤销，等于假选择。解钉只能由显式改选远端（selectTarget）。

@@ -72,6 +72,15 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       await view.unmount();
     });
 
+    it('思考结束但内容为空（或纯空白/零宽字符）时返回 null，不渲染空壳卡片', async () => {
+      const view = await renderCard(
+        <ReasoningCard status="done" text={'   \u200B\uFEFF '} />
+      );
+      expect(view.queryByTestId('reasoning-card')).toBeNull();
+      expect(view.queryByTestId('reasoning-header')).toBeNull();
+      await view.unmount();
+    });
+
     it('正在思考 status="thinking" 保持视口可见；流转为 status="done" 时刚性折叠', async () => {
       const view = await renderCard(
         <ReasoningCard
@@ -201,66 +210,61 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       protoSpy.mockRestore();
       await view.unmount();
     });
+
+    it('在 100ms 窗口内高频触发 contentSizeChange 时受到节流防抖控制，杜绝逐字动画冲突', async () => {
+      const scrollSpy = jest.fn();
+      const protoSpy = jest
+        .spyOn(ScrollView.prototype, 'scrollToEnd')
+        .mockImplementation(scrollSpy);
+
+      const view = await renderCard(
+        <ReasoningContentBox text="高频生成的思考内容" isThinking={true} />
+      );
+
+      const scrollView = view.getByTestId('reasoning-scroll-view');
+
+      await act(async () => {
+        const onContentSizeChange = scrollView.props.onContentSizeChange;
+        onContentSizeChange(350, 180);
+        onContentSizeChange(350, 190);
+        onContentSizeChange(350, 200);
+        onContentSizeChange(350, 210);
+        onContentSizeChange(350, 220);
+        // 等待 120ms 让 trailing edge 在当前 act 作用域内完整执行
+        await new Promise((r) => setTimeout(r, 120));
+      });
+
+      // 5 次密集触发最终仅执行 2 次 scrollToEnd (leading 1 次 + trailing 1 次)，杜绝逐字动画冲突
+      expect(scrollSpy).toHaveBeenCalledTimes(2);
+
+      protoSpy.mockRestore();
+      await view.unmount();
+    });
+
+    it('ReasoningCard 经 React.memo 包裹导出', () => {
+      expect((ReasoningCard as any).$$typeof).toBe(Symbol.for('react.memo'));
+    });
   });
 
-  describe('3. 点击卡片唤起抽屉回调断言', () => {
-    it('轻触卡片内容区域触发 onOpenDrawer 回调与脱离跟随', async () => {
-      const onOpenDrawer = jest.fn();
-      const onToggleDisclosure = jest.fn();
-
+  describe('3. 纯净思考卡片交互与抽屉解耦断言', () => {
+    it('展开状态下不渲染多余的顶部标签与抽屉按钮，抽屉默认不挂载', async () => {
       const view = await renderCard(
         <ReasoningCard
           initialExpanded={true}
-          text="这是完整的超长思考推演过程，包含背景、反思与规划细节。"
+          text="这是纯净的思考推演过程。"
           durationMs={4800}
-          onOpenDrawer={onOpenDrawer}
-          onToggleDisclosure={onToggleDisclosure}
           minResidencyMs={0}
         />
       );
 
-      // 点击卡片内容区域
-      await fireEvent.press(view.getByTestId('reasoning-card-pressable'));
-
-      // 验证回调触发
-      expect(onOpenDrawer).toHaveBeenCalledTimes(1);
-      expect(onToggleDisclosure).toHaveBeenCalledTimes(1);
+      expect(view.queryByTestId('reasoning-drawer-btn')).toBeNull();
+      expect(view.queryByTestId('reasoning-box-toolbar')).toBeNull();
+      expect(view.queryByTestId('reasoning-expand-sheet-bar')).toBeNull();
+      expect(view.queryByTestId('reasoning-sheet')).toBeNull();
       await view.unmount();
     });
 
-    it('点击卡片右上角“查看全部 ↗”按钮亦能触发 onOpenDrawer', async () => {
-      const onOpenDrawer = jest.fn();
-      const view = await renderCard(
-        <ReasoningCard
-          initialExpanded={true}
-          text="思考要点..."
-          onOpenDrawer={onOpenDrawer}
-          minResidencyMs={0}
-        />
-      );
-
-      await fireEvent.press(view.getByTestId('reasoning-drawer-btn'));
-      expect(onOpenDrawer).toHaveBeenCalledTimes(1);
-      await view.unmount();
-    });
-
-    it('点击底部提示指示条亦能触发 onOpenDrawer', async () => {
-      const onOpenDrawer = jest.fn();
-      const view = await renderCard(
-        <ReasoningCard
-          initialExpanded={true}
-          text="思考要点..."
-          onOpenDrawer={onOpenDrawer}
-          minResidencyMs={0}
-        />
-      );
-
-      await fireEvent.press(view.getByTestId('reasoning-expand-sheet-bar'));
-      expect(onOpenDrawer).toHaveBeenCalledTimes(1);
-      await view.unmount();
-    });
-
-    it('抽屉独立展示：展示完整全文、耗时标签、字数统计并支持点击完成阅读关闭', async () => {
+    it('抽屉独立组件仍然具备完整全文、耗时标签、字数统计并支持点击完成阅读关闭', async () => {
       const onClose = jest.fn();
       const view = await renderCard(
         <ReasoningSheet
@@ -307,8 +311,8 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
     });
   });
 
-  describe('4. 仿代码块底色与浅色文字样式断言', () => {
-    it('容器采用仿代码块底色 (canvasDrawer) 与微圆角 (borderRadius: 8)', async () => {
+  describe('4. 纯白底色与浅色文字样式断言', () => {
+    it('容器采用纯白底色 (surface #ffffff) 与微圆角 (borderRadius: 12)', async () => {
       const view = await renderCard(
         <ReasoningCard
           initialExpanded={true}
@@ -320,12 +324,12 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       const box = view.getByTestId('reasoning-content-box');
       const boxStyle = StyleSheet.flatten(box.props.style);
 
-      // 仿代码块底色（轻浅模式下为 #f0f0f0）
-      expect(boxStyle.backgroundColor).toBe('#f0f0f0');
+      // 纯白底色（轻浅模式下为 #ffffff）
+      expect(boxStyle.backgroundColor).toBe('#ffffff');
       // 微圆角规范（theme.radius.control）
       expect(boxStyle.borderRadius).toBe(12);
       // 细边框界定
-      expect(boxStyle.borderWidth).toBe(StyleSheet.hairlineWidth);
+      expect(boxStyle.borderWidth).toBe(1);
       await view.unmount();
     });
 
@@ -346,7 +350,7 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       await view.unmount();
     });
 
-    it('抽屉内部展示盒同样保持 canvasDrawer 仿代码块质感与 textSecondary 浅色文字', async () => {
+    it('抽屉内部展示盒保持 canvasDrawer 仿代码块质感与 textSecondary 浅色文字', async () => {
       const view = await renderCard(
         <ReasoningSheet
           visible={true}

@@ -1,6 +1,5 @@
-// hub 本地行摘要口径（MD3 列表面纯文本纪律）：生成中线程的实时内容是
-// markdown 原文且多行——snippetOf 必须摘为纯文本单行（与 meta.preview
-// 同口径），标记不得泄漏到主页本地行；非生成线程直取 meta.preview。
+// hub 本地行摘要口径：生成中线程直接返回「正在生成…」标量（避免逐 Token
+// 轰炸主屏）；非生成线程直取 meta.preview。
 import { renderHook } from '@testing-library/react-native';
 import { useLocalHubEntryVm } from './useLocalHubEntryVm';
 import { localChatStore } from '@/domain/store/localChatStore';
@@ -40,8 +39,8 @@ function seed(input: {
   });
 }
 
-describe('useLocalHubEntryVm · snippetOf 纯文本纪律', () => {
-  it('生成中：实时 markdown 原文摘为纯文本（标记不泄漏、无换行）', async () => {
+describe('useLocalHubEntryVm · snippetOf 标量与落定摘要', () => {
+  it('生成中：直接返回「正在生成…」标量，不受 messages 内容干扰', async () => {
     seed({
       streaming: true,
       messages: [
@@ -56,19 +55,32 @@ describe('useLocalHubEntryVm · snippetOf 纯文本纪律', () => {
     });
     const { result } = await renderHook(() => useLocalHubEntryVm());
     const snippet = result.current.snippetOf('t1');
-    expect(snippet).toBe('结论 重点 如下 列甲 列乙 甲一 乙一');
-    expect(snippet).not.toContain('**');
-    expect(snippet).not.toContain('|');
-    expect(snippet).not.toContain('\n');
+    expect(snippet).toBe('正在生成…');
   });
 
-  it('生成中尚无内容：生成中文案', async () => {
-    seed({
-      streaming: true,
-      messages: [{ id: 'a1', role: 'assistant', content: '', streaming: true }],
+  it('生成中非活动线程：同样返回「正在生成…」标量', async () => {
+    localChatStore.setState({
+      config: { version: 2, providers: {}, activeModel: null },
+      hydrated: true,
+      keyPresence: {},
+    });
+    localChatSessionStore.setState({
+      threads: [META, { ...META, id: 't2', preview: '旧摘要' }],
+      activeThreadId: 't1',
+      inactive: {
+        t2: {
+          messages: [],
+          streaming: true,
+          error: null,
+        },
+      },
+      hydrated: true,
+      messages: [],
+      streaming: false,
+      error: null,
     });
     const { result } = await renderHook(() => useLocalHubEntryVm());
-    expect(result.current.snippetOf('t1')).toBe('正在生成…');
+    expect(result.current.snippetOf('t2')).toBe('正在生成…');
   });
 
   it('非生成：直取 meta.preview；未知线程为空串', async () => {

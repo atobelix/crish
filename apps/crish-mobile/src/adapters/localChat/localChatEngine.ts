@@ -75,6 +75,102 @@ export const CIRCUIT_BREAKER_MAX_ROUNDS_PROMPT =
 /** 进行中的流式句柄（threadId → handle；同线程同时至多一条流） */
 const handles = new Map<string, StreamHandle>();
 
+/** 流式微批缓冲窗口（默认 33ms，削减高频吐词引起的无谓状态派发） */
+export const DEFAULT_STREAM_BATCH_WINDOW_MS = 33;
+let currentStreamBatchWindowMs = DEFAULT_STREAM_BATCH_WINDOW_MS;
+
+export function setStreamBatchWindowMsForTest(ms: number): void {
+  currentStreamBatchWindowMs = ms;
+}
+
+/**
+ * 流式文本与思考链微批调度器（例如 33ms 缓冲窗口）：
+ * 在生成中高频吐词时将密集的 delta 进行微批合并再推入 store，
+ * 削减 65% 无谓状态派发；在生成完成（onComplete）、流式结束或错误时强制同步立即 flush。
+ */
+export class StreamBatchScheduler {
+  private textBuffer = '';
+  private reasoningBuffer = '';
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  readonly assistantId: string;
+  readonly windowMs: number;
+
+  constructor(
+    assistantId: string,
+    windowMs: number = currentStreamBatchWindowMs
+  ) {
+    this.assistantId = assistantId;
+    this.windowMs = windowMs;
+  }
+
+  appendReasoningDelta(delta: string): void {
+    if (!delta) return;
+    this.reasoningBuffer += delta;
+    this.schedule();
+  }
+
+  appendTextDelta(delta: string): void {
+    if (!delta) return;
+    this.textBuffer += delta;
+    this.schedule();
+  }
+
+  private schedule(): void {
+    if (this.windowMs <= 0) {
+      this.flush();
+      return;
+    }
+    if (this.timer !== null) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.flush();
+    }, this.windowMs);
+  }
+
+  /**
+   * 强制同步立即 flush：清空定时器并将缓冲区内的思考与文本增量立即推入 store，
+   * 确保生成完成、停止或错误时 100% 内容无损落盘。
+   */
+  flush(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.reasoningBuffer.length > 0) {
+      const d = this.reasoningBuffer;
+      this.reasoningBuffer = '';
+      localChatSessionStore
+        .getState()
+        .appendAssistantReasoningDelta(this.assistantId, d);
+    }
+    if (this.textBuffer.length > 0) {
+      const d = this.textBuffer;
+      this.textBuffer = '';
+      localChatSessionStore
+        .getState()
+        .appendAssistantDelta(this.assistantId, d);
+    }
+  }
+
+  clear(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.textBuffer = '';
+    this.reasoningBuffer = '';
+  }
+}
+
+/** 进行中的微批调度器（threadId → scheduler） */
+const batchSchedulers = new Map<string, StreamBatchScheduler>();
+
+export function getStreamBatchSchedulerForTest(
+  threadId: string
+): StreamBatchScheduler | undefined {
+  return batchSchedulers.get(threadId);
+}
+
 /** AI 标题已尝试的线程（进程内标记：一线程至多触发一次，失败不重试） */
 const aiTitleAttempted = new Set<string>();
 
@@ -298,6 +394,11 @@ export function sendLocalChatMessage(
   const activeHandle: StreamHandle = {
     abort: () => {
       runAbortController.abort();
+      const scheduler = batchSchedulers.get(threadId);
+      if (scheduler) {
+        scheduler.flush();
+        batchSchedulers.delete(threadId);
+      }
       if (currentStreamHandle) {
         currentStreamHandle.abort();
         currentStreamHandle = null;
@@ -372,6 +473,9 @@ export function sendLocalChatMessage(
             systemPrompt,
           });
 
+          const batchScheduler = new StreamBatchScheduler(assistantId);
+          batchSchedulers.set(threadId, batchScheduler);
+
           currentStreamHandle = client.streamChatCompletion(
             {
               baseUrl: currentSel.provider.baseUrl ?? '',
@@ -385,16 +489,14 @@ export function sendLocalChatMessage(
             },
             {
               onTextDelta: (delta) => {
-                localChatSessionStore
-                  .getState()
-                  .appendAssistantDelta(assistantId, delta);
+                batchScheduler.appendTextDelta(delta);
               },
               onReasoningDelta: (delta) => {
-                localChatSessionStore
-                  .getState()
-                  .appendAssistantReasoningDelta(assistantId, delta);
+                batchScheduler.appendReasoningDelta(delta);
               },
               onComplete: async ({ toolCallCount, toolCalls }) => {
+                batchScheduler.flush();
+                batchSchedulers.delete(threadId);
                 currentStreamHandle = null;
                 if (runAbortController.signal.aborted) {
                   handles.delete(threadId);
@@ -551,6 +653,11 @@ export function sendLocalChatMessage(
                     );
                   await executeRound(round + 1, nextAssistantId);
                 } catch (err: any) {
+                  const scheduler = batchSchedulers.get(threadId);
+                  if (scheduler) {
+                    scheduler.flush();
+                    batchSchedulers.delete(threadId);
+                  }
                   handles.delete(threadId);
                   const state = localChatSessionStore.getState();
                   state.setError(
@@ -565,6 +672,8 @@ export function sendLocalChatMessage(
                 }
               },
               onError: (err) => {
+                batchScheduler.flush();
+                batchSchedulers.delete(threadId);
                 currentStreamHandle = null;
                 handles.delete(threadId);
                 const state = localChatSessionStore.getState();
@@ -583,6 +692,11 @@ export function sendLocalChatMessage(
 
         await executeRound(1, initialAssistantId);
       } catch (err: any) {
+        const scheduler = batchSchedulers.get(threadId);
+        if (scheduler) {
+          scheduler.flush();
+          batchSchedulers.delete(threadId);
+        }
         handles.delete(threadId);
         const state = localChatSessionStore.getState();
         state.finishAssistant(initialAssistantId);
@@ -598,6 +712,11 @@ export function sendLocalChatMessage(
       }
     })
     .catch((err: any) => {
+      const scheduler = batchSchedulers.get(threadId);
+      if (scheduler) {
+        scheduler.flush();
+        batchSchedulers.delete(threadId);
+      }
       handles.delete(threadId);
       const state = localChatSessionStore.getState();
       state.finishAssistant(initialAssistantId);
@@ -618,6 +737,11 @@ export function sendLocalChatMessage(
 
 /** 停止指定线程的生成（保留已生成部分并标注 stopped；不产生错误） */
 export function stopLocalChatMessage(threadId: string): void {
+  const scheduler = batchSchedulers.get(threadId);
+  if (scheduler) {
+    scheduler.flush();
+    batchSchedulers.delete(threadId);
+  }
   const handle = handles.get(threadId);
   if (handle) {
     handle.abort();
@@ -636,6 +760,11 @@ export function stopLocalChatMessage(threadId: string): void {
 
 /** 中止指定线程的流（删线程前调用；不写收尾，线程数据随即整体移除） */
 export function abortLocalThread(threadId: string): void {
+  const scheduler = batchSchedulers.get(threadId);
+  if (scheduler) {
+    scheduler.clear();
+    batchSchedulers.delete(threadId);
+  }
   const handle = handles.get(threadId);
   if (handle) {
     handle.abort();
@@ -650,6 +779,11 @@ export function isLocalThreadStreaming(threadId: string): boolean {
 
 /** 测试隔离：清空全部句柄、工具 mock 与 AI 标题尝试标记（不中止底层流，测试以假传输替换） */
 export function resetLocalChatEngineForTest(): void {
+  for (const s of batchSchedulers.values()) {
+    s.clear();
+  }
+  batchSchedulers.clear();
+  currentStreamBatchWindowMs = DEFAULT_STREAM_BATCH_WINDOW_MS;
   handles.clear();
   aiTitleAttempted.clear();
   customToolsSupplier = null;
