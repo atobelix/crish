@@ -132,6 +132,7 @@ function Column({
   reduceMotion: boolean;
   enableOdometer: boolean;
 }) {
+  const [isAnimating, setIsAnimating] = useState(false);
   // 当 armed 为 false 时（即 animateOnView=false 纯静态模式或视口已就绪），
   // 初始物理位置与内部状态直接锚定在目标 digit 上，避免首帧为 0 的闪烁或跳变
   const position = useMotionValue(armed ? 0 : digit);
@@ -168,18 +169,26 @@ function Column({
       state.revealed = true;
       return undefined;
     } else {
+      setIsAnimating(true);
       const controls = animate(position, state.target, {
         ...SPRING_SMOOTH,
         delay: state.revealed ? 0 : delay,
+        onComplete: () => {
+          setIsAnimating(false);
+        },
       });
       state.revealed = true;
-      return () => controls.stop();
+      return () => {
+        controls.stop();
+        setIsAnimating(false);
+      };
     }
   }, [armed, delay, digit, direction, position, reduceMotion, enableOdometer]);
 
   return (
     <m.span
       className={styles.column}
+      data-animating={isAnimating ? 'true' : undefined}
       {...columnPresence}
       transition={reduceMotion ? { duration: 0 } : SPRING_MORPH}
     >

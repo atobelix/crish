@@ -61,6 +61,14 @@ export function attachScrollFade(host: HTMLElement): () => void {
       : null;
   const observed: Element[] = [host, ...Array.from(host.children)];
 
+  let isScrollable = true;
+  const checkOverflow = () => {
+    if (!host.isConnected) return false;
+    const overflowY = window.getComputedStyle(host).overflowY;
+    isScrollable = overflowY === 'auto' || overflowY === 'scroll';
+    return isScrollable;
+  };
+
   const update = () => {
     raf = 0;
     if (disposed) return;
@@ -68,11 +76,9 @@ export function attachScrollFade(host: HTMLElement): () => void {
       detach();
       return;
     }
-    const overflowY = window.getComputedStyle(host).overflowY;
-    const next: ScrollFadeState =
-      overflowY === 'auto' || overflowY === 'scroll'
-        ? computeScrollFadeState(host)
-        : 'none';
+    const next: ScrollFadeState = isScrollable
+      ? computeScrollFadeState(host)
+      : 'none';
     if (host.dataset.fade !== next) {
       host.dataset.fade = next;
     }
@@ -80,20 +86,25 @@ export function attachScrollFade(host: HTMLElement): () => void {
   const schedule = () => {
     if (!raf) raf = requestAnimationFrame(update);
   };
+  const onResize = () => {
+    checkOverflow();
+    schedule();
+  };
   const detach = () => {
     if (disposed) return;
     disposed = true;
     if (raf) cancelAnimationFrame(raf);
     host.removeEventListener('scroll', schedule);
     if (manager) {
-      for (const el of observed) manager.unobserve(el, schedule);
+      for (const el of observed) manager.unobserve(el, onResize);
     }
   };
 
+  checkOverflow();
   update();
   host.addEventListener('scroll', schedule, { passive: true });
   if (manager) {
-    for (const el of observed) manager.observe(el, schedule);
+    for (const el of observed) manager.observe(el, onResize);
   }
   return detach;
 }

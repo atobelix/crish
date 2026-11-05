@@ -31,6 +31,7 @@ import {
 import { AppIcon, type IconName } from '@/components/ui/icons';
 import { NumericText, ScrollFadeRegion, Tooltip } from '@/components/ui';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
+import { getActiveVsm } from '../../store/storeAccess';
 import {
   calcAccordionDuration,
   accordionDurationStyle,
@@ -71,6 +72,30 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     const [transitionDuration, setTransitionDuration] = useState<number>(
       DURATION_ACCORDION_MS
     );
+    const animLockReleaseRef = useRef<(() => void) | null>(null);
+
+    const acquireMotionLock = useCallback(
+      (duration: number) => {
+        if (hostProps?.activeSessionId) {
+          const vsm = getActiveVsm(hostProps.activeSessionId);
+          if (animLockReleaseRef.current) {
+            animLockReleaseRef.current();
+          }
+          animLockReleaseRef.current =
+            vsm?.acquireAccordionMotionLock(duration + 60) ?? null;
+        }
+      },
+      [hostProps?.activeSessionId]
+    );
+
+    useEffect(() => {
+      return () => {
+        if (animLockReleaseRef.current) {
+          animLockReleaseRef.current();
+          animLockReleaseRef.current = null;
+        }
+      };
+    }, []);
 
     // 视口保护：折叠收起时若顶部脱离视口，平滑拉回
     const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
@@ -149,7 +174,9 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         const performCollapse = () => {
           const currentHeight =
             innerRef.current?.getBoundingClientRect().height ?? 0;
-          setTransitionDuration(calcAccordionDuration(currentHeight, false));
+          const dur = calcAccordionDuration(currentHeight, false);
+          setTransitionDuration(dur);
+          acquireMotionLock(dur);
           triggerViewportRecovery();
           setIsExpanded(false);
           onInvalidate?.();
@@ -213,10 +240,17 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         const estimatedHeight = Math.min(280, Math.max(80, items.length * 48));
         const dur = calcAccordionDuration(estimatedHeight, next);
         setTransitionDuration(dur);
+        acquireMotionLock(dur);
         onInvalidate?.();
         return next;
       });
-    }, [onInvalidate, triggerViewportRecovery, cancelCollapseWait]);
+    }, [
+      onInvalidate,
+      triggerViewportRecovery,
+      cancelCollapseWait,
+      acquireMotionLock,
+      items.length,
+    ]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -271,12 +305,18 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     const handleTransitionEnd = useCallback(
       (e: React.TransitionEvent<HTMLDivElement>) => {
         if (e.target !== slotRef.current) return;
-        if (e.propertyName === 'grid-template-rows' && !isExpanded) {
-          if (collapseTimerRef.current) {
-            clearTimeout(collapseTimerRef.current);
-            collapseTimerRef.current = null;
+        if (e.propertyName === 'grid-template-rows') {
+          if (animLockReleaseRef.current) {
+            animLockReleaseRef.current();
+            animLockReleaseRef.current = null;
           }
-          slotRef.current?.setAttribute('hidden', 'until-found');
+          if (!isExpanded) {
+            if (collapseTimerRef.current) {
+              clearTimeout(collapseTimerRef.current);
+              collapseTimerRef.current = null;
+            }
+            slotRef.current?.setAttribute('hidden', 'until-found');
+          }
         }
       },
       [isExpanded]

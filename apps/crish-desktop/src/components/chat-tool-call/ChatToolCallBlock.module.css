@@ -463,7 +463,6 @@
   border: none;
   overflow: hidden;
   contain: layout paint;
-  will-change: grid-template-rows;
   transition: grid-template-rows
     var(--accordion-duration, var(--transition-accordion));
 }

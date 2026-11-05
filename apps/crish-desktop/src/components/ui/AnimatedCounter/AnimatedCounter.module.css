@@ -34,6 +34,10 @@
   overflow: hidden;
   margin-block: calc(var(--feather) * -1);
   padding-block: var(--feather);
+}
+
+/* 仅在滚轮转动中启用上下边缘羽化渐变遮罩，静止停靠态无 mask 规避 WebView2 合成管线开销 */
+.column[data-animating='true'] {
   mask-image: linear-gradient(
     to bottom,
     transparent,
@@ -66,7 +70,6 @@
   position: absolute;
   inset: var(--feather) 0;
   text-align: center;
-  will-change: transform;
 }
 
 .symbol {
