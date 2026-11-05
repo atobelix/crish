@@ -603,3 +603,8 @@ export function validateSafeWebUrl(
     hostname,
   };
 }
+
+/**
+ * 别名：统一对外暴露 `validateSafeUrl`，对齐移动端与桌面端调用契约。
+ */
+export const validateSafeUrl = validateSafeWebUrl;

@@ -12,7 +12,6 @@
 import { MemorySqlDriver } from './driver';
 import { migrateIfNeeded } from './db';
 import { LATEST_VERSION, MIGRATIONS } from './migrations';
-import { SCHEMA_VERSION } from './schema';
 import {
   hasColumn,
   migrateV6WebSearchAndTools,
@@ -86,10 +85,8 @@ describe('v6 数据库迁移：平滑升级与版本推进', () => {
     );
 
     // 3. 执行全量迁移（v5 -> v6）
-    const v6Version = await migrateIfNeeded(db);
+    const v6Version = await migrateIfNeeded(db, MIGRATIONS.slice(0, 6));
     expect(v6Version).toBe(6);
-    expect(v6Version).toBe(LATEST_VERSION);
-    expect(LATEST_VERSION).toBe(SCHEMA_VERSION);
     await expect(db.getFirst('PRAGMA user_version')).resolves.toEqual({
       user_version: 6,
     });

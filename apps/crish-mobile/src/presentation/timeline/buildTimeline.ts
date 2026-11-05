@@ -24,6 +24,7 @@ import {
 } from '@/domain/store/eventReducers';
 import { stripAnsi } from '@/domain/pure/ansi';
 import { presentRemoteFailure } from '@/domain/pure/remoteFailure';
+import type { WebSearchSource, WebFetchResult } from '@crish/shared-types';
 
 export type TimelineTone = 'muted' | 'info' | 'success' | 'warning' | 'danger';
 
@@ -78,6 +79,10 @@ export interface ToolBlock {
   /** 工具结束事件的接收时刻（tool-end 落点；运行中未定）。工具组总时长的
    * 数据面（批 B：过程组收尾组头带总时长）；本地线程无工具块，不涉及。 */
   endedAtMs?: number;
+  /** 当 toolName === 'web_search' 时，解析出的结构化网页来源 */
+  webSources?: readonly WebSearchSource[];
+  /** 当 toolName === 'web_fetch' 或 'read_url_content' 时的抓取元数据 */
+  fetchResult?: WebFetchResult;
 }
 
 export interface ApprovalBlock {
@@ -319,14 +324,9 @@ function approvalStatusOf(
 
 function terminalNotice(frame: FeedEntry): NoticeBlock | null {
   const terminal = (readString(frame, 'terminal') ?? '').toLowerCase();
+  // 核心体验降噪：运行正常完成属于静默状态机终态，严禁在时间线生成占位行
   if (terminal === 'completed') {
-    return {
-      kind: 'notice',
-      id: `run-terminal-${readNumber(frame, 'sequence') ?? frame.receivedAtMs}`,
-      text: '运行完成',
-      tone: 'success',
-      atMs: frame.receivedAtMs,
-    };
+    return null;
   }
   if (terminal === 'cancelled' || terminal === 'canceled') {
     return {
@@ -690,6 +690,18 @@ function foldEntries(
           output.includes('@@ -') ||
           output.includes('diff --git');
         const existing = draftAt<ToolBlock>(state, state.toolIndex, id, 'tool');
+        const toolName = existing ? existing.block.toolName : toolNameOf(entry);
+        const webSources =
+          toolName === 'web_search' || toolName === 'search_web'
+            ? extractWebSources(output)
+            : undefined;
+        const fetchResult =
+          toolName === 'web_fetch' ||
+          toolName === 'fetch_url' ||
+          toolName === 'read_url_content'
+            ? extractFetchResult(output, existing?.block.input)
+            : undefined;
+
         if (existing) {
           existing.block.status = isError ? 'error' : 'done';
           existing.block.endedAtMs = entry.receivedAtMs;
@@ -699,18 +711,22 @@ function foldEntries(
               -MAX_TOOL_OUTPUT
             );
           }
+          if (webSources) existing.block.webSources = webSources;
+          if (fetchResult) existing.block.fetchResult = fetchResult;
           state.touched.add(existing.index);
         } else {
           const index = pushDraft(state, {
             kind: 'tool',
             id,
-            toolName: toolNameOf(entry),
+            toolName,
             summary: '',
             status: isError ? 'error' : 'done',
             isDiff,
             output,
             atMs: entry.receivedAtMs,
             endedAtMs: entry.receivedAtMs,
+            ...(webSources ? { webSources } : {}),
+            ...(fetchResult ? { fetchResult } : {}),
           });
           state.toolIndex.set(id, index);
         }
@@ -796,6 +812,13 @@ function foldEntries(
 }
 
 /**
+ * 语义文本清洗：剔除不可见字符（零宽字符、BOM等）及两端空白
+ */
+export function cleanSemanticText(text: string): string {
+  return text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+}
+
+/**
  * 发射：草稿 → 对外块数组。未被触碰的草稿复用上轮快照（同一引用）；
  * 被触碰 / 新生草稿发浅拷贝新快照；空消息（只有 start 没有正文）不
  * 占位（与历史口径一致，过滤在发射面做、草稿保留待后续增量续写）。
@@ -807,13 +830,15 @@ function emitTimeline(state: TimelineFoldState): TimelineBlock[] {
   let sameAsPrev = prev !== null;
   for (let index = 0; index < state.blocks.length; index += 1) {
     const draft = state.blocks[index]!;
-    if (draft.kind === 'message' && draft.text.trim() === '') {
+    // 1. 消息非空铁门：剔除全为空白字符或零宽字符的幽灵消息块
+    if (draft.kind === 'message' && cleanSemanticText(draft.text) === '') {
       state.emitted[index] = null;
       continue;
     }
+    // 2. 思考链非空铁门：收口后如果文本为空，绝不发射空思考壳
     if (
       draft.kind === 'reasoning' &&
-      draft.text.trim() === '' &&
+      cleanSemanticText(draft.text) === '' &&
       !draft.streaming &&
       !draft.isThinking
     ) {
@@ -875,8 +900,240 @@ export function buildSessionTimeline(
   return emitTimeline(state);
 }
 
+export const buildTimeline = buildSessionTimeline;
+
+/**
+ * 安全反序列化提取 webSources
+ */
+export function extractWebSources(
+  output: unknown
+): readonly WebSearchSource[] | undefined {
+  if (!output) return undefined;
+  let parsed: unknown = output;
+  if (typeof output === 'string') {
+    const trimmed = output.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined;
+
+  let rawList: unknown[] | null = null;
+  if (Array.isArray(parsed)) {
+    rawList = parsed;
+  } else {
+    const record = parsed as Record<string, unknown>;
+    if (Array.isArray(record.results)) {
+      rawList = record.results;
+    } else if (Array.isArray(record.sources)) {
+      rawList = record.sources;
+    }
+  }
+
+  if (!rawList || rawList.length === 0) return undefined;
+
+  const sources: WebSearchSource[] = [];
+  for (let idx = 0; idx < rawList.length; idx++) {
+    const item = rawList[idx];
+    if (item && typeof item === 'object') {
+      const r = item as Record<string, unknown>;
+      const url = String(r.url || '');
+      let domain = String(r.domain || '');
+      if (!domain && url) {
+        try {
+          domain = new URL(url).hostname;
+        } catch {
+          const m = url.match(/^(?:https?:\/\/)?([^/?#:]+)/i);
+          domain = m ? m[1] || '' : '';
+        }
+      }
+      sources.push({
+        id: String(r.id || idx + 1),
+        title: String(r.title || '无标题网页'),
+        url,
+        snippet: String(r.snippet || r.content || ''),
+        domain,
+        provider: (r.provider || 'model_native') as WebSearchSource['provider'],
+        publishedDate:
+          typeof r.publishedDate === 'string' ? r.publishedDate : undefined,
+        score: typeof r.score === 'number' ? r.score : undefined,
+        faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : undefined,
+        fullContent:
+          typeof r.fullContent === 'string' ? r.fullContent : undefined,
+      });
+    }
+  }
+  return sources.length > 0 ? sources : undefined;
+}
+
+/**
+ * 安全反序列化提取 fetchResult
+ */
+export function extractFetchResult(
+  output: unknown,
+  input?: unknown
+): WebFetchResult | undefined {
+  if (!output) return undefined;
+  let parsed: unknown = output;
+  if (typeof output === 'string') {
+    const trimmed = output.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined;
+  const obj = parsed as Record<string, unknown>;
+  const rawUrl =
+    typeof obj.url === 'string'
+      ? obj.url
+      : typeof (input as Record<string, unknown>)?.url === 'string'
+        ? ((input as Record<string, unknown>).url as string)
+        : '';
+  if (!rawUrl) return undefined;
+
+  return {
+    url: rawUrl,
+    title: String(obj.title || ''),
+    markdownContent: String(obj.markdownContent || obj.content || ''),
+    rawHtmlLength: Number(obj.rawHtmlLength || 0),
+    cleanedLength: Number(obj.cleanedLength || 0),
+    truncated: Boolean(obj.truncated),
+    discoveredLinks: Array.isArray(obj.discoveredLinks)
+      ? obj.discoveredLinks.filter((x): x is string => typeof x === 'string')
+      : undefined,
+  };
+}
+
+/** 工具入参提取助手 */
+function extractToolInputRecord(
+  input?: Record<string, unknown> | string
+): Record<string, unknown> | null {
+  if (!input) return null;
+  if (typeof input === 'object' && input !== null) return input;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/** 工具名称精炼呈现 */
+export function formatToolDisplayName(toolName: string): string {
+  if (toolName === 'web_search' || toolName === 'search_web') {
+    return '网页搜索';
+  }
+  if (
+    toolName === 'web_fetch' ||
+    toolName === 'fetch_url' ||
+    toolName === 'read_url_content'
+  ) {
+    return '网页抓取';
+  }
+  if (
+    toolName === 'run_js_sandbox' ||
+    toolName === 'quickjs_sandbox' ||
+    toolName === 'run_javascript'
+  ) {
+    return '执行端侧脚本';
+  }
+  return toolName;
+}
+
 /** 工具块一行摘要（折叠态）。 */
 export function toolBlockSummary(block: ToolBlock): string {
+  const toolName = block.toolName;
+  const inputRecord = extractToolInputRecord(block.input);
+
+  // 1. web_search / search_web
+  if (toolName === 'web_search' || toolName === 'search_web') {
+    if (block.status === 'done' && Array.isArray(block.webSources)) {
+      return `已搜索 ${block.webSources.length} 个网页`;
+    }
+    const query =
+      (inputRecord &&
+        (typeof inputRecord.query === 'string'
+          ? inputRecord.query
+          : typeof inputRecord.q === 'string'
+            ? inputRecord.q
+            : null)) ??
+      (typeof block.input === 'string' && !block.input.trim().startsWith('{')
+        ? block.input.trim()
+        : null);
+    if (query) {
+      return `搜索 · "${query}"`;
+    }
+    if (block.summary) {
+      return block.summary.length > 80
+        ? `${block.summary.slice(0, 79)}…`
+        : block.summary;
+    }
+    return '搜索';
+  }
+
+  // 2. web_fetch / fetch_url / read_url_content
+  if (
+    toolName === 'web_fetch' ||
+    toolName === 'fetch_url' ||
+    toolName === 'read_url_content'
+  ) {
+    const rawUrl =
+      (inputRecord && typeof inputRecord.url === 'string'
+        ? inputRecord.url
+        : null) ??
+      (typeof block.input === 'string' && !block.input.trim().startsWith('{')
+        ? block.input.trim()
+        : null) ??
+      block.fetchResult?.url;
+    if (rawUrl) {
+      let hostname = '';
+      try {
+        hostname = new URL(rawUrl).hostname;
+      } catch {
+        const match = rawUrl.match(/^(?:https?:\/\/)?([^/?#:]+)/i);
+        hostname = match ? match[1] || '' : rawUrl;
+      }
+      if (hostname) {
+        return `抓取 · ${hostname}`;
+      }
+    }
+    if (block.summary) {
+      return block.summary.length > 80
+        ? `${block.summary.slice(0, 79)}…`
+        : block.summary;
+    }
+    return '抓取';
+  }
+
+  // 3. run_js_sandbox / quickjs_sandbox / run_javascript
+  if (
+    toolName === 'run_js_sandbox' ||
+    toolName === 'quickjs_sandbox' ||
+    toolName === 'run_javascript'
+  ) {
+    return '执行端侧脚本';
+  }
+
   const text = `${block.summary} ${block.output}`.replace(/\s+/g, ' ').trim();
   if (text === '') return '';
   return text.length > 80 ? `${text.slice(0, 79)}…` : text;

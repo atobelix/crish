@@ -1,17 +1,21 @@
 // 本地存储 schema（Z0 R2-13 / M5 §5.2；v2 收敛为 3 张生效表；v3 增本地线程两表；
 // v4 给 local_threads 增 title_source 列，见 V4_THREAD_TITLE_SOURCE_SQL；
 // v5 给 local_messages 增 attachments_json 列，见 V5_MESSAGE_ATTACHMENTS_SQL；
-// v6 给 local_messages 增 5 个搜索与工具 JSON 列，见 V6_MESSAGE_TOOLS_AND_SEARCH_SQL）
+// v6 给 local_messages 增 5 个搜索与工具 JSON 列，见 V6_MESSAGE_TOOLS_AND_SEARCH_SQL；
+// v7 增加 remote_sessions / remote_events / remote_sync_state 远程控制持久化三表，见 V7_REMOTE_STORAGE_SQL）
 // 纪律（M5 §1.2 规则 2）：存储层不得 import 网络层；与 src/network 互不可见。
 // 迁移纪律（M5 §5.4）：已发布迁移 SQL 禁止修改，新需求走 v2+；本文件只追加表定义。
 
 /**
- * 生效表清单（v3）：
- * 1. approval_queue   outbox 待发队列（SqlApprovalQueueDao）
- * 2. settings         键值存储（SqlSettingsDao）
- * 3. notifications    应用内通知/角标状态（SqlNotificationsDao）
- * 4. local_threads    本地对话线程元数据（SqlLocalThreadsDao；CON-4/L2）
- * 5. local_messages   本地对话消息历史（SqlLocalThreadsDao；CON-4/L2）
+ * 生效表清单（v7）：
+ * 1. approval_queue     outbox 待发队列（SqlApprovalQueueDao）
+ * 2. settings           键值存储（SqlSettingsDao）
+ * 3. notifications      应用内通知/角标状态（SqlNotificationsDao）
+ * 4. local_threads      本地对话线程元数据（SqlLocalThreadsDao；CON-4/L2）
+ * 5. local_messages     本地对话消息历史（SqlLocalThreadsDao；CON-4/L2）
+ * 6. remote_sessions    远程会话元数据（SqlRemoteSessionDao；设备物理分区隔离）
+ * 7. remote_events      远程会话事件流（SqlRemoteEventDao；本地真源 SSOT）
+ * 8. remote_sync_state  远程增量同步状态机游标（SqlRemoteSyncDao）
  *
  * v1 曾声明 8 表；其中 `events` / `approval_history` / `session_summaries` /
  * `push_tokens` / `device_info` 五表自始至终无 DAO 无读写（早期全量镜像方案的
@@ -22,7 +26,7 @@
  */
 
 /** 当前 schema 版本（PRAGMA user_version 目标值） */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** 全部生效表名（供测试与工具使用） */
 export const TABLES = [
@@ -31,6 +35,9 @@ export const TABLES = [
   'notifications',
   'local_threads',
   'local_messages',
+  'remote_sessions',
+  'remote_events',
+  'remote_sync_state',
 ] as const;
 
 export type TableName = (typeof TABLES)[number];
@@ -237,4 +244,50 @@ export const V6_MESSAGE_TOOLS_AND_SEARCH_SQL: readonly string[] = [
   `ALTER TABLE local_messages ADD COLUMN citations_json TEXT DEFAULT NULL`,
   `ALTER TABLE local_messages ADD COLUMN search_state_json TEXT DEFAULT NULL`,
   `ALTER TABLE local_messages ADD COLUMN server_diagnostics_json TEXT DEFAULT NULL`,
+];
+
+/**
+ * v7 迁移 SQL（远程控制本地持久化与增量同步）：
+ * 1. remote_sessions：远程会话元数据（多设备物理分区支持，复合主键 device_id + session_id）；
+ * 2. remote_events：会话事件信封本地持久化真源（按 sequence 升序索引）；
+ * 3. remote_sync_state：每个远程会话的双向同步游标与同步状态。
+ */
+export const V7_REMOTE_STORAGE_SQL: readonly string[] = [
+  // 1. 远程会话元数据表
+  `CREATE TABLE IF NOT EXISTS remote_sessions (
+    device_id   TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    cwd         TEXT,
+    model       TEXT,
+    updated_at  INTEGER NOT NULL,
+    is_pinned   INTEGER NOT NULL DEFAULT 0,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (device_id, session_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_remote_sessions_updated ON remote_sessions(device_id, updated_at DESC)`,
+
+  // 2. 远程事件信封持久化表
+  `CREATE TABLE IF NOT EXISTS remote_events (
+    device_id      TEXT NOT NULL,
+    session_id     TEXT NOT NULL,
+    sequence       INTEGER NOT NULL,
+    kind           TEXT NOT NULL,
+    event_type     TEXT NOT NULL,
+    received_at_ms INTEGER NOT NULL,
+    raw_payload    TEXT NOT NULL,
+    PRIMARY KEY (device_id, session_id, sequence)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_remote_events_seq ON remote_events(device_id, session_id, sequence ASC)`,
+
+  // 3. 增量同步状态与游标表
+  `CREATE TABLE IF NOT EXISTS remote_sync_state (
+    device_id            TEXT NOT NULL,
+    session_id           TEXT NOT NULL,
+    last_synced_sequence INTEGER NOT NULL DEFAULT 0,
+    has_more_history     INTEGER NOT NULL DEFAULT 1,
+    updated_at           INTEGER NOT NULL,
+    PRIMARY KEY (device_id, session_id)
+  )`,
 ];

@@ -16,3 +16,9 @@ export {
   rowToThreadMeta,
   rowToLocalMessage,
 } from './localThreadsDao';
+export type { RemoteSessionRow, RemoteSessionDao } from './remoteSessionDao';
+export { SqlRemoteSessionDao } from './remoteSessionDao';
+export type { RemoteEventRow, RemoteEventDao } from './remoteEventDao';
+export { SqlRemoteEventDao } from './remoteEventDao';
+export type { RemoteSyncStateRow, RemoteSyncDao } from './remoteSyncDao';
+export { SqlRemoteSyncDao } from './remoteSyncDao';

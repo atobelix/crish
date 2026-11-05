@@ -16,6 +16,7 @@
 // - markdown 独立成段图：真加载（MarkdownImage，批 E；几何见 FN-3 口径），
 //   与正文混排的行内图仍为文字标（同上，无块级面可嵌）。
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -57,6 +58,9 @@ import { AppText, Icon } from '@/presentation/ui';
 import { MarkdownImage } from './MarkdownImage';
 import { WebContentBlock } from './WebContentBlock';
 import { StreamingTailText } from './StreamingTailText';
+import { CitationPill } from './CitationPill';
+import type { WebSearchSource } from '@crish/shared-types';
+import { parseMessageCitations } from '@crish/shared-utils';
 
 /** 超限降级线（字符数）：超过即纯文本 + 标注（审计 C.4，真机定标后写死） */
 export const MARKDOWN_DEGRADE_THRESHOLD = 50_000;
@@ -74,12 +78,21 @@ export interface MarkdownTextProps {
   cursorTestID?: string;
   cursorStyle?: StyleProp<TextStyle>;
   testID?: string;
+  /** 可选的事实源列表（若传入，角标将自动关联对应事实源） */
+  sources?: readonly WebSearchSource[];
+  /** 点击正文引文角标时的回调 */
+  onCitationPress?: (index: number, source?: WebSearchSource) => void;
+  /** 当前处于联动高亮状态的引文角标序号 */
+  highlightedCitationIndex?: number;
 }
 
-/** 渲染上下文：正文色与气泡标记（气泡内行内代码底色需换档，见 span 渲染） */
+/** 渲染上下文：正文色、气泡标记与正文引文联动 */
 interface RenderCtx {
   color: ColorValue;
   inBubble: boolean;
+  sources?: readonly WebSearchSource[];
+  onCitationPress?: (index: number, source?: WebSearchSource) => void;
+  highlightedCitationIndex?: number;
 }
 
 /**
@@ -124,6 +137,9 @@ export function MarkdownText({
   cursorTestID,
   cursorStyle,
   testID,
+  sources,
+  onCitationPress,
+  highlightedCitationIndex,
 }: MarkdownTextProps) {
   const theme = useTheme();
   const degraded = text.length > MARKDOWN_DEGRADE_THRESHOLD;
@@ -153,6 +169,9 @@ export function MarkdownText({
   const ctx: RenderCtx = {
     color: flatBase?.color ?? theme.colors.textPrimary,
     inBubble: flatBase?.color === theme.colors.bubbleUserText,
+    sources,
+    onCitationPress,
+    highlightedCitationIndex,
   };
 
   const cursorBox: CursorBox = {
@@ -239,6 +258,9 @@ const MarkdownBlockView = memo(
     blockSignature(prev.block) === blockSignature(next.block) &&
     prev.ctx.color === next.ctx.color &&
     prev.ctx.inBubble === next.ctx.inBubble &&
+    prev.ctx.sources === next.ctx.sources &&
+    prev.ctx.onCitationPress === next.ctx.onCitationPress &&
+    prev.ctx.highlightedCitationIndex === next.ctx.highlightedCitationIndex &&
     prev.sealed === next.sealed &&
     prev.tailGradient === next.tailGradient &&
     (prev.cursorBox?.node ?? null) === (next.cursorBox?.node ?? null)
@@ -419,7 +441,7 @@ function SpanNodes({
       {spans.map((span, index) => {
         const isLastSpan = index === spans.length - 1;
         switch (span.type) {
-          case 'text':
+          case 'text': {
             if (tailGradient && index === lastTextSpanIndex) {
               return (
                 <StreamingTailText
@@ -430,8 +452,50 @@ function SpanNodes({
                 />
               );
             }
-            // 纯文本直接以字符串作子节点：少建节点，文本查询口径与单 Text 一致
-            return span.text;
+            const { segments } = parseMessageCitations(span.text, ctx.sources);
+            if (segments.length === 0) {
+              return span.text;
+            }
+            if (segments.length === 1 && segments[0]!.type === 'text') {
+              return span.text;
+            }
+            return (
+              <Fragment key={index}>
+                {segments.map((seg, segIndex) => {
+                  if (seg.type === 'text') {
+                    return seg.text;
+                  }
+                  const citeIndex = seg.index ?? seg.citationIndex ?? 0;
+                  const isHighlighted =
+                    ctx.highlightedCitationIndex !== undefined &&
+                    ctx.highlightedCitationIndex === citeIndex;
+                  return (
+                    <CitationPill
+                      key={segIndex}
+                      index={citeIndex}
+                      citation={seg.citation}
+                      highlighted={isHighlighted}
+                      onPress={
+                        ctx.onCitationPress
+                          ? (idx) => {
+                              const matchedSource =
+                                (seg.citation?.sourceId &&
+                                  ctx.sources?.find(
+                                    (s) => s.id === seg.citation?.sourceId
+                                  )) ||
+                                (idx > 0 && ctx.sources
+                                  ? ctx.sources[idx - 1]
+                                  : undefined);
+                              ctx.onCitationPress?.(idx, matchedSource);
+                            }
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+              </Fragment>
+            );
+          }
           case 'break':
             return '\n';
           case 'strong':
@@ -468,12 +532,21 @@ function SpanNodes({
             return (
               <Text
                 key={index}
-                style={{
-                  fontFamily: theme.type.mono.fontFamily,
-                  backgroundColor: ctx.inBubble
-                    ? theme.colors.fillPressed
-                    : theme.colors.surfaceGrouped,
-                }}
+                style={[
+                  theme.type.mono,
+                  {
+                    backgroundColor: ctx.inBubble
+                      ? theme.colors.fillPressed
+                      : theme.colors.surfaceGrouped,
+                    color: ctx.inBubble
+                      ? theme.colors.bubbleUserText
+                      : theme.colors.textPrimary,
+                    borderRadius: theme.radius.bubbleTail,
+                    overflow: 'hidden',
+                    paddingHorizontal: 5,
+                    paddingVertical: 1.5,
+                  },
+                ]}
               >
                 {span.text}
               </Text>
@@ -798,6 +871,9 @@ function QuoteBlock({
   const quoteCtx: RenderCtx = {
     color: theme.colors.textSecondary,
     inBubble: ctx.inBubble,
+    sources: ctx.sources,
+    onCitationPress: ctx.onCitationPress,
+    highlightedCitationIndex: ctx.highlightedCitationIndex,
   };
   return (
     <View style={{ flexDirection: 'row', gap: theme.space.sm }}>
@@ -827,7 +903,19 @@ function QuoteBlock({
   );
 }
 
-/** 表格：横滑容器，表头次级底、行间分隔、单元格不折行 */
+function spansTextLength(spans: MdSpan[]): number {
+  let len = 0;
+  for (const span of spans) {
+    if (span.type === 'text' || span.type === 'code') {
+      len += span.text.length;
+    } else if ('children' in span && Array.isArray(span.children)) {
+      len += spansTextLength(span.children);
+    }
+  }
+  return len;
+}
+
+/** 表格：横滑容器，等宽列对齐、表头次级底、微圆角外框与发丝线分隔 */
 function TableBlock({
   block,
   ctx,
@@ -836,65 +924,125 @@ function TableBlock({
   ctx: RenderCtx;
 }) {
   const theme = useTheme();
-  const cellStyle = (align: 'left' | 'center' | 'right' | null) => ({
-    paddingHorizontal: theme.space.sm,
-    paddingVertical: theme.space.xs,
-    textAlign: align ?? 'left',
-  });
+
+  // 计算每列自适应宽度：保证表头与所有数据行纵向严格对齐
+  const numCols = Math.max(
+    block.header.length,
+    ...block.rows.map((r) => r.length)
+  );
+
+  const colWidths = useMemo(() => {
+    const widths: number[] = [];
+    for (let c = 0; c < numCols; c++) {
+      let maxLen = block.header[c] ? spansTextLength(block.header[c]!) : 4;
+      for (const row of block.rows) {
+        if (row[c]) {
+          maxLen = Math.max(maxLen, spansTextLength(row[c]!));
+        }
+      }
+      // 动态列宽：根据内容长度计算，最小 72dp，最大 260dp
+      const width = Math.max(72, Math.min(260, maxLen * 12 + 28));
+      widths.push(width);
+    }
+    return widths;
+  }, [block.header, block.rows, numCols]);
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       testID="markdown-table"
+      style={{ marginVertical: 6 }}
     >
       <View
         style={{
           borderRadius: theme.radius.control,
-          backgroundColor: theme.colors.surfaceGrouped,
+          backgroundColor: theme.colors.surface,
+          borderWidth: 1,
+          borderColor: theme.colors.hairline,
           overflow: 'hidden',
         }}
       >
+        {/* 表头 */}
         <View
           style={{
             flexDirection: 'row',
             backgroundColor: theme.colors.fillSubtle,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.hairline,
           }}
         >
           {block.header.map((cell, index) => (
-            <Text
+            <View
               key={index}
-              numberOfLines={1}
-              style={[
-                theme.type.chat,
-                { color: ctx.color, fontWeight: '700' },
-                cellStyle(block.align[index] ?? null),
-              ]}
+              style={{
+                width: colWidths[index] ?? 72,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                justifyContent: 'center',
+                borderRightWidth:
+                  index < colWidths.length - 1 ? StyleSheet.hairlineWidth : 0,
+                borderRightColor: theme.colors.hairline,
+              }}
             >
-              <SpanNodes spans={cell} ctx={ctx} />
-            </Text>
+              <Text
+                style={[
+                  theme.type.footnote,
+                  {
+                    color: theme.colors.textPrimary,
+                    fontWeight: '600',
+                    textAlign: block.align[index] ?? 'left',
+                  },
+                ]}
+              >
+                <SpanNodes spans={cell} ctx={ctx} />
+              </Text>
+            </View>
           ))}
         </View>
+
+        {/* 数据行 */}
         {block.rows.map((row, rowIndex) => (
           <View
             key={rowIndex}
             style={{
               flexDirection: 'row',
-              borderTopWidth: StyleSheet.hairlineWidth,
-              borderTopColor: theme.colors.hairline,
+              backgroundColor:
+                rowIndex % 2 === 1
+                  ? theme.colors.fillSubtle
+                  : theme.colors.surface,
+              borderBottomWidth:
+                rowIndex < block.rows.length - 1 ? StyleSheet.hairlineWidth : 0,
+              borderBottomColor: theme.colors.hairline,
             }}
           >
             {row.map((cell, cellIndex) => (
-              <Text
+              <View
                 key={cellIndex}
-                numberOfLines={1}
-                style={[
-                  theme.type.chat,
-                  { color: ctx.color },
-                  cellStyle(block.align[cellIndex] ?? null),
-                ]}
+                style={{
+                  width: colWidths[cellIndex] ?? 72,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  justifyContent: 'center',
+                  borderRightWidth:
+                    cellIndex < colWidths.length - 1
+                      ? StyleSheet.hairlineWidth
+                      : 0,
+                  borderRightColor: theme.colors.hairline,
+                }}
               >
-                <SpanNodes spans={cell} ctx={ctx} />
-              </Text>
+                <Text
+                  style={[
+                    theme.type.footnote,
+                    {
+                      color: ctx.color ?? theme.colors.textPrimary,
+                      textAlign: block.align[cellIndex] ?? 'left',
+                    },
+                  ]}
+                >
+                  <SpanNodes spans={cell} ctx={ctx} />
+                </Text>
+              </View>
             ))}
           </View>
         ))}

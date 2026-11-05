@@ -165,6 +165,7 @@ export { redactSecrets, redactDeep, maskSecretLast4 } from './redact';
 // ── 网络安全门禁（SSRF 对齐 Rust ip_class.rs） ──
 export {
   validateSafeWebUrl,
+  validateSafeUrl,
   isIpv4Reserved,
   isIpv6Reserved,
   isLoopbackIp,
