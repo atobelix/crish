@@ -125,8 +125,14 @@ export function useChatSessionActions({
         return;
       }
 
-      // 剥离代码行号/列号锚点（如 src/main.rs:42 或 index.ts:15:3），避免文件系统路径校验失败
-      const cleanPath = trimmed.replace(/:\d+(:\d+)?$/, '');
+      // 剥离代码行号/列号/行区间锚点（如 src/main.rs:42、index.ts:15:3 或 foo.ts:1-240），避免文件系统路径校验失败
+      const cleanPath = trimmed.replace(/:\d+(?:-\d+)?(?::\d+)?$/, '');
+      const lineMatch = trimmed.match(/:(\d+)(?:-(\d+))?(?::\d+)?$/);
+      const parsedLine = lineMatch ? Number(lineMatch[1]) : undefined;
+      const parsedRange =
+        lineMatch && lineMatch[2]
+          ? `${lineMatch[1]}-${lineMatch[2]}`
+          : undefined;
 
       const isOfficeOrBinary =
         /\.(pptx?|docx?|xlsx?|pdf|zip|rar|7z|tar|gz|png|jpe?g|gif|webp|bmp|ico|tiff?|mp4|mov|webm|mp3|wav)$/i.test(
@@ -147,6 +153,8 @@ export function useChatSessionActions({
               new CustomEvent('crish-open-file', {
                 detail: {
                   path: resolved,
+                  line: parsedLine,
+                  lineRange: parsedRange,
                   sessionId: activeSessionId ?? undefined,
                   leafId: scopeRef.current.leafId ?? undefined,
                 },
@@ -178,6 +186,8 @@ export function useChatSessionActions({
               new CustomEvent('crish-open-file', {
                 detail: {
                   path: resolved,
+                  line: parsedLine,
+                  lineRange: parsedRange,
                   sessionId: activeSessionId ?? undefined,
                   leafId: scopeRef.current.leafId ?? undefined,
                 },

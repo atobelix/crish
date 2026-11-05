@@ -360,10 +360,11 @@ describe('ToolPresentation SSOT 黄金用例契约', () => {
       status: 'success',
     };
     const pres = resolveToolPresentation(tc, '');
+    expect(pres.target?.text).toBe('app.tsx:1-80');
     expect(pres.meta).toHaveLength(2);
     expect(pres.meta[0]!.type).toBe('diff');
     expect(pres.meta[0]!.text).toBe('+12 -4');
     expect(pres.meta[1]!.type).toBe('metric');
-    expect(pres.meta[1]!.text).toBe('L1–80 / 240 行');
+    expect(pres.meta[1]!.text).toBe('共 240 行');
   });
 });

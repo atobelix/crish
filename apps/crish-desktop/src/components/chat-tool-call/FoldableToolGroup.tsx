@@ -29,7 +29,7 @@ import {
   formatProcessActionsSummary,
 } from '../../api/tool-presentation/processMetricsEngine';
 import { AppIcon, type IconName } from '@/components/ui/icons';
-import { NumericText, ScrollFadeRegion, Tooltip } from '@/components/ui';
+import { NumericText, ScrollFadeRegion } from '@/components/ui';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
 import { getActiveVsm } from '../../store/storeAccess';
 import {
@@ -394,19 +394,6 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
           <span className={styles.summaryLabel}>
             <NumericText text={summaryText} />
           </span>
-          {metrics.errorCount > 0 && (
-            <Tooltip content={`包含 ${metrics.errorCount} 个执行错误`}>
-              <span
-                className={styles.errorBadge}
-                data-testid="tool-group-error-badge"
-              >
-                <AppIcon name="alert-triangle" size={12} aria-hidden />
-                <span data-testid="tool-group-error-count">
-                  <NumericText text={String(metrics.errorCount)} />
-                </span>
-              </span>
-            </Tooltip>
-          )}
           <span
             className={`${styles.chevron} ${isExpanded ? styles.rot : ''}`}
             aria-hidden

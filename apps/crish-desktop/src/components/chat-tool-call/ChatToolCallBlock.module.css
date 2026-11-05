@@ -442,8 +442,7 @@
   color: var(--text-tertiary);
   /* AN1 同钟契约：与 .toolBody 共读 --accordion-duration（未设时回退共享 token） */
   transition:
-    transform var(--accordion-duration, var(--transition-accordion))
-      var(--ease-decelerate),
+    transform var(--accordion-duration, var(--transition-accordion)),
     color var(--transition-micro);
   flex-shrink: 0;
   user-select: none;

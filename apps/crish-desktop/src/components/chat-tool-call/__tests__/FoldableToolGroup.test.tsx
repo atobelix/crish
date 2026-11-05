@@ -184,7 +184,7 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     expect(root.getAttribute('data-expanded')).toBe('false');
   });
 
-  it('存在执行错误时展示错误标记', () => {
+  it('总结行精简：存在执行错误时不再展示警告图标与错误角标（彻底移除 errorBadge）', () => {
     const items: ToolRenderItem[] = [
       {
         kind: 'single',
@@ -196,7 +196,7 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
       },
     ];
 
-    const { getByTestId } = render(
+    const { queryByTestId } = render(
       <FoldableToolGroup
         items={items}
         msgId="m1"
@@ -204,11 +204,7 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
       />
     );
 
-    const errorBadge = getByTestId('tool-group-error-badge');
-    expect(errorBadge).toBeTruthy();
-    expect(
-      errorBadge.querySelector('[data-icon="alert-triangle"]')
-    ).toBeTruthy();
+    expect(queryByTestId('tool-group-error-badge')).toBeNull();
   });
 
   it('单工具不做组级折叠：直出工具行，意图说明与命令可见，详情仍默认折叠', () => {

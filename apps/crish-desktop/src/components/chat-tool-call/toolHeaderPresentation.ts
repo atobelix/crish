@@ -2,10 +2,12 @@
  * apps/crish-desktop/src/components/chat-tool-call/toolHeaderPresentation.ts
  *
  * 工具行头部展现语义解析与次要指标提炼（DIM-04 专项）
- * 纯业务逻辑模块，从 ToolCallHeader.tsx 解耦抽离以满足行数门禁 (≤ 400 行)
+ * 纯业务逻辑模块，从 ToolCallHeader.tsx 解耦抽离以满足行数门禁 (≤ 518 行)
  */
 
 import type { MessageToolCall } from '../../store/types';
+import type { ToolTarget } from '../../api/tool-presentation/toolPresentationTypes';
+import { t } from '../../i18n';
 import {
   extractToolCommand,
   toolCommandPreview,
@@ -24,6 +26,18 @@ export interface ResolvedToolAction {
   actionText: string;
   paramText: string;
   isPath: boolean;
+}
+
+/** 严格防裸奔安全阀：严禁任何原始 JSON 结构或键值倾倒直接呈现在行头 */
+export function sanitizeParamText(text: string): string {
+  if (!text) return '';
+  const trimmed = text.trim();
+  return trimmed.startsWith('{') ||
+    trimmed.startsWith('[') ||
+    trimmed === '{}' ||
+    trimmed === '[]'
+    ? ''
+    : trimmed;
 }
 
 /**
@@ -71,9 +85,7 @@ export function extractFallbackParam(name: string, args?: string): string {
         }
       }
 
-      // 2. 提取前两项 key: 值——对象/数组只给「键名 + 类型占位」
-      // （HC1 · D-4：禁止原始 JSON 进标签，如 tasks: [{...] 的线协议倾倒；
-      //   R8 合并时以 HC1 版为准恢复，勿回退为 JSON.stringify 倾倒）
+      // 2. 提取前两项 key: 值——对象/数组只给「键名 + 类型占位」（HC1 · D-4）
       const entries = Object.entries(obj).filter(
         ([_, v]) => v !== undefined && v !== null
       );
@@ -95,46 +107,38 @@ export function extractFallbackParam(name: string, args?: string): string {
   return '';
 }
 
-/**
- * 【R8/B2 动词时态表】行内行头的动词词干按工具状态变时态：
- * 成功 → 完成式（已读取），运行中 → 进行式（读取中）；
- * 失败 / 待确认保持词干（状态由行尾状态词承担，见 STATUS_WORD）。
- * 词干清单以 HC1 口径为准（2026-11-02 整波收口合并裁定）：grep 词干
- * 「搜索」、glob 词干「查找」；成功时态形以 R8 为准（已搜索 / 已查找）。
- * 名词行头（终端 / Bash / Pwsh / 属性 / 结构树 /
- * 子任务 / 任务 / 工具名）不分时态、任何状态下不变——分工：
- * 时态管动词行头，名词行头由行尾状态词承担。
- */
+/** 动词时态映射表（特例动词采用映射，通用动作词自动规则派生） */
 const VERB_TENSE: Record<string, { done: string; doing: string }> = {
   读取: { done: '已读取', doing: '读取中' },
   写入: { done: '已写入', doing: '写入中' },
   编辑: { done: '已编辑', doing: '编辑中' },
   修改: { done: '已修改', doing: '修改中' },
   列出目录: { done: '已列出目录', doing: '列出中' },
+  差异对比: { done: '已对比', doing: '对比中' },
   搜索网络: { done: '已搜索', doing: '搜索中' },
   搜索: { done: '已搜索', doing: '搜索中' },
   查找: { done: '已查找', doing: '查找中' },
   网页获取: { done: '已获取', doing: '获取中' },
-  差异对比: { done: '已对比', doing: '对比中' },
 };
 
-function applyActionTense(
+export function applyActionTense(
   actionText: string,
   status: MessageToolCall['status'] | undefined
 ): string {
   const forms = VERB_TENSE[actionText];
-  if (!forms) return actionText;
-  if (status === 'success') return forms.done;
-  if (status === 'running') return forms.doing;
+  if (forms) {
+    if (status === 'success') return forms.done;
+    if (status === 'running') return forms.doing;
+    return actionText;
+  }
+  if (status === 'success')
+    return t('tool.tense.done', '已{action}', { action: actionText });
+  if (status === 'running')
+    return t('tool.tense.doing', '正在{action}', { action: actionText });
   return actionText;
 }
 
-/**
- * 【R8/B3】task / todo 类工具的参数摘要：解析参数 JSON——
- * 任务数组 → 「N 个任务 · 首个任务标题」；单任务 → 其标题；
- * 解析不出结构时退回原文截断（与历史口径一致）。
- * 禁止把裸 JSON 直接贴进行头。
- */
+/** 任务类入参结构化解析（禁止 raw JSON 泄露） */
 function summarizeTaskArgs(args: string): string {
   const trimmed = (args || '').trim();
   if (!trimmed) return '';
@@ -163,17 +167,202 @@ function summarizeTaskArgs(args: string): string {
         parsed.title ?? parsed.name ?? parsed.task ?? ''
       ).trim();
       if (single) return single;
+      return '';
     }
   } catch {
-    // 非 JSON 参数：走下方原文截断
+    // 非 JSON 参数
   }
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return '';
   return trimmed.length > 50 ? trimmed.slice(0, 50) + '…' : trimmed;
 }
 
-/**
- * 按照 DIM-04 规范将工具调用解析为人类友好动作与核心参数。
- * 出口统一过 applyActionTense（B2 时态层）——分支内只产词干。
- */
+/** 任务管理、定时调度、插件市场等专用领域意图解析（彻底杜绝 raw JSON 裸奔） */
+function resolveDomainToolAction(
+  name: string,
+  args: string
+): ResolvedToolAction | null {
+  if (!args) return null;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const o = JSON.parse(args.trim());
+    if (o && typeof o === 'object') parsed = o as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!parsed) return null;
+
+  // 1. 任务管理 (manage_task / task_manager)
+  if (
+    name === 'manage_task' ||
+    name === 'manage_tasks' ||
+    (parsed.action && parsed.taskId)
+  ) {
+    const act = String(parsed.action ?? parsed.Action ?? '')
+      .toLowerCase()
+      .trim();
+    const taskId = String(
+      parsed.taskId ?? parsed.TaskId ?? parsed.id ?? ''
+    ).trim();
+    const map: Record<string, string> = {
+      status: t('tool.action.taskStatus', '查看任务状态'),
+      read_log: t('tool.action.taskLog', '读取任务日志'),
+      log: t('tool.action.taskLog', '读取任务日志'),
+      logs: t('tool.action.taskLog', '读取任务日志'),
+      kill: t('tool.action.taskKill', '终止任务'),
+      stop: t('tool.action.taskKill', '终止任务'),
+      cancel: t('tool.action.taskKill', '终止任务'),
+      send_input: t('tool.action.taskInput', '发送任务输入'),
+      input: t('tool.action.taskInput', '发送任务输入'),
+      list: t('tool.action.taskList', '查看任务列表'),
+    };
+    const actionText = map[act] || t('tool.action.taskManage', '管理任务');
+    return {
+      actionText,
+      paramText: act === 'list' ? '' : taskId,
+      isPath: false,
+    };
+  }
+
+  // 2. 定时调度 (schedule / set_timer / cancel_timer)
+  if (name === 'schedule' || name === 'set_timer' || name === 'cancel_timer') {
+    if (name.includes('cancel')) {
+      const id = String(parsed.timerId ?? parsed.id ?? '').trim();
+      return {
+        actionText: t('tool.action.scheduleCancel', '取消定时器'),
+        paramText: sanitizeParamText(id),
+        isPath: false,
+      };
+    }
+    const sec =
+      parsed.DurationSeconds ?? parsed.durationSeconds ?? parsed.duration;
+    const cron = parsed.CronExpression ?? parsed.cronExpression ?? parsed.cron;
+    const pText =
+      sec !== undefined && sec !== null
+        ? t('tool.action.scheduleSeconds', '{seconds} 秒', {
+            seconds: String(sec),
+          })
+        : cron
+          ? String(cron).trim()
+          : '';
+    return {
+      actionText: t('tool.action.scheduleSet', '设置定时器'),
+      paramText: sanitizeParamText(pText),
+      isPath: false,
+    };
+  }
+
+  // 3. 插件与市场
+  if (name === 'search_marketplace') {
+    const q = Array.isArray(parsed.queries)
+      ? parsed.queries.join(', ')
+      : String(parsed.query || parsed.q || '');
+    return {
+      actionText: t('tool.action.marketplaceSearch', '搜索插件市场'),
+      paramText: q ? (q.startsWith('"') ? q : `"${q}"`) : '',
+      isPath: false,
+    };
+  }
+  if (name === 'list_plugin_accounts') {
+    return {
+      actionText: t('tool.action.pluginAccounts', '查看插件账号'),
+      paramText: '',
+      isPath: false,
+    };
+  }
+
+  // 4. 子代理派发 (invoke_subagent / run_subagent)
+  if (name === 'invoke_subagent' || name === 'run_subagent') {
+    const label = String(
+      parsed.Role ?? parsed.role ?? parsed.TypeName ?? parsed.typeName ?? ''
+    ).trim();
+    if (label)
+      return {
+        actionText: t('tool.action.subagentSpawn', '派发子任务'),
+        paramText: sanitizeParamText(label),
+        isPath: false,
+      };
+  }
+
+  return null;
+}
+
+/** 从读取文件参数中解析行号区间 */
+export function resolveReadFileLineRange(
+  tc: MessageToolCall
+): { rangeStr: string; startLine?: number; endLine?: number } | null {
+  if (tc.output) {
+    const parsed = parseReadFileOutput(
+      tc.output,
+      (tc.name || '').toLowerCase().replace(/[\s-]+/g, '_')
+    );
+    if (
+      parsed &&
+      parsed.startLine !== undefined &&
+      parsed.endLine !== undefined
+    ) {
+      return {
+        rangeStr: `${parsed.startLine}-${parsed.endLine}`,
+        startLine: parsed.startLine,
+        endLine: parsed.endLine,
+      };
+    }
+  }
+  if (tc.arguments) {
+    try {
+      const p = JSON.parse(tc.arguments.trim());
+      const start = p.StartLine ?? p.startLine ?? p.start_line ?? p.start;
+      const end = p.EndLine ?? p.endLine ?? p.end_line ?? p.end;
+      if (start !== undefined && end !== undefined) {
+        return {
+          rangeStr: `${start}-${end}`,
+          startLine: Number(start),
+          endLine: Number(end),
+        };
+      }
+      if (start !== undefined) {
+        return {
+          rangeStr: `${start}`,
+          startLine: Number(start),
+          endLine: Number(start),
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+export function formatReadFileParam(
+  baseName: string,
+  lineRange: { rangeStr: string } | null
+): string {
+  return baseName && lineRange?.rangeStr
+    ? `${baseName}:${lineRange.rangeStr}`
+    : baseName;
+}
+
+/** read_file 目标提取器（用于 ToolPresentation 领域注册模型） */
+export function extractReadFileTarget(
+  args: Record<string, unknown>,
+  tc?: MessageToolCall
+): ToolTarget | undefined {
+  const p = String(
+    args.path ?? args.Path ?? args.filePath ?? args.filepath ?? ''
+  ).trim();
+  if (!p) return undefined;
+  const base = basename(p) || p;
+  const m = tc?.output?.match(/^startLine:\s*(\d+),\s*endLine:\s*(\d+)$/im);
+  const rangeStr = m ? `:${m[1]}-${m[2]}` : '';
+  return {
+    text: `${base}${rangeStr}`,
+    kind: 'path',
+    clickable: true,
+    tooltip: rangeStr ? `${p}:${rangeStr.slice(1)}` : p,
+  };
+}
+
+/** 按照 DIM-04 规范将工具调用解析为人类友好动作与核心参数 */
 export function resolveToolActionAndParam(
   tc: MessageToolCall,
   human: string,
@@ -184,6 +373,7 @@ export function resolveToolActionAndParam(
   return {
     ...resolved,
     actionText: applyActionTense(resolved.actionText, tc.status),
+    paramText: sanitizeParamText(resolved.paramText),
   };
 }
 
@@ -197,7 +387,7 @@ function resolveToolActionAndParamRaw(
   const args = tc.arguments || '';
   const isError = tc.status === 'error';
 
-  // 0. 失败终态时，若包含错误输出直接提炼错误概要展示于摘要行
+  // 0. 失败终态时提炼错误概要
   if (isError && tc.output) {
     const lines = tc.output
       .split('\n')
@@ -223,6 +413,10 @@ function resolveToolActionAndParamRaw(
       isPath: false,
     };
   }
+
+  // 0.1 专用领域意图解析（消除裸奔参数与 raw JSON）
+  const domainAction = resolveDomainToolAction(name, args);
+  if (domainAction) return domainAction;
 
   // 1. Shell 执行类
   if (
@@ -276,14 +470,10 @@ function resolveToolActionAndParamRaw(
           '';
         if (pathVal) p = basename(pathVal);
       } catch {
-        // ignore
+        /* ignore */
       }
     }
-    return {
-      actionText: '属性',
-      paramText: p,
-      isPath: Boolean(filePath || p),
-    };
+    return { actionText: '属性', paramText: p, isPath: Boolean(filePath || p) };
   }
 
   // 4. 文件读取类
@@ -299,9 +489,11 @@ function resolveToolActionAndParamRaw(
     (name.includes('view') && !name.includes('preview'))
   ) {
     const p = pathLabel || (filePath ? basename(filePath) : '');
+    const lineRange = resolveReadFileLineRange(tc);
+    const formattedParam = formatReadFileParam(p, lineRange);
     return {
       actionText: '读取',
-      paramText: p,
+      paramText: formattedParam,
       isPath: Boolean(filePath || p),
     };
   }
@@ -314,11 +506,7 @@ function resolveToolActionAndParamRaw(
     name.includes('edit')
   ) {
     const p = pathLabel || (filePath ? basename(filePath) : '');
-    return {
-      actionText: '修改',
-      paramText: p,
-      isPath: Boolean(filePath || p),
-    };
+    return { actionText: '修改', paramText: p, isPath: Boolean(filePath || p) };
   }
 
   // 6. 文件写入 / 创建类
@@ -329,11 +517,7 @@ function resolveToolActionAndParamRaw(
     (name.includes('write') && !name.includes('edit'))
   ) {
     const p = pathLabel || (filePath ? basename(filePath) : '');
-    return {
-      actionText: '写入',
-      paramText: p,
-      isPath: Boolean(filePath || p),
-    };
+    return { actionText: '写入', paramText: p, isPath: Boolean(filePath || p) };
   }
 
   // 7. 搜索与查询类
@@ -401,11 +585,7 @@ function resolveToolActionAndParamRaw(
     const pText = dir
       ? basename(dir) || dir
       : extractFallbackParam(name, args) || '.';
-    return {
-      actionText: '列出目录',
-      paramText: pText,
-      isPath: Boolean(dir),
-    };
+    return { actionText: '列出目录', paramText: pText, isPath: Boolean(dir) };
   }
 
   if (name.includes('tree') || name === 'project_tree') {
@@ -484,16 +664,7 @@ function resolveToolActionAndParamRaw(
   };
 }
 
-/**
- * 行头单权威文本源判定（HC1 · D-1）：human 是否在行内与 action+param 并列渲染。
- *
- * - human 为入参派生标签（source='args'）：与 action+param 同源同文，并列必然
- *   重复——恒不渲染（文本退守行级 aria-label 与 Tooltip）；
- * - human 为 explanation：仅在与 `action + param` 拼接不构成包含关系时并列；
- *   包含判断在去空白归一后双向进行（治旧「整段全等」弱去重漏检拼接相等），
- *   类型分支与通用分支共用本收口，不再各写一份。
- * （R8 合并时以 HC1 版为准恢复：ToolCallHeader.tsx 现行 import 依赖本导出。）
- */
+/** 行头单权威文本源判定（HC1 · D-1） */
 export function shouldShowHumanLabel(args: {
   human: string;
   humanSource: ToolHumanLabelSource;
@@ -501,26 +672,20 @@ export function shouldShowHumanLabel(args: {
   paramText: string;
 }): boolean {
   const { human, humanSource, actionText, paramText } = args;
-  if (!human) return false;
-  if (humanSource === 'args') return false;
+  if (!human || humanSource === 'args') return false;
   const norm = (s: string) => s.replace(/\s+/g, '');
   const humanNorm = norm(human);
   const combinedNorm = norm(
     paramText ? `${actionText} ${paramText}` : actionText
   );
-  if (
+  return !(
     humanNorm &&
     combinedNorm &&
     (combinedNorm.includes(humanNorm) || humanNorm.includes(combinedNorm))
-  ) {
-    return false;
-  }
-  return true;
+  );
 }
 
-/**
- * 解析工具调用的次要关键量度（用于在摘要行中紧凑呈现：行数、匹配数、文件大小等）
- */
+/** 解析工具调用的次要关键量度（直观易读中文，消除混乱符号） */
 export function resolveToolSecondaryMeta(tc: MessageToolCall): string | null {
   const name = (tc.name || '').toLowerCase().replace(/[\s-]+/g, '_');
   const output = tc.output || '';
@@ -543,29 +708,20 @@ export function resolveToolSecondaryMeta(tc: MessageToolCall): string | null {
         if (
           parsed.startLine !== undefined &&
           parsed.endLine !== undefined &&
-          parsed.totalLines &&
-          parsed.endLine - parsed.startLine + 1 < parsed.totalLines
+          parsed.totalLines
         ) {
-          return `L${parsed.startLine}–${parsed.endLine} / ${parsed.totalLines} 行`;
+          return t('tool.action.linesTotalCombined', '共 {total} 行', {
+            total: parsed.totalLines,
+          });
         }
-        if (parsed.totalLines) {
-          return `${parsed.totalLines} 行`;
-        }
-        if (parsed.code) {
-          const lines = parsed.code.split('\n').length;
-          return `${lines} 行`;
-        }
-      }
-    }
-    // 如果 output 为空但入参指定了行范围
-    if (tc.arguments) {
-      try {
-        const p = JSON.parse(tc.arguments);
-        if (p.StartLine && p.EndLine) {
-          return `L${p.StartLine}–${p.EndLine}`;
-        }
-      } catch {
-        // ignore
+        if (parsed.totalLines)
+          return t('tool.action.linesTotal', '{total} 行', {
+            total: parsed.totalLines,
+          });
+        if (parsed.code)
+          return t('tool.action.linesCount', '{count} 行', {
+            count: parsed.code.split('\n').length,
+          });
       }
     }
     return null;
@@ -583,26 +739,19 @@ export function resolveToolSecondaryMeta(tc: MessageToolCall): string | null {
     return null;
   }
 
-  // 3. 文件属性查看类（用户裁决 · 2026-11-02：行头不展示冗余属性字符串，"没有必要显示"）
-  if (name === 'file_stat' || name.includes('stat')) {
+  if (
+    name === 'file_stat' ||
+    name.includes('stat') ||
+    name === 'list_dir' ||
+    name.includes('listdir')
+  ) {
     return null;
   }
 
-  // 4. 目录列表类（用户裁决 · 2026-11-02：行头不显示项数，"这个可以不用显示"）
-  if (name === 'list_dir' || name.includes('listdir')) {
-    return null;
-  }
-
-  // 5. 通用扁平标量（E1 决策序 9 的行内摘要来源，与政策函数共用
-  //    同一派生 deriveFlatScalarSummary：这类行取消展开后，输出的
-  //    完整紧凑形在此可见，不丢信息）
   return deriveFlatScalarSummary(tc);
 }
 
-/**
- * 次级元数据的完整版（Tooltip / aria 用）：stat 行给全字段 + 完整
- * 时间戳（E1 §6.2）；其余行返回 null——行内文本本身即完整信息。
- */
+/** 次级元数据的完整版（Tooltip / aria 用） */
 export function resolveToolSecondaryMetaTitle(
   tc: MessageToolCall
 ): string | null {

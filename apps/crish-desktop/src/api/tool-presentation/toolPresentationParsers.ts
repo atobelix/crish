@@ -201,7 +201,7 @@ export function extractReadUrlTarget(
     : undefined;
 }
 
-/** read_file 返回行数与范围元数据解析 */
+/** read_file 返回行数与范围元数据解析（总行数以清晰易读中文呈现，消除 L/斜杠/连字符混杂） */
 export function resolveReadFileMeta(
   tc: MessageToolCall,
   args: Record<string, unknown>
@@ -213,13 +213,11 @@ export function resolveReadFileMeta(
     const total = linesMatch?.[1] ? parseInt(linesMatch[1], 10) : undefined;
     const sl = rangeMatch?.[1] ? parseInt(rangeMatch[1], 10) : undefined;
     const el = rangeMatch?.[2] ? parseInt(rangeMatch[2], 10) : undefined;
-    if (sl !== undefined && el !== undefined && total && el - sl + 1 < total) {
+    if (sl !== undefined && el !== undefined && total) {
       return [
         {
           type: 'metric',
-          text: t('tool.action.linesRange', 'L{sl}–{el} / {total} 行', {
-            sl,
-            el,
+          text: t('tool.action.linesTotalCombined', '共 {total} 行', {
             total,
           }),
         },

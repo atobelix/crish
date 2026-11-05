@@ -43,17 +43,9 @@
   grid-template-rows: 1fr;
 }
 
-/* AN1：槽位淡变只保留 opacity（旧 slot 淡入 keyframes 带 -4px 位移已删；
- * 折叠内层不再混入位移，与 grid 同钟单轨） */
 .reasoningExpandSlot {
   min-height: 0;
   overflow: hidden;
-  opacity: 0;
-  transition: opacity var(--transition-accordion-fade);
-}
-
-.reasoningContainer[data-expanded='true'] .reasoningExpandSlot {
-  opacity: 1;
 }
 
 /* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */

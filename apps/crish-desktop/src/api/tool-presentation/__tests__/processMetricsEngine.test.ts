@@ -351,14 +351,12 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       subagentCount: 1,
       toolCount: 11,
     };
-    // 1. showWorkTime=true: 承载工作耗时，绝不含工具细分字样（动作分布）；
-    // R8 起尾部可拼轮次级常驻统计（失败数 / 子 agent 数，〔同组 §3.2〕组头
-    // 组成定稿）——统计不是细分字样，不破 2026-09-11「时间栏专一承载」本意
+    // 1. showWorkTime=true: 承载工作耗时，精简纯粹，不拼接失败数与子 agent 数
     expect(formatProcessControlLabel(m, true, 5_000, true)).toBe(
-      '正在处理 5.0 秒 · 子 agent 1'
+      '正在处理 5.0 秒'
     );
     expect(formatProcessControlLabel(m, true, 5_000, false)).toBe(
-      '已完成 5.0 秒 · 子 agent 1'
+      '已完成 5.0 秒'
     );
     for (const live of [true, false]) {
       const out = formatProcessControlLabel(m, true, 5_000, live);
@@ -371,14 +369,12 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
 
     // 2. showWorkTime=false: 展示调用了多少工具、分别是什么类型的描述（2026-09-11 用户裁决）
     const summary = formatProcessControlLabel(m, false, 5_000, false);
-    // 动作分布本体（formatProcessActionsSummary）仍不混排子代理计数（R4b）；
-    // 子 agent 数由轮次组头在本函数拼装层追加——两级分工见引擎注记
     expect(summary).toBe(
-      '已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令 · 子 agent 1'
+      '已搜索 3 次 · 已读取 1 个文件 · 已编辑 2 个文件 · 已运行 4 条命令'
     );
   });
 
-  it('R8 组头拼装：失败数常驻组头（两分支同口径）；动作分布本体不含失败/子 agent 统计', () => {
+  it('总结行精简：控制栏文案两分支均不拼接失败数与子 agent 数，保持纯净耗时与动作分布', () => {
     const m = {
       ...emptyMetrics(),
       toolCount: 5,
@@ -388,16 +384,16 @@ describe('formatProcessControlLabel · 控制栏文案（2026-09-11 用户裁决
       errorCount: 2,
       subagentCount: 1,
     };
-    // 工作时间分支：时间 + 失败数 + 子 agent 数，不拼动作分布
+    // 工作时间分支：纯时间，不拼失败数与子 agent 数
     expect(formatProcessControlLabel(m, true, 12_500, false)).toBe(
-      '已完成 12.5 秒 · 失败 2 · 子 agent 1'
+      '已完成 12.5 秒'
     );
     expect(formatProcessControlLabel(m, true, 12_500, true)).toBe(
-      '正在处理 12.5 秒 · 失败 2 · 子 agent 1'
+      '正在处理 12.5 秒'
     );
-    // 分布分支：分布 + 失败数 + 子 agent 数
+    // 分布分支：纯动作分布，不拼失败数与子 agent 数
     expect(formatProcessControlLabel(m, false, 12_500, false)).toBe(
-      '已读取 2 个文件 · 已运行 3 条命令 · 失败 2 · 子 agent 1'
+      '已读取 2 个文件 · 已运行 3 条命令'
     );
     // 动作分布单一来源本体：不含失败数与子 agent 数（工具组头消费口径）
     expect(formatProcessActionsSummary(m)).toBe(
@@ -509,16 +505,14 @@ describe('formatProcessControlLabel · 无计时证据省略时长（F1 · R-C�
     expect(out).not.toContain('秒');
   });
 
-  it('终态 · 无证据 + 失败数 → 「已完成 · 失败 N」（尾统计照常拼装）', () => {
+  it('终态 · 无证据且含失败数 → 依然精简为「已完成」（杜绝尾统计拼装）', () => {
     const m = {
       ...emptyMetrics(),
       toolCount: 3,
       hasError: true,
       errorCount: 2,
     };
-    expect(formatProcessControlLabel(m, true, 0, false)).toBe(
-      '已完成 · 失败 2'
-    );
+    expect(formatProcessControlLabel(m, true, 0, false)).toBe('已完成');
   });
 
   it('运行中 · 无证据 → 只拼「正在处理」', () => {

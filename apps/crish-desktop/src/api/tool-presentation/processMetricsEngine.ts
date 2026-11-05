@@ -345,28 +345,17 @@ export function formatProcessControlLabel(
   elapsedMs: number,
   isLive: boolean
 ): string {
-  // 轮次级常驻统计：失败数 + 子 agent 数（拼装规则见上方分工注记）
-  const tailStats: string[] = [];
-  if (metrics.errorCount > 0) {
-    tailStats.push(`失败 ${metrics.errorCount}`);
-  }
-  if (metrics.subagentCount > 0) {
-    tailStats.push(`子 agent ${metrics.subagentCount}`);
-  }
-
   if (showWorkTime) {
     // 计时证据判定（R-C）：跨度与聚合任一为正即有证据；皆零则省略时长
     const evidenceMs = elapsedMs > 0 ? elapsedMs : metrics.totalDurationMs;
     if (evidenceMs <= 0) {
-      const head = isLive ? '正在处理' : '已完成';
-      return [head, ...tailStats].join(' · ');
+      return isLive ? '正在处理' : '已完成';
     }
     const duration = formatDurationLabel(evidenceMs);
-    const head = isLive ? `正在处理 ${duration}` : `已完成 ${duration}`;
-    return [head, ...tailStats].join(' · ');
+    return isLive ? `正在处理 ${duration}` : `已完成 ${duration}`;
   }
 
-  return [formatProcessActionsSummary(metrics), ...tailStats].join(' · ');
+  return formatProcessActionsSummary(metrics);
 }
 
 /**

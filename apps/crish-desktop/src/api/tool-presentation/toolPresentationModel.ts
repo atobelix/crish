@@ -38,6 +38,7 @@ import {
   resolveReadFileMeta,
   textTarget,
 } from './toolPresentationParsers';
+import { extractReadFileTarget } from '../../components/chat-tool-call/toolHeaderPresentation';
 import {
   cleanHumanExplanation,
   formatErrorTarget,
@@ -106,7 +107,7 @@ export const TOOL_PRESENTATION_REGISTRY: Record<
     'read',
     'file-view',
     t('tool.action.readFile', '读取文件'),
-    pathTarget(PATH_KEYS, true),
+    extractReadFileTarget,
     resolveReadFileMeta
   ),
   write_file: defTool(

@@ -178,19 +178,36 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
                   <span className={styles.toolErrorParamText}>{paramText}</span>
                 </Tooltip>
               ) : isPath && pathClickable && filePath ? (
-                <Tooltip content={filePath}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={styles.toolPathLink}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenPath?.(filePath);
-                    }}
-                  >
-                    {paramText}
-                  </Button>
-                </Tooltip>
+                (() => {
+                  const colonIdx = paramText.lastIndexOf(':');
+                  const lineSuffix =
+                    colonIdx > 0 ? paramText.slice(colonIdx + 1) : '';
+                  const hasLineRange = Boolean(
+                    lineSuffix && /^\d+(-\d+)?$/.test(lineSuffix)
+                  );
+                  const targetPath = hasLineRange
+                    ? `${filePath}:${lineSuffix}`
+                    : filePath;
+                  const linkTooltip = hasLineRange
+                    ? `${filePath}:${lineSuffix}`
+                    : filePath;
+
+                  return (
+                    <Tooltip content={linkTooltip}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className={styles.toolPathLink}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenPath?.(targetPath);
+                        }}
+                      >
+                        {paramText}
+                      </Button>
+                    </Tooltip>
+                  );
+                })()
               ) : (
                 <Tooltip content={fullTooltip}>
                   {/* 链接色只属于真正可点击的路径（上方 toolPathLink 分支）；

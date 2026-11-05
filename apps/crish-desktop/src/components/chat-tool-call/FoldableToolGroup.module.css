@@ -85,16 +85,6 @@
   white-space: nowrap;
 }
 
-.errorBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  margin-right: 2px;
-  color: var(--color-error);
-  user-select: none;
-}
-
 .chevron {
   display: inline-flex;
   align-items: center;
@@ -146,13 +136,6 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: auto;
-  opacity: 0;
-  /* AN1：折叠内层只保留 opacity 淡变，不再混入 translateY 位移（与 grid 同钟单轨） */
-  transition: opacity var(--transition-accordion-fade);
-}
-
-.groupBody[data-expanded='true'] .groupBodyInner {
-  opacity: 1;
 }
 
 /* ───── 按钮文案单格重叠防抖架构（CSS Grid 1 / 1） ───── */
