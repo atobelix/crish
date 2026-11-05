@@ -88,6 +88,8 @@
   overflow-x: hidden;
   overflow-anchor: none;
   position: relative;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 消息列居中容器（Central Column Spacer）
@@ -165,6 +167,7 @@
   width: 100%;
   padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
   padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  contain: layout paint;
 }
 
 @container chatContainer (max-width: 699px) {

@@ -173,7 +173,6 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       shouldReplace,
       handleToggle,
       rowRef,
-      isAccordionAnimating,
       handleAccordionTransitionEnd,
     } = useToolExpansionState({
       tc,
@@ -184,6 +183,35 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       scrollerRef,
       vsm,
     });
+
+    // 退出动画生命周期管理：展开时直接挂载真实内容；收起时保持内容在 DOM 中，
+    // 供 CSS Grid 1fr -> 0fr 顺畅播放收缩折叠动画；动画结束后才卸载子内容。
+    const [shouldMountContent, setShouldMountContent] = useState(isOpen);
+
+    useEffect(() => {
+      if (isOpen) {
+        setShouldMountContent(true);
+        return undefined;
+      }
+      // 安全保底：若 350ms 内未收到 onTransitionEnd（如动画跳过或不可见），保底卸载释放 DOM
+      const timer = setTimeout(() => {
+        setShouldMountContent(false);
+      }, 350);
+      return () => {
+        clearTimeout(timer);
+      };
+    }, [isOpen]);
+
+    const handleAccordionEnd = useCallback(
+      (e: React.TransitionEvent<HTMLDivElement>) => {
+        handleAccordionTransitionEnd();
+        if (e.propertyName !== 'grid-template-rows') return;
+        if (!isOpen) {
+          setShouldMountContent(false);
+        }
+      },
+      [handleAccordionTransitionEnd, isOpen]
+    );
 
     // AN4：工具行入场（实况 + 首次呈现 + 非原地替换才播，交错
     // 延时按挂载序发放；审批分支不挂入场——审批即时类归 AN2）
@@ -448,26 +476,16 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
         {canToggle ? (
           <div
             className={`${styles.toolBody}${isOpen ? ' ' + styles.expanded : ''}`}
-            onTransitionEnd={handleAccordionTransitionEnd}
+            onTransitionEnd={handleAccordionEnd}
           >
             <div className={styles.toolBodyInner}>
-              {isOpen ? (
-                isAccordionAnimating ? (
-                  <div
-                    className={styles.toolSkeletonPlaceholder}
-                    data-testid={`tool-skeleton-${tc.id}`}
-                  >
-                    <div className={styles.toolSkeletonLine} />
-                    <div className={styles.toolSkeletonLineShort} />
-                  </div>
-                ) : (
-                  <ToolCallOutput
-                    tc={tc}
-                    bodyId={bodyId}
-                    onOpenDiff={onOpenDiff}
-                    onOpenTerminal={onOpenTerminal}
-                  />
-                )
+              {shouldMountContent ? (
+                <ToolCallOutput
+                  tc={tc}
+                  bodyId={bodyId}
+                  onOpenDiff={onOpenDiff}
+                  onOpenTerminal={onOpenTerminal}
+                />
               ) : null}
             </div>
           </div>
