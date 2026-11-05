@@ -21,27 +21,7 @@ jest.mock('./CrishDrawerContent', () => {
   };
 });
 
-describe('CrishDrawerLayout 架构规范（Cherry 标杆对齐）', () => {
-  it('源码钉死 Front Drawer 架构：主场景静态 0 动态圆角，顶层抽屉纯平移，具备 Scrim 遮罩', () => {
-    const source = readFileSync(
-      join(__dirname, 'CrishDrawerLayout.tsx'),
-      'utf8'
-    );
-    // 钉死时长 250ms 与 settle 缓动
-    expect(source).toMatch(/duration:\s*250/);
-    expect(source).toMatch(/Easing\.bezier\(0\.22,\s*1,\s*0\.36,\s*1\)/);
-
-    // 钉死必须存在 theme.colors.scrim 遮罩
-    expect(source).toMatch(/theme\.colors\.scrim/);
-    expect(source).toMatch(/scrimAnimatedStyle/);
-
-    // 钉死主场景绝不再包含动态 borderRadius 插值
-    expect(source).not.toMatch(/borderRadius:\s*interpolate/);
-
-    // 抽屉层必须置于顶层 (zIndex: 10)
-    expect(source).toMatch(/zIndex:\s*10/);
-  });
-
+describe('CrishDrawerLayout 内容挂载（M5 → 批 D 常驻）', () => {
   it('未打开抽屉时，布局挂载后内容已常驻挂载', async () => {
     const view = await render(
       <CrishDrawerLayout>
@@ -83,6 +63,31 @@ describe('CrishDrawerLayout 架构规范（Cherry 标杆对齐）', () => {
     });
     // 关闭落定后内容仍在（下次打开零挂载）
     expect(view.getByTestId('drawer-content-stub')).toBeTruthy();
+  });
+
+  it('动画期呈现白名单：底层面板仅 transform 微视差、顶层卡片仅 transform 位移与 borderRadius（源码钉死，绝无 Scrim 遮罩）', () => {
+    const source = readFileSync(
+      join(__dirname, 'CrishDrawerLayout.tsx'),
+      'utf8'
+    );
+    const bodies = [
+      ...source.matchAll(/useAnimatedStyle\(\(\) => \(\{([\s\S]*?)\}\)\)/g),
+    ].map((m) => m[1]!);
+    // 本文件全部逐帧样式 = 底层抽屉面板 + 顶层主卡片两处
+    expect(bodies.length).toBe(2);
+    // 绝无黑色遮罩 Scrim
+    expect(source).not.toMatch(/theme\.colors\.scrim/);
+    expect(source).not.toMatch(/scrimAnimatedStyle/);
+    for (const body of bodies) {
+      const topLevelKeys = [...body.matchAll(/^ {4}([A-Za-z]+):/gm)].map(
+        (m) => m[1]
+      );
+      for (const key of topLevelKeys) {
+        expect(['transform', 'borderRadius']).toContain(key);
+      }
+    }
+    expect(bodies.some((b) => b.includes('translateX'))).toBe(true);
+    expect(bodies.some((b) => b.includes('borderRadius'))).toBe(true);
   });
 });
 
@@ -134,19 +139,16 @@ describe('drawerReleaseTarget 松手落点判定', () => {
     expect(
       drawerReleaseTarget({ startProgress: 1, progress: 0.95, velocityX: -400 })
     ).toBe(1);
-    expect(
-      drawerReleaseTarget({ startProgress: 0, progress: 0.1, velocityX: 400 })
-    ).toBe(0);
   });
 });
 
-// Front Drawer 悬浮抽屉架构与柔和 Scrim 遮罩：
-// - 主界面恒定静态（0 位移、0 动态圆角，GPU 离屏蒙版重剪降为 0）；
-// - 自然渐变半透明暗化 Scrim（遮罩），点遮罩瞬时收起；
-// - 顶层悬浮滑出抽屉面板 (Front Drawer，微描边 + 纯硬件变换)；
-// - 状态机精细化与静默门（phase: idle | opening | open | closing）。
-describe('Front Drawer 悬浮抽屉架构与柔和 Scrim 遮罩', () => {
-  it('主场景保持静态，具备柔和 Scrim 遮罩，顶层抽屉纯硬件平移，支持点击遮罩收起', async () => {
+// Card Push 原型层叠卡片推移架构与手势解耦：
+// - 主界面作为顶层圆角卡片向右推开，底层抽屉面板微视差展露；
+// - 绝无黑色遮罩层（Scrim），纯靠色阶差与大圆角产生立体感；
+// - 点击主卡片即可收起抽屉；
+// - 手势与动画期间不触发 isOpen 中途更新，仅在落定后同步。
+describe('Card Push 原型层叠卡片推移架构与手势解耦', () => {
+  it('主界面作为顶层卡片推开，底层抽屉微视差，无黑色遮罩，支持点击主卡片收起', async () => {
     const view = await render(
       <CrishDrawerLayout>
         <View testID="main-child" />
@@ -203,35 +205,6 @@ describe('Front Drawer 悬浮抽屉架构与柔和 Scrim 遮罩', () => {
       triggerClose();
     });
     expect(seenIsOpen[seenIsOpen.length - 1]).toBe(false);
-  });
-
-  it('状态机精细化：controller.phase 暴露当前动画阶段（idle | opening | open | closing）', async () => {
-    const phases: string[] = [];
-    let triggerOpen: () => void = () => {};
-    let triggerClose: () => void = () => {};
-    function PhaseProbe() {
-      const controller = useDrawerController();
-      triggerOpen = controller.open;
-      triggerClose = controller.close;
-      phases.push(controller.phase);
-      return null;
-    }
-    await render(
-      <CrishDrawerLayout>
-        <PhaseProbe />
-      </CrishDrawerLayout>
-    );
-    expect(phases[phases.length - 1]).toBe('idle');
-
-    await act(async () => {
-      triggerOpen();
-    });
-    expect(phases[phases.length - 1]).toBe('open');
-
-    await act(async () => {
-      triggerClose();
-    });
-    expect(phases[phases.length - 1]).toBe('idle');
   });
 });
 

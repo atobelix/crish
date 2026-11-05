@@ -265,8 +265,6 @@ export function Sheet({
   const effectiveVisible = visible;
   // 关闭时先播出场动画再卸载 Modal（进场则立即挂载）
   const [mounted, setMounted] = useState(false);
-  // 动效落定状态：位移动画进行期间置 false（避让 Android SVG 大半径高斯模糊软光栅化），完全落位后置 true 恢复极软阴影
-  const [animSettled, setAnimSettled] = useState(false);
   // 覆盖层登记（批 D）：挂载期间（含出场动画）在栈，Android 返回
   // 由 Modal onRequestClose 汇入栈顶裁决；钻取在场时先退钻取。
   useOverlayRegistration(overlayId, mounted, {
@@ -288,20 +286,46 @@ export function Sheet({
   }
   const frame = frameRef.current;
   const [panelHeight, setPanelHeight] = useState(0);
+  const lastMeasuredHeightRef = useRef<number>(0);
   const backdropProgress = useSharedValue(0);
   const panelProgress = useSharedValue(0);
   // 动效基线高度共享值（UI 线程）：飞行过程中锁定基线，杜绝 onLayout 回包突变瞬移
   const baselineHeight = useSharedValue(fallbackHeight);
 
-  // 当布局测量真实高度送达时，若已处于稳态（panelProgress >= 0.99）才更新基线；
-  // 动效飞行中途保持基线锁定（Baseline Latching），杜绝空中突变瞬移
+  // 当布局测量真实高度送达时：记录历史实测高度供后续立即复用；
+  // 稳态（panelProgress >= 0.99）才更新当前 UI 线程基线，动效飞行中途保持基线锁定，杜绝空中突变瞬移
   const handlePanelLayout = useCallback((event: LayoutChangeEvent) => {
     const h = event.nativeEvent.layout.height;
     setPanelHeight(h);
+    lastMeasuredHeightRef.current = h;
     if (panelProgress.value >= 0.99) {
       baselineHeight.value = h;
     }
   }, []);
+
+  // 即时响应关闭（空白区域与关闭按钮）：立刻在 UI 线程与 JS 同步启动退场动效，无需等待宿主 React 重新渲染
+  const handleDismiss = useCallback(() => {
+    if (!dismissible) return;
+    backdropProgress.value = withTiming(0, {
+      duration: reduceMotion
+        ? theme.motion.duration.fast
+        : theme.motion.duration.normal,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+    });
+    panelProgress.value = withTiming(
+      0,
+      {
+        duration: reduceMotion
+          ? theme.motion.duration.fast
+          : theme.motion.duration.sheet,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      },
+      (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      }
+    );
+    onClose();
+  }, [dismissible, onClose, reduceMotion, theme]);
 
   // 拖拽状态（UI 线程）：内容滚动偏移（>0 时纵向拖动归滚动）、抓手起始进度、
   // 起始触点纵坐标、释放判定是否已由 onEnd 处理（onFinalize 兜底回位用）
@@ -311,24 +335,25 @@ export function Sheet({
   const dragEndHandled = useSharedValue(false);
   // 弹簧参数在渲染期取成普通对象（数字字段），供手势 worklet 捕获
   const sheetSpring = theme.motion.spring.sheet;
-  // 曲线口径（浮层曲线统一批）：程式化开合与抽屉/Composer 同走 token
-  // emphasized 曲线（各调用点内联构造 Easing.bezier(...motion.easing.emphasized)，
-  // 同抽屉先例；jest 环境由 jest.setup 的 reanimated 桩提供 Easing.bezier
-  // （M8 收口补桩），测试与真机同走 token 曲线）。时长沿既有档：开 = 遮罩
-  // settle / 面板 expand，关 = 遮罩 normal / 面板 sheet；减动效时改走 fast 档
-  // 交叉淡化（150ms），与 panelStyle 的塌缩配套。
 
   useEffect(() => {
     if (effectiveVisible) {
       setMounted(true);
-      setAnimSettled(false);
-      // 进场前锁定基线高度（若已有测量高则用测量高，否则用确定性估高）
-      baselineHeight.value = panelHeight > 0 ? panelHeight : fallbackHeight;
+      // 进场前锁定基线高度（优先使用历史已知高度，消除深渊盲飞与几何断层）
+      const initialBaseline =
+        lastMeasuredHeightRef.current > 0
+          ? lastMeasuredHeightRef.current
+          : panelHeight > 0
+            ? panelHeight
+            : fallbackHeight;
+      baselineHeight.value = initialBaseline;
+      // 遮罩柔和呼吸渐入：时长与面板进场同步 (expand: 280ms)，曲线采用平滑缓出贝塞尔 (0.25, 0.1, 0.25, 1)，
+      // 消除陡峭火箭式瞬间压暗，与抽屉上升同步呼应
       backdropProgress.value = withTiming(1, {
         duration: reduceMotion
           ? theme.motion.duration.fast
-          : theme.motion.duration.settle,
-        easing: Easing.bezier(...theme.motion.easing.emphasized),
+          : theme.motion.duration.expand,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       });
       panelProgress.value = withTiming(
         1,
@@ -341,20 +366,18 @@ export function Sheet({
         (finished) => {
           if (finished) {
             baselineHeight.value =
-              panelHeight > 0 ? panelHeight : fallbackHeight;
-            runOnJS(setAnimSettled)(true);
+              panelHeight > 0 ? panelHeight : initialBaseline;
           }
         }
       );
       return;
     }
     if (!mounted) return;
-    setAnimSettled(false);
     backdropProgress.value = withTiming(0, {
       duration: reduceMotion
         ? theme.motion.duration.fast
         : theme.motion.duration.normal,
-      easing: Easing.bezier(...theme.motion.easing.emphasized),
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
     panelProgress.value = withTiming(
       0,
@@ -362,7 +385,7 @@ export function Sheet({
         duration: reduceMotion
           ? theme.motion.duration.fast
           : theme.motion.duration.sheet,
-        easing: Easing.bezier(...theme.motion.easing.emphasized),
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
         if (finished) runOnJS(setMounted)(false);
@@ -384,23 +407,20 @@ export function Sheet({
         transform: [{ translateY: 0 }],
       };
     }
-    const currentHeight =
-      panelProgress.value >= 0.99 && panelHeight > 0
-        ? panelHeight
-        : baselineHeight.value;
+    // 全程位移基线保持连续锁定，杜绝在 progress >= 0.99 处突变高度导致的段落感跳跃
     return {
       transform: [
         {
           translateY: sheetPanelTranslateY(
             panelProgress.value,
-            currentHeight,
+            baselineHeight.value,
             windowHeight,
             fallbackHeight
           ),
         },
       ],
     };
-  }, [panelHeight, windowHeight, fallbackHeight, reduceMotion]);
+  }, [windowHeight, fallbackHeight, reduceMotion]);
 
   // 手势吸附关闭的 JS 侧收尾：触感与关闭回调同帧（门面纪律）
   const notifyGestureClose = () => {
@@ -431,7 +451,6 @@ export function Sheet({
       }
     })
     .onStart(() => {
-      runOnJS(setAnimSettled)(false);
       dragStartProgress.value = panelProgress.value;
     })
     .onUpdate((event) => {
@@ -457,13 +476,7 @@ export function Sheet({
         );
         backdropProgress.value = withSpring(0, { ...sheetSpring, velocity });
       } else {
-        panelProgress.value = withSpring(
-          1,
-          { ...sheetSpring, velocity },
-          (finished) => {
-            if (finished) runOnJS(setAnimSettled)(true);
-          }
-        );
+        panelProgress.value = withSpring(1, { ...sheetSpring, velocity });
         backdropProgress.value = withSpring(1, { ...sheetSpring, velocity });
       }
     })
@@ -471,9 +484,7 @@ export function Sheet({
       // 手势被系统取消且 onEnd 未达：回位到展开态，不留半开面板
       if (dragEndHandled.value) return;
       if (panelProgress.value > 0 && panelProgress.value < 1) {
-        panelProgress.value = withSpring(1, { ...sheetSpring }, (finished) => {
-          if (finished) runOnJS(setAnimSettled)(true);
-        });
+        panelProgress.value = withSpring(1, { ...sheetSpring });
         backdropProgress.value = withSpring(1, { ...sheetSpring });
       }
     });
@@ -488,7 +499,7 @@ export function Sheet({
       onRequestClose={() => {
         // 返回汇入覆盖层注册表裁决（栈顶优先/钻取优先/不可关挡下）；
         // 栈空竞态（尚未登记）回落本层口径
-        if (!handleOverlayBackFor(overlayId) && dismissible) onClose();
+        if (!handleOverlayBackFor(overlayId) && dismissible) handleDismiss();
       }}
       statusBarTranslucent
     >
@@ -513,11 +524,12 @@ export function Sheet({
                   testID="sheet-backdrop"
                   accessibilityRole={dismissible ? 'button' : undefined}
                   accessibilityLabel={dismissible ? '关闭' : undefined}
+                  unstable_pressDelay={0}
                   style={[
                     StyleSheet.absoluteFill,
                     { backgroundColor: theme.colors.scrim },
                   ]}
-                  onPress={dismissible ? onClose : undefined}
+                  onPress={dismissible ? handleDismiss : undefined}
                 />
               </Animated.View>
               <GestureDetector gesture={panGesture}>
@@ -533,11 +545,9 @@ export function Sheet({
                   ]}
                 >
                   {/* 面板软阴影面（sheetUp 上向档）：填充/圆角/裁剪/内衬归内层，
-                    拖拽位移挂外层随面板同动；外层不裁剪保阴影出血；
-                    动效避让（批 E）：位移滑入中避让 SVG 软光栅化，落定后展示 */}
+                    拖拽位移挂外层随面板同动；外层不裁剪保阴影出血 */}
                   <SoftShadowSurface
                     preset="sheetUp"
-                    shadowVisible={animSettled}
                     borderRadius={theme.radius.sheet}
                     fill={
                       Platform.OS === 'ios'
@@ -599,7 +609,7 @@ export function Sheet({
                           <View style={styles.title} />
                         )}
                         {dismissible ? (
-                          <SheetCloseButton onClose={onClose} />
+                          <SheetCloseButton onClose={handleDismiss} />
                         ) : null}
                       </View>
                     ) : null}

@@ -1,16 +1,18 @@
-// 悬浮抽屉容器（Front Drawer 标杆架构，对齐 Cherry Studio 极速丝滑手感）：
-// - 主场景在底层（完全静态，恒定 translateX: 0、borderRadius: 0，GPU 离屏蒙版重剪降为 0）；
-// - 中层挂载柔和 Scrim 暗化遮罩（纯 GPU Alpha 渐变，带呼吸带透出原场景轮廓，点遮罩瞬时收起）；
-// - 顶层抽屉面板纯 GPU 硬件变换平移（translateX: [-maxTranslate, 0]，zIndex: 10）；
-// - 开合动效：250ms easing.settle 极陡减速贝塞尔 Easing.bezier(0.22, 1, 0.36, 1)，次帧扑面而来；
-// - 状态机精细化与静默门：增加 phase ('idle' | 'opening' | 'open' | 'closing')，actions.close()
-//   触发瞬间立即切入 closing，绝缘全树重绘；
+// 层叠卡片抽屉容器（Card Push 原型层叠架构，对齐 Crish Mobile 权威设计）：
+// - 主界面在上（顶层圆角卡片向右平移推开），抽屉在下（底层面板微视差平移展露）；
+// - 绝对无 Scrim 黑色遮罩：原型抽屉本就没有遮罩层（Scrim 只属于底部弹窗 Sheet）；
+//   层叠纯靠色阶差（主卡片 surface #ffffff，底层面板 canvasDrawer #f0f0f0）
+//   和大圆角（radius.sheet 28dp）呈现，不存在随进度平移或渐变的半透明黑色遮罩；
+// - 立体感 = 色阶差 + 大圆角，零描边、零缩放、抽屉本体零投影（符合 2026-11-02 晚用户裁决，禁止加阴影）；
+// - 开合动效：0.35s emphasized 定时曲线（motion.duration.drawer）；
 // - 手势与手感：
-//   * manualActivation 精确仲裁——关闭态横向意图（dx > 14 且 dx > 0.7|dy|）顺滑激活；
+//   * manualActivation 精确仲裁——关闭态屏幕左侧 75% 范围横向意图（dx > 14 且 dx > 0.7|dy|）顺滑激活；
 //   * 纵向滚动优先——垂直位移明显大于横向时自动让位给列表滚动，零滚动竞争；
 //   * drawerReleaseTarget 灵敏双向定案——相对起始行程 0.25 滞回翻转 + 双向 ±400dp/s 快速轻扫定案；
-// - 动效与 React 渲染解耦：全程动画在 Reanimated UI 线程执行，落定后同步 isOpen 与 phase；
-// - 软键盘协同：异步卸载软键盘与失焦，消除键盘收起与动画首帧的并发卡顿；
+// - 动效与 React 渲染解耦：
+//   * 全程动画在 Reanimated UI 线程执行，手势拖动中途 0 次触发 React 重绘；
+//   * 仅在手势/动画完全落定（Settled）时同步 isOpen 状态，杜绝会话列表因相对时间刷新重绘；
+// - 软键盘协同：打开抽屉与拖动开始瞬间优先收起软键盘并失焦，消除软键盘与位移动画的并发卡顿；
 // - 内容常驻挂载：布局挂载后首个 effect 即挂载且永不卸载，开合全程零挂载；
 // - 控制器经 context 暴露 DrawerActionsContext 与 DrawerControllerContext，动作面 actions 与状态面 isOpen/phase 分离（C-PERF）。
 import {
@@ -35,7 +37,6 @@ import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -112,6 +113,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
 
   const progress = useSharedValue(0);
   const startProgress = useSharedValue(0);
+  const touchStartX = useSharedValue(0);
+  const touchStartY = useSharedValue(0);
 
   // 仅在手势/动画完全落定（Settled）时同步的 React 状态（拖动中途 0 次触发）
   const [isOpen, setIsOpen] = useState(false);
@@ -119,24 +122,23 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
 
   const contentMountedRef = useRef(false);
   const [contentMounted, setContentMounted] = useState(false);
-  const closeListenersRef = useRef<Set<() => void>>(new Set());
 
-  const registerCloseListener = useCallback((listener: () => void) => {
-    closeListenersRef.current.add(listener);
-    return () => {
-      closeListenersRef.current.delete(listener);
-    };
+  // 挂载内容闭包（幂等）
+  const mountContent = useCallback(() => {
+    if (contentMountedRef.current) return;
+    contentMountedRef.current = true;
+    setContentMounted(true);
   }, []);
 
-  const handleDrawerClose = useCallback(() => {
-    dismissKeyboardAndBlur();
-    closeListenersRef.current.forEach((listener) => {
-      try {
-        listener();
-      } catch {
-        // 忽略监听器异常
+  // 抽屉收起回调监听槽（CrishDrawerContent 经注册在关闭时先失焦输入框）
+  const closeListenerRef = useRef<(() => void) | null>(null);
+  const registerCloseListener = useCallback((listener: () => void) => {
+    closeListenerRef.current = listener;
+    return () => {
+      if (closeListenerRef.current === listener) {
+        closeListenerRef.current = null;
       }
-    });
+    };
   }, []);
 
   // 动画或手势终态收口回调（仅在落定瞬间触发）
@@ -146,108 +148,147 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
   }, []);
 
   // 抽屉内容常驻挂载：布局挂载后的首个 effect 即挂载且永不卸载
-  const mountContent = useCallback(() => {
-    if (contentMountedRef.current) return;
-    contentMountedRef.current = true;
-    setContentMounted(true);
-  }, []);
   useEffect(() => {
     mountContent();
   }, [mountContent]);
 
-  useAnimatedReaction(
-    () => progress.value > 0,
-    (next, prev) => {
-      if (next && next !== prev) {
-        runOnJS(mountContent)();
-      }
-    },
-    []
-  );
+  // 关闭收拢统一触发：先通知内容区失焦收尾、再同步失焦键盘
+  const handleDrawerClose = useCallback(() => {
+    try {
+      closeListenerRef.current?.();
+    } catch {
+      // 容错：监听器抛错不阻断关闭动效
+    }
+    dismissKeyboardAndBlur();
+  }, []);
 
-  // 原生声明式平移手势：纯声明式横纵仲裁，普通点击 0ms 瞬间放行，杜绝 manualActivation 触摸挂起
-  const pan = useMemo(() => {
-    return Gesture.Pan()
-      .activeOffsetX([-ACTIVATION_DX, ACTIVATION_DX])
-      .failOffsetY([-FAIL_DY, FAIL_DY])
-      .onStart(() => {
-        'worklet';
-        startProgress.value = progress.value;
-        if (progress.value === 0) {
-          runOnJS(mountContent)();
-          runOnJS(dismissKeyboardAndBlur)();
-          runOnJS(setPhase)('opening');
-        }
-      })
-      .onUpdate((event) => {
-        'worklet';
-        const delta = event.translationX / (maxTranslate || 1);
-        progress.value = Math.min(Math.max(startProgress.value + delta, 0), 1);
-      })
-      .onEnd((event) => {
-        'worklet';
-        const target = drawerReleaseTarget({
-          startProgress: startProgress.value,
-          progress: progress.value,
-          velocityX: event.velocityX,
-        });
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .manualActivation(true)
+        .onTouchesDown((event) => {
+          'worklet';
+          const touch = event.allTouches[0];
+          if (touch) {
+            touchStartX.value = touch.x;
+            touchStartY.value = touch.y;
+          }
+          if (progress.value === 0) {
+            runOnJS(mountContent)();
+            runOnJS(dismissKeyboardAndBlur)();
+          }
+          startProgress.value = progress.value;
+        })
+        .onTouchesMove((event, stateManager) => {
+          'worklet';
+          const touch = event.allTouches[0];
+          if (!touch) return;
+          const dx = touch.x - touchStartX.value;
+          const dy = touch.y - touchStartY.value;
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
 
-        if (target === 0) {
-          runOnJS(handleDrawerClose)();
-          runOnJS(setPhase)('closing');
-        } else {
-          runOnJS(setPhase)('opening');
-        }
+          // 纵向滚动优先：垂直位移明显大于横向时让位给列表滚动
+          if (absDy > FAIL_DY && absDy > absDx * 1.2) {
+            stateManager.fail();
+            return;
+          }
 
-        if (reduceMotion) {
-          progress.value = target;
-          runOnJS(onAnimationFinished)(target === 1);
-          return;
-        }
-
-        progress.value = withTiming(
-          target,
-          {
-            duration: 250,
-            easing: Easing.bezier(0.22, 1, 0.36, 1),
-          },
-          (finished) => {
-            if (finished) {
-              runOnJS(onAnimationFinished)(target === 1);
+          if (progress.value === 0) {
+            // 关闭态：向右拖动且纵向不占优时激活
+            if (dx > ACTIVATION_DX && dx > absDy * 0.7) {
+              stateManager.activate();
+            } else if (dx < -ACTIVATION_DX) {
+              stateManager.fail();
+            }
+          } else {
+            // 打开态：任意明显的横向拖动均激活
+            if (absDx > ACTIVATION_DX) {
+              stateManager.activate();
             }
           }
-        );
-        if (process.env.NODE_ENV === 'test') {
-          runOnJS(onAnimationFinished)(target === 1);
-        }
-      });
-  }, [
-    handleDrawerClose,
-    maxTranslate,
-    mountContent,
-    onAnimationFinished,
-    progress,
-    reduceMotion,
-    startProgress,
-  ]);
+        })
+        .onUpdate((event) => {
+          'worklet';
+          if (maxTranslate <= 0) return;
+          const deltaProgress = event.translationX / maxTranslate;
+          const next = startProgress.value + deltaProgress;
+          progress.value = Math.max(0, Math.min(1, next));
+        })
+        .onEnd((event) => {
+          'worklet';
+          const target = drawerReleaseTarget({
+            startProgress: startProgress.value,
+            progress: progress.value,
+            velocityX: event.velocityX,
+          });
 
-  // 顶层：悬浮抽屉面板纯平移（[-maxTranslate, 0]）
+          if (target === 0) {
+            runOnJS(handleDrawerClose)();
+          }
+
+          if (reduceMotion) {
+            progress.value = target;
+            runOnJS(onAnimationFinished)(target === 1);
+            return;
+          }
+
+          progress.value = withTiming(
+            target,
+            {
+              duration: theme.motion.duration.drawer,
+              easing: Easing.bezier(...theme.motion.easing.emphasized),
+            },
+            (finished) => {
+              if (finished) runOnJS(onAnimationFinished)(target === 1);
+            }
+          );
+        }),
+    [
+      handleDrawerClose,
+      maxTranslate,
+      mountContent,
+      onAnimationFinished,
+      progress,
+      reduceMotion,
+      startProgress,
+      theme.motion.duration.drawer,
+      theme.motion.easing.emphasized,
+    ]
+  );
+
+  // 顶层：主卡片向右平移推开（[0, maxTranslate]）+ 动态大圆角（[0, radius.sheet]）
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          progress.value,
+          [0, 1],
+          [0, maxTranslate],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+    borderRadius: interpolate(
+      progress.value,
+      [0, 1],
+      [0, theme.radius.sheet],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  // 底层：抽屉面板微视差平移（[drawerParallaxOffset, 0]）
   const drawerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       {
         translateX: interpolate(
           progress.value,
           [0, 1],
-          [-maxTranslate, 0],
+          [theme.layout.drawerParallaxOffset, 0],
           Extrapolation.CLAMP
         ),
       },
     ],
-  }));
-
-  // 中层：自然渐变半透明暗化 Scrim 遮罩（纯 GPU Alpha 渐变，0 次重绘开销）
-  const scrimAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
   // 动作面与状态面分离（C-PERF）：actions 不依赖 isOpen
@@ -256,15 +297,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       open: () => {
         mountContent();
         setPhase('opening');
-        if (process.env.NODE_ENV === 'test') {
-          Keyboard.dismiss();
-          dismissKeyboardAndBlur();
-        } else {
-          requestAnimationFrame(() => {
-            Keyboard.dismiss();
-            dismissKeyboardAndBlur();
-          });
-        }
+        Keyboard.dismiss();
+        dismissKeyboardAndBlur();
         if (reduceMotion) {
           progress.value = 1;
           onAnimationFinished(true);
@@ -273,8 +307,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
         progress.value = withTiming(
           1,
           {
-            duration: 250,
-            easing: Easing.bezier(0.22, 1, 0.36, 1),
+            duration: theme.motion.duration.drawer,
+            easing: Easing.bezier(...theme.motion.easing.emphasized),
           },
           (finished) => {
             if (finished) runOnJS(onAnimationFinished)(true);
@@ -295,8 +329,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
         progress.value = withTiming(
           0,
           {
-            duration: 250,
-            easing: Easing.bezier(0.22, 1, 0.36, 1),
+            duration: theme.motion.duration.drawer,
+            easing: Easing.bezier(...theme.motion.easing.emphasized),
           },
           (finished) => {
             if (finished) runOnJS(onAnimationFinished)(false);
@@ -319,6 +353,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       onAnimationFinished,
       progress,
       reduceMotion,
+      theme.motion.duration.drawer,
+      theme.motion.easing.emphasized,
     ]
   );
 
@@ -345,39 +381,7 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       <DrawerControllerContext.Provider value={controller}>
         <GestureDetector gesture={pan}>
           <View style={[styles.root, { backgroundColor: theme.colors.canvas }]}>
-            {/* 1. 底层：主界面内容（完全静态！0 位移！0 动态圆角！GPU 离屏重剪降为 0） */}
-            <View
-              style={styles.sceneContainer}
-              pointerEvents={isOpen ? 'none' : 'auto'}
-              accessible={!isOpen}
-              accessibilityElementsHidden={isOpen}
-              importantForAccessibility={
-                isOpen ? 'no-hide-descendants' : 'auto'
-              }
-            >
-              {children}
-            </View>
-
-            {/* 2. 中层：自然渐变半透明暗化 Scrim（遮罩），点遮罩瞬时收起 */}
-            <Animated.View
-              collapsable={false}
-              style={[
-                styles.scrim,
-                { backgroundColor: theme.colors.scrim },
-                scrimAnimatedStyle,
-              ]}
-              pointerEvents={isOpen ? 'auto' : 'none'}
-            >
-              <Pressable
-                accessibilityLabel="收起菜单"
-                testID="drawer-tap-dismiss"
-                style={StyleSheet.absoluteFill}
-                onPress={() => actions.close()}
-                onTouchStart={handleDrawerClose}
-              />
-            </Animated.View>
-
-            {/* 3. 顶层：悬浮滑出抽屉面板 (Front Drawer，微描边 + 纯硬件变换) */}
+            {/* 底层：抽屉面板（微视差平移，背景 canvasDrawer，常驻内容） */}
             <Animated.View
               collapsable={false}
               style={[
@@ -385,8 +389,6 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
                 {
                   width: maxTranslate,
                   backgroundColor: theme.colors.canvasDrawer,
-                  borderRightWidth: StyleSheet.hairlineWidth,
-                  borderRightColor: theme.colors.hairline,
                 },
                 drawerAnimatedStyle,
               ]}
@@ -396,6 +398,38 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
                   registerCloseListener={registerCloseListener}
                 />
               ) : null}
+            </Animated.View>
+
+            {/* 顶层：主界面卡片（向右平移推开 + 动态大圆角，绝无黑色遮罩） */}
+            <Animated.View
+              collapsable={false}
+              style={[
+                styles.cardContainer,
+                { backgroundColor: theme.colors.surface },
+                cardAnimatedStyle,
+              ]}
+            >
+              <View
+                style={styles.sceneContainer}
+                pointerEvents={isOpen ? 'none' : 'auto'}
+                accessible={!isOpen}
+                accessibilityElementsHidden={isOpen}
+                importantForAccessibility={
+                  isOpen ? 'no-hide-descendants' : 'auto'
+                }
+              >
+                {children}
+              </View>
+
+              {/* 打开状态下点击主卡片收起抽屉（纯透明点击区域，无黑色遮罩） */}
+              <Pressable
+                accessibilityLabel="收起菜单"
+                testID="drawer-tap-dismiss"
+                style={styles.tapDismiss}
+                onPress={() => actions.close()}
+                onTouchStart={handleDrawerClose}
+                pointerEvents={isOpen ? 'auto' : 'none'}
+              />
             </Animated.View>
           </View>
         </GestureDetector>
@@ -414,17 +448,23 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    zIndex: 10,
+    zIndex: 1,
   },
-  scrim: {
+  cardContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    zIndex: 2,
+  },
+  sceneContainer: {
+    flex: 1,
+  },
+  tapDismiss: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 5,
-  },
-  sceneContainer: {
-    flex: 1,
   },
 });
+
+export default CrishDrawerLayout;
