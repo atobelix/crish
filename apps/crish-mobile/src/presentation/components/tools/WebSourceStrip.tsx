@@ -24,6 +24,9 @@ export interface WebSourceStripProps {
   /** 点击某来源卡片的回调（回传数据与 0-based 下标） */
   onPressSource?:
     ((source: WebSearchSource, index: number) => void) | undefined;
+  /** 点击某来源卡片的回调别名（兼容 onSelectSource） */
+  onSelectSource?:
+    ((source: WebSearchSource, index: number) => void) | undefined;
   /** 最大展示数量（缺省 10） */
   maxCount?: number | undefined;
   /** 自定义外层样式 */
@@ -66,12 +69,14 @@ export function WebSourceStrip({
   highlightedIndex,
   citationIndex,
   onPressSource,
+  onSelectSource,
   maxCount = 10,
   style,
   contentContainerStyle,
   testID,
 }: WebSourceStripProps) {
   const theme = useTheme();
+  const handlePress = onPressSource ?? onSelectSource;
 
   if (!sources || sources.length === 0) {
     return null;
@@ -109,7 +114,7 @@ export function WebSourceStrip({
             source={source}
             index={index + 1}
             highlighted={highlighted}
-            onPress={(item) => onPressSource?.(item, index)}
+            onPress={(item) => handlePress?.(item, index)}
             testID={`web-source-card-${source.id || index}`}
           />
         );

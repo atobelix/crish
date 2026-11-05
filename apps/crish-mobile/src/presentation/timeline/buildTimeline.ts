@@ -902,8 +902,17 @@ export function buildSessionTimeline(
 
 export const buildTimeline = buildSessionTimeline;
 
+function unescapeXml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 /**
- * 安全反序列化提取 webSources
+ * 安全反序列化提取 webSources（支持 JSON、XML 与 Markdown 链接多格式）
  */
 export function extractWebSources(
   output: unknown
@@ -916,9 +925,88 @@ export function extractWebSources(
       try {
         parsed = JSON.parse(trimmed);
       } catch {
-        return undefined;
+        parsed = null;
       }
     } else {
+      // 1. 尝试从 XML 标签 <result ...> 中提取 (searchWaterfall / 端侧标准产出)
+      if (trimmed.includes('<result')) {
+        const sources: WebSearchSource[] = [];
+        const resultRegex = /<result\s+([^>]*?)>([\s\S]*?)<\/result>/gi;
+        let match: RegExpExecArray | null;
+        let idx = 1;
+        while ((match = resultRegex.exec(trimmed)) !== null) {
+          const attrsStr = match[1] || '';
+          const bodyStr = match[2] || '';
+
+          const urlAttrMatch = attrsStr.match(/url="([^"]+)"/i);
+          const urlTagMatch = bodyStr.match(/<url>([\s\S]*?)<\/url>/i);
+          const idMatch =
+            attrsStr.match(/id="([^"]+)"/i) ||
+            bodyStr.match(/<id>([\s\S]*?)<\/id>/i);
+          const sourceMatch =
+            attrsStr.match(/source="([^"]+)"/i) ||
+            bodyStr.match(/<source>([\s\S]*?)<\/source>/i);
+
+          const titleMatch = bodyStr.match(/<title>([\s\S]*?)<\/title>/i);
+          const snippetMatch = bodyStr.match(/<snippet>([\s\S]*?)<\/snippet>/i);
+
+          const rawUrl = urlAttrMatch
+            ? unescapeXml(urlAttrMatch[1] || '')
+            : urlTagMatch
+              ? unescapeXml(urlTagMatch[1] || '').trim()
+              : '';
+          if (rawUrl) {
+            let domain = '';
+            try {
+              domain = new URL(rawUrl).hostname;
+            } catch {
+              const m = rawUrl.match(/^(?:https?:\/\/)?([^/?#:]+)/i);
+              domain = m ? m[1] || '' : '';
+            }
+            sources.push({
+              id: idMatch ? idMatch[1] || String(idx) : String(idx),
+              title: titleMatch
+                ? unescapeXml(titleMatch[1] || '').trim()
+                : '无标题网页',
+              url: rawUrl,
+              snippet: snippetMatch
+                ? unescapeXml(snippetMatch[1] || '').trim()
+                : '',
+              domain,
+              provider: (sourceMatch
+                ? sourceMatch[1]
+                : 'model_native') as WebSearchSource['provider'],
+            });
+            idx++;
+          }
+        }
+        if (sources.length > 0) return sources;
+      }
+
+      // 2. 尝试从 Markdown 格式 [title](url) 列表中提取
+      const mdRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      const mdSources: WebSearchSource[] = [];
+      let mdMatch: RegExpExecArray | null;
+      let mdIdx = 1;
+      while ((mdMatch = mdRegex.exec(trimmed)) !== null) {
+        const title = mdMatch[1] || '无标题网页';
+        const rawUrl = mdMatch[2] || '';
+        let domain = '';
+        try {
+          domain = new URL(rawUrl).hostname;
+        } catch {
+          const m = rawUrl.match(/^(?:https?:\/\/)?([^/?#:]+)/i);
+          domain = m ? m[1] || '' : '';
+        }
+        mdSources.push({
+          id: String(mdIdx),
+          title,
+          url: rawUrl,
+          domain,
+        });
+        mdIdx++;
+      }
+      if (mdSources.length > 0) return mdSources;
       return undefined;
     }
   }
@@ -973,7 +1061,7 @@ export function extractWebSources(
 }
 
 /**
- * 安全反序列化提取 fetchResult
+ * 安全反序列化提取 fetchResult（支持 JSON 与纯 Markdown 正文）
  */
 export function extractFetchResult(
   output: unknown,
@@ -981,36 +1069,70 @@ export function extractFetchResult(
 ): WebFetchResult | undefined {
   if (!output) return undefined;
   let parsed: unknown = output;
+  let title = '';
+  let markdownContent = '';
+
   if (typeof output === 'string') {
     const trimmed = output.trim();
     if (trimmed.startsWith('{')) {
       try {
         parsed = JSON.parse(trimmed);
       } catch {
-        return undefined;
+        parsed = null;
       }
     } else {
-      return undefined;
+      // output 是直接的 Markdown 正文文本（web_fetch 标准产出）
+      markdownContent = trimmed;
+      const titleMatch = trimmed.match(/^#\s+(.+)$/m);
+      if (titleMatch) {
+        title = titleMatch[1]?.trim() || '';
+      }
     }
   }
-  if (!parsed || typeof parsed !== 'object') return undefined;
-  const obj = parsed as Record<string, unknown>;
-  const rawUrl =
-    typeof obj.url === 'string'
-      ? obj.url
-      : typeof (input as Record<string, unknown>)?.url === 'string'
-        ? ((input as Record<string, unknown>).url as string)
-        : '';
+
+  let rawUrl = '';
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    rawUrl = typeof obj.url === 'string' ? obj.url : '';
+    if (!title) title = String(obj.title || '');
+    if (!markdownContent) {
+      markdownContent = String(obj.markdownContent || obj.content || '');
+    }
+  }
+
+  if (!rawUrl && input) {
+    if (typeof input === 'string') {
+      try {
+        const parsedInput = JSON.parse(input);
+        if (typeof parsedInput.url === 'string') rawUrl = parsedInput.url;
+      } catch {
+        const m = input.match(/https?:\/\/[^\s"'`<>]+/i);
+        if (m) rawUrl = m[0] || '';
+      }
+    } else if (typeof input === 'object' && input !== null) {
+      const objInput = input as Record<string, unknown>;
+      if (typeof objInput.url === 'string') rawUrl = String(objInput.url || '');
+    }
+  }
+
   if (!rawUrl) return undefined;
+
+  const obj =
+    parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : null;
 
   return {
     url: rawUrl,
-    title: String(obj.title || ''),
-    markdownContent: String(obj.markdownContent || obj.content || ''),
-    rawHtmlLength: Number(obj.rawHtmlLength || 0),
-    cleanedLength: Number(obj.cleanedLength || 0),
-    truncated: Boolean(obj.truncated),
-    discoveredLinks: Array.isArray(obj.discoveredLinks)
+    title,
+    markdownContent,
+    rawHtmlLength: Number(obj?.rawHtmlLength || 0),
+    cleanedLength:
+      typeof obj?.cleanedLength === 'number'
+        ? obj.cleanedLength
+        : markdownContent.length,
+    truncated: Boolean(obj?.truncated),
+    discoveredLinks: Array.isArray(obj?.discoveredLinks)
       ? obj.discoveredLinks.filter((x): x is string => typeof x === 'string')
       : undefined,
   };

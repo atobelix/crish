@@ -426,6 +426,7 @@ export function sendLocalChatMessage(
                 }
 
                 // 拦截收尾：将 Assistant tool_calls 存入历史并持久化
+                const nowMs = Date.now();
                 const messageToolCalls: LocalToolCall[] = validToolCalls.map(
                   (tc) => ({
                     id: tc.id,
@@ -439,6 +440,7 @@ export function sendLocalChatMessage(
                     parsedArgs: tc.parsedArgs ?? tc.parsedArguments,
                     status: 'running' as const,
                     state: 'executing' as const,
+                    startedAt: nowMs,
                   })
                 );
 
@@ -474,18 +476,46 @@ export function sendLocalChatMessage(
                       runCache.set(cacheKey, execPromise);
                     }
 
+                    let isError = false;
                     let resultOutput: string;
+                    const callStartMs = Date.now();
                     try {
                       const res = await execPromise;
+                      if (typeof res !== 'string' && res.success === false) {
+                        isError = true;
+                      }
                       resultOutput =
                         typeof res === 'string' ? res : res.content;
-                    } catch (err: any) {
+                    } catch (err) {
+                      isError = true;
                       resultOutput = JSON.stringify({
                         status: 'error',
-                        error: err?.message ?? 'Tool execution failed',
+                        error:
+                          err instanceof Error
+                            ? err.message
+                            : 'Tool execution failed',
                         system_note:
                           '工具调用发生异常。禁止使用相同参数重复调用该工具！请向用户说明原因或直接根据已有信息回答。',
                       });
+                    }
+
+                    // 深度回填该工具调用的执行终态、结果与耗时
+                    const targetTool = messageToolCalls.find(
+                      (m) => m.id === tc.id
+                    );
+                    if (targetTool) {
+                      targetTool.status = isError ? 'error' : 'done';
+                      targetTool.state = isError ? 'failed' : 'success';
+                      targetTool.result = resultOutput;
+                      targetTool.completedAt = Date.now();
+                      targetTool.durationMs =
+                        targetTool.completedAt -
+                        (targetTool.startedAt ?? callStartMs);
+                      localChatSessionStore
+                        .getState()
+                        .finishAssistant(assistantId, {
+                          toolCalls: [...messageToolCalls],
+                        });
                     }
 
                     if (runAbortController.signal.aborted) break;

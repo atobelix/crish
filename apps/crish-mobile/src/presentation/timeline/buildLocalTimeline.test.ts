@@ -503,5 +503,44 @@ describe('buildLocalTimeline', () => {
         discoveredLinks: ['https://example.com/other'],
       });
     });
+
+    it('web_search 工具返回 XML 搜索结果时正确提炼 webSources 并挂载', () => {
+      const xmlOutput = `<web_search_results>
+<result id="1">
+<title>React Native 官网</title>
+<url>https://reactnative.dev</url>
+<snippet>Learn React Native</snippet>
+</result>
+</web_search_results>`;
+      const blocks = buildLocalTimeline([
+        msg({
+          id: 'a2',
+          role: 'assistant',
+          content: '这是搜索结果。',
+          toolCalls: [
+            {
+              id: 'call_search_1',
+              type: 'function',
+              function: {
+                name: 'web_search',
+                arguments: '{"query":"React Native"}',
+              },
+              status: 'success',
+              state: 'success',
+              result: xmlOutput,
+            },
+          ],
+        }),
+      ]);
+
+      expect(blocks).toHaveLength(2);
+      const toolBlock = blocks[0] as any;
+      expect(toolBlock.kind).toBe('tool');
+      expect(toolBlock.toolName).toBe('web_search');
+      expect(toolBlock.status).toBe('done');
+      expect(toolBlock.webSources).toHaveLength(1);
+      expect(toolBlock.webSources[0].title).toBe('React Native 官网');
+      expect(toolBlock.webSources[0].domain).toBe('reactnative.dev');
+    });
   });
 });

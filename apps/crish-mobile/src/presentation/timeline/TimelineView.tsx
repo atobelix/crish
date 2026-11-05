@@ -18,6 +18,7 @@ import {
 import type { RefObject } from 'react';
 import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
 import { useSmoothKeyboardTimelineLinkage } from './useSmoothKeyboardTimelineLinkage';
+import { useTimelineAutoScroll } from './useTimelineAutoScroll';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -36,7 +37,6 @@ import {
 import Icon from '@/presentation/ui/Icon';
 import { StreamingText } from '@/presentation/components/blocks/StreamingText';
 import {
-  MarkdownText,
   TimelineImage,
   TimelineImagePlaceholder,
 } from '@/presentation/components/blocks/MarkdownText';
@@ -50,6 +50,7 @@ import { groupToolRuns, type DisplayBlock } from './groupToolRuns';
 import { ToolSummaryRow } from './ToolSummaryRow';
 import { ReasoningCard } from './ReasoningCard';
 import { MessageActionBar } from './MessageActionBar';
+import { UserMessageRow } from './UserMessageRow';
 import {
   formatTimeSeparator,
   insertTimeSeparators,
@@ -66,6 +67,10 @@ import {
   type ScrollAnchor,
 } from '@/domain/store/scrollAnchorStore';
 import { evaluateFollowState } from '@/domain/pure/timelineBottomInset';
+import type { WebSearchSource } from '@crish/shared-types';
+import { WebSourceSheet } from '@/presentation/components/tools/WebSourceSheet';
+import { WebPreviewSheet } from '@/presentation/components/webview/WebPreviewSheet';
+import { haptics } from '@/adapters/platform/haptics';
 
 /** 锚点节流写入间隔（ms）：非跟随滚动中最多每 200ms 落一次盘 */
 const ANCHOR_SAVE_THROTTLE_MS = 200;
@@ -135,6 +140,8 @@ export interface TimelineViewProps {
   onRegenerate?: (messageId: string) => void;
   /** 是否允许重新生成（引擎空闲状态） */
   canRegenerate?: boolean;
+  /** 单元测试中是否强制开启平滑动画追踪 */
+  forceSmoothScroll?: boolean;
 }
 
 export function TimelineView({
@@ -155,6 +162,7 @@ export function TimelineView({
   readyCover = false,
   onRegenerate,
   canRegenerate,
+  forceSmoothScroll = false,
 }: TimelineViewProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
@@ -250,6 +258,80 @@ export function TimelineView({
   // 就绪遮罩：列表首帧布局完成（listLaidOut）+ 锚点 settle 后淡出
   const [listLaidOut, setListLaidOut] = useState(false);
   const [coverGone, setCoverGone] = useState(false);
+  // 网页来源半屏详情抽屉与应用内安全预览抽屉交互态
+  const [selectedSource, setSelectedSource] = useState<{
+    source: WebSearchSource;
+    citationIndex?: number;
+  } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string | undefined>(
+    undefined
+  );
+  const [highlightedSourceIndex, setHighlightedSourceIndex] = useState<
+    number | undefined
+  >(undefined);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSelectSource = useCallback((source: WebSearchSource) => {
+    void haptics.selection();
+    setSelectedSource({ source });
+  }, []);
+
+  const handleCitationPress = useCallback(
+    (citationIndex: number) => {
+      void haptics.selection();
+      setHighlightedSourceIndex(citationIndex - 1);
+      if (highlightTimerRef.current !== null) {
+        clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightedSourceIndex(undefined);
+        highlightTimerRef.current = null;
+      }, 2000);
+
+      const allSources: WebSearchSource[] = [];
+      for (const b of blocks) {
+        if (b.kind === 'tool' && Array.isArray(b.webSources)) {
+          allSources.push(...b.webSources);
+        }
+      }
+      const matched = allSources[citationIndex - 1];
+      if (matched) {
+        setSelectedSource({
+          source: matched,
+          citationIndex,
+        });
+      }
+    },
+    [blocks]
+  );
+
+  const handleOpenPreview = useCallback(
+    (url: string) => {
+      const curTitle = selectedSource?.source.title;
+      setSelectedSource(null);
+      setPreviewUrl(url);
+      setPreviewTitle(curTitle);
+    },
+    [selectedSource]
+  );
+
+  const handleCloseSourceSheet = useCallback(() => {
+    setSelectedSource(null);
+  }, []);
+
+  const handleClosePreviewSheet = useCallback(() => {
+    setPreviewUrl(null);
+    setPreviewTitle(undefined);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current !== null) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
   const coverOpacity = useSharedValue(1);
   const coverFadeMs = theme.motion.duration.menu;
   const coverStyle = useAnimatedStyle(() => ({ opacity: coverOpacity.value }));
@@ -407,8 +489,12 @@ export function TimelineView({
   useEffect(() => {
     const wasFollowing = prevFollowRef.current;
     prevFollowRef.current = follow;
-    if (follow && !wasFollowing && anchorKey) {
-      clearScrollAnchor(anchorKey);
+    if (follow && !wasFollowing) {
+      if (anchorKey) {
+        clearScrollAnchor(anchorKey);
+      }
+      savedAnchorRef.current = null;
+      anchorPhaseRef.current = 'done';
     }
   }, [follow, anchorKey]);
 
@@ -492,49 +578,24 @@ export function TimelineView({
   // 手势与滚动调度守卫：保护用户手动拖拽浏览，防止流式打字与 Yoga 排版测高抢夺手势
   const isDraggingRef = useRef(false);
   const isMomentumRef = useRef(false);
-  const rafScrollRef = useRef<number | null>(null);
+  const autoScroll = useTimelineAutoScroll({
+    targetRef,
+    follow,
+    busy,
+    effectiveBottomInset,
+    viewportHeightRef,
+    scrollYRef,
+    isDraggingRef,
+    isMomentumRef,
+    isProgrammaticScrollingRef,
+    anchorPhaseRef,
+    hasBlocks: blocks.length > 0,
+    reducedMotion,
+    forceSmoothScroll,
+  });
 
-  const scheduleScrollToEnd = useCallback(
-    (animated = false) => {
-      if (
-        !follow ||
-        isDraggingRef.current ||
-        isMomentumRef.current ||
-        isProgrammaticScrollingRef.current ||
-        blocks.length === 0
-      )
-        return;
-      // 锚点恢复未 settle 前禁止贴底：恢复落位与贴底同帧竞争会把
-      // 用户拽回底部（遮罩在此期间盖住列表，就绪后二选一生效）
-      if (anchorPhaseRef.current !== 'done') return;
-      if (rafScrollRef.current !== null) {
-        cancelAnimationFrame(rafScrollRef.current);
-      }
-      rafScrollRef.current = requestAnimationFrame(() => {
-        rafScrollRef.current = null;
-        if (
-          !follow ||
-          isDraggingRef.current ||
-          isMomentumRef.current ||
-          isProgrammaticScrollingRef.current ||
-          blocks.length === 0
-        )
-          return;
-        if (anchorPhaseRef.current !== 'done') return;
-        targetRef.current?.scrollToEnd({ animated });
-      });
-    },
-    [follow, blocks.length, targetRef]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (rafScrollRef.current !== null) {
-        cancelAnimationFrame(rafScrollRef.current);
-        rafScrollRef.current = null;
-      }
-    };
-  }, []);
+  const scheduleScrollToEndRef = useRef(autoScroll.scheduleScrollToEnd);
+  scheduleScrollToEndRef.current = autoScroll.scheduleScrollToEnd;
 
   useEffect(() => {
     if (
@@ -545,10 +606,8 @@ export function TimelineView({
       blocks.length === 0
     )
       return;
-    scheduleScrollToEnd(false);
-    // 净化依赖：仅响应浮层物理尺寸本身变化（如输入框换行或折叠状态改变），
-    // 坚决移除 bottomInset 依赖，阻断键盘升降与收起期间的非法贴底抢跑与反向跳跃！
-  }, [follow, blocks.length, scheduleScrollToEnd, effectiveBottomInset]);
+    scheduleScrollToEndRef.current(false);
+  }, [follow, blocks.length]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -581,7 +640,12 @@ export function TimelineView({
     const isInteracting = isDraggingRef.current || isMomentumRef.current;
     // 传入 isInteracting：仅当用户明确手势滑动且离开底部 >64dp 时退出跟随；内容自然膨胀绝不退出
     const following = evaluateFollowState(distance, follow, isInteracting);
-    if (following !== follow) onFollowChange(following);
+    if (following !== follow) {
+      if (!following) {
+        autoScroll.cancelStreamingChase();
+      }
+      onFollowChange(following);
+    }
     // 锚点节流落盘（仅非跟随态，见 persistAnchorThrottled）
     persistAnchorThrottled();
   };
@@ -591,19 +655,10 @@ export function TimelineView({
       linkage.notifyContentHeight(_h);
       // 内容尺寸到位是锚点落位的最早可信时机（布局图随行 onLayout 同批补齐）
       attemptAnchorRestore();
-      // 原生 Yoga 测高完成且处于 follow 状态时，通过 requestAnimationFrame 安排 scrollToEnd，
-      // 彻底解决文本换行或新块渲染后尺寸增加留在视口外“划不动”的断裂
-      if (
-        follow &&
-        !isDraggingRef.current &&
-        !isMomentumRef.current &&
-        !isProgrammaticScrollingRef.current &&
-        blocks.length > 0
-      ) {
-        scheduleScrollToEnd(false);
-      }
+      // 委托给 autoScroll 控制器：流式期间满帧阻尼平滑上推，消除段落感
+      autoScroll.handleContentSizeChange(_w, _h);
     },
-    [follow, blocks.length, scheduleScrollToEnd, attemptAnchorRestore]
+    [linkage, attemptAnchorRestore, autoScroll]
   );
 
   const handleScrollBeginDrag = useCallback(
@@ -616,15 +671,13 @@ export function TimelineView({
           programmaticScrollTimerRef.current = null;
         }
       }
+      // 手势中断感知：一旦用户触摸屏幕拖动，瞬间取消自动推升循环，绝不与用户手势争抢
+      autoScroll.cancelStreamingChase();
       // 锁定手势：用户手动拖拽期间严禁流式更新或 Yoga 排版重排打断手势响应链
       isDraggingRef.current = true;
       isMomentumRef.current = false;
-      if (rafScrollRef.current !== null) {
-        cancelAnimationFrame(rafScrollRef.current);
-        rafScrollRef.current = null;
-      }
     },
-    []
+    [autoScroll]
   );
 
   const handleScrollEndDrag = useCallback(
@@ -694,16 +747,25 @@ export function TimelineView({
           const key = rowKey(item);
           if (item.kind === 'timeSeparator') {
             return (
-              <View onLayout={(event) => handleRowLayout(key, event)}>
+              <View
+                style={{ width: '100%' }}
+                onLayout={(event) => handleRowLayout(key, event)}
+              >
                 <TimeSeparatorRow atMs={item.atMs} />
               </View>
             );
           }
           return (
-            <View onLayout={(event) => handleRowLayout(key, event)}>
+            <View
+              style={{ width: '100%' }}
+              onLayout={(event) => handleRowLayout(key, event)}
+            >
               <TimelineBlockView
                 block={item}
                 onOpenTools={onOpenTools}
+                onSelectSource={handleSelectSource}
+                onCitationPress={handleCitationPress}
+                highlightedSourceIndex={highlightedSourceIndex}
                 disclosureStore={disclosureRef.current}
                 onToggleDisclosure={handleToggleDisclosure}
                 onRegenerate={onRegenerate}
@@ -806,6 +868,19 @@ export function TimelineView({
           <LoadingState label="正在打开会话…" />
         </Animated.View>
       ) : null}
+      <WebSourceSheet
+        visible={selectedSource !== null}
+        source={selectedSource?.source ?? null}
+        citationIndex={selectedSource?.citationIndex}
+        onClose={handleCloseSourceSheet}
+        onOpenPreview={handleOpenPreview}
+      />
+      <WebPreviewSheet
+        visible={previewUrl !== null}
+        url={previewUrl ?? ''}
+        title={previewTitle}
+        onClose={handleClosePreviewSheet}
+      />
     </>
   );
 }
@@ -824,6 +899,9 @@ function TimeSeparatorRow({ atMs }: { atMs: number }) {
 const TimelineBlockView = memo(function TimelineBlockView({
   block,
   onOpenTools,
+  onSelectSource,
+  onCitationPress,
+  highlightedSourceIndex,
   disclosureStore,
   onToggleDisclosure,
   onRegenerate,
@@ -831,6 +909,9 @@ const TimelineBlockView = memo(function TimelineBlockView({
 }: {
   block: DisplayBlock;
   onOpenTools?: (focusId: string) => void;
+  onSelectSource?: (source: WebSearchSource) => void;
+  onCitationPress?: (index: number) => void;
+  highlightedSourceIndex?: number;
   /** 折叠选择记忆表（TimelineView 持有，按块 id 存展开态） */
   disclosureStore?: Map<string, boolean>;
   /** ⑰ 折叠区切换通知（宿主据此脱离跟随） */
@@ -845,12 +926,20 @@ const TimelineBlockView = memo(function TimelineBlockView({
           block={block}
           canRegenerate={canRegenerate}
           onRegenerate={onRegenerate}
+          onCitationPress={onCitationPress}
         />
       );
     case 'image':
       return <MessageImageView block={block} />;
     case 'toolRun':
-      return <ToolSummaryRow run={block} onOpen={onOpenTools} />;
+      return (
+        <ToolSummaryRow
+          run={block}
+          onOpen={onOpenTools}
+          onSelectSource={onSelectSource}
+          highlightedSourceIndex={highlightedSourceIndex}
+        />
+      );
     case 'approval':
       // 流内不渲染审批行：待审批由全局悬浮卡承载（见文件头注）
       return null;
@@ -873,42 +962,21 @@ function MessageView({
   block,
   canRegenerate,
   onRegenerate,
+  onCitationPress,
 }: {
   block: AssistantMessageBlock;
   canRegenerate?: boolean;
   onRegenerate?: (messageId: string) => void;
+  onCitationPress?: (index: number) => void;
 }) {
   const theme = useTheme();
   if (block.role === 'user') {
-    return (
-      <View style={styles.userRow}>
-        <View
-          style={[
-            styles.userBubble,
-            {
-              // 用户气泡（原型 18/18/4/18）：尾角朝发言侧收窄
-              backgroundColor: theme.colors.bubbleUser,
-              borderTopLeftRadius: theme.radius.bubble,
-              borderTopRightRadius: theme.radius.bubble,
-              borderBottomRightRadius: theme.radius.bubbleTail,
-              borderBottomLeftRadius: theme.radius.bubble,
-              // 原型 msg-user-bubble：padding 10/14（原型的微阴影不采——
-              // 去阴影裁决 2026-11-02，墨色气泡靠自身明度差区分）
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-            },
-          ]}
-        >
-          <MarkdownText
-            text={block.text}
-            baseStyle={[
-              theme.type.chat,
-              { color: theme.colors.bubbleUserText },
-            ]}
-          />
-        </View>
-      </View>
-    );
+    return <UserMessageRow id={block.id} text={block.text} />;
+  }
+  const cleanText = block.text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  // 渲染层严格非空守门：收口后若无正文内容，绝不渲染幽灵空气泡
+  if (cleanText === '' && !block.streaming) {
+    return null;
   }
   return (
     <View style={styles.assistantMessageContainer}>
@@ -916,6 +984,7 @@ function MessageView({
         identity={`message:${block.id}`}
         text={block.text}
         streaming={block.streaming}
+        onCitationPress={onCitationPress}
         cursorStyle={{ color: theme.colors.textTertiary }}
         style={[theme.type.chat, { color: theme.colors.textPrimary }]}
       />
@@ -1020,4 +1089,5 @@ const styles = StyleSheet.create({
 
 export default TimelineView;
 export { useSmoothKeyboardTimelineLinkage } from './useSmoothKeyboardTimelineLinkage';
+export { useTimelineAutoScroll } from './useTimelineAutoScroll';
 export { useKeyboardHandler } from 'react-native-keyboard-controller';

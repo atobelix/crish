@@ -96,6 +96,46 @@ describe('buildTimeline · Web Search / Fetch / Sandbox 投影对齐', () => {
       expect(sourcesB![0]!.title).toBe('Expo Docs');
     });
 
+    it('正确解析 XML <web_search_results> 格式（端侧 searchWaterfall 产物）', () => {
+      const xmlOutput =
+        '<web_search_results query="React Native" count="2">\n' +
+        '  <result id="cite-1" source="google" url="https://reactnative.dev/blog">\n' +
+        '    <title>React Native Blog &amp; Updates</title>\n' +
+        '    <snippet>Latest announcements &lt;b&gt;here&lt;/b&gt;.</snippet>\n' +
+        '  </result>\n' +
+        '  <result id="cite-2" source="bing" url="https://github.com/facebook/react-native">\n' +
+        '    <title>GitHub - facebook/react-native</title>\n' +
+        '    <snippet>A framework for building native apps.</snippet>\n' +
+        '  </result>\n' +
+        '</web_search_results>';
+
+      const sources = extractWebSources(xmlOutput);
+      expect(sources).toBeDefined();
+      expect(sources).toHaveLength(2);
+      expect(sources![0]).toEqual({
+        id: 'cite-1',
+        title: 'React Native Blog & Updates',
+        url: 'https://reactnative.dev/blog',
+        snippet: 'Latest announcements <b>here</b>.',
+        domain: 'reactnative.dev',
+        provider: 'google',
+      });
+      expect(sources![1]!.domain).toBe('github.com');
+      expect(sources![1]!.id).toBe('cite-2');
+    });
+
+    it('正确解析 Markdown 格式链接 [title](url)', () => {
+      const md =
+        '参考资料：\n- [MDN Web Docs](https://developer.mozilla.org/en-US/)\n- [React 官方](https://react.dev)';
+      const sources = extractWebSources(md);
+      expect(sources).toBeDefined();
+      expect(sources).toHaveLength(2);
+      expect(sources![0]!.title).toBe('MDN Web Docs');
+      expect(sources![0]!.url).toBe('https://developer.mozilla.org/en-US/');
+      expect(sources![0]!.domain).toBe('developer.mozilla.org');
+      expect(sources![1]!.domain).toBe('react.dev');
+    });
+
     it('非法或损坏 JSON 平滑降级为 undefined，零异常抛出', () => {
       expect(extractWebSources('{ not-valid-json')).toBeUndefined();
       expect(extractWebSources('纯文本普通输出')).toBeUndefined();
@@ -135,6 +175,18 @@ describe('buildTimeline · Web Search / Fetch / Sandbox 投影对齐', () => {
       expect(result).toBeDefined();
       expect(result?.url).toBe('https://injected.com');
       expect(result?.title).toBe('未知标题');
+    });
+
+    it('当 output 为纯 Markdown 文本时，提取一级标题并从 input 中补齐 url', () => {
+      const markdown = '# React Native 架构全解\n\n正文详细介绍...';
+      const input = JSON.stringify({
+        url: 'https://reactnative.dev/architecture',
+      });
+      const result = extractFetchResult(markdown, input);
+      expect(result).toBeDefined();
+      expect(result?.url).toBe('https://reactnative.dev/architecture');
+      expect(result?.title).toBe('React Native 架构全解');
+      expect(result?.markdownContent).toBe(markdown);
     });
 
     it('非法输入平滑降级为 undefined', () => {

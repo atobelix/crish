@@ -1,10 +1,14 @@
 // 对话里的工具摘要行：相邻工具调用折叠成一行，点按打开工具抽屉并定位到这一组。
 // 美化排版：终端图标、运行状态指示、发丝边框与右侧抽屉进入指示。
+// 下方若有搜索结果，自动挂载 32px 网页来源微胶囊横向滑动条 (WebSourceStrip)。
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, Icon, type IconName } from '@/presentation/ui';
 import { usePressFade } from '@/presentation/ui/pressFeedback';
+import type { WebSearchSource } from '@crish/shared-types';
+import { WebSourceStrip } from '@/presentation/components/tools/WebSourceStrip';
 import { toolBlockSummary } from './buildTimeline';
 import type { ToolRunBlock } from './groupToolRuns';
 import { useMinResidencyText } from './useActivityLabel';
@@ -13,6 +17,10 @@ export interface ToolSummaryRowProps {
   run: ToolRunBlock;
   /** 未提供时只读（如运行详情页没有工具抽屉） */
   onOpen?: (focusId: string) => void;
+  /** 点击具体网页来源胶囊回调 */
+  onSelectSource?: (source: WebSearchSource) => void;
+  /** 高亮的来源序号（对应点击正文 [N] 角标联动） */
+  highlightedSourceIndex?: number;
 }
 
 function getToolIconName(toolName?: string): IconName {
@@ -71,18 +79,35 @@ function sealedLabel(run: ToolRunBlock): string {
   return `${base} · ${seconds} 秒`;
 }
 
-export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
+export function ToolSummaryRow({
+  run,
+  onOpen,
+  onSelectSource,
+  highlightedSourceIndex,
+}: ToolSummaryRowProps) {
   const theme = useTheme();
   const running = run.running > 0;
   const press = usePressFade();
   const currentTool = run.activeTool ?? run.latest;
   const iconName = getToolIconName(currentTool?.toolName);
 
+  // 汇聚提取该工具组下所有子工具产出的 webSources
+  const allWebSources = useMemo(() => {
+    const sources: WebSearchSource[] = [];
+    for (const t of run.tools) {
+      if (Array.isArray(t.webSources) && t.webSources.length > 0) {
+        sources.push(...t.webSources);
+      }
+    }
+    return sources;
+  }, [run.tools]);
+
   // 活动文案最短驻留（批 B）：执行中逐工具切换的文案经 ≥1200ms 驻留
   // 整形防闪变；封口瞬间 active=false 直通终态文案（含组总时长）。
   const rawLabel = running ? runningLabel(run) : sealedLabel(run);
   const label = useMinResidencyText(rawLabel, running);
-  return (
+
+  const capsule = (
     <Pressable
       testID={`tool-run-${run.id}`}
       accessibilityRole="button"
@@ -158,12 +183,38 @@ export function ToolSummaryRow({ run, onOpen }: ToolSummaryRowProps) {
       ) : null}
     </Pressable>
   );
+
+  if (allWebSources.length === 0) {
+    return capsule;
+  }
+
+  return (
+    <View style={styles.container}>
+      {capsule}
+      <View style={styles.stripWrapper}>
+        <WebSourceStrip
+          sources={allWebSources}
+          onSelectSource={onSelectSource}
+          highlightedIndex={highlightedSourceIndex}
+          testID={`tool-run-${run.id}-sources`}
+        />
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    alignSelf: 'stretch',
+    gap: 4,
+  },
   row: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' },
   label: { flexShrink: 1, flexDirection: 'row', alignItems: 'center' },
   shrink: { flexShrink: 1 },
+  stripWrapper: {
+    marginTop: 2,
+    marginBottom: 2,
+  },
 });
 
 export default ToolSummaryRow;

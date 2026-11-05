@@ -37,6 +37,8 @@ export interface StreamingTextProps {
   maxWaitMs?: number;
   /** 正文基础样式（透传 MarkdownText 的 baseStyle) */
   style?: StyleProp<TextStyle>;
+  /** 点击引证微标回调 (透传 MarkdownText) */
+  onCitationPress?: (index: number) => void;
   /** 容器 testID */
   testID?: string;
 }
@@ -57,6 +59,7 @@ export const StreamingText = memo(function StreamingText({
   mergeWindowMs,
   maxWaitMs,
   style,
+  onCitationPress,
   testID,
 }: StreamingTextProps) {
   const rendered = useStreamingText(identity, text, streaming, {
@@ -82,6 +85,7 @@ export const StreamingText = memo(function StreamingText({
       cursorSymbol={effectiveCursorSymbol}
       cursorTestID={cursorTestID}
       cursorStyle={cursorStyle}
+      onCitationPress={onCitationPress}
       testID={testID}
     />
   );
