@@ -38,6 +38,7 @@ interface FilePreviewPreviewProps {
   wordWrap?: boolean;
   formattedContent?: string;
   isFormatted?: boolean;
+  highlightLineRange?: [number, number] | null;
 }
 
 /** 预览操作回调域（加载更多、编辑缓冲变更、错误清除、外部打开）。 */
@@ -79,6 +80,7 @@ export const FilePreview = React.memo(function FilePreview({
     wordWrap = true,
     formattedContent,
     isFormatted,
+    highlightLineRange,
   } = previewState;
   const { onLoadMore, onEditBufChange, onError, onOpenFile } = actions;
   const previewPaneRef = useRef<HTMLDivElement>(null);
@@ -235,6 +237,7 @@ export const FilePreview = React.memo(function FilePreview({
                   content={displayContent || ''}
                   filePath={selected || ''}
                   wordWrap={wordWrap}
+                  highlightLineRange={highlightLineRange ?? undefined}
                 />
               </div>
               {canLoadMore ? (

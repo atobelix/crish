@@ -38,7 +38,7 @@ import {
   resolveReadFileMeta,
   textTarget,
 } from './toolPresentationParsers';
-import { extractReadFileTarget } from '../../components/chat-tool-call/toolHeaderPresentation';
+import { extractReadFileTarget } from './toolPresentationReadFile';
 import {
   cleanHumanExplanation,
   formatErrorTarget,

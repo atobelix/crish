@@ -765,6 +765,16 @@
   color: var(--text-primary);
 }
 
+.lineHighlighted {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-left: 3px solid var(--accent);
+}
+.lineHighlighted .gutterNum {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* 词法级行内修改高亮 (Intraline) */
 .diffWordAdd {
   background: transparent;

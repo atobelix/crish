@@ -32,7 +32,8 @@
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows
-    var(--accordion-duration, var(--transition-accordion));
+    var(--accordion-duration, var(--transition-accordion))
+    var(--ease-standard, ease);
   margin: 0;
   padding: 0;
   border: none;

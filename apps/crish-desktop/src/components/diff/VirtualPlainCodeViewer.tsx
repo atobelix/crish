@@ -46,6 +46,7 @@ export interface VirtualPlainCodeViewerProps {
   content: string;
   filePath: string;
   wordWrap?: boolean;
+  highlightLineRange?: [number, number];
 }
 
 const FALLBACK_ROW_HEIGHT = 22;
@@ -53,7 +54,7 @@ const FALLBACK_CHAR_WIDTH = 7.2;
 const OVERSCAN = 20;
 
 export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> =
-  React.memo(({ content, filePath, wordWrap = true }) => {
+  React.memo(({ content, filePath, wordWrap = true, highlightLineRange }) => {
     const lineBuffer = useMemo(() => new LineBuffer(content), [content]);
     const totalLines = lineBuffer.totalLines;
 
@@ -78,6 +79,16 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> =
     useEffect(() => {
       setExpandedLines(new Set());
     }, [content]);
+
+    useEffect(() => {
+      if (!highlightLineRange || totalLines <= 0) return;
+      const targetLine = highlightLineRange[0];
+      const targetScrollTop = Math.max(0, (targetLine - 1) * rowHeight - 60);
+      containerRef.current?.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth',
+      });
+    }, [highlightLineRange, totalLines, rowHeight, containerRef]);
 
     const toggleLineExpanded = useCallback((lineIndex: number) => {
       setExpandedLines((prev) => {
@@ -380,92 +391,99 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> =
             }}
             aria-label={`${basename(filePath)} 的源码`}
           >
-            {visibleLines.map((l, idx) => (
-              <div
-                key={l.num}
-                ref={idx === 0 ? firstLineRef : undefined}
-                className={styles.line}
-                style={{
-                  minHeight: `${rowHeight}px`,
-                  gridTemplateColumns: wordWrap
-                    ? `${gutterWidth}px 1fr`
-                    : `${gutterWidth}px auto`,
-                  width: wordWrap ? '100%' : 'max-content',
-                  minWidth: '100%',
-                  borderLeft: 'none',
-                  overflowX: 'visible',
-                }}
-              >
+            {visibleLines.map((l, idx) => {
+              const isHighlighted =
+                Boolean(highlightLineRange) &&
+                l.num >= highlightLineRange![0] &&
+                l.num <= highlightLineRange![1];
+              return (
                 <div
-                  className={styles.gutterNum}
-                  data-num={l.num}
+                  key={l.num}
+                  ref={idx === 0 ? firstLineRef : undefined}
+                  className={`${styles.line}${isHighlighted ? ' ' + styles.lineHighlighted : ''}`}
+                  data-highlighted={isHighlighted ? 'true' : undefined}
                   style={{
-                    position: 'sticky',
-                    left: 0,
-                    zIndex: 1,
-                    width: `${gutterWidth}px`,
-                    minWidth: `${gutterWidth}px`,
-                    textAlign: 'right',
-                    padding: '0 3px',
-                    boxSizing: 'border-box',
-                    alignItems: 'flex-start',
-                    lineHeight: `${rowHeight}px`,
-                    background: 'var(--diff-gutter-bg, var(--bg-card))',
+                    minHeight: `${rowHeight}px`,
+                    gridTemplateColumns: wordWrap
+                      ? `${gutterWidth}px 1fr`
+                      : `${gutterWidth}px auto`,
+                    width: wordWrap ? '100%' : 'max-content',
+                    minWidth: '100%',
+                    borderLeft: isHighlighted ? undefined : 'none',
+                    overflowX: 'visible',
                   }}
                 >
-                  {l.num}
-                </div>
-                <div
-                  className={styles.lineText}
-                  data-native-highlight-line={
-                    useNativeHighlights ? l.num : undefined
-                  }
-                  style={{
-                    whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-                    wordBreak: wordWrap ? 'break-word' : 'normal',
-                    overflowWrap: wordWrap ? 'anywhere' : 'normal',
-                    overflowX: 'hidden',
-                    minWidth: wordWrap ? 0 : 'max-content',
-                    width: wordWrap ? 'auto' : 'max-content',
-                    padding: '0 2px 0 6px',
-                    lineHeight: `${rowHeight}px`,
-                  }}
-                >
-                  {useNativeHighlights ? (
-                    l.text
-                  ) : (
-                    <span
-                      dangerouslySetInnerHTML={{
-                        __html: highlightCodeSafe(l.text, filePath),
-                      }}
-                    />
-                  )}
-                  {l.isTruncated && (
-                    <Tooltip
-                      content={
-                        l.expanded
-                          ? '收起该行'
-                          : '展开该行剩余内容（按需加载，复制仍走全量数据）'
-                      }
-                    >
-                      <Button
-                        bare
-                        type="button"
-                        className={styles.expandLineBtn}
-                        onClick={() => toggleLineExpanded(l.num - 1)}
-                        aria-expanded={l.expanded}
+                  <div
+                    className={styles.gutterNum}
+                    data-num={l.num}
+                    style={{
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 1,
+                      width: `${gutterWidth}px`,
+                      minWidth: `${gutterWidth}px`,
+                      textAlign: 'right',
+                      padding: '0 3px',
+                      boxSizing: 'border-box',
+                      alignItems: 'flex-start',
+                      lineHeight: `${rowHeight}px`,
+                      background: 'var(--diff-gutter-bg, var(--bg-card))',
+                    }}
+                  >
+                    {l.num}
+                  </div>
+                  <div
+                    className={styles.lineText}
+                    data-native-highlight-line={
+                      useNativeHighlights ? l.num : undefined
+                    }
+                    style={{
+                      whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                      wordBreak: wordWrap ? 'break-word' : 'normal',
+                      overflowWrap: wordWrap ? 'anywhere' : 'normal',
+                      overflowX: 'hidden',
+                      minWidth: wordWrap ? 0 : 'max-content',
+                      width: wordWrap ? 'auto' : 'max-content',
+                      padding: '0 2px 0 6px',
+                      lineHeight: `${rowHeight}px`,
+                    }}
+                  >
+                    {useNativeHighlights ? (
+                      l.text
+                    ) : (
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: highlightCodeSafe(l.text, filePath),
+                        }}
+                      />
+                    )}
+                    {l.isTruncated && (
+                      <Tooltip
+                        content={
+                          l.expanded
+                            ? '收起该行'
+                            : '展开该行剩余内容（按需加载，复制仍走全量数据）'
+                        }
                       >
-                        {l.expanded
-                          ? l.text.length < l.originalLen
-                            ? `[已展开前 ${l.text.length} 字符，完整共 ${l.originalLen} 字符] 收起`
-                            : `[已展开，完整共 ${l.originalLen} 字符] 收起`
-                          : `[超长单行已截断呈现，完整共 ${l.originalLen} 字符] 点击展开`}
-                      </Button>
-                    </Tooltip>
-                  )}
+                        <Button
+                          bare
+                          type="button"
+                          className={styles.expandLineBtn}
+                          onClick={() => toggleLineExpanded(l.num - 1)}
+                          aria-expanded={l.expanded}
+                        >
+                          {l.expanded
+                            ? l.text.length < l.originalLen
+                              ? `[已展开前 ${l.text.length} 字符，完整共 ${l.originalLen} 字符] 收起`
+                              : `[已展开，完整共 ${l.originalLen} 字符] 收起`
+                            : `[超长单行已截断呈现，完整共 ${l.originalLen} 字符] 点击展开`}
+                        </Button>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </pre>
         </div>
 

@@ -6,7 +6,6 @@
  */
 
 import type { MessageToolCall } from '../../store/types';
-import type { ToolTarget } from '../../api/tool-presentation/toolPresentationTypes';
 import { t } from '../../i18n';
 import {
   extractToolCommand,
@@ -342,25 +341,8 @@ export function formatReadFileParam(
     : baseName;
 }
 
-/** read_file 目标提取器（用于 ToolPresentation 领域注册模型） */
-export function extractReadFileTarget(
-  args: Record<string, unknown>,
-  tc?: MessageToolCall
-): ToolTarget | undefined {
-  const p = String(
-    args.path ?? args.Path ?? args.filePath ?? args.filepath ?? ''
-  ).trim();
-  if (!p) return undefined;
-  const base = basename(p) || p;
-  const m = tc?.output?.match(/^startLine:\s*(\d+),\s*endLine:\s*(\d+)$/im);
-  const rangeStr = m ? `:${m[1]}-${m[2]}` : '';
-  return {
-    text: `${base}${rangeStr}`,
-    kind: 'path',
-    clickable: true,
-    tooltip: rangeStr ? `${p}:${rangeStr.slice(1)}` : p,
-  };
-}
+import { extractReadFileTarget } from '../../api/tool-presentation/toolPresentationReadFile';
+export { extractReadFileTarget };
 
 /** 按照 DIM-04 规范将工具调用解析为人类友好动作与核心参数 */
 export function resolveToolActionAndParam(

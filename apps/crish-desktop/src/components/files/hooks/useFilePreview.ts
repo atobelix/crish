@@ -102,6 +102,10 @@ export function useFilePreview() {
       lineBudget: typeof val === 'function' ? val(prev.lineBudget) : val,
     }));
 
+  const [highlightLineRange, setHighlightLineRange] = useState<
+    [number, number] | null
+  >(null);
+
   const [mdMode, setMdMode] = useState<'render' | 'source'>('render');
   const [assetUrl, setAssetUrl] = useState<string | null>(null);
 
@@ -217,52 +221,65 @@ export function useFilePreview() {
     }
   }, [isFormatted, content, truncated, selected, showActionHint]);
 
-  const openFile = useCallback(async (filePath: string) => {
-    const resolved = resolveReadableFilePath(filePath) || filePath;
-    setSelected(resolved);
-    setView('detail');
-    setEditing(false);
-    setDirty(false);
-    setDetailLoading(true);
-    setContent('');
-    setEditBuf('');
-    setAssetUrl(null);
-    setActionHint(null);
-    setTruncated(false);
-    setIsFormatted(false);
-    setFormattedContent('');
-    void listOpenOptionsForFile(resolved)
-      .then((opts) => {
-        setFileOpeners(opts.openers);
-        setOpenDefaultLabel(opts.defaultLabel || '打开');
-      })
-      .catch(() => {
-        setFileOpeners([]);
-        setOpenDefaultLabel('打开');
-      });
-    const k = detectFileKind(pathBasename(resolved));
-    const initBudget = k === 'table' ? 200 : FILE_PREVIEW_CODE_BUDGET;
-    setLineBudget(initBudget);
-    setMdMode('render');
-    setLoadingMore(false);
-    try {
-      if (k === 'image' || k === 'pdf') {
-        const url = await toAssetUrl(resolved);
-        setAssetUrl(url);
-        if (!url) setActionHint('无法生成预览（需桌面壳 · 资源协议）');
-      } else if (k === 'text' || k === 'table') {
-        const res = await readTextFile(resolved, initBudget);
-        setContent(res.content);
-        setEditBuf(res.content);
-        openedContentRef.current = res.content;
-        setTruncated(res.truncated);
+  const openFile = useCallback(
+    async (
+      filePath: string,
+      target?: { line?: number; lineRange?: [number, number] }
+    ) => {
+      const resolved = resolveReadableFilePath(filePath) || filePath;
+      setSelected(resolved);
+      setView('detail');
+      if (target?.lineRange) {
+        setHighlightLineRange(target.lineRange);
+      } else if (typeof target?.line === 'number') {
+        setHighlightLineRange([target.line, target.line]);
+      } else {
+        setHighlightLineRange(null);
       }
-    } catch (e) {
-      setActionHint(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
+      setEditing(false);
+      setDirty(false);
+      setDetailLoading(true);
+      setContent('');
+      setEditBuf('');
+      setAssetUrl(null);
+      setActionHint(null);
+      setTruncated(false);
+      setIsFormatted(false);
+      setFormattedContent('');
+      void listOpenOptionsForFile(resolved)
+        .then((opts) => {
+          setFileOpeners(opts.openers);
+          setOpenDefaultLabel(opts.defaultLabel || '打开');
+        })
+        .catch(() => {
+          setFileOpeners([]);
+          setOpenDefaultLabel('打开');
+        });
+      const k = detectFileKind(pathBasename(resolved));
+      const initBudget = k === 'table' ? 200 : FILE_PREVIEW_CODE_BUDGET;
+      setLineBudget(initBudget);
+      setMdMode('render');
+      setLoadingMore(false);
+      try {
+        if (k === 'image' || k === 'pdf') {
+          const url = await toAssetUrl(resolved);
+          setAssetUrl(url);
+          if (!url) setActionHint('无法生成预览（需桌面壳 · 资源协议）');
+        } else if (k === 'text' || k === 'table') {
+          const res = await readTextFile(resolved, initBudget);
+          setContent(res.content);
+          setEditBuf(res.content);
+          openedContentRef.current = res.content;
+          setTruncated(res.truncated);
+        }
+      } catch (e) {
+        setActionHint(e instanceof Error ? e.message : String(e));
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    []
+  );
 
   const loadMoreLines = useCallback(async () => {
     if (!selected || loadingMore || editing) return;
@@ -343,6 +360,7 @@ export function useFilePreview() {
     setTruncated(false);
     setIsFormatted(false);
     setFormattedContent('');
+    setHighlightLineRange(null);
   }, []);
 
   const ret = {
@@ -358,6 +376,8 @@ export function useFilePreview() {
     mdMode,
     assetUrl,
     detailLoading,
+    highlightLineRange,
+    setHighlightLineRange,
     fileOpeners,
     openDefaultLabel,
     actionHint,

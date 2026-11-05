@@ -240,7 +240,10 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     );
 
     const handleOpenFile = useCallback(
-      async (path: string) => {
+      async (
+        path: string,
+        target?: { line?: number; lineRange?: [number, number] }
+      ) => {
         if (!(await nav.confirmNavigation())) return;
         const resolved = resolveReadableFilePath(path);
         const wsPath = resolveWorkspacePath(path);
@@ -251,7 +254,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             /* 外部路径或定位失败时不阻断预览 */
           }
         }
-        await preview.openFile(resolved || path);
+        await preview.openFile(resolved || path, target);
       },
       [nav, preview]
     );
@@ -352,6 +355,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         const detail = (
           ev as CustomEvent<{
             path?: string;
+            line?: number;
+            lineRange?: [number, number];
             sessionId?: string;
             leafId?: string;
           }>
@@ -368,7 +373,10 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         }
         takePendingOpenPath();
         const resolved = resolveReadableFilePath(detail.path);
-        void handleOpenFile(resolved || detail.path);
+        void handleOpenFile(resolved || detail.path, {
+          line: detail.line,
+          lineRange: detail.lineRange,
+        });
       };
       window.addEventListener('crish-open-file', onOpen);
       return () => window.removeEventListener('crish-open-file', onOpen);
@@ -636,6 +644,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                   wordWrap: preview.wordWrap,
                   formattedContent: preview.formattedContent,
                   isFormatted: preview.isFormatted,
+                  highlightLineRange: preview.highlightLineRange,
                 }}
                 actions={{
                   onLoadMore: () => void preview.loadMoreLines(),

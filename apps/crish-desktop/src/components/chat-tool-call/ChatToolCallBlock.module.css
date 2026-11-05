@@ -463,7 +463,8 @@
   overflow: hidden;
   contain: layout paint;
   transition: grid-template-rows
-    var(--accordion-duration, var(--transition-accordion));
+    var(--accordion-duration, var(--transition-accordion))
+    var(--ease-standard, ease);
 }
 
 .toolBody.expanded,
@@ -475,13 +476,6 @@
   overflow: hidden;
   min-height: 0;
   contain: content;
-  opacity: 0;
-  transition: opacity var(--transition-accordion-fade);
-}
-
-.toolBody.expanded .toolBodyInner,
-.toolBody[data-expanded='true'] .toolBodyInner {
-  opacity: 1;
 }
 
 /* Phase 1 轻量骨架：手风琴动效过渡期间占位，杜绝高亮与重型 DOM 阻塞主线程 */

@@ -90,6 +90,8 @@
   position: relative;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  contain: layout;
 }
 
 /* 消息列居中容器（Central Column Spacer）

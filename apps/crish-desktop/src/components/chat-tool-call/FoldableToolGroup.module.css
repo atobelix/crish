@@ -136,6 +136,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: auto;
+  contain: layout paint;
+  transform: translateZ(0);
 }
 
 /* ───── 按钮文案单格重叠防抖架构（CSS Grid 1 / 1） ───── */

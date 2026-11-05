@@ -735,6 +735,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           // 组体先以等高占位替代挂载，IntersectionObserver 在占位进入
           // 预热区时真实挂载组体（口径见文件头常量区）。
           const deferBody =
+            !isExpanded &&
             windowPlan.heights.has(seg.id) &&
             !seg.isLive &&
             segIndex < segments.length - 1 &&
