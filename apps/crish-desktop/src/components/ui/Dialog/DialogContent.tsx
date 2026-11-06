@@ -87,6 +87,7 @@ export function DialogContent({
       aria-labelledby={resolvedAriaLabel ? undefined : ctx.titleId}
       aria-describedby={props['aria-describedby'] ?? ctx.descriptionId}
       className={panelClasses}
+      data-surface-shadow={surface.shadow === 'none' ? 'none' : undefined}
       style={style}
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}

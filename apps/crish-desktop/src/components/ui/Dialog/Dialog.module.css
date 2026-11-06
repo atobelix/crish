@@ -113,6 +113,14 @@
       drop-shadow(0 8px 8px color-mix(in srgb, var(--shadow-color) 6%, transparent));
   }
 
+  /* 去阴影面（surface.shadow='none'，用户点名面，如删除对话确认面板）：
+     形状层 filter 整体关闭——是去掉，不是调淡。与裁定 #6(a)「阴影近似
+     现值」的区别：点名面以用户口径为准。特异性 (0,3,0) 胜基座规则。 */
+  .dialog[data-surface-shadow='none'] [data-g2-layer],
+  .panel[data-surface-shadow='none'] [data-g2-layer] {
+    filter: none;
+  }
+
   @starting-style {
     .dialog,
     .panel {

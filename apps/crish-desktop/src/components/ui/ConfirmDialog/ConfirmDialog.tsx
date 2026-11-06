@@ -29,14 +29,16 @@ import type { DialogSize } from '../Dialog/Dialog';
 import { Button } from '../Button/Button';
 
 /**
- * 方案 A 标尺与纪律（同心几何收敛）：
- * 底部确认与取消按钮高度统一为 34px~36px，按钮圆角统一设为 var(--radius-md, 8px)，
- * 消除 7px 杂音值（与外壳 24px + 边距 16px 形成 24 = 8 + 16 绝对同心）。
+ * 按钮形态（用户口径 2026-11-06，取代旧同心标尺注释）：
+ * 确认/取消按钮为胶囊形——审批卡设计稿「曲率一致轨」：两端半圆
+ * border-radius 9999px，端弧曲率 κ = 1/(高/2)，与面板 G² 外角峰值
+ * 曲率同源同法，不走 R_inner = R_outer − Padding 的同心算术。
+ * 高度沿用本组件既定 36px。
  */
 const confirmButtonStyle: React.CSSProperties = {
   minHeight: '36px',
   height: '36px',
-  borderRadius: 'var(--radius-md, 8px)',
+  borderRadius: '9999px',
 };
 
 export interface ConfirmDialogProps {
@@ -98,6 +100,10 @@ export function ConfirmDialog({
     <Dialog
       open={open}
       onClose={cancel}
+      // 用户点名（2026-11-06，删除对话面板）：卡片周围阴影去掉——
+      // 经基座 surface.shadow='none' 通道整体关闭形状层 filter；
+      // 面板轮廓仍为基座 modal 档 G²，底色取基座默认 --surface-overlay。
+      surface={{ shadow: 'none' }}
       role="alertdialog"
       title={title}
       description={description}
