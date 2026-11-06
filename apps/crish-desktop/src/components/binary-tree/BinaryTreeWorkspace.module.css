@@ -349,7 +349,9 @@
   border-radius: var(--radius-l);
 }
 
-.leafBody[data-dock-open='true'] {
+/* row 方向覆盖开态与关闭保活期（data-dock-present），使关闭动画期间
+ * 对话列仍按行内剩余项跟随外层 width 收缩（S11） */
+.leafBody[data-dock-present='true'] {
   flex-direction: row;
 }
 
@@ -415,13 +417,65 @@
   outline: 1px solid var(--state-focus-ring);
 }
 
+/*
+ * 抽屉开合 / 最大化动画（S11 · 2026-11-06，照左栏 S2 已验证配方）：
+ * - 开合只挂外层 .leafDockDrawer 的 width 一个几何量（--duration-normal
+ *   + --ease-decelerate，与左栏同族同钟）；对话列是 flex 剩余项，在同一
+ *   布局通道内逐帧跟随，不存在两步。
+ * - 内层 .leafDockDrawerInner 宽度钉死 --leaf-dock-width（记忆宽）且右
+ *   锚定，外层 overflow 裁切：展开过程中内容零挤压、右缘不动，边界自
+ *   右向左揭示。分界线（border-left）在内层，与 LeafDockResizer 高亮
+ *   线重合的契约不变。
+ * - 外层在坞可用叶内常驻挂载（内容仅在 open / closing 保活期渲染），
+ *   使 width 有「关」态 before-change 值、过渡可触发；关闭时内容由
+ *   TreeLeafPanel 的 dockClosing 保活到过渡收完再卸载。
+ * - 最大化 / 还原走 .maximizing 瞬态壳（绝对定位）+ TreeLeafPanel 的
+ *   inline left/width 两段翻转，几何过渡与开合同口径。
+ * - keyframes 红线：全段只用 transition，无按名 keyframes 引用。
+ */
 .leafDockDrawer {
   position: relative;
-  flex: 0 0 var(--leaf-dock-width, 50%);
+  flex: none;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  justify-content: flex-end;
+  transition: none;
+}
+
+/* 水合门控：与左栏 S2 同门（.app-container 的 data-preferences-hydrated），
+ * 防冷启动状态恢复期出现伪开合动画 */
+:global(.app-container[data-preferences-hydrated='true'])
+  .leafDockDrawer:not(.maximizing) {
+  transition: width var(--duration-normal, 200ms) var(--ease-decelerate);
+}
+
+/* 打开目标宽：--leaf-dock-width 已由 TreeLeafPanel 按 [200px, 70%] 钳制写入 */
+.leafBody[data-dock-open='true']
+  .leafDockDrawer:not(.maximized):not(.maximizing) {
+  width: var(--leaf-dock-width, 50%);
+  max-width: 70%;
+}
+
+/* 拖拽改宽期间关停（LeafDockResizer 的 body 协议类）。特异性须压过水合
+ * 门控 (0,4,0)：body 元素 + 协议类 + app-container + 属性合计 (0,4,1)，
+ * 与 S2 的关停级联同 craft。 */
+:global(body.is-resizing .app-container[data-preferences-hydrated='true'])
+  .leafDockDrawer,
+:global(body.leaf-dock-resizing
+    .app-container[data-preferences-hydrated='true'])
+  .leafDockDrawer {
+  transition: none;
+}
+
+.leafDockDrawerInner {
+  flex: none;
   width: var(--leaf-dock-width, 50%);
   min-width: 200px;
-  max-width: 70%;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -437,12 +491,36 @@
   right: 0;
   width: 100%;
   max-width: 100%;
-  flex: 1 1 100%;
   min-width: 0;
   height: 100%;
-  border-left: none;
   z-index: var(--z-chrome);
   background: var(--bg-card);
+}
+
+/* 最大化 / 还原过渡态：绝对定位壳，几何由 inline left/width 两段翻转驱动 */
+.leafDockDrawer.maximizing {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  z-index: var(--z-chrome);
+  background: var(--bg-card);
+}
+
+:global(.app-container[data-preferences-hydrated='true'])
+  .leafDockDrawer.maximizing {
+  transition:
+    left var(--duration-normal, 200ms) var(--ease-decelerate),
+    width var(--duration-normal, 200ms) var(--ease-decelerate);
+}
+
+.leafDockDrawer.maximized .leafDockDrawerInner,
+.leafDockDrawer.maximizing .leafDockDrawerInner {
+  width: 100%;
+  min-width: 0;
+  border-left: none;
 }
 
 .dockSplitWorkspace {

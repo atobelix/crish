@@ -18,6 +18,17 @@
   user-select: none;
   -webkit-user-select: none;
   outline: none;
+  /* 几何补位（S11）：程序性分屏增删时与窗格同钟平滑移动；拖拽期间
+   * 由下方 body 协议类关停，paintLive 直写保持即时跟随 */
+  transition:
+    left var(--duration-normal, 200ms) var(--ease-decelerate),
+    top var(--duration-normal, 200ms) var(--ease-decelerate),
+    width var(--duration-normal, 200ms) var(--ease-decelerate),
+    height var(--duration-normal, 200ms) var(--ease-decelerate);
+}
+
+:global(body.dock-split-resizing) .sash {
+  transition: none;
 }
 
 /* 左右分屏：竖直热区条（宽 8px，居中于分界线），沿线调宽 */

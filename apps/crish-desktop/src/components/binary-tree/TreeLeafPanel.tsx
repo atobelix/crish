@@ -76,6 +76,9 @@ const isCloseTarget = (e?: React.SyntheticEvent) =>
     (e.target as HTMLElement).closest(CLOSE_TARGET_SELECTOR)
   );
 
+/** 抽屉开合 / 最大化过渡时长（ms），与 CSS --duration-normal (200ms) 同值同族 */
+const DOCK_DRAWER_ANIM_MS = 200;
+
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
   ({ leaf, rect, isActive, isDragSource }) => {
     const { t } = useI18n();
@@ -137,19 +140,111 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const isTerminalTab = activeTab?.kind === 'terminal';
     const isBrowserTab = activeTab?.kind === 'browser';
     const isStandaloneTab = isTerminalTab || isBrowserTab;
-    const dockOpen =
-      isChatSurface &&
-      !isLeafDraft &&
-      !isStandaloneTab &&
-      dock.collapsed !== true;
+    const dockCapable = isChatSurface && !isLeafDraft && !isStandaloneTab;
+    const dockOpen = dockCapable && dock.collapsed !== true;
 
     const [isMaximized, setIsMaximized] = useState(false);
+
+    /*
+     * 抽屉关闭保活（S11 · 2026-11-06）：开合动画本体在 CSS（外层
+     * .leafDockDrawer 的 width 单挂点过渡，照左栏 S2 配方）。关闭时
+     * 内容多挂一拍过渡时长、待 width 收完再卸载；重开立即取消保活。
+     */
+    const [dockClosing, setDockClosing] = useState(false);
+    const dockWasOpenRef = useRef(false);
+    useEffect(() => {
+      if (dockOpen) {
+        dockWasOpenRef.current = true;
+        setDockClosing(false);
+        return;
+      }
+      if (!dockWasOpenRef.current) return;
+      dockWasOpenRef.current = false;
+      setDockClosing(true);
+      const timer = window.setTimeout(
+        () => setDockClosing(false),
+        DOCK_DRAWER_ANIM_MS + 60
+      );
+      return () => window.clearTimeout(timer);
+    }, [dockOpen]);
+
+    /*
+     * 最大化 / 还原动画（S11）：isMaximized 保持「目标态」即时翻转
+     * （类名 / data-maximized 契约不变）；几何由瞬态 maximizing 壳 +
+     * inline left/width 两段翻转承担——首帧钉当前实测几何
+     * （transition: none），次帧翻到目标几何，.maximizing 的 CSS
+     * 过渡播完后由定时器清瞬态。动画中途再点按，按实测几何重定向。
+     */
+    const [maxAnim, setMaxAnim] = useState<{
+      left: number;
+      width: number;
+      go: boolean;
+    } | null>(null);
+    const maxAnimTargetRef = useRef<{ left: number; width: number } | null>(
+      null
+    );
+    const maxAnimTimerRef = useRef<number | null>(null);
+    const drawerRef = useRef<HTMLDivElement | null>(null);
+
+    const clearMaxAnimTimer = useCallback(() => {
+      if (maxAnimTimerRef.current !== null) {
+        window.clearTimeout(maxAnimTimerRef.current);
+        maxAnimTimerRef.current = null;
+      }
+    }, []);
+
+    useEffect(() => {
+      return () => clearMaxAnimTimer();
+    }, [clearMaxAnimTimer]);
+
+    useLayoutEffect(() => {
+      if (!maxAnim || maxAnim.go) return;
+      const raf = requestAnimationFrame(() => {
+        const to = maxAnimTargetRef.current;
+        if (!to) return;
+        setMaxAnim({ left: to.left, width: to.width, go: true });
+      });
+      return () => cancelAnimationFrame(raf);
+    }, [maxAnim]);
+
+    const handleToggleMaximize = useCallback(() => {
+      const next = !isMaximized;
+      setIsMaximized(next);
+      const body = leafBodyRef.current;
+      const el = drawerRef.current;
+      if (!body || !el) {
+        clearMaxAnimTimer();
+        setMaxAnim(null);
+        return;
+      }
+      const bodyRect = body.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const from = { left: rect.left - bodyRect.left, width: rect.width };
+      const dockPx =
+        parseFloat(
+          getComputedStyle(body).getPropertyValue('--leaf-dock-width')
+        ) || rect.width;
+      const to = next
+        ? { left: 0, width: bodyRect.width }
+        : { left: bodyRect.width - dockPx, width: dockPx };
+      clearMaxAnimTimer();
+      maxAnimTargetRef.current = to;
+      setMaxAnim({ left: from.left, width: from.width, go: false });
+      maxAnimTimerRef.current = window.setTimeout(() => {
+        maxAnimTimerRef.current = null;
+        setMaxAnim(null);
+      }, DOCK_DRAWER_ANIM_MS + 60);
+    }, [isMaximized, clearMaxAnimTimer]);
 
     useEffect(() => {
       if (!dockOpen && isMaximized) {
         setIsMaximized(false);
       }
-    }, [dockOpen, isMaximized]);
+      if (!dockOpen && maxAnim) {
+        clearMaxAnimTimer();
+        setMaxAnim(null);
+      }
+    }, [dockOpen, isMaximized, maxAnim, clearMaxAnimTimer]);
 
     const handleCaptureActivate = useCallback(
       (e: React.SyntheticEvent) => {
@@ -353,6 +448,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             ref={leafBodyRef}
             className={styles.leafBody}
             data-dock-open={dockOpen ? 'true' : 'false'}
+            data-dock-present={dockOpen || dockClosing ? 'true' : 'false'}
           >
             <div className={styles.leafChatColumn}>
               {isChatSurface &&
@@ -403,33 +499,45 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                 </Suspense>
               </AppErrorBoundary>
             </div>
-            {dockOpen ? (
-              <>
-                {!isMaximized && (
-                  <LeafDockResizer
-                    leafBodyRef={leafBodyRef}
-                    widthRatio={dock.widthRatio || 0.5}
-                    onCommitRatio={handleCommitDockRatio}
-                  />
+            {dockOpen && !isMaximized && !maxAnim && (
+              <LeafDockResizer
+                leafBodyRef={leafBodyRef}
+                widthRatio={dock.widthRatio || 0.5}
+                onCommitRatio={handleCommitDockRatio}
+              />
+            )}
+            {dockCapable && (
+              <div
+                ref={drawerRef}
+                className={`${styles.leafDockDrawer} ${
+                  isMaximized ? styles.maximized : ''
+                } ${maxAnim ? styles.maximizing : ''} chat-side-panel`}
+                data-drawer-strip="true"
+                data-leaf-dock-drawer="true"
+                data-maximized={isMaximized ? 'true' : 'false'}
+                style={
+                  maxAnim
+                    ? {
+                        left: maxAnim.left,
+                        width: maxAnim.width,
+                        ...(maxAnim.go ? {} : { transition: 'none' }),
+                      }
+                    : undefined
+                }
+              >
+                {(dockOpen || dockClosing) && (
+                  <div className={styles.leafDockDrawerInner}>
+                    <DockSplitWorkspace
+                      leafId={leaf.id}
+                      sessionId={sessionForPanel}
+                      dock={dock}
+                      isMaximized={isMaximized}
+                      onToggleMaximize={handleToggleMaximize}
+                    />
+                  </div>
                 )}
-                <div
-                  className={`${styles.leafDockDrawer} ${
-                    isMaximized ? styles.maximized : ''
-                  } chat-side-panel`}
-                  data-drawer-strip="true"
-                  data-leaf-dock-drawer="true"
-                  data-maximized={isMaximized ? 'true' : 'false'}
-                >
-                  <DockSplitWorkspace
-                    leafId={leaf.id}
-                    sessionId={sessionForPanel}
-                    dock={dock}
-                    isMaximized={isMaximized}
-                    onToggleMaximize={() => setIsMaximized((prev) => !prev)}
-                  />
-                </div>
-              </>
-            ) : null}
+              </div>
+            )}
           </div>
           {isChatSurface && !isLeafDraft && !isStandaloneTab && (
             <Tooltip

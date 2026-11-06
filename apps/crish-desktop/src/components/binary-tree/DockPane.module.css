@@ -18,7 +18,15 @@
   background-color: var(--bg-card);
   border: none;
   border-radius: 0;
-  transition: border-color var(--duration-fast, 150ms) var(--ease-standard);
+  /* 几何补位（S11 · 2026-11-06）：程序性增删 / solo 切换引起的 rect
+   * 变化走 200ms 平滑过渡；拖拽分割条期间由下方 body 协议类关停、
+   * 保持即时跟随，两条路径就此分清。 */
+  transition:
+    border-color var(--duration-fast, 150ms) var(--ease-standard),
+    left var(--duration-normal, 200ms) var(--ease-decelerate),
+    top var(--duration-normal, 200ms) var(--ease-decelerate),
+    width var(--duration-normal, 200ms) var(--ease-decelerate),
+    height var(--duration-normal, 200ms) var(--ease-decelerate);
 
   /* 窗格根容器声明尺寸包含，供头部与内部组件直接执行 2D 容器查询 */
   container-type: size;
@@ -59,6 +67,12 @@
   container-name: dock-pane;
 }
 
+/* 分屏拖拽期间几何由 DockResizeSash 直写（paintLive），窗格与分割线
+ * 的几何过渡一律关停（body 协议类与 sash 同源，S11） */
+:global(body.dock-split-resizing) .pane {
+  transition: none;
+}
+
 .toolOutletPane {
   position: absolute;
   inset: 0;
@@ -66,6 +80,18 @@
   height: 100%;
   flex-direction: column;
   overflow: hidden;
+  transition: opacity var(--duration-fast, 150ms) var(--ease-standard);
+}
+
+/* 标签切换入场淡入（S11）：激活面 display 由 none 翻 flex 时，
+ * @starting-style 给出首帧 opacity 0、由上面的 transition 平滑升起；
+ * 旧面仍走 display 直切（keep-alive 契约），无双面叠影。连点时
+ * display 同步翻转、过渡即时重定向不排队——已实机证明（见 S11 报告）。
+ * 本段只用 transition + @starting-style，无按名 keyframes 引用。 */
+@starting-style {
+  .toolOutletPane[data-active-tab='true'] {
+    opacity: 0;
+  }
 }
 
 /* =========================================================================
