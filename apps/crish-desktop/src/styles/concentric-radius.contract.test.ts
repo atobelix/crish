@@ -10,6 +10,24 @@
  * - 双形态：
  *     圆角形态（Rounded Mode）：20px 顶级枢纽（Dialog / Settings / ProjectManageModal / ChatComposer）
  *     微圆形态（Compact Mode）：14px 浮层 / 16px 卡片 / 8px 控件 / 6px 小项 / 10px 独立按钮（2026-11-01 由 7px 调整）
+ *
+ * 【G² 第 0 波改版 · 断言口径转计算值（立项方案 §五 F7）】
+ * 本契约原先多处消费侧断言钉的是源码回退文本而非计算值，且文本与真值系统性
+ * 脱节（意图≠现值）：契约 4 的 .folderPickerDropzone 钉 `var(--radius-xl, 14px)`
+ * 而 --radius-xl 计算值是 16px；契约 9 的 .filterTabs 钉
+ * `var(--sep-radius-outer, 14px)` 而计算值是 18px；契约 10 的 .schedForm 标题
+ * 自称 14px 而 `var(--sep-radius-outer)` 计算值同为 18px。钉文本的守卫在 token
+ * 真值漂移时保持绿灯——与 keyframes 悬空事故同族（守卫验意图不验产物）。
+ * 本次改版：全部消费侧数值断言改走 computedRadiusPx（解析 token 定义链求有效
+ * 计算值再断言），钉的是真值；意图与现值的差距（14 的意图 vs 16/18 的现值）
+ * 不由本契约裁决——回退文本本身的核正归 F3 机械小批（第 0 波之后），契约只
+ * 负责让漂移无处藏身（g2-corner.contract 棘轮的回退漂移类同步入册跟踪）。
+ * 保留文本口径的只有三类：①定义点断言（契约 1/11，以及 threeTierSurface /
+ * style-contract / layout-contract 中的 token 定义断言）——定义点文本即事实；
+ * ②绑定/禁令断言（契约 2/5/7 的「必须消费某 token」「严禁某写法」）——约束
+ * 接线方式而非数值；③已是计算口径的（motion-concentric-contract 的奇数圆角
+ * 扫描与别名链解析）。同批普查结论：半径相关断言文件中只有本契约存在消费侧
+ * 钉回退文本的病灶，其余文件按上述三类保留原口径。
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
@@ -25,6 +43,51 @@ function readDesktopFile(...segments: string[]): string {
     throw new Error(`[concentric-contract] Target file not found: ${fullPath}`);
   }
   return readFileSync(fullPath, 'utf8');
+}
+
+/* ================= 计算值口径（F7） =================
+ * 按 tokens.css 的级联序（tokens-radius.css → tokens-components.css）收集
+ * 自定义属性定义（后定义胜出），递归解析 var() 链求有效 px 计算值。
+ * 消费侧断言一律经 computedRadiusPx，不再钉源码回退文本。 */
+function collectTokenDefs(): Map<string, string> {
+  const defs = new Map<string, string>();
+  for (const f of ['tokens-radius.css', 'tokens-components.css']) {
+    const text = readDesktopFile('styles', f).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of text.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      defs.set(m[1], m[2].trim());
+    }
+  }
+  return defs;
+}
+
+const tokenDefs = collectTokenDefs();
+
+function resolveTokenValue(name: string, depth = 0): number | null {
+  if (depth > 10 || !tokenDefs.has(name)) return null;
+  const v = tokenDefs.get(name)!;
+  const px = v.match(/^([\d.]+)px$/);
+  if (px) return parseFloat(px[1]);
+  const vm = v.match(/^var\(\s*(--[\w-]+)\s*(?:,\s*([\d.]+)px\s*)?\)$/);
+  if (vm) {
+    const inner = resolveTokenValue(vm[1], depth + 1);
+    return inner !== null ? inner : vm[2] ? parseFloat(vm[2]) : null;
+  }
+  return null;
+}
+
+/** 求一段 CSS 中 border-radius 声明的有效计算值（px）；无法解析返回 null */
+function computedRadiusPx(css: string): number | null {
+  const declMatch = css.match(/border-radius\s*:\s*([^;]+);/);
+  if (!declMatch) return null;
+  const decl = declMatch[1].trim();
+  const lit = decl.match(/^([\d.]+)px$/);
+  if (lit) return parseFloat(lit[1]);
+  const vm = decl.match(/^var\(\s*(--[\w-]+)\s*(?:,\s*([\d.]+)px\s*)?\)$/);
+  if (vm) {
+    const resolved = resolveTokenValue(vm[1]);
+    return resolved !== null ? resolved : vm[2] ? parseFloat(vm[2]) : null;
+  }
+  return null;
 }
 
 describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', () => {
@@ -132,22 +195,25 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       /border-radius:\s*7px/
     );
 
-    // 断言必须为 14px 或以上（如 var(--radius-xl, 14px)）
-    const radiusDecl = block.match(/border-radius:\s*([^;]+);/);
+    // 断言计算值必须为 14px 或以上（F7 计算值口径：现声明为
+    // var(--sep-radius-outer)，经定义链 --radius-menu-outer 计算值 18px）
+    const computed = computedRadiusPx(block);
     expect(
-      radiusDecl,
-      '.credentialsContainer 必须声明 border-radius'
-    ).toBeTruthy();
+      computed,
+      '.credentialsContainer 必须声明可解析的 border-radius'
+    ).not.toBeNull();
     expect(
-      /(?:1[4-9]|[2-9][0-9])px|var\(--(?:radius-xl|sep-radius-outer)/.test(
-        radiusDecl![1]
-      ),
-      `.credentialsContainer 的 border-radius 必须为 14px 或以上（当前声明: ${radiusDecl![1]}）`
+      computed! >= 14,
+      `.credentialsContainer 的 border-radius 计算值必须为 14px 或以上（当前计算值: ${computed}px）`
     ).toBe(true);
   });
 
-  // 4. ProjectManageModal 现代同心圆角断言（消解生硬 8px 锐利倒挂，对齐 20px/14px/12px 视觉和谐阶梯）
-  it('契约 4：ProjectManageModal 现代同心圆角断言（.modalPanel 必须为 20px，.folderPickerDropzone 必须为 14px，.nameInput 必须为 12px）', () => {
+  // 4. ProjectManageModal 现代同心圆角断言（消解生硬 8px 锐利倒挂）
+  // F7 计算值口径：.folderPickerDropzone 的历史意图标注为 14px，但其绑定
+  // --radius-xl 的计算值是 16px——原断言钉回退文本造成「意图≠现值」长期隐形。
+  // 本契约钉计算真值 16px；回退文本的核正归 F3 机械小批，意图本身若要变更
+  // 须走 token 裁决，不得在本契约里改期望迎合文本。
+  it('契约 4：ProjectManageModal 现代同心圆角断言（计算值口径：.modalPanel 为 20px，.folderPickerDropzone 为 16px，.nameInput 为 12px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'sidebar',
@@ -155,27 +221,27 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ProjectManageModal.module.css'
     );
 
-    // 断言 .modalPanel 必须为 var(--radius-2xl, 20px)
+    // 断言 .modalPanel 计算值必须为 20px（--radius-2xl）
     const panelMatch = modalCss.match(/\.modalPanel\s*\{[^}]+\}/);
     expect(
       panelMatch,
       'ProjectManageModal.module.css 中必须包含 .modalPanel 规则块'
     ).toBeTruthy();
     expect(
-      panelMatch![0],
-      '.modalPanel 的 border-radius 必须绑定为 var(--radius-2xl, 20px)'
-    ).toMatch(/border-radius:\s*var\(--radius-2xl,\s*20px\)/);
+      computedRadiusPx(panelMatch![0]),
+      '.modalPanel 的 border-radius 计算值必须为 20px（--radius-2xl）'
+    ).toBe(20);
 
-    // 断言 .folderPickerDropzone 必须为 var(--radius-xl, 14px)
+    // 断言 .folderPickerDropzone 计算值必须为 16px（--radius-xl）
     const dropzoneMatch = modalCss.match(/\.folderPickerDropzone\s*\{[^}]+\}/);
     expect(
       dropzoneMatch,
       'ProjectManageModal.module.css 中必须包含 .folderPickerDropzone 规则块'
     ).toBeTruthy();
     expect(
-      dropzoneMatch![0],
-      '.folderPickerDropzone 的 border-radius 必须为 var(--radius-xl, 14px)'
-    ).toMatch(/border-radius:\s*var\(--radius-xl,\s*14px\)/);
+      computedRadiusPx(dropzoneMatch![0]),
+      '.folderPickerDropzone 的 border-radius 计算值必须为 16px（--radius-xl 真值；旧回退文本 14px 是意图标注，核正归 F3）'
+    ).toBe(16);
 
     // 断言 .nameInput 必须为 var(--radius-card, 12px)
     const nameInputMatch = modalCss.match(/\.nameInput\s*\{[^}]+\}/);
@@ -184,9 +250,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ProjectManageModal.module.css 中必须包含 .nameInput 规则块'
     ).toBeTruthy();
     expect(
-      nameInputMatch![0],
-      '.nameInput 的 border-radius 必须为 var(--radius-card, 12px)'
-    ).toMatch(/border-radius:\s*var\(--radius-card,\s*12px\)/);
+      computedRadiusPx(nameInputMatch![0]),
+      '.nameInput 的 border-radius 计算值必须为 12px（--radius-card）'
+    ).toBe(12);
 
     // 断言 .modalFooter button 必须为 var(--radius-card, 12px)
     const footerBtnMatch = modalCss.match(/\.modalFooter\s+button\s*\{[^}]+\}/);
@@ -195,9 +261,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ProjectManageModal.module.css 中必须包含 .modalFooter button 规则块'
     ).toBeTruthy();
     expect(
-      footerBtnMatch![0],
-      '.modalFooter button 的 border-radius 必须为 var(--radius-card, 12px)'
-    ).toMatch(/border-radius:\s*var\(--radius-card,\s*12px\)/);
+      computedRadiusPx(footerBtnMatch![0]),
+      '.modalFooter button 的 border-radius 计算值必须为 12px（--radius-card）'
+    ).toBe(12);
   });
 
   // 5. 通用 Dialog 外壳断言
@@ -218,6 +284,11 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       dialogMatch![0],
       '.dialog 的 border-radius 必须包含 var(--radius-2xl'
     ).toMatch(/border-radius:\s*var\(--radius-2xl/);
+    // F7 计算值口径补强：绑定之外再钉有效值（--radius-2xl 计算值 20px）
+    expect(
+      computedRadiusPx(dialogMatch![0]),
+      '.dialog 的 border-radius 计算值必须为 20px'
+    ).toBe(20);
   });
 
   // 6. ChatComposer 多行与单行零位移契约断言
@@ -237,13 +308,13 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     const multilineBlock = multilineMatch![0];
 
-    // 断言多行形态外圆角必须为 20px
+    // 断言多行形态外圆角计算值必须为 20px（F7 计算值口径：历史上以文本
+    // 择一正则放行四种写法，四种写法的计算值同为 20px；改钉计算值后，
+    // 任何解析结果偏离 20px 的新写法都会变红，强于文本择一）
     expect(
-      multilineBlock,
-      '.composerCard.isMultiline 必须绑定 20px 圆角'
-    ).toMatch(
-      /border-radius:\s*(?:var\(--composer-radius-multi,\s*20px\)|var\(--radius-dock,\s*20px\)|var\(--radius-dock\)|20px)/
-    );
+      computedRadiusPx(multilineBlock),
+      '.composerCard.isMultiline 的 border-radius 计算值必须为 20px'
+    ).toBe(20);
   });
 
   // 7. Dialog 底部无分割线契约（去除横线和虚高边距）
@@ -280,9 +351,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'PluginCreateModal.module.css 中必须包含 .modalPanel 规则块'
     ).toBeTruthy();
     expect(
-      panelMatch![0],
-      '.modalPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
-    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
+      computedRadiusPx(panelMatch![0]),
+      '.modalPanel 的 border-radius 计算值必须为 24px（--radius-3xl）'
+    ).toBe(24);
 
     const dropZoneMatch = modalCss.match(/\.dropZone\s*\{[^}]+\}/);
     expect(
@@ -290,13 +361,15 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'PluginCreateModal.module.css 中必须包含 .dropZone 规则块'
     ).toBeTruthy();
     expect(
-      dropZoneMatch![0],
-      '.dropZone 的 border-radius 必须为 var(--radius-md, 8px)'
-    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+      computedRadiusPx(dropZoneMatch![0]),
+      '.dropZone 的 border-radius 计算值必须为 8px（--radius-md）'
+    ).toBe(8);
   });
 
   // 9. ExternalSessionImportModal 方案 A 同心契约断言
-  it('契约 9：ExternalSessionImportModal 方案 A 同心契约断言（.dialogPanel 必须为 24px，.filterTabs 为 14px，.filterTab 为 8px）', () => {
+  // F7 计算值口径：.filterTabs 历史意图标注 14px，其绑定 --sep-radius-outer 的
+  // 计算值是 18px（--radius-menu-outer)；钉计算真值 18px，回退文本核正归 F3。
+  it('契约 9：ExternalSessionImportModal 方案 A 同心契约断言（计算值口径：.dialogPanel 为 24px，.filterTabs 为 18px，.filterTab 为 8px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'plugins',
@@ -309,9 +382,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ExternalSessionImportModal.module.css 中必须包含 .dialogPanel 规则块'
     ).toBeTruthy();
     expect(
-      dialogPanelMatch![0],
-      '.dialogPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
-    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
+      computedRadiusPx(dialogPanelMatch![0]),
+      '.dialogPanel 的 border-radius 计算值必须为 24px（--radius-3xl）'
+    ).toBe(24);
 
     const tabsMatch = modalCss.match(/\.filterTabs\s*\{[^}]+\}/);
     expect(
@@ -319,9 +392,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ExternalSessionImportModal.module.css 中必须包含 .filterTabs 规则块'
     ).toBeTruthy();
     expect(
-      tabsMatch![0],
-      '.filterTabs 的 border-radius 必须为 var(--sep-radius-outer, 14px)'
-    ).toMatch(/border-radius:\s*var\(--sep-radius-outer,\s*14px\)/);
+      computedRadiusPx(tabsMatch![0]),
+      '.filterTabs 的 border-radius 计算值必须为 18px（--sep-radius-outer 真值；旧回退文本 14px 是意图标注，核正归 F3）'
+    ).toBe(18);
 
     const tabMatch = modalCss.match(/\.filterTab\s*\{[^}]+\}/);
     expect(
@@ -329,13 +402,15 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ExternalSessionImportModal.module.css 中必须包含 .filterTab 规则块'
     ).toBeTruthy();
     expect(
-      tabMatch![0],
-      '.filterTab 的 border-radius 必须为 var(--radius-md, 8px)'
-    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+      computedRadiusPx(tabMatch![0]),
+      '.filterTab 的 border-radius 计算值必须为 8px（--radius-md）'
+    ).toBe(8);
   });
 
   // 10. ScheduledTasksPanel 方案 A 表单同心契约断言
-  it('契约 10：ScheduledTasksPanel 方案 A 表单同心契约断言（.schedForm 为 14px，.schedFieldInput 为 8px）', () => {
+  // F7 计算值口径：.schedForm 历史标题自称 14px，其声明 var(--sep-radius-outer)
+  // 的计算值是 18px；钉计算真值 18px（意图若变更走 token 裁决）。
+  it('契约 10：ScheduledTasksPanel 方案 A 表单同心契约断言（计算值口径：.schedForm 为 18px，.schedFieldInput 为 8px）', () => {
     const schedCss = readDesktopFile(
       'components',
       'settings',
@@ -347,9 +422,10 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       formMatch,
       'ScheduledTasksPanel.module.css 中必须包含 .schedForm 规则块'
     ).toBeTruthy();
-    expect(formMatch![0], '.schedForm 的 border-radius 必须为 14px').toMatch(
-      /border-radius:\s*var\(--(?:sep-radius-outer|radius-xl)/
-    );
+    expect(
+      computedRadiusPx(formMatch![0]),
+      '.schedForm 的 border-radius 计算值必须为 18px（--sep-radius-outer 真值）'
+    ).toBe(18);
 
     const inputMatch = schedCss.match(/\.schedFieldInput\s*\{[^}]+\}/);
     expect(
@@ -357,9 +433,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ScheduledTasksPanel.module.css 中必须包含 .schedFieldInput 规则块'
     ).toBeTruthy();
     expect(
-      inputMatch![0],
-      '.schedFieldInput 的 border-radius 必须为 var(--radius-md)'
-    ).toMatch(/border-radius:\s*var\(--radius-md/);
+      computedRadiusPx(inputMatch![0]),
+      '.schedFieldInput 的 border-radius 计算值必须为 8px（--radius-md）'
+    ).toBe(8);
   });
 
   // 11. 全局浮层菜单外大圆角 18px 与内同心 12px 契约断言
