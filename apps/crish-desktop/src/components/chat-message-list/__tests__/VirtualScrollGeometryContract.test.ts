@@ -59,9 +59,9 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
 
   describe('2. ChatMessageRow.module.css 契约：内部盒模型与双重虚拟化切除 (DEF-13 & DEF-14)', () => {
     it('.row 包含内部盒模型 padding-bottom（--chat-row-gap，默认 16px）与 margin: 0', () => {
-      // FINAL-PLAN P2-a：行距 token 化，回退值仍为 16px
+      // FINAL-PLAN P2-a：行距 token 化；回退与默认密度同值 16px（默认档 2026-11-06 方向①由 20 收紧，回退为平值形）
       expect(rowCss).toMatch(
-        /\.row\s*\{[\s\S]*?padding-bottom:\s*var\(--chat-row-gap, var\(--space-4, 16px\)\);/
+        /\.row\s*\{[\s\S]*?padding-bottom:\s*var\(--chat-row-gap, 16px\);/
       );
       expect(rowCss).toMatch(/\.row\s*\{[\s\S]*?margin-top:\s*0;/);
       expect(rowCss).toMatch(/\.row\s*\{[\s\S]*?margin-bottom:\s*0;/);

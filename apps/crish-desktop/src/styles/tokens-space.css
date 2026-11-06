@@ -72,7 +72,7 @@ html[data-theme='light'] {
   /* [WAVE2-DEPRECATED-ALIAS] 旧间距刻度与布局别名桥接层（Wave 2 Codemod 后一键清除） */
   --chat-stream-pad-x: var(--stream-pad-x); /* [WAVE2-DEPRECATED-ALIAS] */
   --chat-col-max-wide: 840px; /* [WAVE2-DEPRECATED-ALIAS] */
-  --chat-row-gap: 20px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap: 16px; /* [WAVE2-DEPRECATED-ALIAS] */
   --chat-row-gap-compact: 4px; /* [WAVE2-DEPRECATED-ALIAS] */
   --space-0_5: 2px; /* [WAVE2-DEPRECATED-ALIAS] */
   --space-1: 4px; /* [WAVE2-DEPRECATED-ALIAS] */

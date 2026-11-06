@@ -6,8 +6,8 @@
   margin-top: 0;
   margin-bottom: 0;
   /* 行距 token（FINAL-PLAN P2-a）；估高常量由 VirtualScrollManager.rowGap 契约测试锁定。
-     回退值与默认密度同值 20px——16px 是紧凑档的 token 值而非默认值，勿再误写为回退 */
-  padding-bottom: var(--chat-row-gap, 20px);
+     回退值与默认密度同值 16px（默认档 2026-11-06 方向①裁定由 20 收紧至 16，与紧凑档同值） */
+  padding-bottom: var(--chat-row-gap, 16px);
   /* 行内绝对定位子元素的锚点（操作栏已回到文档流占位，见 .userMeta / .assistantMeta） */
   position: relative;
   /* 仅保留布局与绘制隔离（DEF-14），坚决剔除 content-visibility 与 contain-intrinsic-size 属性，交由 JS 虚拟化单轨调度 */

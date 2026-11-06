@@ -195,7 +195,7 @@
 
 /* 纯净垂直节奏体系（DEF-13）：彻底消除相邻兄弟选择器与外部 margin 黑洞。
    行垂直间距全面收敛为消息行内部盒模型（.row padding-bottom 取 --chat-row-gap：
-   默认密度 20px / 紧凑 16px / 宽松 24px，token 见 styles/tokens-space.css；
+   默认密度 16px / 紧凑 16px / 宽松 24px（默认档原 20，2026-11-06 方向①收紧至 16），token 见 styles/tokens-space.css；
    .rowCarrier padding-bottom: 4px），
    保证 DOM Physical Height (offsetHeight) 与 VSM 实测高度 100% 恒等，杜绝切片卸载时 1600px 累积高度蒸发与视口跳跃。 */
 
