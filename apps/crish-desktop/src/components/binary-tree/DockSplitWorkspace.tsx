@@ -173,7 +173,14 @@ export const DockSplitWorkspace: React.FC<DockSplitWorkspaceProps> = React.memo(
           }
         }
 
-        commitDock({ tree: nextTree });
+        // 用户 2026-11-06 裁决：关掉最后一个标签（树变空）时，侧边栏
+        // 整体关闭，与 handleClosePane 同构——同一次提交带 collapsed: true，
+        // 不再停在空态显示总览式启动器（DockLauncherOverview）。
+        const patch: { collapsed?: boolean; tree?: DockTree } = {
+          tree: nextTree,
+          ...(isDockTreeEmpty(nextTree) ? { collapsed: true } : {}),
+        };
+        commitDock(patch);
       },
       [tree, soloLeafId, sessionId, commitDock]
     );

@@ -377,7 +377,7 @@ describe('DockSplitWorkspace 坞内分屏总调度容器架构测试 (Phase 2)',
       expect((nextTree.root as DockLeaf).activeTabId).toBe(secondTabId);
     });
 
-    it('onCloseTab: 关闭终端标签时销毁 ConPTY 进程，全部关闭后保持空态展示推荐总览启动器（不强制折叠）', () => {
+    it('onCloseTab: 关闭终端标签时销毁 ConPTY 进程，关掉最后一个标签后同一次提交带 collapsed: true 整体关闭侧边栏（用户 2026-11-06 裁决改口径：全关标签不再停在空态总览启动器）', () => {
       const onUpdateDock = vi.fn();
       const dock: RightToolDockState = {
         collapsed: false,
@@ -405,7 +405,8 @@ describe('DockSplitWorkspace 坞内分屏总调度容器架构测试 (Phase 2)',
       );
       expect(onUpdateDock).toHaveBeenCalledTimes(1);
       const patch = onUpdateDock.mock.calls[0][0];
-      expect(patch.collapsed).toBeUndefined();
+      // 用户 2026-11-06 裁决：树空 ⇒ 同一次提交带 collapsed: true，侧边栏整体关闭
+      expect(patch.collapsed).toBe(true);
       expect(isDockTreeEmpty(patch.tree)).toBe(true);
     });
 
