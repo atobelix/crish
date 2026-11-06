@@ -62,8 +62,15 @@ describe('Select & Combobox: 1px Hairline Border Guardrails (Plan 09)', () => {
     expect(contentCss).not.toMatch(/transform:\s*scale\(0\.95\)/);
 
     expect(selectCss).toContain("[data-positioned='true']");
-    expect(contentCss).toContain("[data-positioned='true']");
     expect(selectCss).toContain('crish-popover-enter');
-    expect(contentCss).toContain('crish-popover-enter');
+    // keyframes 悬空修复批（2026-11-06）：SelectContent 进/退场已迁全局
+    // 工具类 .crish-popover-anim（design-system.css §4b），模块内 4 份
+    // 本地副本删除、宿主 TSX 挂类消费——接线断言随之转指全局类与 TSX。
+    const dsCss = getFileContent('../../../styles/design-system.css');
+    expect(dsCss).toContain(
+      ".crish-popover-anim[data-state='open'][data-positioned='true']"
+    );
+    expect(dsCss).toContain('crish-popover-enter');
+    expect(getFileContent('SelectContent.tsx')).toContain('crish-popover-anim');
   });
 });

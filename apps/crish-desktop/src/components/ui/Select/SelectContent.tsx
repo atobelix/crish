@@ -108,7 +108,7 @@ export function SelectContent({
         ? styles.contentLg
         : styles.contentMd;
 
-  const contentClass = [styles.content, sizeClass, className]
+  const contentClass = [styles.content, sizeClass, 'crish-popover-anim', className]
     .filter(Boolean)
     .join(' ');
 

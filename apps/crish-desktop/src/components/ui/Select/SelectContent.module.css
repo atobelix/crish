@@ -24,65 +24,9 @@
   will-change: transform, opacity;
 }
 
-/* 进/退场 keyframes 与共享层正典同值（styles/design-system.css）。
- * 本模块副本不可删：Vite CSS Modules 会把 animation 引用名 scoped 化，
- * 无同名定义则动画静默失效（S5a 2026-11-06 实机证伪按名跨模块消费）。 */
-@keyframes crish-popover-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-enter-top {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-}
-
-@keyframes crish-popover-exit-top {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-}
-
-.content[data-state='open'][data-positioned='true'] {
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
-}
-
-.content[data-state='open'][data-positioned='true'][data-side='top'] {
-  animation-name: crish-popover-enter-top;
-}
-
-.content[data-state='closed'] {
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
-  pointer-events: none;
-}
+/* 进/退场走全局工具类 .crish-popover-anim（styles/design-system.css §4b），
+ * 由 SelectContent.tsx 在宿主元素上挂类消费。本模块原 4 份同值本地
+ * keyframes 副本已删（keyframes 悬空修复批 2026-11-06：消费单轨）。 */
 
 /* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */
 .contentSm,
