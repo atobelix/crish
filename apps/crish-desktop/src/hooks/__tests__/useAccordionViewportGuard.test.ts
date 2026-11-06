@@ -147,6 +147,18 @@ describe('useAccordionViewportGuard', () => {
     const container = document.createElement('div');
     container.scrollTop = 500;
     container.scrollTo = vi.fn();
+    // 判底豁免（底部钉底修复）：容器须为可滚动且未在底部，否则守卫
+    // 直接返回不滚动；jsdom 裸 div 的 scrollHeight/clientHeight 恒为 0
+    // 会误判为退化区制在底，故显式给出可滚动几何（maxScroll 1500，
+    // 距底 1000 > 判底阈值 2px）。
+    Object.defineProperty(container, 'scrollHeight', {
+      value: 2000,
+      configurable: true,
+    });
+    Object.defineProperty(container, 'clientHeight', {
+      value: 500,
+      configurable: true,
+    });
 
     vi.spyOn(mockElement, 'getBoundingClientRect').mockReturnValue({
       top: -100,

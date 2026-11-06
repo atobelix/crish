@@ -1,6 +1,6 @@
 /**
  * 消息流撤回：入口在 user / 生成中助手行，不在 composer 页脚。
- * ghost + 7px，流式中仍可点。
+ * ghost + 10px（按钮用户锁，2026-11-01 由 7px 调整），流式中仍可点。
  */
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
@@ -196,11 +196,11 @@ describe('消息级撤回入口', () => {
     expect(screen.queryByRole('button', { name: '解除固定' })).toBeNull();
   });
 
-  it('撤回皮：7px token + appearance none，无 scale 果冻', () => {
+  it('撤回皮：10px token + appearance none，无 scale 果冻', () => {
     const css = readFileSync(join(here, 'ChatMessageRow.module.css'), 'utf8');
     expect(css).toMatch(/\.retractBtn\s*\{[^}]*appearance:\s*none/s);
     expect(css).toMatch(
-      /\.retractBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*7px\)/s
+      /\.retractBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*10px\)/s
     );
     expect(css).toMatch(/\.retractBtn\s*\{[^}]*transform:\s*none/s);
     const composerCss = readFileSync(
@@ -285,17 +285,17 @@ describe('消息级撤回入口', () => {
     expect(editBtn.className).toMatch(/editBtn/);
   });
 
-  it('ChatMessageRow.module.css 样式契约：regenerateBtn 与 editBtn 均具备 7px 圆角与平滑过渡', () => {
+  it('ChatMessageRow.module.css 样式契约：regenerateBtn 与 editBtn 均具备 10px 圆角与平滑过渡', () => {
     const css = readFileSync(join(here, 'ChatMessageRow.module.css'), 'utf8');
     expect(css).toMatch(/\.regenerateBtn\s*\{[^}]*appearance:\s*none/s);
     expect(css).toMatch(
-      /\.regenerateBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*7px\)/s
+      /\.regenerateBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*10px\)/s
     );
     expect(css).toMatch(/\.regenerateBtn\s*\{[^}]*transform:\s*none/s);
 
     expect(css).toMatch(/\.editBtn\s*\{[^}]*appearance:\s*none/s);
     expect(css).toMatch(
-      /\.editBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*7px\)/s
+      /\.editBtn\s*\{[^}]*border-radius:\s*var\(--button-radius,\s*10px\)/s
     );
     expect(css).toMatch(/\.editBtn\s*\{[^}]*transform:\s*none/s);
   });
