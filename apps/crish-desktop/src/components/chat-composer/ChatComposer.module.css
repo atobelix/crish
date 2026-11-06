@@ -22,12 +22,15 @@
    ========================================================================== */
 
 .composerCard {
-  --composer-radius-outer: var(--radius-dock, 21px);
+  --composer-radius-outer: var(--radius-dock, 20px);
   --composer-border: color-mix(
     in srgb,
     var(--border-subtle) 98%,
     var(--text-primary) 2%
   );
+  /* G² 形状层描边色通道（G² 推广第一波 · 枢纽档）：与 border-color 状态机
+   * 同步——静止取 --composer-border，各聚焦规则内与 --edge-focus 同步覆写 */
+  --g2-stroke: var(--composer-border);
   --composer-shadow:
     0 2px 5px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 5px 16px -2px color-mix(in srgb, var(--shadow-color) 2%, transparent);
@@ -86,6 +89,10 @@
     var(--border-color) 94%,
     var(--text-primary) 6%
   );
+  --g2-stroke: var(
+    --edge-focus,
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
+  );
   border-color: var(
     --edge-focus,
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
@@ -95,6 +102,10 @@
 }
 
 .composerCard:active {
+  --g2-stroke: var(
+    --edge-focus,
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
+  );
   border-color: var(
     --edge-focus,
     color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
@@ -112,12 +123,38 @@
     var(--border-color) 97%,
     var(--text-primary) 3%
   );
+  --g2-stroke: var(
+    --edge-focus-empty,
+    color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%)
+  );
   border-color: var(
     --edge-focus-empty,
     color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%)
   );
   box-shadow: var(--composer-shadow);
   outline: none;
+}
+
+/* G² 形状层在位（ChatComposer 内嵌 G2Surface）：卡自身 border/box-shadow
+ * 让位于形状层——边框改走同路径描边（色经 --g2-stroke 与上方状态机同步，
+ * 描边过渡由形状层 path 的 stroke transition 承接）、阴影改走形状层
+ * filter（--composer-shadow 的 drop-shadow 近似，裁定 #6(a)：偏移与
+ * 不透明度照原值、模糊取半）。border 声明保留占位（border-box 不变），
+ * 背景保留为兜底（被同色填充层覆盖）。本规则置于全部卡状态规则之后，
+ * 以同特异性靠后胜出压制各状态规则重申的 box-shadow。 */
+.composerCard:has(> [data-g2-mode]) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.composerCard [data-g2-layer] {
+  filter:
+    drop-shadow(0 2px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent))
+    drop-shadow(0 5px 8px color-mix(in srgb, var(--shadow-color) 2%, transparent));
+}
+
+.composerCard [data-g2-layer] path {
+  transition: stroke var(--transition-fast) var(--ease-decelerate);
 }
 
 /* ==========================================================================
@@ -521,7 +558,9 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border-radius: var(--composer-radius-outer, 24px);
+  /* 回退值核正（G² 枢纽档）：--composer-radius-outer 定义在 .composerCard
+   * 上，遮罩并非其后代、继承不到，原回退 24px 与卡真值 20 不符，改 20 */
+  border-radius: var(--composer-radius-outer, 20px);
   background: var(--bg-elevated, var(--composer-bg));
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
@@ -529,6 +568,12 @@
   pointer-events: none;
   box-shadow: inset 0 0 0 1px var(--state-hover);
   outline: none;
+}
+
+/* G² 形状层在位：原 inset 环改走形状层同路径描边，压制旧环；
+ * 背景保留兜底（同色填充层覆盖，弧形底在 G² 轮廓内侧不外露）。 */
+.dropMask:has(> [data-g2-mode]) {
+  box-shadow: none;
 }
 
 .dropMask svg {

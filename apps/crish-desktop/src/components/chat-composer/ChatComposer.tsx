@@ -15,6 +15,7 @@ import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Input, Tooltip } from '@/components/ui';
 import { shouldSuppressMenuReopen } from '@/components/ui';
+import { G2Surface } from '../ui/G2Surface';
 import { ComposerField, STOP_TOOLTIP } from './ComposerField';
 import type {
   ComposerFieldProps,
@@ -233,6 +234,25 @@ const ChatComposerInner: React.FC<ChatComposerProps> = ({
           data-empty-kind={emptyKind}
           data-disabled={disabled ? 'true' : undefined}
         >
+          {/* G² 形状层（G² 推广第一波 · 枢纽档）：卡轮廓由本层以 dock 档
+              生成——填充 + 同路径描边（§2.3 边框面 (a)）；描边色经 CSS
+              --g2-stroke 通道跟随卡的边框色状态机（静止/聚焦/空态聚焦）。
+              本层为绝对定位负 z（inset -1 使层盒与卡 border box 精确
+              重合，描边带即边框环）：绘于卡底/边框之上、内容之下；内容由卡
+              6–10px 内边距与角区错开，不入 R20 角域，无需 clip。内嵌顶槽
+              与卡的「上半」关系不变：顶槽仍是卡内首个在流子元素，审批面板
+              将来迁入时继续以顶槽为接入点，不经本层嵌套递减。 */}
+          <G2Surface
+            radius="dock"
+            fill="var(--composer-bg, var(--surface-input))"
+            stroke="var(--g2-stroke)"
+            style={{
+              position: 'absolute',
+              inset: -1,
+              zIndex: -1,
+              pointerEvents: 'none',
+            }}
+          />
           {/* 内嵌顶槽：权限审批条、目标/计划进度条、内嵌通知顶条共享 .composerCard 同一围合 */}
           {hasFloatLayer || effectiveNotice ? (
             <div

@@ -7,6 +7,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import styles from './ChatComposer.module.css';
 import { useI18n } from '../../i18n';
 import { AppIcon } from '@/components/ui/icons';
+import { G2Surface } from '../ui/G2Surface';
 
 export function hasFiles(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false;
@@ -81,6 +82,21 @@ export const ComposerDropHost = React.forwardRef<
           data-testid="composer-drop-mask"
           aria-hidden
         >
+          {/* G² 形状层（枢纽档）：拖放遮罩与 composer 卡同 dock 档轮廓——
+              填充 + 同路径描边（原 inset box-shadow 环改走描边，CSS 侧
+              [data-g2-mode] 规则压制旧环）；遮罩无边框，层盒 inset 0 即
+              与遮罩 border box 重合。负 z 绘于遮罩底之上、图标文案之下。 */}
+          <G2Surface
+            radius="dock"
+            fill="var(--bg-elevated, var(--composer-bg))"
+            stroke="var(--state-hover)"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: -1,
+              pointerEvents: 'none',
+            }}
+          />
           <AppIcon name="upload" size={20} aria-hidden />
           <span>{t('chat.composer.dropToAttach')}</span>
         </div>
