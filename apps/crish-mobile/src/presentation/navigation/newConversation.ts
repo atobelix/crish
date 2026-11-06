@@ -1,7 +1,13 @@
-// 移动端统一新建会话协议原语（维度 1 根治，2026-11-04 裁决）：
-// 无论是从侧边抽屉、会话顶栏还是全局快捷方式点击新建会话，
-// 必须同时执行本地线程槽位重置、远端会话选中重置与路由切回主页，
-// 彻底阻断历史会话上下文向新会话污染。
+// 移动端统一新建会话协议（2026-11-05 修订版，取代 2026-11-04"维度 1"落点）：
+// 任何入口（抽屉加号 / 会话顶栏加号）= 双模槽位重置 + 回到主页新对话面。
+// - 实质不变量保留：新建前必须清空本地活动线程与远端选中态，彻底阻断
+//   历史会话上下文向新会话污染（主页挂载 effect 同款复位兜底）。
+// - 落点反转（2026-11-05 用户裁决）：旧口径"/session/draft 草稿屏、严禁
+//   踢回主页"废止——主页即唯一新对话落点，设备维度由主页 CON-2 中央派生
+//   承担（连接就绪 → 远端按当前目标设备创建；否则 → 本地新线程），旧
+//   draft 伪路由把"新建"硬编码成远端对话的协议断层随之删除。
+// - 命令式导出已删除（无生产调用方且 _options 死参漂移，见巡检 §3.6）；
+//   Hook 是唯一入口。
 import { useCallback } from 'react';
 import { router } from 'expo-router';
 import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
@@ -14,23 +20,11 @@ export interface NewConversationOptions {
 }
 
 /**
- * 执行全局新建会话重置（命令式，可供任意无 React Hook 上下文直接调用）
- */
-export function executeNewConversation(
-  _options: NewConversationOptions = {}
-): void {
-  // 1. 本地对话槽位重置：将当前活动线程归入 inactive 隔离表，清空前台活跃投影
-  localChatSessionStore.getState().resetActiveThread();
-
-  // 2. 远端会话槽位重置：清除当前选中的历史会话 ID，确保 quickRun 不携带历史 sessionId
-  sessionStore.getState().setSelected(null);
-
-  // 3. 路由重置导航到主屏新会话发射台
-  router.navigate('/');
-}
-
-/**
- * 响应式新建会话 Hook（供组件层消费，自动编排抽屉动画稳定性）
+ * 响应式新建会话 Hook（全 App 唯一新建入口）：
+ * 1. 本地对话槽位重置（当前活动线程归入 inactive，清空前台活跃投影）；
+ * 2. 远端会话槽位重置（清除选中历史会话 id）；
+ * 3. 按需收拢抽屉；
+ * 4. 导航回主页新对话面（发送时按主页 CON-2 派生模式在当前设备上创建）。
  */
 export function useNewConversation(): (
   options?: NewConversationOptions
@@ -50,8 +44,14 @@ export function useNewConversation(): (
         actions.close();
       }
 
-      // 4. 切回主屏
-      router.navigate('/');
+      // 4. 回到主页新对话面：栈中已有主页（canGoBack）走 dismissTo
+      // 弹栈回主页；深链冷启单屏栈（栈内无主页）才 navigate——无条件
+      // navigate 会在单屏栈下把主页压在旧会话屏之上、旧屏残留栈内
+      if (router.canGoBack()) {
+        router.dismissTo('/');
+      } else {
+        router.navigate('/');
+      }
     },
     [actions]
   );

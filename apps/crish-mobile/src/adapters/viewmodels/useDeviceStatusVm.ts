@@ -117,8 +117,9 @@ export function useDeviceStatusVm(): DeviceStatusVm {
       if (!target?.online) return;
       if (deviceId === targetDeviceId) return;
       selectAccountTarget(deviceId);
-      // 切换后立即补一轮发现：目标若恰在此刻掉线，自动目标语义会如实改选，
-      // 不让 UI 停留在「已切换到离线设备」的假象上。
+      // 切换后立即补一轮发现：目标若恰在此刻掉线，发现只更新设备表与
+      // 离线呈现、绝不自动改选（目标主权）；UI 以「设备名 · 未连接」
+      // 如实呈现，不停留在「已切换到离线设备」的假连接象上。
       void refreshAccountDevices();
     },
     [freshDevices, targetDeviceId]

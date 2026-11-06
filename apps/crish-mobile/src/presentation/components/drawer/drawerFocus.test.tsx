@@ -15,7 +15,15 @@ import { sessionStore } from '@/domain/store/sessionStore';
 
 jest.mock('expo-router', () => ({
   usePathname: () => '/',
-  router: { navigate: jest.fn(), push: jest.fn() },
+  // 新建对话（newConversation）按 canGoBack 分支 dismissTo / navigate；
+  // 本套件无历史栈 → canGoBack 恒 false，走 navigate 分支（与旧无条件
+  // navigate 的可观察行为一致）
+  router: {
+    navigate: jest.fn(),
+    push: jest.fn(),
+    canGoBack: () => false,
+    dismissTo: jest.fn(),
+  },
 }));
 
 jest.mock('@/adapters/viewmodels/useSessionListVm', () => ({
@@ -124,6 +132,7 @@ describe('CrishDrawerLayout 键盘与焦点防御', () => {
     return (
       <View>
         <TextInput testID="main-input" />
+        <View testID="trigger-open" onTouchStart={() => actions.open()} />
         <View testID="trigger-close" onTouchStart={() => actions.close()} />
         <View
           testID="trigger-close-immediate"
@@ -155,7 +164,7 @@ describe('CrishDrawerLayout 键盘与焦点防御', () => {
     }
   });
 
-  it('点击遮罩层 tapDismiss 触发收起与 Keyboard.dismiss', async () => {
+  it('点按遮罩层 tapDismiss 触发收起与 Keyboard.dismiss（2026-11-05 卡手修复：按下不再抢跑，仅真正点按关闭）', async () => {
     const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
     try {
       const view = await render(
@@ -165,7 +174,23 @@ describe('CrishDrawerLayout 键盘与焦点防御', () => {
         { wrapper: Wrapper }
       );
       const tapDismiss = view.getByTestId('drawer-tap-dismiss');
+      // 抽屉关闭态下 tapDismiss 为 pointerEvents="none"：按下与点按都不触发
       await fireEvent(tapDismiss, 'touchStart');
+      await fireEvent.press(tapDismiss);
+      expect(dismissSpy).not.toHaveBeenCalled();
+      // 先开抽屉（open() 在测试环境同步落定 isOpen=true → 遮罩层接管触摸）；
+      // open() 自带开抽屉时的收键盘动作，清零计数以隔离本用例断言
+      await act(async () => {
+        await fireEvent(view.getByTestId('trigger-open'), 'touchStart');
+      });
+      dismissSpy.mockClear();
+      // 打开态：按下（touchStart）仍不抢跑——拖拽手势期静默（S-A/S-B 修复）
+      await fireEvent(tapDismiss, 'touchStart');
+      expect(dismissSpy).not.toHaveBeenCalled();
+      // 真正点按（press）才收起：close() → handleDrawerClose → 失焦收键盘
+      await act(async () => {
+        await fireEvent.press(tapDismiss);
+      });
       expect(dismissSpy).toHaveBeenCalledTimes(1);
     } finally {
       dismissSpy.mockRestore();

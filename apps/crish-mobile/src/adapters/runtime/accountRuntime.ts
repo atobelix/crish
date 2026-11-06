@@ -31,6 +31,7 @@ import {
   requestClientTicket,
 } from '@/adapters/account/accountService';
 import { notifySelectedDeviceOffline } from '@/notifications/localProducer';
+import { emitHostToast } from '@/presentation/ui/toastBus';
 
 /** 设备发现心跳周期（仅前台运行；后台挂起） */
 const DISCOVERY_INTERVAL_MS = 15_000;
@@ -51,6 +52,50 @@ let remoteTargetId: string | null = null;
 const TARGET_MISS_ROUND_LIMIT = 2;
 let targetMissRounds = 0;
 let lastDiscoveryRef: readonly AccountDevice[] | null = null;
+
+/**
+ * 桌面设备上线边沿提醒（2026-11-05 目标主权裁决的对称面）：
+ * 自动选靶删除后，"别台电脑上线了"对用户不可见——前台 Toast 提醒补齐
+ * 感知。提醒形态为**纯提醒**（定案）：不带任何直达动作，切换永远由
+ * 用户点设备胶囊开 DeviceSheet 手动完成，提醒绝不代选。防扰五约束：
+ * ① 当前目标自身不上报（接线恢复在连接横幅/设备胶囊可见，重复提醒
+ * 是噪音）；② prev = null（冷启动首填）不算边沿；③ 同一轮发现里多
+ * 台上线合并为一条提醒（逐台连发是骚扰）；④ 边沿去重（前后快照
+ * diff，稳态轮次不重复报）；⑤ 后台不报（发现心跳仅前台运行，提醒
+ * 经 toastBus 呈现、未挂载前台宿主时静默丢弃）。只提醒 desktop 平台。
+ */
+function notifyDesktopOnlineEdges(
+  prev: readonly AccountDevice[] | null,
+  next: readonly AccountDevice[],
+  targetDeviceId: string | null
+): void {
+  if (prev === null) return;
+  const newlyOnline = next.filter((device) => {
+    if (device.platform !== 'desktop' || !device.online) return false;
+    if (device.id === targetDeviceId) return false;
+    const wasOnline = prev.find((d) => d.id === device.id)?.online === true;
+    return !wasOnline;
+  });
+  if (newlyOnline.length === 0) return;
+  if (newlyOnline.length === 1) {
+    emitHostToast(
+      {
+        title: '桌面设备已上线',
+        message: `${newlyOnline[0]!.name} 已上线，可在设备列表切换控制目标`,
+      },
+      'info'
+    );
+    return;
+  }
+  const names = newlyOnline.map((device) => device.name).join('、');
+  emitHostToast(
+    {
+      title: '桌面设备已上线',
+      message: `${names} 等 ${newlyOnline.length} 台桌面设备已上线，可在设备列表切换控制目标`,
+    },
+    'info'
+  );
+}
 
 /**
  * 只拆接线不动数据面（CON-3）：数据面的去留由调用方按场景裁决——
@@ -128,9 +173,13 @@ export function syncAccountRemote(): void {
     Boolean(targetDeviceId) &&
     target?.online === true;
 
-  // 发现轮次判定：引用变化才算新一轮（见 TARGET_MISS_ROUND_LIMIT 注释）
+  // 发现轮次判定：引用变化才算新一轮（见 TARGET_MISS_ROUND_LIMIT 注释）；
+  // 新一轮落表前先做上线边沿提醒（prev=上一轮快照，避免冷启动首轮误报）
   const isNewDiscoveryRound = devices !== lastDiscoveryRef;
-  if (isNewDiscoveryRound) lastDiscoveryRef = devices;
+  if (isNewDiscoveryRound) {
+    notifyDesktopOnlineEdges(lastDiscoveryRef, devices, targetDeviceId);
+    lastDiscoveryRef = devices;
+  }
 
   if (!eligible) {
     // 硬资格丢失（登出 / 无令牌 / 无目标 / 目标已切换到别台）：立即拆线，

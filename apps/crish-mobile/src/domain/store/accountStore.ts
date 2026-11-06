@@ -1,4 +1,11 @@
 // 账号领域 store（无网络副效应；HTTP / SecureStore 编排在 adapters/account）。
+//
+// 目标设备主权（2026-11-05 用户裁决）：targetDeviceId 只由用户显式动作
+// 改变（selectTarget / selectLocalTarget / 冷启动水合恢复）——设备发现
+// 心跳的 setDevices 只更新设备表，严禁自动选靶（旧实现"目标离线即静默
+// 改选第一台在线桌面"构成越权状态变更：正在查看的会话面会被整表换成
+// 别台设备的快照）。设备上线边沿只做纯提醒（见 accountRuntime 的
+// notifyDesktopOnlineEdges），切换永远由用户在设备 Sheet 手动完成。
 
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type {
@@ -16,7 +23,7 @@ export interface AccountActions {
   setAccessToken: (token: string | null) => void;
   setDevices: (devices: AccountDevice[]) => void;
   selectTarget: (deviceId: string | null) => void;
-  /** 显式选「本机」：目标清空 + 本地钉住（自动选靶让位，见 setDevices） */
+  /** 显式选「本机」：目标清空 + 本地钉住（呈现语义，见 useDeviceStatusVm） */
   selectLocalTarget: () => void;
   setError: (error: string | null) => void;
   reset: () => void;
@@ -78,32 +85,11 @@ export const accountStore: StoreApi<AccountStoreState> =
         if (areDevicesEqual(state.devices, devices)) {
           return state;
         }
-        // 用户显式选了「本机」（本地钉住）：目标恒为 null——自动选靶不得
-        // 把用户改选到远端，否则「选本机」会在下一轮发现心跳（≤15s）内被
-        // 静默撤销，等于假选择。解钉只能由显式改选远端（selectTarget）。
-        if (state.localTargetPinned) {
-          return { devices, targetDeviceId: null };
-        }
-        // 成功但为空的发现只更新设备列表（当前无在线设备），不撤销既有
-        // 目标（CON-1 空发现保护）：目标的去留由后续发现是否命中与资格门
-        // 去抖裁决，不由一次空快照清零——否则桌面 presence 一次抖动就
-        // 丢目标、整条接线被拆。
-        if (devices.length === 0) {
-          return { devices, targetDeviceId: state.targetDeviceId };
-        }
-        const current = devices.find(
-          (device) => device.id === state.targetDeviceId
-        );
-        const onlineDesktop = devices.find(
-          (device) => device.platform === 'desktop' && device.online
-        );
-        const firstDesktop = devices.find(
-          (device) => device.platform === 'desktop'
-        );
-        const nextTarget = current?.online
-          ? current.id
-          : (onlineDesktop?.id ?? current?.id ?? firstDesktop?.id ?? null);
-        return { devices, targetDeviceId: nextTarget };
+        // 只更新设备表，绝不改写 targetDeviceId（2026-11-05 目标主权裁决）：
+        // 目标离线与否只影响资格门（accountRuntime.syncAccountRemote 的
+        // 去抖拆线）与呈现（DevicePill 离线徽标），不由发现心跳改写用户
+        // 选择；上线/切换走提醒 + 用户显式动作。
+        return { devices };
       }),
     selectTarget: (targetDeviceId) =>
       set({ targetDeviceId, localTargetPinned: false }),

@@ -37,6 +37,7 @@ jest.mock('@/adapters/account/accountService', () => ({
     relayUrl: 'wss://r',
     exp: 1,
   })),
+  selectAccountTarget: jest.fn(() => {}),
 }));
 
 import {
@@ -45,6 +46,7 @@ import {
   accountRemoteTargetId,
   refreshAndSyncAccountRemote,
 } from './accountRuntime';
+import { subscribeHostToasts } from '@/presentation/ui/toastBus';
 import {
   ensureRelayObservationWiring,
   disposeObservationWiring,
@@ -551,5 +553,128 @@ describe('发现心跳与列表同步解耦（2026-11-02 增量口径）', () =>
     expect(ensureRelayMock).not.toHaveBeenCalled();
     // 会话数据面引用不变（零写入）
     expect(sessionStore.getState().sessions).toBe(sessionsBefore);
+  });
+});
+
+describe('设备上线边沿提醒（2026-11-05 目标主权对称面）', () => {
+  function makeDevice(id: string, online: boolean): AccountDevice {
+    return {
+      id,
+      name: `桌面-${id}`,
+      platform: 'desktop',
+      lastSeenAt: Date.now(),
+      online,
+    };
+  }
+
+  it('非目标桌面上线发纯提醒（无直达动作）；目标上线与冷启动首轮不提醒', () => {
+    const seen: Array<Record<string, any>> = [];
+    const unsub = subscribeHostToasts((options) => {
+      seen.push(typeof options === 'string' ? { message: options } : options);
+    });
+    try {
+      startAccountRuntime();
+
+      // 冷启动首轮发现（prev = null）：即使有非目标在线也不产生边沿
+      accountStore.setState({
+        status: 'loggedIn',
+        accessToken: 'at',
+        targetDeviceId: 'd-1',
+        devices: [makeDevice('d-1', true), makeDevice('d-2', true)],
+      });
+      expect(seen).toHaveLength(0);
+
+      // 下一轮：新桌面 d-3 上线 → 一条纯提醒（定案形态：不带「切换」
+      // 直达动作，切换由用户开 DeviceSheet 手动完成，提醒绝不代选）
+      accountStore.setState({
+        devices: [
+          makeDevice('d-1', true),
+          makeDevice('d-2', false),
+          makeDevice('d-3', true),
+        ],
+      });
+      expect(seen).toHaveLength(1);
+      const toast = seen[0]!;
+      expect(toast.message).toContain('桌面-d-3');
+      expect(toast.actions).toBeUndefined();
+      const { selectAccountTarget } = jest.requireMock(
+        '@/adapters/account/accountService'
+      );
+      expect(selectAccountTarget).not.toHaveBeenCalled();
+
+      // 稳态轮次（引用变化但无新上线边沿）：不重复提醒
+      accountStore.setState({
+        devices: [
+          makeDevice('d-1', true),
+          makeDevice('d-2', false),
+          makeDevice('d-3', true),
+        ].map((d) => ({ ...d, lastSeenAt: d.lastSeenAt + 1000 })),
+      });
+      expect(seen).toHaveLength(1);
+    } finally {
+      unsub();
+      stopAccountRuntime();
+    }
+  });
+
+  it('同一轮多台桌面上线合并为一条提醒（防扰约束③）', () => {
+    const seen: Array<Record<string, any>> = [];
+    const unsub = subscribeHostToasts((options) => {
+      seen.push(typeof options === 'string' ? { message: options } : options);
+    });
+    try {
+      startAccountRuntime();
+
+      // 首轮：只有目标在线
+      accountStore.setState({
+        status: 'loggedIn',
+        accessToken: 'at',
+        targetDeviceId: 'd-1',
+        devices: [makeDevice('d-1', true)],
+      });
+      expect(seen).toHaveLength(0);
+
+      // 下一轮：d-2 与 d-3 同时上线 → 合并为一条（不是逐台两条）
+      accountStore.setState({
+        devices: [
+          makeDevice('d-1', true),
+          makeDevice('d-2', true),
+          makeDevice('d-3', true),
+        ],
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.message).toContain('桌面-d-2');
+      expect(seen[0]!.message).toContain('桌面-d-3');
+      expect(seen[0]!.message).toContain('2 台');
+      expect(seen[0]!.actions).toBeUndefined();
+    } finally {
+      unsub();
+      stopAccountRuntime();
+    }
+  });
+
+  it('当前目标自身上线不提醒（接线恢复已在连接横幅可见）', () => {
+    const seen: Array<Record<string, any>> = [];
+    const unsub = subscribeHostToasts((options) => {
+      seen.push(typeof options === 'string' ? { message: options } : options);
+    });
+    try {
+      startAccountRuntime();
+      accountStore.setState({
+        status: 'loggedIn',
+        accessToken: 'at',
+        targetDeviceId: 'd-1',
+        devices: [makeDevice('d-1', false)],
+      });
+      expect(seen).toHaveLength(0);
+      // 目标从离线恢复在线：资格门接线恢复，但不上线提醒
+      accountStore.setState({
+        devices: [makeDevice('d-1', true)],
+      });
+      expect(seen).toHaveLength(0);
+    } finally {
+      unsub();
+      stopAccountRuntime();
+    }
   });
 });

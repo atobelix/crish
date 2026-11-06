@@ -10,6 +10,9 @@ import {
 import {
   useSafeBack,
   useAndroidBackGuard,
+  useSessionVisitRecorder,
+  useSessionVisitStackAccountReset,
+  resetSessionVisitStack,
   SAFE_BACK_FALLBACK_HREF,
   AUTH_BACK_FALLBACK_HREF,
 } from '@/presentation/navigation/useSafeBack';
@@ -24,6 +27,7 @@ jest.mock('expo-router', () => ({
   router: {
     back: jest.fn(),
     replace: jest.fn(),
+    navigate: jest.fn(),
     canGoBack: jest.fn(),
   },
   usePathname: () => mockCurrentPathname,
@@ -31,6 +35,7 @@ jest.mock('expo-router', () => ({
 
 const backMock = router.back as jest.Mock;
 const replaceMock = router.replace as jest.Mock;
+const navigateMock = router.navigate as jest.Mock;
 const canGoBackMock = router.canGoBack as jest.Mock;
 
 let registeredBackHandler:
@@ -41,6 +46,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   (Platform as { OS: string }).OS = 'android';
   mockCurrentPathname = '/';
+  resetSessionVisitStack();
   authStore.setState({ pairState: 'unpaired' });
   accountStore.setState({ status: 'loggedOut', user: null });
   registeredBackHandler = null;
@@ -291,5 +297,215 @@ describe('useAndroidBackGuard', () => {
       expect(toastSpy).toHaveBeenCalledTimes(2);
       dateSpy.mockRestore();
     });
+  });
+});
+
+describe('会话访问栈（题 9：A→抽屉→B→返回先回 A，耗尽才回主页）', () => {
+  /** 记录器 + 安全返回同挂（根布局 / 会话头栏的真实组合） */
+  async function renderRecorderWithSafeBack() {
+    const harness = await renderHook(() => {
+      useSessionVisitRecorder();
+      return useSafeBack();
+    });
+    return harness;
+  }
+
+  async function gotoPath(
+    rerender: (props: never) => Promise<void> | void,
+    path: string
+  ): Promise<void> {
+    mockCurrentPathname = path;
+    await act(async () => {
+      await rerender({} as never);
+    });
+  }
+
+  it('头栏返回：B 返回先回 A；落地不反压 B（防弹跳）；栈空后回落主页兜底', async () => {
+    accountStore.setState({ status: 'loggedIn' });
+    canGoBackMock.mockReturnValue(false);
+
+    const { result, rerender } = await renderRecorderWithSafeBack();
+
+    // 主页 → 会话 A（不记录）→ 抽屉切会话 B（记录被替换者 A）
+    await gotoPath(rerender, '/session/a');
+    await gotoPath(rerender, '/session/b');
+
+    // 在 B 按返回：先回最近会话 A，不走 router.back / replace 兜底
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock).toHaveBeenCalledWith('/session/a');
+    expect(backMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    // 落地 A（经访问栈返回）：这次落地不得把 B 再压栈
+    await gotoPath(rerender, '/session/a');
+
+    // 在 A 再按返回：栈已耗尽 → 既有兜底 replace 主页（若落地误压 B，
+    // 这里会错误地 navigate 去 B，断言即失败）
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).toHaveBeenCalledWith(SAFE_BACK_FALLBACK_HREF);
+  });
+
+  it('头栏返回：A→B→C 逆序回退（先 B 后 A）', async () => {
+    accountStore.setState({ status: 'loggedIn' });
+    canGoBackMock.mockReturnValue(false);
+
+    const { result, rerender } = await renderRecorderWithSafeBack();
+    await gotoPath(rerender, '/session/a');
+    await gotoPath(rerender, '/thread/b');
+    await gotoPath(rerender, '/session/c');
+
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).toHaveBeenNthCalledWith(1, '/thread/b');
+
+    await gotoPath(rerender, '/thread/b');
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).toHaveBeenNthCalledWith(2, '/session/a');
+  });
+
+  it('Android 返回键：会话页有访问记录时先回最近会话并消费事件；耗尽后走既有兜底', async () => {
+    accountStore.setState({ status: 'loggedIn' });
+    canGoBackMock.mockReturnValue(false);
+
+    const harness = await renderHook(() => {
+      useSessionVisitRecorder();
+      useAndroidBackGuard();
+    });
+    await waitFor(() => {
+      expect(registeredBackHandler).not.toBeNull();
+    });
+
+    await gotoPath(harness.rerender, '/session/a');
+    await gotoPath(harness.rerender, '/session/b');
+    await waitFor(() => {
+      expect(registeredBackHandler).not.toBeNull();
+    });
+
+    // 在 B 按物理返回键：消费事件并回 A
+    const handled1 = triggerHardwareBack();
+    expect(handled1).toBe(true);
+    expect(navigateMock).toHaveBeenCalledWith('/session/a');
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    // 落地 A 后再按：栈已耗尽 → 既有场景 B 兜底 replace 主页
+    await gotoPath(harness.rerender, '/session/a');
+    const handled2 = triggerHardwareBack();
+    expect(handled2).toBe(true);
+    expect(replaceMock).toHaveBeenCalledWith('/');
+  });
+
+  it('无访问记录的会话页返回行为与既有口径一致（不被空栈改变）', async () => {
+    accountStore.setState({ status: 'loggedIn' });
+    canGoBackMock.mockReturnValue(true);
+    mockCurrentPathname = '/session/only';
+
+    const { result } = await renderHook(() => useSafeBack());
+    await act(async () => {
+      result.current();
+    });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(backMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('会话访问栈账号生命周期复位（收口裁定：登出/换号清栈）', () => {
+  /** 记录器 + 账号复位 + 安全返回同挂（根布局 / 会话头栏的真实组合） */
+  async function renderFullHarness() {
+    return renderHook(() => {
+      useSessionVisitRecorder();
+      useSessionVisitStackAccountReset();
+      return useSafeBack();
+    });
+  }
+
+  async function gotoPath(
+    rerender: (props: never) => Promise<void> | void,
+    path: string
+  ): Promise<void> {
+    mockCurrentPathname = path;
+    await act(async () => {
+      await rerender({} as never);
+    });
+  }
+
+  it('登出后清栈：会话页返回不再回旧账号的最近会话，落未登录兜底', async () => {
+    accountStore.setState({
+      status: 'loggedIn',
+      user: { id: 'u-1', email: 'a@example.com', name: 'A' },
+    });
+    canGoBackMock.mockReturnValue(false);
+
+    const { result, rerender } = await renderFullHarness();
+    await gotoPath(rerender, '/session/a');
+    await gotoPath(rerender, '/session/b');
+
+    // 登出的终局形态（logoutAccount / 删号 / 会话失效同落点）
+    await act(async () => {
+      accountStore.setState({ status: 'loggedOut', user: null });
+    });
+
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(replaceMock).toHaveBeenCalledWith(AUTH_BACK_FALLBACK_HREF);
+  });
+
+  it('换号（user.id 变化、仍为登录态）同样清栈', async () => {
+    accountStore.setState({
+      status: 'loggedIn',
+      user: { id: 'u-1', email: 'a@example.com', name: 'A' },
+    });
+    canGoBackMock.mockReturnValue(false);
+
+    const { result, rerender } = await renderFullHarness();
+    await gotoPath(rerender, '/session/a');
+    await gotoPath(rerender, '/session/b');
+
+    await act(async () => {
+      accountStore.setState({
+        user: { id: 'u-2', email: 'b@example.com', name: 'B' },
+      });
+    });
+
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(replaceMock).toHaveBeenCalledWith(SAFE_BACK_FALLBACK_HREF);
+  });
+
+  it('同账号资料变化（同 id 改名）不清栈：返回仍先回最近会话', async () => {
+    accountStore.setState({
+      status: 'loggedIn',
+      user: { id: 'u-1', email: 'a@example.com', name: 'A' },
+    });
+    canGoBackMock.mockReturnValue(false);
+
+    const { result, rerender } = await renderFullHarness();
+    await gotoPath(rerender, '/session/a');
+    await gotoPath(rerender, '/session/b');
+
+    await act(async () => {
+      accountStore.setState({
+        user: { id: 'u-1', email: 'a@example.com', name: 'A 改名' },
+      });
+    });
+
+    await act(async () => {
+      result.current();
+    });
+    expect(navigateMock).toHaveBeenCalledWith('/session/a');
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 });

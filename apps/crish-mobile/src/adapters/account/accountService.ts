@@ -307,7 +307,7 @@ async function applyTokenPair(
     email: user.email,
     userJson: JSON.stringify(user),
     profileJson: profile ? JSON.stringify(profile) : null,
-    // 已选目标（setDevices 自动选靶的结果）随会话落盘，冷启动水合恢复（CON-1）
+    // 已选目标（只由用户显式选择产生，setDevices 严禁自动选靶）随会话落盘，冷启动水合恢复（CON-1）
     targetDeviceId: accountStore.getState().targetDeviceId,
     localTargetPinned: accountStore.getState().localTargetPinned,
   });
