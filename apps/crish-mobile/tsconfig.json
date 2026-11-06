@@ -20,7 +20,8 @@
       "@/*": ["./src/*"],
       "@/assets/*": ["./assets/*"],
       "crish-asr": ["./modules/crish-asr/src/index.ts"],
-      "crish-haptics": ["./modules/crish-haptics/src/index.ts"]
+      "crish-haptics": ["./modules/crish-haptics/src/index.ts"],
+      "crish-js-sandbox": ["./modules/crish-js-sandbox/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

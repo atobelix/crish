@@ -23,6 +23,8 @@ import { useSkillsVm } from '@/adapters/viewmodels/useSkillsVm';
 import { useComposerAttachments } from '@/adapters/viewmodels/useComposerAttachments';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
 import { ensureSessionHistory } from '@/adapters/runtime/appRuntime';
+import { remoteControlFacade } from '@/adapters/RemoteControlFacade';
+import { haptics } from '@/adapters/platform/haptics';
 import {
   buildSessionTimeline,
   type TimelineBlock,
@@ -60,23 +62,29 @@ export interface RemoteConversationSync {
   follow: boolean;
   /** 发送成功回调（宿主据此恢复跟随，原 handleSent 语义） */
   onSendSuccess: () => void;
+  /** 草稿态首条消息发出原子创建会话回调（供宿主无感替换路由） */
+  onSessionCreated?: (newSessionId: string) => void;
 }
 
 export function useRemoteConversationEngine(
-  sessionId: string,
+  sessionId: string | null,
   nav: RemoteConversationNav,
   sync: RemoteConversationSync
 ): ConversationEngine {
   const { onOpenRun, onOpenTerminal, onOpenTools } = nav;
-  const { follow, onSendSuccess } = sync;
+  const { follow, onSendSuccess, onSessionCreated } = sync;
   const theme = useTheme();
   const router = useRouter();
   const goBack = useSafeBack();
+  // 无会话绑定态（新建远程对话面）：sessionId 为空（宿主以 '' 传入），
+  // 首条消息发出时由 composer 原子创建会话。协议 draft 会话已退役，
+  // 不再有 'draft' 字面 id 流入（2026-11-05 死代码清理）。
+  const noSession = !sessionId;
   // 离线出口「去本地对话」按压反馈（按压过渡统一批）
   const exitPress = usePressFade();
-  const window = useSessionWindow(sessionId);
+  const window = useSessionWindow(sessionId ?? '');
   const summary = useSessionStore((s) =>
-    s.sessions.find((item) => item.id === sessionId)
+    noSession ? undefined : s.sessions.find((item) => item.id === sessionId)
   );
   // 会话操作（G3）：··· 菜单直达改名/置顶/归档/导出/删除；删本会话后返回
   const sessionOps = useSessionOpsController({
@@ -106,12 +114,18 @@ export function useRemoteConversationEngine(
   }
   const echoOf = echoOfRef.current;
 
-  const composer = useSessionComposer(sessionId, (prompt, runId) => {
-    setLocalPrompts((current) => [
-      ...current,
-      { id: `local-${runId}`, text: prompt, atMs: Date.now() },
-    ]);
-  });
+  const composer = useSessionComposer(
+    noSession ? null : sessionId,
+    (prompt, runId, createdSessionId) => {
+      setLocalPrompts((current) => [
+        ...current,
+        { id: `local-${runId}`, text: prompt, atMs: Date.now() },
+      ]);
+      if (createdSessionId && onSessionCreated) {
+        onSessionCreated(createdSessionId);
+      }
+    }
+  );
 
   const { showToast } = useToast();
   // 已选附件（G5b）：发送成功清空、失败保留（清空只发生在成功回执后）
@@ -123,7 +137,22 @@ export function useRemoteConversationEngine(
     summary?.engineLastRunId ?? null
   );
 
-  // 转场落定状态标志（方案 21：双阶段挂载，避开抽屉向左平移动画期间的 CPU 抢占）
+  // 原生打断控制方法：下发 L2 cooperative_stop
+  const handleStop = useCallback(async () => {
+    if (!currentRunId) return;
+    try {
+      haptics.tap();
+      await remoteControlFacade.stopRun(
+        currentRunId,
+        noSession ? undefined : (sessionId ?? undefined)
+      );
+      showToast('已请求停止生成', 'info');
+    } catch {
+      showToast('停止请求失败', 'error');
+    }
+  }, [currentRunId, noSession, sessionId, showToast]);
+
+  // 转场落定状态标志（双阶段挂载）
   const [transitionSettled, setTransitionSettled] = useState(false);
 
   useEffect(() => {
@@ -142,6 +171,7 @@ export function useRemoteConversationEngine(
   }, [sessionId]);
 
   const blocks = useMemo(() => {
+    if (noSession && localPrompts.length === 0) return [];
     if (!transitionSettled) {
       // 快速首帧：最多展示最新 3 条轻量文本，零长列表负担
       const recentEntries = window.entries.slice(-3);
@@ -151,7 +181,7 @@ export function useRemoteConversationEngine(
     const prompts = localPrompts.map<TimelineBlock>((prompt) => echoOf(prompt));
     if (prompts.length === 0) return base;
     return [...base, ...prompts].sort((a, b) => a.atMs - b.atMs);
-  }, [window.entries, localPrompts, transitionSettled]);
+  }, [window.entries, localPrompts, transitionSettled, noSession]);
   const hasTools = blocks.some((block) => block.kind === 'tool');
 
   // 生成进行中判定（批 C ② 排队触发面）：块流中任一消息/思考流式
@@ -272,9 +302,10 @@ export function useRemoteConversationEngine(
   });
 
   // 未送达行（批 C 03-4）：本会话 outbox 未送达组 + 送达转绿投影
-  const undelivered = useUndeliveredVm(sessionId);
+  const undelivered = useUndeliveredVm(sessionId ?? '');
 
   useEffect(() => {
+    if (!sessionId) return;
     if (!transitionSettled) return;
     ensureSessionHistory(sessionId);
   }, [sessionId, transitionSettled]);
@@ -282,11 +313,12 @@ export function useRemoteConversationEngine(
   // 打开即退休（批 C ⑫）：经任何入口打开本会话 → 该会话的通知中心
   // 未读条目一并退休（归属判定与幂等在 retireNotificationsForSession）
   useEffect(() => {
+    if (!sessionId) return;
     retireNotificationsForSession(sessionId);
   }, [sessionId]);
 
   useEffect(() => {
-    if (follow && window.lastSeq > 0) {
+    if (sessionId && follow && window.lastSeq > 0) {
       sessionStore.getState().markRead(sessionId, window.lastSeq);
     }
   }, [follow, sessionId, window.lastSeq]);
@@ -537,13 +569,17 @@ export function useRemoteConversationEngine(
     </>
   );
 
+  // 核心闭环：将 engine.busy 准确绑定到真实的生成态（runActive || composer.busy）
+  const isGenerating = runActive || composer.busy;
+
   return {
     kind: 'remote',
-    id: sessionId,
-    title: summary?.title?.trim() || null,
+    id: noSession ? 'draft' : (sessionId ?? 'draft'),
+    title: summary?.title?.trim() || (noSession ? '新对话' : null),
     blocks,
-    busy: composer.busy,
+    busy: isGenerating,
     available: composer.connected,
+    stop: isGenerating && currentRunId ? handleStop : undefined,
     error:
       composer.feedback.kind === 'error'
         ? { message: composer.feedback.message ?? '' }
@@ -600,7 +636,7 @@ export function useRemoteConversationEngine(
     },
     menuEntries,
     // 空态标题与迁移前 TimelineView 缺省值一致（显式化为引擎供给）
-    emptyState: { title: '暂无消息' },
+    emptyState: { title: noSession ? '开始新的远程对话' : '暂无消息' },
     renderSheets,
     renderComposerLead,
   };

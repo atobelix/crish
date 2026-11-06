@@ -21,8 +21,9 @@ import { createWebSearchTool } from './webSearchTool';
 import { createWebFetchTool } from './webFetchTool';
 import {
   createRunJsSandboxTool,
-  executeFallbackJsSandbox,
+  type JsSandboxRunner,
 } from './runJsSandboxTool';
+import * as vm from 'node:vm';
 import { registerDefaultMobileTools } from './index';
 import type { MobileToolDefinition, ToolExecutionResult } from './types';
 import type { WaterfallSearchResult } from '../webSearch/searchWaterfallOrchestrator';
@@ -625,8 +626,79 @@ describe('端侧通用工具体系单元测试 (Mobile Tool System)', () => {
   });
 
   describe('6. run_js_sandbox 工具端到端执行测试', () => {
+    /**
+     * Node 宿主执行器替身（仅测试）：经工具的 runner 注入 seam 提供
+     * 真实执行，使工具面整形 / 日志透传可端到端验证。生产执行恒走
+     * crish-js-sandbox 原生模块，不经此替身（2026-11-05 收敛：工具
+     * 自带 Node vm 回退已删，无原生模块时工具诚实降级
+     * runtime_unavailable，见本组末尾契约）。
+     */
+    const nodeHostRunner: JsSandboxRunner = async (code, options) => {
+      const startedAt = Date.now();
+      const logs: string[] = [];
+      const capture =
+        (prefix: string) =>
+        (...args: unknown[]) =>
+          logs.push(
+            `${prefix} ${args
+              .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+              .join(' ')}`
+          );
+      try {
+        const value = vm.runInNewContext(
+          code,
+          {
+            console: {
+              log: capture('[log]'),
+              info: capture('[info]'),
+              warn: capture('[warn]'),
+              error: capture('[error]'),
+            },
+            Math,
+            Date,
+            JSON,
+            Array,
+            Object,
+            String,
+            Number,
+            Boolean,
+            RegExp,
+            Map,
+            Set,
+            BigInt,
+            parseInt,
+            parseFloat,
+            isNaN,
+            isFinite,
+          },
+          { timeout: options.timeoutMs }
+        );
+        return {
+          status: 'success',
+          result:
+            value === undefined
+              ? 'undefined'
+              : (JSON.stringify(value, null, 2) ?? String(value)),
+          logs: logs.join('\n'),
+          durationMs: Date.now() - startedAt,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const isTimeout = /timed out/i.test(message);
+        return {
+          status: 'error',
+          kind: isTimeout ? 'timeout' : 'exception',
+          error: isTimeout
+            ? `Script execution timed out (${options.timeoutMs}ms)`
+            : message,
+          logs: logs.join('\n'),
+          durationMs: Date.now() - startedAt,
+        };
+      }
+    };
+
     it('正确执行确定性高精度计算与标准内置对象运算', async () => {
-      const tool = createRunJsSandboxTool();
+      const tool = createRunJsSandboxTool({ runner: nodeHostRunner });
       const result = await tool.execute(
         {
           code: 'const r = Math.sqrt(256) * 10; r + 5;',
@@ -641,7 +713,7 @@ describe('端侧通用工具体系单元测试 (Mobile Tool System)', () => {
     });
 
     it('正确捕获 console.log 内存日志', async () => {
-      const tool = createRunJsSandboxTool();
+      const tool = createRunJsSandboxTool({ runner: nodeHostRunner });
       const code = `
         console.log("Calculated item:", 123);
         console.info("Status: OK");
@@ -661,7 +733,7 @@ describe('端侧通用工具体系单元测试 (Mobile Tool System)', () => {
     });
 
     it('代码语法或运行时异常安全捕获，返回明确错误类型', async () => {
-      const tool = createRunJsSandboxTool();
+      const tool = createRunJsSandboxTool({ runner: nodeHostRunner });
       const result = await tool.execute(
         {
           code: 'const a = undefined; a.nonExistentMethod();',
@@ -683,8 +755,8 @@ describe('端侧通用工具体系单元测试 (Mobile Tool System)', () => {
       expect(result.error).toBe('empty_code');
     });
 
-    it('Fallback 运行时 5000ms 超时中断防护', async () => {
-      const outcome = await executeFallbackJsSandbox('while(true) {}', {
+    it('注入执行器对同步死循环的超时中断防护', async () => {
+      const outcome = await nodeHostRunner('while(true) {}', {
         timeoutMs: 100, // 缩短单测等待时间至 100ms
         memoryBytes: 64 * 1024 * 1024,
       });
@@ -692,6 +764,18 @@ describe('端侧通用工具体系单元测试 (Mobile Tool System)', () => {
       expect(outcome.status).toBe('error');
       expect(outcome.kind).toBe('timeout');
       expect(outcome.error).toContain('timed out');
+    });
+
+    it('无原生模块时诚实降级 runtime_unavailable（不抛致命）', async () => {
+      // Jest 宿主无 crish-js-sandbox 原生模块：默认工具必须把模块的
+      // runtime_unavailable 透传为工具错误结果，而非抛错或假装成功
+      const tool = createRunJsSandboxTool();
+      const result = await tool.execute({ code: '1 + 1' }, {});
+
+      expect(result.ok).toBe(false);
+      const parsed = JSON.parse(result.output);
+      expect(parsed.status).toBe('error');
+      expect(parsed.kind).toBe('runtime_unavailable');
     });
   });
 

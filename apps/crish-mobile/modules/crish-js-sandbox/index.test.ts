@@ -1,256 +1,254 @@
-import {
-  runJsSandbox,
-  DEFAULT_LIMITS,
-  type JsSandboxSuccessOutcome,
-  type JsSandboxErrorOutcome,
+/**
+ * crish-js-sandbox 桥接契约测试（2026-11-05 收敛后重写）：
+ *
+ * 本模块是端侧 JS 沙箱的唯一实现真源，生产路径只有两条——原生
+ * QuickJS 模块在场则桥接执行，不在场则 runtime_unavailable 诚实
+ * 降级。旧 Node vm 回退已按删除清单清除，本套件钉住桥接边界契约：
+ * 1. 原生路径可达：以 (runId, code, limits) 形状调用原生 run，
+ *    结果 JSON 原样透传；探测名首选 'CrishJsSandbox'（与原生侧
+ *    JsSandboxModule.kt 的 Name 注册一致）；
+ * 2. 原生缺失：返回 runtime_unavailable 结构化错误，绝不抛致命；
+ * 3. 原生抛错 / 返回坏 JSON → internal；预取消 → cancelled 且不
+ *    触达原生；执行中取消 → cancel(runId) 被调用且结果 cancelled；
+ * 4. onSettled 在成功与降级路径均触发；DEFAULT_LIMITS 基准值。
+ *
+ * 执行语义本身（求值 / 超时 / 内存熔断）由原生 QuickJS 实现承担，
+ * 不在本 TS 契约面内——旧回退语义测试随回退一并退役。
+ */
+import type {
+  JsSandboxErrorOutcome,
+  JsSandboxNativeModule,
+  JsSandboxSuccessOutcome,
 } from './index';
 
-describe('crish-js-sandbox (QuickJS 隔离沙箱模块)', () => {
-  describe('1. 正常表达式求值与 JSON 返回', () => {
-    test('支持简单算术表达式与基础类型求值', async () => {
-      const outcome = await runJsSandbox('1 + 2 * 3');
+const mockRequireOptionalNativeModule = jest.fn();
+
+jest.mock('expo', () => ({
+  requireOptionalNativeModule: (name: string) =>
+    mockRequireOptionalNativeModule(name),
+}));
+
+type SandboxModule = typeof import('./index');
+
+/**
+ * 每次以指定的原生在场状态全新加载模块（绕开模块内原生探测缓存）。
+ * 注：本仓 jest 环境不支持动态 import()（无 --experimental-vm-modules），
+ * 故经 jest.requireActual 在 resetModules 后同步重载真模块——其内部
+ * require('expo') 仍走上方 mock，探测结果由 mock 实现决定。
+ */
+async function loadModule(native: unknown): Promise<SandboxModule> {
+  jest.resetModules();
+  mockRequireOptionalNativeModule.mockReset();
+  mockRequireOptionalNativeModule.mockImplementation((name: string) =>
+    name === 'CrishJsSandbox' ? native : null
+  );
+  return jest.requireActual<SandboxModule>('./index');
+}
+
+function fakeNative(
+  overrides: Partial<JsSandboxNativeModule> = {}
+): JsSandboxNativeModule {
+  return {
+    run: jest.fn(async () =>
+      JSON.stringify({
+        status: 'ok',
+        result: '7',
+        logs: '',
+        logsTruncated: false,
+        durationMs: 1,
+      })
+    ),
+    cancel: jest.fn(),
+    ...overrides,
+  };
+}
+
+describe('crish-js-sandbox 桥接契约', () => {
+  describe('1. 原生路径可达（形状断言）', () => {
+    it('以 (runId, code, limits) 调用原生 run 并透传 ok 结果', async () => {
+      const native = fakeNative();
+      const mod = await loadModule(native);
+
+      const outcome = await mod.runJsSandbox('1 + 2 * 3');
+
       expect(outcome.status).toBe('ok');
       const ok = outcome as JsSandboxSuccessOutcome;
       expect(ok.result).toBe('7');
-      expect(ok.durationMs).toBeGreaterThanOrEqual(0);
-      expect(ok.logs).toBe('');
-      expect(ok.logsTruncated).toBe(false);
-    });
 
-    test('支持多行语句并返回最后一条表达式值', async () => {
-      const code = `
-        const a = 15;
-        const b = 25;
-        const c = a + b;
-        c * 2;
-      `;
-      const outcome = await runJsSandbox(code);
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.result).toBe('80');
-    });
-
-    test('支持显式 return 语句与复杂对象/数组返回值', async () => {
-      const code = `
-        const user = { name: 'Alice', age: 28, tags: ['ai', 'mobile'] };
-        return {
-          status: 'success',
-          data: user,
-          count: user.tags.length,
-        };
-      `;
-      const outcome = await runJsSandbox(code);
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(JSON.parse(ok.result!)).toEqual({
-        status: 'success',
-        data: { name: 'Alice', age: 28, tags: ['ai', 'mobile'] },
-        count: 2,
+      expect(native.run).toHaveBeenCalledTimes(1);
+      const [runId, code, limits] = (native.run as jest.Mock).mock.calls[0];
+      expect(typeof runId).toBe('string');
+      expect(runId.length).toBeGreaterThan(0);
+      expect(code).toBe('1 + 2 * 3');
+      expect(limits).toEqual({
+        timeoutMs: 5000,
+        memoryBytes: 64 * 1024 * 1024,
+        maxResultBytes: 256 * 1024,
+        maxLogBytes: 4 * 1024,
       });
     });
 
-    test('无返回值（或语句返回 undefined）时 result 缺省', async () => {
-      const outcome = await runJsSandbox('const x = 1;');
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.result).toBeUndefined();
-    });
+    it('探测首选名与原生注册名一致，且在场判定为真', async () => {
+      const native = fakeNative();
+      const mod = await loadModule(native);
 
-    test('支持 BigInt, Map, Set 无损序列化返回', async () => {
-      const code = `
-        return {
-          big: 12345678901234567890n,
-          map: new Map([['k1', 'v1'], ['k2', 'v2']]),
-          set: new Set(['apple', 'banana']),
-        };
-      `;
-      const outcome = await runJsSandbox(code);
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      const parsed = JSON.parse(ok.result!);
-      expect(parsed.big).toBe('12345678901234567890');
-      expect(parsed.map).toEqual({ k1: 'v1', k2: 'v2' });
-      expect(parsed.set).toEqual(['apple', 'banana']);
-    });
-
-    test('返回值超限时按 maxResultBytes 刚性截断并标记 resultTruncated', async () => {
-      const outcome = await runJsSandbox('"X".repeat(500)', {
-        maxResultBytes: 64,
-      });
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.resultTruncated).toBe(true);
-      expect(ok.result!.length).toBeLessThanOrEqual(64);
-    });
-  });
-
-  describe('2. console.log 捕获与截断', () => {
-    test('捕获 console.log, info, warn, error 输出', async () => {
-      const code = `
-        console.log('standard log message');
-        console.info('info detail', { id: 101 });
-        console.warn('warning notice');
-        console.error('error notification');
-        return 'done';
-      `;
-      const outcome = await runJsSandbox(code);
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.logs).toContain('standard log message\n');
-      expect(ok.logs).toContain('[info] info detail {"id":101}\n');
-      expect(ok.logs).toContain('[warn] warning notice\n');
-      expect(ok.logs).toContain('[error] error notification\n');
-      expect(ok.logsTruncated).toBe(false);
-      expect(ok.result).toBe('"done"');
-    });
-
-    test('print 函数等价映射为 console.log', async () => {
-      const outcome = await runJsSandbox('print("print via global print"); 42');
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.logs).toBe('print via global print\n');
-      expect(ok.result).toBe('42');
-    });
-
-    test('日志超出 maxLogBytes 时刚性截断并标记 logsTruncated', async () => {
-      const code = `
-        for (let i = 0; i < 50; i++) {
-          console.log('Long log line payload index ' + i);
-        }
-        return 'logged';
-      `;
-      const outcome = await runJsSandbox(code, { maxLogBytes: 64 });
-      expect(outcome.status).toBe('ok');
-      const ok = outcome as JsSandboxSuccessOutcome;
-      expect(ok.logsTruncated).toBe(true);
-      expect(new TextEncoder().encode(ok.logs).length).toBeLessThanOrEqual(64);
-    });
-  });
-
-  describe('3. 死循环 while(true) 超时熔断', () => {
-    test('同步死循环 while(true) 触发硬超时熔断并抛出 timeout', async () => {
-      const startTime = Date.now();
-      const outcome = await runJsSandbox('while (true) {}', {
-        timeoutMs: 100,
-      });
-      const elapsed = Date.now() - startTime;
-
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('timeout');
-      expect(err.message).toMatch(/time limit|timed out/i);
-      expect(elapsed).toBeLessThan(1500);
-    });
-
-    test('异步悬挂 Promise 触发超时熔断', async () => {
-      const code = `
-        await new Promise((resolve) => {
-          // 悬挂永远不 resolve
-        });
-      `;
-      const outcome = await runJsSandbox(code, { timeoutMs: 150 });
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('timeout');
-      expect(err.message).toMatch(/time limit|timed out/i);
-    });
-  });
-
-  describe('4. 内存超限保护（抛出 memory / OOM）', () => {
-    test('申请超限 TypedArray 触发内存熔断', async () => {
-      // 限制 1024 字节内存，申请 4096 字节 Uint8Array
-      const outcome = await runJsSandbox('new Uint8Array(4096)', {
-        memoryBytes: 1024,
-      });
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('memory');
-      expect(err.message).toMatch(/memory limit/i);
-    });
-
-    test('申请超限 ArrayBuffer 触发内存熔断', async () => {
-      const outcome = await runJsSandbox('new ArrayBuffer(1024 * 1024)', {
-        memoryBytes: 64 * 1024,
-      });
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('memory');
-      expect(err.message).toMatch(/memory limit/i);
-    });
-
-    test('申请巨型 Array 触发内存保护', async () => {
-      const outcome = await runJsSandbox('new Array(5000000)', {
-        memoryBytes: 1024 * 1024,
-      });
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('memory');
-      expect(err.message).toMatch(/memory limit/i);
-    });
-  });
-
-  describe('5. 语法错误抛出 syntax 错误', () => {
-    test('语法不合法（如未闭合的花括号）抛出 syntax 错误', async () => {
-      const outcome = await runJsSandbox('function badSyntax( {');
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('syntax');
-      expect(err.message.length).toBeGreaterThan(0);
-    });
-
-    test('意外的非法 token 抛出 syntax 错误', async () => {
-      const outcome = await runJsSandbox('const x = %%%;');
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('syntax');
-    });
-  });
-
-  describe('6. 运行时异常、取消与选项完整性', () => {
-    test('代码内部抛出普通异常捕获为 exception', async () => {
-      const outcome = await runJsSandbox(
-        'throw new Error("Custom calculation failure");'
+      expect(mod.getNativeJsSandbox()).toBe(native);
+      expect(mod.isNativeSandboxAvailable()).toBe(true);
+      expect(mockRequireOptionalNativeModule).toHaveBeenCalledWith(
+        'CrishJsSandbox'
       );
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('exception');
-      expect(err.message).toContain('Custom calculation failure');
     });
 
-    test('支持 AbortSignal 取消执行并返回 cancelled', async () => {
+    it('自定义 limits 与 DEFAULT_LIMITS 合并后透传', async () => {
+      const native = fakeNative();
+      const mod = await loadModule(native);
+
+      await mod.runJsSandbox({ code: 'x', limits: { timeoutMs: 100 } });
+
+      const [, , limits] = (native.run as jest.Mock).mock.calls[0];
+      expect(limits.timeoutMs).toBe(100);
+      expect(limits.memoryBytes).toBe(64 * 1024 * 1024);
+    });
+
+    it('原生 error 结果原样透传 kind 与 message', async () => {
+      const native = fakeNative({
+        run: jest.fn(async () =>
+          JSON.stringify({
+            status: 'error',
+            kind: 'timeout',
+            message: 'The script exceeded the 100 ms time limit.',
+            logs: 'partial',
+            logsTruncated: false,
+            durationMs: 100,
+          })
+        ),
+      });
+      const mod = await loadModule(native);
+
+      const outcome = await mod.runJsSandbox('while (true) {}');
+      expect(outcome.status).toBe('error');
+      const err = outcome as JsSandboxErrorOutcome;
+      expect(err.kind).toBe('timeout');
+      expect(err.message).toContain('time limit');
+      expect(err.logs).toBe('partial');
+    });
+  });
+
+  describe('2. 原生缺失 → runtime_unavailable 诚实降级', () => {
+    it('返回结构化错误而非抛致命，且在场判定为假', async () => {
+      const mod = await loadModule(null);
+
+      expect(mod.getNativeJsSandbox()).toBeNull();
+      expect(mod.isNativeSandboxAvailable()).toBe(false);
+
+      const outcome = await mod.runJsSandbox('1 + 1');
+      expect(outcome.status).toBe('error');
+      const err = outcome as JsSandboxErrorOutcome;
+      expect(err.kind).toBe('runtime_unavailable');
+      expect(err.message.length).toBeGreaterThan(0);
+      expect(err.durationMs).toBe(0);
+    });
+
+    it('字符串与对象两种入参形态都走同一降级落点', async () => {
+      const mod = await loadModule(null);
+
+      const byString = await mod.runJsSandbox('return 1');
+      const byOptions = await mod.runJsSandbox({ code: 'return 1' });
+      expect((byString as JsSandboxErrorOutcome).kind).toBe(
+        'runtime_unavailable'
+      );
+      expect((byOptions as JsSandboxErrorOutcome).kind).toBe(
+        'runtime_unavailable'
+      );
+    });
+  });
+
+  describe('3. 原生侧失败收敛为结构化错误', () => {
+    it('原生 run 抛错 → internal（不向上抛）', async () => {
+      const native = fakeNative({
+        run: jest.fn(async () => {
+          throw new Error('native boom');
+        }),
+      });
+      const mod = await loadModule(native);
+
+      const outcome = await mod.runJsSandbox('1');
+      expect(outcome.status).toBe('error');
+      const err = outcome as JsSandboxErrorOutcome;
+      expect(err.kind).toBe('internal');
+      expect(err.message).toContain('native boom');
+    });
+
+    it('原生返回不可解析的结果 → internal', async () => {
+      const native = fakeNative({
+        run: jest.fn(async () => 'not-a-json'),
+      });
+      const mod = await loadModule(native);
+
+      const outcome = await mod.runJsSandbox('1');
+      expect((outcome as JsSandboxErrorOutcome).kind).toBe('internal');
+    });
+  });
+
+  describe('4. 取消语义', () => {
+    it('信号预取消 → cancelled 且不触达原生', async () => {
+      const native = fakeNative();
+      const mod = await loadModule(native);
       const controller = new AbortController();
       controller.abort();
 
-      const outcome = await runJsSandbox({
+      const outcome = await mod.runJsSandbox({
         code: '1 + 1',
         signal: controller.signal,
       });
-      expect(outcome.status).toBe('error');
-      const err = outcome as JsSandboxErrorOutcome;
-      expect(err.kind).toBe('cancelled');
+      expect((outcome as JsSandboxErrorOutcome).kind).toBe('cancelled');
+      expect(native.run).not.toHaveBeenCalled();
     });
 
-    test('执行完成无论成败均触发 onSettled 回调', async () => {
-      const onSettled = jest.fn();
-      await runJsSandbox({
-        code: 'return 100',
-        onSettled,
+    it('执行中取消 → 以同一 runId 调原生 cancel 且结果 cancelled', async () => {
+      const native = fakeNative({
+        run: jest.fn(() => new Promise<string>(() => {})),
       });
-      expect(onSettled).toHaveBeenCalledTimes(1);
+      const mod = await loadModule(native);
+      const controller = new AbortController();
 
-      const onSettledError = jest.fn();
-      await runJsSandbox({
-        code: 'bad syntax {{{',
-        onSettled: onSettledError,
+      const pending = mod.runJsSandbox({
+        code: 'while (true) {}',
+        signal: controller.signal,
       });
-      expect(onSettledError).toHaveBeenCalledTimes(1);
+      await Promise.resolve();
+      controller.abort();
+
+      const outcome = await pending;
+      expect((outcome as JsSandboxErrorOutcome).kind).toBe('cancelled');
+      expect(native.cancel).toHaveBeenCalledTimes(1);
+      const [runId] = (native.run as jest.Mock).mock.calls[0];
+      expect((native.cancel as jest.Mock).mock.calls[0][0]).toBe(runId);
+    });
+  });
+
+  describe('5. onSettled 与基准值', () => {
+    it('成功与降级两条路径都触发 onSettled 恰一次', async () => {
+      const withNative = await loadModule(fakeNative());
+      const onSettledOk = jest.fn();
+      await withNative.runJsSandbox({ code: '1', onSettled: onSettledOk });
+      expect(onSettledOk).toHaveBeenCalledTimes(1);
+
+      const withoutNative = await loadModule(null);
+      const onSettledDown = jest.fn();
+      await withoutNative.runJsSandbox({
+        code: '1',
+        onSettled: onSettledDown,
+      });
+      expect(onSettledDown).toHaveBeenCalledTimes(1);
     });
 
-    test('默认限制参数 DEFAULT_LIMITS 具备合理基准值', () => {
-      expect(DEFAULT_LIMITS.timeoutMs).toBe(5000);
-      expect(DEFAULT_LIMITS.memoryBytes).toBe(64 * 1024 * 1024);
-      expect(DEFAULT_LIMITS.maxResultBytes).toBe(256 * 1024);
-      expect(DEFAULT_LIMITS.maxLogBytes).toBe(4 * 1024);
+    it('DEFAULT_LIMITS 具备合理基准值', async () => {
+      const mod = await loadModule(null);
+      expect(mod.DEFAULT_LIMITS.timeoutMs).toBe(5000);
+      expect(mod.DEFAULT_LIMITS.memoryBytes).toBe(64 * 1024 * 1024);
+      expect(mod.DEFAULT_LIMITS.maxResultBytes).toBe(256 * 1024);
+      expect(mod.DEFAULT_LIMITS.maxLogBytes).toBe(4 * 1024);
     });
   });
 });

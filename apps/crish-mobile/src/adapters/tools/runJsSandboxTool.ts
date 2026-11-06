@@ -5,27 +5,37 @@
  * 严格对齐《04-分维-移动端本地Agent循环与通用端侧工具体系方案.md》§4.4 与《03-分维》§2
  *
  * 核心特性：
- * 1. 优先调用 crish-js-sandbox 原生模块（QuickJS-NG C++ 独立原生 Worker 线程）；
- * 2. 具备健壮的端侧 Fallback 执行器（在单测环境或原生模块未挂载时保障 100% 可用）；
- * 3. 严格限制 5000ms 硬超时与 64MB 堆内存上限；
- * 4. 自动捕获并截断 console.log 内存日志（上限 4KB）；
- * 5. 序列化支持 BigInt、Date、Map、Set、RegExp 与循环引用安全防护。
+ * 1. 经 crish-js-sandbox 模块（端侧沙箱唯一实现真源）调用原生 QuickJS
+ *    （独立原生 Worker 线程）；本文件只做工具面适配与结果整形，不再
+ *    自带任何执行器；
+ * 2. 原生模块未装配时，模块返回 runtime_unavailable 结构化错误，本工具
+ *    原样透传为工具错误结果（诚实降级）——旧自带 Node vm 回退执行器与
+ *    错误接线的原生探测（找不存在的 `.run` / globalThis）已于
+ *    2026-11-05 收敛删除；
+ * 3. 严格限制 5000ms 硬超时与 64MB 堆内存上限（限额真源为模块
+ *    DEFAULT_LIMITS，本文件常量仅转引）；
+ * 4. 测试可经 options.runner 注入执行器替身；生产恒走模块。
  */
 
+import {
+  DEFAULT_LIMITS,
+  runJsSandbox,
+  type JsSandboxOutcome,
+} from 'crish-js-sandbox';
 import type {
   MobileToolContext,
   MobileToolDefinition,
   ToolExecutionResult,
 } from './types';
 
-/** 最大运行超时（毫秒）：硬顶 5000ms */
-export const SANDBOX_MAX_TIMEOUT_MS = 5000;
-/** 沙箱最大堆内存（字节）：64 MiB */
-export const SANDBOX_MAX_MEMORY_BYTES = 64 * 1024 * 1024;
-/** 日志最大截断字节数：4 KiB */
-export const SANDBOX_MAX_LOG_BYTES = 4 * 1024;
-/** 单次结果返回最大字节数：256 KiB */
-export const SANDBOX_MAX_RESULT_BYTES = 256 * 1024;
+/** 最大运行超时（毫秒）：硬顶 5000ms（真源：模块 DEFAULT_LIMITS） */
+export const SANDBOX_MAX_TIMEOUT_MS = DEFAULT_LIMITS.timeoutMs;
+/** 沙箱最大堆内存（字节）：64 MiB（真源：模块 DEFAULT_LIMITS） */
+export const SANDBOX_MAX_MEMORY_BYTES = DEFAULT_LIMITS.memoryBytes;
+/** 日志最大截断字节数：4 KiB（真源：模块 DEFAULT_LIMITS） */
+export const SANDBOX_MAX_LOG_BYTES = DEFAULT_LIMITS.maxLogBytes;
+/** 单次结果返回最大字节数：256 KiB（真源：模块 DEFAULT_LIMITS） */
+export const SANDBOX_MAX_RESULT_BYTES = DEFAULT_LIMITS.maxResultBytes;
 
 export interface JsSandboxExecutionOutcome {
   status: 'success' | 'error';
@@ -51,275 +61,28 @@ export interface RunJsSandboxToolOptions {
 }
 
 /**
- * 格式化安全 JSON 字符串（支持 BigInt, Map, Set, 正则, 函数等）
+ * 模块结果 → 工具面结果（状态 / kind / 日志口径对齐）：
+ * ok → success；error 的 kind 与 message 原样透传（含
+ * runtime_unavailable 诚实降级）。
  */
-function safeSerialize(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'function')
-    return `[Function: ${value.name || 'anonymous'}]`;
-  if (typeof value === 'symbol') return value.toString();
-
-  const seen = new WeakSet();
-  try {
-    return JSON.stringify(
-      value,
-      (_key, val) => {
-        if (typeof val === 'bigint') {
-          return `${val.toString()}n`;
-        }
-        if (val instanceof Map) {
-          return Object.fromEntries(val);
-        }
-        if (val instanceof Set) {
-          return Array.from(val);
-        }
-        if (val instanceof RegExp) {
-          return val.toString();
-        }
-        if (val instanceof Error) {
-          return { name: val.name, message: val.message, stack: val.stack };
-        }
-        if (typeof val === 'object' && val !== null) {
-          if (seen.has(val)) {
-            return '[Circular]';
-          }
-          seen.add(val);
-        }
-        return val;
-      },
-      2
-    );
-  } catch {
-    return String(value);
-  }
-}
-
-/**
- * 健壮的纯 JavaScript 沙箱降级执行器（Fallback Runner）
- * 用于 Jest 测试、Node 环境或原生模块未挂载时的等价安全执行
- */
-export async function executeFallbackJsSandbox(
-  code: string,
-  options: {
-    timeoutMs: number;
-    memoryBytes: number;
-    signal?: AbortSignal;
-  }
-): Promise<JsSandboxExecutionOutcome> {
-  const startTime = Date.now();
-  const logsBuffer: string[] = [];
-  let logBytesTotal = 0;
-
-  const appendLog = (prefix: string, args: unknown[]) => {
-    const line = `${prefix} ${args.map((a) => (typeof a === 'string' ? a : safeSerialize(a))).join(' ')}\n`;
-    if (logBytesTotal + line.length <= SANDBOX_MAX_LOG_BYTES) {
-      logsBuffer.push(line);
-      logBytesTotal += line.length;
-    } else if (logBytesTotal < SANDBOX_MAX_LOG_BYTES) {
-      const remaining = SANDBOX_MAX_LOG_BYTES - logBytesTotal;
-      logsBuffer.push(line.slice(0, remaining) + '... [logs truncated]');
-      logBytesTotal = SANDBOX_MAX_LOG_BYTES;
-    }
-  };
-
-  const sandboxConsole = {
-    log: (...args: unknown[]) => appendLog('[log]', args),
-    info: (...args: unknown[]) => appendLog('[info]', args),
-    warn: (...args: unknown[]) => appendLog('[warn]', args),
-    error: (...args: unknown[]) => appendLog('[error]', args),
-  };
-
-  // 1. 信号前置检查
-  if (options.signal?.aborted) {
+export function mapJsSandboxOutcome(
+  outcome: JsSandboxOutcome
+): JsSandboxExecutionOutcome {
+  if (outcome.status === 'ok') {
     return {
-      status: 'error',
-      kind: 'cancelled',
-      error: 'Script execution cancelled before start',
-      logs: logsBuffer.join(''),
-      durationMs: 0,
+      status: 'success',
+      result: outcome.result,
+      logs: outcome.logs,
+      durationMs: outcome.durationMs,
     };
   }
-
-  return new Promise<JsSandboxExecutionOutcome>((resolve) => {
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer);
-      options.signal?.removeEventListener('abort', onAbort);
-    };
-
-    const finish = (outcome: JsSandboxExecutionOutcome) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(outcome);
-    };
-
-    const onAbort = () => {
-      finish({
-        status: 'error',
-        kind: 'cancelled',
-        error: 'Script execution cancelled by AbortSignal',
-        logs: logsBuffer.join(''),
-        durationMs: Date.now() - startTime,
-      });
-    };
-
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-
-    timer = setTimeout(() => {
-      finish({
-        status: 'error',
-        kind: 'timeout',
-        error: `Script execution timed out (${options.timeoutMs}ms)`,
-        logs: logsBuffer.join(''),
-        durationMs: Date.now() - startTime,
-      });
-    }, options.timeoutMs);
-
-    try {
-      let vmModule: any = null;
-      try {
-        const req =
-          typeof require !== 'undefined'
-            ? require
-            : (globalThis as any).require;
-        if (typeof req === 'function') {
-          vmModule = req('node:vm') || req('vm');
-        }
-      } catch {
-        vmModule = null;
-      }
-
-      let rawResult: unknown;
-      if (vmModule && typeof vmModule.runInNewContext === 'function') {
-        const sandboxCtx = {
-          console: sandboxConsole,
-          Math,
-          Date,
-          JSON,
-          Array,
-          Object,
-          String,
-          Number,
-          Boolean,
-          RegExp,
-          Map,
-          Set,
-          BigInt,
-          parseInt,
-          parseFloat,
-          isNaN,
-          isFinite,
-          encodeURI,
-          decodeURI,
-          encodeURIComponent,
-          decodeURIComponent,
-        };
-        rawResult = vmModule.runInNewContext(code, sandboxCtx, {
-          timeout: options.timeoutMs,
-        });
-      } else {
-        // 在安全的立即执行函数作用域中执行
-        const executeFn = new Function(
-          'console',
-          'safeSerialize',
-          `"use strict";
-           return (function() {
-             try {
-               return eval(${JSON.stringify(code)});
-             } catch (__evalErr__) {
-               throw __evalErr__;
-             }
-           })();`
-        );
-        rawResult = executeFn(sandboxConsole, safeSerialize);
-      }
-
-      const serialized = safeSerialize(rawResult);
-
-      if (serialized.length > SANDBOX_MAX_RESULT_BYTES) {
-        finish({
-          status: 'error',
-          kind: 'memory',
-          error: `Result payload exceeded limit (${serialized.length} > ${SANDBOX_MAX_RESULT_BYTES} bytes)`,
-          logs: logsBuffer.join(''),
-          durationMs: Date.now() - startTime,
-        });
-        return;
-      }
-
-      finish({
-        status: 'success',
-        result: serialized,
-        logs: logsBuffer.join(''),
-        durationMs: Date.now() - startTime,
-      });
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      const isTimeout =
-        errMsg.toLowerCase().includes('timed out') ||
-        errMsg.toLowerCase().includes('timeout');
-      finish({
-        status: 'error',
-        kind: isTimeout ? 'timeout' : 'exception',
-        error: isTimeout
-          ? `Script execution timed out (${options.timeoutMs}ms)`
-          : errMsg,
-        logs: logsBuffer.join(''),
-        durationMs: Date.now() - startTime,
-      });
-    }
-  });
-}
-
-/**
- * 尝试调用 crish-js-sandbox 原生模块（若不可用则返回 null 触发 Fallback）
- */
-async function tryNativeJsSandbox(
-  code: string,
-  limits: { timeoutMs: number; memoryBytes: number; signal?: AbortSignal }
-): Promise<JsSandboxExecutionOutcome | null> {
-  try {
-    // 动态检查全局或环境模块
-    const g = globalThis as Record<string, unknown>;
-    const nativeModule =
-      g?.CrishJsSandbox ||
-      (typeof require === 'function'
-        ? (require as unknown as (m: string) => Record<string, unknown>)(
-            'crish-js-sandbox'
-          )
-        : null);
-
-    if (
-      nativeModule &&
-      typeof (nativeModule as { run?: unknown }).run === 'function'
-    ) {
-      const runFn = (nativeModule as { run: (...args: unknown[]) => unknown })
-        .run;
-      const rawRes = await runFn(code, {
-        timeoutMs: limits.timeoutMs,
-        memoryBytes: limits.memoryBytes,
-        signal: limits.signal,
-      });
-      if (typeof rawRes === 'string') {
-        const parsed = JSON.parse(rawRes);
-        return {
-          status: parsed.status === 'ok' ? 'success' : 'error',
-          result: parsed.result,
-          logs: parsed.logs,
-          error: parsed.message || parsed.error,
-          kind: parsed.kind,
-          durationMs: parsed.durationMs || 0,
-        };
-      }
-      return rawRes as JsSandboxExecutionOutcome;
-    }
-  } catch {
-    // 原生模块不可用，走 Fallback
-  }
-  return null;
+  return {
+    status: 'error',
+    error: outcome.message,
+    kind: outcome.kind,
+    logs: outcome.logs,
+    durationMs: outcome.durationMs,
+  };
 }
 
 /**
@@ -374,7 +137,7 @@ export function createRunJsSandboxTool(
 
       context.onProgress?.('Executing JavaScript in mobile sandbox...');
 
-      // 2. 选择执行驱动（优先原生模块，降级 Fallback，支持测试注入）
+      // 2. 选择执行驱动（生产恒走 crish-js-sandbox 模块；runner 仅测试注入）
       const limits = {
         timeoutMs: SANDBOX_MAX_TIMEOUT_MS,
         memoryBytes: SANDBOX_MAX_MEMORY_BYTES,
@@ -385,12 +148,16 @@ export function createRunJsSandboxTool(
       if (options.runner) {
         outcome = await options.runner(rawCode, limits);
       } else {
-        const nativeRes = await tryNativeJsSandbox(rawCode, limits);
-        if (nativeRes) {
-          outcome = nativeRes;
-        } else {
-          outcome = await executeFallbackJsSandbox(rawCode, limits);
-        }
+        outcome = mapJsSandboxOutcome(
+          await runJsSandbox({
+            code: rawCode,
+            limits: {
+              timeoutMs: limits.timeoutMs,
+              memoryBytes: limits.memoryBytes,
+            },
+            signal: limits.signal,
+          })
+        );
       }
 
       // 3. 组织标准工具返回
