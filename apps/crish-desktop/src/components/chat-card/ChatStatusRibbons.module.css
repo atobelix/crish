@@ -31,7 +31,8 @@
     color var(--transition-fast),
     border-color var(--transition-fast);
   box-shadow: none;
-  animation: chipFadeIn var(--transition-popover-enter);
+  /* 入场收敛至共享 keyframes（crish-row-enter，与统一入场通道同语言） */
+  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
 }
 
 .dynamicChip:hover {
@@ -62,17 +63,6 @@
   }
 }
 
-@keyframes chipFadeIn {
-  0% {
-    opacity: 0;
-    transform: translateY(4px) scale(0.985);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 .dynamicPlanDrawer {
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -82,7 +72,8 @@
   border: var(--hairline-width, 1px) solid var(--border-color);
   background: var(--bg-secondary);
   box-shadow: var(--shadow-sm);
-  animation: chipFadeIn var(--transition-popover-enter);
+  /* 入场收敛至共享 keyframes（crish-row-enter，与统一入场通道同语言） */
+  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
 }
 
 .dynamicPlanHeader {

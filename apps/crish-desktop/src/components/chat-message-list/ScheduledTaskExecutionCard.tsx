@@ -9,6 +9,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './ScheduledTaskExecutionCard.module.css';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import { workflowRunStatusLabel } from '../../api/workflowApi';
 import { Button, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
@@ -216,6 +217,20 @@ export const ScheduledTaskExecutionCard: React.FC<
   );
   const userToggledRef = useRef(false);
 
+  // 统一入场通道：定时执行卡在触发实况挂载时入场（fade 变体；
+  // triggeredAt 归一为事件戳，历史回放时实况窗自动拒绝）。
+  const triggeredTs =
+    typeof triggeredAt === 'number'
+      ? triggeredAt
+      : triggeredAt
+        ? Date.parse(triggeredAt)
+        : NaN;
+  const entrance = useEntranceReveal({
+    key: `sched:${runId ?? workflowId}`,
+    eventTs: Number.isFinite(triggeredTs) ? triggeredTs : undefined,
+    variant: 'fade',
+  });
+
   useEffect(() => {
     if (typeof defaultExpanded === 'boolean') {
       setExpanded(defaultExpanded);
@@ -244,13 +259,24 @@ export const ScheduledTaskExecutionCard: React.FC<
     styles.card,
     status === 'running' ? styles.cardRunning : null,
     status === 'failed' ? styles.cardFailed : null,
+    entrance.entering ? 'crish-entrance-fade' : null,
   ]
     .filter(Boolean)
     .join(' ');
 
   return (
     <section
+      ref={entrance.rootRef}
       className={cardCls}
+      style={
+        entrance.entering
+          ? ({
+              '--reveal-delay': `${entrance.delayMs}ms`,
+            } as React.CSSProperties)
+          : undefined
+      }
+      data-entering={entrance.entering ? 'true' : undefined}
+      onAnimationEnd={entrance.handleAnimationEnd}
       data-testid="scheduled-task-execution-card"
       data-workflow-id={workflowId}
       data-run-id={runId}

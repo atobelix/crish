@@ -284,6 +284,25 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       prevStreamingRef.current = streaming;
     }
 
+    /**
+     * 流式尾段开始时刻（跟进二）：线性时间线合成的流式尾正文项
+     * （tailTextItem）在其分段记账块落块之前就已挂载——当时块尚不
+     * 存在，item.startTime 无处可取，入场钩子在挂载时刻的判定会因
+     * eventTs 缺省而拒绝、且同键同节点复用后永不重判（实测：第二、
+     * 三段正文挂载瞬间 data-start-time 缺失、无 fade，落块后才有
+     * startTime）。此处在尾项首次合成时记下该段的实际开始时刻
+     * （即它首次出现在渲染管线的时间），随尾项一并供给；落块后
+     * 同键的块项携带块自身的 startTime 接替，两值同源（均为段开始
+     * 时刻）。记录以 msgId + 流式相位 + 尾项键为身份，任一变化即
+     * 重新记时；不是渲染器伪造时间戳——本处即该合成项的数据源头。
+     */
+    const tailStartRef = useRef<{
+      msgId: string;
+      phase: number;
+      key: string;
+      startTime: number;
+    } | null>(null);
+
     // 单轨交错线性时间线：相邻同文案的上下文状态提示只留一条（S-5 唯一折叠实现）
     const linearItems = useMemo(() => {
       const base = collapseContextState(
@@ -327,11 +346,27 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           // 尾段正文 = 流式缓冲剥离全部已封口段后的剩余（分段记账口径）；
           // 旧 streamTextOffset 切片已随单一偏移模型删除。
           const tailText = sliceActiveStreamText(streamText, msg.blocks);
+          // 跟进二：尾项挂载即实况段开始——首次合成时记下开始时刻
+          // 供给入场判定（见 tailStartRef 注释）；落块后同键块项接替。
+          const tailKey = `text-${textCount}`;
+          if (
+            tailStartRef.current?.msgId !== msg.id ||
+            tailStartRef.current?.phase !== streamPhaseRef.current ||
+            tailStartRef.current?.key !== tailKey
+          ) {
+            tailStartRef.current = {
+              msgId: msg.id,
+              phase: streamPhaseRef.current,
+              key: tailKey,
+              startTime: Date.now(),
+            };
+          }
           const tailTextItem: TimelineTextItem = {
             kind: 'text',
             content: tailText,
-            key: `text-${textCount}`,
+            key: tailKey,
             isFinal: true,
+            startTime: tailStartRef.current.startTime,
           };
           return [...base, tailTextItem];
         }

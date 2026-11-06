@@ -12,6 +12,7 @@ import styles from './InFlowStatusLine.module.css';
 import { AppIcon } from '@/components/ui/icons';
 import type { RuntimeRetryInfo } from '../../store';
 import { formatRetryStatusText } from './inFlowStatusLineLib';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 
 export interface InFlowStatusLineProps {
   retry: RuntimeRetryInfo;
@@ -19,12 +20,30 @@ export interface InFlowStatusLineProps {
 
 export const InFlowStatusLine: React.FC<InFlowStatusLineProps> = React.memo(
   function InFlowStatusLine({ retry }) {
+    // 统一入场通道：retrying 相位是纯实况瞬态（存在本身即事件、无可用
+    // 事件戳下发到本组件），以 liveOnMount 判定 + grow 变体让 24px 行
+    // 高度同步生长，不再瞬时弹入顶开下方内容。
+    const entrance = useEntranceReveal({
+      key: `retry:${retry.attempt}:${retry.errorKind ?? ''}`,
+      liveOnMount: true,
+      variant: 'grow',
+    });
     return (
       <div
-        className={styles.statusLine}
+        ref={entrance.rootRef}
+        className={`${styles.statusLine}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+        style={
+          entrance.entering
+            ? ({
+                '--reveal-delay': `${entrance.delayMs}ms`,
+              } as React.CSSProperties)
+            : undefined
+        }
         role="status"
         aria-live="polite"
         data-testid="in-flow-status-line"
+        data-entering={entrance.entering ? 'true' : undefined}
+        onAnimationEnd={entrance.handleAnimationEnd}
       >
         <AppIcon
           name="wifi"

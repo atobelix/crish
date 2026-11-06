@@ -227,6 +227,22 @@
   }
 }
 
+/* 统一入场通道呈现类（components/motion/useEntranceReveal 唯一消费）：
+ * fade 变体 = 共享 keyframes crish-row-enter + 批次交错延时
+ * （--reveal-delay 由钩子按 toolRevealState 协调器发放）；grow 变体
+ * 的高度生长由钩子内联驱动（时长/缓动同出 motionTokens），本类只
+ * 负责透明与位移。时长/缓动与 AN4 工具行同档，禁止别处复刻本类。 */
+.crish-entrance-fade {
+  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crish-entrance-fade {
+    animation: none;
+  }
+}
+
 /* ==========================================================================
    5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
    ========================================================================== */

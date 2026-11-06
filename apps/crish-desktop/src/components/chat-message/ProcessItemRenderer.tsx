@@ -16,6 +16,7 @@ import {
   stripWorkflowConfirmFence,
 } from '../../api/workflow-api/workflowConfirm';
 import { ReasoningRow } from '../chat-message-row/ReasoningRow';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import { ContextStateNotice } from './ContextStateNotice';
 import { isContextStateInjection } from './contextStateUtils';
 import type { useNarrativeRenderSlots } from './narrativeRenderSlots';
@@ -58,10 +59,18 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> =
     isNarration = false,
   }) {
     const toolItems = item.kind === 'tools' ? item.items : null;
-    const itemsToPass = React.useMemo(
-      () => (toolItems && streamPhase ? [...toolItems] : toolItems || []),
-      [toolItems, streamPhase]
-    );
+    // 稳定引用传透：直接传递 toolItems，杜绝无谓的 [...toolItems] 浅拷贝破坏 downstream React.memo 浅比较
+    const itemsToPass = toolItems || [];
+
+    // 统一入场通道（文本段）：段容器 fade 入场；段内文字揭示仍归
+    // RevealPacer，本钩子只管容器。非 text 项 disabled 空转（本组件
+    // 按 item.key 挂载、kind 终身不变，钩子序稳定）。
+    const textEntrance = useEntranceReveal({
+      key: item.kind === 'text' ? `seg:${msgId}:${item.key}` : '',
+      eventTs: item.startTime,
+      variant: 'fade',
+      disabled: item.kind !== 'text',
+    });
 
     if (item.kind === 'thought') {
       // 思考活跃态精准判定（解决思考早完成却依然显示「思考中」的缺陷）：
@@ -101,6 +110,7 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> =
           durationMs={item.durationMs}
           turnIndex={item.turnIndex}
           messageId={msgId}
+          startTime={item.startTime}
           defaultExpanded={thoughtDefaultOpen}
         />
       );
@@ -120,15 +130,25 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> =
       return (
         <div
           key={item.key}
-          className={
+          ref={textEntrance.rootRef}
+          className={`${
             isNarration
               ? `${styles.contentText} ${styles.narrationText}`
               : styles.contentText
+          }${textEntrance.entering ? ' crish-entrance-fade' : ''}`}
+          style={
+            textEntrance.entering
+              ? ({
+                  '--reveal-delay': `${textEntrance.delayMs}ms`,
+                } as React.CSSProperties)
+              : undefined
           }
           data-kind="text"
           data-narration={isNarration ? 'true' : undefined}
           data-start-time={item.startTime}
           data-duration-ms={item.durationMs}
+          data-entering={textEntrance.entering ? 'true' : undefined}
+          onAnimationEnd={textEntrance.handleAnimationEnd}
         >
           <StreamingMarkdownView
             text={displayText}
@@ -195,6 +215,7 @@ export const ProcessItemRenderer: React.FC<ProcessItemRendererProps> =
             key={item.key}
             rowKey={item.key}
             injection={item.injection}
+            eventTs={item.startTime}
           />
         );
       }

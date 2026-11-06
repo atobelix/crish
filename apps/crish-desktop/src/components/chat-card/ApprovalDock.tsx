@@ -15,6 +15,7 @@ import {
   resolveApprovalDockLabelText,
   shouldRenderApprovalDock,
 } from './chatStatusRibbonsLib';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import { AppIcon } from '@/components/ui/icons';
 
 function escapeCss(id: string): string {
@@ -45,6 +46,14 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
 }) => {
   const { showToast } = useToast();
   const dockRef = useRef<HTMLButtonElement | null>(null);
+
+  // 统一入场通道：审批 dock 只在待审批实况中存在（存在本身即事件），
+  // liveOnMount 判定 + grow 变体让缎带条高度同步生长，不再瞬时顶开。
+  const entrance = useEntranceReveal({
+    key: `dock:${toolId || msgId}`,
+    liveOnMount: true,
+    variant: 'grow',
+  });
 
   if (!shouldRenderApprovalDock(show, pendingCount)) return null;
 
@@ -108,13 +117,25 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
   return (
     <Tooltip content={ariaLabel}>
       <Button
-        ref={dockRef}
+        ref={(el: HTMLButtonElement | null) => {
+          dockRef.current = el;
+          entrance.rootRef(el);
+        }}
         type="button"
         variant="ghost"
         size="sm"
-        className={`${styles.approvalDock} ${styles.slim} ${styles.docked}`}
+        className={`${styles.approvalDock} ${styles.slim} ${styles.docked}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+        style={
+          entrance.entering
+            ? ({
+                '--reveal-delay': `${entrance.delayMs}ms`,
+              } as React.CSSProperties)
+            : undefined
+        }
         aria-label={ariaLabel}
         data-pending-count={pendingCount}
+        data-entering={entrance.entering ? 'true' : undefined}
+        onAnimationEnd={entrance.handleAnimationEnd}
         onClick={handleClick}
       >
         <span className={styles.approvalDockDot} aria-hidden />

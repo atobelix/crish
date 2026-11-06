@@ -20,8 +20,8 @@
   text-align: left;
   color: var(--text-primary);
   box-sizing: border-box;
-  /* 入场与状态缎带同级（AN2 / A4）：popover-enter 口径，只动 opacity + ≤4px 位移 */
-  animation: crish-popover-enter-top var(--transition-popover-enter);
+  /* 入场已收敛至统一入场通道（components/motion/useEntranceReveal，
+     grow 变体 + .crish-entrance-fade）：本文件不再自带入场 animation */
 }
 
 .approvalDock.slim {

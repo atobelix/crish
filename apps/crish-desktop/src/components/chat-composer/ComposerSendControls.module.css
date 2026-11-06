@@ -135,6 +135,10 @@
 .stop {
   background: transparent;
   color: var(--text-secondary);
+  /* 入场走统一通道的 CSS-only 消费：共享 keyframes crish-fade-in +
+   * 共享节奏 token（reduced-motion.css 全局归零兜底）；停止钮在运行
+   * 开始时挂载、与发送钮互换，一次 mount 一次淡入 */
+  animation: crish-fade-in var(--transition-micro);
 }
 
 /* X3 停止乐观态：已请求停止、等待会话退出 processing 收敛 */

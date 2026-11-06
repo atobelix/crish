@@ -20,6 +20,7 @@ import {
   useSessionRuntimeStatus,
 } from '../../store/storeAccess';
 import { isModelConfigurationError } from './chatStatusRibbonsLib';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import styles from './ComposerErrorBar.module.css';
 
 export interface ComposerErrorBarProps {
@@ -33,6 +34,19 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
     const status = useSessionRuntimeStatus(activeSessionId);
     const [detailOpen, setDetailOpen] = useState(false);
     const { t } = useI18n();
+
+    // 统一入场通道：failed 相位自带 timestamp（实况窗判定），grow 变体
+    // 让全宽错误条高度同步生长，不再瞬时顶开输入区（私有 errorBarIn
+    // keyframes 已删除）。
+    const failedStatus = status?.phase === 'failed' ? status : null;
+    const entrance = useEntranceReveal({
+      key:
+        failedStatus && activeSessionId
+          ? `errbar:${activeSessionId}:${failedStatus.turn.assistantMsgId ?? failedStatus.turn.userMsgId}`
+          : '',
+      eventTs: failedStatus?.timestamp,
+      variant: 'grow',
+    });
 
     if (!activeSessionId || status?.phase !== 'failed') return null;
     const sid = activeSessionId;
@@ -66,7 +80,8 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
 
     return (
       <div
-        className={styles.errorBar}
+        ref={entrance.rootRef}
+        className={`${styles.errorBar}${entrance.entering ? ' crish-entrance-fade' : ''}`}
         style={{
           border:
             '1px solid color-mix(in srgb, var(--text-danger) 15%, var(--border-subtle))',
@@ -76,12 +91,19 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
           backgroundColor:
             'color-mix(in srgb, var(--text-danger) 5%, var(--bg-secondary))',
           color: 'var(--text-primary)',
+          ...(entrance.entering
+            ? ({
+                '--reveal-delay': `${entrance.delayMs}ms`,
+              } as React.CSSProperties)
+            : null),
         }}
         role="alert"
         aria-live="assertive"
         aria-atomic="true"
         data-testid="composer-error-bar"
         data-kind={status.kind}
+        data-entering={entrance.entering ? 'true' : undefined}
+        onAnimationEnd={entrance.handleAnimationEnd}
       >
         <AppIcon
           name="alert-triangle"
