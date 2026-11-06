@@ -16,7 +16,7 @@
 
 export const G2_RATCHET_CAPS = {
   barePx: 25,
-  privateVars: 23,
+  privateVars: 20, // 甲槽 A 核销 2（Toast）+ 乙槽 C 核销 1（SettingsRulesTab 局部覆写 --radius-xl 退役）
   fallbackDrift: 8, // F3 回退核正：已核销 21 键；余 8 键 = 占用跳过 4（ChatToolCallBlock / FoldableToolGroup / ModelBadgePickerMenu）+ 纠缠留置 4（ExternalImportWorkbench / ExternalSessionsWorkbench / McpConnectModal，修复已叠工作区、待其文件提交时同删本行）
 } as const;
 
@@ -60,9 +60,6 @@ export const G2_RATCHET_PRIVATE_VARS: readonly string[] = [
   'components/chat-message-row/ChatMessageRow.module.css :: --composer-attach-card-radius:',
   'components/chat-message/MessageContent.module.css :: --md-code-inline-radius:',
   'components/diff/DiffCard.module.css :: --btn-radius:',
-  'components/overlay/ToastStackModern.module.css :: --toast-btn-radius:',
-  'components/overlay/ToastStackModern.module.css :: --toast-radius:',
-  'components/settings/SettingsRulesTab.module.css :: --radius-xl:',
   'components/sidebar/Sidebar.module.css :: --btn-radius:',
   'components/sidebar/SidebarNav.module.css :: --btn-radius:',
   'components/ui/Badge/Badge.module.css :: --badge-radius:',

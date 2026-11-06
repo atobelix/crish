@@ -1,12 +1,9 @@
-/* 方案 A 标尺：规则卡片外壳统一为 14px */
-:global([data-settings-tab='rules']) {
-  --radius-xl: 14px;
-}
-
-/* 方案 A 标尺：规则页卡片圆角统一走 sep 外圆角 */
-:global([data-settings-tab='rules']) :global(.settings-ui-card) {
-  border-radius: var(--sep-radius-outer);
-}
+/* 口径收口（G² 推广第一波槽 C 第一步，2026-11-06）：原有两条规则页局部
+ * 覆写已删除——① 在 [data-settings-tab='rules'] 作用域内把全局 token
+ * --radius-xl 改写为 14px（局部覆写全局真值，越界）；② 规则页卡片单独走
+ * --sep-radius-outer(18)。删除后规则页与全站同口径：卡片归 SettingsUI
+ * 正典（--radius-xl=16，G² 形状由 SettingsCard 的 G2Surface 统一生成），
+ * 作用域内其余 --radius-xl 消费者回到全局真值 16。 */
 
 /* 全文编辑器（页面主体）：ui/Textarea bare + 本地 token 口径——无边框、
  * 白天模式下采用稍暗一档的 2.5% 纯中性灰下凹底色 (--surface-sunken, 对应 e0/e1 下凹画布档)，
