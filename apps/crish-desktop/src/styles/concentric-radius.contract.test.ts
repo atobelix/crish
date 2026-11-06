@@ -130,10 +130,13 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       tokens,
       'tokens-radius.css 必须显式声明 --radius-dock: 20px;'
     ).toMatch(/--radius-dock:\s*20px;/);
+    // 模态名义半径收敛（待裁决 #4 裁定统一 20，2026-11-06）：专设
+    // --radius-modal(24) 零消费已按 §五 F4 删除——断言其不得复活为定义点；
+    // 模态档事实源即上方 1.1 的 --radius-2xl: 20px。
     expect(
       tokens,
-      'tokens-radius.css 必须显式声明 --radius-modal: 24px;'
-    ).toMatch(/--radius-modal:\s*24px;/);
+      'tokens-radius.css 不得再定义 --radius-modal（#4 收敛 20 + F4 删除零消费 token）'
+    ).not.toMatch(/--radius-modal\s*:/);
 
     // 1.4 断言 --radius-sm 必须为 6px，--radius-xl 必须为 16px
     expect(
@@ -195,8 +198,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       /border-radius:\s*7px/
     );
 
-    // 断言计算值必须为 14px 或以上（F7 计算值口径：现声明为
-    // var(--sep-radius-outer)，经定义链 --radius-menu-outer 计算值 18px）
+    // 断言计算值必须为 14px 或以上（G² 槽 C 收敛后声明为 var(--radius-xl)，
+    // 计算值 16px；收敛前为 --sep-radius-outer → --radius-menu-outer 18px）
     const computed = computedRadiusPx(block);
     expect(
       computed,
@@ -338,7 +341,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
   });
 
   // 8. PluginCreateModal 方案 A 同心契约断言
-  it('契约 8：PluginCreateModal 方案 A 同心契约断言（.modalPanel 必须为 24px，内部卡片必须为 8px）', () => {
+  // 模态收敛（待裁决 #4，2026-11-06）：外壳名义半径由 24 统一为 20。
+  it('契约 8：PluginCreateModal 方案 A 同心契约断言（.modalPanel 必须为 20px，内部卡片必须为 8px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'extensions-surface',
@@ -352,8 +356,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       computedRadiusPx(panelMatch![0]),
-      '.modalPanel 的 border-radius 计算值必须为 24px（--radius-3xl）'
-    ).toBe(24);
+      '.modalPanel 的 border-radius 计算值必须为 20px（--radius-2xl；#4 模态收敛）'
+    ).toBe(20);
 
     const dropZoneMatch = modalCss.match(/\.dropZone\s*\{[^}]+\}/);
     expect(
@@ -369,7 +373,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
   // 9. ExternalSessionImportModal 方案 A 同心契约断言
   // F7 计算值口径：.filterTabs 历史意图标注 14px，其绑定 --sep-radius-outer 的
   // 计算值是 18px（--radius-menu-outer)；钉计算真值 18px，回退文本核正归 F3。
-  it('契约 9：ExternalSessionImportModal 方案 A 同心契约断言（计算值口径：.dialogPanel 为 24px，.filterTabs 为 18px，.filterTab 为 8px）', () => {
+  // 模态收敛（待裁决 #4，2026-11-06）：.dialogPanel 名义半径由 24 统一为 20。
+  it('契约 9：ExternalSessionImportModal 方案 A 同心契约断言（计算值口径：.dialogPanel 为 20px，.filterTabs 为 18px，.filterTab 为 8px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'plugins',
@@ -383,8 +388,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       computedRadiusPx(dialogPanelMatch![0]),
-      '.dialogPanel 的 border-radius 计算值必须为 24px（--radius-3xl）'
-    ).toBe(24);
+      '.dialogPanel 的 border-radius 计算值必须为 20px（--radius-2xl；#4 模态收敛）'
+    ).toBe(20);
 
     const tabsMatch = modalCss.match(/\.filterTabs\s*\{[^}]+\}/);
     expect(
@@ -408,9 +413,10 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
   });
 
   // 10. ScheduledTasksPanel 方案 A 表单同心契约断言
-  // F7 计算值口径：.schedForm 历史标题自称 14px，其声明 var(--sep-radius-outer)
-  // 的计算值是 18px；钉计算真值 18px（意图若变更走 token 裁决）。
-  it('契约 10：ScheduledTasksPanel 方案 A 表单同心契约断言（计算值口径：.schedForm 为 18px，.schedFieldInput 为 8px）', () => {
+  // 意图变更（G² 推广第一波槽 C 表单卡收敛，2026-11-06）：.schedForm 原借
+  // 浮层菜单外框档 --sep-radius-outer(18)，按档位表归属改隶设置卡档
+  // --radius-xl(16)（SettingsUI 正典）；本契约随裁定改钉 16px。
+  it('契约 10：ScheduledTasksPanel 方案 A 表单同心契约断言（.schedForm 为 16px，.schedFieldInput 为 8px）', () => {
     const schedCss = readDesktopFile(
       'components',
       'settings',
@@ -424,8 +430,8 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       computedRadiusPx(formMatch![0]),
-      '.schedForm 的 border-radius 计算值必须为 18px（--sep-radius-outer 真值）'
-    ).toBe(18);
+      '.schedForm 的 border-radius 计算值必须为 16px（--radius-xl 设置卡档；槽 C 收敛）'
+    ).toBe(16);
 
     const inputMatch = schedCss.match(/\.schedFieldInput\s*\{[^}]+\}/);
     expect(

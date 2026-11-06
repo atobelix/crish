@@ -43,12 +43,14 @@ export type CornerRadiiInput = number | Partial<CornerRadii>;
 
 /**
  * 档位 → 名义半径映射（参数层 §2.1 的代码侧镜像；契约与 tokens 定义逐项对账）。
+ * modal 档 = 20：待裁决 #4 已裁定模态名义半径统一 20（2026-11-06），事实源为
+ * --radius-2xl；专设 --radius-modal(24) 零消费已按 §五 F4 删除，不再作对账锚。
  * r16 为单独立档：16 是聊天域用量最大的外框档之一，角色 token 系在 card 12 与
  * dock 20 之间是空档，其 token 事实源为别名 --radius-xl(16)。
  */
 export const G2_TIERS = {
   dock: 20,
-  modal: 24,
+  modal: 20,
   menuOuter: 18,
   r16: 16,
   card: 12,

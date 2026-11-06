@@ -246,7 +246,9 @@ describe('G² 真相源守卫（g2-corner）', () => {
     };
     // 计算值对账：档位数值必须等于对应 token 的有效计算值（不钉任何回退文本）
     expect(tierOf('dock')).toBe(resolveToken('--radius-dock'));
-    expect(tierOf('modal')).toBe(resolveToken('--radius-modal'));
+    // modal 档对账锚 = --radius-2xl(20)：待裁决 #4 裁定模态统一 20 后，
+    // 专设 --radius-modal(24) 已按 §五 F4 删除（零消费不留死定义）
+    expect(tierOf('modal')).toBe(resolveToken('--radius-2xl'));
     expect(tierOf('menuOuter')).toBe(resolveToken('--radius-menu-outer'));
     expect(tierOf('r16')).toBe(resolveToken('--radius-xl'));
     expect(tierOf('card')).toBe(resolveToken('--radius-card'));

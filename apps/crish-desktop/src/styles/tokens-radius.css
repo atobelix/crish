@@ -22,7 +22,6 @@ html[data-theme='light'] {
   --radius-menu-inner: 12px;
   --radius-menu-outer: 18px;
   --radius-dock: 20px;
-  --radius-modal: 24px;
   --radius-pill: 9999px;
   --radius-circle: 50%;
 
@@ -36,7 +35,9 @@ html[data-theme='light'] {
      档位 → 形状待遇映射表（守卫断言与本表逐项对账；「待定档」随待裁决结论改表，
      改档只改本表与接入声明，不动生成层）：
        枢纽/坞   --radius-dock 20        G² 全表面（第一波）
-       模态      --radius-modal 24       G² 全表面（第一波；名义值收敛随待裁决 #4）
+       模态      --radius-2xl 20         G² 全表面（第一波）。待裁决 #4 已裁定
+                                        模态名义半径统一 20（2026-11-06）；专设
+                                        --radius-modal(24) 零消费，按 §五 F4 删除
        浮层外框  --radius-menu-outer 18  G² 全表面（第一波，含 --sep-radius-outer 链）
        R16 独立档 --radius-xl 16         G² 全表面（第一/二波）。角色系在 card 12 与
                                         dock 20 之间为空档，16 是聊天域用量最大的
