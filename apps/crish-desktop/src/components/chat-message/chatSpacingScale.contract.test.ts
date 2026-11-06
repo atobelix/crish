@@ -14,8 +14,12 @@
 * 时间分隔块 30.6 = 上衬 8（--space-2）+ 行盒 18.6（--font-size-meta
 * 12px × --lh-prose 1.55）+ 下衬 4（--space-1）。
 * L2 行盒层（归属 tokens-space.css / ChatMessageRow.module.css）
-* 轮 pitch 52 = meta 槽 32（margin-top 4 = --space-1 + min-height 28）
-* + 行 padding-bottom 20（--chat-row-gap 默认密度；紧凑 16 / 宽松 24）。
+* 轮 pitch 48 = meta 槽 32（margin-top 4 = --space-1 + min-height 28）
+* + 行 padding-bottom 16（--chat-row-gap 默认密度；紧凑 16 / 宽松 24。
+* 默认档 2026-11-06 方向①裁定 (c) 由 20 收紧至 16，与紧凑档同值）。
+* 估高常量（CHAT_ROW_GAP_PX + META_SLOT_PX = 16 + 32 = 48）与默认档
+* pitch 恒等；默认/紧凑两档 pitch 同为 48、估高精确，宽松档 pitch 58
+* 与估高相差 10 为既定占位误差（靠实测收敛，见调研3 §二 2.3）。
 * L3 流层（归属 MessageContent.module.css）
 * 流内相邻段盒间隙恒 8（.assistantTimelineStream gap = --space-2）。
 * L4 段内层（归属 FoldableProcessSection / tokens-base / MessageContent /
@@ -27,10 +31,14 @@
 * 段后距 0.82em（--md-paragraph-margin-bottom，14px 下 ≈11.48）；
 * 正文块间 0.65em（--md-block-gap，≈9.1，由.assistantText 的
 * margin-block-end 承载、末块归零）。
-* 流内收口（2026-11-06 间距修复批方向②）：渲染根直属末段的段后距
-* 在流层正文（.contentText）与思考展开体（.reasoningContent）内
-* 归零——否则可见间距按方向分叉（8 / 19.4 / 15.5、块间 9.1 被叠成
-* 20.6）；归零只许存在于这两个聊天流表面，排版层全局规则不动。
+* 流内收口（2026-11-06 间距修复批方向②立、方向①施工批改通则）：
+* 渲染根直属末子元素的段后距在流层正文（.contentText）与思考展开体
+* （.reasoningContent）内一律归零——否则可见间距按方向分叉（8 /
+* 19.4 / 15.5、块间 9.1 被叠成 20.6）。方向②初版只归段落尾；列表/
+* 代码/表格等非段落块的自有规则同为特异性 (0,2,0)、位置在排版层
+* 收敛规则之后而将其击穿，段尾残留 ≈11.48——通则以 (0,3,0) 一次
+* 覆盖全部现存与未来块型，且不逐块枚举（枚举正是残留的成因模式）。
+* 归零只许存在于这两个聊天流表面，排版层全局规则不动。
 *
 * 本文件只做源码级断言，不渲染组件。
 */
@@ -91,22 +99,22 @@ expect(b).toMatch(/line-height:\s*var\(--lh-prose\)/);
 });
 
 /* ═══════════════════════════════════════════════════════════════════
-* L2 行盒层（轮 pitch 52 = meta 槽 32 + 行距 20）
+* L2 行盒层（轮 pitch 48 = meta 槽 32 + 行距 16）
 * ═══════════════════════════════════════════════════════════════════ */
 describe('L2 行盒层', () => {
-it('--chat-row-gap 三档齐备且各一份：默认 20 / 紧凑 16 / 宽松 24', () => {
-for (const v of ['20px', '16px', '24px']) {
-const hits =
+it('--chat-row-gap 档位：默认 16 / 紧凑 16 / 宽松 24（16 恰两处、24 一处、旧默认 20 零处）', () => {
+const count = v =>
 tokensSpace.match(new RegExp(`--chat-row-gap:\\s*${v}`, 'g'))?? [];
-expect(hits.length, `--chat-row-gap: ${v} 必须恰好一处`).toBe(1);
-}
+expect(count('16px').length, '--chat-row-gap: 16px 必须恰好两处（默认+紧凑）').toBe(2);
+expect(count('24px').length, '--chat-row-gap: 24px 必须恰好一处（宽松）').toBe(1);
+expect(count('20px').length, '--chat-row-gap: 20px 必须零处（旧默认已收紧）').toBe(0);
 });
 
-it('.row 的 padding-bottom 消费 --chat-row-gap，回退与默认密度同值 20px', () => {
+it('.row 的 padding-bottom 消费 --chat-row-gap，回退与默认密度同值 16px', () => {
 const b = block(rowCss, '.row');
 expect(b).not.toBe('');
-expect(b).toMatch(/padding-bottom:\s*var\(--chat-row-gap, 20px\)/);
-expect(b).not.toMatch(/--chat-row-gap,[^)]*16px/);
+expect(b).toMatch(/padding-bottom:\s*var\(--chat-row-gap, 16px\)/);
+expect(b).not.toMatch(/--chat-row-gap,[^)]*20px/);
 });
 
 it('meta 槽 32：margin-top 4（--space-1）+ min-height 28，用户/助手同构', () => {
@@ -121,8 +129,9 @@ expect(block(rowCss, '.userMeta')).toMatch(/min-height:\s*28px/);
     );
 });
 
-it('负向断言：DEF-13 注释不得再把 16px 写成.row 行距默认值', () => {
-expect(listCssRaw).not.toMatch(/\.row padding-bottom: 16px/);
+it('DEF-13 注释口径与现行行距一致：默认密度 16px，且不得再把 20px 写成默认', () => {
+expect(listCssRaw).toMatch(/默认密度 16px/);
+expect(listCssRaw).not.toMatch(/默认密度 20px/);
 });
 });
 
@@ -167,7 +176,7 @@ expect(block(reasoningCss, '.reasoningBody')).toMatch(
 });
 
 /* ═══════════════════════════════════════════════════════════════════
-* L5 md 排版层 + 流内段尾归零收口（方向②）
+* L5 md 排版层 + 流内段尾归零收口（方向②立、方向①改通则）
 * ═══════════════════════════════════════════════════════════════════ */
 describe('L5 md 排版层', () => {
 it('chat 变体段后距 0.82em，且.md-p 全局规则仍经该 token 取值（全局不动）', () => {
@@ -189,16 +198,27 @@ expect(rowCss).toMatch(
 );
 });
 
-it('方向②：流层正文段尾归零规则在.contentText 作用域内（MessageContent）', () => {
+it('段尾归零通则在.contentText 作用域内（MessageContent）：渲染根直属末子一律归零', () => {
 expect(contentCss).toMatch(
-/\.contentText :global\(\.md-rendered\) > :global\(\.md-p:last-child\)[\s\S]{0,240}?margin-bottom:\s*0;/
+/\.contentText :global\(\.md-rendered\) > :last-child,/
+);
+expect(contentCss).toMatch(
+/\.contentText :global\(\.conex-markdown\) > :last-child\s*\{\s*margin-bottom:\s*0;/
 );
 });
 
-it('方向②：思考展开体尾部归零规则在.reasoningContent 作用域内（ReasoningRow）', () => {
+it('段尾归零通则在.reasoningContent 作用域内（ReasoningRow）：渲染根直属末子一律归零', () => {
 expect(reasoningCss).toMatch(
-/\.reasoningContent :global\(\.md-rendered\) > :global\(\.md-p:last-child\)[\s\S]{0,240}?margin-bottom:\s*0;/
+/\.reasoningContent :global\(\.md-rendered\) > :last-child,/
 );
+expect(reasoningCss).toMatch(
+/\.reasoningContent :global\(\.conex-markdown\) > :last-child\s*\{\s*margin-bottom:\s*0;/
+);
+});
+
+it('负向断言：两表面不得回到逐块枚举（不得按 md 块类名点名末子归零）', () => {
+expect(contentCss).not.toMatch(/\.contentText[^\n{]*:global\(\.md-[a-z-]+:last-child\)/);
+expect(reasoningCss).not.toMatch(/\.reasoningContent[^\n{]*:global\(\.md-[a-z-]+:last-child\)/);
 });
 
 it('负向断言：归零不得写进排版层全局（markdown-typography 不得出现聊天流表面类名）', () => {
