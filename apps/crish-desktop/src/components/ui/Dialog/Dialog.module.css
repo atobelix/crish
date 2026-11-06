@@ -94,6 +94,25 @@
       transform var(--duration-enter) var(--ease-standard);
   }
 
+  /* G² 形状层在位时压制面板自身 box-shadow：阴影改走形状层 filter
+     （drop-shadow 跟随 G² 轮廓），避免普通圆弧阴影与轮廓阴影双影。
+     背景/边框声明保留为无形状层时的兜底（被不透明填充层完全覆盖）。 */
+  .dialog:has(> [data-g2-mode]),
+  .panel:has(> [data-g2-mode]) {
+    box-shadow: none;
+  }
+
+  /* 形状层阴影：基座双层 box-shadow 的 drop-shadow 近似（裁定 #6(a) 逐面
+     调近现状）——偏移与不透明度照原声明，模糊半径取半（filter 无扩散，
+     视觉等效半径约为 box-shadow 一半）。逐面覆盖（设置壳 --shadow-2xl 等）
+     在各面模块以更高特异性规则给出。 */
+  .dialog [data-g2-layer],
+  .panel [data-g2-layer] {
+    filter:
+      drop-shadow(0 24px 24px color-mix(in srgb, var(--shadow-color) 16%, transparent))
+      drop-shadow(0 8px 8px color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  }
+
   @starting-style {
     .dialog,
     .panel {

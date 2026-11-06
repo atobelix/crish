@@ -61,6 +61,7 @@ export function AccountCenterDialog() {
         overlay: controls.scrim,
         body: styles.body,
       }}
+      surface={{ fill: 'var(--bg-card)' }}
     >
       <div className={styles.split}>
         <div className={styles.brand}>

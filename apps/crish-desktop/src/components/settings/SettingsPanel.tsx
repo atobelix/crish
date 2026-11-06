@@ -337,6 +337,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         overlay: styles.settingsModalOverlay,
         body: styles.settingsModalBody,
       }}
+      surface={{ fill: 'var(--surface-outer)' }}
     >
       <div
         ref={rootRef}

@@ -34,11 +34,40 @@
   max-height: none;
   background: var(--surface-outer);
   border: 1px solid var(--border-panel);
-  border-radius: var(--radius-2xl);
+  /* 圆角不在此二次定义：面板名义半径 20 的单一定义点在 Dialog 基座
+   * （.dialog/.panel 的 --radius-2xl），形状由基座 G² 形状层统一生成
+   * （G² 推广第一波槽 C 收敛：原「同一 20 两处定义、互相阻断传播」已消解）。
+   * background/border/box-shadow 保留为无形状层时的兜底，被不透明填充层
+   * 完全覆盖；box-shadow 与 overflow 由下方 :has 规则在形状层在位时压制。 */
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-sans);
+}
+
+/* G² 形状层在位：放行 overflow（面板内容改由形状层同路径 clip 承载，
+ * 自身 overflow:hidden + 普通圆弧会把 G² 轮廓裁回圆弧）；压制自身
+ * box-shadow（改走下方形状层 filter，避免双影）。 */
+[role='dialog'].settingsModal:has(> [data-g2-mode]) {
+  overflow: visible;
+  box-shadow: none;
+}
+
+/* 形状层阴影 = --shadow-2xl 的 drop-shadow 近似（裁定 #6(a)）：偏移与
+ * 不透明度照 token 原值，模糊半径取半。--shadow-2xl 本身分主题两套值，
+ * 故近似亦分两条规则（浅色缺省 / 暗色作用域）。 */
+[role='dialog'].settingsModal [data-g2-layer] {
+  filter:
+    drop-shadow(0 12px 12px color-mix(in srgb, var(--shadow-color) 2.5%, transparent))
+    drop-shadow(0 32px 32px color-mix(in srgb, var(--shadow-color) 3.5%, transparent))
+    drop-shadow(0 1px 2px color-mix(in srgb, var(--shadow-color) 1%, transparent));
+}
+
+:global([data-theme='dark']) [role='dialog'].settingsModal [data-g2-layer] {
+  filter:
+    drop-shadow(0 12px 12px color-mix(in srgb, var(--shadow-color) 30%, transparent))
+    drop-shadow(0 32px 32px color-mix(in srgb, var(--shadow-color) 40%, transparent))
+    drop-shadow(0 1px 2px color-mix(in srgb, var(--shadow-color) 15%, transparent));
 }
 
 /* Dialog 内容区：去掉基座默认内边距与滚动，交给内部两栏布局 */

@@ -27,6 +27,7 @@ import {
   type DialogSize,
   type DialogRole,
   type DialogContextValue,
+  type DialogSurfaceSpec,
 } from './dialogContext';
 import {
   DialogPortal,
@@ -85,6 +86,8 @@ export interface DialogProps {
    * - body 追加到内容区
    */
   classNames?: { panel?: string; overlay?: string; body?: string };
+  /** G² 形状层表面规格（逐面色值；轮廓由基座统一生成，见 dialogContext） */
+  surface?: DialogSurfaceSpec;
   /** 面板自定义类名快捷属性 */
   className?: string;
   /** 遮罩自定义类名快捷属性 */
@@ -119,6 +122,7 @@ export function Dialog({
   footer,
   children,
   classNames,
+  surface,
   className,
   overlayClassName,
   onEscapeKeyDown,
@@ -187,6 +191,7 @@ export function Dialog({
     overlayEl,
     setOverlayEl,
     classNames: mergedClassNames,
+    surface,
     initialFocusRef,
     portalTarget,
     description,
@@ -278,6 +283,7 @@ export {
   type DialogSize,
   type DialogRole,
   type DialogContextValue,
+  type DialogSurfaceSpec,
 } from './dialogContext';
 export {
   DialogPortal,
