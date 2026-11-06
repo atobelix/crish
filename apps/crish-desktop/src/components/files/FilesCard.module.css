@@ -735,6 +735,24 @@
   color: var(--text-primary);
   border-radius: 0;
   box-sizing: border-box;
+  /* S6：悬停/选中态的背景与透明度走微档过渡（原为瞬时切换，实测 transition-duration: 0s）；
+     退场快照靠 opacity 过渡淡出（见下方 [data-tree-leaving]）。 */
+  transition:
+    background-color var(--transition-micro),
+    opacity var(--duration-micro) var(--ease-standard);
+}
+
+/* S6 文件树折叠退场：快照行以旧 top 留位，透明度 100ms 淡出后由定时器卸载。
+   首帧即带 data-leaving 挂载（@starting-style 兜底）；节点复用时类名切换同样过渡。 */
+.filesRow[data-tree-leaving='true'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@starting-style {
+  .filesRow[data-tree-leaving='true'] {
+    opacity: 1;
+  }
 }
 
 .filesRow:hover {
@@ -923,7 +941,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   3. Emerald 标杆翡翠绿 1.4s 呼吸脉冲动画（MIN-02）
+   3. Emerald 标杆翡翠绿 1.6s 呼吸脉冲动画（MIN-02）
    ───────────────────────────────────────────────────────────────────────── */
 @keyframes fileRowPulse {
   0% {

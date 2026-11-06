@@ -287,24 +287,52 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     expect(scrollToMock).not.toHaveBeenCalled();
   });
 
-  it('[MIN-02] 1.4s (1400ms) 翡翠绿脉冲高亮周期结束后，脉冲类名安全卸载', () => {
+  it('[MIN-02] 1.6s (1600ms) 翡翠绿脉冲高亮周期结束后，脉冲类名安全卸载', () => {
     vi.useFakeTimers();
     const targetPath = DEEP_TREE[0].path;
 
+    // 先空选渲染并模拟视口尺寸（jsdom 下 clientHeight 默认为 0，脉冲 effect 会提前返回），
+    // 再切到选中态，脉冲才真实触发——中段正向断言借此不再是空真通过。
     const { container, rerender } = render(
-      <FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />
+      <FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />
     );
+    const scrollContainer = container.querySelector(
+      '[role="tree"]'
+    ) as HTMLDivElement;
+    expect(scrollContainer).toBeTruthy();
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 280,
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
+
+    act(() => {
+      rerender(
+        <FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />
+      );
+    });
 
     const firstRow = container.querySelector('[data-tree-index="0"]');
     expect(firstRow).toBeTruthy();
     expect(firstRow?.className).toMatch(/isSelected/);
+    expect(firstRow?.className).toMatch(/isSelectedPulse/);
 
-    // 时钟快进 1400ms
+    // S6：脉冲清除定时器已与 fileRowPulse 动画时长 1.6s 对齐（原 1400ms 会截断动画尾巴）。
+    // 1400ms 处脉冲仍在（动画未播完），再推进 200ms 后才卸载。
     act(() => {
       vi.advanceTimersByTime(1400);
     });
+    const midRow = container.querySelector('[data-tree-index="0"]');
+    expect(midRow?.className).toMatch(/isSelectedPulse/);
 
-    rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
     const updatedRow = container.querySelector('[data-tree-index="0"]');
     expect(updatedRow?.className).toMatch(/isSelected/);
     expect(updatedRow?.className).not.toMatch(/isSelectedPulse/);

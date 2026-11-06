@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +15,9 @@ import type { HostOpener } from '../../api/hostOpenersApi';
 import type { TreeNode } from './hooks/useFileNavigation';
 import { FileTreeContextMenu } from './FileTreeContextMenu';
 import { AppIcon } from '@/components/ui/icons';
+import { diffToggleChange } from './fileTreeMotion';
+import { calcAccordionDuration, EASE_DECELERATE } from '../../utils/motionTokens';
+import { isRevealDegraded } from '../chat-tool-call/toolRevealState';
 
 function TreeFileIcon({ name }: { name: string }) {
   return (
@@ -92,6 +96,33 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     const [pulseTarget, setPulseTarget] = useState<string | null>(null);
     const prevSelectedRef = useRef<string | null>(null);
 
+    /**
+     * S6 文件树展开/折叠动效（G §3.1 + 审计 A 2-1）：
+     * - 展开：新增子行 WAAPI 淡入（100ms 微档）+ 下方行 FLIP 下移（下标差 × 28，
+     *   时长走 calcAccordionDuration 单一时钟）；折叠：子行快照淡出 + 下方行 FLIP 上移。
+     * - 归因关口：只认 diffToggleChange 承认的「锚点目录后单段连续插入/删除」；
+     *   过滤替换、外部重载等一律静默同步。切换意图由 noteToggle 记录（单击目录行 /
+     *   键盘 ←/→/Enter / 双击目录），diff 不符时记录即作废，不产生动画。
+     * - 入场不用 @starting-style：标记在布局 effect 里才算出，晚于行挂载的首帧样式计算，
+     *   故淡入直接走 WAAPI（布局 effect 在首漆前执行，首帧即为 opacity 0）。
+     *   退场行则不同——快照在 effect 触发的重渲染里首帧即带 data-leaving 挂载，
+     *   故走 CSS [data-leaving] 目标态 + @starting-style（节点复用时类名切换同样过渡）。
+     */
+    const [leavingRows, setLeavingRows] = useState<
+      Array<{ node: TreeNode; top: number }>
+    >([]);
+    /** 退场快照的 ref 真源（state 的镜像）：effect 内同步读写，避免闭包过期 */
+    const leavingRowsRef = useRef<Array<{ node: TreeNode; top: number }>>([]);
+    const pendingToggleRef = useRef<string | null>(null);
+    const prevFlatTreeRef = useRef<TreeNode[]>(flatTree);
+    const prevVisibleRef = useRef({ startIndex, endIndex });
+    const motionTimerRef = useRef<number | null>(null);
+    const flipAnimsRef = useRef(new Map<string, Animation>());
+
+    const noteToggle = useCallback((path: string) => {
+      pendingToggleRef.current = path;
+    }, []);
+
     // 行右键菜单（统一 ui/ContextMenu 基座）：右键不改选择态，
     // 直接以命中节点为目标（目录右键不得触发 onSelect 的展开副作用）
     const [ctxMenu, setCtxMenu] = useState<{
@@ -166,9 +197,10 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
 
       const triggerFocusAndPulse = () => {
         setPulseTarget(selected);
+        // S6：与 fileRowPulse 动画时长 1.6s 对齐（原 1400ms 会在动画约 87% 处截断尾巴）
         pulseTimer = window.setTimeout(() => {
           setPulseTarget(null);
-        }, 1400);
+        }, 1600);
         focusTreeRow(targetIndex);
         requestAnimationFrame(() => {
           focusTreeRow(targetIndex);
@@ -216,6 +248,126 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
       };
     }, [selected, flatTree, focusTreeRow, containerRef, totalHeight]);
 
+    // S6 展开/折叠动效主 effect：flatTree 变化后、首漆前执行。
+    // 滚动引起的 visibleRange 变化会同 effect 重跑，此时 diff 为 null（无切换记录），
+    // 仅静默同步基线——滚动挂载的行不做入场（G §七反例 1 裁决沿用），
+    // 且不碰退场快照的 200ms 定时器（滚动不打断正在进行的退场）。
+    useLayoutEffect(() => {
+      const prevTree = prevFlatTreeRef.current;
+      const prevVisible = prevVisibleRef.current;
+      const container = containerRef.current;
+      const change = diffToggleChange(
+        prevTree,
+        flatTree,
+        pendingToggleRef.current
+      );
+      pendingToggleRef.current = null;
+
+      const filterActive = filter.trim() !== '';
+      if (!change || filterActive || isRevealDegraded() || !container) {
+        prevFlatTreeRef.current = flatTree;
+        prevVisibleRef.current = { startIndex, endIndex };
+        return;
+      }
+
+      // 有新切换：接管退场定时器（旧快照的回收权移交本次切换）
+      if (motionTimerRef.current != null) {
+        window.clearTimeout(motionTimerRef.current);
+        motionTimerRef.current = null;
+      }
+
+      const isOpening = change.kind === 'expand';
+      const prevIndexByPath = new Map(prevTree.map((n, i) => [n.path, i]));
+      let maxDeltaPx = 0;
+      const flips: Array<{ el: HTMLElement; delta: number; path: string }> =
+        [];
+      flatTree.forEach((node, newIdx) => {
+        const oldIdx = prevIndexByPath.get(node.path);
+        if (oldIdx === undefined || oldIdx === newIdx) return;
+        if (newIdx < startIndex || newIdx > endIndex) return;
+        const el = container.querySelector<HTMLElement>(
+          `[data-tree-index="${newIdx}"]`
+        );
+        if (!el) return;
+        const delta = (oldIdx - newIdx) * ITEM_HEIGHT;
+        maxDeltaPx = Math.max(maxDeltaPx, Math.abs(delta));
+        flips.push({ el, delta, path: node.path });
+      });
+      const duration = calcAccordionDuration(maxDeltaPx, isOpening);
+      for (const { el, delta, path } of flips) {
+        flipAnimsRef.current.get(path)?.cancel();
+        const anim = el.animate(
+          [
+            { transform: `translateY(${delta}px)` },
+            { transform: 'translateY(0px)' },
+          ],
+          { duration, easing: EASE_DECELERATE }
+        );
+        flipAnimsRef.current.set(path, anim);
+      }
+
+      // 入场淡入：新增段中当前可见的行（WAAPI，首漆前启动即首帧 opacity 0）
+      if (isOpening) {
+        for (
+          let i = change.runStartIndex;
+          i < change.runStartIndex + change.run.length;
+          i++
+        ) {
+          if (i < startIndex || i > endIndex) continue;
+          const el = container.querySelector<HTMLElement>(
+            `[data-tree-index="${i}"]`
+          );
+          if (!el) continue;
+          el.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 100,
+            easing: 'ease-out',
+          });
+        }
+      } else {
+        // 退场快照：删除段中此前可见的行，按旧 top 留位淡出（CSS [data-leaving] 接管）
+        const leaving: Array<{ node: TreeNode; top: number }> = [];
+        change.run.forEach((node, k) => {
+          const prevIdx = change.runStartIndex + k;
+          if (
+            prevIdx >= prevVisible.startIndex &&
+            prevIdx <= prevVisible.endIndex
+          ) {
+            leaving.push({ node, top: prevIdx * ITEM_HEIGHT });
+          }
+        });
+        if (leaving.length > 0) {
+          leavingRowsRef.current = leaving;
+          setLeavingRows(leaving);
+          // 退场主档 150ms + 50ms 余量（与 S4 useClosingFlag 同口径）
+          motionTimerRef.current = window.setTimeout(() => {
+            leavingRowsRef.current = [];
+            setLeavingRows([]);
+            motionTimerRef.current = null;
+          }, 200);
+        } else if (leavingRowsRef.current.length > 0) {
+          // 本次切换无退场行：立即撤下上一批快照
+          leavingRowsRef.current = [];
+          setLeavingRows([]);
+        }
+      }
+
+      prevFlatTreeRef.current = flatTree;
+      prevVisibleRef.current = { startIndex, endIndex };
+      // leavingRows 的回收权唯一归属 motionTimerRef；本 effect 不返回定时器清理，
+      // 滚动重跑不得打断退场。卸载清理见下方空 deps effect。
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [flatTree, startIndex, endIndex, filter]);
+
+    // 卸载时清理退场定时器（唯一的定时器清理点）
+    useEffect(() => {
+      return () => {
+        if (motionTimerRef.current != null) {
+          window.clearTimeout(motionTimerRef.current);
+          motionTimerRef.current = null;
+        }
+      };
+    }, []);
+
     // ARIA tree pattern 键盘漫游
     const handleRowKeyDown = useCallback(
       (e: React.KeyboardEvent, idx: number, node: TreeNode) => {
@@ -233,6 +385,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         }
         if (e.key === 'Enter') {
           e.preventDefault();
+          // 目录的 Enter 即切换展开（与单击同义），记录切换意图供动效归因
+          if (node.isDir) noteToggle(node.path);
           onSelect(node.path, node.isDir);
           return;
         }
@@ -258,22 +412,128 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         }
         if (e.key === 'ArrowRight' && node.isDir && !expanded[node.path]) {
           e.preventDefault();
+          noteToggle(node.path);
           onToggleExpand(node.path, e as unknown as React.MouseEvent);
           return;
         }
         if (e.key === 'ArrowLeft' && node.isDir && expanded[node.path]) {
           e.preventDefault();
+          noteToggle(node.path);
           onToggleExpand(node.path, e as unknown as React.MouseEvent);
         }
       },
       [
         flatTree.length,
         expanded,
+        noteToggle,
         onSelect,
         onToggleExpand,
         focusTreeRow,
         openRowContextMenu,
       ]
+    );
+
+    // S6：行渲染抽取——正常行与退场快照共用同一 JSX；退场行不带 data-tree-index
+    //（FLIP/入场按下标查元素时不被快照干扰）、不带选中/脉冲态、tabIndex -1、aria-hidden。
+    const renderTreeRow = (
+      node: TreeNode,
+      globalIdx: number | null,
+      top: number,
+      leaving: boolean
+    ) => {
+      const isSelected =
+        !leaving && Boolean(selected && isSameFsPath(node.path, selected));
+      const isPulse =
+        !leaving &&
+        Boolean(pulseTarget && isSameFsPath(node.path, pulseTarget));
+
+      return (
+        <div
+          key={node.path}
+          data-tree-index={leaving ? undefined : (globalIdx ?? undefined)}
+          data-tree-leaving={leaving ? 'true' : undefined}
+          aria-hidden={leaving ? true : undefined}
+          className={`${styles.filesRow} ${isSelected ? styles.isSelected : ''} ${isPulse ? styles.isSelectedPulse || 'isSelectedPulse' : ''}`}
+          style={{
+            position: 'absolute',
+            top: `${top}px`,
+            left: 0,
+            width: '100%',
+            height: `${ITEM_HEIGHT}px`,
+            paddingLeft: 4 + node.depth * 10,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+          onClick={() => {
+            if (node.isDir) noteToggle(node.path);
+            onSelect(node.path, node.isDir);
+          }}
+          onDoubleClick={() => {
+            if (node.isDir) noteToggle(node.path);
+            onDoubleClick(node.path, node.isDir);
+          }}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            openRowContextMenu(node, ev.clientX, ev.clientY, ev.currentTarget);
+          }}
+          role="treeitem"
+          aria-level={node.depth + 1}
+          aria-selected={isSelected}
+          aria-expanded={
+            node.isDir ? (expanded[node.path] ? 'true' : 'false') : undefined
+          }
+          tabIndex={leaving ? -1 : isSelected ? 0 : -1}
+          onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx ?? 0, node)}
+        >
+          {/* 文件浏览器不显示展开箭头（filesRowTwist 已移除，不占位）：
+              单击行 → onSelect（目录即 toggleExpand），键盘 ←/→/Enter 同样可展开折叠；
+              展开态由 aria-expanded 暴露。差异面板用自己的 fileNodeToggle，不受影响。 */}
+          {node.isDir ? (
+            <AppIcon
+              name="folder"
+              size={14}
+              className={`${styles.filesRowIco} ${styles.dir}`}
+            />
+          ) : (
+            <TreeFileIcon name={node.name} />
+          )}
+          <Tooltip content={node.name}>
+            <span className={styles.filesRowName}>{node.name}</span>
+          </Tooltip>
+          {!node.isDir && gitStatusMap[node.path] ? (
+            <span
+              className={styles.filesGitStatus}
+              style={{
+                color:
+                  gitStatusMap[node.path] === 'M'
+                    ? 'var(--color-warning)'
+                    : gitStatusMap[node.path] === 'A'
+                      ? 'var(--color-success)'
+                      : gitStatusMap[node.path] === 'D'
+                        ? 'var(--color-error)'
+                        : gitStatusMap[node.path] === '?'
+                          ? 'var(--text-tertiary)'
+                          : undefined,
+              }}
+            >
+              {gitStatusMap[node.path]}
+            </span>
+          ) : null}
+          {!node.isDir && node.size != null ? (
+            <span className={styles.filesRowMeta}>
+              {formatSize(node.size)}
+            </span>
+          ) : null}
+        </div>
+      );
+    };
+
+    // S6：内容高度下限——退场快照按旧 top 渲染在内容区内，高度不得小于其底边，
+    // 否则 inner div 的 overflow: hidden 会裁掉正在淡出的行。
+    const contentHeight = Math.max(
+      totalHeight,
+      leavingRows.reduce((m, r) => Math.max(m, r.top + ITEM_HEIGHT), 0)
     );
 
     return (
@@ -335,7 +595,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
 
             <div
               style={{
-                height: `${totalHeight}px`,
+                height: `${contentHeight}px`,
                 width: '100%',
                 position: 'relative',
                 overflow: 'hidden',
@@ -343,96 +603,12 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
             >
               {visibleItems.map((e, index) => {
                 const globalIdx = startIndex + index;
-                const top = globalIdx * ITEM_HEIGHT;
-                const isSelected = Boolean(
-                  selected && isSameFsPath(e.path, selected)
-                );
-                const isPulse = Boolean(
-                  pulseTarget && isSameFsPath(e.path, pulseTarget)
-                );
-
-                return (
-                  <div
-                    key={e.path}
-                    data-tree-index={globalIdx}
-                    className={`${styles.filesRow} ${isSelected ? styles.isSelected : ''} ${isPulse ? styles.isSelectedPulse || 'isSelectedPulse' : ''}`}
-                    style={{
-                      position: 'absolute',
-                      top: `${top}px`,
-                      left: 0,
-                      width: '100%',
-                      height: `${ITEM_HEIGHT}px`,
-                      paddingLeft: 4 + e.depth * 10,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    onClick={() => onSelect(e.path, e.isDir)}
-                    onDoubleClick={() => onDoubleClick(e.path, e.isDir)}
-                    onContextMenu={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      openRowContextMenu(
-                        e,
-                        ev.clientX,
-                        ev.clientY,
-                        ev.currentTarget
-                      );
-                    }}
-                    role="treeitem"
-                    aria-level={e.depth + 1}
-                    aria-selected={isSelected}
-                    aria-expanded={
-                      e.isDir
-                        ? expanded[e.path]
-                          ? 'true'
-                          : 'false'
-                        : undefined
-                    }
-                    tabIndex={isSelected ? 0 : -1}
-                    onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx, e)}
-                  >
-                    {/* 文件浏览器不显示展开箭头（filesRowTwist 已移除，不占位）：
-                        单击行 → onSelect（目录即 toggleExpand），键盘 ←/→/Enter 同样可展开折叠；
-                        展开态由 aria-expanded 暴露。差异面板用自己的 fileNodeToggle，不受影响。 */}
-                    {e.isDir ? (
-                      <AppIcon
-                        name="folder"
-                        size={14}
-                        className={`${styles.filesRowIco} ${styles.dir}`}
-                      />
-                    ) : (
-                      <TreeFileIcon name={e.name} />
-                    )}
-                    <Tooltip content={e.name}>
-                      <span className={styles.filesRowName}>{e.name}</span>
-                    </Tooltip>
-                    {!e.isDir && gitStatusMap[e.path] ? (
-                      <span
-                        className={styles.filesGitStatus}
-                        style={{
-                          color:
-                            gitStatusMap[e.path] === 'M'
-                              ? 'var(--color-warning)'
-                              : gitStatusMap[e.path] === 'A'
-                                ? 'var(--color-success)'
-                                : gitStatusMap[e.path] === 'D'
-                                  ? 'var(--color-error)'
-                                  : gitStatusMap[e.path] === '?'
-                                    ? 'var(--text-tertiary)'
-                                    : undefined,
-                        }}
-                      >
-                        {gitStatusMap[e.path]}
-                      </span>
-                    ) : null}
-                    {!e.isDir && e.size != null ? (
-                      <span className={styles.filesRowMeta}>
-                        {formatSize(e.size)}
-                      </span>
-                    ) : null}
-                  </div>
-                );
+                return renderTreeRow(e, globalIdx, globalIdx * ITEM_HEIGHT, false);
               })}
+              {/* S6 退场快照：折叠时子行在旧 top 处留位淡出，200ms 后由定时器回收 */}
+              {leavingRows.map(({ node, top }) =>
+                renderTreeRow(node, null, top, true)
+              )}
             </div>
           </>
         )}
