@@ -18,7 +18,7 @@ import {
   sessionLastActivityMs,
 } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
-import { SIDEBAR_SESSION_ROW_HEIGHT } from '../../../api/sessionListWindow';
+import type { SessionRowMotion } from './useSessionListMotion';
 import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
@@ -207,6 +207,13 @@ export type SessionRowProps = {
   actions: SessionRowActionsProps;
   /** 行高（固定值，由列表布局统一） */
   rowHeight: number;
+  /**
+   * 行级动效标记（S6，useSessionListMotion 供给；缺省为 steady）。
+   * 入场/退场由 CSS @starting-style 与 [data-motion='leaving'] 目标态驱动，
+   * 行高由 .sessionItemWrap 的 CSS 统一拥有——此处不写行内高度，
+   * 否则行内样式会压过 @starting-style 的首帧 0 高。
+   */
+  motion?: SessionRowMotion;
 };
 
 /** memo：长列表下避免无关 tick/state 整表重渲每一行 */
@@ -242,8 +249,8 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     onUnpinSession,
     onArchiveSession,
   } = props.actions;
-  const _rowHeight = props.rowHeight;
-  void _rowHeight;
+  const motion = props.motion;
+  const isLeaving = motion?.kind === 'leaving';
   const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
 
   const handleTogglePin = useCallback(
@@ -313,14 +320,20 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     ? `${sessionTitleForA11y}，处理中`
     : sessionTitleForA11y;
 
-  const fixedH = SIDEBAR_SESSION_ROW_HEIGHT;
-
   return (
     <li
       data-session-id={s.id}
       data-drop-place={dropPlace || undefined}
+      data-motion={
+        motion && motion.kind !== 'steady' ? motion.kind : undefined
+      }
+      data-motion-gap={
+        motion && motion.kind !== 'steady' && motion.gapAfter
+          ? 'true'
+          : undefined
+      }
+      aria-hidden={isLeaving ? true : undefined}
       className={`${styles.sessionItemWrap} ${isDraggingThis ? styles.isDraggingSource : ''} ${isRunning ? styles.isRunning : ''}`.trim()}
-      style={{ height: fixedH, minHeight: fixedH, maxHeight: fixedH }}
       role="presentation"
     >
       <div

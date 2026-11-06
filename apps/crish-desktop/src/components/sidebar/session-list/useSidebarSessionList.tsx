@@ -17,6 +17,7 @@ import { buildSectionTitleHints } from '../../../api/sessionListTitleHint';
 import { storeSessionSearchQuery } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
+import type { SessionRowMotion } from './useSessionListMotion';
 import {
   dedupeSessionsById,
   SESSION_LIST_GENERAL_LABEL,
@@ -322,7 +323,7 @@ export function useSidebarSessionList(
   }, []);
 
   const renderSessionItem = useCallback(
-    (s: SessionState, isDraggable: boolean = true) => {
+    (s: SessionState, isDraggable: boolean = true, motion?: SessionRowMotion) => {
       const rh = rowHeightById.get(s.id) ?? defaultRowHeight;
       const dropPlace =
         dropIndicator?.sessionId === s.id ? dropIndicator.place : null;
@@ -330,6 +331,7 @@ export function useSidebarSessionList(
         <SessionRow
           key={s.id}
           rowHeight={rh}
+          motion={motion}
           session={{
             s,
             activeSessionId,
@@ -398,6 +400,11 @@ export function useSidebarSessionList(
     !isSearching && filterType === 'all' && visibleSessions.length === 0;
   const showProjectsAndGeneral = filterType !== 'pinned';
   const showProjectsSection = filterType !== 'pinned' && groupType !== 'none';
+  /**
+   * 行级动效总开关（S6）：搜索/过滤整表替换与拖拽期间禁用一切行级动效，
+   * 各分区 hook 静默同步基线（恢复后当次不补动画）。
+   */
+  const motionDisabled = isSearching || isDragging;
 
   return {
     visibleSessions,
@@ -420,6 +427,7 @@ export function useSidebarSessionList(
     showProjectsSection,
     nowTick,
     renderSessionItem,
+    motionDisabled,
     listClassName: isDragging ? styles.sidebarDragging : undefined,
   };
 }

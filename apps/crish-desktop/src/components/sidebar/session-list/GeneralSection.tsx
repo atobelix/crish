@@ -5,6 +5,8 @@ import { navigateToNewDraft } from '../../../store/storeAccess';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
 import { resolveActualScrollHost } from './useSessionListWindow';
+import { useSessionListMotion } from './useSessionListMotion';
+import type { SessionRowMotion } from './useSessionListMotion';
 import { Button, Tooltip } from '@/components/ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '@/components/ui/icons';
@@ -28,7 +30,13 @@ export interface GeneralSectionProps {
     targetFolder: string,
     isPinned: boolean
   ) => void;
-  renderSessionItem: (s: SessionState) => React.ReactNode;
+  renderSessionItem: (
+    s: SessionState,
+    isDraggable?: boolean,
+    motion?: SessionRowMotion
+  ) => React.ReactNode;
+  /** 行级动效总开关（S6）：搜索/拖拽期间禁用 */
+  motionDisabled?: boolean;
 }
 
 const GENERAL_FOLD_LIMIT = 10;
@@ -46,6 +54,7 @@ export function GeneralSection({
   sortDropdownOpen = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
+  motionDisabled = false,
 }: GeneralSectionProps) {
   void _onMoveSessionRealtime;
   const { t } = useI18n();
@@ -63,6 +72,16 @@ export function GeneralSection({
   const displayedSessions = showAll
     ? generalSessions
     : generalSessions.slice(0, GENERAL_FOLD_LIMIT);
+
+  /**
+   * 行级动效（S6）：只在非窗口化路径启用。窗口化时（general > 48 行）虚拟窗口
+   * 与行级动效互斥，hook 直通、WindowedSessionUl 原样渲染。
+   */
+  const motion = useSessionListMotion(displayedSessions, {
+    listRef: generalListRef,
+    disabled: motionDisabled,
+    windowed: generalWindowEnabled && showAll,
+  });
 
   return (
     <section
@@ -159,11 +178,13 @@ export function GeneralSection({
                   role="tree"
                   aria-label={t('sidebar.conversationsListAria', '对话列表')}
                   data-windowed="0"
-                  data-window-count={displayedSessions.length}
+                  data-window-count={motion.displaySessions.length}
                   data-drop-zone={isFlatList ? 'flat' : 'general'}
                   data-folder-name={isFlatList ? undefined : GENERAL_FOLDER}
                 >
-                  {displayedSessions.map((s) => renderSessionItem(s))}
+                  {motion.displaySessions.map(({ s, motion: m }) =>
+                    renderSessionItem(s, true, m)
+                  )}
                 </ul>
               )}
               {!isFlatList && generalSessions.length > GENERAL_FOLD_LIMIT && (

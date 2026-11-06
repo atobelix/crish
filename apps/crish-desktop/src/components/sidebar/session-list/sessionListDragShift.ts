@@ -8,7 +8,15 @@
  */
 import type { DropPlace } from './useSessionListDragHelpers';
 
-const SHIFT_TRANSITION = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
+/**
+ * 会话行位移手感（S6：数据驱动重排/置顶的 FLIP 与拖拽让位共用同一常量——
+ * 120ms + cubic-bezier(0.2, 0, 0, 1)，与 --ease-decelerate 同值）。
+ * SHIFT_TRANSITION 由此二者派生，字符串与原内联实现逐字一致。
+ */
+export const SESSION_ROW_SHIFT_DURATION_MS = 120;
+export const SESSION_ROW_SHIFT_EASING = 'cubic-bezier(0.2, 0, 0, 1)';
+
+const SHIFT_TRANSITION = `transform ${SESSION_ROW_SHIFT_DURATION_MS}ms ${SESSION_ROW_SHIFT_EASING}`;
 
 /** 容器内当前可见的会话行（隐藏或零高度的行不参与位移）。 */
 export function collectVisibleRows(container: ParentNode): HTMLElement[] {

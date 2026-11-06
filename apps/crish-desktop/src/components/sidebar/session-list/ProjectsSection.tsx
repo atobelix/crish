@@ -12,8 +12,50 @@ import { AppIcon } from '@/components/ui/icons';
 import { ProjectManageModal } from './ProjectManageModal';
 import { useI18n } from '../../../i18n';
 import { toast } from '../../../services/toast';
+import { useSessionListMotion } from './useSessionListMotion';
+import type { SessionRowMotion } from './useSessionListMotion';
 
 const PROJECT_FOLD_LIMIT = 6;
+
+/**
+ * 单项目会话列表（S6）：每个项目文件夹独立调用行级动效 hook——
+ * 入场/退场快照与 FLIP 基线按列表实例隔离；折叠展开/收起即本列表的批量入场/退场。
+ */
+function ProjectFolderSessions({
+  sessions,
+  renderSessionItem,
+  motionDisabled,
+  ariaLabel,
+  folderId,
+}: {
+  sessions: SessionState[];
+  renderSessionItem: (
+    s: SessionState,
+    isDraggable?: boolean,
+    motion?: SessionRowMotion
+  ) => React.ReactNode;
+  motionDisabled: boolean;
+  ariaLabel: string;
+  folderId: string;
+}) {
+  const motion = useSessionListMotion(sessions, {
+    disabled: motionDisabled,
+  });
+  return (
+    <ul
+      ref={motion.listRef}
+      className={`${styles.pinnedList} ${styles.folderSessions}`}
+      role="tree"
+      aria-label={ariaLabel}
+      data-drop-zone="project"
+      data-folder-name={folderId}
+    >
+      {motion.displaySessions.map(({ s, motion: m }) =>
+        renderSessionItem(s, true, m)
+      )}
+    </ul>
+  );
+}
 
 export interface ProjectsSectionData {
   projects: ProjectEntry[];
@@ -38,7 +80,8 @@ export interface ProjectsSectionActions {
   ) => void;
   renderSessionItem: (
     s: SessionState,
-    isDraggable?: boolean
+    isDraggable?: boolean,
+    motion?: SessionRowMotion
   ) => React.ReactNode;
 }
 
@@ -47,9 +90,11 @@ export interface ProjectsSectionProps {
   data: ProjectsSectionData;
   /** 回调组（折叠/打开/移动/渲染） */
   actions: ProjectsSectionActions;
+  /** 行级动效总开关（S6）：搜索/拖拽期间禁用 */
+  motionDisabled?: boolean;
 }
 
-export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
+export function ProjectsSection({ data, actions, motionDisabled = false }: ProjectsSectionProps) {
   const { t } = useI18n();
   const [expandedProjectFolders, setExpandedProjectFolders] = useState<
     Record<string, boolean>
@@ -263,22 +308,21 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                   <div className={styles.accordionInner}>
                     {sess.length > 0 ? (
                       <>
-                        <ul
-                          className={`${styles.pinnedList} ${styles.folderSessions}`}
-                          role="tree"
-                          aria-label={t(
+                        <ProjectFolderSessions
+                          sessions={
+                            expandedProjectFolders[p.id]
+                              ? sess
+                              : sess.slice(0, PROJECT_FOLD_LIMIT)
+                          }
+                          renderSessionItem={renderSessionItem}
+                          motionDisabled={motionDisabled}
+                          ariaLabel={t(
                             'sidebar.projectSessionsAria',
                             `${p.name} 会话`,
                             { name: p.name }
                           )}
-                          data-drop-zone="project"
-                          data-folder-name={p.id}
-                        >
-                          {(expandedProjectFolders[p.id]
-                            ? sess
-                            : sess.slice(0, PROJECT_FOLD_LIMIT)
-                          ).map((s) => renderSessionItem(s, true))}
-                        </ul>
+                          folderId={p.id}
+                        />
                         {sess.length > PROJECT_FOLD_LIMIT && (
                           <div className={styles.foldToggleRow}>
                             <Button

@@ -6,6 +6,7 @@ import styles from '../../SidebarSessionList.module.css';
 import { GeneralSection } from '../GeneralSection';
 import { ProjectsSection } from '../ProjectsSection';
 import type { SessionState } from '../../../../store/types';
+import type { SessionRowMotion } from '../useSessionListMotion';
 import type { ProjectEntry } from '../../../../api/projectStore';
 
 // Mock compositionRoot & uiEvents
@@ -36,11 +37,31 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
     messages: [],
   });
 
-  const renderItemMock = (s: SessionState) => (
-    <li key={s.id} data-session-id={s.id} className="session-item-wrap">
+  // S6：mock 行须与真实 SessionRow 的动效契约一致——退场快照行带
+  // data-motion="leaving"（真实行还带 aria-hidden 与 data-motion-gap，
+  // 此处只取计数所需的 data-motion）。此前 mock 丢弃 motion 参数，
+  // 退场行与可见行无法区分，收起后的行数断言与退场动画本身冲突。
+  const renderItemMock = (
+    s: SessionState,
+    _isDraggable?: boolean,
+    motion?: SessionRowMotion
+  ) => (
+    <li
+      key={s.id}
+      data-session-id={s.id}
+      data-motion={
+        motion && motion.kind !== 'steady' ? motion.kind : undefined
+      }
+      className="session-item-wrap"
+    >
       {s.title}
     </li>
   );
+  /** 可见行（不含 200ms 退场期内的快照行）：折叠截断断言以此计数。 */
+  const visibleRows = (container: HTMLElement) =>
+    container.querySelectorAll(
+      'li[data-session-id]:not([data-motion="leaving"])'
+    );
 
   it('GeneralSection 默认截断为 10 条，展示“查看全部 (24)”，点击后展开全部 24 条', () => {
     // 模拟现场截图中的 24 条常规会话
@@ -76,10 +97,14 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
     expect(listItems.length).toBe(24);
     expect(getByText('收起')).not.toBeNull();
 
-    // 4. 点击收起
+    // 4. 点击收起：可见行回到 10 条；退场快照（14 行）在 200ms 内仍在 DOM
+    //    内做退场动画，故总数此时为 24，200ms 后才回到 10。
     fireEvent.click(getByText('收起'));
-    listItems = container.querySelectorAll('li[data-session-id]');
+    listItems = visibleRows(container);
     expect(listItems.length).toBe(10);
+    expect(
+      container.querySelectorAll('li[data-session-id]').length
+    ).toBe(24);
     expect(queryByText('查看全部 (24)')).not.toBeNull();
   });
 
@@ -132,10 +157,14 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
     expect(listItems.length).toBe(12);
     expect(getByText('收起')).not.toBeNull();
 
-    // 5. 点击收起恢复 6 项
+    // 5. 点击收起恢复 6 项（可见行）；退场快照（6 行）在 200ms 内仍在 DOM，
+    //    故总数此时为 12。
     fireEvent.click(getByText('收起'));
-    listItems = container.querySelectorAll('li[data-session-id]');
+    listItems = visibleRows(container);
     expect(listItems.length).toBe(6);
+    expect(
+      container.querySelectorAll('li[data-session-id]').length
+    ).toBe(12);
     expect(queryByText('查看全部 (12)')).not.toBeNull();
   });
 });

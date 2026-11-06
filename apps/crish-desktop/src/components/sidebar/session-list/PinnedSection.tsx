@@ -4,6 +4,8 @@ import { Button, Tooltip } from '@/components/ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../../i18n';
+import { useSessionListMotion } from './useSessionListMotion';
+import type { SessionRowMotion } from './useSessionListMotion';
 
 export interface PinnedSectionProps {
   pinnedSessions: SessionState[];
@@ -22,7 +24,13 @@ export interface PinnedSectionProps {
     targetFolder: string,
     isPinned: boolean
   ) => void;
-  renderSessionItem: (s: SessionState) => React.ReactNode;
+  renderSessionItem: (
+    s: SessionState,
+    isDraggable?: boolean,
+    motion?: SessionRowMotion
+  ) => React.ReactNode;
+  /** 行级动效总开关（S6）：搜索/拖拽期间禁用 */
+  motionDisabled?: boolean;
 }
 
 export function PinnedSection({
@@ -37,9 +45,13 @@ export function PinnedSection({
   sortDropdownOpen = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
+  motionDisabled = false,
 }: PinnedSectionProps) {
   void _onMoveSessionRealtime;
   const { t } = useI18n();
+  const motion = useSessionListMotion(pinnedSessions, {
+    disabled: motionDisabled,
+  });
 
   return (
     <section
@@ -107,11 +119,14 @@ export function PinnedSection({
           >
             {pinnedSessions.length > 0 ? (
               <ul
+                ref={motion.listRef}
                 className={`${styles.pinnedList} ${styles.folderSessions}`}
                 role="tree"
                 aria-label={t('sidebar.pinnedListAria', '置顶会话列表')}
               >
-                {pinnedSessions.map((s) => renderSessionItem(s))}
+                {motion.displaySessions.map(({ s, motion: m }) =>
+                  renderSessionItem(s, true, m)
+                )}
               </ul>
             ) : (
               <div

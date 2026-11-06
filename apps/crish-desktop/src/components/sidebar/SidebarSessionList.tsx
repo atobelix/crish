@@ -69,6 +69,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     showProjectsSection,
     nowTick,
     renderSessionItem,
+    motionDisabled,
     listClassName,
   } = useSidebarSessionList({
     ...props,
@@ -151,6 +152,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             sortDropdownOpen={sortDropdownOpen}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
+            motionDisabled={motionDisabled}
           />
         ) : null}
 
@@ -175,6 +177,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
               onMoveSessionRealtime,
               renderSessionItem,
             }}
+            motionDisabled={motionDisabled}
           />
         ) : null}
 
@@ -196,6 +199,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             sortDropdownOpen={sortDropdownOpen}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
+            motionDisabled={motionDisabled}
           />
         ) : null}
       </div>
