@@ -20,6 +20,8 @@ import {
   usePressFade,
 } from '@/presentation/ui/pressFeedback';
 import { Dialog, DropdownMenu, Icon, useToast } from '@/presentation/ui';
+import { measureAnchorRect } from '@/presentation/ui/anchorMeasure';
+import type { AnchorRect } from '@/presentation/ui/dropdownLayout';
 import type { DropdownMenuEntry } from '@/presentation/ui/DropdownMenu';
 
 export interface MessageActionBarProps {
@@ -81,10 +83,11 @@ export const MessageActionBar = memo(function MessageActionBar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const moreButtonRef = useRef<View>(null);
-  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number }>({
-    top: 0,
-    right: 18,
-  });
+  /** 物理锚点矩形（measureInWindow 全量上报，窗口坐标系；
+   *  旧 {top,right} 相对量形状已删除——右偏根因，见 2026-11-05 收敛） */
+  const [menuAnchor, setMenuAnchor] = useState<AnchorRect | undefined>(
+    undefined
+  );
 
   // 按压动效（usePressFade 120ms 平滑渐变）
   const copyPress = usePressFade();
@@ -133,31 +136,16 @@ export const MessageActionBar = memo(function MessageActionBar({
     }
   }, [text]);
 
-  // 3. 打开更多菜单并测量触发锚点
+  // 3. 打开更多菜单并测量触发锚点（与 SessionHeader/home 同一契约：
+  //    measureInWindow 全量 {x,y,width,height} → anchorRect，单一几何真源；
+  //    测量走 anchorMeasure 接缝，回调到手才置锚点并打开——锚点与打开
+  //    同批到达，首帧即以本次测量定位，测量不可用则不开菜单）
   const handleOpenMore = useCallback(() => {
     haptics.selection();
-    const node = moreButtonRef.current;
-    if (node && typeof node.measureInWindow === 'function') {
-      let measured = false;
-      try {
-        node.measureInWindow((x, y, width, height) => {
-          measured = true;
-          setMenuAnchor({
-            top: (y ?? 0) + (height ?? 0) + 4,
-            right: 18, // 贴近视口右边缘安全距离
-          });
-          setMenuOpen(true);
-        });
-      } catch {
-        // fallback
-      }
-      // Jest/测试环境下，measureInWindow 常为未调用回调的桩函数，此时兜底直接打开菜单
-      if (!measured && process.env.NODE_ENV === 'test') {
-        setMenuOpen(true);
-      }
-    } else {
+    measureAnchorRect(moreButtonRef.current, (rect) => {
+      setMenuAnchor(rect);
       setMenuOpen(true);
-    }
+    });
   }, []);
 
   // 4. 点击菜单项进入防误触二次确认
@@ -180,8 +168,9 @@ export const MessageActionBar = memo(function MessageActionBar({
     onRegenerate?.(messageId);
   }, [onRegenerate, messageId]);
 
-  // 流式中或正文为空时不渲染工具栏
-  if (streaming || !text || !text.trim()) {
+  // 严格非空把关：流式中或正文无实质语义内容时短路隐藏工具栏
+  const clean = text ? text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim() : '';
+  if (streaming || clean === '') {
     return null;
   }
 
@@ -253,16 +242,18 @@ export const MessageActionBar = memo(function MessageActionBar({
         </AnimatedPressable>
       </View>
 
-      {/* 更多下拉浮层 */}
-      <DropdownMenu
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        entries={moreMenuEntries}
-        top={menuAnchor.top}
-        right={menuAnchor.right}
-        width={160}
-        testID={`${testID}-dropdown`}
-      />
+      {/* 更多下拉浮层（anchorRect 必传：measure 回调到手后才置位
+          menuAnchor 并打开，见 handleOpenMore） */}
+      {menuAnchor ? (
+        <DropdownMenu
+          visible={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          entries={moreMenuEntries}
+          anchorRect={menuAnchor}
+          width={160}
+          testID={`${testID}-dropdown`}
+        />
+      ) : null}
 
       {/* 重新生成二次确认弹窗（防手滑误触防护） */}
       <Dialog

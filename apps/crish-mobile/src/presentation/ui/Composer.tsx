@@ -449,9 +449,9 @@ export const ComposerVoiceError = memo(function ComposerVoiceError({
 });
 
 /**
- * 语音浮层组（memo 子簇，C-PERF）：录音相位量（phase/level 等）是
- * 基元——录音中 level 逐帧变时只本组重渲染，不再连带输入卡整树；
- * 打字期这些量恒定，整组逐键跳过。
+ * 语音浮层组（memo 子簇，C-PERF）：phase/starting/displayText 仍走
+ * props（变化频率低）；level 已改 SharedValue 直驱浮层 UI 线程（电平
+ * 桥在 Composer 内），本组不随电平 tick 重渲染；打字期整组逐键跳过。
  */
 export const ComposerVoiceOverlays = memo(function ComposerVoiceOverlays({
   phase,
@@ -469,7 +469,7 @@ export const ComposerVoiceOverlays = memo(function ComposerVoiceOverlays({
   phase: VoiceInputApi['phase'];
   starting: boolean;
   displayText: string;
-  level: number;
+  level: SharedValue<number>;
   dragX?: SharedValue<number>;
   dragY?: SharedValue<number>;
   gateVisible: boolean;
@@ -753,6 +753,16 @@ export const Composer = memo(function Composer({
   // 手势位移 Reanimated 共享变量（驱动流光大球水滴磁吸形变，120Hz 纯 UI 线程）
   const voiceDragX = useSharedValue(0);
   const voiceDragY = useSharedValue(0);
+
+  // 语音电平 Reanimated 共享变量（驱动大球共鸣与波形条，UI 线程消费）：
+  // useVoiceInput 的 level 仍以 React state 交付，本桥把它镜像写入
+  // SharedValue——电平 tick 不再驱动浮层子树重渲（ComposerVoiceOverlays
+  // 的 level 道具恒为同一 SharedValue，memo 逐 tick 跳过）
+  const voiceLevel = useSharedValue(0);
+  const voiceLevelValue = voice?.level ?? 0;
+  useEffect(() => {
+    voiceLevel.value = voiceLevelValue;
+  }, [voiceLevel, voiceLevelValue]);
 
   const springConfig = theme.motion.spring.bouncy;
   const shuntingGesture = useMemo(() => {
@@ -1058,7 +1068,7 @@ export const Composer = memo(function Composer({
           phase={voice.phase}
           starting={voice.starting}
           displayText={voice.displayText}
-          level={voice.level}
+          level={voiceLevel}
           dragX={voiceDragX}
           dragY={voiceDragY}
           gateVisible={voice.gateVisible}

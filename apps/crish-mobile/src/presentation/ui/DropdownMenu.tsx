@@ -1,7 +1,7 @@
 // 右上锚定下拉菜单（原型 dropdown-menu-popover）：原生 Modal 视口脱离 + 纯白圆角浮层 + 透明全屏关闭层。
 // 移动端交互精进方案 17：全面升级为原生透明 Modal 宿主，彻底脱离父级局部 DOM 拓扑陷阱与 overflow: hidden 裁剪。
 // 支持现代物理锚点矩形（anchorRect）与垂直自适应智能翻转（空间不足时向上升起，位移动画反向映射），水平安全夹取。
-// 兼容遗留 top / right 属性。
+// 旧 top / right 遗留通道已于 2026-11-05 物理删除：anchorRect 是唯一几何入口（见 dropdownLayout）。
 // 入场 = 位移 -6px/+6px + 淡入、0.18s（原型口径；淡入/淡出走 reanimated builder，
 // 位移走 withTiming animated style + token emphasized 曲线）。
 // 浮层阴影：卡片走 SoftShadowSurface menu 档（几何沿原型 dropdown-menu.css，α 收到按钮档
@@ -76,16 +76,14 @@ export interface DropdownMenuProps {
   visible: boolean;
   onClose: () => void;
   entries: readonly DropdownMenuEntry[];
-  /** 现代物理锚点矩形（推荐：由触发源 measureInWindow 传入） */
-  anchorRect?: AnchorRect | null;
+  /** 物理锚点矩形（必传，2026-11-05 收敛：由触发源 measureInWindow 全量上报；
+   *  旧 top/right 兼容通道已删除——全仓唯一几何真源 = calculateDropdownLayout
+   *  的 anchorRect 分支） */
+  anchorRect: AnchorRect;
   /** 期望展示方向：auto 智能翻转；top 向上；bottom 向下 */
   placement?: DropdownPlacement;
   /** 水平对齐倾向：auto 智能选择；right 靠右；left 靠左 */
   align?: DropdownAlign;
-  /** 兼容旧代码：菜单卡片顶部偏移 */
-  top?: number;
-  /** 兼容旧代码：菜单卡片右侧偏移 */
-  right?: number;
   /** 缺省 170（原型固定宽） */
   width?: number;
   testID?: string;
@@ -98,8 +96,6 @@ export function DropdownMenu({
   anchorRect,
   placement = 'auto',
   align = 'auto',
-  top,
-  right,
   width = 170,
   testID,
 }: DropdownMenuProps) {
@@ -128,28 +124,21 @@ export function DropdownMenu({
   const layout = useMemo(() => {
     return calculateDropdownLayout({
       anchorRect,
-      top,
-      right,
       width,
       estimatedHeight,
       windowWidth: scrW,
       windowHeight: scrH,
       insets,
-      defaultTop: insets.top + theme.size.header + theme.space.md,
       placement,
       align,
     });
   }, [
     anchorRect,
-    top,
-    right,
     width,
     estimatedHeight,
     scrW,
     scrH,
     insets,
-    theme.size.header,
-    theme.space.md,
     placement,
     align,
   ]);
@@ -192,7 +181,7 @@ export function DropdownMenu({
           testID={testID ? `${testID}-backdrop` : 'dropdown-backdrop'}
           accessibilityRole="button"
           accessibilityLabel="关闭菜单"
-          onPress={onClose}
+          onPress={() => onClose()}
           style={StyleSheet.absoluteFill}
         />
         <Animated.View

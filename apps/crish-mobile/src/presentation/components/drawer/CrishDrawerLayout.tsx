@@ -4,10 +4,20 @@
 //   层叠纯靠色阶差（主卡片 surface #ffffff，底层面板 canvasDrawer #f0f0f0）
 //   和大圆角（radius.sheet 28dp）呈现，不存在随进度平移或渐变的半透明黑色遮罩；
 // - 立体感 = 色阶差 + 大圆角，零描边、零缩放、抽屉本体零投影（符合 2026-11-02 晚用户裁决，禁止加阴影）；
-// - 开合动效：0.35s emphasized 定时曲线（motion.duration.drawer）；
-// - 手势与手感：
+// - 开合动效：物理弹簧曲线（theme.motion.spring.drawer，overshootClamping: true）；
+// - 手势与手感（2026-11-05 卡手修复 + 返工收口后口径）：
 //   * manualActivation 精确仲裁——关闭态屏幕左侧 75% 范围横向意图（dx > 14 且 dx > 0.7|dy|）顺滑激活；
-//   * 纵向滚动优先——垂直位移明显大于横向时自动让位给列表滚动，零滚动竞争；
+//   * 纵向滚动优先——垂直位移明显大于横向时让位给列表滚动；判 fail 须纵向
+//     占优连续 3 个采样点成立（去噪定案），单帧抖动/斜擦不误杀手势；
+//   * 生命周期收口——手势未激活结束、被判 fail 或被系统取消时，onFinalize
+//     按 drawerReleaseTarget 就近落位（onEnd 已收口则跳过）：落定动画在飞时
+//     落指已把 progress 停在中间值，无收口则抽屉冻在半开位、状态与视觉脱节
+//     （题 8 冻结链根因，2026-11-05 返工补齐）；
+//   * 激活帧零跳变——onUpdate 首帧捕获激活点位移为换算偏移，激活瞬间
+//     progress 不再跳约 14dp；
+//   * 打开态仅左移激活、右摇不判死（不激活即不消费触摸，方向回摆可再激活）；
+//   * 多指钉死首触指针——第二指落下不重置拖拽基准（按 pointer id 取触点）；
+//   * 点按主卡才关抽屉（Pressable onPress），按下不再抢跑关闭弹簧；
 //   * drawerReleaseTarget 灵敏双向定案——相对起始行程 0.25 滞回翻转 + 双向 ±400dp/s 快速轻扫定案；
 // - 动效与 React 渲染解耦：
 //   * 全程动画在 Reanimated UI 线程执行，手势拖动中途 0 次触发 React 重绘；
@@ -34,13 +44,12 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
-  Easing,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
@@ -66,8 +75,10 @@ export {
 
 /** 激活阈值：横向位移达到即认领手势 */
 const ACTIVATION_DX = 14;
-/** 纵向失效阈值：纵向位移达到 12dp 且大于横向 → 极速让位给列表滚动，消除粘滞感 */
+/** 纵向失效阈值：纵向位移达到 12dp 且大于横向视为纵向占优（判 fail 还须连续多采样确认，见 FAIL_DY_CONFIRM_SAMPLES） */
 const FAIL_DY = 12;
+/** FAIL_DY 去噪：纵向占优须连续命中的采样点数才定案判 fail，单帧抖动不定案 */
+const FAIL_DY_CONFIRM_SAMPLES = 3;
 /** 提交行程：自起始进度再拖过该进度量松手即翻转开合（抽屉宽 320dp 时 ≈80dp） */
 const COMMIT_TRAVEL = 0.25;
 /** 快速轻扫速度阈值（dp/s，双向对称） */
@@ -116,6 +127,15 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
   const startProgress = useSharedValue(0);
   const touchStartX = useSharedValue(0);
   const touchStartY = useSharedValue(0);
+  /** 被钉死的首触指针 id（-1 = 无）；多指先后落地时拖拽基准不重置（S-D 修复） */
+  const gesturePointerId = useSharedValue(-1);
+  /** FAIL_DY 去噪计数：纵向占优连续命中的采样点数（落指/抬手/条件消散即清零） */
+  const failDyStreak = useSharedValue(0);
+  /** 激活点位移偏移（onUpdate 首帧捕获）：progress 换算扣除它，激活瞬间零跳变 */
+  const activationOffsetX = useSharedValue(0);
+  const activationOffsetCaptured = useSharedValue(false);
+  /** onEnd 已收口标记：onFinalize 在 onEnd 之后也会触发，靠它防双重收口 */
+  const endHandled = useSharedValue(false);
 
   // 仅在手势/动画完全落定（Settled）时同步的 React 状态（拖动中途 0 次触发）
   const [isOpen, setIsOpen] = useState(false);
@@ -164,33 +184,79 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
   }, []);
 
   const pan = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      // 落定收口（worklet）：onEnd 与 onFinalize 共用同一落位机器——关侧
+      // 先走关闭收尾（内容失焦 + 收键盘），减动效直落，否则物理弹簧落位
+      // 并仅在落定瞬间同步 isOpen/phase（拖动中途零 React 同步，不变）
+      const settleProgress = (target: 0 | 1, velocityX: number) => {
+        'worklet';
+        if (target === 0) {
+          runOnJS(handleDrawerClose)();
+        }
+        if (reduceMotion) {
+          progress.value = target;
+          runOnJS(onAnimationFinished)(target === 1);
+          return;
+        }
+        const normalizedVelocity =
+          maxTranslate > 0 ? velocityX / maxTranslate : 0;
+        progress.value = withSpring(
+          target,
+          {
+            ...theme.motion.spring.drawer,
+            velocity: normalizedVelocity,
+            overshootClamping: true,
+          },
+          (finished) => {
+            if (finished) runOnJS(onAnimationFinished)(target === 1);
+          }
+        );
+      };
+
+      return Gesture.Pan()
         .manualActivation(true)
         .onTouchesDown((event) => {
           'worklet';
-          cancelAnimation(progress);
+          // 多指纪律（2026-11-05 卡手修复 S-D）：仅"单指按下"视为新手势
+          // 起点——第二根手指落下不重置拖拽基准，杜绝双指先后落地时
+          // progress 基准突变造成的跳变；全部手指抬起后自然回到单指态
+          if (event.allTouches.length !== 1) return;
           const touch = event.allTouches[0];
-          if (touch) {
-            touchStartX.value = touch.x;
-            touchStartY.value = touch.y;
-          }
+          if (!touch) return;
+          gesturePointerId.value = touch.id;
+          cancelAnimation(progress);
+          touchStartX.value = touch.x;
+          touchStartY.value = touch.y;
           startProgress.value = progress.value;
+          failDyStreak.value = 0;
+          activationOffsetCaptured.value = false;
+          activationOffsetX.value = 0;
+          endHandled.value = false;
         })
         .onTouchesMove((event, stateManager) => {
           'worklet';
-          const touch = event.allTouches[0];
+          // 只跟随被钉死的首触指针（按 pointer id 取，取 allTouches[0] 会随
+          // 第二指落下换人）；首触抬起后本次手势宁可暂停也不换基准跳变
+          const touch =
+            event.allTouches.find((t) => t.id === gesturePointerId.value) ??
+            null;
           if (!touch) return;
           const dx = touch.x - touchStartX.value;
           const dy = touch.y - touchStartY.value;
           const absDx = Math.abs(dx);
           const absDy = Math.abs(dy);
 
-          // 纵向滑动极速让位：垂直位移达到 12dp 且大于横向位移时立即放弃
+          // 纵向让位（去噪定案）：纵向占优须连续 FAIL_DY_CONFIRM_SAMPLES
+          // 个采样点成立才判 fail——单帧抖动/斜擦不误杀；条件成立期间先
+          // 按兵不动（不激活也不判 fail），等确认满额或条件消散后清零
           if (absDy > FAIL_DY && absDy > absDx) {
-            stateManager.fail();
+            failDyStreak.value += 1;
+            if (failDyStreak.value >= FAIL_DY_CONFIRM_SAMPLES) {
+              stateManager.fail();
+            }
             return;
           }
+          failDyStreak.value = 0;
 
           if (progress.value === 0) {
             // 关闭态：超出左侧 75% 区域直接放弃手势
@@ -208,13 +274,28 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
               stateManager.activate();
             }
           } else {
-            // 打开态限定仅向左收起：
+            // 打开态限定仅向左收起（2026-11-05 卡手修复 S-C）：右摇不再
+            // 判死——manualActivation 下不激活即不消费触摸，方向回摆后
+            // 仍可激活左移；旧 `dx > ACTIVATION_DX → fail()` 把一次右晃
+            // 永久放弃整条手势，用户只能干等关闭弹簧跑完（"滑多了时不时
+            // 卡手"的静态推演首因之一）
             if (dx < -ACTIVATION_DX && absDx > absDy * 0.7) {
               stateManager.activate();
-            } else if (dx > ACTIVATION_DX) {
-              stateManager.fail();
             }
           }
+        })
+        .onTouchesUp((event) => {
+          'worklet';
+          // 全部手指离开屏幕后释放首触钉死（下次单指按下重新取基准）
+          if (event.allTouches.length <= 1) {
+            gesturePointerId.value = -1;
+          }
+          failDyStreak.value = 0;
+        })
+        .onTouchesCancelled(() => {
+          'worklet';
+          gesturePointerId.value = -1;
+          failDyStreak.value = 0;
         })
         .onStart(() => {
           'worklet';
@@ -225,53 +306,69 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
         .onUpdate((event) => {
           'worklet';
           if (maxTranslate <= 0) return;
-          const deltaProgress = event.translationX / maxTranslate;
+          // 激活帧零跳变：首个 onUpdate 的 translationX 即激活点位移，
+          // 捕获为换算偏移——扣除后激活瞬间 progress 与抓取时严格一致，
+          // 不再跳 ACTIVATION_DX / maxTranslate（≈14dp）
+          if (!activationOffsetCaptured.value) {
+            activationOffsetCaptured.value = true;
+            activationOffsetX.value = event.translationX;
+          }
+          const deltaProgress =
+            (event.translationX - activationOffsetX.value) / maxTranslate;
           const next = startProgress.value + deltaProgress;
           progress.value = Math.max(0, Math.min(1, next));
         })
         .onEnd((event) => {
           'worklet';
+          endHandled.value = true;
           const target = drawerReleaseTarget({
             startProgress: startProgress.value,
             progress: progress.value,
             velocityX: event.velocityX,
           });
-
-          if (target === 0) {
-            runOnJS(handleDrawerClose)();
-          }
-
-          if (reduceMotion) {
-            progress.value = target;
-            runOnJS(onAnimationFinished)(target === 1);
+          settleProgress(target, event.velocityX);
+        })
+        .onFinalize(() => {
+          'worklet';
+          // 生命周期收口（题 8 冻结链根治）：手势未激活结束、被判 fail
+          // 或被系统取消时 onEnd 永不触发——而落指已在 onTouchesDown 里
+          // cancelAnimation 把在飞的落定动画停在中间值，若无人落位，
+          // 抽屉就冻在半开位且 isOpen/phase 与视觉脱节（N-1 主页露边
+          // 同源：静止残值只能来自这种未收口的中间 progress）。此处按
+          // drawerReleaseTarget 就近落位（速度不计入：非主动甩动，只求
+          // 回到最近的落定侧）；onEnd 已收口（endHandled）或已在落定
+          // 位（恰为 0/1）时跳过，防双重收口与无谓弹簧
+          if (endHandled.value) {
+            endHandled.value = false;
             return;
           }
-
-          progress.value = withTiming(
-            target,
-            {
-              duration: theme.motion.duration.drawer,
-              easing: Easing.bezier(...theme.motion.easing.emphasized),
-            },
-            (finished) => {
-              if (finished) runOnJS(onAnimationFinished)(target === 1);
-            }
-          );
-        }),
+          const current = progress.value;
+          if (current === 0 || current === 1) return;
+          const target = drawerReleaseTarget({
+            startProgress: startProgress.value,
+            progress: current,
+            velocityX: 0,
+          });
+          settleProgress(target, 0);
+        });
+    },
     [
+      activationOffsetCaptured,
+      activationOffsetX,
+      endHandled,
+      failDyStreak,
       handleDrawerClose,
       maxTranslate,
       onAnimationFinished,
       progress,
       reduceMotion,
       startProgress,
-      theme.motion.duration.drawer,
-      theme.motion.easing.emphasized,
+      theme.motion.spring.drawer,
       width,
     ]
   );
 
-  // 顶层：主卡片向右平移推开（[0, maxTranslate]）+ 动态大圆角（[0, radius.sheet]）
+  // 顶层：主卡片向右平移推开（[0, maxTranslate]）+ 阶跃常量大圆角（消除 Skia 动态重绘 38% 掉帧）
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       {
@@ -283,12 +380,8 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
         ),
       },
     ],
-    borderRadius: interpolate(
-      progress.value,
-      [0, 1],
-      [0, theme.radius.sheet],
-      Extrapolation.CLAMP
-    ),
+    borderRadius:
+      progress.value <= 0.005 ? 0 : theme.radius.sheet,
   }));
 
   // 底层：抽屉面板微视差平移（[drawerParallaxOffset, 0]）
@@ -318,11 +411,11 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           onAnimationFinished(true);
           return;
         }
-        progress.value = withTiming(
+        progress.value = withSpring(
           1,
           {
-            duration: theme.motion.duration.drawer,
-            easing: Easing.bezier(...theme.motion.easing.emphasized),
+            ...theme.motion.spring.drawer,
+            overshootClamping: true,
           },
           (finished) => {
             if (finished) runOnJS(onAnimationFinished)(true);
@@ -340,11 +433,11 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           onAnimationFinished(false);
           return;
         }
-        progress.value = withTiming(
+        progress.value = withSpring(
           0,
           {
-            duration: theme.motion.duration.drawer,
-            easing: Easing.bezier(...theme.motion.easing.emphasized),
+            ...theme.motion.spring.drawer,
+            overshootClamping: true,
           },
           (finished) => {
             if (finished) runOnJS(onAnimationFinished)(false);
@@ -367,8 +460,7 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       onAnimationFinished,
       progress,
       reduceMotion,
-      theme.motion.duration.drawer,
-      theme.motion.easing.emphasized,
+      theme.motion.spring.drawer,
     ]
   );
 
@@ -435,13 +527,17 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
                 {children}
               </View>
 
-              {/* 打开状态下点击主卡片收起抽屉（纯透明点击区域，无黑色遮罩） */}
+              {/* 打开状态下点击主卡片收起抽屉（纯透明点击区域，无黑色遮罩）。
+                  2026-11-05 卡手修复 S-A/S-B：删除 onTouchStart 关闭触发——
+                  按下帧即启动关闭弹簧会抢在手势激活之前（14dp 激活窗口内
+                  progress 已被弹簧推走，Pan 激活后从弹簧位置跳回手指位置），
+                  且"按住不动想拖"会变成"没拖它自己关"。现在只有真正点按
+                  （onPress）才关闭，拖拽关闭完全交还 Pan 手势。 */}
               <Pressable
                 accessibilityLabel="收起菜单"
                 testID="drawer-tap-dismiss"
                 style={styles.tapDismiss}
                 onPress={() => actions.close()}
-                onTouchStart={handleDrawerClose}
                 pointerEvents={isOpen ? 'auto' : 'none'}
               />
             </Animated.View>

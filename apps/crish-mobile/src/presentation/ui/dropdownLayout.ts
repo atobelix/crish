@@ -1,6 +1,9 @@
 // 下拉菜单与浮层几何解算器（移动端交互精进方案 17 物理锚点数学模型求解器）
 // - 负责视口坐标空间下的碰撞检测、智能垂直翻转与水平安全夹取
 // - 纯数学函数，零 DOM / React 依赖，保证 100% 可测性与像素级确定性
+// - 单一几何真源（2026-11-05 收敛）：只接受 anchorRect 物理锚点矩形——
+//   旧 top/right 兼容模式（遗留偏移量与按钮位置解耦，曾造成 more 面板
+//   固定右偏）已物理删除，调用方一律 measureInWindow 全量上报
 
 export interface AnchorRect {
   x: number;
@@ -20,12 +23,8 @@ export interface DropdownInsets {
 }
 
 export interface DropdownLayoutInput {
-  /** 现代物理锚点矩形（由 measureInWindow 提供） */
-  anchorRect?: AnchorRect | null;
-  /** 兼容遗留：顶部偏移 */
-  top?: number;
-  /** 兼容遗留：右侧偏移 */
-  right?: number;
+  /** 物理锚点矩形（必传，由 measureInWindow 提供，窗口坐标系） */
+  anchorRect: AnchorRect;
   /** 菜单宽度（默认 170dp） */
   width: number;
   /** 预估或实测菜单高度 */
@@ -36,8 +35,6 @@ export interface DropdownLayoutInput {
   windowHeight: number;
   /** 安全区边距 */
   insets: DropdownInsets;
-  /** 缺省顶部偏移（无 top 且无 anchorRect 时的备用） */
-  defaultTop?: number;
   /** 期望展示方向：auto 智能翻转；top 向上；bottom 向下 */
   placement?: DropdownPlacement;
   /** 水平对齐倾向：auto 智能选择；right 靠右；left 靠左 */
@@ -58,14 +55,11 @@ export function calculateDropdownLayout(
 ): DropdownLayoutResult {
   const {
     anchorRect,
-    top,
-    right,
     width,
     estimatedHeight,
     windowWidth,
     windowHeight,
     insets,
-    defaultTop,
     placement = 'auto',
     align = 'auto',
   } = input;
@@ -84,43 +78,7 @@ export function calculateDropdownLayout(
     windowWidth - insets.right - MARGIN - width
   );
 
-  // 1. 若无 anchorRect，进入兼容模式
-  if (!anchorRect) {
-    const fallbackTop = top ?? defaultTop ?? insets.top + 44 + 12;
-    const fallbackLeft =
-      right !== undefined
-        ? windowWidth - insets.right - right - width
-        : windowWidth - insets.right - MARGIN - width;
-
-    let direction: 'down' | 'up' = 'down';
-    let finalTop = fallbackTop;
-
-    if (placement === 'top') {
-      direction = 'up';
-      finalTop = fallbackTop - estimatedHeight;
-    } else if (
-      placement === 'auto' &&
-      fallbackTop + estimatedHeight > windowHeight - insets.bottom - MARGIN
-    ) {
-      const spaceBelow = windowHeight - insets.bottom - fallbackTop - MARGIN;
-      const spaceAbove = fallbackTop - insets.top - MARGIN;
-      if (spaceAbove > spaceBelow && spaceAbove >= estimatedHeight) {
-        direction = 'up';
-        finalTop = fallbackTop - estimatedHeight;
-      }
-    }
-
-    finalTop = Math.max(minTop, Math.min(maxTop, finalTop));
-    const finalLeft = Math.max(minLeft, Math.min(maxLeft, fallbackLeft));
-
-    return {
-      top: Math.round(finalTop),
-      left: Math.round(finalLeft),
-      direction,
-    };
-  }
-
-  // 2. 物理锚点数学模型求解
+  // 物理锚点数学模型求解
   const { x, y, width: aW, height: aH } = anchorRect;
   const spaceBelow = windowHeight - insets.bottom - (y + aH) - GAP - MARGIN;
   const spaceAbove = y - insets.top - GAP - MARGIN;

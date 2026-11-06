@@ -51,6 +51,7 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
           visible={false}
           onClose={mockClose}
           entries={sampleEntries}
+          anchorRect={{ x: 40, y: 60, width: 32, height: 32 }}
           testID="test-menu"
         />
       </Providers>
@@ -66,6 +67,7 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
           visible
           onClose={mockClose}
           entries={sampleEntries}
+          anchorRect={{ x: 40, y: 60, width: 32, height: 32 }}
           testID="test-menu"
         />
       </Providers>
@@ -83,6 +85,7 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
     // 点击遮罩触发关闭
     fireEvent.press(backdrop);
     expect(mockClose).toHaveBeenCalledTimes(1);
+    expect(mockClose).toHaveBeenCalledWith();
   });
 
   it('点击菜单项先触发 onClose 并执行对应 onPress 回调', async () => {
@@ -92,6 +95,7 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
           visible
           onClose={mockClose}
           entries={sampleEntries}
+          anchorRect={{ x: 40, y: 60, width: 32, height: 32 }}
           testID="test-menu"
         />
       </Providers>
@@ -111,6 +115,7 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
           visible
           onClose={mockClose}
           entries={sampleEntries}
+          anchorRect={{ x: 40, y: 60, width: 32, height: 32 }}
           testID="test-menu-back"
         />
       </Providers>
@@ -141,5 +146,25 @@ describe('DropdownMenu (移动端视口脱离与自适应定位浮层)', () => {
 
     expect(view.getByTestId('flip-menu')).toBeTruthy();
     expect(view.getByText('常规条目')).toBeTruthy();
+  });
+
+  it('点击 dropdown-backdrop 时无条件触发 onClose 回调且不携带任何事件参数（阻断手势事件透传）', async () => {
+    const view = await render(
+      <Providers>
+        <DropdownMenu
+          visible
+          onClose={mockClose}
+          entries={sampleEntries}
+          anchorRect={{ x: 40, y: 60, width: 32, height: 32 }}
+          testID="clean-close-menu"
+        />
+      </Providers>
+    );
+
+    const backdrop = view.getByTestId('clean-close-menu-backdrop');
+    fireEvent.press(backdrop);
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
+    expect(mockClose).toHaveBeenCalledWith();
   });
 });

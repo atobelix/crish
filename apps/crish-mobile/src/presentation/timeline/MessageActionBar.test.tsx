@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Share } from 'react-native';
+import { Share, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   MessageActionBar,
@@ -9,6 +9,25 @@ import type { MessageActionBarProps } from './MessageActionBar';
 import * as clipboard from '@/adapters/platform/clipboard';
 import { haptics } from '@/adapters/platform/haptics';
 import { ToastProvider } from '@/presentation/ui';
+import type { ReactTestRendererJSON } from 'react-test-renderer';
+import { measureAnchorRect } from '@/presentation/ui/anchorMeasure';
+import * as dropdownLayout from '@/presentation/ui/dropdownLayout';
+
+function findNodes(
+  node: ReactTestRendererJSON | string | null,
+  predicate: (n: ReactTestRendererJSON) => boolean
+): ReactTestRendererJSON[] {
+  const result: ReactTestRendererJSON[] = [];
+  function walk(curr: ReactTestRendererJSON | string | null) {
+    if (!curr || typeof curr === 'string') return;
+    if (predicate(curr)) result.push(curr);
+    for (const child of curr.children ?? []) {
+      walk(child);
+    }
+  }
+  walk(node);
+  return result;
+}
 
 jest.mock('@/adapters/platform/haptics', () => ({
   haptics: {
@@ -22,6 +41,26 @@ jest.mock('@/adapters/platform/haptics', () => ({
 
 jest.mock('@/adapters/platform/clipboard', () => ({
   copyTextToClipboard: jest.fn(),
+}));
+
+// 锚点测量接缝（题 7 透传回归的落点）：宿主 View 的 measureInWindow 在
+// jest 里是不回调的桩、ref 实例不可达，故透传契约在模块边界钉住——
+// 本 mock 以固定矩形同步回调，模拟真机测量到手；接缝自身映射保真由
+// anchorMeasure 单测覆盖。生产代码内的零锚点测试脚手架已删除。
+jest.mock('@/presentation/ui/anchorMeasure', () => ({
+  measureAnchorRect: jest.fn(
+    (
+      _node: unknown,
+      onRect: (rect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }) => void
+    ) => {
+      onRect({ x: 98, y: 640, width: 32, height: 32 });
+    }
+  ),
 }));
 
 const metrics = {
@@ -78,6 +117,17 @@ describe('MessageActionBar (移动端助手消息操作工具栏 - 纯图标精�
           <MessageActionBar
             messageId="msg-101"
             text={'   \n   \t '}
+            streaming={false}
+          />
+        </Wrapper>
+      );
+      expect(view.queryByTestId('assistant-message-action-bar')).toBeNull();
+
+      await view.rerender(
+        <Wrapper>
+          <MessageActionBar
+            messageId="msg-101"
+            text={' \u200B\uFEFF '}
             streaming={false}
           />
         </Wrapper>
@@ -290,6 +340,50 @@ describe('MessageActionBar (移动端助手消息操作工具栏 - 纯图标精�
       expect(haptics.tap).toHaveBeenCalledTimes(1);
       expect(onRegenerate).toHaveBeenCalledTimes(1);
       expect(onRegenerate).toHaveBeenCalledWith('msg-regen-123');
+    });
+
+    it('锚点透传回归（题 7 事故环）：测量矩形 {x,y,width,height} 原样到达面板解算，落位逐值等于解算输出', async () => {
+      const layoutSpy = jest.spyOn(
+        dropdownLayout,
+        'calculateDropdownLayout'
+      );
+      const view = await renderBar({
+        messageId: 'msg-anchor',
+        text: '锚点透传回归',
+      });
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('assistant-message-action-bar-more'));
+      });
+
+      // 测量接缝被调用一次（触发源节点 → 接缝 → 回调置锚点）
+      expect(measureAnchorRect).toHaveBeenCalledTimes(1);
+      // 解算器收到的 anchorRect 与测量矩形逐值一致（无二次换算、无丢弃 x/width）
+      expect(layoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anchorRect: { x: 98, y: 640, width: 32, height: 32 },
+        })
+      );
+
+      // 面板卡片的实际落位（top/left）= 解算器对同一输入的输出逐值
+      const solverInput = layoutSpy.mock.calls[0]![0];
+      const expected = dropdownLayout.calculateDropdownLayout(solverInput);
+      const rootJson = view.toJSON() as ReactTestRendererJSON;
+      const cards = findNodes(rootJson, (n) => {
+        const s = StyleSheet.flatten(n.props?.style);
+        return (
+          typeof s?.top === 'number' &&
+          typeof s?.left === 'number' &&
+          s?.width === 160 &&
+          s?.position === 'absolute'
+        );
+      });
+      expect(cards.length).toBeGreaterThan(0);
+      const cardStyle = StyleSheet.flatten(cards[0]!.props.style);
+      expect(cardStyle.top).toBe(expected.top);
+      expect(cardStyle.left).toBe(expected.left);
+
+      layoutSpy.mockRestore();
     });
 
     it('当 canRegenerate === false 时，重新生成条目呈现提示且不唤起确认弹窗', async () => {

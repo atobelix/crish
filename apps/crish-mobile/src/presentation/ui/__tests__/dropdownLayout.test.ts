@@ -1,4 +1,8 @@
-import { calculateDropdownLayout, DROPDOWN_MARGIN } from '../dropdownLayout';
+import {
+  calculateDropdownLayout,
+  DROPDOWN_GAP,
+  DROPDOWN_MARGIN,
+} from '../dropdownLayout';
 
 describe('calculateDropdownLayout (方案 17 物理锚点数学模型求解器)', () => {
   const defaultInsets = { top: 47, bottom: 34, left: 0, right: 0 };
@@ -115,34 +119,31 @@ describe('calculateDropdownLayout (方案 17 物理锚点数学模型求解器)'
     );
   });
 
-  it('断言 4：兼容遗留仅传 top / right 的降级表现与防溢出保护', () => {
-    const legacyResult = calculateDropdownLayout({
-      top: 60,
-      right: 18,
+  it('断言 4（2026-11-05 收敛）：anchorRect 为唯一输入，旧 top/right 兼容模式已物理删除', () => {
+    // 几何单一真源：一切定位都从物理锚点矩形出发（more 面板右偏事故根因
+    // 即"遗留偏移量与按钮位置解耦"），兼容分支删除后由 TS 类型层禁绝
+    const pinnedLeft = calculateDropdownLayout({
+      anchorRect: { x: 20, y: 60, width: 32, height: 32 },
       width: menuWidth,
       estimatedHeight,
       windowWidth: scrW,
       windowHeight: scrH,
       insets: defaultInsets,
+      align: 'left',
     });
-    // left = scrW - insets.right - right - width = 390 - 0 - 18 - 170 = 202
-    expect(legacyResult.left).toBe(202);
-    expect(legacyResult.top).toBe(60);
-    expect(legacyResult.direction).toBe('down');
+    expect(pinnedLeft.left).toBe(20);
+    expect(pinnedLeft.direction).toBe('down');
 
-    // 遗留 top 处于屏幕极度靠下位置时自动翻转为向上
-    const bottomLegacy = calculateDropdownLayout({
-      top: 800,
+    // 视口底部：向上翻转路径 finalTop = y - GAP - estimatedHeight（无需钳制）
+    const flippedUp = calculateDropdownLayout({
+      anchorRect: { x: 20, y: 800, width: 32, height: 32 },
       width: menuWidth,
       estimatedHeight,
       windowWidth: scrW,
       windowHeight: scrH,
       insets: defaultInsets,
     });
-    expect(bottomLegacy.direction).toBe('up');
-    // 受视口底部安全区限制，经过 safe clamping 后收口在 maxTop (678)
-    expect(bottomLegacy.top).toBe(
-      scrH - defaultInsets.bottom - DROPDOWN_MARGIN - estimatedHeight
-    );
+    expect(flippedUp.direction).toBe('up');
+    expect(flippedUp.top).toBe(800 - DROPDOWN_GAP - estimatedHeight);
   });
 });

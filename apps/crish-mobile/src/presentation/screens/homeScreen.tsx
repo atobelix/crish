@@ -82,6 +82,8 @@ import {
   useOverlayHost,
   useToast,
 } from '@/presentation/ui';
+import { measureAnchorRect } from '@/presentation/ui/anchorMeasure';
+import type { AnchorRect } from '@/presentation/ui/dropdownLayout';
 import { ConnectionBanner } from '@/presentation/components/status/ConnectionBanner';
 import { AttachmentSheet } from '@/presentation/components/chat/AttachmentSheet';
 import { AttachmentStrip } from '@/presentation/components/chat/AttachmentStrip';
@@ -241,16 +243,26 @@ export default function HomeScreen({
     [openSessionActionsFn]
   );
   // 覆盖层统一状态机（SSOT + 退出动画完成后物理卸载，闭合时 0 内存 / 0 JSI 共享节点）
-  const { openOverlay, closeOverlay, onOverlayExited, isOpen, isMounted } =
-    useOverlayHost<
-      | 'menu'
-      | 'device'
-      | 'workspace'
-      | 'permission'
-      | 'model'
-      | 'localModel'
-      | 'skills'
-    >();
+  const {
+    openOverlay,
+    closeOverlay,
+    toggleOverlay,
+    onOverlayExited,
+    isOpen,
+    isMounted,
+  } = useOverlayHost<
+    | 'menu'
+    | 'device'
+    | 'workspace'
+    | 'permission'
+    | 'model'
+    | 'localModel'
+    | 'skills'
+  >();
+  const moreBtnWrapRef = useRef<View | null>(null);
+  const [moreAnchor, setMoreAnchor] = useState<AnchorRect | undefined>(
+    undefined
+  );
   const [attachOpen, setAttachOpen] = useState(false);
   const attachEverOpened = useEverOpened(attachOpen);
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
@@ -501,13 +513,23 @@ export default function HomeScreen({
           <MenuButton onPress={onOpenDrawer} />
           <DevicePill onPress={() => openOverlay('device')} />
         </View>
-        <IconButton
-          name="more"
-          variant="floating"
-          accessibilityLabel="更多选项"
-          onPress={() => openOverlay('menu')}
-          testID="home-more"
-        />
+        <View ref={moreBtnWrapRef} collapsable={false}>
+          <IconButton
+            name="more"
+            variant="floating"
+            accessibilityLabel="更多选项"
+            onPress={() => {
+              // 锚点测量走 anchorMeasure 接缝（回调只落锚点，接缝保证
+              // 非零尺寸才回调）；打开仍同步走 toggleOverlay，菜单渲染
+              // 以 moreAnchor 在位为门——锚点缺失则菜单不渲染，几何不猜测
+              measureAnchorRect(moreBtnWrapRef.current, (rect) => {
+                setMoreAnchor(rect);
+              });
+              toggleOverlay('menu');
+            }}
+            testID="home-more"
+          />
+        </View>
       </View>
 
       {/* 中段：状态板/问候空态（输入态联动变淡，容器 testID home-board）；
@@ -744,13 +766,12 @@ export default function HomeScreen({
         />
       </KeyboardStickyView>
 
-      {/* 右上更多下拉：真实入口（通知中心 / 偏好设置） */}
-      {isMounted('menu') ? (
+      {/* 右上更多下拉：真实入口（通知中心 / 偏好设置）；几何单一真源 = anchorRect */}
+      {isMounted('menu') && moreAnchor ? (
         <DropdownMenu
           visible={isOpen('menu')}
           onClose={closeOverlay}
-          top={insets.top + theme.size.header + theme.space.md}
-          right={theme.space.md}
+          anchorRect={moreAnchor}
           testID="home-menu"
           entries={menuEntries}
         />

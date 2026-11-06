@@ -15,6 +15,24 @@
 //    - 撤销红态平滑自然漫散，中心红度克制，向外平滑衰减；
 //    - 居中提示语独立 HUD 胶囊位（bottom: 206px），上下错开永不碰撞；
 //    - 状态切换联动 haptics.snap() 触感。
+// 1.1 三层层模型（2026-11-05 用户实测卡手/露白/条纹不清事故根治）：
+//    - shield（底衬遮罩）/ dome（流光大球）/ arcs（双翼胶囊）拆为三个兄弟
+//      <Svg> 层——domeAnimatedStyle 只作用于 dome 层；shield 恒定贴底封死
+//      输入区（旧实现三层共挂一个 wrapper，手指一动整块底衬跟着位移、
+//      底部露出主界面白色区域）；
+//    - 大球行程收敛（2026-11-05 返工，方案波 4b 口径）：drag 磁吸平移
+//      ±20dp、上滑提拉 −10dp，变换原点钉底边中心（transformOrigin
+//      '50% 100%'），缩放/张力绕底边中心展开——旧 ±65/-30 大行程未收敛
+//      版本已废除（此前头注曾误把旧值写成定案，特此更正）；
+//    - 波形电平改 SharedValue 在 UI 线程驱动（WaveTick 组件逐条
+//      useAnimatedStyle 读 level.value）：ASR 电平回调只写 SharedValue，
+//      31 根条退出 React render 路径（旧实现 number prop 逐回调整排重渲）；
+//    - 弧形胶囊 SvgText 严禁 alignmentBaseline（react-native-svg 的
+//      TextPathMethod 枚举无 central，Fabric 预分配视图即 IllegalArgumentException
+//      杀进程——实机 5 次崩溃，见战役 findings/04 B3 链）；基线居中由轨迹
+//      几何承担；
+//    - 微音浪条重定位到弧带与实色区过渡带（WAVE_BAR_BOTTOM_DP=150）并改
+//      反差配色（send=onMedia），旧锚定同色叠在光球最亮核心上不可辨。
 // 2. 错误条与下载门：VoiceErrorBar 与 VoiceModelGate 原生保留，诚实保障离线模型交付。
 import { useContext, useEffect, useRef, type ReactNode } from 'react';
 import {
@@ -32,6 +50,7 @@ import Animated, {
   withSequence,
   interpolate,
   Easing as ReanimatedEasing,
+  type SharedValue,
 } from 'react-native-reanimated';
 import Svg, {
   Defs,
@@ -60,6 +79,27 @@ import Spinner from './Spinner';
 
 const DEFAULT_INSETS = { top: 0, bottom: 0, left: 0, right: 0 };
 
+/**
+ * 微音浪条的垂直锚定（workspace 底部起算，dp）：
+ * 弧形胶囊带占据 workspace 底部 ≈128~200（弧线 y 199~233 ± strokeWidth/2 19，
+ * 换算 380 - y），HUD 提示语底缘在 206——旧锚定（输入中线-12 ≈ 14~46）压在
+ * shield 实色区内部、且同色叠在光球最亮核心上，可读性趋近于零（2026-11-05
+ * 用户实测）。新锚定 150 = 弧带下缘（128）与 shield 实色上缘（≈118+）之间
+ * 的过渡带中点：低于弧线不会与笔画相交（弧线在该高度已外扩至 |x|>100），
+ * 高于实色区不压输入卡，球体在该高度已渐弱、反差配色下清晰可辨。
+ */
+const WAVE_BAR_BOTTOM_DP = 150;
+
+/** 波形条形状表（31 根：钟形包络 × 谐波系数——纯静态量，模块级预计算；
+ *  高度动态部分由 WaveTick 在 UI 线程按 level SharedValue 逐帧推导） */
+const WAVE_TICKS = Array.from({ length: 31 }, (_, i) => {
+  const norm = i / 30;
+  return {
+    bell: Math.sin(norm * Math.PI),
+    harmonic: (i % 2 === 0 ? 1 : 0.82) * (i % 3 === 0 ? 1.15 : 0.9),
+  };
+});
+
 function useSafeInsets() {
   const insets = useContext(SafeAreaInsetsContext);
   return insets ?? DEFAULT_INSETS;
@@ -69,17 +109,11 @@ export interface VoiceOverlayProps {
   phase: VoicePhase;
   starting: boolean;
   displayText: string;
-  /** 波形电平 0..1 */
-  level: number;
-  /**
-   * 宿主输入框卡体实际高度（dp）：单行 52、两行 98 或多行实测高。
-   * 用于底部大球光晕中心与微音浪的垂直位置呼吸锚定，与输入框卡体形成紧密贴合。
-   */
-  composerHeight?: number;
-  /**
-   * 可选底部安全边距覆盖（dp）；未提供时自动消费 SafeAreaInsetsContext。
-   */
-  bottomInset?: number;
+  /** 波形电平 0..1（SharedValue：UI 线程驱动大球共鸣与波形条，不进 render 路径） */
+  level: SharedValue<number>;
+  /** 手势拖拽位移驱动流光大球水滴磁吸形变 */
+  dragX?: SharedValue<number>;
+  dragY?: SharedValue<number>;
 }
 
 export function VoiceOverlay({
@@ -87,8 +121,8 @@ export function VoiceOverlay({
   starting,
   displayText,
   level,
-  composerHeight,
-  bottomInset,
+  dragX,
+  dragY,
 }: VoiceOverlayProps) {
   const theme = useTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -98,25 +132,25 @@ export function VoiceOverlay({
   const editing = phase === 'editing';
 
   // 垂直几何锚定：与输入框底缘 Math.max(insets.bottom, theme.space.sm) 保持严密一致
-  const effectiveBottomInset = bottomInset ?? insets.bottom;
-  const bottomPadding = Math.max(effectiveBottomInset, theme.space.sm);
-
-  // 宿主输入框高度与微音浪呼吸对齐（单行 52 居中于 26、两行 98 首行居中于 70）
-  const hostCardHeight = composerHeight ?? theme.size.composerMin;
-  const inputCenterFromBottom =
-    hostCardHeight > 64 ? hostCardHeight - 28 : Math.round(hostCardHeight / 2);
-  const waveBottom = Math.max(14, inputCenterFromBottom - 12);
+  const bottomPadding = Math.max(insets.bottom, theme.space.sm);
 
   // 总工作区高度与 SVG 贴地高度（彻底覆盖底部安全区与输入框底盘，杜绝漏底与串戏）
   const workspaceHeight = 380;
   const totalSvgHeight = workspaceHeight + bottomPadding;
 
   // 动态屏幕宽度居中适配：
-  // 左右弧形胶囊各长 108dp，中间留白 94dp（离中心各 47dp），两翼向外延伸 155dp
-  // 在任何屏幕宽度（360dp、390dp、412dp、430dp 等）下均严格绝对对称居中，绝无写死 390dp 造成的偏心
+  // 左右弧形胶囊平缓微拱（倾角约 14°，两翼向外延伸 168dp，中央走廊留白 92dp）
+  // 在任何屏幕宽度（360dp、390dp、412dp、430dp 等）下均严格绝对对称居中
   const centerX = Math.round(screenWidth / 2);
-  const leftArcD = `M ${centerX - 155},242 C ${centerX - 129},218 ${centerX - 91},204 ${centerX - 47},202`;
-  const rightArcD = `M ${centerX + 47},202 C ${centerX + 91},204 ${centerX + 129},218 ${centerX + 155},242`;
+  const leftArcD = `M ${centerX - 168},230 C ${centerX - 128},214 ${centerX - 88},203 ${centerX - 46},200`;
+  const rightArcD = `M ${centerX + 46},200 C ${centerX + 88},203 ${centerX + 128},214 ${centerX + 168},230`;
+
+  // 文字排版安全轨道：借用两端 19px 圆角空间向外延伸，轨道物理弧长达 142dp；
+  // 基线居中由轨迹几何本身承担（轨道走向直接对齐文字中线）——严禁给
+  // SvgText/TextPath 设置 alignmentBaseline：react-native-svg 的
+  // TextPathMethod 枚举无 central，设置即在 Fabric 预分配视图时崩溃（见 §1.1）
+  const leftTrackD = `M ${centerX - 176},233 C ${centerX - 132},215 ${centerX - 84},202 ${centerX - 38},199`;
+  const rightTrackD = `M ${centerX + 38},199 C ${centerX + 84},202 ${centerX + 132},215 ${centerX + 176},233`;
 
   // 触觉咬合联动 (进入左撤销或右编辑时触发轻脆吸附感)
   const prevPhaseRef = useRef<VoicePhase>('idle');
@@ -171,6 +205,73 @@ export function VoiceOverlay({
     }
   }, [visible, breatheAnim, breatheDuration]);
 
+  // 手势位移响应（未传入时内部提供静止兜底值）
+  const fallbackDragX = useSharedValue(0);
+  const fallbackDragY = useSharedValue(0);
+  const effectiveDragX = dragX ?? fallbackDragX;
+  const effectiveDragY = dragY ?? fallbackDragY;
+
+  // “正在聆听…”背衬声波雷达隔离波纹（错开双层扩散圆角矩形，与下层主对话文字动态隔离）
+  const rippleProgress1 = useSharedValue(0);
+  const rippleProgress2 = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      rippleProgress1.value = 0;
+      rippleProgress2.value = 0;
+      rippleProgress1.value = withRepeat(
+        withTiming(1, {
+          duration: 2000,
+          easing: ReanimatedEasing.out(ReanimatedEasing.quad),
+        }),
+        -1,
+        false
+      );
+      const timer = setTimeout(() => {
+        rippleProgress2.value = withRepeat(
+          withTiming(1, {
+            duration: 2000,
+            easing: ReanimatedEasing.out(ReanimatedEasing.quad),
+          }),
+          -1,
+          false
+        );
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+    rippleProgress1.value = 0;
+    rippleProgress2.value = 0;
+    return undefined;
+  }, [visible, rippleProgress1, rippleProgress2]);
+
+  const rippleStyle1 = useAnimatedStyle(() => {
+    const scale = interpolate(rippleProgress1.value, [0, 1], [0.98, 1.12]);
+    const opacity = interpolate(
+      rippleProgress1.value,
+      [0, 0.25, 1],
+      [0.45, 0.2, 0]
+    );
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
+
+  const rippleStyle2 = useAnimatedStyle(() => {
+    const scale = interpolate(rippleProgress2.value, [0, 1], [0.98, 1.12]);
+    const opacity = interpolate(
+      rippleProgress2.value,
+      [0, 0.25, 1],
+      [0.45, 0.2, 0]
+    );
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
+
   const layerAnimatedStyle = useAnimatedStyle(() => {
     return {
       opacity: enterProgress.value,
@@ -184,9 +285,45 @@ export function VoiceOverlay({
 
   const domeAnimatedStyle = useAnimatedStyle(() => {
     // 基础呼吸脉冲 (1 ~ 1.035) + 语音电平强力膨胀共振 (level * 0.08)
-    const totalScale = breatheAnim.value + level * 0.08;
+    const totalScale = breatheAnim.value + level.value * 0.08;
+    // 随手指滑动的磁吸牵引位移（行程收敛：最大平移 ±20dp，方案波 4b 口径）
+    const offsetX = interpolate(
+      effectiveDragX.value,
+      [-200, 0, 200],
+      [-20, 0, 20],
+      'clamp'
+    );
+    // 纵向上滑提拉（手指往上滑动时，大球向上拉起，最大提拉 10dp）
+    const offsetY = interpolate(
+      effectiveDragY.value,
+      [-200, 0, 100],
+      [-10, 0, 0],
+      'clamp'
+    );
+    // 触感张力：横向与纵向水滴微形变
+    const stretchX = interpolate(
+      Math.abs(effectiveDragX.value),
+      [0, 160],
+      [1, 1.05],
+      'clamp'
+    );
+    const stretchY = interpolate(
+      Math.abs(effectiveDragY.value),
+      [0, 160],
+      [1, 1.04],
+      'clamp'
+    );
+
     return {
-      transform: [{ scale: totalScale }],
+      // 变换原点钉底边中心：缩放/张力绕大球底边中点展开，底缘不漂移
+      transformOrigin: '50% 100%',
+      transform: [
+        { translateX: offsetX },
+        { translateY: offsetY },
+        { scale: totalScale },
+        { scaleX: stretchX },
+        { scaleY: stretchY },
+      ],
     };
   });
 
@@ -219,48 +356,79 @@ export function VoiceOverlay({
             layerAnimatedStyle,
           ]}
         >
-          {/* 1. 顶部转写文本气泡卡片 (经 SoftShadowSurface 软阴影，Android 浅色柔和漫散，无生硬系统阴影) */}
-          <SoftShadowSurface
-            preset="voiceCard"
-            borderRadius={theme.radius.xl}
-            fill={theme.colors.surface}
-            fillStyle={[
-              styles.previewCard,
-              {
-                width: Math.min(screenWidth - 32, 520),
-                borderColor: cancelling
-                  ? theme.colors.dangerSoft
-                  : theme.colors.hairline,
-              },
-            ]}
-          >
-            <AppText
-              variant="body"
-              color={
-                cancelling
-                  ? 'danger'
-                  : displayText
-                    ? 'textPrimary'
-                    : 'textTertiary'
-              }
-              numberOfLines={3}
-              style={[styles.previewText, cancelling && styles.strikeText]}
+          {/* 1. 顶部转写文本气泡卡片：背衬动态雷达扩散隔离波纹 + SoftShadowSurface 软阴影，彻底去除生硬描边 */}
+          <View style={styles.previewCardWrapper}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.rippleHalo,
+                {
+                  width: Math.min(screenWidth - 32, 520),
+                  borderRadius: theme.radius.xl,
+                  backgroundColor: cancelling
+                    ? theme.colors.dangerSoft
+                    : editing
+                      ? theme.colors.infoSoft
+                      : theme.colors.actionPrimary,
+                },
+                rippleStyle1,
+              ]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.rippleHalo,
+                {
+                  width: Math.min(screenWidth - 32, 520),
+                  borderRadius: theme.radius.xl,
+                  backgroundColor: cancelling
+                    ? theme.colors.dangerSoft
+                    : editing
+                      ? theme.colors.infoSoft
+                      : theme.colors.actionPrimary,
+                },
+                rippleStyle2,
+              ]}
+            />
+            <SoftShadowSurface
+              preset="voiceCard"
+              borderRadius={theme.radius.xl}
+              fill={theme.colors.surface}
+              fillStyle={[
+                styles.previewCard,
+                {
+                  width: Math.min(screenWidth - 32, 520),
+                },
+              ]}
             >
-              {displayText || (starting ? '正在准备…' : '正在聆听…')}
-            </AppText>
-          </SoftShadowSurface>
+              <AppText
+                variant="body"
+                color={
+                  cancelling
+                    ? 'danger'
+                    : displayText
+                      ? 'textPrimary'
+                      : 'textTertiary'
+                }
+                numberOfLines={3}
+                style={[styles.previewText, cancelling && styles.strikeText]}
+              >
+                {displayText || (starting ? '正在准备…' : '正在聆听…')}
+              </AppText>
+            </SoftShadowSurface>
+          </View>
 
-          {/* 2. 交互大球与双翼弧形胶囊工作区 */}
+          {/* 2. 交互大球与双翼弧形胶囊工作区（2026-11-05 三层层模型）：
+              shield / dome / arcs 三个兄弟层各自持有独立 <Svg>——拖拽与呼吸
+              变换（domeAnimatedStyle）只允许作用于 dome 层；shield 职责是
+              恒定贴底封死输入区（旧实现三层共挂一个 wrapper，手指一动整块
+              底衬跟着位移、底部露出主界面 = "下面整块都在动/露白"事故根因） */}
           <View style={styles.archWorkspace}>
-            {/* 底部全宽 Svg 呈现：双层架构（底层对话界面实色遮罩防串戏 + 上层流光大球发光体）与双翼胶囊 */}
+            {/* 第一层：对话界面实色底衬遮罩（零 transform，恒定贴底） */}
             <Animated.View
               style={[
-                styles.svgCanvasWrapper,
-                {
-                  bottom: -bottomPadding,
-                  height: totalSvgHeight,
-                },
-                domeAnimatedStyle,
+                styles.svgLayer,
+                { bottom: -bottomPadding, height: totalSvgHeight },
               ]}
             >
               <Svg
@@ -270,9 +438,8 @@ export function VoiceOverlay({
                 style={styles.svgCanvas}
               >
                 <Defs>
-                  {/* 第一层遮罩渐变（用户架构裁决）：
-                      底部实色（theme.colors.canvas）100% 遮死输入框与安全区，彻底杜绝输入框串戏；
-                      在球形偏上部分下方平滑渐变到透明，仅上部有透明度渐变融于主对话流 */}
+                  {/* 遮罩渐变：底部实色（theme.colors.canvas）100% 遮死输入框
+                      与安全区；向上平滑渐变到透明融于主对话流 */}
                   <LinearGradient
                     id="bg-canvas-shield"
                     x1="0"
@@ -302,6 +469,33 @@ export function VoiceOverlay({
                       stopOpacity={0}
                     />
                   </LinearGradient>
+                </Defs>
+
+                <Rect
+                  x="0"
+                  y="0"
+                  width={screenWidth}
+                  height={totalSvgHeight}
+                  fill="url(#bg-canvas-shield)"
+                />
+              </Svg>
+            </Animated.View>
+
+            {/* 第二层：流光大球发光体（唯一挂 domeAnimatedStyle 的层） */}
+            <Animated.View
+              style={[
+                styles.svgLayer,
+                { bottom: -bottomPadding, height: totalSvgHeight },
+                domeAnimatedStyle,
+              ]}
+            >
+              <Svg
+                width={screenWidth}
+                height={totalSvgHeight}
+                viewBox={`0 0 ${screenWidth} ${totalSvgHeight}`}
+                style={styles.svgCanvas}
+              >
+                <Defs>
 
                   {/* 第二层流光大球：正常说话态清透翡翠绿大球 (高阶平滑余弦衰减) */}
                   <RadialGradient
@@ -358,27 +552,27 @@ export function VoiceOverlay({
                     <Stop
                       offset="0%"
                       stopColor={theme.colors.danger}
-                      stopOpacity={0.62}
+                      stopOpacity={0.48}
                     />
                     <Stop
                       offset="28%"
                       stopColor={theme.colors.danger}
-                      stopOpacity={0.52}
+                      stopOpacity={0.38}
                     />
                     <Stop
                       offset="54%"
                       stopColor={theme.colors.dangerSoft}
-                      stopOpacity={0.38}
+                      stopOpacity={0.25}
                     />
                     <Stop
                       offset="76%"
                       stopColor={theme.colors.dangerSoft}
-                      stopOpacity={0.22}
+                      stopOpacity={0.12}
                     />
                     <Stop
                       offset="92%"
                       stopColor={theme.colors.dangerSoft}
-                      stopOpacity={0.08}
+                      stopOpacity={0.04}
                     />
                     <Stop
                       offset="100%"
@@ -428,22 +622,9 @@ export function VoiceOverlay({
                       stopOpacity={0}
                     />
                   </RadialGradient>
-
-                  {/* 黄金留白 94px 弧形轨迹 (左：centerX-155→centerX-47，右：centerX+47→centerX+155，舒展且完全对称) */}
-                  <Path id="left-arc-track" d={leftArcD} />
-                  <Path id="right-arc-track" d={rightArcD} />
                 </Defs>
 
-                {/* 第一层：对话界面实色背景遮罩（完全阻断输入框内容透视） */}
-                <Rect
-                  x="0"
-                  y="0"
-                  width={screenWidth}
-                  height={totalSvgHeight}
-                  fill="url(#bg-canvas-shield)"
-                />
-
-                {/* 第二层：流光大球发光体矩形背景 */}
+                {/* 流光大球发光体矩形背景（随 domeAnimatedStyle 平移/呼吸/张力） */}
                 <Rect
                   x="0"
                   y="0"
@@ -451,8 +632,30 @@ export function VoiceOverlay({
                   height={totalSvgHeight}
                   fill={`url(#dome-${cancelling ? 'cancel' : editing ? 'edit' : 'send'})`}
                 />
+              </Svg>
+            </Animated.View>
 
-                {/* 1 区：左侧弧形撤销胶囊 (高对比清晰底板与文字，彻底根除浅底看不清问题) */}
+            {/* 第三层：双翼弧形胶囊（零 transform——胶囊与轨迹文字钉死在
+                workspace 几何上，不随球体磁吸位移；相位切换仅换色） */}
+            <Animated.View
+              style={[
+                styles.svgLayer,
+                { bottom: -bottomPadding, height: totalSvgHeight },
+              ]}
+            >
+              <Svg
+                width={screenWidth}
+                height={totalSvgHeight}
+                viewBox={`0 0 ${screenWidth} ${totalSvgHeight}`}
+                style={styles.svgCanvas}
+              >
+                <Defs>
+                  {/* 黄金留白 92px 文字排版安全轨迹 (物理弧长 142dp，配合居中对齐绝不截断) */}
+                  <Path id="left-arc-track" d={leftTrackD} />
+                  <Path id="right-arc-track" d={rightTrackD} />
+                </Defs>
+
+                {/* 1 区：左侧弧形撤销胶囊 (微拱 14°，居中对齐，彻底防止偏上与吃字) */}
                 <Path
                   d={leftArcD}
                   fill="none"
@@ -471,20 +674,20 @@ export function VoiceOverlay({
                         ? theme.colors.textTertiary
                         : theme.colors.textPrimary
                   }
-                  fontSize={theme.type.callout.fontSize}
+                  fontSize={theme.type.footnote.fontSize}
                   fontWeight={cancelling ? '700' : '600'}
-                  letterSpacing={0.8}
+                  letterSpacing={0.2}
                 >
                   <TextPath
                     href="#left-arc-track"
                     startOffset="50%"
                     textAnchor="middle"
                   >
-                    {cancelling ? '✕  松开撤销' : '✕  左滑撤销'}
+                    {cancelling ? '✕ 松开撤销' : '✕ 左滑撤销'}
                   </TextPath>
                 </SvgText>
 
-                {/* 2 区：右侧弧形编辑胶囊 (高对比清晰底板与文字，彻底根除浅底看不清问题) */}
+                {/* 2 区：右侧弧形编辑胶囊 (微拱 14°，居中对齐，彻底防止偏上与吃字) */}
                 <Path
                   d={rightArcD}
                   fill="none"
@@ -501,22 +704,22 @@ export function VoiceOverlay({
                         ? theme.colors.textTertiary
                         : theme.colors.textPrimary
                   }
-                  fontSize={theme.type.callout.fontSize}
+                  fontSize={theme.type.footnote.fontSize}
                   fontWeight={editing ? '700' : '600'}
-                  letterSpacing={0.8}
+                  letterSpacing={0.2}
                 >
                   <TextPath
                     href="#right-arc-track"
                     startOffset="50%"
                     textAnchor="middle"
                   >
-                    {editing ? '松开编辑  ✎' : '右滑编辑  ✎'}
+                    {editing ? '松开编辑 ✎' : '右滑编辑 ✎'}
                   </TextPath>
                 </SvgText>
               </Svg>
             </Animated.View>
 
-            {/* 3. 高空独立 HUD 居中提示语 (带柔和半透微胶囊底衬，极高对比度，全天候清晰可见) */}
+            {/* 3. 高空独立 HUD 居中提示语 (纯净半透无描边微胶囊底衬，全天候清晰可见，彻底去除生硬描边) */}
             <View style={styles.centerTipContainer}>
               <View
                 style={[
@@ -527,11 +730,6 @@ export function VoiceOverlay({
                       : editing
                         ? theme.colors.infoSoft
                         : theme.colors.surfaceTranslucentStrong,
-                    borderColor: cancelling
-                      ? theme.colors.danger
-                      : editing
-                        ? theme.colors.info
-                        : theme.colors.hairline,
                     borderRadius: theme.radius.pill,
                   },
                 ]}
@@ -554,43 +752,79 @@ export function VoiceOverlay({
               </View>
             </View>
 
-            {/* 4. 底部微声波跳动条 (随音频电平 level 跳跃与谐波共振，与输入框卡体内中线精准贴合) */}
+            {/* 4. 微声波跳动条（随音频电平 level 跳跃与谐波共振）。
+                2026-11-05 重定位：锚定弧带与 shield 实色区之间的过渡带
+                （WAVE_BAR_BOTTOM_DP=150，几何推导见常量注释）——旧锚定
+                （输入中线-12）压在输入卡区且同色叠在光球最亮核心上，
+                对比度趋近于零（用户实测"条纹看不清楚"）。配色改为与球色
+                反差系（send=onMedia / cancel=danger / edit=info），静止
+                参考系不随球体磁吸位移，保证全程可辨。高度由 WaveTick 在
+                UI 线程按 level SharedValue 推导，电平回调不触发重渲。 */}
             <View
               testID="voice-overlay-wave-bar"
-              style={[styles.waveBarContainer, { bottom: waveBottom }]}
+              style={[styles.waveBarContainer, { bottom: WAVE_BAR_BOTTOM_DP }]}
             >
-              {Array.from({ length: 31 }).map((_, i) => {
-                const norm = i / 30;
-                const bell = Math.sin(norm * Math.PI);
-                const harmonic =
-                  (i % 2 === 0 ? 1 : 0.82) * (i % 3 === 0 ? 1.15 : 0.9);
-                const dynamicJump =
-                  bell * Math.min(22, level * 28 * harmonic + 2);
-                const h = Math.max(4, 4 + dynamicJump);
-                return (
-                  <View
-                    key={i}
-                    style={[
-                      styles.waveTick,
-                      {
-                        height: h,
-                        opacity: 0.5 + bell * 0.45,
-                        backgroundColor: cancelling
-                          ? theme.colors.danger
-                          : editing
-                            ? theme.colors.info
-                            : theme.colors.actionPrimary,
-                        borderRadius: theme.radius.pill,
-                      },
-                    ]}
-                  />
-                );
-              })}
+              {WAVE_TICKS.map((tick, i) => (
+                <WaveTick
+                  key={i}
+                  level={level}
+                  bell={tick.bell}
+                  harmonic={tick.harmonic}
+                  color={
+                    cancelling
+                      ? theme.colors.danger
+                      : editing
+                        ? theme.colors.info
+                        : theme.colors.onMedia
+                  }
+                  radius={theme.radius.pill}
+                />
+              ))}
             </View>
           </View>
         </Animated.View>
       </View>
     </Modal>
+  );
+}
+
+/**
+ * 单根微声波条：高度由 level（SharedValue）在 UI 线程逐帧推导——ASR
+ * 电平回调只写 SharedValue，本组件不进 React render 路径（旧实现 31 根
+ * 条在 render 内以 number 电平逐条算高，电平每回调一次整排重渲，是输入
+ * 延迟基线的一条来源）。bell/harmonic 为静态形状参数，color/radius 随
+ * 阶段变化（阶段切换频率远低于电平 tick，重渲可忽略）。
+ */
+function WaveTick({
+  level,
+  bell,
+  harmonic,
+  color,
+  radius,
+}: {
+  level: SharedValue<number>;
+  bell: number;
+  harmonic: number;
+  color: string;
+  radius: number;
+}) {
+  const tickStyle = useAnimatedStyle(() => {
+    const dynamicJump =
+      bell * Math.min(22, level.value * 28 * harmonic + 2);
+    return { height: Math.max(6, 6 + dynamicJump) };
+  });
+  return (
+    <Animated.View
+      style={[
+        styles.waveTick,
+        {
+          opacity: 0.7 + bell * 0.3,
+          backgroundColor: color,
+          borderRadius: radius,
+        },
+        tickStyle,
+      ]}
+    />
   );
 }
 
@@ -785,14 +1019,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
-  // 预览文字卡片：经 SoftShadowSurface 软阴影，纯粹边线与半透明
+  // 预览文字卡片背衬容器：承载雷达隔离波纹
+  previewCardWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  // 动态雷达声波隔离环：柔和圆角矩形扩散波
+  rippleHalo: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    alignSelf: 'center',
+  },
+  // 预览文字卡片：经 SoftShadowSurface 软阴影，彻底去除生硬描边
   previewCard: {
     minHeight: 88,
-    borderWidth: 1,
+    borderWidth: 0,
     paddingHorizontal: 20,
     paddingVertical: 16,
     justifyContent: 'center',
-    marginBottom: 12,
   },
   previewText: {
     textAlign: 'center',
@@ -808,7 +1055,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
-  svgCanvasWrapper: {
+  // 三层兄弟层的公共定位（shield/dome/arcs 各自绝对贴底、全宽；transform
+  // 仅经 domeAnimatedStyle 作用于 dome 层，见 JSX 三层模型注释）
+  svgLayer: {
     position: 'absolute',
     left: 0,
     right: 0,
@@ -834,7 +1083,7 @@ const styles = StyleSheet.create({
   centerTipBadge: {
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -852,7 +1101,7 @@ const styles = StyleSheet.create({
     height: 24,
   },
   waveTick: {
-    width: 2,
+    width: 2.5,
   },
   // 错误条
   errorBar: {

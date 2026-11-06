@@ -16,6 +16,7 @@ import type { DeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
 export interface DeviceSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   device: DeviceStatusVm;
   /** 扫码添加新设备（→ /pair/scan） */
   onOpenScan: () => void;
@@ -27,6 +28,7 @@ export interface DeviceSheetProps {
 export function DeviceSheet({
   visible,
   onClose,
+  onCloseComplete,
   device,
   onOpenScan,
   onUseLocal,
@@ -47,6 +49,7 @@ export function DeviceSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       title="连接设备"
       size="large"
       testID={testID}
@@ -76,12 +79,18 @@ export function DeviceSheet({
                 selected={row.isTarget}
                 disabled={!row.online}
                 onPress={() => {
+                  // 点选即同步执行切换（单测契约 + 即时生效）：经 Sheet.tsx
+                  // 的 runOnJS(handleExitFinished)() 根治后，退场动画与数据
+                  // 面切换安全共存，无需延迟到退场完成——旧「待执行动作」
+                  // 延迟机制（pendingActionRef）从未真正生效（登记→关闭→
+                  // 同步执行→立即清空，关闭完成回调的分支永不触发），已整段
+                  // 删除（2026-11-05 返工）；以下顺序与删除前逐点一致
+                  onClose();
                   if (row.isTarget) {
                     if (!device.connected) device.reconnect();
                   } else {
                     device.switchDevice(row.id);
                   }
-                  onClose();
                 }}
               />
             ))}

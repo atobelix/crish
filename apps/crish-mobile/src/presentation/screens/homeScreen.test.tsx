@@ -39,9 +39,33 @@ const mockRouterPush = jest.fn();
 /** 本地线程打开落点（U3：壳内 /thread replace 由宿主回调承接） */
 const mockOpenLocalThread = jest.fn();
 
-jest.mock('@/adapters/quickRunWiring', () => ({
-  ...jest.requireActual('@/adapters/quickRunWiring'),
+jest.mock('@/adapters/RemoteControlFacade', () => ({
+  ...jest.requireActual('@/adapters/RemoteControlFacade'),
   getQuickRunContext: () => ({ repository: { runTask: mockRunTask } }),
+  remoteControlFacade: {
+    ...jest.requireActual('@/adapters/RemoteControlFacade').remoteControlFacade,
+    isAvailable: () => true,
+    runTask: mockRunTask,
+    quickRunRepo: { runTask: mockRunTask },
+  },
+}));
+
+// 锚点测量接缝：jest 里宿主 measureInWindow 不回调——以固定矩形同步
+// 回调模拟测量到手（接缝映射保真由 anchorMeasure 单测覆盖）。
+jest.mock('@/presentation/ui/anchorMeasure', () => ({
+  measureAnchorRect: jest.fn(
+    (
+      _node: unknown,
+      onRect: (rect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }) => void
+    ) => {
+      onRect({ x: 330, y: 60, width: 32, height: 32 });
+    }
+  ),
 }));
 
 jest.mock('expo-router', () => ({

@@ -257,13 +257,20 @@ describe('抽屉动作面稳定性（C-PERF）', () => {
   });
 });
 
-describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极速让位/键盘异步收起）', () => {
-  it('源码铁律：FAIL_DY 调整为 12dp，杜绝首帧触碰跨线程调度，闭合态 75% 限制与打开态仅向左收起', () => {
+describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/纵向去噪让位/键盘异步收起）', () => {
+  it('源码铁律：FAIL_DY 为 12dp 且判 fail 须多采样确认，杜绝首帧触碰跨线程调度，闭合态 75% 限制与打开态仅向左收起，onFinalize 收口在位', () => {
     const source = readFileSync(
       join(__dirname, 'CrishDrawerLayout.tsx'),
       'utf8'
     );
     expect(source).toMatch(/const FAIL_DY = 12;/);
+    // FAIL_DY 去噪（2026-11-05 返工）：单采样即时定案已废除，纵向占优
+    // 须连续 FAIL_DY_CONFIRM_SAMPLES 个采样点成立才判 fail
+    expect(source).toMatch(/const FAIL_DY_CONFIRM_SAMPLES = 3;/);
+    expect(source).toContain('failDyStreak.value >= FAIL_DY_CONFIRM_SAMPLES');
+    // 生命周期收口（题 8 冻结链根治）：onFinalize 必须在手势链上
+    expect(source).toContain('.onFinalize(');
+    expect(source).toContain('endHandled');
     const touchesDownMatch = source.match(
       /\.onTouchesDown\(\(event\) => \{([\s\S]*?)\}\)/
     );
@@ -273,6 +280,8 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
     expect(touchesDownMatch![1]).not.toMatch(
       /runOnJS\(dismissKeyboardAndBlur\)/
     );
+    // 多指纪律（2026-11-05 卡手修复 S-D）：仅单指按下重置基准
+    expect(touchesDownMatch![1]).toContain('allTouches.length !== 1');
 
     expect(source).toMatch(
       /\.onStart\(\(\) => \{[\s\S]*?dismissKeyboardAndBlur[\s\S]*?\}\)/
@@ -280,10 +289,17 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
     expect(source).toContain('touchStartX.value > width * 0.75');
     expect(source).toContain('dx < -10');
     expect(source).toContain('dx < -ACTIVATION_DX && absDx > absDy * 0.7');
-    expect(source).toContain('else if (dx > ACTIVATION_DX)');
+    // 打开态右摇不判死（2026-11-05 卡手修复 S-C）：旧 `dx > ACTIVATION_DX
+    // → fail()` 永久放弃手势的策略已删除——不激活即不消费触摸，方向回摆
+    // 可再激活；按 pointer id 钉死首触（S-D 移动取触点）
+    expect(source).not.toContain('else if (dx > ACTIVATION_DX)');
+    expect(source).toContain(
+      'event.allTouches.find((t) => t.id === gesturePointerId.value)'
+    );
+    expect(source).not.toContain('onTouchStart={handleDrawerClose}');
   });
 
-  it('手势全生命周期行为：手到即停(cancelAnimation)、极速让位(FAIL_DY=12)、闭合区范围限制与打开态单向收起', async () => {
+  it('手势全生命周期行为：手到即停(cancelAnimation)、纵向去噪让位(FAIL_DY=12×3 采样)、闭合区范围限制与打开态单向收起', async () => {
     const capturedPan: any = {};
     const panSpy = jest.spyOn(Gesture, 'Pan').mockImplementation(() => {
       const handler: any = {
@@ -296,6 +312,8 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
           capturedPan.onTouchesMove = cb;
           return handler;
         }),
+        onTouchesUp: jest.fn(() => handler),
+        onTouchesCancelled: jest.fn(() => handler),
         onStart: jest.fn((cb) => {
           capturedPan.onStart = cb;
           return handler;
@@ -306,6 +324,10 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
         }),
         onEnd: jest.fn((cb) => {
           capturedPan.onEnd = cb;
+          return handler;
+        }),
+        onFinalize: jest.fn((cb) => {
+          capturedPan.onFinalize = cb;
           return handler;
         }),
       };
@@ -345,11 +367,28 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
     capturedPan.onStart();
     expect(dismissSpy).toHaveBeenCalledTimes(1);
 
-    // 3. onTouchesMove - 纵向极速让位（absDy > 12 且 absDy > absDx）
+    // 3. onTouchesMove - 纵向让位去噪（absDy > 12 且 absDy > absDx 须
+    //    连续 3 个采样点成立才判 fail；单帧/双帧纵向抖动不定案、不激活）
     const smVertical = { fail: jest.fn(), activate: jest.fn() };
-    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 115 }] }, smVertical); // dx = 5, dy = 15
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 115 }] }, smVertical); // dx = 5, dy = 15（第 1 采样）
+    expect(smVertical.fail).not.toHaveBeenCalled();
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 118 }] }, smVertical); // dy = 18（第 2 采样）
+    expect(smVertical.fail).not.toHaveBeenCalled();
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 121 }] }, smVertical); // dy = 21（第 3 采样，定案）
     expect(smVertical.fail).toHaveBeenCalledTimes(1);
     expect(smVertical.activate).not.toHaveBeenCalled();
+
+    // 3b. 去噪清零：纵向占优中间夹一个非纵向采样，计数重新起算
+    capturedPan.onTouchesDown({ allTouches: [{ x: 50, y: 100 }] });
+    const smReset = { fail: jest.fn(), activate: jest.fn() };
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 115 }] }, smReset); // 纵向 1
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 118 }] }, smReset); // 纵向 2
+    capturedPan.onTouchesMove({ allTouches: [{ x: 58, y: 103 }] }, smReset); // dx = 8, dy = 3：条件消散，清零
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 115 }] }, smReset); // 纵向 1（重新起算）
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 118 }] }, smReset); // 纵向 2
+    expect(smReset.fail).not.toHaveBeenCalled();
+    capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 121 }] }, smReset); // 纵向 3，定案
+    expect(smReset.fail).toHaveBeenCalledTimes(1);
 
     // 4. onTouchesMove - 关闭态触碰超过左侧 75% 宽度直接失败（假设屏幕宽 750dp，750 * 0.75 = 562.5）
     capturedPan.onTouchesDown({ allTouches: [{ x: 600, y: 100 }] });
@@ -384,17 +423,298 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/极
     expect(smClose.activate).toHaveBeenCalledTimes(1);
     expect(smClose.fail).not.toHaveBeenCalled();
 
-    // 向右拖动失败
-    const smRightFail = { fail: jest.fn(), activate: jest.fn() };
+    // 向右拖动（2026-11-05 卡手修复 S-C）：不激活也不判死——手势保持未消费
+    // 状态，方向回摆后仍可激活左移；松手时手势未激活即不产生任何落位
+    const smRightHold = { fail: jest.fn(), activate: jest.fn() };
     capturedPan.onTouchesMove(
       { allTouches: [{ x: 330, y: 102 }] },
-      smRightFail
+      smRightHold
     ); // dx = 30
-    expect(smRightFail.fail).toHaveBeenCalledTimes(1);
-    expect(smRightFail.activate).not.toHaveBeenCalled();
+    expect(smRightHold.fail).not.toHaveBeenCalled();
+    expect(smRightHold.activate).not.toHaveBeenCalled();
 
     panSpy.mockRestore();
     cancelAnimationSpy.mockRestore();
     dismissSpy.mockRestore();
+  });
+});
+
+describe('CrishDrawerLayout 物理弹簧动效与 GPU 零重排契约（任务单元 T4）', () => {
+  it('源码契约：全量采用 withSpring + theme.motion.spring.drawer，彻底杜绝 withTiming 贝塞尔暴冲', () => {
+    const source = readFileSync(
+      join(__dirname, 'CrishDrawerLayout.tsx'),
+      'utf8'
+    );
+    expect(source).not.toMatch(/\bwithTiming\(/);
+    expect(source).not.toMatch(/\bEasing\b/);
+    expect(source).toMatch(/\bwithSpring\(/);
+
+    const springMatches = [...source.matchAll(/withSpring\(([\s\S]*?)\)/g)];
+    expect(springMatches.length).toBeGreaterThanOrEqual(3);
+    for (const match of springMatches) {
+      expect(match[1]).toContain('theme.motion.spring.drawer');
+      expect(match[1]).toContain('overshootClamping: true');
+    }
+
+    expect(source).toContain('normalizedVelocity');
+    expect(source).toContain('velocity: normalizedVelocity');
+  });
+
+  it('GPU 零重排契约：主卡片圆角采用阶跃常量契约，严禁逐帧动态插值', () => {
+    const source = readFileSync(
+      join(__dirname, 'CrishDrawerLayout.tsx'),
+      'utf8'
+    );
+    expect(source).not.toMatch(/borderRadius:\s*interpolate\(/);
+    expect(source).toMatch(
+      /borderRadius:\s*progress\.value\s*<=\s*0\.005\s*\?\s*0\s*:\s*theme\.radius\.sheet/
+    );
+  });
+
+  it('运行时动效验证：open / close 与手势释放正确调用 withSpring 并传递参数', async () => {
+    const withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    const capturedPan: Record<string, any> = {};
+    const panSpy = jest.spyOn(Gesture, 'Pan').mockImplementation(() => {
+      const handler: any = {
+        manualActivation: jest.fn(() => handler),
+        onTouchesDown: jest.fn(() => handler),
+        onTouchesMove: jest.fn(() => handler),
+        onTouchesUp: jest.fn(() => handler),
+        onTouchesCancelled: jest.fn(() => handler),
+        onStart: jest.fn(() => handler),
+        onUpdate: jest.fn(() => handler),
+        onEnd: jest.fn((cb) => {
+          capturedPan.onEnd = cb;
+          return handler;
+        }),
+        onFinalize: jest.fn(() => handler),
+      };
+      return handler;
+    });
+
+    let triggerOpen: () => void = () => {};
+    let triggerClose: () => void = () => {};
+    function Probe() {
+      const actions = useDrawerActions();
+      triggerOpen = actions.open;
+      triggerClose = actions.close;
+      return null;
+    }
+
+    await render(
+      <CrishDrawerLayout>
+        <Probe />
+      </CrishDrawerLayout>
+    );
+
+    // 1. open() 触发 withSpring
+    withSpringSpy.mockClear();
+    await act(async () => {
+      triggerOpen();
+    });
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        damping: 30,
+        stiffness: 260,
+        mass: 1,
+        overshootClamping: true,
+      }),
+      expect.any(Function)
+    );
+
+    // 2. close() 触发 withSpring
+    withSpringSpy.mockClear();
+    await act(async () => {
+      triggerClose();
+    });
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({
+        damping: 30,
+        stiffness: 260,
+        mass: 1,
+        overshootClamping: true,
+      }),
+      expect.any(Function)
+    );
+
+    // 3. pan.onEnd 注入 normalizedVelocity
+    withSpringSpy.mockClear();
+    expect(capturedPan.onEnd).toBeDefined();
+    capturedPan.onEnd({ velocityX: 600 });
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        damping: 30,
+        stiffness: 260,
+        mass: 1,
+        overshootClamping: true,
+        velocity: expect.any(Number),
+      }),
+      expect.any(Function)
+    );
+
+    withSpringSpy.mockRestore();
+    panSpy.mockRestore();
+  });
+});
+
+// 生命周期收口（2026-11-05 返工，题 8 冻结链 + 激活跳变）：
+// - 落定动画在飞时落指 cancelAnimation 把 progress 停在中间值，手势
+//   若未激活结束/被判 fail，onEnd 永不触发——onFinalize 必须就近落位；
+// - onEnd 已收口时 onFinalize 不得二次落位（防双重收口）；
+// - 已在落定位（0/1）时 onFinalize 不得无谓起弹簧；
+// - onUpdate 首帧捕获激活点位移为偏移，激活瞬间 progress 零跳变。
+describe('CrishDrawerLayout 生命周期收口（onFinalize）与激活零跳变', () => {
+  function capturePan() {
+    const capturedPan: Record<string, any> = {};
+    const panSpy = jest.spyOn(Gesture, 'Pan').mockImplementation(() => {
+      const handler: any = {
+        manualActivation: jest.fn(() => handler),
+        onTouchesDown: jest.fn((cb) => {
+          capturedPan.onTouchesDown = cb;
+          return handler;
+        }),
+        onTouchesMove: jest.fn((cb) => {
+          capturedPan.onTouchesMove = cb;
+          return handler;
+        }),
+        onTouchesUp: jest.fn(() => handler),
+        onTouchesCancelled: jest.fn(() => handler),
+        onStart: jest.fn((cb) => {
+          capturedPan.onStart = cb;
+          return handler;
+        }),
+        onUpdate: jest.fn((cb) => {
+          capturedPan.onUpdate = cb;
+          return handler;
+        }),
+        onEnd: jest.fn((cb) => {
+          capturedPan.onEnd = cb;
+          return handler;
+        }),
+        onFinalize: jest.fn((cb) => {
+          capturedPan.onFinalize = cb;
+          return handler;
+        }),
+      };
+      return handler;
+    });
+    return { capturedPan, panSpy };
+  }
+
+  /** 驱动一次「激活并拖到中途」：落指(50,100) → 右移激活 → 拖拽位移序列 */
+  function driveToMidDrag(capturedPan: Record<string, any>) {
+    capturedPan.onTouchesDown({ allTouches: [{ id: 1, x: 50, y: 100 }] });
+    const sm = { fail: jest.fn(), activate: jest.fn() };
+    capturedPan.onTouchesMove({ allTouches: [{ id: 1, x: 75, y: 102 }] }, sm);
+    expect(sm.activate).toHaveBeenCalled();
+    capturedPan.onStart({ translationX: 25 });
+    // 首帧 translationX=25 即激活点（捕获为偏移，progress 保持 0）
+    capturedPan.onUpdate({ translationX: 25 });
+    // 再拖 160dp（maxTranslate=320 时 progress = 160/320 = 0.5）
+    capturedPan.onUpdate({ translationX: 185 });
+  }
+
+  it('手势链包含 onFinalize 收口', async () => {
+    const { capturedPan, panSpy } = capturePan();
+    await render(
+      <CrishDrawerLayout>
+        <View testID="main-child" />
+      </CrishDrawerLayout>
+    );
+    expect(capturedPan.onFinalize).toBeDefined();
+    panSpy.mockRestore();
+  });
+
+  it('冻结链收口：拖到中途后手势未走 onEnd（fail/取消），onFinalize 就近落位起弹簧', async () => {
+    const { capturedPan, panSpy } = capturePan();
+    const withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    await render(
+      <CrishDrawerLayout>
+        <View testID="main-child" />
+      </CrishDrawerLayout>
+    );
+    driveToMidDrag(capturedPan);
+    withSpringSpy.mockClear();
+    // 不调用 onEnd，直接 onFinalize（模拟 fail/系统取消路径）
+    capturedPan.onFinalize();
+    // progress=0.5、自起始 0：就近落位 → 目标 1（行程口径 0.5 > 0.25）
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ overshootClamping: true }),
+      expect.any(Function)
+    );
+    withSpringSpy.mockRestore();
+    panSpy.mockRestore();
+  });
+
+  it('防双重收口：onEnd 已落位后 onFinalize 不再起弹簧', async () => {
+    const { capturedPan, panSpy } = capturePan();
+    const withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    await render(
+      <CrishDrawerLayout>
+        <View testID="main-child" />
+      </CrishDrawerLayout>
+    );
+    driveToMidDrag(capturedPan);
+    capturedPan.onEnd({ velocityX: 0 });
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ overshootClamping: true }),
+      expect.any(Function)
+    );
+    withSpringSpy.mockClear();
+    capturedPan.onFinalize();
+    expect(withSpringSpy).not.toHaveBeenCalled();
+    withSpringSpy.mockRestore();
+    panSpy.mockRestore();
+  });
+
+  it('已在落定位时 onFinalize 不起无谓弹簧', async () => {
+    const { capturedPan, panSpy } = capturePan();
+    const withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    await render(
+      <CrishDrawerLayout>
+        <View testID="main-child" />
+      </CrishDrawerLayout>
+    );
+    withSpringSpy.mockClear();
+    capturedPan.onFinalize();
+    expect(withSpringSpy).not.toHaveBeenCalled();
+    withSpringSpy.mockRestore();
+    panSpy.mockRestore();
+  });
+
+  it('激活零跳变：首帧位移被捕获为偏移，小行程松手弹回（旧换算会误判过 0.25 行程）', async () => {
+    const { capturedPan, panSpy } = capturePan();
+    const withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    await render(
+      <CrishDrawerLayout>
+        <View testID="main-child" />
+      </CrishDrawerLayout>
+    );
+    capturedPan.onTouchesDown({ allTouches: [{ id: 1, x: 50, y: 100 }] });
+    const sm = { fail: jest.fn(), activate: jest.fn() };
+    capturedPan.onTouchesMove({ allTouches: [{ id: 1, x: 75, y: 102 }] }, sm);
+    capturedPan.onStart({ translationX: 25 });
+    capturedPan.onUpdate({ translationX: 25 }); // 激活帧：progress 仍为 0
+    capturedPan.onUpdate({ translationX: 95 }); // 实际行程 70dp → progress 70/320 ≈ 0.22
+    withSpringSpy.mockClear();
+    capturedPan.onEnd({ velocityX: 0 });
+    // progress ≈ 0.22 未过 0.25 行程 → 弹回 0；旧换算（95/320 ≈ 0.30）会误开
+    expect(withSpringSpy).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ overshootClamping: true }),
+      expect.any(Function)
+    );
+    expect(withSpringSpy).not.toHaveBeenCalledWith(
+      1,
+      expect.anything(),
+      expect.anything()
+    );
+    withSpringSpy.mockRestore();
+    panSpy.mockRestore();
   });
 });

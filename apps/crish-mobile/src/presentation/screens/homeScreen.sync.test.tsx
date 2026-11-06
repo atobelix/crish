@@ -22,9 +22,16 @@ const mockRunTask = jest.fn<Promise<RunTaskResult>, [RunTaskParams]>();
 const mockRefreshNow = jest.fn(async () => {});
 const mockRouterPush = jest.fn();
 
-jest.mock('@/adapters/quickRunWiring', () => ({
-  ...jest.requireActual('@/adapters/quickRunWiring'),
+jest.mock('@/adapters/RemoteControlFacade', () => ({
+  ...jest.requireActual('@/adapters/RemoteControlFacade'),
   getQuickRunContext: () => ({ repository: { runTask: mockRunTask } }),
+  getModelsContext: () => null,
+  remoteControlFacade: {
+    ...jest.requireActual('@/adapters/RemoteControlFacade').remoteControlFacade,
+    isAvailable: () => true,
+    runTask: mockRunTask,
+    quickRunRepo: { runTask: mockRunTask },
+  },
 }));
 
 jest.mock('@/adapters/wiring/observationWiring', () => ({
@@ -46,10 +53,7 @@ jest.mock('@/adapters/wiring/observationWiring', () => ({
   ensureObservationWiring: () => null,
 }));
 
-jest.mock('@/adapters/wiring/modelsWiring', () => ({
-  ...jest.requireActual('@/adapters/wiring/modelsWiring'),
-  getModelsContext: () => null,
-}));
+
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
