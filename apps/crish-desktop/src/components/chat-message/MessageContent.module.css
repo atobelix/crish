@@ -123,11 +123,44 @@
   margin-bottom: 0;
 }
 
-/* 工具调用/过程段与回复正文之间稍作拉开（微调 +4px，整体 12px 节奏） */
-.assistantTimelineStream > :not(.contentText) + .contentText,
-.assistantTimelineStream > :not(.contentText) + :global([data-kind='text']) {
-  margin-top: 4px;
+/*
+ * 组内叙述的链接口径（用户裁决 2026-11-05，与工具行 .toolPathLink 同正典）：
+ * 超链接默认只有链接色、无下划线；hover 时加下划虚线。
+ * 全局 md 规则默认常驻虚线下划线，在此作用域内收敛；路径链接
+ * （.md-path-link）默认本为次级灰 + 点线，统一改走链接色口径。
+ * 作用域严格限于组内叙述，流层正文/最终答复的全局 md 规则不动。
+ */
+.narrationText :global(.md-rendered) :global(.md-a),
+.narrationText :global(.md-rendered) :global(a) {
+  text-decoration: none;
 }
+
+.narrationText :global(.md-rendered) :global(.md-a:hover),
+.narrationText :global(.md-rendered) :global(a:hover),
+.narrationText :global(.md-rendered) :global(.md-a:focus-visible),
+.narrationText :global(.md-rendered) :global(a:focus-visible) {
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+
+.narrationText :global(.md-rendered) :global(.md-path-link) {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.narrationText :global(.md-rendered) :global(.md-path-link:hover),
+.narrationText :global(.md-rendered) :global(.md-path-link:focus-visible) {
+  color: var(--color-link-hover);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-link-hover);
+}
+
+/*
+ * 【间距刻度收敛 · 2026-11-05】原「过程段 → 正文 +4px 微调」规则已删除：
+ * 流层相邻关系一律由 .assistantTimelineStream 的 8px gap 单值承担，
+ * 不再出现同对相邻正向 12px / 反向 8px 的不对称。
+ */
 
 .compactAnswer {
   margin-top: var(--space-2, 8px);
@@ -157,6 +190,71 @@
   width: 100%;
   box-sizing: border-box;
   margin-bottom: var(--space-2, 8px);
+}
+
+/*
+ * 等待态指示器退出动效（150ms 折叠淡出）：
+ * height 24px -> 0, opacity 1 -> 0, 配合 --ease-accelerate，
+ * 与首项内容淡入同时发生交叉淡化（Cross-fade），消除突兀截断与瞬闪。
+ */
+.indicatorExiting {
+  overflow: hidden;
+  max-height: 24px;
+  opacity: 1;
+  animation: indicatorExit var(--duration-exit, 150ms) var(--ease-accelerate, cubic-bezier(0.4, 0, 1, 1)) forwards;
+}
+
+@keyframes indicatorExit {
+  0% {
+    max-height: 24px;
+    opacity: 1;
+    margin-bottom: var(--space-2, 8px);
+  }
+  100% {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/*
+ * 首段内容入场淡入（150ms decelerate）：
+ * 配合指示器退出交叉淡化，消除新大块内容突兀弹出的视觉冲击。
+ */
+.firstContentEnter {
+  animation: firstContentFadeIn var(--duration-fast, 150ms) var(--ease-decelerate, cubic-bezier(0.2, 0, 0, 1)) forwards;
+}
+
+/*
+ * 废除 .assistantTimelineStream[data-live-turn='true'] > :not(.topProcessHeader):first-child 规则。
+ * 该隐式选择器在工具组挂载/重新挂载时无差别施加 0% { opacity: 0 } 动画黑洞，是引发界面瞬闪的核心根因。
+ * 工具组与分段入场统一由自身受控过渡管理。
+ */
+
+@keyframes firstContentFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 减动效无缝合规基线：时长清零瞬时完成，状态机生命周期完整闭环 */
+@media (prefers-reduced-motion: reduce) {
+  .indicatorExiting {
+    animation: none;
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+  }
+
+  .firstContentEnter {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 .toolsTimelineItem {

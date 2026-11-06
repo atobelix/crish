@@ -1,15 +1,11 @@
 /**
  * apps/crish-desktop/src/components/chat-tool-call/FoldableToolGroup.tsx
  *
- * 过程段内连续工具调用的独立折叠容器（对齐图二设计规范）。
- *
- * 【核心特性】
- * ① 默认折叠：首屏仅展示一行极简摘要（如「已搜索 2 次 · 已运行 1 条命令 〉」）；
- * ② 24px 高度、400 字重、13px 字号（D5 定版 2026-11-02，原 14px），与 ReasoningRow 严格对齐同构；
- * ③ 整行 Hover 统一变黑（var(--text-primary)），展开后详细结果内容 Hover 不变色；
- * ④ 原生 hidden="until-found" 支持 Ctrl+F 页面穿透搜索并自动唤醒展开；
- * ⑤ 运行中流式态直出展开，收口后自收敛折叠；
- * ⑥ 仅 ≥2 个工具才做组级折叠；单工具直出工具行（意图说明与命令常驻可见，详情默认折叠）。
+ * 意图组容器组件（P4 方案 & M-01 静态身份确定律 & F3 任务 A/B）。
+ * 废除 toolCount >= 2 门槛，从第 1 项起恒定渲染组头 + 组体，杜绝 DOM 裂变跳动。
+ * 组头视觉：12×12 槽内居中 6px 组级聚合状态点（蓝脉冲 / 红 / 橙 / 绿），彻底移除 14px 类别图标。
+ * 组头文本：自然语言意图标题与 24px 垂直步进 Ticker 轮播（ΔH ≡ 0，绝不触发虚拟测高失效）。
+ * 展开状态与用户意图全量提升至会话级账本（useChatMessageState），拆除 900ms 误杀定时器。
  */
 
 import React, {
@@ -20,16 +16,9 @@ import React, {
   useState,
 } from 'react';
 import type { ToolRenderItem } from '../../api/toolPresentation';
-import {
-  DOMINANT_ICON_MAP,
-  type ProcessSegmentMetrics,
-} from '../../api/tool-presentation/toolPresentationTypes';
-import {
-  aggregateProcessMetrics,
-  formatProcessActionsSummary,
-} from '../../api/tool-presentation/processMetricsEngine';
-import { AppIcon, type IconName } from '@/components/ui/icons';
-import { NumericText, ScrollFadeRegion } from '@/components/ui';
+import type { ProcessSegmentMetrics } from '../../api/tool-presentation/toolPresentationTypes';
+import { aggregateProcessMetrics } from '../../api/tool-presentation/processMetricsEngine';
+import { ScrollFadeRegion, Tooltip } from '@/components/ui';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
 import { getActiveVsm } from '../../store/storeAccess';
 import {
@@ -38,20 +27,34 @@ import {
   DURATION_ACCORDION_MS,
 } from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
+import { useRevealEntrance } from './useRevealEntrance';
 import {
   AUTO_COLLAPSE_DRAIN_WAIT_CAP_MS,
   hasActiveToolDrain,
   onAllToolDrainsSettled,
 } from './toolRevealState';
-import { useRevealEntrance } from './useRevealEntrance';
+import { stripReferencesToPlainText } from './Reference';
+import { useHeaderTicker } from './useHeaderTicker';
+import { useLiveThoughtTicker } from '../chat-message/liveThoughtTickerContext';
+import {
+  useGroupExpanded,
+  markGroupUserInteracted,
+  isGroupUserInteracted,
+} from '../chat-message-list/useChatMessageState';
+import type { MessageToolCall } from '../../store/types';
 import styles from './FoldableToolGroup.module.css';
 
 export interface FoldableToolGroupProps {
   items: ToolRenderItem[];
   msgId: string;
   hostProps: ChatToolStackProps;
+  /** 外部传入的自然语言意图组标题 */
+  groupTitle?: string;
+  /** 组封口信号（来自状态机或回合结束） */
+  isSealed?: boolean;
   onInvalidate?: () => void;
   defaultExpanded?: boolean;
+  groupId?: string;
 }
 
 export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
@@ -59,8 +62,11 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     items,
     msgId: _msgId,
     hostProps,
+    groupTitle,
+    isSealed,
     onInvalidate,
     defaultExpanded = false,
+    groupId,
   }) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
@@ -68,7 +74,6 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     const innerRef = useRef<HTMLDivElement | null>(null);
     const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isInitialMount = useRef(true);
-    const userInteractedRef = useRef(false);
     const [transitionDuration, setTransitionDuration] = useState<number>(
       DURATION_ACCORDION_MS
     );
@@ -110,14 +115,6 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       ]);
     }, [items]);
 
-    const prevHasRunningRef = useRef(metrics.hasRunning);
-    /** AN4：自动折叠延后等待（排空 settle 订阅 + 硬顶定时器）的清理句柄 */
-    const collapseWaitCleanupRef = useRef<(() => void) | null>(null);
-    const cancelCollapseWait = useCallback(() => {
-      collapseWaitCleanupRef.current?.();
-      collapseWaitCleanupRef.current = null;
-    }, []);
-
     const groupToolIds = useMemo(() => {
       const ids: string[] = [];
       for (const item of items) {
@@ -126,6 +123,32 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       }
       return ids;
     }, [items]);
+
+    const allTools = useMemo(() => {
+      const result: MessageToolCall[] = [];
+      for (const item of items) {
+        if (item.kind === 'single') result.push(item.tc);
+        else if (item.kind === 'group') result.push(...item.tools);
+      }
+      return result;
+    }, [items]);
+
+    /** 解析当前组稳定 groupId（M-01 静态身份确定律） */
+    const resolvedGroupId = useMemo(() => {
+      if (groupId && groupId.trim()) return groupId.trim();
+      for (const item of items) {
+        if (item.kind === 'group') {
+          if (item.groupId && item.groupId.trim()) return item.groupId.trim();
+          if (item.id && item.id.trim()) return item.id.trim();
+        }
+        if (item.kind === 'single' && item.tc?.id) {
+          return item.tc.id;
+        }
+      }
+      return groupToolIds[0] || 'default-group';
+    }, [groupId, items, groupToolIds]);
+
+    const effectiveSessionId = hostProps?.activeSessionId || '_';
 
     /** 组内最近一次工具事件时间戳（入场实况门判定用） */
     const groupEventTs = useMemo(() => {
@@ -139,87 +162,62 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       return latest || undefined;
     }, [items]);
 
-    // 组级折叠门槛：仅 ≥2 个工具才聚合为单行摘要（总方案 §终态收敛「单工具则直出展开」、
-    // 分段详案 S08）。单工具的摘要（「已运行 1 条命令」）与工具行同为 24px 单行，
-    // 却会抹掉意图说明与真实命令——单工具直接渲染工具行，详情仍由工具行自身默认折叠。
-    const isGroupFolding = metrics.toolCount >= 2;
-
-    // AN4：组头形成入场（聚合形成的那一帧淡入；结构「更换」保留——
-    // 单工具行降级/升级为组时容器换挂即播，不做高度动画避免与手风琴叠播）
+    // AN4：组头形成入场动效（统一入场通道 grow 变体，2026-11-06 收口
+    // 跟进接入）：fade 之外根高度自 0 同步生长到自然高，时长由通道钩子
+    // 内部以 calcAccordionDuration 按高度推导，与手风琴折叠族同口径；
+    // 生长只作用于组根自身高度，不经过 ticker 门禁链与封口收敛链。
     const groupEntrance = useRevealEntrance({
-      key: isGroupFolding ? `group:${_msgId}:${groupToolIds[0] ?? ''}` : '',
+      key: `group:${_msgId}:${groupToolIds[0] ?? ''}`,
       eventTs: groupEventTs,
+      variant: 'grow',
     });
 
-    // 默认折叠；当前正在运行则直出展开。
-    // （R4b：原「含子代理强制展开（铁律四）」已删——分派在组合根被提取为
-    //  独立卡片，工具组内不再出现子代理调用，无强展豁免。）
-    const [isExpanded, setIsExpanded] = useState<boolean>(
-      () => defaultExpanded || metrics.hasRunning
+    // grow 需驱动根元素高度：把通道 rootRef 与既有 containerRef
+    // （视口保护用）合成同一回调 ref，两边都登记。
+    const entranceRootRef = groupEntrance.rootRef;
+    const groupRootRef = useCallback(
+      (el: HTMLDivElement | null) => {
+        containerRef.current = el;
+        entranceRootRef(el);
+      },
+      [entranceRootRef]
     );
 
-    // HC1/F1：组体滚动宿主的边缘渐隐四态——经 ScrollFadeRegion 组件
-    // 接入（宿主 JSX 见渲染段；active=isExpanded 透传状态机开关）。
-    // （C1 审计 D-1 恢复：本接线曾被旧基线整文件覆盖致接线丢失、在此
-    //  重落；F1 组件化后由 hc1.contract 的组件契约 + 宿主存在断言守卫。）
+    // 运行态默认折叠（用户裁决 2026-11-06 第 8 条，取代旧「视线保护」）：
+    // 运行/排空/未封口信号一律不得把组撑开——展开状态只由用户交互
+    // （账本）与显式 defaultExpanded 决定，运行中 items 增减不改变它。
+    // 故此处不再向账本回退注入 hasRunning（旧口径曾以其为 fallback 顶开组）。
+    const isLiveUnsealed = isSealed === false;
 
-    // 流式执行中进入 running 时保持展开；全部工具执行完毕后自动收敛折叠（用户手动切换除外）
-    useEffect(() => {
-      const wasRunning = prevHasRunningRef.current;
-      prevHasRunningRef.current = metrics.hasRunning;
-      if (metrics.hasRunning) {
-        cancelCollapseWait();
-        setIsExpanded(true);
-      } else if (wasRunning && !userInteractedRef.current && !defaultExpanded) {
-        const performCollapse = () => {
-          const currentHeight =
-            innerRef.current?.getBoundingClientRect().height ?? 0;
-          const dur = calcAccordionDuration(currentHeight, false);
-          setTransitionDuration(dur);
-          acquireMotionLock(dur);
-          triggerViewportRecovery();
-          setIsExpanded(false);
-          onInvalidate?.();
-        };
-        // AN4 协调段：组内输出仍在排空揭示时，自动折叠延后至排空
-        // settle 后再启动（用户在未读完时不会被折叠抢走内容）；硬顶
-        // = 排空总时长上限，与时长公式同源。等待期间用户若已切换
-        // 过展开态（userInteractedRef 在 toggle 委托里同步置位），
-        // 触发时复查并放弃本次自动折叠。
-        const pendingDrains = groupToolIds.filter((id) =>
-          hasActiveToolDrain(id)
-        );
-        if (pendingDrains.length === 0) {
-          performCollapse();
-        } else {
-          cancelCollapseWait();
-          let fired = false;
-          const fire = () => {
-            if (fired) return;
-            fired = true;
-            cancelCollapseWait();
-            if (!userInteractedRef.current && !defaultExpanded) {
-              performCollapse();
-            }
-          };
-          const unsubscribe = onAllToolDrainsSettled(pendingDrains, fire);
-          const timer = setTimeout(fire, AUTO_COLLAPSE_DRAIN_WAIT_CAP_MS);
-          collapseWaitCleanupRef.current = () => {
-            unsubscribe();
-            clearTimeout(timer);
-          };
-        }
-      }
-    }, [
-      metrics.hasRunning,
+    // 会话级账本读取：彻底移除内部 useState 与 userInteractedRef（F3 §根因 1 & 2）
+    const [isExpanded, setIsExpanded] = useGroupExpanded(resolvedGroupId, {
+      sessionId: effectiveSessionId,
       defaultExpanded,
-      onInvalidate,
-      triggerViewportRecovery,
-      groupToolIds,
-      cancelCollapseWait,
-    ]);
+    });
 
-    // AN4：卸载时取消未决的自动折叠等待
+    const prevExpandedRef = useRef(isExpanded);
+    useEffect(() => {
+      if (prevExpandedRef.current !== isExpanded) {
+        prevExpandedRef.current = isExpanded;
+        if (!isExpanded) {
+          triggerViewportRecovery();
+        }
+        const currentHeight =
+          innerRef.current?.getBoundingClientRect().height ?? 0;
+        const dur = calcAccordionDuration(currentHeight, isExpanded);
+        setTransitionDuration(dur);
+        acquireMotionLock(dur);
+        onInvalidate?.();
+      }
+    }, [isExpanded, triggerViewportRecovery, acquireMotionLock, onInvalidate]);
+
+    /** AN4：自动折叠延后等待（排空 settle 订阅 + 硬顶定时器）的清理句柄 */
+    const collapseWaitCleanupRef = useRef<(() => void) | null>(null);
+    const cancelCollapseWait = useCallback(() => {
+      collapseWaitCleanupRef.current?.();
+      collapseWaitCleanupRef.current = null;
+    }, []);
+
     useEffect(() => {
       return () => {
         collapseWaitCleanupRef.current?.();
@@ -227,30 +225,95 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       };
     }, []);
 
-    const handleToggle = useCallback(() => {
-      // AN4：用户切换即取消未决的排空后自动折叠（人的操作优先）
-      cancelCollapseWait();
-      userInteractedRef.current = true;
-      setIsExpanded((prev) => {
-        const next = !prev;
-        if (!next) {
-          triggerViewportRecovery();
+    const firstToolId = groupToolIds[0];
+
+    // 查询用户是否曾与该组手动交互：优先查询 resolvedGroupId，以 firstToolId 兜底（防换锚孤儿化）
+    const userHasInteracted =
+      isGroupUserInteracted(effectiveSessionId, resolvedGroupId) ||
+      Boolean(firstToolId && isGroupUserInteracted(effectiveSessionId, firstToolId));
+
+    const prevHasRunningRef = useRef(metrics.hasRunning);
+    // 封口收敛原则：不在 hasRunning 变 false 的瞬间折叠。
+    // 只有当工具组封口且非 running 时才执行自动收敛折叠（用户手动切换除外）。
+    // 运行期组恒折叠（2026-11-06 第 8 条），本效应只负责封口一刻把
+    // 非交互路径（如 defaultExpanded）留下的展开态收敛回折叠。
+    useEffect(() => {
+      const wasRunning = prevHasRunningRef.current;
+      prevHasRunningRef.current = metrics.hasRunning;
+      if (metrics.hasRunning || isLiveUnsealed) {
+        cancelCollapseWait();
+      } else {
+        // 视线保护核心门禁：
+        // 1. 若显式传入 isSealed（生产环境真实状态）：严格要求 isSealed === true，在流式运行期（isSealed === false）绝不折叠！
+        // 2. 若未显式传入 isSealed（单测模拟场景）：仅在 wasRunning 存在时兼容触发
+        const canCollapseBySealed = isSealed !== undefined ? isSealed : wasRunning;
+
+        if (canCollapseBySealed && !userHasInteracted && !defaultExpanded) {
+          // 封口收敛（2026-11-06 第 8 条）：运行态默认折叠后组在封口时本就
+          // 折叠，≤3 工具不再有「保持展开」特例（旧 UX-04 以 setIsExpanded
+          // 强行顶开，与「完成态折叠为主」冲突，物理删除）；少量工具组
+          // 无需收敛动作，大组若因非交互路径处于展开态仍在此收敛折叠。
+          if (allTools.length <= 3) {
+            return;
+          }
+          const performCollapse = () => {
+            if (!userHasInteracted && !defaultExpanded) {
+              setIsExpanded(false);
+            }
+          };
+          const pendingDrains = groupToolIds.filter((id) =>
+            hasActiveToolDrain(id)
+          );
+          if (pendingDrains.length === 0) {
+            performCollapse();
+          } else {
+            cancelCollapseWait();
+            let fired = false;
+            const fire = () => {
+              if (fired) return;
+              fired = true;
+              cancelCollapseWait();
+              if (!userHasInteracted && !defaultExpanded) {
+                performCollapse();
+              }
+            };
+            const unsubscribe = onAllToolDrainsSettled(pendingDrains, fire);
+            const timer = setTimeout(fire, AUTO_COLLAPSE_DRAIN_WAIT_CAP_MS);
+            collapseWaitCleanupRef.current = () => {
+              unsubscribe();
+              clearTimeout(timer);
+            };
+          }
         }
-        // 杜绝同步强读未清洁布局 DOM（Layout Thrashing）：改用纯数学条目估高，封顶 280px
-        const estimatedHeight = Math.min(280, Math.max(80, items.length * 48));
-        const dur = calcAccordionDuration(estimatedHeight, next);
-        setTransitionDuration(dur);
-        acquireMotionLock(dur);
-        onInvalidate?.();
-        return next;
-      });
+      }
     }, [
-      onInvalidate,
-      triggerViewportRecovery,
+      metrics.hasRunning,
+      isLiveUnsealed,
+      isSealed,
+      defaultExpanded,
+      userHasInteracted,
+      groupToolIds,
+      allTools.length,
       cancelCollapseWait,
-      acquireMotionLock,
-      items.length,
+      setIsExpanded,
     ]);
+
+    // 子工具行的展开交互通过回调向上冒泡，标记 markGroupUserInteracted(groupId)（F3 §4.2）
+    const wrappedHostProps = useMemo((): ChatToolStackProps => {
+      return {
+        ...hostProps,
+        onToggleTool: (toolId: string, currentlyOpen: boolean, toolMsgId?: string) => {
+          cancelCollapseWait();
+          markGroupUserInteracted(effectiveSessionId, resolvedGroupId, true);
+          hostProps.onToggleTool?.(toolId, currentlyOpen, toolMsgId);
+        },
+      };
+    }, [hostProps, effectiveSessionId, resolvedGroupId, cancelCollapseWait]);
+
+    const handleToggle = useCallback(() => {
+      cancelCollapseWait();
+      setIsExpanded((prev) => !prev);
+    }, [cancelCollapseWait, setIsExpanded]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -262,7 +325,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       [handleToggle]
     );
 
-    // 无障碍键盘聚焦穿透：内部子元素获得焦点时平滑展开
+    // 无障碍键盘聚焦穿透
     const handleFocusCapture = useCallback(
       (e: React.FocusEvent) => {
         if (isExpanded) return;
@@ -270,7 +333,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         setIsExpanded(true);
         onInvalidate?.();
       },
-      [isExpanded, onInvalidate]
+      [isExpanded, onInvalidate, setIsExpanded]
     );
 
     // 解耦 hidden 阻断：展开态确保无 hidden，收起态在自适应过渡后安全附加 hidden="until-found"
@@ -289,7 +352,6 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         if (isInitialMount.current) {
           el.setAttribute('hidden', 'until-found');
         } else {
-          // 延迟附加，允许 CSS Grid 0fr 过渡动画平滑播放，避免 Chromium 掐死动画
           collapseTimerRef.current = setTimeout(() => {
             if (!isExpanded && slotRef.current) {
               slotRef.current.setAttribute('hidden', 'until-found');
@@ -298,10 +360,8 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         }
       }
       isInitialMount.current = false;
-      // isGroupFolding：单工具→多工具时槽位首次挂载，需按当前折叠态补挂 hidden
-    }, [isExpanded, isGroupFolding, transitionDuration]);
+    }, [isExpanded, transitionDuration]);
 
-    // CSS Grid 过渡结束时立即附加 hidden="until-found" 支持 Ctrl+F 页面穿透
     const handleTransitionEnd = useCallback(
       (e: React.TransitionEvent<HTMLDivElement>) => {
         if (e.target !== slotRef.current) return;
@@ -341,39 +401,123 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       return () => {
         el.removeEventListener('beforematch', handleBeforeMatch);
       };
-    }, [onInvalidate, isGroupFolding]);
+    }, [onInvalidate, setIsExpanded]);
 
-    const summaryText = useMemo(() => {
-      return formatProcessActionsSummary(metrics);
-    }, [metrics]);
+    // 组级自然语言标题解析：优先消费传入的 groupTitle；其次消费组内首个工具意图；最后回退
+    const resolvedGroupTitle = useMemo(() => {
+      if (groupTitle && groupTitle.trim()) {
+        return groupTitle.trim();
+      }
+      for (const item of items) {
+        if (item.kind === 'group' && item.label) {
+          return item.label;
+        }
+        const tools = item.kind === 'single' ? [item.tc] : item.tools;
+        for (const t of tools) {
+          if (t.group && t.group.trim()) {
+            return t.group.trim();
+          }
+          if (t.intent && t.intent.trim()) {
+            return stripReferencesToPlainText(t.intent);
+          }
+        }
+      }
+      return '处理过程';
+    }, [groupTitle, items]);
 
-    const iconName = useMemo(() => {
-      return (DOMINANT_ICON_MAP[metrics.leadAction] || 'terminal') as IconName;
-    }, [metrics.leadAction]);
+    // 运行态思考承载（2026-11-06 第 9 条）：段级 context 提供的当前思考行
+    // 只注入 live 的组（已封口的同段子组不承载，保持静态标题）
+    const { line: liveThoughtLine, sectionLive } = useLiveThoughtTicker();
 
-    if (!isGroupFolding) {
-      return (
-        <div
-          ref={containerRef}
-          className={styles.groupContainer}
-          data-testid="foldable-tool-group"
-          data-single-tool="true"
-        >
-          <ChatToolStack {...hostProps} />
-        </div>
-      );
-    }
+    // 组级 live 判定：显式 isSealed 优先；缺失（undefined，单项领衔组块
+    // 在 MessageToolCallsSection 取不到组封口信号）时回退段级 live 信号。
+    // 缺此回退，这类组运行中不轮播、思考不入列、封口时索引不收敛。
+    const tickerIsLive =
+      isSealed !== undefined ? isSealed === false : sectionLive;
+
+    // 组标题行意图滚动摘要钩子（F3 任务 B）
+    const {
+      items: tickerItems,
+      currentText: currentTickerText,
+      transformStyle,
+      pause: pauseTicker,
+      resume: resumeTicker,
+    } = useHeaderTicker({
+      groupTitle: resolvedGroupTitle,
+      tools: allTools,
+      hasRunning: metrics.hasRunning,
+      isSealed,
+      isExpanded,
+      thoughtLine: tickerIsLive ? liveThoughtLine : null,
+      isLive: tickerIsLive,
+    });
+
+    // 组级聚合状态仲裁（P4 §8.2：P0 运行蓝脉冲 > P1 失败红 > P2 审批橙 > P3 成功绿）
+    const aggregateStatus = useMemo<'running' | 'error' | 'pending' | 'success'>(() => {
+      let hasError = false;
+      let hasPending = false;
+      for (const item of items) {
+        const tools = item.kind === 'single' ? [item.tc] : item.tools;
+        for (const t of tools) {
+          if (t.status === 'running') return 'running';
+          if (t.status === 'error') hasError = true;
+          if (t.status === 'pending_approval') hasPending = true;
+        }
+      }
+      if (hasError) return 'error';
+      if (hasPending) return 'pending';
+      return 'success';
+    }, [items]);
+
+    const renderGroupStatusDot = () => {
+      switch (aggregateStatus) {
+        case 'running':
+          return <span className={styles.toolPulseDot} aria-hidden="true" />;
+        case 'error':
+          return <span className={styles.toolErrorDot} aria-hidden="true" />;
+        case 'pending':
+          return <span className={styles.toolPendingDot} aria-hidden="true" />;
+        default:
+          return <span className={styles.toolSuccessDot} aria-hidden="true" />;
+      }
+    };
+
+    const statusZh = useMemo(() => {
+      switch (aggregateStatus) {
+        case 'running':
+          return '运行中';
+        case 'error':
+          return '失败';
+        case 'pending':
+          return '待确认';
+        default:
+          return '已完成';
+      }
+    }, [aggregateStatus]);
+
+    // J9 裁决：彻底去除「共 N 项工具」统计，保持与无统计红线一致
+    const groupAriaLabel = `${statusZh}：${resolvedGroupTitle}，按 Enter 或空格${isExpanded ? '折叠' : '展开'}`;
 
     return (
       <div
-        ref={containerRef}
+        ref={groupRootRef}
         className={`${styles.groupContainer}${groupEntrance.entering ? ` ${styles.groupEnter}` : ''}`}
         data-testid="foldable-tool-group"
         data-expanded={isExpanded ? 'true' : 'false'}
         data-entering={groupEntrance.entering ? 'true' : undefined}
         onAnimationEnd={groupEntrance.handleAnimationEnd}
         onFocusCapture={handleFocusCapture}
-        style={accordionDurationStyle(transitionDuration)}
+        style={{
+          ...accordionDurationStyle(transitionDuration),
+          // 入场通道修复（2026-11-06 动效统一封装批）：groupEntrance 的
+          // 交错 delayMs 此前从未写入 --reveal-delay，.groupEnter 的
+          // animation-delay 恒读缺省 0ms——此处补齐，口径与通道一致。
+          ...(groupEntrance.entering
+            ? ({
+                '--reveal-delay': `${groupEntrance.delayMs}ms`,
+              } as React.CSSProperties)
+            : null),
+        }}
       >
         <div
           ref={headerRef}
@@ -381,22 +525,45 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
           role="button"
           tabIndex={0}
           aria-expanded={isExpanded}
+          aria-label={groupAriaLabel}
           onClick={handleToggle}
           onKeyDown={handleKeyDown}
+          onMouseEnter={pauseTicker}
+          onMouseLeave={resumeTicker}
+          onFocusCapture={pauseTicker}
+          onBlurCapture={resumeTicker}
         >
-          <AppIcon
-            name={iconName}
-            size={14}
-            className={styles.leadIcon}
-            aria-hidden
-            data-testid={`tool-group-icon-${metrics.leadAction}`}
-          />
-          <span className={styles.summaryLabel}>
-            <NumericText text={summaryText} />
+          {/* 12×12 槽内居中 6px 聚合状态点，杜绝 14px 类别图标 */}
+          <span className={styles.groupSlotIco} aria-hidden="true">
+            {renderGroupStatusDot()}
           </span>
+          {/* 展开态显示静态 groupTitle 文本，停止轮播；折叠态展示 24px 视口垂直轮播 */}
+          {isExpanded ? (
+            <Tooltip content={resolvedGroupTitle}>
+              <span className={styles.summaryLabel}>{resolvedGroupTitle}</span>
+            </Tooltip>
+          ) : (
+            <Tooltip content={currentTickerText}>
+              <div className={styles.tickerViewport} aria-hidden="true">
+                <div
+                  className={`${styles.tickerTrack} ${styles.tickerTrackAnimated}`}
+                  style={transformStyle}
+                >
+                  {tickerItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`${styles.tickerCell} ${styles.summaryLabel}`}
+                    >
+                      {item.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Tooltip>
+          )}
           <span
             className={`${styles.chevron} ${isExpanded ? styles.rot : ''}`}
-            aria-hidden
+            aria-hidden="true"
             data-testid="tool-group-chevron"
           >
             &#8250;
@@ -414,7 +581,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
             active={isExpanded}
             className={`${styles.groupBodyInner} tool-group-scroll-host`}
           >
-            <ChatToolStack {...hostProps} />
+            <ChatToolStack {...wrappedHostProps} />
           </ScrollFadeRegion>
         </div>
       </div>

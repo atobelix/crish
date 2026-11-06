@@ -31,7 +31,9 @@ import {
 } from '../../utils/motionTokens';
 import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
 import { useI18n } from '../../i18n';
-import { formatDurationLabel } from '../../api/tool-presentation/processMetricsEngine';
+import { useLiveThoughtTicker } from '../chat-message/liveThoughtTickerContext';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
+
 
 /**
  * 折叠摘要 = 纯文本渲染（HC1 治 L-8）：摘要是标题文本而非正文，
@@ -94,6 +96,8 @@ export interface ReasoningRowProps {
   defaultExpanded?: boolean;
   /** 消息唯一 ID（供定位与锚点追溯） */
   messageId?: string;
+  /** 思考段开始时间戳（ms；统一入场通道的实况窗判定用） */
+  startTime?: number;
   /** 外层容器附加类名 */
   className?: string;
 }
@@ -147,20 +151,9 @@ export function resolveReasoningPresentation(
     };
   }
 
-  // 2. 终态收敛：格式化耗时与身份徽标
-  // B13：耗时统一 formatDurationLabel（与组头同一口径），禁止本地拼 `${x}s`
-  let badgeText = t('chat.thinking.completed', '已思考');
-  if (durationMs != null && durationMs > 0) {
-    const label = formatDurationLabel(durationMs);
-    badgeText = t('chat.thinking.durationShort', `已思考 ${label}`, {
-      duration: label,
-    });
-  }
-
-  const ariaLabel =
-    durationMs != null && durationMs > 0
-      ? badgeText
-      : t('chat.thinking.process', '思考过程');
+  // 2. 终态收敛：静态文案「思考过程」，去耗时秒数（M-07 & R2 规范）
+  const badgeText = t('chat.thinking.process', '思考过程');
+  const ariaLabel = badgeText;
 
   return {
     badgeText,
@@ -257,39 +250,32 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   onToggle,
   defaultExpanded,
   messageId,
+  startTime,
   className = '',
 }) => {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // 统一入场通道：思考行容器 fade 入场（展开高度仍归本行 accordion
+  // 机制，通道不接管高度，避免双轨）。
+  const entrance = useEntranceReveal({
+    key: `thought:${messageId ?? ''}:${turnIndex ?? 0}`,
+    eventTs: startTime,
+    variant: 'fade',
+  });
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [userInteracted, setUserInteracted] = useState(false);
   const [userExpanded, setUserExpanded] = useState(false);
-  const [prevTurnWorking, setPrevTurnWorking] = useState(isTurnWorking);
   const [accordionDuration, setAccordionDuration] = useState<number>(
     DURATION_ACCORDION_MS
   );
 
+  // 运行态思考承载（2026-11-06 第 9 条）：本段思考已由组头 ticker 承载时，
+  // 本行 live 摘要抑制（只留「思考中」标签与状态点），杜绝双动态通道。
+  const { hosted: thoughtHostedByTicker } = useLiveThoughtTicker();
+
   // 视口保护：长思维链收拢时防迷失
   const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
-
-  // 终态跃迁时长同步：当模型整轮工作态结束（isTurnWorking 从 true 转为 false）
-  // 且未被外部显式受控或用户手动交互覆盖时，按思考体实测高度预置收拢时长，
-  // 使随后的 grid 收缩与 chevron 旋转同钟完成；折叠判定本身由 isExpanded
-  // 派生承担，本块只管时长与视口保护，不再驱动任何挂载/卸载状态。
-  if (prevTurnWorking !== isTurnWorking) {
-    setPrevTurnWorking(isTurnWorking);
-    if (
-      prevTurnWorking &&
-      !isTurnWorking &&
-      isOpen === undefined &&
-      !userInteracted &&
-      defaultExpanded !== false
-    ) {
-      const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
-      setAccordionDuration(calcAccordionDuration(h, false));
-      triggerViewportRecovery();
-    }
-  }
 
   const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
@@ -303,17 +289,20 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     prevIsOpenRef.current = isOpen;
   }, [isOpen, triggerViewportRecovery]);
 
-  // 默认开合策略（2026-09-18 / 2026-10-13 用户裁决）：
+  // 默认开合策略（2026-11-06 用户裁决第 8 条，取代 2026-09-18 / 10-13
+  // 「工作态默认展开」旧口径）：
   // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
-  // 2. 若用户曾手动交互（主动打开/关闭），持久保持用户的意图，生成完也不自动关闭；
-  // 3. 模型工作态 (isTurnWorking) 期间：默认展开显示思考思维链（除非 defaultExpanded 显式为 false）；
-  // 4. 终态 (!isTurnWorking，生成完成或关闭对话再打开的历史消息)：一律默认折叠收起为 24px 单行。
+  // 2. 若用户曾手动交互（主动打开/关闭），持久保持用户的意图，
+  //    运行中内容到达与工作态翻转都不改变它，生成完也不自动关闭；
+  // 3. 其余一切情形（模型工作态、终态、历史消息）一律默认折叠为
+  //    24px 单行——运行中思考在组头 ticker 呈现（第 9 条），本行不自动展开。
+  // 注：isTurnWorking / defaultExpanded 入参保留以兼容既有调用方，
+  // 自本裁决起不再驱动展开判定（退役清理归后续专批，本批不动调用面）。
   const isExpanded = useMemo(() => {
     if (isOpen !== undefined) return isOpen;
     if (userInteracted) return userExpanded;
-    if (isTurnWorking) return defaultExpanded ?? true;
     return false;
-  }, [isOpen, userInteracted, userExpanded, isTurnWorking, defaultExpanded]);
+  }, [isOpen, userInteracted, userExpanded]);
 
   // R11 §5.1：折叠摘要从已显现文本派生——展开体（StreamingMarkdownView）
   // 经 onRevealedTextChange 回传同一 revealed 前缀，摘要不单独定速、
@@ -334,9 +323,21 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       t,
     });
     if (!isLive || isExpanded) return base;
+    // 思考已被同段组头 ticker 承载（第 9 条）：本行只留静态标签，
+    // 不再呈现会逐行变化的摘要——全段唯一动态面归 ticker。
+    if (thoughtHostedByTicker) return { ...base, summaryText: '' };
     // live 折叠态：摘要尾窗改从已显现前缀取最新行（与展开体同源）
     return { ...base, summaryText: extractLatestLine(revealedText) };
-  }, [isLive, isExpanded, durationMs, turnIndex, content, t, revealedText]);
+  }, [
+    isLive,
+    isExpanded,
+    durationMs,
+    turnIndex,
+    content,
+    t,
+    revealedText,
+    thoughtHostedByTicker,
+  ]);
 
   // ── AN1 隐藏协调（与 FoldableProcessSection 同构的已验证模式）──
   // 思考体常驻 DOM：展开时摘除 hidden；折叠的 grid transitionend
@@ -455,13 +456,25 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
   return (
     <div
-      ref={containerRef}
-      className={`${styles.reasoningContainer} ${isLive ? styles.isLive : ''} ${className}`}
+      ref={(el) => {
+        containerRef.current = el;
+        entrance.rootRef(el);
+      }}
+      className={`${styles.reasoningContainer} ${isLive ? styles.isLive : ''} ${className}${entrance.entering ? ' crish-entrance-fade' : ''}`}
       data-expanded={isExpanded ? 'true' : 'false'}
       data-live={isLive ? 'true' : undefined}
       data-message-id={messageId}
       data-testid="reasoning-container"
-      style={accordionDurationStyle(accordionDuration)}
+      data-entering={entrance.entering ? 'true' : undefined}
+      onAnimationEnd={entrance.handleAnimationEnd}
+      style={{
+        ...accordionDurationStyle(accordionDuration),
+        ...(entrance.entering
+          ? ({
+              '--reveal-delay': `${entrance.delayMs}ms`,
+            } as React.CSSProperties)
+          : null),
+      }}
     >
       <Button
         type="button"
@@ -472,11 +485,13 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         aria-label={presentation.ariaLabel}
       >
         {presentation.hasLiveDot ? (
-          <span
-            className={styles.statusDot}
-            aria-hidden
-            data-testid="status-dot"
-          />
+          <span className={styles.reasoningSlotIco}>
+            <span
+              className={styles.statusDot}
+              aria-hidden
+              data-testid="status-dot"
+            />
+          </span>
         ) : null}
 
         <span

@@ -1,19 +1,10 @@
 /**
  * apps/crish-desktop/src/components/chat-tool-call/FoldableToolGroup.module.css
  *
- * 过程段内单组工具折叠栏样式契约。
- *
- * 【统一排版纪律 · 2026-09-11 用户裁决】
- * ① 高度 24px，与 ReasoningRow 严格同构；
- * ② 默认 --text-secondary（R8/B7 组头升半档、与组内明细拉开层级，
- *    覆盖原 --text-tertiary），字号 14px，字重 400；
- * ③ Hover 时整行（前缀图标 + 摘要文案 + 右折叠指示）统一变黑（--text-primary）；
- * ④ 展开态内部详细输出保持柔和灰阶，禁止全框加深晃动。
- *
- * 【统一 14px · 2026-11-04 用户裁决】过程区字号统一调整为 14px，推翻 D5 13px 试验。
- * 【HC1】组体为聚合滚动层：展开 = 进入受限滚动区（--tool-aggregate-max-h 封顶 +
- * 内部滚动 + mask 边缘渐隐），不是全高展开；组内单工具视口随之降格（见
- * ChatToolCallBlock.module.css 的组内降格规则），指针路径上只留一层纵向滚动。
+ * 意图组折叠栏样式契约（P4 方案重塑）。
+ * 24px 高度，14px 字号，400 字重，正文主色 var(--text-primary)。
+ * 12×12 状态槽 + 6px 间距，绝对保证 18px 垂直对齐基线。
+ * 彻底切除 .leadIcon、.stackedLabels 与 .stackedLabel。
  */
 
 .groupContainer {
@@ -32,45 +23,157 @@
   min-height: 24px;
   max-height: 24px;
   line-height: 24px;
-  padding: 0;
+  padding: 0 4px;
   margin: 0;
   background: transparent;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
   font-family: inherit;
   font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
-  color: var(--text-secondary);
-  transition: color var(--transition-micro, 100ms ease);
+  /* 默认态弱化（用户裁决 2026-11-05）：组头摘要文字与工具行/思考行同档
+   * --text-tertiary，与正文拉开区分度；hover 从此弱默认态出发只变文字灰度 */
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast, 150ms ease);
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 仅在折叠态下 hover 整行统一加深（用户裁决 · 2026-09-11）；展开后不加深以防大面积灰度变化 */
-.groupContainer:not([data-expanded='true']) .groupHeader:hover {
+/* 组头悬停与聚焦态（用户裁决 2026-11-05）：整行只变文字灰度，严禁背景色变化 */
+.groupHeader:hover,
+.groupHeader:focus-within {
   color: var(--text-primary);
 }
 
-.groupContainer:not([data-expanded='true']) .groupHeader:hover .leadIcon,
-.groupContainer:not([data-expanded='true']) .groupHeader:hover .summaryLabel,
-.groupContainer:not([data-expanded='true']) .groupHeader:hover .chevron {
+.groupHeader:hover .summaryLabel,
+.groupHeader:focus-within .summaryLabel {
   color: var(--text-primary);
+}
+
+.groupHeader:hover .chevron,
+.groupHeader:focus-within .chevron {
+  color: var(--text-secondary);
+}
+
+.groupHeader:hover .toolSuccessDot,
+.groupHeader:focus-within .toolSuccessDot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.groupHeader:hover .toolErrorDot,
+.groupHeader:focus-within .toolErrorDot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.groupHeader:hover .toolPendingDot,
+.groupHeader:focus-within .toolPendingDot {
+  opacity: 1;
+}
+
+/* 组内有运行任务时提升辨识度（字重恒定 400 不加粗） */
+.groupHeader:has(.toolPulseDot),
+.groupHeader[data-status='running'],
+.groupHeader.isRunning {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .groupHeader:focus-visible {
   outline: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-sm, 4px);
   box-shadow: 0 0 0 1.5px
     color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
-.leadIcon {
-  color: var(--text-tertiary);
+/* 12px 前缀槽：确保与单工具行及展开体 18px 基线绝对一致 */
+.groupSlotIco {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  box-sizing: border-box;
   flex-shrink: 0;
-  transition: color var(--transition-micro, 100ms ease);
+}
+
+/* 6px 组级聚合状态点 */
+.toolPulseDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-info);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 25%, transparent);
+  animation: groupDotPulseBlue var(--transition-pulse, 1.6s ease-in-out) infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes groupDotPulseBlue {
+  0%, 100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 20%, transparent);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--color-info) 45%, transparent);
+  }
+}
+
+.toolSuccessDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  opacity: 0.9;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-success) 20%, transparent);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.toolErrorDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-error);
+  opacity: 0.8;
+  transform: scale(0.9);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.toolPendingDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-warning) 25%, transparent);
+  opacity: 0.85;
+  transition: opacity var(--transition-fast, 150ms ease);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .summaryLabel {
@@ -93,7 +196,7 @@
   height: 12px;
   font-size: 14px;
   line-height: 1;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   transform: rotate(0deg);
   transition:
     transform var(--accordion-duration, var(--transition-accordion)),
@@ -124,15 +227,11 @@
   grid-template-rows: 1fr;
 }
 
-/*
- * 组体滚动宿主（HC1）：聚合封顶 --tool-aggregate-max-h + 内部纵向滚动，
- * 滚轮到边界链式穿透回消息列表（overscroll-behavior-y: auto，成文口径）。
- * data-fade 四态由 useScrollFade 维护，mask 作用于内层 .scroll-fade-inner。
- * 全局类 tool-group-scroll-host 供 ChatToolCallBlock 的组内视口降格规则定位。
- */
 .groupBodyInner {
   min-height: 0;
   max-height: var(--tool-aggregate-max-h, min(280px, 35vh));
+  padding-left: 18px;
+  border-left: var(--hairline-width) solid var(--border-color);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: auto;
@@ -140,64 +239,67 @@
   transform: translateZ(0);
 }
 
-/* ───── 按钮文案单格重叠防抖架构（CSS Grid 1 / 1） ───── */
-/* 双文案同格容器：自动锁定为最大宽度，Chevron 零位移 */
-.stackedLabels {
-  display: inline-grid;
-  justify-items: start;
-  align-items: center;
-  position: relative;
-}
-
-/* 两个状态文案共享同一个 (行 1 / 列 1) 单元格 */
-.stackedLabel {
-  grid-area: 1 / 1;
-  opacity: 0;
-  /* AN1：模糊量走 --blur-* token 路线，使 eco / reduced-motion 的 token 降级可达 */
-  filter: blur(var(--blur-subtle, 2px));
-  transform: translateY(-3px);
-  transition:
-    opacity var(--duration-fast, 150ms)
-      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform var(--duration-fast, 150ms)
-      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    filter var(--duration-fast, 150ms)
-      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
-  pointer-events: none;
-  user-select: none;
-  white-space: nowrap;
-}
-
-/* 激活态文案：原地清晰展示 */
-.stackedLabel[data-active='true'] {
-  opacity: 1;
-  filter: blur(0);
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-/* 处于失活态的第二文案从下方退场 */
-.stackedLabel + .stackedLabel:not([data-active='true']) {
-  transform: translateY(3px);
-}
-
-/* 无障碍偏好降级 */
-@media (prefers-reduced-motion: reduce) {
-  .stackedLabel {
-    transition: none;
-    filter: none;
-    transform: none;
-  }
-}
-
-/* AN4：组头形成入场（聚合形成帧淡入，与工具行同语言；不做高度
- * 动画避免与手风琴叠播；共享 keyframes 在 design-system.css） */
+/* AN4：组头入场动效（呈现与 .crish-entrance-fade 同语言；2026-11-06
+   收口补 animation-delay 消费 --reveal-delay——此前 TS 侧写入该变量
+   却无规则读取，组入场交错延时实际恒为 0） */
 .groupEnter {
   animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+/* 24px 高度刚性视口剪裁区（F3 任务 B） */
+.tickerViewport {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  line-height: 24px;
+  overflow: hidden;
+  position: relative;
+  contain: layout paint;
+}
+
+/* 垂直滑动轨道：仅消费 transform 合成层属性，绝不触发 layout 重排 */
+.tickerTrack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  will-change: transform;
+}
+
+.tickerTrackAnimated {
+  transition: transform var(--duration-spring-smooth, 400ms) var(--ease-emphasized);
+}
+
+/* 单个意图单元格：高度严格锁定 24px，保证与单工具行 18px 基线严格对齐 */
+.tickerCell {
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  line-height: 24px;
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 400);
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .groupEnter {
+    animation: none;
+  }
+  .tickerTrackAnimated {
+    transition: none;
+  }
+  .groupHeader,
+  .chevron,
+  .toolSuccessDot,
+  .toolErrorDot,
+  .toolPendingDot {
+    transition: none;
+  }
+  .toolPulseDot {
     animation: none;
   }
 }

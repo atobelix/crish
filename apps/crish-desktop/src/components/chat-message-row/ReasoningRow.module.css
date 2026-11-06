@@ -110,6 +110,17 @@
   border-radius: var(--radius-sm);
 }
 
+/* 补齐 12px 槽，严格保证与意图组及单工具行 18px 基线一致 (UX-01) */
+.reasoningSlotIco {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 /* 极简状态指示灯（静态 4px 中性炭灰圆点，零动态闪烁与缩放） */
 .statusDot {
   width: 4px;
@@ -280,11 +291,12 @@
  * 内层 .reasoningContent。展开 = 进入受限滚动区，不是全高展开（用户裁决）。
  */
 /* 展开态文字始终以柔和灰色呈现，hover 严禁加深颜色（2026-09-11 用户裁决） */
+/* 纵向内边距收敛为跨类单步 6px（2026-11-05 间距刻度收敛，原 4/8 不对称） */
 .reasoningBody {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 4px 0 8px 12px;
+  padding: 6px 0 6px 12px;
   margin-left: 6px;
   border-left: 2px solid var(--border-subtle);
   overflow-x: hidden;
@@ -319,6 +331,40 @@
 .reasoningContent :global(div),
 .reasoningContent :global(blockquote) {
   color: inherit;
+}
+
+/*
+ * 思考作用域的链接口径（用户裁决 2026-11-05，与工具行链接同正典）：
+ * 思考正文整体弱灰（color: inherit）是既定口径，但真正的超链接与路径
+ * 链接是链接语义元素，须回到链接色：默认只有颜色、无下划线；
+ * hover 时加下划虚线。覆盖上段 :global(span) 的 inherit 压制仅限链接元素。
+ */
+.reasoningContent :global(.md-rendered) :global(.md-a),
+.reasoningContent :global(.md-rendered) :global(a) {
+  color: var(--md-link-color);
+  text-decoration: none;
+}
+
+.reasoningContent :global(.md-rendered) :global(.md-a:hover),
+.reasoningContent :global(.md-rendered) :global(a:hover),
+.reasoningContent :global(.md-rendered) :global(.md-a:focus-visible),
+.reasoningContent :global(.md-rendered) :global(a:focus-visible) {
+  color: var(--md-link-hover-color);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+
+.reasoningContent :global(.md-rendered) :global(.md-path-link) {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.reasoningContent :global(.md-rendered) :global(.md-path-link:hover),
+.reasoningContent :global(.md-rendered) :global(.md-path-link:focus-visible) {
+  color: var(--color-link-hover);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-link-hover);
 }
 
 /* 保留兼容 ThinkingTimer 轻量样式类名 */

@@ -30,12 +30,17 @@
 }
 
 /* Tool Group */
+/* 组内子段与单行同节奏（间距刻度收敛 2026-11-05）：不再自带 4px 外边距，
+ * 子行改由与 .toolStack 相同的 flex 纵列 + --tool-row-gap 统一承担行距 */
 .toolGroup {
   width: 100%;
   box-sizing: border-box;
-  margin: var(--space-1, 4px) 0;
+  margin: 0;
   padding-left: 0;
   border-left: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tool-row-gap, 3px);
 }
 
 .toolGroupHeader {
@@ -97,31 +102,56 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  border: none;
-  background: transparent;
-  padding: 0;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  color: var(--text-tertiary);
   height: 24px;
   min-height: 24px;
   max-height: 24px;
   line-height: 24px;
-  box-sizing: border-box;
+  padding: 0 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-family: inherit;
   font-size: 14px;
   font-weight: var(--font-weight-normal, 400);
+  color: var(--text-tertiary);
   overflow: hidden;
   white-space: nowrap;
   box-shadow: none;
   outline: none;
   flex-shrink: 0;
-  transition: color var(--transition-micro, 100ms ease);
+  box-sizing: border-box;
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .toolRowHead.toolRowHeadStatic {
   cursor: default;
+}
+
+/* 悬停与键盘聚焦态（用户裁决 2026-11-05）：整行只变文字灰度，严禁背景色变化 */
+.toolRowHead:hover {
+  color: var(--text-primary);
+}
+
+.toolRowHead:focus-within {
+  color: var(--text-primary);
+}
+
+/* 运行中例外：活跃期保持高可见度（但字重恒定 400 不加粗） */
+.toolRow.isRunning .toolRowHead,
+.toolRow[data-tone='running'] .toolRowHead,
+.toolRowHead:has(.toolPulseDot) {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-normal, 400);
+}
+
+/* 键盘无障碍焦点软环（§13 规范：上限 10% 混入度） */
+.toolRowHead:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .toolRowHeadMain {
@@ -146,17 +176,11 @@
   overflow: visible;
   background: transparent;
   border: none;
-  color: var(--text-tertiary);
   box-sizing: border-box;
   flex-shrink: 0;
-  transition: color var(--transition-micro, 100ms ease);
 }
 
-/* 原地替换指示：AN4 改 150ms opacity 交叉淡化（废 100ms rotateY
- * 翻转——二值落定是瞬时状态变化，3D 翻转与之脱节且快到不可读，
- * 见工具调用伪流式动画分析 §1.3）。数据在替换窗首帧已换新：旧
- * 图标随数据切换退出，新图标在同一 150ms 窗内淡入落定；替换窗
- * 时长由 toolExpansionState 的 IN_PLACE_FLIP_DURATION_MS 对齐。 */
+/* 原地替换指示：AN4 改 150ms opacity 交叉淡化 */
 .toolRow[data-in-place-flipping='true'] .toolRowIcoSlot,
 .toolRow.inPlaceFlipping .toolRowIcoSlot {
   animation: toolIndicatorCrossfade var(--duration-fast) var(--ease-decelerate)
@@ -170,54 +194,6 @@
   to {
     opacity: 1;
   }
-}
-
-/* 仅在折叠态下悬停整行加深（用户裁决 · 2026-09-11）；展开后大段输出保持静止不变色 */
-.toolRow.isCollapsed .toolRowHead:hover,
-.toolRow:not(.isOpen) .toolRowHead:hover,
-.toolRowHead:hover {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.toolRow.isCollapsed .toolRowHead:hover .toolRowSummary,
-.toolRow.isCollapsed .toolRowHead:hover .toolActionText,
-.toolRow.isCollapsed .toolRowHead:hover .dotSeparator,
-.toolRow.isCollapsed .toolRowHead:hover .toolParamText,
-.toolRow.isCollapsed .toolRowHead:hover .toolRowChevron,
-.toolRow.isCollapsed .toolRowHead:hover .toolSecondaryMeta,
-.toolRow.isCollapsed .toolRowHead:hover .toolSecondaryMetaInline,
-.toolRow.isCollapsed .toolRowHead:hover .toolRowIcoSlot,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolRowSummary,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolActionText,
-.toolRow:not(.isOpen) .toolRowHead:hover .dotSeparator,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolParamText,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolRowChevron,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolSecondaryMeta,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolSecondaryMetaInline,
-.toolRow:not(.isOpen) .toolRowHead:hover .toolRowIcoSlot,
-.toolRowHead:hover .toolRowSummary,
-.toolRowHead:hover .toolActionText,
-.toolRowHead:hover .dotSeparator,
-.toolRowHead:hover .toolParamText,
-.toolRowHead:hover .toolRowChevron,
-.toolRowHead:hover .toolSecondaryMeta,
-.toolRowHead:hover .toolSecondaryMetaInline,
-.toolRowHead:hover .toolRowIcoSlot {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-}
-
-.toolRow.isOpen .toolRowHead:hover {
-  color: var(--text-tertiary);
-}
-.toolRow.isOpen .toolRowHead:hover .toolRowSummary,
-.toolRow.isOpen .toolRowHead:hover .toolActionText,
-.toolRow.isOpen .toolRowHead:hover .toolParamText,
-.toolRow.isOpen .toolRowHead:hover .dotSeparator,
-.toolRow.isOpen .toolRowHead:hover .toolRowIcoSlot {
-  color: var(--text-tertiary);
 }
 
 .toolRowText {
@@ -240,69 +216,66 @@
   font-size: 14px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
-  color: var(--text-tertiary);
+  color: inherit;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.toolActionText {
-  font-size: 14px;
-  font-weight: var(--font-weight-normal, 400);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  white-space: nowrap;
-  line-height: 24px;
-}
+/* ─────────────────────────────────────────────────────────────
+   6px 四态状态点系统（ChatToolCallBlock.module.css）
+   ───────────────────────────────────────────────────────────── */
 
-/*
- * 意图说明（toolHumanLabel）：继承 .toolActionText 的字号/字重/色与悬停加深，
- * 仅额外允许单行省略收缩——长意图不挤掉右侧的动作词与命令参数。
- */
-.toolHumanText {
-  font-size: 14px;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dotSeparator {
-  margin: 0 4px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  user-select: none;
-  flex-shrink: 0;
-}
-
+/* 1. 运行中：蓝色脉冲微光呼吸点（6px，hsl 斜杠透明度语法） */
 .toolPulseDot {
-  width: 4px;
-  height: 4px;
-  min-width: 4px;
-  min-height: 4px;
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
   border-radius: 50%;
-  background: var(--text-secondary);
-  animation: tool-dot-pulse var(--transition-pulse, 1.6s ease-in-out) infinite;
+  background: var(--color-info);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 25%, transparent);
+  animation: toolDotPulseBlue var(--transition-pulse, 1.6s ease-in-out) infinite;
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 0;
+  opacity: 1;
+  transform: scale(1);
 }
 
-/* 收口登记的独立配方（AN2 脉冲归队裁定，禁止合并）：tool-dot-pulse 是
- * 「纯缩放」点脉冲（scale 0.85 ↔ 1.1，无 opacity / 无阴影），供工具行
- * 运行态状态点；与 agentDotPulse（缩放+透明+辉光）、sync-dot-pulse
- * （缩放+光晕环）、pulseDot（反相透明）、flowPulse（纯透明）的作用
- * 通道与视觉语义各不相同，强行合并会改变工具行已验收的体感，故独立
- * 登记、独立演进。唯一消费方：本文件工具状态点（周期经
- * var(--transition-pulse) 驱动，fallback 1.6s 为本面自有口径）。 */
-@keyframes tool-dot-pulse {
-  0%,
-  100% {
-    transform: scale(0.85);
+@keyframes toolDotPulseBlue {
+  0%, 100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 20%, transparent);
   }
   50% {
-    transform: scale(1.1);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--color-info) 45%, transparent);
   }
 }
 
+/* 2. 完成态：绿色实心圆点（6px 默认素雅微缩降透，悬停饱满） */
+.toolSuccessDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  display: inline-block;
+  flex-shrink: 0;
+  opacity: 0.45;
+  transform: scale(0.8);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+}
+
+.toolRowHead:hover .toolSuccessDot,
+.toolRowHead:focus-within .toolSuccessDot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 3. 失败态：红色实心圆点（6px） */
 .toolErrorDot {
   width: 6px;
   height: 6px;
@@ -312,100 +285,154 @@
   background: var(--color-error);
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 0;
+  opacity: 0.8;
+  transform: scale(0.9);
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
 }
 
-.toolParamText {
-  font-family: var(--font-mono, monospace);
+.toolRowHead:hover .toolErrorDot,
+.toolRowHead:focus-within .toolErrorDot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 4. 待确认态（审批）：橙黄色实心微光点 */
+.toolPendingDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-warning) 25%, transparent);
+  display: inline-block;
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.toolRowHead:hover .toolPendingDot,
+.toolRowHead:focus-within .toolPendingDot {
+  opacity: 1;
+}
+
+/* 14px 意图文本：继承父级行状态机色彩 */
+.toolIntentText {
   font-size: 14px;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 24px;
+  font-weight: var(--font-weight-normal, 400);
+  color: inherit;
   flex: 1 1 auto;
   min-width: 0;
-  line-height: 24px;
-}
-
-/*
- * 链接色只属于真正可点击的路径（.toolPathLink）。不可点击的参数
- * （.toolParamText）一律素面 mono 灰阶，不谎报可点击性（2026-11-02 用户
- * 复裁：「超链接才应该是这种颜色」，取代此前 D3 的路径一律着链接色）。
- */
-
-.toolErrorParamText {
-  font-family: var(--font-sans, inherit);
-  font-size: 14px;
-  color: var(--color-error);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1 1 auto;
-  min-width: 0;
-  line-height: 24px;
+  font-family: inherit;
 }
 
-.toolSecondaryMetaInline {
-  font-size: 14px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  white-space: nowrap;
-  line-height: 24px;
-  transition: color var(--transition-micro, 100ms ease);
-}
-
-.toolRowHead:hover .toolSecondaryMetaInline {
-  color: var(--text-primary);
-}
-
-.diffStatsInline,
-.diffStatsBtn {
-  font-family: var(--font-mono, monospace);
-  font-size: 14px;
-  margin-left: 4px;
-  flex-shrink: 0;
-  white-space: nowrap;
-  line-height: 24px;
-}
-
-/*
- * diff 统计（用户 2026-11-02 复裁）：文本型语汇——无背景、无下划线，
- * hover 只让加/删数字的语义色向正文色加深一档。按钮本体只保留命中与
- * 点击语义（开侧栏差异）；Button 的 hover 叠加层（::before）必须归零，
- * 否则即便本体 background 透明，hover 仍会浮出灰底。
- * （数字是滚轮列 inline-flex，text-decoration 不会穿透到列内，故不用下划线。）
- */
-.diffStatsBtn {
-  --btn-hover-overlay: transparent;
-  --btn-active-overlay: transparent;
+/* [已废弃死代码] 早期行尾独立 chip 胶囊样式，现已全面升级为原位行内超链接 (.toolInlineRefLink)
+.toolCitation {
   display: inline-flex;
   align-items: center;
-  background: transparent;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  max-width: 240px;
+  height: 24px;
+  line-height: 24px;
+}
+
+.toolCitationItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+}
+*/
+
+/* 行内原位引用超链接（In-place Inline Reference）
+ * 【链接正典 · 用户裁决 2026-11-05，与 .toolPathLink 同口径】：
+ * 默认即链接色（--color-link），无下划线、无边框（常驻点线边框曾把行盒
+ * 撑高 0.8px 并令字形上偏，一并切除）；hover / focus 时加深为
+ * --color-link-hover 并加下划虚线（text-decoration，不占布局）。
+ * 链接的颜色身份不随行状态改变——行级 hover 的灰阶变色不作用于本类。 */
+.toolInlineRefLink {
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
+  display: inline;
+  vertical-align: baseline;
   border: none;
-  padding: 0;
-  cursor: pointer;
-  border-radius: 0;
-  height: auto;
-  min-height: 0;
-}
-
-.diffStatsBtn:hover {
   background: transparent;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-link);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
 
-.diffStatsAdd,
-.diffStatsDel {
-  transition: color var(--transition-fast, 150ms ease);
+.toolInlineRefLink:hover,
+.toolInlineRefLink:focus-visible {
+  color: var(--color-link-hover);
+  background: transparent;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-link-hover);
 }
 
-.diffStatsBtn:hover .diffStatsAdd {
-  color: color-mix(in srgb, var(--diff-add-fg) 70%, var(--text-primary) 30%);
+.toolInlineRefLink.disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.5;
+  text-decoration: none;
 }
 
-.diffStatsBtn:hover .diffStatsDel {
-  color: color-mix(in srgb, var(--diff-del-fg) 70%, var(--text-primary) 30%);
+/* [已废弃死代码] 早期行尾独立 chip 链接样式
+.toolCitationLink {
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
+  display: inline;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  line-height: 24px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
+
+.toolCitationLink:hover,
+.toolCitationLink:focus-visible {
+  color: var(--text-primary);
+  background: transparent;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--text-secondary);
+}
+
+.toolCitationLink.disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+*/
 
 .toolRowHeadRight {
   display: inline-flex;
@@ -417,20 +444,6 @@
   line-height: 24px;
 }
 
-.toolSecondaryMeta {
-  font-size: 14px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  white-space: nowrap;
-  line-height: 24px;
-  transition: color var(--transition-micro, 100ms ease);
-}
-
-.toolRowHead:hover .toolSecondaryMeta {
-  color: var(--text-primary);
-}
-
 .toolRowChevron {
   display: inline-flex;
   align-items: center;
@@ -439,13 +452,18 @@
   height: 12px;
   font-size: 14px;
   line-height: 1;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   /* AN1 同钟契约：与 .toolBody 共读 --accordion-duration（未设时回退共享 token） */
   transition:
     transform var(--accordion-duration, var(--transition-accordion)),
-    color var(--transition-micro);
+    color var(--transition-micro, 100ms ease);
   flex-shrink: 0;
   user-select: none;
+}
+
+.toolRowHead:hover .toolRowChevron,
+.toolRowHead:focus-within .toolRowChevron {
+  color: var(--text-tertiary);
 }
 
 .toolRowChevron.rot {
@@ -492,16 +510,16 @@
   height: 12px;
   width: 85%;
   border-radius: 4px;
-  background: var(--bg-hover, hsl(210 20% 95% / 0.6));
-  animation: toolSkeletonPulse 1.2s ease-in-out infinite;
+  background: var(--state-hover);
+  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
 .toolSkeletonLineShort {
   height: 12px;
   width: 55%;
   border-radius: 4px;
-  background: var(--bg-hover, hsl(210 20% 95% / 0.6));
-  animation: toolSkeletonPulse 1.2s ease-in-out infinite;
+  background: var(--state-hover);
+  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
 @keyframes toolSkeletonPulse {
@@ -512,17 +530,6 @@
   50% {
     opacity: 0.3;
   }
-}
-
-/* Duration display */
-.duration {
-  font-variant-numeric: tabular-nums;
-  font-size: 14px;
-  color: var(--text-tertiary);
-  margin-left: auto;
-  flex-shrink: 0;
-  font-family: var(--font-mono, monospace);
-  line-height: 24px;
 }
 
 /* Retry button */
@@ -547,24 +554,6 @@
 .retryBtn:hover {
   opacity: 1;
   background: var(--danger-soft-bg);
-}
-
-/* Diff stats in collapsed row */
-.diffStats {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-micro, 11px);
-  flex-shrink: 0;
-  white-space: nowrap;
-  line-height: 24px;
-}
-
-.diffStatsAdd {
-  color: var(--diff-add-fg);
-  margin-right: 4px;
-}
-
-.diffStatsDel {
-  color: var(--diff-del-fg);
 }
 
 /* Batch approval bar */
@@ -1365,6 +1354,17 @@
 @media (prefers-reduced-motion: reduce) {
   .toolRowEnter,
   .outputRevealFade {
+    animation: none;
+  }
+  .toolSuccessDot,
+  .toolErrorDot,
+  .toolPendingDot,
+  .toolRowHead,
+  .toolInlineRefLink,
+  .toolRowChevron {
+    transition: none;
+  }
+  .toolPulseDot {
     animation: none;
   }
 }

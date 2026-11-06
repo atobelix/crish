@@ -79,7 +79,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(pres.interactive).toBe(true);
     });
 
-    it('终态带耗时返回格式化时长，无 liveDot', () => {
+    it('终态统一返回静态思考过程，无 liveDot，去耗时秒数（M-07 & R2）', () => {
       const pres = resolveReasoningPresentation({
         isLive: false,
         isExpanded: false,
@@ -87,20 +87,20 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         content: '首行核心主题\n第二行细节',
         t: mockT,
       });
-      expect(pres.badgeText).toBe('已思考 3.2 秒');
+      expect(pres.badgeText).toBe('思考过程');
       expect(pres.hasLiveDot).toBe(false);
       expect(pres.summaryText).toBe('首行核心主题');
-      expect(pres.ariaLabel).toBe('已思考 3.2 秒');
+      expect(pres.ariaLabel).toBe('思考过程');
     });
 
-    it('终态无耗时稳定兜底已思考', () => {
+    it('终态无耗时稳定兜底思考过程', () => {
       const pres = resolveReasoningPresentation({
         isLive: false,
         isExpanded: false,
         content: '首行核心主题',
         t: mockT,
       });
-      expect(pres.badgeText).toBe('已思考');
+      expect(pres.badgeText).toBe('思考过程');
       expect(pres.hasLiveDot).toBe(false);
       expect(pres.summaryText).toBe('首行核心主题');
       expect(pres.ariaLabel).toBe('思考过程');
@@ -231,9 +231,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      // 极简状态指示灯
+      // 极简状态指示灯与 UX-01 12×12 槽包裹
       const dot = container.querySelector('[data-testid="status-dot"]');
       expect(dot).not.toBeNull();
+      const slot = dot?.parentElement;
+      expect(slot?.className).toContain('reasoningSlotIco');
 
       // 语义标签与状态圆点
       expect(screen.getByText('思考中')).toBeDefined();
@@ -286,19 +288,15 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
     });
   });
 
-  describe('四、终态闭合态：已思考 3.2 秒 > 与 tabular-nums 等宽对齐', () => {
-    it('终态展示“已思考 3.2 秒 >”，耗时样式应用 tabular-nums', () => {
+  describe('四、终态闭合态：静态“思考过程”收敛（M-07 & R2）', () => {
+    it('终态展示静态“思考过程 >”，去耗时秒数', () => {
       const { container } = render(
         <ReasoningRow content="" isLive={false} durationMs={3200} />
       );
 
-      // 终态闭合文案匹配（NumericText 把数字拆成 AnimatedCounter，srOnly+视觉层小数点 → "3.2." 多一点；
-      // 用 regex \.? 容忍尾部冗余点）
       const badge = container.querySelector('[data-testid="reasoning-badge"]');
       expect(badge).not.toBeNull();
-      expect(badge?.textContent?.replace(/\s+/g, ' ')).toMatch(
-        /已思考 3\.2\.? 秒/
-      );
+      expect(badge?.textContent?.replace(/\s+/g, ' ')).toBe('思考过程');
 
       // 折叠指示符（> 或 ›）
       const chevron = container.querySelector('[data-testid="chevron"]');
@@ -311,12 +309,12 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/font-variant-numeric:\s*tabular-nums/);
     });
 
-    it('无耗时终态展示兜底“已思考 >”', () => {
+    it('无耗时终态展示兜底“思考过程 >”', () => {
       render(<ReasoningRow content="" isLive={false} />);
-      expect(screen.getByText('已思考')).toBeDefined();
+      expect(screen.getByText('思考过程')).toBeDefined();
     });
 
-    it('多阶段思考轮次统一展示思考与耗时（无第 N 阶段）', () => {
+    it('多阶段思考轮次统一展示思考过程（无第 N 阶段、无耗时秒数）', () => {
       render(
         <ReasoningRow
           content="阶段推理总结"
@@ -326,19 +324,15 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      // NumericText 把数字段拆成 AnimatedCounter，srOnly+视觉层小数点 → "2.5." 多一点；
-      // 用 regex \.? 容忍尾部冗余点
       const badge323 = screen.getByTestId('reasoning-badge');
-      expect(badge323.textContent?.replace(/\s+/g, ' ')).toMatch(
-        /已思考 2\.5\.? 秒/
-      );
+      expect(badge323.textContent?.replace(/\s+/g, ' ')).toBe('思考过程');
       // AN1 常驻后正文也在文档中：摘要断言须定位摘要元素本身（不再全页唯一）
       expect(screen.getByTestId('reasoning-summary-markup').textContent).toBe(
         '阶段推理总结'
       );
     });
 
-    it('从流式态平滑跃迁至终态：最新行平滑切换为首行主题', () => {
+    it('从流式态平滑跃迁至终态：最新行平滑切换为首行主题，文案由“思考中”变为“思考过程”', () => {
       const { rerender } = render(
         <ReasoningRow
           content={'首行设计方案\n正在执行具体分析细节...'}
@@ -357,19 +351,17 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
       expect(screen.getByText('首行设计方案')).toBeDefined();
-      // NumericText 把数字拆成 AnimatedCounter，srOnly+视觉层小数点 → "3.2." 多一点；用 regex \.? 容忍
       const badge353 = screen.getByTestId('reasoning-badge');
-      expect(badge353.textContent?.replace(/\s+/g, ' ')).toMatch(
-        /已思考 3\.2\.? 秒/
-      );
+      expect(badge353.textContent?.replace(/\s+/g, ' ')).toBe('思考过程');
     });
 
-    it('负向断言：排版严格去符号化，绝不渲染任何 dotSeparator 分割点', () => {
+    it('负向断言：排版严格去符号化，绝不渲染任何 dotSeparator 分割点或耗时秒数', () => {
       const { container } = render(
         <ReasoningRow content="首行思考内容" isLive={false} durationMs={3200} />
       );
       expect(container.querySelector('[class*="dotSeparator"]')).toBeNull();
       expect(container.textContent).not.toContain('·');
+      expect(container.textContent).not.toMatch(/\d+\.?\d*\s*秒/);
     });
   });
 
@@ -459,7 +451,8 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
 
-      // 工作态默认展开正文
+      // 运行态默认折叠（2026-11-06 裁决第 8 条）：用户点击后展开正文
+      fireEvent.click(screen.getByRole('button'));
       const reasoningBody = container.querySelector(
         '[data-testid="reasoning-body"]'
       );
@@ -519,7 +512,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
   });
 
   describe('八、AN1 常驻折叠机制（until-found 隐藏协调）与零测试环境绕行断言', () => {
-    it('当模型工作态结束（isTurnWorking 从 true 转为 false）时，自动折叠且思考体常驻', () => {
+    it('运行态默认折叠（2026-11-06 裁决第 8 条）：工作态全程折叠、内容生长与工作态结束都不改变展开状态，思考体常驻', () => {
       vi.useFakeTimers();
       try {
         const { rerender, container } = render(
@@ -532,25 +525,33 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         const body = () =>
           container.querySelector('[data-testid="reasoning-body"]');
         const slot = () => body()?.parentElement ?? null;
-        expect(root?.getAttribute('data-expanded')).toBe('true');
+        // 工作态挂载即折叠（旧「工作态默认展开」口径已退役）
+        expect(root?.getAttribute('data-expanded')).toBe('false');
         expect(root?.hasAttribute('data-collapsing')).toBe(false);
         expect(body()).not.toBeNull();
-        expect(slot()?.hasAttribute('hidden')).toBe(false);
 
-        // 模型输出完成，整轮工作态结束
+        // 运行中内容持续到达（content 生长）→ 展开状态不变
         rerender(
           <ReasoningRow
-            content="深度推理思维链推导步骤"
+            content="深度推理思维链推导步骤\n新增的第二步推理"
+            isTurnWorking={true}
+          />
+        );
+        expect(root?.getAttribute('data-expanded')).toBe('false');
+        expect(body()).not.toBeNull();
+
+        // 模型输出完成，整轮工作态结束 → 保持折叠；思考体常驻
+        rerender(
+          <ReasoningRow
+            content="深度推理思维链推导步骤\n新增的第二步推理"
             isTurnWorking={false}
             durationMs={3600}
           />
         );
-
-        // 折叠判定即时生效；思考体仍在文档中（hidden 待过渡落定后挂上）
         expect(root?.getAttribute('data-expanded')).toBe('false');
         expect(body()).not.toBeNull();
 
-        // 兜底定时器（与收拢同钟）到点：只补 hidden，DOM 不注销
+        // 兜底定时器到点：只补 hidden，DOM 不注销
         act(() => {
           vi.advanceTimersByTime(400);
         });
@@ -561,10 +562,10 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       }
     });
 
-    it('当传入 defaultExpanded={true}（默认未开启隐藏思考块）时：思考中展开、生成完自动关闭、历史对话重开默认折叠', () => {
+    it('当传入 defaultExpanded={true} 时：运行态、生成完、历史重开全程默认折叠（2026-11-06 裁决：该入参不再驱动展开）', () => {
       vi.useFakeTimers();
       try {
-        // 1. 思考中展开
+        // 1. 思考中亦折叠（defaultExpanded 不再驱动展开判定）
         const { rerender, container, unmount } = render(
           <ReasoningRow
             content="正在生成思考过程"
@@ -575,9 +576,9 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         const root = container.querySelector(
           '[data-testid="reasoning-container"]'
         );
-        expect(root?.getAttribute('data-expanded')).toBe('true');
+        expect(root?.getAttribute('data-expanded')).toBe('false');
 
-        // 2. 生成完自动关闭（平滑收起，思考体常驻、落定挂 hidden）
+        // 2. 生成完保持折叠（思考体常驻、落定挂 hidden）
         rerender(
           <ReasoningRow
             content="正在生成思考过程"
@@ -664,37 +665,42 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       }
     });
 
-    it('折叠落定前工作态重新激活，应取消待挂 hidden 并恢复展开', () => {
+    it('用户手动展开后，工作态翻转与内容到达不改变展开状态（2026-11-06 裁决第 8 条：items/状态变化不背刺用户意图）', () => {
       vi.useFakeTimers();
       try {
         const { rerender, container } = render(
           <ReasoningRow content="思考过程" isTurnWorking={true} />
         );
-
-        // 触发收拢
-        rerender(<ReasoningRow content="思考过程" isTurnWorking={false} />);
         const root = container.querySelector(
           '[data-testid="reasoning-container"]'
         );
         const body = () =>
           container.querySelector('[data-testid="reasoning-body"]');
         const slot = () => body()?.parentElement ?? null;
+
+        // 默认折叠；用户点击展开
         expect(root?.getAttribute('data-expanded')).toBe('false');
-
-        // 在 80ms 处（兜底定时器未到）重新激活工作态
-        act(() => {
-          vi.advanceTimersByTime(80);
-        });
-        rerender(<ReasoningRow content="思考过程" isTurnWorking={true} />);
-
+        fireEvent.click(screen.getByRole('button'));
         expect(root?.getAttribute('data-expanded')).toBe('true');
         expect(slot()?.hasAttribute('hidden')).toBe(false);
+
+        // 工作态结束 + 内容定格 → 用户的展开不被自动收起
+        rerender(
+          <ReasoningRow
+            content="思考过程"
+            isTurnWorking={false}
+            durationMs={1200}
+          />
+        );
+        expect(root?.getAttribute('data-expanded')).toBe('true');
         expect(body()).not.toBeNull();
 
-        // 推进越过原定时器：不得误挂 hidden、不得注销
+        // 工作态重新激活 → 仍保持展开；越过任何兜底定时器不得误挂 hidden
+        rerender(<ReasoningRow content="思考过程" isTurnWorking={true} />);
         act(() => {
           vi.advanceTimersByTime(400);
         });
+        expect(root?.getAttribute('data-expanded')).toBe('true');
         expect(body()).not.toBeNull();
         expect(slot()?.hasAttribute('hidden')).toBe(false);
       } finally {
@@ -768,6 +774,9 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       });
 
       const btn = container.querySelector('button') as HTMLButtonElement;
+      // 运行态默认折叠（2026-11-06 裁决）：先手动展开，再手动收起触发回退
+      fireEvent.click(btn);
+      expect(container.getAttribute('data-expanded')).toBe('true');
       fireEvent.click(btn);
 
       expect(container.getAttribute('data-expanded')).toBe('false');

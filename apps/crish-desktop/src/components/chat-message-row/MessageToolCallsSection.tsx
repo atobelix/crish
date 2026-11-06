@@ -23,7 +23,17 @@ import {
   buildToolStackHostProps,
   shouldHostToolStack,
 } from './chatMessageRowUtils';
-import { ReasoningRow } from './ReasoningRow';
+import {
+  ReasoningRow,
+  extractLatestLine,
+  stripInlineMarkdownMarkers,
+} from './ReasoningRow';
+import {
+  LiveThoughtTickerProvider,
+  type LiveThoughtTickerValue,
+} from '../chat-message/liveThoughtTickerContext';
+import { slotCore } from '../../services/view-registry/SlotCore';
+import '../chat-card/workspaceChatComposerAbove.slot';
 
 /**
  * 流内子 agent 分派卡（懒加载保持分包）。
@@ -118,6 +128,18 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
     const hasTools = shouldHostToolStack(toolRenderItems);
     const hasThinking = Boolean(thinkingItem && thinkingItem.content.trim());
 
+    // 运行态思考承载（2026-11-06 第 9 条）：本节内混合的 live 思考与工具
+    // 并存时，思考最新行经 context 交组头 ticker 统一呈现，本节思考行
+    // 转静态标签（hosted），不留第二条动态通道。无内嵌思考时不提供
+    // context，子树继承外层 FoldableProcessSection 的段级提供。
+    const liveThoughtValue = useMemo<LiveThoughtTickerValue | null>(() => {
+      if (!thinkingItem?.isLive || !hasTools) return null;
+      const line =
+        stripInlineMarkdownMarkers(extractLatestLine(thinkingItem.content)) ||
+        null;
+      return line ? { line, hosted: true, sectionLive: true } : null;
+    }, [thinkingItem, hasTools]);
+
     // 3. 工具展开/折叠拦截：通知外部状态（尺寸变化由外层宿主 ResizeObserver 单轨自动测量）
     const handleToggleTool = useCallback(
       (toolId: string, currentlyOpen: boolean) => {
@@ -173,7 +195,7 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
 
     if (!hasTools && !hasThinking) return null;
 
-    return (
+    const sectionBody = (
       <div
         className={styles.timelineTools}
         data-section="tool-calls"
@@ -214,17 +236,126 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
           }
           const host = blockHosts[i];
           if (!host) return null;
+
+          // 审批上提空组保护（R5 §6）：
+          // 当 composerAbove 开启且组内工具全处于 pending_approval 时，
+          // CompactToolRow 返回 null。渲染兜底提示文案，防止 0px 空白幽灵框。
+          const isComposerAbove = Boolean(
+            slotCore.getSingle('workspace.chat.composerAbove')
+          );
+          const allPendingApproval =
+            isComposerAbove &&
+            block.items.length > 0 &&
+            block.items.every((it) => {
+              const tools = it.kind === 'single' ? [it.tc] : it.tools;
+              return (
+                tools.length > 0 &&
+                tools.every((t) => t.status === 'pending_approval')
+              );
+            });
+
+          const firstItem = block.items[0];
+          const groupId =
+            firstItem?.kind === 'group'
+              ? firstItem.groupId ||
+                (firstItem.id?.startsWith('grp-')
+                  ? firstItem.id.slice(4)
+                  : firstItem.id)
+              : firstItem?.kind === 'single'
+                ? firstItem.tc.groupId
+                : undefined;
+
+          const groupTitle =
+            firstItem?.kind === 'group'
+              ? firstItem.groupTitle || firstItem.label
+              : firstItem?.kind === 'single'
+                ? firstItem.tc.group || firstItem.tc.intent
+                : undefined;
+
+          const isSealed =
+            firstItem?.kind === 'group' ? firstItem.isSealed : undefined;
+
+          // 基于组内首个工具的 tool ID 锚定持久 key，生命周期内永远不变，杜绝 groupId 注入时 key 漂移与 Remount 瞬闪
+          const firstToolId =
+            firstItem?.kind === 'group'
+              ? firstItem.tools[0]?.id
+              : firstItem?.kind === 'single'
+                ? firstItem.tc.id
+                : undefined;
+          const itemKey = `g-${firstToolId || groupId || i}`;
+
+          if (allPendingApproval) {
+            const isGroup = firstItem?.kind === 'group';
+            if (!isGroup) {
+              return (
+                <div
+                  key={`pending-composer-${firstItem?.tc.id ?? i}`}
+                  style={{
+                    height: 24,
+                    lineHeight: '24px',
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    paddingLeft: 24,
+                  }}
+                  data-testid="composer-above-pending-notice"
+                >
+                  等待在输入框上方确认…
+                </div>
+              );
+            }
+            return (
+              <div key={`pending-${itemKey}`}>
+                <FoldableToolGroup
+                  items={block.items}
+                  msgId={msgId}
+                  hostProps={host}
+                  groupId={groupId}
+                  groupTitle={groupTitle}
+                  isSealed={isSealed}
+                />
+                <div
+                  style={{
+                    height: 24,
+                    lineHeight: '24px',
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    paddingLeft: 24,
+                  }}
+                  data-testid="composer-above-pending-notice"
+                >
+                  等待在输入框上方确认…
+                </div>
+              </div>
+            );
+          }
+
           return (
             <FoldableToolGroup
-              key={`tools-${block.items[0]?.kind === 'single' ? block.items[0].tc.id : block.items[0]?.id}`}
+              key={itemKey}
               items={block.items}
               msgId={msgId}
               hostProps={host}
+              groupId={groupId}
+              groupTitle={groupTitle}
+              isSealed={isSealed}
             />
           );
         })}
       </div>
     );
+
+    if (liveThoughtValue) {
+      return (
+        <LiveThoughtTickerProvider value={liveThoughtValue}>
+          {sectionBody}
+        </LiveThoughtTickerProvider>
+      );
+    }
+    return sectionBody;
   });
 
 MessageToolCallsSection.displayName = 'MessageToolCallsSection';
