@@ -2,7 +2,7 @@
  * apps/crish-desktop/src/components/chat-tool-call/FoldableToolGroup.module.css
  *
  * 意图组折叠栏样式契约（P4 方案重塑）。
- * 24px 高度，14px 字号，400 字重，正文主色 var(--text-primary)。
+ * 24px 高度，13px 字号，400 字重，正文主色 var(--text-primary)。
  * 12×12 状态槽 + 6px 间距，绝对保证 18px 垂直对齐基线。
  * 彻底切除 .leadIcon、.stackedLabels 与 .stackedLabel。
  */
@@ -32,7 +32,7 @@
   text-align: left;
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-normal, 400);
   /* 默认态弱化（用户裁决 2026-11-05）：组头摘要文字与工具行/思考行同档
    * --text-tertiary，与正文拉开区分度；hover 从此弱默认态出发只变文字灰度 */
@@ -113,20 +113,21 @@
   min-height: 6px;
   border-radius: 50%;
   background: var(--color-info);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 25%, transparent);
   animation: groupDotPulseBlue var(--transition-pulse, 1.6s ease-in-out) infinite;
   display: inline-block;
   flex-shrink: 0;
 }
 
+/* 光晕已退役（2026-11-06 B2 裁定，与 ChatToolCallBlock 的 toolDotPulseBlue 同处理）：
+ * 脉冲只保留缩放 + 透明度呼吸 */
 @keyframes groupDotPulseBlue {
   0%, 100% {
     transform: scale(0.9);
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 20%, transparent);
+    opacity: 0.55;
   }
   50% {
     transform: scale(1.15);
-    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--color-info) 45%, transparent);
+    opacity: 1;
   }
 }
 
@@ -171,7 +172,6 @@
   min-height: 6px;
   border-radius: 50%;
   background: var(--color-warning);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-warning) 25%, transparent);
   opacity: 0.85;
   transition: opacity var(--transition-fast, 150ms ease);
   display: inline-block;
@@ -183,7 +183,7 @@
    * 贴住文本；长文本时盒涨满可用宽，chevron 回到行尾（与改前同位） */
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
@@ -198,7 +198,7 @@
   justify-content: center;
   width: 12px;
   height: 12px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
   color: var(--text-faint);
   transform: rotate(0deg);
@@ -291,7 +291,7 @@
   min-height: 24px;
   max-height: 24px;
   line-height: 24px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
   overflow: hidden;

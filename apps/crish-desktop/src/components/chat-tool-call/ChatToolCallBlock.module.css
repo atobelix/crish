@@ -4,11 +4,13 @@
  * ① 工具容器与思考行（ReasoningRow）严格同构：24px 行高、左右 4px 内边距、
  *    上下零外边距——消除两侧「边距不一样」的观感差异；
  * ② 除正文外一律默认浅色（--text-tertiary），字重统一 400，
- *    字号统一 14px（原 11px/12px/13px 混排且偏小）；
+ *    字号统一 13px（原 11px/12px 混排且偏小）；
  * ③ 语义色（错误 / 差异增删）保留，不计入「统一浅色」范畴。
  *
- * 【统一 14px · 2026-11-04 用户裁决，覆盖上款 ② 的字号部分】
- * 过程区字号统一调整为 14px，推翻 D5 13px 试验；
+ * 【字号口径 · 2026-11-06 协调者裁定，覆盖上款 ② 的字号部分】
+ * 过程区统一 13px，按 D5 长期记录（2026-11-02 定为永久口径）；
+ * 此前注释所称「2026-11-04 统一 14px」与长期记录冲突且无其他
+ * 佐证，不予采信，本次订正。
  * 过程行间加 --tool-row-gap 呼吸（V2 A 案），24px 行高同构不变。
  */
 .toolStack {
@@ -22,7 +24,7 @@
   border: none;
   background: transparent;
   box-shadow: none;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .toolStack > .toolRow + .toolRow {
@@ -113,7 +115,7 @@
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-tertiary);
   overflow: hidden;
@@ -215,7 +217,7 @@
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
@@ -227,7 +229,8 @@
    6px 四态状态点系统（ChatToolCallBlock.module.css）
    ───────────────────────────────────────────────────────────── */
 
-/* 1. 运行中：蓝色脉冲微光呼吸点（6px，hsl 斜杠透明度语法） */
+/* 1. 运行中：蓝色脉冲呼吸点（6px；扩散光晕已退役——2026-11-06 B2 裁定：
+ * 光晕不携带信息，脉冲只保留缩放 + 透明度呼吸） */
 .toolPulseDot {
   width: 6px;
   height: 6px;
@@ -235,7 +238,6 @@
   min-height: 6px;
   border-radius: 50%;
   background: var(--color-info);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 25%, transparent);
   animation: toolDotPulseBlue var(--transition-pulse, 1.6s ease-in-out) infinite;
   display: inline-block;
   flex-shrink: 0;
@@ -246,11 +248,11 @@
 @keyframes toolDotPulseBlue {
   0%, 100% {
     transform: scale(0.9);
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-info) 20%, transparent);
+    opacity: 0.55;
   }
   50% {
     transform: scale(1.15);
-    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--color-info) 45%, transparent);
+    opacity: 1;
   }
 }
 
@@ -300,7 +302,7 @@
   transform: scale(1);
 }
 
-/* 4. 待确认态（审批）：橙黄色实心微光点 */
+/* 4. 待确认态（审批）：橙黄色实心点（光晕已退役——2026-11-06 B2 裁定） */
 .toolPendingDot {
   width: 6px;
   height: 6px;
@@ -308,7 +310,6 @@
   min-height: 6px;
   border-radius: 50%;
   background: var(--color-warning);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-warning) 25%, transparent);
   display: inline-block;
   flex-shrink: 0;
   opacity: 0.85;
@@ -322,7 +323,7 @@
 
 /* 14px 意图文本：继承父级行状态机色彩 */
 .toolIntentText {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   font-weight: var(--font-weight-normal, 400);
   color: inherit;
@@ -452,7 +453,7 @@
   justify-content: center;
   width: 12px;
   height: 12px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
   color: var(--text-faint);
   /* AN1 同钟契约：与 .toolBody 共读 --accordion-duration（未设时回退共享 token） */
@@ -959,7 +960,7 @@
 }
 
 .fileStatTitle {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
