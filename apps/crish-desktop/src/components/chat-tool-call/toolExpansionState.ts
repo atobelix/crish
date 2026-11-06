@@ -40,6 +40,7 @@ import {
   type PagingAnchor,
   type PreActionAnchor,
 } from '../chat-message-list/PagingAnchor';
+import { BOTTOM_STICK_EPSILON_PX } from '../../hooks/virtualScrollConstants';
 
 /** 100ms 原地替换黄金缓冲阈值（毫秒） */
 export const IN_PLACE_REPLACEMENT_BUFFER_MS = 100;
@@ -335,6 +336,27 @@ export function calculateRelativeDisplacement(
 }
 
 /**
+ * 动作前判底（S-D · 底部钉底修复）：以切换前捕获的快照几何判定当时是否
+ * 在底部——距底 ≤ BOTTOM_STICK_EPSILON_PX（与列表贴底判定同口径）。
+ * 快照字段（snapshotScrollHeight / snapshotScrollTop）均为点击前状态，
+ * 不受切换后的布局变化污染。
+ */
+export function isPreActionAtBottom(
+  snapshot: {
+    snapshotScrollTop: number;
+    snapshotScrollHeight: number;
+  },
+  clientHeight: number
+): boolean {
+  return (
+    snapshot.snapshotScrollHeight -
+      clientHeight -
+      snapshot.snapshotScrollTop <=
+    BOTTOM_STICK_EPSILON_PX
+  );
+}
+
+/**
  * 在 DOM 树中自底向上寻找最近的滚动宿主容器
  */
 export function findScrollContainer(
@@ -565,7 +587,14 @@ export function useToolExpansionState({
     }
 
     const activeVsm = getVsm();
-    if (snapshot.anchor) {
+    // S-D（底部钉底修复）：动作前已在底部时，视口由手风琴判底钉底接管
+    // （虚拟滚动层锁内逐帧钉底 + 解锁终检），锚点恢复在此让位：它锚的
+    // 是视口顶行而非被点行、且位移差在动画开始瞬间采样（Δ≈0），在底部
+    // 几何下是空转，还可能与钉底相互干扰。非底部行为完全不变。
+    if (
+      snapshot.anchor &&
+      !isPreActionAtBottom(snapshot, scroller.clientHeight)
+    ) {
       restorePagingAnchor(scroller, snapshot.anchor, activeVsm);
     }
 

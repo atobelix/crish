@@ -36,6 +36,7 @@ import {
   shouldInPlaceReplace,
   isExpansionDebounced,
   calculateRelativeDisplacement,
+  isPreActionAtBottom,
   recordToolDisplacement,
   getDisplacementHistory,
   clearDisplacementHistory,
@@ -356,6 +357,37 @@ describe('toolExpansionState — 工具卡片原地替换与展开防抖测试�
 
       clearDisplacementHistory();
       expect(getDisplacementHistory().length).toBe(0);
+    });
+
+    it('isPreActionAtBottom (S-D): 动作前快照判底口径——在底时锚点恢复让位钉底', () => {
+      // 距底 0：在底（恢复让位，视口由判底钉底接管）
+      expect(
+        isPreActionAtBottom(
+          { snapshotScrollTop: 1400, snapshotScrollHeight: 2000 },
+          600
+        )
+      ).toBe(true);
+      // 距底恰为贴底容差 2px：在底
+      expect(
+        isPreActionAtBottom(
+          { snapshotScrollTop: 1398, snapshotScrollHeight: 2000 },
+          600
+        )
+      ).toBe(true);
+      // 距底 3px：不在底（锚点恢复照常执行）
+      expect(
+        isPreActionAtBottom(
+          { snapshotScrollTop: 1397, snapshotScrollHeight: 2000 },
+          600
+        )
+      ).toBe(false);
+      // 退化区制：内容装得下（scrollHeight < clientHeight）恒在底
+      expect(
+        isPreActionAtBottom(
+          { snapshotScrollTop: 0, snapshotScrollHeight: 464 },
+          600
+        )
+      ).toBe(true);
     });
 
     it('findScrollContainer: 正确检索 DOM 树中的滚动宿主容器', () => {
