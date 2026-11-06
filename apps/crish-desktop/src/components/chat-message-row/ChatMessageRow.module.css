@@ -630,21 +630,9 @@ button.iconBtn,
   color: inherit;
 }
 
-.inlineImages {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-}
-
-.mdImg {
-  max-width: min(100%, 420px);
-  max-height: 280px;
-  border-radius: var(--radius-xl);
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  object-fit: contain;
-  background: var(--bg-secondary);
-}
+/* 注：.inlineImages / .mdImg 曾为 MessageContent 同规的死副本（#7 批 2026-11-06 删除）：
+   全仓唯一引用方 ProcessItemRenderer 用的是 MessageContent.module.css，
+   本文件两规则零 TSX 引用。 */
 
 @media (max-width: 720px) {
   .row {
