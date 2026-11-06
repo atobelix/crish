@@ -18,6 +18,13 @@
  * 4. 11 项首批集成确实接线（摘掉即红）；
  * 5. 本批触及的 CSS 模块不新增 keyframes 悬空（S 波收口 43 处教训：
  *    模块内引用的 animation 名必须在本文件内定义）。
+ *
+ * S5b 弹层收敛（2026-11-06，接 S4）：Menu 入场死选择器修复
+ * （[data-state='open'] 对 Base UI 永远不匹配，改走 data-starting-style
+ * + 过渡）；SettingsQuickMenu 死规则删除（入场/退场改走 menuContent）；
+ * 私有退场 keyframes 名收敛为正典名（值不变）；TiptapSlashMenu /
+ * ModelBadgePickerMenu 的父级早退修复（退场宿主保活）；ProjectPickerMenu
+ * 死级联规则删除。新增断言见末尾 describe('S5b 弹层收敛')。
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -270,7 +277,7 @@ describe('首批集成接线', () => {
     expect(chip).toContain('useExitReveal');
     expect(chip).toContain('useClosingFlag');
     const css = read('components/chat-composer/AnnotationChipItem.module.css');
-    expect(css).toContain('@keyframes annPopoverFadeOut');
+    expect(css).toContain('@keyframes crish-popover-exit-top');
     expect(css).toContain(".annPopoverCard[data-closing='true']");
   });
 
@@ -332,7 +339,10 @@ describe('首批集成接线', () => {
     const css = read(
       'components/binary-tree/NewTabLauncherPopover.module.css'
     );
-    expect(css).toContain('@keyframes launcherExit');
+    // S5b：私有 keyframes 名 launcherExit 已收敛为正典名（值不变）
+    expect(css).toContain('@keyframes crish-popover-exit');
+    expect(css).not.toContain('@keyframes launcherExit');
+    expect(css).not.toContain('launcherExit');
     expect(css).toContain(".popoverContent[data-state='closed']");
   });
 
@@ -349,7 +359,9 @@ describe('首批集成接线', () => {
     expect(pop).toContain('closingPop');
     expect(pop).toContain('data-closing');
     const css = read('components/files/FileAnnotationPopover.module.css');
-    expect(css).toContain('@keyframes popoverFadeOut');
+    // S5b：私有 keyframes 名 popoverFadeOut 已收敛为正典名（值不变）
+    expect(css).toContain('@keyframes crish-popover-exit');
+    expect(css).not.toContain('popoverFadeOut');
     expect(css).toContain(".popover[data-closing='true']");
   });
 
@@ -359,8 +371,138 @@ describe('首批集成接线', () => {
     expect(toast).toContain('toastClosing');
     expect(toast).toContain('data-closing');
     const css = read('components/chat-composer/DraftUndoToast.module.css');
-    expect(css).toContain('@keyframes undoToastOut');
+    // S5b：私有 keyframes 名 undoToastOut 已收敛为正典名 -top 变体（值不变）
+    expect(css).toContain('@keyframes crish-popover-exit-top');
+    expect(css).not.toContain('undoToastOut');
     expect(css).toContain(".undoToast[data-closing='true']");
+  });
+});
+
+describe('S5b 弹层收敛', () => {
+  it('Menu 入场：Base UI 走 data-starting-style + 过渡（[data-state=open] 仍留给 Radix）', () => {
+    const css = read('components/ui/Menu/Menu.module.css');
+    // 基类带入场过渡（减动效档归零）
+    expect(css).toContain(
+      'transition:\n      opacity var(--transition-popover-enter),\n      transform var(--transition-popover-enter);'
+    );
+    expect(css).toContain('.menuContent[data-starting-style]');
+    expect(css).toContain('.popup[data-starting-style]');
+    expect(css).toContain(
+      ".menuContent[data-starting-style][data-side='top']"
+    );
+    // Radix 面仍走关键帧入场（SEP 主面板），不得误删
+    expect(css).toContain(".menuContent[data-state='open']");
+    expect(css).toContain('@keyframes crish-popover-enter');
+    // 减动效档须同时关掉过渡（本文件 media 块在 @layer 内缩进，
+    // 故不用 design-system 式 \n} 锚定，改以块内匹配）
+    expect(css).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?transition: none;/
+    );
+  });
+
+  it('SettingsQuickMenu：死 data-state 规则与本地 keyframes 已删，入场/退场改走 menuContent', () => {
+    const css = read('components/settings/SettingsQuickMenu.module.css');
+    expect(css).not.toContain(".sbQuickMenu[data-state='open']");
+    expect(css).not.toContain(".sbQuickMenu[data-state='closed']");
+    expect(css).not.toContain('@keyframes crish-popover-enter-top');
+    expect(css).not.toContain('@keyframes crish-popover-exit-top');
+    // 交接注释须写明接管方（防后人误以为本文件漏了动画）
+    expect(css).toContain('menuContent');
+    // 子菜单自有机制不动（其 popup 不挂 menuContent）
+    expect(css).toContain('@starting-style');
+    expect(css).toContain('.sbQuickSubmenu[data-ending-style]');
+  });
+
+  it('TiptapSlashMenu：父级早退已修（退场宿主保活）+ 本地 keyframes 已补', () => {
+    const tsx = read('components/chat-composer/TiptapSlashMenu.tsx');
+    expect(tsx).toContain('useClosingFlag');
+    expect(tsx).toContain('tiptap-slash-menu');
+    expect(tsx).toContain('slashClosing.visible');
+    expect(tsx).not.toMatch(/^\s*if \(!isOpen\) return null;/m);
+    const css = read('components/chat-composer/TiptapSlashMenu.module.css');
+    expect(css).toContain('@keyframes crish-popover-enter');
+    expect(css).toContain('@keyframes crish-popover-enter-top');
+    expect(css).toContain('@keyframes crish-popover-exit');
+    expect(css).toContain('@keyframes crish-popover-exit-top');
+  });
+
+  it('ModelBadgePickerMenu：父级早退已修（退场宿主保活），死类 .mbMenuExit 已删', () => {
+    const tsx = read('components/provider/ModelBadgePickerMenu.tsx');
+    expect(tsx).toContain('useClosingFlag');
+    expect(tsx).toContain('model-badge-picker');
+    expect(tsx).toContain('pickerClosing.visible');
+    expect(tsx).not.toMatch(/^\s*if \(!open\) return null;/m);
+    const css = read('components/provider/ModelBadgePickerMenu.module.css');
+    // 死类规则已删（注释里仍会提到该类名的典故，故只钉规则形态）
+    expect(css).not.toContain('.mbMenuExit {');
+    expect(css).not.toContain('@keyframes crish-popover-exit');
+    // 层遮挡棘轮：.mbMenu 不得挂未分层的 animation（会压过 @layer
+    // components 内的 menuContent [data-ending-style] 退场规则，退场
+    // 动画接管不上、Presence 约 5ms 即卸载；S4 的 .permMenu 同类缺陷
+    // 前例）。入场改走 menuContent 过渡。
+    const mbMenuBlock = css.match(/\.mbMenu \{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(mbMenuBlock).not.toContain('animation:');
+    // 本文件仅剩 .advancedContent 一处引用入场关键帧
+    expect(css.match(/animation: crish-popover-enter/g)?.length).toBe(1);
+  });
+
+  it('ProjectPickerMenu：死级联规则已删（无 TSX 消费、悬空引用随之消除）', () => {
+    const css = read('components/chat-card/ProjectPickerMenu.module.css');
+    expect(css).not.toContain('.cascadeSubmenu');
+    expect(css).not.toContain('crish-popover-enter');
+  });
+
+  it('私有 keyframes 名收敛：popover 族进/退场只剩正典名', () => {
+    for (const rel of [
+      'components/binary-tree/NewTabLauncherPopover.module.css',
+      'components/files/FileAnnotationPopover.module.css',
+      'components/chat-composer/DraftUndoToast.module.css',
+      'components/chat-composer/AnnotationChipItem.module.css',
+    ]) {
+      const css = read(rel);
+      expect(css).not.toContain('launcherEnter');
+      expect(css).not.toContain('launcherExit');
+      expect(css).not.toContain('popoverFadeIn');
+      expect(css).not.toContain('popoverFadeOut');
+      expect(css).not.toContain('undoToastIn');
+      expect(css).not.toContain('undoToastOut');
+      expect(css).not.toContain('annPopoverFadeIn');
+      expect(css).not.toContain('annPopoverFadeOut');
+    }
+  });
+});
+
+describe('S5b 父级保活（实机发现的第二层早退）', () => {
+  it('SlashExtension：关闭路径一律延迟销毁（先 isOpen=false 再 170ms 销毁）', () => {
+    const ts = read('components/chat-composer/SlashExtension.ts');
+    // 延迟销毁机制存在
+    expect(ts).toContain('scheduleDestroy');
+    expect(ts).toContain('destroyTimer');
+    expect(ts).toContain('DURATION_POPOVER_EXIT_MS + EXIT_SETTLE_BUFFER_MS');
+    // 关闭三路（菜单 onClose / 扩展 Esc / 建议 onExit）都不再直接销毁
+    expect(ts).toContain('onClose: () => {\n        scheduleDestroy();');
+    expect(ts).toMatch(/onKeyDown\(props: any\) \{[\s\S]*?scheduleDestroy\(\);/);
+    // 销毁本体清定时器并统一清理引用（退场窗内保锚引用不得提前置空）
+    expect(ts).toContain('clearTimeout(destroyTimer)');
+    expect(ts).toMatch(
+      /const destroyComponent = \(\) => \{[\s\S]*?propsRef = null;[\s\S]*?lastCachedBox = null;/
+    );
+    // 退场窗内重开：取消定时、就地复用
+    expect(ts).toContain('if (component) {');
+    expect(ts).toContain('component.updateProps(buildProps(props));');
+  });
+
+  it('ChatHeaderControls：父级宿主把 ModelBadgePickerMenu 多留一个退场窗', () => {
+    const tsx = read('components/chat-card/ChatHeaderControls.tsx');
+    expect(tsx).toContain('useClosingFlag');
+    expect(tsx).toContain('model-badge-picker');
+    expect(tsx).toContain('badgeClosing.visible');
+    expect(tsx).toContain('badgeShownRef');
+    // 条件渲染不再是 showModelDropdown 单条件（否则子级宿主同提交被卸载）
+    expect(tsx).toContain('showModelDropdown || badgeClosing.visible');
+    expect(tsx).not.toMatch(
+      /\{showModelDropdown && !isUnconfigured \? \(/
+    );
   });
 });
 
@@ -373,6 +515,12 @@ describe('本批不新增 keyframes 悬空', () => {
     'components/ui/SmartExpandablePanel/SmartExpandablePanel.module.css',
     'components/binary-tree/NewTabLauncherPopover.module.css',
     'components/files/FileAnnotationPopover.module.css',
+    // S5b 新增：本批触及的其余 CSS 模块（Menu 入场过渡不引用 keyframes 名）
+    'components/ui/Menu/Menu.module.css',
+    'components/settings/SettingsQuickMenu.module.css',
+    'components/chat-composer/TiptapSlashMenu.module.css',
+    'components/chat-card/ProjectPickerMenu.module.css',
+    'components/provider/ModelBadgePickerMenu.module.css',
   ])('%s 引用的 animation 名均在本文件内定义', (rel) => {
     expect(danglingKeyframes(read(rel))).toEqual([]);
   });

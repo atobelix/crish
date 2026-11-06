@@ -34,7 +34,7 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
 
     // S4 退场宿主：选区消失/提交/Esc 时浮层不立即卸载——宿主保持最后一
     // 次 {selText, selAnchor, commentDraft} 播 120ms 退场。浮层不走入
-    // 场通道（本地 popoverFadeIn），entered 取「曾经打开过」；disabled
+    // 场通道（本地 crish-popover-enter），entered 取「曾经打开过」；disabled
     // 翻 true 时直落（判定层门控）。新选区到达即取消退场（值重新非空）。
     const wasOpenRef = useRef(false);
     if (selText && selAnchor) wasOpenRef.current = true;

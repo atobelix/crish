@@ -1,6 +1,10 @@
-/* 进/退场 keyframes 与共享层正典同值（styles/design-system.css）。
+/* 入场 keyframes 与共享层正典同值（styles/design-system.css）。
  * 本模块副本不可删：Vite CSS Modules 会把 animation 引用名 scoped 化，
- * 无同名定义则动画静默失效（S5a 2026-11-06 实机证伪按名跨模块消费）。 */
+ * 无同名定义则动画静默失效（S5a 2026-11-06 实机证伪按名跨模块消费）。
+ * S5b：退场 keyframes（crish-popover-exit）已随死类 .mbMenuExit 一并
+ * 删除——退场由 ui/Menu menuContent 的 [data-ending-style] 并集规则
+ * 接管；.mbMenu 自身的入场 animation 行亦已删除（见下方注释），本
+ * 文件的 keyframes 定义仅供 .advancedContent 引用。 */
 @keyframes crish-popover-enter {
   0% {
     opacity: 0;
@@ -9,17 +13,6 @@
   100% {
     opacity: 1;
     transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
   }
 }
 
@@ -35,7 +28,14 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  /* S5b：退场不再走本文件的 .mbMenuExit（该类从未被挂载，已删除）——
+   * popup 同时挂 ui/Menu 的 menuContent，退场由其 [data-ending-style]
+   * 并集规则接管（S4 已实机验证）。本规则不得再挂 animation：未分层
+   * 的 animation 声明会压过 @layer components 内的 menuContent 退场
+   * 规则（分层恒输于未分层，与特异性无关），退场动画接管不上、Base
+   * UI Presence 约 5ms 即卸载——实机证伪（S4 的 .permMenu 同类缺陷
+   * 已删行，本文件是第二例）。入场改走 menuContent 的过渡（与
+   * PermissionModeMenu 同构，实机已证）。 */
   transform-origin: top left;
   max-height: min(
     var(--radix-popover-content-available-height, 480px),
@@ -48,10 +48,6 @@
   font-family: var(--font-sans, var(--sep-font-sans));
   box-sizing: border-box;
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-}
-
-.mbMenuExit {
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .mbInner {

@@ -69,52 +69,16 @@
   transform-origin: var(--transform-origin);
   will-change: transform, opacity;
 }
-/* keyframes 与共享层正典同值（styles/design-system.css）。
- * 本模块副本不可删：Vite CSS Modules 会把 animation 引用名 scoped 化，
- * 无同名定义则动画静默失效（S5a 2026-11-06 实机证伪按名跨模块消费）。 */
-@keyframes crish-popover-enter-top {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit-top {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-}
-
-/* 菜单面板入场/出场动画（与 ui/Menu/Menu.module.css 同款机制）：
-   position 为 side='top'，故使用 *-top 变体（从下往上展开）；
-   使用 data-state='open'/'closed' 属性（@base-ui/react/menu 菜单 Popup 自动注入）。
-   与 sbQuickSubmenu 的 @starting-style 机制并列，各管各的浮层。 */
-.sbQuickMenu[data-state='open'] {
-  animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
-}
-
-.sbQuickMenu[data-state='closed'] {
-  animation: crish-popover-exit-top var(--transition-popover-exit) forwards;
-  pointer-events: none;
-}
-
-/* 减弱动态偏好 */
-@media (prefers-reduced-motion: reduce) {
-  .sbQuickMenu[data-state='open'],
-  .sbQuickMenu[data-state='closed'] {
-    animation: none;
-    transition: opacity var(--duration-micro) var(--ease-standard);
-  }
-}
+/* 主菜单入场/退场（S5b）：本文件不再自备 data-state 规则——Base UI
+ * 的 MenuPopup 根本不写 data-state（见 node_modules/@base-ui/react
+ * menu/popup/MenuPopupDataAttributes.d.ts），旧 .sbQuickMenu[data-state=
+ * 'open'/'closed'] 三条规则全死，连同其仅被死规则引用的本地 *-top
+ * keyframes 与配套减动效块一并删除（S4 收口新发现，见 S 波后续收口
+ * 报告 §三.3）。入场/退场改走 ui/Menu 基座的 menuContent（S5b 的
+ * [data-starting-style] 过渡入场 + S4 的 [data-ending-style] 并集
+ * 退场，side=top 变体同理）：本 popup 经 panel.contentClassName
+ * 同时挂 menuContent 类。子菜单 .sbQuickSubmenu 仍走本文件自有的
+ * @starting-style 机制（其 popup 不挂 menuContent），不动。 */
 
 /* 菜单功能项（主题/设置分类/检查更新等）：采用标准控件中档高度（--control-height-md: 32px）与紧凑字阶，视觉轻盈利落 */
 .sbQuickItem,

@@ -26,6 +26,10 @@ import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';
+import {
+  useClosingFlag,
+  DURATION_POPOVER_EXIT_MS,
+} from '../motion/useExitReveal';
 
 export interface ChatHeaderControlsProps {
   appSettings: AppSettings | undefined;
@@ -176,6 +180,20 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   const showModelDropdown = showModelDropdownProp ?? internalShow;
   const setShowModelDropdown = setShowModelDropdownProp ?? setInternalShow;
   const badgeRef = useRef<HTMLButtonElement>(null);
+
+  // S5b：父级退场保活——ModelBadgePickerMenu 自身的 useClosingFlag 只能
+  // 保住组件内的 Menu，父级 `{showModelDropdown && …}` 会在 open 翻
+  // false 的同一提交里卸载整个子组件，退场根本没机会播（与斜杠菜单的
+  // SlashExtension 父级销毁同类）。本级宿主把子组件多留 120ms+50ms，
+  // 与子级宿主同时起表、同时到期；退场动画 120ms 内播完，边界竞态无
+  // 视觉影响。entered 取「曾经打开过」（菜单不走入场通道、无入场记忆）。
+  const badgeShownRef = useRef(false);
+  if (showModelDropdown) badgeShownRef.current = true;
+  const badgeClosing = useClosingFlag(showModelDropdown, {
+    key: 'model-badge-picker',
+    durationMs: DURATION_POPOVER_EXIT_MS,
+    entered: badgeShownRef.current,
+  });
   const catalogVersion = useModelsCatalogVersion();
   const choiceCount = useMemo(
     () => listLivePickerEntries().length,
@@ -328,17 +346,19 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
           )}
         </Button>
       </Tooltip>
-      {showModelDropdown && !isUnconfigured ? (
-        <ModelBadgePickerMenu
-          activeModel={engineModel}
-          onClose={() => setShowModelDropdown(false)}
-          onOpenChange={(nextOpen) => {
-            if (!nextOpen) setShowModelDropdown(false);
-          }}
-          open={showModelDropdown}
-          side="top"
-          anchor={badgeRef}
-        />
+      {showModelDropdown || badgeClosing.visible ? (
+        !isUnconfigured ? (
+          <ModelBadgePickerMenu
+            activeModel={engineModel}
+            onClose={() => setShowModelDropdown(false)}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setShowModelDropdown(false);
+            }}
+            open={showModelDropdown}
+            side="top"
+            anchor={badgeRef}
+          />
+        ) : null
       ) : null}
     </Suspense>
   );

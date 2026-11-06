@@ -25,6 +25,10 @@ import {
 } from '../../api/SessionRuntimeRegistry';
 import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
+import {
+  useClosingFlag,
+  DURATION_POPOVER_EXIT_MS,
+} from '../motion/useExitReveal';
 import { AppIcon } from '@/components/ui/icons';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { useI18n } from '../../i18n';
@@ -169,7 +173,22 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     onClose();
   }, [onOpenChange, onClose]);
 
-  if (!open) return null;
+  // S5b 退场宿主：此前 `!open` 直接 return null，整个 Menu（含 Base UI
+  // Presence）立即卸载，退场动画播不出；.mbMenuExit 类也从未被挂载，
+  // 是死类（随 CSS 一并删除）。现由 useClosingFlag 保活 120ms+50ms
+  // 退场窗，关闭期仍向 Menu 传实况 open（false），退场由 ui/Menu
+  // menuContent 的 [data-ending-style] 并集规则接管（S4 已实机验证）。
+  const pickerShownRef = useRef(false);
+  if (open) {
+    pickerShownRef.current = true;
+  }
+  const pickerClosing = useClosingFlag(open, {
+    key: 'model-badge-picker',
+    durationMs: DURATION_POPOVER_EXIT_MS,
+    entered: pickerShownRef.current,
+  });
+
+  if (!pickerClosing.visible) return null;
 
   return (
     <Menu

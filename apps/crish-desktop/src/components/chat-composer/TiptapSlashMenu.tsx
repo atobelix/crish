@@ -27,6 +27,10 @@ import {
   calculateSafeCursorAnchor,
   type SafeAnchorRect,
 } from './safeCursorAnchor';
+import {
+  useClosingFlag,
+  DURATION_POPOVER_EXIT_MS,
+} from '../motion/useExitReveal';
 import { Button } from '@/components/ui';
 import { AppIcon, ICON_NAMES, type IconName } from '@/components/ui/icons';
 
@@ -170,6 +174,21 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
     const [selectedIndex, setSelectedIndex] = useState(0);
     const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+    // S5b 退场宿主：此前 `!isOpen` 直接 return null，整个 Popover 树
+    // 立即卸载，Radix Presence 没机会播退场（与 S4 的 ComposePlusMenu
+    // 父级早退同类）。现由 useClosingFlag 保活 120ms+50ms 退场窗，
+    // 关闭期仍向 Radix 传实况 open（false），由 data-state='closed'
+    // 播本地退场；熔断条件（无有效几何/空指令集）仍立即隐藏。
+    const slashShownRef = useRef(false);
+    if (isOpen) {
+      slashShownRef.current = true;
+    }
+    const slashClosing = useClosingFlag(isOpen, {
+      key: 'tiptap-slash-menu',
+      durationMs: DURATION_POPOVER_EXIT_MS,
+      entered: slashShownRef.current,
+    });
+
     useEffect(() => {
       setSelectedIndex(0);
     }, [items]);
@@ -270,9 +289,11 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       });
     }
 
-    // 终极熔断防线：无有效几何包围盒或空指令集时拒绝挂载 Portal（自动隐藏）
+    // 终极熔断防线：无有效几何包围盒或空指令集时拒绝挂载 Portal（自动隐藏）。
+    // S5b：关闭（isOpen 翻 false）不再立即 return null，退场窗内由
+    // slashClosing.visible 保活，Radix 播完退场再卸载。
     if (
-      !isOpen ||
+      (!isOpen && !slashClosing.visible) ||
       !items ||
       items.length === 0 ||
       !anchor ||

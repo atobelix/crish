@@ -24,6 +24,10 @@ import {
 } from './safeCursorAnchor';
 import { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 import { findSlashOrEnumerationMatch } from './slashTriggerAlias';
+import {
+  DURATION_POPOVER_EXIT_MS,
+  EXIT_SETTLE_BUFFER_MS,
+} from '../../utils/motionTokens';
 
 export { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 
@@ -139,7 +143,21 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
       | null = null;
     let lastSuggestedSide: 'top' | 'bottom' | undefined = undefined;
 
+    // S5b：退场延迟销毁——TiptapSlashMenu 的退场宿主（useClosingFlag）
+    // 在组件内，而本文件是拥有条件渲染的父级：直接 destroy 会让组件连
+    // 同退场一起死（实机：Esc 后 50ms 内已卸载，零淡出帧；且 onKeyDown
+    // 的 Esc 分支先于菜单自身的 Esc 处理，菜单的 onClose 根本走不到
+    // isOpen 翻 false）。关闭路径一律先把 isOpen 翻 false（触发组件
+    // 内 120ms 退场 + 50ms settle），170ms 后再真正销毁；退场窗内
+    // 重开则取消定时、就地复用。useExitReveal 的宿主契约第 1/2 条：
+    // 保活只能发生在卸载的上一级，卸载只由宿主定时器驱动。
+    let destroyTimer: ReturnType<typeof setTimeout> | null = null;
+
     const destroyComponent = () => {
+      if (destroyTimer !== null) {
+        clearTimeout(destroyTimer);
+        destroyTimer = null;
+      }
       if (component) {
         if (component.element?.parentNode) {
           component.element.parentNode.removeChild(component.element);
@@ -147,6 +165,30 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         component.destroy();
         component = null;
       }
+      // 引用清理统一落在此处：退场窗内 clientRect 仍需 lastCachedBox
+      // 保锚，提前置空会触发菜单熔断、杀死退场。
+      propsRef = null;
+      lastCachedBox = null;
+      lastSuggestedSide = undefined;
+    };
+
+    const scheduleDestroy = () => {
+      if (!component) return;
+      if (destroyTimer !== null) return; // 已在退场窗内
+      if (!propsRef) {
+        destroyComponent();
+        return;
+      }
+      try {
+        component.updateProps({ ...buildProps(propsRef), isOpen: false });
+      } catch {
+        destroyComponent();
+        return;
+      }
+      destroyTimer = setTimeout(() => {
+        destroyTimer = null;
+        destroyComponent();
+      }, DURATION_POPOVER_EXIT_MS + EXIT_SETTLE_BUFFER_MS);
     };
 
     const buildProps = (props: any) => ({
@@ -158,7 +200,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
       range: props.range,
       isOpen: true,
       onClose: () => {
-        destroyComponent();
+        scheduleDestroy();
       },
       clientRect: () => {
         const view = props.editor?.view;
@@ -249,6 +291,16 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         if (ctx.listboxId) dom.setAttribute('aria-controls', ctx.listboxId);
         dom.setAttribute('aria-expanded', 'true');
       }
+      if (component) {
+        // 退场窗内重开：取消待销毁，就地复用并翻回 open（无闪烁、无重挂载）；
+        // useClosingFlag 见 open 翻回 true 即取消退场。
+        if (destroyTimer !== null) {
+          clearTimeout(destroyTimer);
+          destroyTimer = null;
+        }
+        component.updateProps(buildProps(props));
+        return;
+      }
       component = new ReactRenderer(TiptapSlashMenu, {
         props: buildProps(props),
         editor: props.editor,
@@ -270,7 +322,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         propsRef = props;
         const empty = !props.items || props.items.length === 0;
         if (empty && ctx.skipEmpty) {
-          destroyComponent();
+          scheduleDestroy();
           return;
         }
         if (component) {
@@ -292,7 +344,9 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
             return false;
           }
 
-          destroyComponent();
+          // S5b：先退场（isOpen 翻 false）再销毁；exitSuggestion 会走
+          // onExit，其内的 scheduleDestroy 因定时器已在而幂等。
+          scheduleDestroy();
           if (props.view && ctx.pluginKey) {
             exitSuggestion(props.view, ctx.pluginKey);
           }
@@ -308,10 +362,15 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
           dom.removeAttribute('aria-controls');
           dom.removeAttribute('aria-activedescendant');
         }
-        destroyComponent();
-        propsRef = null;
-        lastCachedBox = null;
-        lastSuggestedSide = undefined;
+        // S5b：退场窗内引用（lastCachedBox 保锚）不得提前置空；销毁时
+        // destroyComponent 统一清理。无组件时（建议未开过菜单）直接清理。
+        if (component) {
+          scheduleDestroy();
+        } else {
+          propsRef = null;
+          lastCachedBox = null;
+          lastSuggestedSide = undefined;
+        }
       },
     };
   };

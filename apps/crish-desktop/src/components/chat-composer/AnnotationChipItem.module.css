@@ -22,7 +22,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: annPopoverFadeIn var(--transition-popover-enter) forwards;
+  animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
   box-sizing: border-box;
 }
 
@@ -30,7 +30,7 @@
  * --transition-popover-enter token；S5a）。keyframes 保留本模块定义：
  * Vite CSS Modules 会把 animation 引用名 scoped 化，按名跨模块消费
  * 共享 keyframes 会静默失效（S5a 实机证伪）。 */
-@keyframes annPopoverFadeIn {
+@keyframes crish-popover-enter-top {
   from {
     opacity: 0;
     transform: scale(0.97) translateY(4px);
@@ -182,11 +182,12 @@
   opacity: 0.8;
 }
 
-/* S4 退场：批注 popover 的本地退场配方（与入场 annPopoverFadeIn 同值
+/* S4 退场：批注 popover 的本地退场配方（与入场 crish-popover-enter-top 同值
  * 反向：scale 0.97 / +4px，120ms accelerate；keyframes 保留本模块
  * 定义——Vite CSS Modules 按名跨模块消费共享 keyframes 会静默失效，
- * 见 S5a）。退场期 pointer-events 由 data-closing 规则关闭。 */
-@keyframes annPopoverFadeOut {
+ * 见 S5a）。S5b：私有 keyframes 名已收敛为正典名（值不变）。
+ * 退场期 pointer-events 由 data-closing 规则关闭。 */
+@keyframes crish-popover-exit-top {
   from {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -198,7 +199,7 @@
 }
 
 .annPopoverCard[data-closing='true'] {
-  animation: annPopoverFadeOut var(--transition-popover-exit) forwards;
+  animation: crish-popover-exit-top var(--transition-popover-exit) forwards;
   pointer-events: none;
 }
 
