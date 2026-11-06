@@ -38,8 +38,8 @@
   -webkit-app-region: no-drag;
 }
 
-/* 浮层配方归队（AN2 / A6）：进/出场统一走共享 keyframes + popover token，
- * 方向语义不变（top = 自下方 4px 升入、bottom = 自上方 4px 落入、closed 沿 top 向退场） */
+/* 浮层配方归队（AN2 / A6）：进/出场统一走全局共享 keyframes（design-system.css）+ popover token */
+
 .popoverContent[data-state='open'][data-side='top'] {
   animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
 }
@@ -48,9 +48,15 @@
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 
+/* 退场按弹出方向分发（S5a 修复）：默认（side='bottom'）走 exit，
+   side='top' 覆盖为 exit-top 镜像；此前无分发，底部弹出也播向上退场。 */
 .popoverContent[data-state='closed'] {
-  animation: crish-popover-exit-top var(--transition-popover-exit) forwards;
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
   pointer-events: none;
+}
+
+.popoverContent[data-state='closed'][data-side='top'] {
+  animation-name: crish-popover-exit-top;
 }
 
 .menuList {

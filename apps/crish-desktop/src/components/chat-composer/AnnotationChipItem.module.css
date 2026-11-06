@@ -22,18 +22,22 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: annPopoverFadeIn var(--transition-popover-enter);
+  animation: annPopoverFadeIn var(--transition-popover-enter) forwards;
   box-sizing: border-box;
 }
 
+/* 入场值已对齐共享配方 -top 变体（scale 0.97 / +4px 上浮，时长缓动走
+ * --transition-popover-enter token；S5a）。keyframes 保留本模块定义：
+ * Vite CSS Modules 会把 animation 引用名 scoped 化，按名跨模块消费
+ * 共享 keyframes 会静默失效（S5a 实机证伪）。 */
 @keyframes annPopoverFadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.985);
+    transform: scale(0.97) translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 

@@ -223,6 +223,24 @@
   flex-direction: column;
   flex-shrink: 0;
   box-sizing: border-box;
+  overflow: hidden;
+  /* 开合过渡对齐笔记抽屉先例（NoteSidebarDrawer）：200ms width + opacity（S5a）。
+     本抽屉由父级条件渲染（FileViewerCard），打开走 @starting-style 起始帧滑入；
+     关闭侧的常驻挂载改造涉及父文件归属，登记待 S4/S1a 协调。 */
+  transition:
+    width var(--duration-normal, 200ms)
+      var(--ease-in-out, cubic-bezier(0.2, 0, 1, 1)),
+    min-width var(--duration-normal, 200ms)
+      var(--ease-in-out, cubic-bezier(0.2, 0, 1, 1)),
+    opacity var(--duration-normal, 200ms) var(--ease-standard);
+}
+
+@starting-style {
+  .historyDrawer {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+  }
 }
 
 .historyHeader {

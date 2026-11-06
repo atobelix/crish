@@ -42,28 +42,55 @@
 
     opacity: 1;
     transform: scale(1);
-    transition:
-      opacity var(--duration-micro) ease-out,
-      transform var(--duration-micro) cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  @starting-style {
-    .menuContent,
-    .popup {
+  /* 进/退场 keyframes 与共享层正典同值（styles/design-system.css，scale 0.97 / ∓4px）。
+   * 本模块副本不可删：Vite CSS Modules 会把 animation 引用名 scoped 化，
+   * 模块内无同名 @keyframes 定义时引用名悬空、动画静默失效（S5a 2026-11-06
+   * 实机证伪「按名跨模块消费」；真单轨待共享层工具类 + TSX 采纳批）。 */
+  @keyframes crish-popover-enter {
+    0% {
       opacity: 0;
-      transform: scale(0.95);
+      transform: scale(0.97) translateY(-4px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
     }
   }
 
-  .menuContent[data-ending-style],
-  .popup[data-ending-style] {
-    opacity: 0;
-    transform: scale(0.95);
+  @keyframes crish-popover-enter-top {
+    0% {
+      opacity: 0;
+      transform: scale(0.97) translateY(4px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
-  /* 进/退场关键帧统一消费共享层正典 crish-popover-enter/-top、crish-popover-exit/-top
-   * （styles/design-system.css，scale 0.97 / ∓4px）；本文件旧本地同名定义
-   * （scale 0.93 / ∓6px、exit 0.95）已于 AN3 收编删除，禁止再本地重定义。 */
+  @keyframes crish-popover-exit {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.97) translateY(-4px);
+    }
+  }
+
+  @keyframes crish-popover-exit-top {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.97) translateY(4px);
+    }
+  }
 
   .menuContent[data-side='top'],
   .popup[data-side='top'] {
@@ -273,7 +300,6 @@
     .menuContent,
     .popup {
       animation: none;
-      transition: opacity var(--duration-micro) var(--ease-standard);
     }
   }
 }

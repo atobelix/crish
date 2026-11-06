@@ -30,19 +30,22 @@
   outline: none;
   z-index: var(--z-dropdown);
   font-family: var(--font-sans);
-  animation: launcherEnter var(--duration-fast) var(--ease-standard);
+  animation: launcherEnter var(--transition-popover-enter) forwards;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
+/* 入场值已对齐共享配方（scale 0.97 / -4px，时长缓动走 --transition-popover-enter
+ * token；S5a）。keyframes 保留本模块定义：Vite CSS Modules 会把 animation
+ * 引用名 scoped 化，按名跨模块消费共享 keyframes 会静默失效（S5a 实机证伪）。 */
 @keyframes launcherEnter {
   0% {
     opacity: 0;
-    transform: scale(0.97) translateY(-3px);
+    transform: scale(0.97) translateY(-4px);
   }
   100% {
     opacity: 1;
-    transform: none;
+    transform: scale(1) translateY(0);
   }
 }
 
