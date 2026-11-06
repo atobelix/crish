@@ -208,7 +208,7 @@ html[data-theme='light'] {
 
   --md-heading-color: var(--text-primary);
 
-  --md-code-inline-bg: var(--surface-shell);
+  --md-code-inline-bg: var(--state-selected);
   --md-code-inline-fg: var(--text-primary);
   --md-code-inline-radius: var(--radius-row);
   --md-code-inline-padding: 0.15em 0.4em;
@@ -457,7 +457,7 @@ html[data-theme='dark'] {
 
   --md-heading-color: var(--text-primary);
 
-  --md-code-inline-bg: var(--surface-shell);
+  --md-code-inline-bg: var(--state-selected);
   --md-code-inline-fg: var(--text-primary);
   --md-code-inline-radius: var(--radius-row);
   --md-code-inline-padding: 0.15em 0.4em;
