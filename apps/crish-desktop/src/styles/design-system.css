@@ -285,6 +285,77 @@
 }
 
 /* ==========================================================================
+   4b. keyframes 全局消费工具类（keyframes 悬空修复批 · 2026-11-06）
+   --------------------------------------------------------------------------
+   模块 CSS（*.module.css）内按名引用全局 keyframes 是悬空的：工具链会把
+   引用名改写为模块 scoped 名（如 _crish-spin_<hash>），而对应定义不会
+   随之生成，动画静默死亡（动效审计 B · T1，实测 42 处、含 Spinner 完全
+   不可见）。故立纪律：模块 CSS 禁止按名引用未在本文件定义的 keyframes；
+   跨文件消费一律经本节全局工具类——模块侧 `composes: <工具类> from
+   global;`，或在 TSX 直接挂全局类。引用完整性由守卫
+   components/motion/keyframesIntegrity.contract.test.ts 钉住（棘轮）。
+   fade-in 工具类以 --anim-duration / --anim-easing / --anim-fill 三个
+   自定义属性承接各消费面的原时长/缓动/填充差异，缺省 = 多数消费面的
+   原口径（--duration-fast + --ease-decelerate + both）。
+   旋转族工具类（.crish-anim-spin / .crish-anim-spin-appear）不在本节：
+   它们住 styles/indicators.css，与其关键帧同文件。
+   ========================================================================== */
+
+.crish-anim-pulse-dot {
+  animation: crish-pulse-dot var(--transition-pulse) infinite;
+}
+
+.crish-anim-skeleton-pulse {
+  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
+}
+
+.crish-anim-shine-sweep {
+  animation: crish-shine-sweep var(--transition-pulse) infinite;
+}
+
+.crish-anim-text-breathe {
+  animation: crish-text-breathe var(--transition-pulse) infinite;
+}
+
+.crish-anim-fade-in {
+  animation-name: crish-fade-in;
+  animation-duration: var(--anim-duration, var(--duration-fast));
+  animation-timing-function: var(--anim-easing, var(--ease-decelerate));
+  animation-fill-mode: var(--anim-fill, both);
+}
+
+.crish-anim-fade-out {
+  animation: crish-fade-out var(--transition-smooth) forwards;
+}
+
+/* 弹层进/退场状态族：供弹层宿主按 data-state / data-side /
+ * data-positioned 直接挂类消费（正典自 ui/Select 收敛，本地副本已删）。 */
+.crish-popover-anim[data-state='open'][data-positioned='true'] {
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+}
+
+.crish-popover-anim[data-state='open'][data-positioned='true'][data-side='top'] {
+  animation-name: crish-popover-enter-top;
+}
+
+.crish-popover-anim[data-state='closed'] {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crish-anim-pulse-dot,
+  .crish-anim-skeleton-pulse,
+  .crish-anim-shine-sweep,
+  .crish-anim-text-breathe,
+  .crish-anim-fade-in,
+  .crish-anim-fade-out,
+  .crish-popover-anim {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
    5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
    ========================================================================== */
 

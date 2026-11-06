@@ -25,3 +25,25 @@
     opacity: 1;
   }
 }
+
+/* keyframes 全局消费工具类（keyframes 悬空修复批 · 2026-11-06）：模块
+ * CSS 禁按名引用关键帧（工具链会把引用名 scoped 化而定义不随之生成，
+ * 动画静默死亡），旋转族经此二类以 composes 消费；其余动效工具类在
+ * design-system.css §4b。 */
+.crish-anim-spin {
+  animation: crish-spin var(--transition-spin) infinite;
+}
+
+.crish-anim-spin-appear {
+  animation:
+    crish-spin var(--transition-spin) infinite,
+    crish-indicator-appear var(--duration-fast) var(--ease-standard) 250ms
+      forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crish-anim-spin,
+  .crish-anim-spin-appear {
+    animation: none;
+  }
+}
