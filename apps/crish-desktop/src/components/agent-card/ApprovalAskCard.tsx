@@ -35,7 +35,6 @@ import {
   plainApprovalQuestion,
   shouldResetAllowConfirmArmed,
 } from '../../api/chatApprovalUi';
-import { agentIdentity } from '../../api/tool-presentation/agentIdentity';
 import type {
   MessageToolApprovalMeta,
   MessageToolApprovalPayload,
@@ -43,6 +42,8 @@ import type {
 import { ApprovalActions } from './ApprovalActions';
 import { ApprovalNoteField } from './ApprovalNoteField';
 import { ApprovalPayloadSection } from './ApprovalPayloadSection';
+import { ApprovalCountdownBar } from './ApprovalCountdownBar';
+import { ApprovalRequesterSection } from './ApprovalRequesterSection';
 import {
   ApprovalRiskChips,
   dedupeChipLabels,
@@ -54,6 +55,7 @@ import {
   type ApprovalTimeoutPolicy,
 } from './useApprovalCountdown';
 import { useApprovalKeyboard } from './useApprovalKeyboard';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import { AppIcon } from '@/components/ui/icons';
 
 export type { ApprovalTimeoutPolicy };
@@ -145,6 +147,19 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
   const prevMsgIdRef = useRef(msgId);
   const allowBtnRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // 统一入场通道：审批卡在请求发生的实况时刻挂载。事件戳优先取
+  // 到期反推的请求时刻（expiresAtMs - timeoutMs），缺省时 liveOnMount
+  // 兜底；grow 变体让卡片高度同步生长（私有 popover 入场已删除）。
+  const entrance = useEntranceReveal({
+    key: `approval:${toolId ?? msgId}`,
+    eventTs:
+      propExpiresAtMs != null && propTimeoutMs != null
+        ? propExpiresAtMs - propTimeoutMs
+        : undefined,
+    liveOnMount: true,
+    variant: 'grow',
+  });
 
   const titleId = useId();
   const descId = useId();
@@ -265,16 +280,8 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
     zoneHint;
   const riskAriaSummary = hasRiskFacts ? approvalRiskSummary(riskMeta) : '';
 
-  // R7 申请人标注：requester 存在 = 子 agent 发起（主 agent 发起时桥接层
-  // 不写 requester，卡片不标注、与既有呈现一致）。身份标按 subagentId 走
-  // agentIdentity 同源取值（与分派卡同一色板/标号）；解析不到 subagentId
-  // 时只出文案不出身份标，绝不按 runId 误挂身份。申请理由作上下文一行，
-  // 与 summary / riskReason 同文时不重复展示（parse 层有 reason→riskReason
-  // 的兜底串扰，此处收口去重）。
+  // 申请人与理由标注：requester 存在 = 子 agent 发起，收口去重
   const requester = riskMeta?.requester;
-  const requesterIdentity = requester?.subagentId
-    ? agentIdentity(requester.subagentId)
-    : null;
   const requesterReason =
     requester?.reason &&
     requester.reason !== summary &&
@@ -376,19 +383,24 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
     (countdownActive || remainingMs != null || effectiveExpiresAtMs != null) &&
     effectiveTimeoutPolicy !== 'manual-only';
 
-  const tensionColor =
-    tensionStage === 'critical'
-      ? 'var(--color-danger)'
-      : tensionStage === 'warning'
-        ? 'var(--color-warning)'
-        : 'var(--color-success)';
-
   return (
     <div
-      ref={rootRef}
+      ref={(el) => {
+        rootRef.current = el;
+        entrance.rootRef(el);
+      }}
       className={`${styles.approvalCard} ${needsDouble ? styles.approvalCardElevated : ''} ${
         confirmArmed ? styles.isConfirmArmed : ''
-      } ${approvalCardClassName({ needsDouble, confirmArmed })}`}
+      } ${approvalCardClassName({ needsDouble, confirmArmed })}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+      style={
+        entrance.entering
+          ? ({
+              '--reveal-delay': `${entrance.delayMs}ms`,
+            } as React.CSSProperties)
+          : undefined
+      }
+      data-entering={entrance.entering ? 'true' : undefined}
+      onAnimationEnd={entrance.handleAnimationEnd}
       role="region"
       aria-label={regionLabel}
       aria-labelledby={titleId}
@@ -456,51 +468,11 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
         ) : null}
       </div>
 
-      {requester ? (
-        <div
-          data-testid="approval-requester"
-          data-requester-agent={requester.subagentId ?? requester.runId}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginTop: 4,
-            fontSize: 'var(--font-size-xs)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {requesterIdentity ? (
-            <span
-              aria-hidden
-              style={{
-                color: requesterIdentity.hueVar,
-                fontSize: 11,
-                lineHeight: 1,
-              }}
-            >
-              {requesterIdentity.glyph}
-            </span>
-          ) : null}
-          <span>
-            {requester.label
-              ? t('chat.approval.requesterSubagent', {
-                  label: requester.label,
-                })
-              : t('chat.approval.requesterSubagentAnon')}
-            {riskMeta?.arbiter === 'main-agent' ? (
-              <span style={{ color: 'var(--text-tertiary)' }}>
-                {t('chat.approval.arbiterMainAgentSuffix')}
-              </span>
-            ) : null}
-          </span>
-        </div>
-      ) : null}
-
-      {showRequesterReason ? (
-        <div className={styles.approvalCardDesc} data-requester-reason>
-          {requesterReason}
-        </div>
-      ) : null}
+      <ApprovalRequesterSection
+        requester={requester}
+        arbiter={riskMeta?.arbiter}
+        requesterReason={requesterReason}
+      />
 
       <div className={styles.approvalCardTitle} id={titleId}>
         {question}
@@ -609,138 +581,15 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
         onDeny={handleDeny}
       />
 
-      {/* 倒计时归零时锁定提示：纯等待后端系统策略广播，0 竞态 */}
-      {isExpired ? (
-        <div
-          className={styles.approvalCardStatus}
-          role="status"
-          aria-live="polite"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 10px',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--font-size-xs)',
-            color: 'var(--color-warning)',
-            background:
-              'color-mix(in srgb, var(--color-warning) 8%, transparent)',
-            border:
-              '1px solid color-mix(in srgb, var(--color-warning) 20%, transparent)',
-            marginTop: 4,
-          }}
-        >
-          <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            <AppIcon name="timer" size={12} aria-hidden />
-            <span>{t('chat.approval.countdownExpiredDecision')}</span>
-          </span>
-        </div>
-      ) : null}
-
-      {/* 三阶段渐进张力进度条 */}
-      {showCountdown ? (
-        <div
-          style={{
-            marginTop: 6,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-          }}
-          role="progressbar"
-          aria-valuenow={Math.round(timeoutPercent)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`审批剩余时间 ${remainingSeconds} 秒`}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: 'var(--font-size-xxs, 11px)',
-              color: 'var(--text-tertiary)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <AppIcon
-                name={
-                  isExpired
-                    ? 'timer'
-                    : isPaused
-                      ? 'pause'
-                      : effectiveTimeoutPolicy === 'auto-allow'
-                        ? 'zap'
-                        : 'shield-alert'
-                }
-                size={12}
-                aria-hidden
-              />
-              <span>
-                {isExpired
-                  ? t('chat.approval.countdownExpired')
-                  : isPaused
-                    ? t('chat.approval.countdownPaused')
-                    : effectiveTimeoutPolicy === 'auto-allow'
-                      ? t('chat.approval.countdownAutoAllow', {
-                          seconds: remainingSeconds,
-                        })
-                      : t('chat.approval.countdownAutoDeny', {
-                          seconds: remainingSeconds,
-                        })}
-              </span>
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: tensionStage === 'critical' ? 700 : 600,
-                color: isPaused ? 'var(--text-tertiary)' : tensionColor,
-              }}
-            >
-              <AppIcon name="clock" size={12} aria-hidden />
-              <span>
-                {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:
-                {String(remainingSeconds % 60).padStart(2, '0')}
-              </span>
-            </span>
-          </div>
-
-          <div
-            style={{
-              position: 'relative',
-              height: 4,
-              borderRadius: 2,
-              background: 'var(--hairline, var(--border-subtle))',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                height: '100%',
-                width: `${timeoutPercent}%`,
-                borderRadius: 2,
-                background: isPaused ? 'var(--text-tertiary)' : tensionColor,
-                transition:
-                  'width var(--transition-micro), background-color var(--transition-smooth)',
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
+      <ApprovalCountdownBar
+        isExpired={isExpired}
+        showCountdown={showCountdown}
+        remainingSeconds={remainingSeconds}
+        timeoutPercent={timeoutPercent}
+        tensionStage={tensionStage}
+        effectiveTimeoutPolicy={effectiveTimeoutPolicy}
+        isPaused={isPaused}
+      />
     </div>
   );
 };
