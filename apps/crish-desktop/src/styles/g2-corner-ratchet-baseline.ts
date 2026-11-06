@@ -17,7 +17,7 @@
 export const G2_RATCHET_CAPS = {
   barePx: 25,
   privateVars: 23,
-  fallbackDrift: 29,
+  fallbackDrift: 8, // F3 回退核正：已核销 21 键；余 8 键 = 占用跳过 4（ChatToolCallBlock / FoldableToolGroup / ModelBadgePickerMenu）+ 纠缠留置 4（ExternalImportWorkbench / ExternalSessionsWorkbench / McpConnectModal，修复已叠工作区、待其文件提交时同删本行）
 } as const;
 
 export const G2_RATCHET_BARE_PX: readonly string[] = [
@@ -75,33 +75,12 @@ export const G2_RATCHET_PRIVATE_VARS: readonly string[] = [
 ];
 
 export const G2_RATCHET_FALLBACK_DRIFT: readonly string[] = [
-  'components/binary-tree/DockPane.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/binary-tree/DockSplitWorkspace.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/binary-tree/LeafToolTabStrip.module.css :: border-radius: var(--radius-control, 6px);',
-  'components/binary-tree/LeafToolTabStrip.module.css :: border-radius: var(--radius-md, 6px);',
-  'components/binary-tree/LeafToolTabStrip.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/binary-tree/LeafToolTabStrip.module.css :: border-radius: var(--radius-xs, 2px);',
-  'components/chat-card/SubagentHeaderPanel.module.css :: border-radius: var(--radius-card, 10px);',
-  'components/chat-message-list/ChatMessageList.module.css :: border-radius: var(--radius-md, 6px);',
-  'components/chat-message-row/CacheMetricsBadge.module.css :: border-radius: var(--radius-lg, 8px);',
-  'components/chat-message-row/ChatMessageRow.module.css :: border-radius: var(--button-radius, 7px);',
   'components/chat-tool-call/ChatToolCallBlock.module.css :: border-radius: var(--radius-sm, 4px);',
   'components/chat-tool-call/FoldableToolGroup.module.css :: border-radius: var(--radius-sm, 4px);',
   'components/extensions-surface/ExternalImportWorkbench.module.css :: border-radius: var(--radius-sm, 4px);',
   'components/extensions-surface/ExternalSessionsWorkbench.module.css :: border-radius: var(--radius-lg, 7px);',
-  'components/extensions-surface/ImportPluginSettingsModal.module.css :: border-radius: var(--radius-xl, 12px);',
   'components/extensions-surface/McpConnectModal.module.css :: border-radius: var(--button-radius, 7px);',
   'components/extensions-surface/McpConnectModal.module.css :: border-radius: var(--radius-lg, 9px);',
-  'components/extensions-surface/PluginCreateModal.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/extensions-surface/PluginShareModal.module.css :: border-radius: var(--radius-l, 10px);',
-  'components/extensions-surface/PluginShareModal.module.css :: border-radius: var(--radius-xl, 12px);',
-  'components/extensions-surface/SkillCreateModal.module.css :: border-radius: var(--radius-xl, 12px);',
-  'components/overview/DockLauncherOverview.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/plugins/ExternalSessionImportModal.module.css :: border-radius: var(--sep-radius-outer, 14px);',
   'components/provider/ModelBadgePickerMenu.module.css :: border-radius: var(--sep-item-radius, 8px);',
   'components/provider/ModelBadgePickerMenu.module.css :: border-radius: var(--sep-radius-outer, 14px);',
-  'components/sidebar/session-list/ProjectManageModal.module.css :: border-radius: var(--radius-xl, 14px);',
-  'components/ui/ColorPicker/ColorPicker.module.css :: border-radius: var(--radius-md, 10px);',
-  'components/ui/ColorPicker/ColorPicker.module.css :: border-radius: var(--radius-md, 14px);',
-  'components/workspace/PreviewStartPage.module.css :: border-radius: var(--radius-xs, 2px);',
 ];

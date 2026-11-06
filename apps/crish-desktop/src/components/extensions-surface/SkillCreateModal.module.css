@@ -7,7 +7,7 @@
 .modalPanel {
   --dialog-width: 680px;
   width: var(--dialog-width);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl, 16px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-panel);
   box-shadow: 0 20px 48px -12px
@@ -37,7 +37,7 @@
 .methodCard {
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-panel);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl, 16px);
   padding: var(--space-3_5, 14px) var(--space-4, 16px);
   display: flex;
   flex-direction: column;

@@ -6,7 +6,7 @@
 .modalPanel {
   --dialog-width: 560px;
   width: var(--dialog-width);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl, 16px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-color);
   box-shadow: 0 20px 48px -12px
@@ -33,7 +33,7 @@
   padding: var(--space-2_5, 10px) var(--space-3_5, 14px);
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-l, 10px);
+  border-radius: var(--radius-l, 12px);
 }
 
 .pluginInfo {
@@ -56,7 +56,7 @@
 
 .jsonViewerWrapper {
   position: relative;
-  border-radius: var(--radius-l, 10px);
+  border-radius: var(--radius-l, 12px);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   background: var(--bg-secondary);
   overflow: hidden;

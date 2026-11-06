@@ -479,7 +479,7 @@ button.iconBtn,
 .retractBtn {
   -webkit-appearance: none;
   appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   transform: none;
   color: var(--text-tertiary);
 }
@@ -495,7 +495,7 @@ button.iconBtn,
 .regenerateBtn {
   -webkit-appearance: none;
   appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   transform: none;
   color: var(--text-tertiary);
 }
@@ -511,7 +511,7 @@ button.iconBtn,
 .editBtn {
   -webkit-appearance: none;
   appearance: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   transform: none;
   color: var(--text-tertiary);
 }

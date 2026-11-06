@@ -139,7 +139,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   border: 1px solid var(--border-subtle);
   background: var(--surface-raised);
   color: var(--text-secondary);

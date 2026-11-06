@@ -111,7 +111,7 @@
   width: var(--picker-width);
   padding-bottom: 12px;
   border: 1px solid var(--border-panel);
-  border-radius: var(--radius-md, 14px);
+  border-radius: var(--radius-md, 8px);
   background: var(--picker-fill);
   will-change: clip-path;
 }
@@ -396,7 +396,7 @@
   height: 20px;
   align-items: center;
   padding: 0 6px;
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--radius-md, 8px);
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;

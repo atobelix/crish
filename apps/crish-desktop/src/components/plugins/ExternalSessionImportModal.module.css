@@ -79,7 +79,7 @@
   gap: 4px;
   background-color: var(--bg-tertiary);
   padding: 4px;
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-radius-outer, 18px);
 }
 
 .filterTab {

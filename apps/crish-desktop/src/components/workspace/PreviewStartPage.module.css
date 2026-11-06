@@ -115,7 +115,7 @@
   height: var(--icon-size);
   object-fit: contain;
   flex-shrink: 0;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs, 4px);
   opacity: 0.85;
   transition: opacity var(--transition-fast);
 }

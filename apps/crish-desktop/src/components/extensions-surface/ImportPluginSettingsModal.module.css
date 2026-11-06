@@ -6,7 +6,7 @@
 .modalPanel {
   --dialog-width: 520px;
   width: var(--dialog-width);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-xl, 16px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-color);
   box-shadow: 0 20px 48px -12px

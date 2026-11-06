@@ -99,7 +99,7 @@
   flex: 0 0 auto;
   padding: 0 4px 0 6px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md, 8px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 11.5px);
@@ -213,7 +213,7 @@
   min-width: 14px;
   min-height: unset;
   border: none;
-  border-radius: var(--radius-xs, 2px);
+  border-radius: var(--radius-xs, 4px);
   background: transparent;
   color: var(--text-tertiary);
   padding: 0;
@@ -273,7 +273,7 @@
   min-height: var(--pane-action-btn-size, 20px);
   flex: 0 0 var(--pane-action-btn-size, 20px);
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
@@ -365,7 +365,7 @@
   min-width: var(--pane-action-btn-size, 26px);
   min-height: var(--pane-action-btn-size, 26px);
   padding: 0;
-  border-radius: var(--radius-control, 6px);
+  border-radius: var(--radius-control, 8px);
   border: none;
   background: transparent;
   display: inline-flex;
@@ -462,7 +462,7 @@
   height: var(--pane-action-btn-size, 20px);
   min-width: var(--pane-action-btn-size, 20px);
   min-height: var(--pane-action-btn-size, 20px);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -627,7 +627,7 @@
   padding: 10px 14px;
   height: auto;
   min-height: unset;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   cursor: pointer;
@@ -655,7 +655,7 @@
 .launcherCardIconBox {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md, 8px);
   background: var(--state-subtle);
   display: flex;
   align-items: center;
