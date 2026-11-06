@@ -280,6 +280,10 @@ function maybeGenerateAiTitle(threadId: string): void {
         baseUrl: sel.provider.baseUrl ?? '',
         apiKey,
         model: sel.modelId,
+        // 分发客户端按 providerId 路由（O3 通道）：端侧线程的标题必须
+        // 填线程自己的供应商，否则会误走 HTTP 路径必然失败、静默回退
+        // 截断标题（O3 登记缺口，O4 补填）。
+        providerId: sel.providerId,
         messages: [
           { role: 'system', content: AI_TITLE_SYSTEM_PROMPT },
           {

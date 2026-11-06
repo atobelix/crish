@@ -1,22 +1,27 @@
 import { router } from 'expo-router';
-import LocalProvidersView from '@/presentation/components/localChat/LocalProvidersView';
-import { useLocalProvidersVm } from '@/adapters/viewmodels/useLocalProvidersVm';
+import ProvidersListView from '@/presentation/components/localChat/views/ProvidersListView';
 import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 
 export default function SettingsLocalProvidersRoute() {
-  const vm = useLocalProvidersVm();
   const goBack = useSafeBack();
+
   return (
-    <LocalProvidersView
-      vm={vm}
+    <ProvidersListView
       onBack={goBack}
-      onAdd={() => router.push('/settings-local-provider-edit')}
-      onEdit={(id) =>
+      onAddProvider={() => router.push('/settings-local-provider-wizard')}
+      onSelectPreset={(presetKey) =>
         router.push({
-          pathname: '/settings-local-provider-edit',
+          pathname: '/settings-local-provider-wizard',
+          params: { preset: presetKey },
+        })
+      }
+      onSelectProvider={(id) =>
+        router.push({
+          pathname: '/settings-local-provider-detail',
           params: { id },
         })
       }
+      onSelectOnDevice={() => router.push('/settings-local-ondevice')}
     />
   );
 }

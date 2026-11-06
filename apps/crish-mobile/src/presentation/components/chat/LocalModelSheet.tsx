@@ -10,11 +10,9 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useLocalChatStore } from '@/adapters/hooks/useAppStore';
 import { localChatStore } from '@/domain/store/localChatStore';
 import { AppText, Button, Sheet, SheetOptionRow } from '@/presentation/ui';
+import type { LocalVendorKey } from '@/domain/types/localChat';
 import { VendorLogo } from '@/presentation/components/localChat/ui/VendorLogo';
-import {
-  isLocalVendorKey,
-  type LocalVendorKey,
-} from '@/presentation/components/localChat/ui/vendorLogosData';
+import { isLocalVendorKey } from '@/presentation/components/localChat/ui/vendorLogosData';
 
 function resolveVendorKey(providerId?: string | null): LocalVendorKey {
   if (!providerId) return 'custom';
@@ -34,6 +32,7 @@ function resolveVendorKey(providerId?: string | null): LocalVendorKey {
 export interface LocalModelSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   /** 未配置时的去向：打开供应商配置（设置内的本地供应商页） */
   onOpenProviders: () => void;
   testID?: string;
@@ -49,6 +48,7 @@ interface LocalModelOption {
 export function LocalModelSheet({
   visible,
   onClose,
+  onCloseComplete,
   onOpenProviders,
   testID = 'local-model-sheet',
 }: LocalModelSheetProps) {
@@ -79,6 +79,7 @@ export function LocalModelSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       title="本地模型"
       size="large"
       testID={testID}

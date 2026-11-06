@@ -19,7 +19,17 @@ import type { ComposerAttachment } from '../pure/attachments';
  */
 export type LocalProtocolKind = 'openai/chat' | 'ondevice/gguf';
 
-/** 官方预置 AI 供应商标识枚举（与桌面及矢量图标库统一规范） */
+/**
+ * 官方预置 AI 供应商标识枚举（与桌面及矢量图标库统一规范）。
+ * 本处是该类型的唯一声明（O4 收敛：providerPresets 与 vendorLogosData
+ * 的独立同名声明已删）。语义边界（O4 裁决）：成员必须是带官方端点、
+ * 密钥占位与品牌徽标的「预置厂商」——它键控 PROVIDER_PRESETS /
+ * VENDOR_LOGOS_DATA / PRESET_DESCRIPTIONS 三份 Record 全量字典。
+ * 端侧内置条目（providerId 'ondevice'）无端点、无密钥、无预置，
+ * **不**加入本枚举：加入将被迫给预置字典造空端点假条目（会漏进
+ * 供应商向导），或把三份 Record 的完备性契约打穿。端侧条目的
+ * vendor 恒为 undefined，路由只认 protocol 'ondevice/gguf'。
+ */
 export type LocalVendorKey =
   | 'deepseek'
   | 'siliconflow'

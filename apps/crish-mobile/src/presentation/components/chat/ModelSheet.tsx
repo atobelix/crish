@@ -20,11 +20,9 @@ import {
   SheetOptionRow,
 } from '@/presentation/ui';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
+import type { LocalVendorKey } from '@/domain/types/localChat';
 import { VendorLogo } from '@/presentation/components/localChat/ui/VendorLogo';
-import {
-  isLocalVendorKey,
-  type LocalVendorKey,
-} from '@/presentation/components/localChat/ui/vendorLogosData';
+import { isLocalVendorKey } from '@/presentation/components/localChat/ui/vendorLogosData';
 
 function resolveVendorKey(providerId?: string | null): LocalVendorKey {
   if (!providerId) return 'custom';
@@ -44,6 +42,7 @@ function resolveVendorKey(providerId?: string | null): LocalVendorKey {
 export interface ModelSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   /** 是否已连接桌面（未连接与命令失败分开呈现） */
   connected: boolean;
   /** 可选模型列表（未拉取为 null） */
@@ -66,6 +65,7 @@ export interface ModelSheetProps {
 export function ModelSheet({
   visible,
   onClose,
+  onCloseComplete,
   connected,
   models,
   status,
@@ -83,6 +83,7 @@ export function ModelSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       title="选择模型"
       size="large"
       testID={testID}

@@ -29,12 +29,12 @@ import type {
   LocalConnectivityResult,
   LocalThinkingFormat,
   LocalThinkingTier,
+  LocalVendorKey,
 } from '@/domain/types/localChat';
 import {
   PROVIDER_PRESETS,
   detectVendorKey,
   type LocalModelSpec,
-  type LocalVendorKey,
 } from './providerPresets';
 
 // ── 传输注入面 ──
