@@ -11,8 +11,13 @@
 //   thinking、pricing、compat 等全量能力，支持无损落盘与双向编辑。
 import type { ComposerAttachment } from '../pure/attachments';
 
-/** 线网协议标识（桌面 ProtocolKind 的线网字符串；本期仅 openai/chat 落地） */
-export type LocalProtocolKind = 'openai/chat';
+/**
+ * 线网协议标识（桌面 ProtocolKind 的线网字符串）：
+ * - 'openai/chat'：OpenAI 兼容 HTTP/SSE（手机直连供应商）；
+ * - 'ondevice/gguf'：端侧本机推理（llama.rn + GGUF，O3 落地）——无网络
+ *   端点、无密钥，由接线层分发到端侧客户端（onDeviceChatClient）。
+ */
+export type LocalProtocolKind = 'openai/chat' | 'ondevice/gguf';
 
 /** 官方预置 AI 供应商标识枚举（与桌面及矢量图标库统一规范） */
 export type LocalVendorKey =
@@ -134,7 +139,7 @@ export interface LocalProviderSpec {
   baseUrl?: string;
   /** 凭据引用：固定形态 secure:<providerId>；密钥材料在 SecureStore 同名槽位 */
   apiKeyRef?: string;
-  /** 线网协议（本期恒为 openai/chat；保留字段与桌面同构） */
+  /** 线网协议（openai/chat = 直连供应商；ondevice/gguf = 端侧本机推理） */
   protocol: LocalProtocolKind;
   /** 是否流式响应（桌面同名字段，缺省 true） */
   stream?: boolean;

@@ -33,6 +33,8 @@ import type {
   LocalChatMessage,
   LocalModelsConfig,
   LocalThreadMeta,
+  LocalThinkingFormat,
+  LocalThinkingTier,
 } from '@/domain/types/localChat';
 import type { LocalToolCall } from '@/db/dao/localThreadsDao';
 import type { StreamHandle } from './localChatClient';
@@ -44,6 +46,9 @@ import { mobileToolRegistry, type ToolExecutionResult } from '@/adapters/tools';
 /** 工具执行上下文 */
 export interface MobileToolExecutionContext {
   runId: string;
+  /** 所属本地线程（2026-11-05 契约收敛：下发与执行同上下文，
+   * 会话级能力开关 isSearchEnabledForThread 才能真正生效） */
+  threadId: string;
   signal: AbortSignal;
 }
 
@@ -224,6 +229,7 @@ async function defaultMobileToolExecutor(
     },
     {
       signal: context.signal,
+      threadId: context.threadId,
     }
   );
 
@@ -382,6 +388,39 @@ export function sendLocalChatMessage(
   };
   session.appendUser(userMessage, threadId);
 
+  return startLocalCompletion(threadId, {
+    currentSel,
+    vision,
+    thinkingTier,
+    thinkingFormat,
+    maxTokens,
+  });
+}
+
+// ── 补全内核（发送 / 重新生成共用同一份多轮 Agent Loop 实现，去重纪律） ──
+
+/** 补全上下文：线程有效选择 + 模型能力面（由调用方按发送同口径推导） */
+interface LocalCompletionContext {
+  currentSel: NonNullable<ReturnType<typeof resolveActiveSelection>>;
+  vision: boolean;
+  thinkingTier: LocalThinkingTier | undefined;
+  thinkingFormat: LocalThinkingFormat | undefined;
+  maxTokens: number | undefined;
+}
+
+/**
+ * 本地补全内核：从"用户消息已就位的历史"起——建新一轮助手槽位、注册
+ * 线程句柄（级联 AbortController）、读密钥并驱动多轮 Agent 循环。
+ * sendLocalChatMessage（发送）与 regenerateLocalThread（重新生成）共用。
+ */
+function startLocalCompletion(
+  threadId: string,
+  context: LocalCompletionContext
+): boolean {
+  const { currentSel, vision, thinkingTier, thinkingFormat, maxTokens } =
+    context;
+  const session = localChatSessionStore.getState();
+
   const initialAssistantId = nextId('lcm');
   session.beginAssistant(
     { id: initialAssistantId, role: 'assistant', content: '' },
@@ -440,10 +479,17 @@ export function sendLocalChatMessage(
 
           const isMaxRound = round >= MAX_AGENT_ROUNDS;
 
-          // 解析当前轮次启用的工具清单
-          const rawTools = customToolsSupplier
-            ? customToolsSupplier()
-            : mobileToolRegistry.toOpenAiFunctionSchemas({ threadId });
+          // 解析当前轮次启用的工具清单。
+          // 端侧纯对话口径（O3 工具闸·第一道）：供应商协议为
+          // 'ondevice/gguf' 时本轮不取任何工具声明，系统提示词随之走
+          // 无工具版——1–3B 本机模型在全量工具 schema 下可靠性不可控；
+          // 端侧客户端本身亦永不下发 tools（第二道闸，双保险）。
+          const rawTools =
+            currentSel.provider.protocol === 'ondevice/gguf'
+              ? undefined
+              : customToolsSupplier
+                ? customToolsSupplier()
+                : mobileToolRegistry.toOpenAiFunctionSchemas({ threadId });
           const tools = isMaxRound
             ? undefined
             : rawTools && rawTools.length > 0
@@ -481,6 +527,9 @@ export function sendLocalChatMessage(
               baseUrl: currentSel.provider.baseUrl ?? '',
               apiKey,
               model: currentSel.modelId,
+              // 接线层分发身份（O3）：分发客户端按 protocol 路由
+              // HTTP / 端侧；HTTP 传输忽略此字段。
+              providerId: currentSel.providerId,
               messages: wire,
               thinkingTier,
               thinkingFormat,
@@ -572,6 +621,7 @@ export function sendLocalChatMessage(
                         },
                         {
                           runId: assistantId,
+                          threadId,
                           signal: runAbortController.signal,
                         }
                       );
@@ -606,7 +656,7 @@ export function sendLocalChatMessage(
                       (m) => m.id === tc.id
                     );
                     if (targetTool) {
-                      targetTool.status = isError ? 'error' : 'done';
+                      targetTool.status = isError ? 'error' : 'success';
                       targetTool.state = isError ? 'failed' : 'success';
                       targetTool.result = resultOutput;
                       targetTool.completedAt = Date.now();
@@ -733,6 +783,68 @@ export function sendLocalChatMessage(
 
   haptics.success();
   return true;
+}
+
+/**
+ * 重新生成本地回答（D-REGEN，2026-11-05）：定位指定助手回答与其锚点
+ * 提问，截断该回答及其后全部轮次（truncateFrom——含 tool 轮次，持久化
+ * 同步删除），保留完整提问上下文后按原选择重启补全内核。
+ * 诚实 no-op：线程生成中 / 回答不存在 / 无锚点提问 → false；未配置 →
+ * 错误写线程 error 槽（与发送同口径）。
+ */
+export function regenerateLocalThread(
+  threadId: string,
+  assistantMessageId: string
+): boolean {
+  const snapshot = threadRuntimeSnapshot(threadId);
+  if (!snapshot || snapshot.streaming) return false;
+  const anchorIndex = snapshot.messages.findIndex(
+    (m) => m.id === assistantMessageId && m.role === 'assistant'
+  );
+  if (anchorIndex < 0) return false;
+  let userIdx = -1;
+  for (let i = anchorIndex - 1; i >= 0; i -= 1) {
+    if (snapshot.messages[i]!.role === 'user') {
+      userIdx = i;
+      break;
+    }
+  }
+  if (userIdx < 0) return false;
+
+  const thread = localChatSessionStore
+    .getState()
+    .threads.find((t) => t.id === threadId);
+  if (!thread) return false;
+  const sel = resolveThreadSelection(localChatStore.getState().config, thread);
+  if (!sel) {
+    localChatSessionStore
+      .getState()
+      .setError(withErrorMessage(notConfiguredError()), threadId);
+    return false;
+  }
+
+  // 模型能力面（与发送同口径推导）
+  const modelSpec = sel.provider.models.find((m) => m.id === sel.modelId);
+  const thinkingTier = modelSpec?.thinking?.supported
+    ? modelSpec.thinking.defaultTier
+    : undefined;
+  const thinkingFormat = resolveEffectiveThinkingFormat(
+    sel.provider,
+    modelSpec
+  );
+  const maxTokens = modelSpec?.maxOutputTokens;
+  const vision = localModelVisionSupported(sel.provider, sel.modelId);
+
+  // 截断：丢弃旧回答及其后全部消息（含 tool 轮次），保留提问为止
+  localChatSessionStore.getState().truncateFrom(assistantMessageId, threadId);
+
+  return startLocalCompletion(threadId, {
+    currentSel: sel,
+    vision,
+    thinkingTier,
+    thinkingFormat,
+    maxTokens,
+  });
 }
 
 /** 停止指定线程的生成（保留已生成部分并标注 stopped；不产生错误） */

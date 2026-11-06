@@ -392,6 +392,11 @@ export interface CompleteChatInput {
   baseUrl: string;
   apiKey: string | null;
   model: string;
+  /**
+   * 供应商身份（可选，接线层分发用，O3）：分发客户端按此 id 查配置
+   * 的 protocol 决定走 HTTP 还是端侧本机推理；HTTP 传输本身忽略此字段。
+   */
+  providerId?: string;
   messages: readonly LocalWireMessage[];
   /** 输出上限（缺省 32，标题量级） */
   maxTokens?: number;
@@ -403,6 +408,11 @@ export interface StreamChatInput {
   baseUrl: string;
   apiKey: string | null;
   model: string;
+  /**
+   * 供应商身份（可选，接线层分发用，O3）：分发客户端按此 id 查配置
+   * 的 protocol 决定走 HTTP 还是端侧本机推理；HTTP 传输本身忽略此字段。
+   */
+  providerId?: string;
   messages: readonly LocalWireMessage[];
   /** 动态工具声明列表（可选） */
   tools?: readonly unknown[];

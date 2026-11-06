@@ -40,6 +40,7 @@ import { configureComposerDraftPersistence } from '@/domain/store/composerDraftS
 import { configureSendQueuePersistence } from '@/domain/store/sendQueueStore';
 import { configureToolExecutionBreadcrumbPersistence } from '@/domain/store/toolExecutionBreadcrumbs';
 import { configureLocalChatSessionPersistence } from '@/domain/store/localChatSessionStore';
+import { configureOnDeviceModelKv } from '@/adapters/onDevice/onDeviceWiring';
 import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
 
@@ -104,6 +105,13 @@ export function configureSqlitePersistence(driver: SqlDriver | null): void {
     driver === null ? null : (new SqlSettingsDao(driver) as SettingsPersist)
   );
   configureLocalChatSecure(expoSecureStoreDriver());
+  // 端侧本机模型（O3）：下载续传记录与 settings 共用 kv 表（键
+  // ondevice.resume.*，SqlSettingsDao 的 get/set/delete 结构满足
+  // OnDeviceResumeKv）；DB 降级时传 null → 进程内内存 kv 形态
+  // （续传记录不跨进程，下载/校验/推理面完整可用）。
+  configureOnDeviceModelKv(
+    driver === null ? null : new SqlSettingsDao(driver)
+  );
   // 本地对话线程历史（CON-4/L2）：SQLite local_threads/local_messages；
   // DB 降级时传 null → 纯内存形态（与配置面降级口径一致）。
   configureLocalChatSessionPersistence(

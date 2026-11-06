@@ -20,6 +20,23 @@ export interface OnDeviceModelLicense {
    */
   warning?: string;
 }
+/**
+ * 端侧推理参数（可选组，O3）：每模型与 llama.cpp 运行时的对接参数，
+ * 缺省走客户端默认口径（n_ctx 4096、思考按模板默认、无追加停止词）。
+ * 与下载身份字段（size/sha256）分开：这里的值是工程口径，不是 HF 实查值。
+ */
+export interface OnDeviceInferenceSpec {
+  /** llama.cpp 上下文大小（n_ctx）；大模型压小以控内存（3B 为 2048） */
+  contextSize?: number;
+  /**
+   * 是否允许模板思考（enable_thinking）；Qwen3 显式关闭——v1 纯对话
+   * 口径 + 小模型思考速度代价，客户端经 enable_thinking 与
+   * chat_template_kwargs 双路下发关闭。
+   */
+  enableThinking?: boolean;
+  /** 追加停止词（模型 eos 的文本形；模板自身 eos 之外的兜底） */
+  stop?: readonly string[];
+}
 /** 目录中的一条端侧模型（单 GGUF 文件） */
 export interface OnDeviceModelSpec {
   /** 稳定 id：同时用作本地存储目录名与配置中的 modelId，禁止随意改名 */
@@ -38,6 +55,8 @@ export interface OnDeviceModelSpec {
   license: OnDeviceModelLicense;
   /** 是否为默认推荐档（当前仅 Qwen2.5-1.5B） */
   recommended?: boolean;
+  /** 端侧推理参数（O3 消费；见 OnDeviceInferenceSpec） */
+  inference?: OnDeviceInferenceSpec;
 }
 const hfUrls = (repo: string, fileName: string): readonly string[] => [
   `https://hf-mirror.com/${repo}/resolve/main/${fileName}`,
@@ -62,6 +81,7 @@ export const ON_DEVICE_MODEL_CATALOG: readonly OnDeviceModelSpec[] = [
     ),
     license: APACHE_2_0,
     recommended: true,
+    inference: { stop: ['<|im_end|>'] },
   },
   {
     id: 'qwen3-1.7b-q4_k_m',
@@ -72,6 +92,7 @@ export const ON_DEVICE_MODEL_CATALOG: readonly OnDeviceModelSpec[] = [
       'b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897',
     urls: hfUrls('unsloth/Qwen3-1.7B-GGUF', 'Qwen3-1.7B-Q4_K_M.gguf'),
     license: APACHE_2_0,
+    inference: { enableThinking: false, stop: ['<|im_end|>'] },
   },
   {
     id: 'smollm2-1.7b-instruct-q4_k_m',
@@ -85,6 +106,7 @@ export const ON_DEVICE_MODEL_CATALOG: readonly OnDeviceModelSpec[] = [
       'smollm2-1.7b-instruct-q4_k_m.gguf'
     ),
     license: APACHE_2_0,
+    inference: { stop: ['<|im_end|>'] },
   },
   {
     id: 'llama-3.2-1b-instruct-q4_k_m',
@@ -101,6 +123,7 @@ export const ON_DEVICE_MODEL_CATALOG: readonly OnDeviceModelSpec[] = [
       id: 'Llama 3.2 Community License',
       label: 'Llama 3.2 社区许可（非 OSI 开源，条款内可分发）',
     },
+    inference: { stop: ['<|eot_id|>'] },
   },
   {
     id: 'qwen2.5-3b-instruct-q4_k_m',
@@ -119,6 +142,7 @@ export const ON_DEVICE_MODEL_CATALOG: readonly OnDeviceModelSpec[] = [
       warning:
         '该模型为 Qwen Research License（非商用研究许可），并非 Apache-2.0 开源许可；仅限非商用研究用途，使用前请自行确认许可条款。',
     },
+    inference: { contextSize: 2048, stop: ['<|im_end|>'] },
   },
 ];
 /** 全部目录模型总字节数（全量下载时的空间/流量提示用） */

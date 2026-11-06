@@ -1030,7 +1030,10 @@ export function decodeLocalModelsConfig(raw: unknown): LocalModelsConfig {
 
     providers[id] = {
       ...s,
-      protocol: 'openai/chat',
+      // 协议归一：未知/缺失值回落 openai/chat（存量口径）；端侧协议
+      // 'ondevice/gguf'（O3）是合法值，必须原样保留——若在此被改写，
+      // 配置水合后接线层分发将永远走不到端侧客户端（功能伪连通）。
+      protocol: s.protocol === 'ondevice/gguf' ? 'ondevice/gguf' : 'openai/chat',
       defaultModelId:
         typeof s.defaultModelId === 'string' && s.defaultModelId.trim() !== ''
           ? s.defaultModelId.trim()
