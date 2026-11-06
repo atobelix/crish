@@ -391,7 +391,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
   });
 
-  it('关闭最后一个标签时，保持右坞展开以展示无标签行的推荐总览界面', async () => {
+  it('关闭最后一个标签时，侧边栏整体关闭（用户 2026-11-06 裁决）', async () => {
     act(() => {
       useLayoutStore.setState({ chatMainSurface: 'chat' });
     });
@@ -429,7 +429,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       'chat-leaf-close-last',
       expect.objectContaining({ tree: expect.anything() })
     );
-    expect(updateLeafDockSpy.mock.calls[0][1].collapsed).toBeUndefined();
+    expect(updateLeafDockSpy.mock.calls[0][1].collapsed).toBe(true);
   });
 
   it('在 tabModeEnabled 模式下，已打开的多个 Dock 标签保持 Keep-Alive 常驻保活，仅通过 display 切换显隐', async () => {
