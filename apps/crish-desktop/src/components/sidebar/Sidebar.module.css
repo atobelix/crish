@@ -1,28 +1,24 @@
 .sidebar {
-  width: var(--sidebar-width);
+  /* 宽度钉记忆宽（--sidebar-visible-width）：开关动画的唯一挂点是外层
+   * .sidebar-wrapper 的 width（styles/shell/shell-layout.css），内层恒按
+   * 记忆宽布局、靠 wrapper 的 overflow 裁切逐步揭示/收起，动画期内容
+   * 零重排。本层不再持有 width 过渡（单一动画源，杜绝双轨）。 */
+  width: var(--sidebar-visible-width, var(--sidebar-width));
   background: transparent;
   border-right: none; /* Removed vertical border line */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width var(--duration-normal, 200ms) var(--ease-decelerate);
   z-index: var(--z-sidebar);
   position: relative;
   overflow: hidden;
   height: 100%;
 }
 
-:global(body.is-resizing) .sidebar,
-:global(body.sidebar-resizing) .sidebar,
-:global(.is-resizing) .sidebar,
-:global(.resizing-active) .sidebar,
-:global(.window-resizing) .sidebar {
-  transition: none;
-}
-
 .sidebar.collapsed {
-  width: 0px;
+  /* 折叠态内层仍钉记忆宽：可见性由 wrapper（宽 0 + overflow hidden）
+   * 独占决定；开关动画期间 wrapper 逐帧裁切本层，而非本层自身缩宽。 */
   border-right: none;
 }
 

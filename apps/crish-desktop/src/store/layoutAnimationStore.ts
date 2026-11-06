@@ -4,9 +4,9 @@ import {
   WindowBlurWatchdog,
 } from '../utils/ResizeObserverManager';
 
-/** 动画/拖拽类型枚举 */
+/** 动画/拖拽类型枚举（'sidebar-transition' 已删：侧栏开关是纯 CSS
+ * 过渡、无任何生产消费方读其门控标记，预埋死类型不留假接线） */
 export type LayoutAnimationType =
-  | 'sidebar-transition'
   | 'workspace-resizing'
   | 'window-resizing'
   | 'tab-dragging';
@@ -58,7 +58,6 @@ export interface LayoutAnimationState {
   suspendedPaneIds: Set<string>;
 
   /** 快捷派生状态 */
-  isSidebarTransitioning: boolean;
   isWorkspaceResizing: boolean;
   isWindowResizing: boolean;
   isTabDragging: boolean;
@@ -112,7 +111,6 @@ export type LayoutAnimationStore = LayoutAnimationState &
 function deriveFlags(active: Set<LayoutAnimationType>) {
   return {
     activeAnimations: active,
-    isSidebarTransitioning: active.has('sidebar-transition'),
     isWorkspaceResizing: active.has('workspace-resizing'),
     isWindowResizing: active.has('window-resizing'),
     isTabDragging: active.has('tab-dragging'),
@@ -123,7 +121,6 @@ export const useLayoutAnimationStore = create<LayoutAnimationStore>(
   (set, get) => ({
     activeAnimations: new Set(),
     suspendedPaneIds: new Set(),
-    isSidebarTransitioning: false,
     isWorkspaceResizing: false,
     isWindowResizing: false,
     isTabDragging: false,

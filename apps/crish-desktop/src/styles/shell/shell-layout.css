@@ -63,3 +63,27 @@ html {
   height: 100%;
   overflow: hidden;
 }
+
+/* ── 侧栏开关动画（S2）：唯一挂点 = .sidebar-wrapper 的 width ────────────
+ * 主区左缘 ≡ wrapper 右缘（同一条 flex 分界线），动画只作用于这一个
+ * 几何量，侧栏开合与主界面平移由结构保证同钟同步，不存在双动画调参
+ * 对齐问题。内层 .sidebar 钉在记忆宽度上靠 wrapper 的 overflow 裁切
+ * 逐步揭示/收起，动画期内容零重排（Sidebar.module.css 已收敛）。
+ * 首帧门控：偏好水合完成前零过渡——持久化折叠态启动时不播放收起动画。
+ * 拖拽互斥：body 拖拽协议类（is-resizing / sidebar-resizing，手势开始
+ * 挂上、呈现静止才移除）下关停过渡：拖拽逐帧写变量须 1:1 跟手，且拖拽
+ * 折叠的提交帧此时类尚在场，折叠保持实时无动画尾巴。
+ * Reduce Motion：reduced-motion.css 全局归零 transition-duration，
+ * 本过渡自动合规。 */
+.sidebar-wrapper {
+  transition: none;
+}
+
+.app-container[data-preferences-hydrated='true'] .sidebar-wrapper {
+  transition: width var(--duration-normal, 200ms) var(--ease-decelerate);
+}
+
+body.is-resizing .app-container .sidebar-wrapper,
+body.sidebar-resizing .app-container .sidebar-wrapper {
+  transition: none;
+}

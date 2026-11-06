@@ -28,7 +28,6 @@ function resetStore() {
   useLayoutAnimationStore.setState({
     activeAnimations: new Set(),
     suspendedPaneIds: new Set(),
-    isSidebarTransitioning: false,
     isWorkspaceResizing: false,
     isWindowResizing: false,
     isTabDragging: false,

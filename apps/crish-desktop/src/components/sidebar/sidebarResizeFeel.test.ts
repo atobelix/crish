@@ -113,19 +113,43 @@ describe('侧栏列表偏好与分区状态（收敛至 runtimeCache）', () => 
   });
 });
 
-describe('侧栏折叠动效与拖拽解耦 CSS 契约', () => {
+describe('侧栏折叠动效与拖拽解耦 CSS 契约（S2：动画挂点收敛至布局层 wrapper）', () => {
   const cssPath = path.resolve(__dirname, 'Sidebar.module.css');
   const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
+  const shellLayoutCss = readFileSync(
+    path.resolve(__dirname, '../../styles/shell/shell-layout.css'),
+    'utf8'
+  ).replace(/\r\n/g, '\n');
 
-  it('.sidebar 声明离散折叠/展开过渡：宽度到位后减速停住', () => {
+  it('.sidebar 钉记忆宽且不自持 width 过渡（单一动画源）', () => {
     expect(css).toMatch(
-      /\.sidebar\s*\{[^}]*transition:\s*width\s+var\(--duration-normal,\s*200ms\)\s+var\(--ease-decelerate\);/
+      /\.sidebar\s*\{[^}]*width:\s*var\(--sidebar-visible-width,\s*var\(--sidebar-width\)\);/
+    );
+    const sidebarBlock = /\.sidebar\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(sidebarBlock).not.toMatch(/transition\s*:/);
+  });
+
+  it('.sidebar.collapsed 不再自缩为 0（可见性由 wrapper 裁切独占）', () => {
+    const collapsedBlock =
+      /\.sidebar\.collapsed\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(collapsedBlock).not.toMatch(/width\s*:/);
+  });
+
+  it('wrapper 过渡：水合门控后才挂 width 过渡（200ms decelerate）；水合前零过渡', () => {
+    expect(shellLayoutCss).toMatch(
+      /\.app-container\[data-preferences-hydrated='true'\] \.sidebar-wrapper\s*\{[^}]*transition:\s*width\s+var\(--duration-normal,\s*200ms\)\s+var\(--ease-decelerate\);/
+    );
+    expect(shellLayoutCss).toMatch(
+      /\.sidebar-wrapper\s*\{\s*transition:\s*none;\s*\}/
     );
   });
 
-  it('拖拽态 body.is-resizing 严格覆盖为 transition: none 确保 0 延迟响应', () => {
-    expect(css).toMatch(
-      /:global\([^)]*is-resizing[^)]*\)[^{]*\{[^}]*transition:\s*none;/
+  it('拖拽态 body.is-resizing / sidebar-resizing 对 wrapper 严格关停过渡（0 延迟跟手）', () => {
+    expect(shellLayoutCss).toMatch(
+      /body\.is-resizing[^{]*\.sidebar-wrapper\s*\{[^}]*transition:\s*none;/
+    );
+    expect(shellLayoutCss).toMatch(
+      /body\.sidebar-resizing[^{]*\.sidebar-wrapper\s*\{[^}]*transition:\s*none;/
     );
   });
 });
@@ -209,6 +233,33 @@ describe('useSidebarResize 状态域（R1 迁移后：手势归 ui/SplitResizer�
     ).toBe('320px');
     // 折叠不改写展开宽度状态：再次展开回到 320
     expect(result.current.sidebarWidthPx).toBe(320);
+  });
+
+  it('挂载初值同步真源：config 记忆宽即首帧状态（根变量不经默认 260 冲刷）', () => {
+    configService.set('workspace.layout', { sidebarWidth: 320 });
+    const { result } = renderHook(() => useSidebarResize());
+    // 旧形态初值恒 260：同步效应会把 260 写上根变量、异步 restore 后
+    // 才改回记忆宽（展开 260 首帧跳的根源）。新形态挂载落值即记忆宽。
+    expect(result.current.sidebarWidthPx).toBe(320);
+    expect(
+      document.documentElement.style.getPropertyValue('--sidebar-width')
+    ).toBe('320px');
+    expect(
+      document.documentElement.style.getPropertyValue('--sidebar-visible-width')
+    ).toBe('320px');
+  });
+
+  it('挂载初值同步真源：可见宽镜像即记忆宽时优先采用（折叠期未扰动真源）', () => {
+    configService.set('workspace.layout', {});
+    document.documentElement.style.setProperty(
+      '--sidebar-visible-width',
+      '300px'
+    );
+    const { result } = renderHook(() => useSidebarResize());
+    expect(result.current.sidebarWidthPx).toBe(300);
+    expect(
+      document.documentElement.style.getPropertyValue('--sidebar-width')
+    ).toBe('300px');
   });
 
   it('handleResizerLiveChange：逐帧镜像可见宽 + 广播，不写根呈现宽', () => {
