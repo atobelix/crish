@@ -293,8 +293,10 @@ html[data-theme='light'] {
 }
 
 html[data-theme='dark'] {
-  /* SmartExpandablePanel tokens (Dark) */
-  --sep-item-radius: var(--radius-menu-inner, 12px);
+  /* SmartExpandablePanel tokens (Dark)
+     --sep-item-radius 不在此重声明：其值与浅色同为 var(--radius-menu-inner, 12px)，
+     由 :root 声明单点生效（G² 第 0 波定义层整理，立项方案 §五 F11——双声明点合并，
+     计算值不变）。其余仍分主题的 sep 变量保留各自声明。 */
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
   --sep-bg-item-hover: var(--state-hover);
