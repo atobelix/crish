@@ -194,6 +194,7 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
         panel: styles.modalPanel,
         body: styles.modalBody,
       }}
+      surface={{ fill: 'var(--bg-card)', stroke: 'var(--border-color)' }}
       footer={
         <div className={styles.modalFooter}>
           <Button variant="ghost" size="sm" onClick={onClose}>

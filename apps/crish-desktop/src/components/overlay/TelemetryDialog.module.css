@@ -1,21 +1,20 @@
 /* apps/crish-desktop/src/components/overlay/TelemetryDialog.module.css
- * 诊断日志与遥测弹窗（方案 A 标尺：外壳 24px + 16px 留白 + 8px 内部卡片/徽标同心闭环）
+ * 诊断日志与遥测弹窗（外壳 20px + 16px 留白 + 8px 内部卡片/徽标同心闭环）
  * 消除 7px 杂音，移除底部分割线与虚高空白
+ * 模态收敛（G² 推广第一波槽 C · 待裁决 #4，2026-11-06）：外壳名义半径由
+ * 24 统一为 20——原经一条 :global([role='dialog']) 作用域规则把基座面板
+ * 覆写为 24，该规则已删，外壳回归 Dialog 基座单一定义（20 + G² 形状层）；
+ * .dialogPanel 的声明同步改为 20 兜底口径（该类现无渲染引用）。
  */
 
-/* 弹窗外壳与边距（方案 A 标尺：外壳 24px，边距 16px） */
+/* 弹窗外壳与边距（边距 16px） */
 .dialogOverlay {
   padding: var(--space-4, 16px);
 }
 
 .dialogPanel {
-  border-radius: var(--radius-3xl, 24px);
+  border-radius: var(--radius-2xl, 20px);
   padding: var(--space-4, 16px);
-}
-
-/* 作用域外壳挂载：确保通过基座渲染的弹窗面板获得 24px 外壳圆角 */
-:global([data-dialog-overlay]):has(.actions) :global([role='dialog']) {
-  border-radius: var(--radius-3xl, 24px);
 }
 
 /* 内部同意/拒绝卡片与数据行：统一为 8px (var(--radius-md, 8px))，移除底部分割线与虚高空白 */

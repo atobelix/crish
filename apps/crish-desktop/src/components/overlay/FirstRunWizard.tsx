@@ -126,6 +126,10 @@ export const FirstRunWizard: React.FC<Props> = ({
         panel: styles.firstRunDialog,
         overlay: styles.firstRunOverlay,
       }}
+      surface={{
+        fill: 'var(--bg-primary)',
+        stroke: 'var(--hairline-strong, var(--border-color))',
+      }}
     >
       <div className={styles.firstRunCard}>
         <div

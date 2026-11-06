@@ -1,16 +1,33 @@
 /* apps/crish-desktop/src/components/extensions-surface/PluginCreateModal.module.css
  * 制作与导入自定义插件模态框样式
- * 方案 A 标准：620px 宽大弹窗绑定 24px 圆角，16px 边距，内部卡片与输入框统一 8px 绝对同心
+ * 620px 宽大弹窗，16px 边距，内部卡片与输入框统一 8px 绝对同心
+ * 模态收敛（G² 推广第一波槽 C · 待裁决 #4，2026-11-06）：外壳名义半径由
+ * 24 统一为 20（--radius-2xl），轮廓由 Dialog 基座 G² 形状层生成；
+ * background/border/box-shadow 保留为无形状层时的兜底。
  */
 
 .modalPanel {
   --dialog-width: 620px;
   width: var(--dialog-width);
-  border-radius: var(--radius-3xl, 24px);
+  border-radius: var(--radius-2xl, 20px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-color);
   box-shadow: 0 20px 48px -12px
     color-mix(in srgb, var(--shadow-color) 16%, transparent);
+}
+
+/* G² 形状层在位：压制自身 box-shadow（本文件未分层，基座分层内的压制
+ * 规则压不过本声明，须本地同口径压制），改走下方形状层 filter。 */
+.modalPanel:has(> [data-g2-mode]) {
+  box-shadow: none;
+}
+
+/* 形状层阴影 = 本面单层 box-shadow 的 drop-shadow 近似（裁定 #6(a)）：
+ * 偏移/不透明度照原值，模糊半径取半。 */
+.modalPanel [data-g2-layer] {
+  filter: drop-shadow(
+    0 20px 24px color-mix(in srgb, var(--shadow-color) 16%, transparent)
+  );
 }
 
 .modalPanel button {

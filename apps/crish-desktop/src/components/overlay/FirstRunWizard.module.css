@@ -6,7 +6,9 @@
 .firstRunDialog {
   --dialog-width: min(560px, calc(100vw - var(--space-8)));
   background: var(--bg-primary);
-  border-radius: var(--radius-xl);
+  /* 模态收敛（G² 槽 C · 待裁决 #4）：外壳名义半径原自定 16，现删除本声明
+   * 回归 Dialog 基座单一定义 20（+ G² 形状层）；底色/边框色经 TSX 的
+   * surface 规格同步给形状层，本声明保留为无形状层时的兜底。 */
   border-color: var(--hairline-strong, var(--border-color));
 }
 
@@ -124,12 +126,10 @@
   min-width: 0;
 }
 
-.firstRunSelect :global(.settings-select-trigger) {
-  width: 100%;
-  min-height: 38px;
-  height: 38px;
-  border-radius: var(--radius-xl);
-}
+/* 死规则已删（G² 槽 C · §五 F6）：原 .firstRunSelect
+ * :global(.settings-select-trigger) 规则块——全仓无任何 TSX 发射
+ * settings-select-trigger 类名，永不命中；上方 .settings-select 宽度
+ * 规则为活规则，保留。 */
 
 .firstRunInput {
   width: 100%;

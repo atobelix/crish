@@ -1,6 +1,10 @@
 .modalPanel {
   --dialog-width: 440px;
   width: var(--dialog-width);
+  /* 名义半径 20 与 Dialog 基座同值（模态收敛目标，G² 槽 C）：本声明为
+   * 同心契约 4 的计算值锚点保留，轮廓由基座 G² 形状层生成；
+   * box-shadow 与基座同规格，形状层在位时由下方规则压制、改走基座
+   * 形状层 filter 近似。background/border 与基座默认一致，不另覆写。 */
   border-radius: var(--radius-2xl, 20px);
   padding: 0;
   overflow: hidden;
@@ -8,6 +12,13 @@
   box-shadow:
     0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
     0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+}
+
+/* G² 形状层在位：放行 overflow（内容改由同路径 clip 承载）、压制自身
+ * box-shadow（本文件未分层，须本地压制基座分层规则压不过的本声明）。 */
+.modalPanel:has(> [data-g2-mode]) {
+  overflow: visible;
+  box-shadow: none;
 }
 
 .modalBody {

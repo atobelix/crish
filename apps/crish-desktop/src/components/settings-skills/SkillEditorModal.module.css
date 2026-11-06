@@ -1,20 +1,20 @@
 /* apps/crish-desktop/src/components/settings-skills/SkillEditorModal.module.css
- * 技能编辑与发现弹窗（方案 A 标尺：外壳 24px + 16px 留白 + 8px 内部参数表单/代码区域同心闭环）
+ * 技能编辑与发现弹窗（外壳 20px + 16px 留白 + 8px 内部参数表单/代码区域同心闭环）
  * 彻底消除 7px 杂音，清除多余横向分割线
+ * 模态收敛（G² 推广第一波槽 C · 待裁决 #4，2026-11-06）：外壳名义半径由
+ * 24 统一为 20——原经 .skillsDiscoverOverlay :global([role='dialog']) 把
+ * 基座面板覆写为 24 的规则已删，外壳回归 Dialog 基座单一定义（20 + G²
+ * 形状层）；.skillsDiscoverPanel 同步改为 20 兜底口径。
  */
 
-/* 技能发现弹窗外壳（方案 A 标尺：外壳 24px，内边距统一 16px） */
+/* 技能发现弹窗外壳（内边距统一 16px） */
 .skillsDiscoverOverlay {
   padding: var(--space-4);
 }
 
-.skillsDiscoverOverlay :global([role='dialog']) {
-  border-radius: var(--radius-3xl);
-}
-
 /* 兼容显式类名透传 */
 .skillsDiscoverPanel {
-  border-radius: var(--radius-3xl);
+  border-radius: var(--radius-2xl);
   padding: var(--space-4);
 }
 

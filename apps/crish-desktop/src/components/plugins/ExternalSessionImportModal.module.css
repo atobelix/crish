@@ -1,11 +1,19 @@
 /* apps/crish-desktop/src/components/plugins/ExternalSessionImportModal.module.css
  * 外部会话同步模态框样式表
- * 方案 A 标准：外壳 24px、内衬 16px、条目/控件 8px 同心闭环
+ * 外壳 20px、内衬 16px、条目/控件 8px 同心闭环
+ * 模态收敛（G² 推广第一波槽 C · 待裁决 #4，2026-11-06）：外壳与内衬
+ * 名义半径由 24 统一为 20，轮廓由 Dialog 基座 G² 形状层生成。
  */
 
 .dialogPanel {
-  border-radius: var(--radius-3xl, 24px);
+  border-radius: var(--radius-2xl, 20px);
   overflow: hidden;
+}
+
+/* G² 形状层在位时放行 overflow：内容改由形状层同路径 clip 承载，
+ * 面板自身 overflow:hidden 会以普通圆弧二次裁切、覆盖 G² 轮廓。 */
+.dialogPanel:has(> [data-g2-mode]) {
+  overflow: visible;
 }
 
 .dialogBody {
@@ -20,7 +28,7 @@
   max-width: 640px;
   max-height: 80vh;
   box-sizing: border-box;
-  border-radius: var(--radius-3xl, 24px);
+  border-radius: var(--radius-2xl, 20px);
   padding: var(--space-4, 16px);
 }
 
