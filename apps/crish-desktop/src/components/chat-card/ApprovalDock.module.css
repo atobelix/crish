@@ -57,7 +57,7 @@
   /* 脉冲归队共享定义 crish-pulse-dot（AN2）；其光环色取 --accent-color，
    * 本点为警示橙，故在点元素作用域内把该变量收敛为橙，身份色不变 */
   --accent-color: var(--accent-orange);
-  animation: crish-pulse-dot var(--transition-pulse, 1.6s ease-in-out) infinite;
+  composes: crish-anim-pulse-dot from global;
 }
 
 .approvalDockLabel {

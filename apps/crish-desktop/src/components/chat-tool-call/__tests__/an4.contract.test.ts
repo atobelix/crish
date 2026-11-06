@@ -80,26 +80,31 @@ describe('AN4 · 入场类与交错变量', () => {
   );
   const cardCss = read('components/agent-card/SubagentDispatchCard.module.css');
 
-  it('.toolRowEnter 引用共享关键帧 + duration-fast + --reveal-delay', () => {
+  it('.toolRowEnter 经全局类 .crish-entrance-fade 消费共享关键帧（时长/交错在全局类体内）', () => {
+    // keyframes 悬空修复批：模块按名引用改 composes 全局通道类；
+    // duration-fast 与 --reveal-delay 交错随通道类本体在 design-system.css 钉。
     const body = blockCss.match(/\.toolRowEnter\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(body).toContain('crish-row-enter');
-    expect(body).toContain('var(--duration-fast)');
-    expect(body).toContain('var(--reveal-delay, 0ms)');
+    expect(body).toContain('crish-entrance-fade');
+    const dsCss = read('styles/design-system.css');
+    const channel = dsCss.match(/\.crish-entrance-fade\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(channel).toContain('crish-row-enter');
+    expect(channel).toContain('var(--duration-fast)');
+    expect(channel).toContain('var(--reveal-delay, 0ms)');
   });
 
   it('.outputRevealFade 引用 crish-fade-in + accordion-fade 时长', () => {
     const body = blockCss.match(/\.outputRevealFade\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(body).toContain('crish-fade-in');
+    expect(body).toContain('crish-anim-fade-in');
     expect(body).toContain('var(--duration-accordion-fade)');
   });
 
   it('组头 .groupEnter 与分派卡 .cardEnter 同语言入场', () => {
     const g = groupCss.match(/\.groupEnter\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(g).toContain('crish-row-enter');
+    expect(g).toContain('crish-entrance-fade');
     const c = cardCss.match(/\.cardEnter\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(c).toContain('crish-row-enter');
+    expect(c).toContain('crish-entrance-fade');
     const t = cardCss.match(/\.traceFade\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(t).toContain('crish-fade-in');
+    expect(t).toContain('crish-anim-fade-in');
   });
 });
 

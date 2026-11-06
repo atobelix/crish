@@ -81,12 +81,12 @@ describe('统一入场通道守卫', () => {
     );
     const ribbons = read('components/chat-card/ChatStatusRibbons.module.css');
     expect(ribbons).not.toContain('chipFadeIn');
-    expect(ribbons).toContain('crish-row-enter');
+    expect(ribbons).toContain('crish-entrance-fade');
   });
 
-  it('停止钮 CSS-only 消费共享 keyframes', () => {
+  it('停止钮 CSS-only 消费共享关键帧（经全局工具类 .crish-anim-fade-in）', () => {
     expect(
       read('components/chat-composer/ComposerSendControls.module.css')
-    ).toContain('crish-fade-in');
+    ).toContain('crish-anim-fade-in');
   });
 });

@@ -60,7 +60,9 @@
     border-color var(--duration-fast, 150ms) var(--ease-standard),
     color var(--duration-fast, 150ms) var(--ease-standard);
   position: relative;
-  animation: crish-fade-in var(--transition-popover-enter);
+  composes: crish-anim-fade-in from global;
+  --anim-duration: 180ms;
+  --anim-fill: none;
 }
 
 .chatScrollFab:hover {

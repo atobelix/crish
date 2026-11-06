@@ -32,7 +32,7 @@
     border-color var(--transition-fast);
   box-shadow: none;
   /* 入场收敛至共享 keyframes（crish-row-enter，与统一入场通道同语言） */
-  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
+  composes: crish-entrance-fade from global;
 }
 
 .dynamicChip:hover {
@@ -54,7 +54,7 @@
   background: var(--accent-green);
   flex-shrink: 0;
   /* 脉冲归队共享定义 crish-pulse-dot（AN1 落位、AN2 归队） */
-  animation: crish-pulse-dot var(--transition-pulse, 1.6s ease-in-out) infinite;
+  composes: crish-anim-pulse-dot from global;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -73,7 +73,7 @@
   background: var(--bg-secondary);
   box-shadow: var(--shadow-sm);
   /* 入场收敛至共享 keyframes（crish-row-enter，与统一入场通道同语言） */
-  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
+  composes: crish-entrance-fade from global;
 }
 
 .dynamicPlanHeader {

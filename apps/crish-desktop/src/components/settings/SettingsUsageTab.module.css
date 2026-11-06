@@ -34,13 +34,13 @@
   height: var(--space-3_5);
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
-  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
+  composes: crish-anim-skeleton-pulse from global;
 }
 
 .skeletonCard {
   background: var(--bg-subtle);
   border-radius: var(--radius-xl);
-  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
+  composes: crish-anim-skeleton-pulse from global;
 }
 
 .skeletonOverview {

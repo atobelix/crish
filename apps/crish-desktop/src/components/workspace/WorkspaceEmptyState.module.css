@@ -19,7 +19,10 @@
   background: transparent;
   box-shadow: none;
   outline: none;
-  animation: crish-fade-in var(--transition-smooth) forwards;
+  composes: crish-anim-fade-in from global;
+  --anim-duration: var(--duration-smooth);
+  --anim-easing: var(--ease-standard);
+  --anim-fill: forwards;
 }
 
 /* D1     shell .emptyState*    */
@@ -117,6 +120,6 @@
 }
 
 .workspaceEmptyStateExit {
-  animation: crish-fade-out var(--transition-smooth) forwards;
+  composes: crish-anim-fade-out from global;
   box-shadow: none;
 }
