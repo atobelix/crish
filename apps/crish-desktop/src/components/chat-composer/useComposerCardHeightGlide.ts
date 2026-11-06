@@ -67,10 +67,32 @@ measureNaturalHeight(): number | null {
 const el = this.el;
 if (!el || typeof window === 'undefined') return null;
 const cs = window.getComputedStyle(el);
-const borderY =
-(Number.parseFloat(cs.borderTopWidth) || 0) +
-(Number.parseFloat(cs.borderBottomWidth) || 0);
-const natural = el.scrollHeight + borderY;
+const borderTop = Number.parseFloat(cs.borderTopWidth) || 0;
+const borderBottom = Number.parseFloat(cs.borderBottomWidth) || 0;
+const borderY = borderTop + borderBottom;
+// 自然高只由在流内容决定：绝对/固定定位的装饰层（如 G² 形状层，
+// inset −1px 覆卡片边框环）高度随卡片高变化，其溢出又计入
+// scrollHeight——若以 scrollHeight 为目标高，会形成「目标高 →
+// 装饰层高 → 目标高再涨」的正反馈，静止态卡片无限缓涨
+// （2026-11-06 活应用实测：空输入单行态卡高涨至 1600px+）。
+// 故按在流子元素底边最大值测内容高，装饰层一律不计；无可测
+// 在流子元素时回落 scrollHeight 口径（引擎单测的无子元素桩、
+// 以及内容不经子元素通道的极端情形）。
+let contentBottom = -1;
+for (const child of Array.from(el.children)) {
+const c = child as HTMLElement;
+if (c.offsetParent !== el || c.offsetHeight <= 0) continue;
+const pos = window.getComputedStyle(c).position;
+if (pos === 'absolute' || pos === 'fixed') continue;
+contentBottom = Math.max(contentBottom, c.offsetTop + c.offsetHeight);
+}
+let natural: number;
+if (contentBottom >= 0) {
+const padBottom = Number.parseFloat(cs.paddingBottom) || 0;
+natural = borderTop + contentBottom + padBottom + borderBottom;
+} else {
+natural = el.scrollHeight + borderY;
+}
 if (!Number.isFinite(natural) || natural <= 0) return null;
 const minH = Number.parseFloat(cs.minHeight) || 0;
 return Math.max(natural, minH);
@@ -172,10 +194,13 @@ const observed = new Set<Element>();
 const onResize = () => glide.sync();
 const observeChildren = () => {
 for (const child of Array.from(el.children)) {
-if (!observed.has(child)) {
+if (observed.has(child)) continue;
+// 绝对/固定定位的装饰层尺寸随卡片高变化：观测它只会把滑翔
+// 自身引起的尺寸变化再喂回 sync。与测高口径一致地跳过。
+const pos = window.getComputedStyle(child as HTMLElement).position;
+if (pos === 'absolute' || pos === 'fixed') continue;
 observed.add(child);
 roManager.observe(child, onResize);
-}
 }
 };
 observeChildren();

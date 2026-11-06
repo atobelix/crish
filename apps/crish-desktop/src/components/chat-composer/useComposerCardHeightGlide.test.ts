@@ -156,4 +156,76 @@ describe('ComposerCardHeightGlide', () => {
     expect(animations[0].anim.cancel).toHaveBeenCalledTimes(1);
     expect(el.style.height).toBe('');
   });
+
+  it('在流子元素决定自然高：内容生长走在流底边口径', () => {
+    const { el, animations } = makeCard(999);
+    const flow = document.createElement('div');
+    Object.defineProperty(flow, 'offsetParent', {
+      get: () => el,
+      configurable: true,
+    });
+    Object.defineProperty(flow, 'offsetTop', {
+      get: () => 0,
+      configurable: true,
+    });
+    let flowH = 100;
+    Object.defineProperty(flow, 'offsetHeight', {
+      get: () => flowH,
+      configurable: true,
+    });
+    el.appendChild(flow);
+    const glide = new ComposerCardHeightGlide(el);
+    glide.sync();
+    // scrollHeight 桩为 999 也不作数：在流底边 100 才是自然高
+    expect(el.style.height).toBe('100px');
+    flowH = 140;
+    glide.sync();
+    expect(animations).toHaveLength(1);
+    expect(animations[0].frames).toEqual([
+      { height: '100px' },
+      { height: '140px' },
+    ]);
+  });
+
+  it('绝对定位装饰层（G² 形状层）不计入自然高：层高涨落不形成正反馈', () => {
+    const { el, animations } = makeCard(100);
+    const flow = document.createElement('div');
+    Object.defineProperty(flow, 'offsetParent', {
+      get: () => el,
+      configurable: true,
+    });
+    Object.defineProperty(flow, 'offsetTop', {
+      get: () => 0,
+      configurable: true,
+    });
+    Object.defineProperty(flow, 'offsetHeight', {
+      get: () => 100,
+      configurable: true,
+    });
+    el.appendChild(flow);
+    const deco = document.createElement('div');
+    deco.style.position = 'absolute';
+    Object.defineProperty(deco, 'offsetParent', {
+      get: () => el,
+      configurable: true,
+    });
+    Object.defineProperty(deco, 'offsetTop', {
+      get: () => -1,
+      configurable: true,
+    });
+    let decoH = 102;
+    Object.defineProperty(deco, 'offsetHeight', {
+      get: () => decoH,
+      configurable: true,
+    });
+    el.appendChild(deco);
+    const glide = new ComposerCardHeightGlide(el);
+    glide.sync();
+    expect(el.style.height).toBe('100px');
+    // 装饰层随卡高继续变高（正反馈的另一半）→ 目标高不变、不播动画
+    decoH = 900;
+    glide.sync();
+    expect(el.style.height).toBe('100px');
+    expect(animations).toHaveLength(0);
+  });
 });
