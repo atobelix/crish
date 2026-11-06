@@ -1,7 +1,7 @@
 //! 流事件聚合与收口（Aggregate / consume / ConsumeBuilder / finish 家族 / metadata 构建）
 
 use conex_types::error::ProviderErrorKind;
-use conex_types::message::ToolCallBlock;
+use conex_types::message::{AgentMessageBlock, ToolCallBlock};
 use conex_types::response::{ClassifiedStreamError, ProviderOutput};
 use conex_types::tool::ProviderDiagnostic;
 use serde::{Deserialize, Serialize};
@@ -22,12 +22,21 @@ struct ThoughtBlock {
 }
 
 /// 聚合中间态
+///
+/// 分工（S4 定稿保序）：`text` / `thought` / `thought_blocks` / `tool_calls`
+/// 是**分桶聚合**，只供响应分类、metadata 标注与平坦文本消费（如
+/// provider 历史拼装）；`segments` 是按事件到达序维护的保序段序列，
+/// 是**定稿消息 blocks 的唯一真源**——定稿路径禁止再从分桶字段按
+/// 类型归拢重组 blocks。
 #[derive(Debug, Default)]
 struct Aggregate {
     text: String,
     thought: String,
     thought_blocks: Vec<ThoughtBlock>,
     tool_calls: Vec<ToolCallBlock>,
+    /// 定稿保序段：事件到达序的块序列（连续同类增量合并成段；
+    /// redacted 取值不同的思考不合并，各自成段）
+    segments: Vec<AgentMessageBlock>,
     diagnostics: Vec<ProviderDiagnostic>,
     error: Option<String>,
     /// 错误分类（D7 §3.7：Stop 事件透传的 classified.kind，
@@ -40,10 +49,34 @@ struct Aggregate {
 impl Aggregate {
     fn push(&mut self, event: ProviderStreamEvent) {
         match event {
-            ProviderStreamEvent::TextDelta { text } => self.text.push_str(&text),
+            ProviderStreamEvent::TextDelta { text } => {
+                self.text.push_str(&text);
+                // 保序段：并入尾部正文段（段边界独立于网络分块粒度），
+                // 尾段非正文时新开一段——交错位置在此保真
+                if !text.is_empty() {
+                    match self.segments.last_mut() {
+                        Some(AgentMessageBlock::Text { text: tail }) => tail.push_str(&text),
+                        _ => self.segments.push(AgentMessageBlock::Text { text }),
+                    }
+                }
+            }
             ProviderStreamEvent::ThoughtDelta { text, redacted } => {
                 self.thought.push_str(&text);
-                self.thought_blocks.push(ThoughtBlock { text, redacted });
+                self.thought_blocks.push(ThoughtBlock {
+                    text: text.clone(),
+                    redacted,
+                });
+                // 保序段：并入尾部思考段（仅 redacted 取值相同才合并，
+                // redacted 边界必须保留）；空增量不建段
+                if !text.is_empty() {
+                    match self.segments.last_mut() {
+                        Some(AgentMessageBlock::Thought {
+                            text: tail,
+                            redacted: tail_redacted,
+                        }) if *tail_redacted == redacted => tail.push_str(&text),
+                        _ => self.segments.push(AgentMessageBlock::Thought { text, redacted }),
+                    }
+                }
             }
             ProviderStreamEvent::ToolCall {
                 id,
@@ -64,11 +97,14 @@ impl Aggregate {
                         candidate
                     }
                 };
-                self.tool_calls.push(ToolCallBlock {
+                let call = ToolCallBlock {
                     id,
                     tool_name,
                     input,
-                });
+                };
+                self.tool_calls.push(call.clone());
+                // 保序段：工具调用各自成段，落在事件到达的位置
+                self.segments.push(AgentMessageBlock::ToolCall(call));
             }
             ProviderStreamEvent::ProviderDiagnostic { diagnostic } => {
                 self.diagnostics.push(diagnostic);
@@ -202,12 +238,14 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
                 }),
                 diagnostics: aggregate.diagnostics,
                 metadata: Value::Null,
+                segments: Vec::new(),
             };
         }
         return ConsumeResult {
             response: ProviderOutput::Empty,
             diagnostics: aggregate.diagnostics,
             metadata: Value::Null,
+            segments: Vec::new(),
         };
     }
 
@@ -242,6 +280,7 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
         response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
         metadata,
+        segments: aggregate.segments,
     }
 }
 
@@ -262,6 +301,7 @@ fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> Cons
             }),
             diagnostics: aggregate.diagnostics,
             metadata: Value::Null,
+            segments: Vec::new(),
         };
     }
     let metadata =
@@ -270,6 +310,7 @@ fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> Cons
         response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
         metadata,
+        segments: aggregate.segments,
     }
 }
 

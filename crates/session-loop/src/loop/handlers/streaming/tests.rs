@@ -4,6 +4,7 @@ use super::*;
 use crate::r#loop::SessionLoopOptions;
 use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
 use agent_tools::registry::ToolRegistry;
+use conex_types::message::ToolCallBlock;
 use conex_types::session::AgentSessionState as S;
 
 fn test_state() -> LoopState {
@@ -151,4 +152,65 @@ async fn test_consume_stream_breaks_immediately_on_stop() {
 
     let consumed = outcome.consumed.expect("应成功聚合");
     assert_eq!(consumed.response.text(), "正文1");
+}
+
+/// S4 定稿保序：交错事件序（思考→正文→工具→正文→思考→工具→总结）经
+/// consume + build_assistant_message 后，定稿 blocks 逐段同序、多段思考
+/// 各自成块——禁止再归拢为 [thought 块 → 本轮全文一块 → tool-call 块]。
+#[test]
+fn build_assistant_message_preserves_interleaved_segment_order() {
+    let consumed = crate::stream::consume(
+        vec![
+            ProviderStreamEvent::thought("先想一想", None),
+            ProviderStreamEvent::text("第一段正文"),
+            ProviderStreamEvent::tool_call(
+                Some("call_1".to_string()),
+                "read_file",
+                serde_json::json!({ "path": "a.txt" }),
+            ),
+            ProviderStreamEvent::text("第二段正文"),
+            ProviderStreamEvent::thought("再想一想", None),
+            ProviderStreamEvent::tool_call(
+                Some("call_2".to_string()),
+                "read_file",
+                serde_json::json!({ "path": "b.txt" }),
+            ),
+            ProviderStreamEvent::text("总结"),
+            ProviderStreamEvent::stop(StopReason::ToolCall),
+        ],
+        false,
+    );
+    let message = build_assistant_message(&consumed, "a1", None);
+    assert_eq!(
+        message.blocks,
+        vec![
+            AgentMessageBlock::Thought {
+                text: "先想一想".to_string(),
+                redacted: None,
+            },
+            AgentMessageBlock::Text {
+                text: "第一段正文".to_string(),
+            },
+            AgentMessageBlock::ToolCall(ToolCallBlock {
+                id: "call_1".to_string(),
+                tool_name: "read_file".to_string(),
+                input: serde_json::json!({ "path": "a.txt" }),
+            }),
+            AgentMessageBlock::Text {
+                text: "第二段正文".to_string(),
+            },
+            AgentMessageBlock::Thought {
+                text: "再想一想".to_string(),
+                redacted: None,
+            },
+            AgentMessageBlock::ToolCall(ToolCallBlock {
+                id: "call_2".to_string(),
+                tool_name: "read_file".to_string(),
+                input: serde_json::json!({ "path": "b.txt" }),
+            }),
+            AgentMessageBlock::Text {
+                text: "总结".to_string(),
+            },
+        ]
+    );
 }

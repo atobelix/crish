@@ -19,7 +19,7 @@
 use conex_types::error::codes;
 use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{
-    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
 };
 use conex_types::response::{ClassifiedStreamError, ProviderOutput};
 use conex_types::session::AgentSessionEvent as E;
@@ -302,15 +302,13 @@ async fn consume_classify(
 
     // 5. 响应分类（01 §2.4 步骤 5）
     match &consumed.response {
-        ProviderOutput::Message { text, tool_calls } => {
+        ProviderOutput::Message { tool_calls, .. } => {
             // commitAssistantMessage：落对话 + message-end（01 §2.4 步骤 5）
             // clientMessageId 取 run-task 下发的 assistantClientMessageId
             // （经 SessionLoopOptions 透传，03 §5.3-4）
             let message = build_assistant_message(
                 consumed,
                 assistant_message_id,
-                text.clone(),
-                tool_calls.clone(),
                 state
                     .options
                     .tool_exec
@@ -673,7 +671,16 @@ fn cache_accounting_kind(consumed: &ConsumeResult) -> conex_telemetry::cache::Ca
     }
 }
 
-/// 构建 assistant 消息（thought 块 → 正文块 → tool-call 块，01 §2.4 步骤 5）
+/// 构建 assistant 消息（01 §2.4 步骤 5 的响应分类产物）
+///
+/// blocks 直接取 consume 的**保序段**（事件到达序：thought / text /
+/// tool-call 逐段交错，与流式事件序一致，S4 定稿保序）——禁止在此按
+/// 类型归拢重排。旧组装（[thought 块 → 本轮全文一块 → tool-call 块]，
+/// 且 thought 块经 metadata.thoughtBlocks 反解析回建）已整体删除：
+/// 它把轮内交错在定稿瞬间压平，事件重放 / 历史回看 / 直消费定稿
+/// blocks 的投影只能拿到归拢序（sess-1793884211510 乱序事故的源头
+/// 之一）。分桶聚合（全文 String / tool_calls Vec）只供响应分类与
+/// provider 历史拼装，不再参与定稿 blocks 的组装。
 ///
 /// `message_id` 为 T09.1 预生成 id（与实时 delta 共用，保证 message-delta /
 /// message-start / message-end 的 message_id 对齐）。
@@ -684,50 +691,13 @@ fn cache_accounting_kind(consumed: &ConsumeResult) -> conex_telemetry::cache::Ca
 fn build_assistant_message(
     consumed: &ConsumeResult,
     message_id: &str,
-    text: String,
-    tool_calls: Vec<ToolCallBlock>,
     client_message_id: Option<&str>,
 ) -> AgentMessage {
-    let mut blocks: Vec<AgentMessageBlock> = Vec::new();
-    let mut has_thought_block = false;
-    // thought 块（metadata.thoughtBlocks，redacted 透传，02 §一.4）
-    if let Some(blocks_value) = consumed
-        .metadata
-        .get("thoughtBlocks")
-        .and_then(|v| v.as_array())
-    {
-        for block in blocks_value {
-            if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
-                blocks.push(AgentMessageBlock::Thought {
-                    text: text.to_string(),
-                    redacted: block.get("redacted").and_then(|v| v.as_bool()),
-                });
-                has_thought_block = true;
-            }
-        }
-    }
-    // 兜底：若 thoughtBlocks 为空或未产出 thought 块，但 metadata.thought 存在非空文本
-    if !has_thought_block {
-        if let Some(thought_text) = consumed.metadata.get("thought").and_then(|v| v.as_str()) {
-            if !thought_text.is_empty() {
-                blocks.push(AgentMessageBlock::Thought {
-                    text: thought_text.to_string(),
-                    redacted: None,
-                });
-            }
-        }
-    }
-    if !text.is_empty() {
-        blocks.push(AgentMessageBlock::Text { text });
-    }
-    for call in tool_calls {
-        blocks.push(AgentMessageBlock::ToolCall(call));
-    }
     AgentMessage {
         id: message_id.to_string(),
         role: AgentMessageRole::Assistant,
         created_at: conex_shared::time::now_iso_utc(),
-        blocks,
+        blocks: consumed.segments.clone(),
         metadata: if consumed.metadata.is_null() {
             None
         } else {

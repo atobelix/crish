@@ -491,10 +491,11 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
             _ => None,
         })
         .collect();
-    // 收口 delta 按消息 block 构建：thought 块 + 整段正文块（2 条）
+    // 收口 delta 按定稿 blocks 逐块构建：定稿保序后（S4）blocks 与事件
+    // 到达序一致（正文「你」/ thought / 正文「好」3 块），收口 delta 3 条
     assert_eq!(
         positions,
-        vec!["start", "end", "start", "delta", "delta", "end"]
+        vec!["start", "end", "start", "delta", "delta", "delta", "end"]
     );
 
     // message_id 对齐：实时 delta / message-start / message-end 同一 id
@@ -510,8 +511,8 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
     }
     assert_eq!(
         ids.len(),
-        6,
-        "user 对 + assistant 族（start/delta/delta/end）"
+        7,
+        "user 对 + assistant 族（start/delta×3/end）"
     );
     let first_assistant = ids[2].clone();
     assert!(
@@ -534,6 +535,21 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
         .expect("应 commit assistant 消息");
     assert_message_delta_concatenation(&sink_events, &message.text());
     assert_eq!(message.text(), "你好");
+
+    // S4 定稿保序钉死：收口轨 delta 的块序列与实时轨逐块同序同内容
+    // （旧归拢序下收口轨会给出 [thought, 全文]，与实时轨错位）
+    let closing_blocks: Vec<&AgentMessageBlock> = outcome
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            AgentEvent::MessageDelta { block, .. } => Some(block),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        closing_blocks, sink_blocks,
+        "收口 delta 序列必须与实时 delta 序列逐块一致（保序定稿）"
+    );
 
     // G4 / 04 §5.2-5：message-end 载荷 turnIndex（前端按 turn 分段合并）——
     // user 消息在 TURN_PREPARED 递增前消费（0），assistant 收口在递增后
@@ -697,18 +713,14 @@ async fn abort_during_thought_salvages_partial_thought() {
             .and_then(|s| s.as_str()),
         Some("aborted")
     );
-    assert_eq!(assistant_msg.blocks.len(), 2);
+    // S4 口径更新：定稿思考按「段」成块（连续同类增量合并，段边界独立
+    // 于分块粒度），两条连续的未脱敏思考合并为一块——抢救内容不变，
+    // 只是不再按每条 delta 逐块落盘（旧口径断言 2 块）
+    assert_eq!(assistant_msg.blocks.len(), 1);
     assert_eq!(
         assistant_msg.blocks[0],
         AgentMessageBlock::Thought {
-            text: "第一阶段思考...".to_string(),
-            redacted: None,
-        }
-    );
-    assert_eq!(
-        assistant_msg.blocks[1],
-        AgentMessageBlock::Thought {
-            text: "第二阶段思考...".to_string(),
+            text: "第一阶段思考...第二阶段思考...".to_string(),
             redacted: None,
         }
     );

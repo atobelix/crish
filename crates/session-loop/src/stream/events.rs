@@ -1,6 +1,7 @@
 //! provider 流事件与消费结果类型（StopReason / ProviderUsage / ProviderStreamEvent / ConsumeResult 等）
 
 use conex_types::error::ProviderErrorKind;
+use conex_types::message::AgentMessageBlock;
 use conex_types::response::ProviderOutput;
 use conex_types::tool::ProviderDiagnostic;
 use serde::{Deserialize, Serialize};
@@ -225,12 +226,21 @@ impl ConsumeStopReason {
 /// - `metadata`：消息元数据标注（stopReason / thought / usage / providerError /
 ///   providerErrorKind / providerErrorRetryable / aborted，对齐
 ///   agent-provider buildMessageMetadata；D7 §3.7 结构化分类字段）
+/// - `segments`：定稿保序段（见字段注释；与 response 的分桶聚合分工——
+///   response 供分类与平坦文本消费，segments 是定稿消息 blocks 的唯一真源）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumeResult {
     pub response: ProviderOutput,
     pub diagnostics: Vec<ProviderDiagnostic>,
     pub metadata: Value,
+    /// 定稿保序段（S4 修复）：本轮 provider 输出按**事件到达序**排列的块
+    /// 序列（thought / text / tool-call 逐段交错；连续同类增量已合并为
+    /// 一段，redacted 取值不同的思考不合并）。定稿消息 `blocks` 的唯一
+    /// 真源——`build_assistant_message` 直接取用本序列，禁止再按类型
+    /// 归拢重组。仅 Message 响应非空；Empty / StreamError 时恒为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<AgentMessageBlock>,
 }
 
 impl ConsumeResult {
