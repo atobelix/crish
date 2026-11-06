@@ -49,12 +49,15 @@ export function findScrollableAncestor(el: HTMLElement): HTMLElement | null {
 }
 
 /**
- * 容器判底：可滚动空间 > 1px 且距底 ≤ BOTTOM_STICK_EPSILON_PX
- * （与 messageVirtualizerScrollState 的贴底判定同口径）。
+ * 容器判底：距底 ≤ BOTTOM_STICK_EPSILON_PX（与 messageVirtualizerScrollState
+ * 的物理底判定同口径，其 isAtPhysicalBottom 同样把 maxScroll ≤ ε 视为在底）。
+ * 退化区制（内容装得下、maxScroll ≈ 0、scrollTop = 0）距底恒为 0 → 判底
+ * 成立：用户此刻看到的就是全部内容，展开把内容顶出视口后必须由钉底接管。
+ * 旧口径对 maxScroll ≤ 1 硬返回 false，使该区制下钉底机制整体缺席、
+ * 展开尾部落在折线以下无人处理（调研2 R4）。
  */
 export function isContainerAtBottom(container: HTMLElement): boolean {
   const maxScroll = container.scrollHeight - container.clientHeight;
-  if (maxScroll <= 1) return false;
   return maxScroll - container.scrollTop <= BOTTOM_STICK_EPSILON_PX;
 }
 

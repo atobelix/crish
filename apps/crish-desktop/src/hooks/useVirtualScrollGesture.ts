@@ -50,6 +50,12 @@ export interface UseVirtualScrollGestureResult {
   performProgrammaticScroll: PerformProgrammaticScrollFn;
   /** 物理硬件输入（Capture 阶段）原子销毁程序滚动豁免权并激活手势保护 */
   cancelProgrammaticScroll: () => void;
+  /**
+   * 物理输入累计计数（wheel / touchstart / touchmove / pointerdown 的
+   * 容器捕获监听单点累加，只增不减）。供上层区分「真实用户输入」与
+   * 「滞后送达的程序滚动事件」——后者不改变计数，前者必然先行改变。
+   */
+  getPhysicalInputCount: () => number;
   /** 在 onScroll 中判定并单次消费程序滚动事件 */
   isProgrammaticScrollEvent: (currentScrollTop: number) => boolean;
 }
@@ -62,6 +68,8 @@ export function useVirtualScrollGesture({
   onGestureEnd,
 }: UseVirtualScrollGestureOptions): UseVirtualScrollGestureResult {
   const gestureActiveRef = useRef(false);
+  /** 物理输入累计计数（见 getPhysicalInputCount） */
+  const physicalInputCountRef = useRef(0);
   const gestureIdleTimerRef = useRef<number | null>(null);
   const programmaticScrollStateRef = useRef<ProgrammaticScrollTokenState>({
     epoch: 0,
@@ -137,6 +145,7 @@ export function useVirtualScrollGesture({
       if (!el || typeof el.addEventListener !== 'function') return;
 
       const onPhysicalCapture = () => {
+        physicalInputCountRef.current += 1;
         cancelProgrammaticScroll();
       };
       const onScrollEnd = () => {
@@ -280,6 +289,11 @@ export function useVirtualScrollGesture({
 
   const isGestureActive = useCallback(() => gestureActiveRef.current, []);
 
+  const getPhysicalInputCount = useCallback(
+    () => physicalInputCountRef.current,
+    []
+  );
+
   return {
     gestureActiveRef,
     isGestureActive,
@@ -290,5 +304,6 @@ export function useVirtualScrollGesture({
     performProgrammaticScroll,
     cancelProgrammaticScroll,
     isProgrammaticScrollEvent,
+    getPhysicalInputCount,
   };
 }

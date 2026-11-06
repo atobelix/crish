@@ -24,6 +24,19 @@ import {
   type PerformProgrammaticScrollFn,
 } from './useVirtualScrollGesture';
 
+/**
+ * S-B：判底锁周期结束后的钉底宽限窗（ms）——解锁后迟到的残差落账
+ * （末帧实测被显著阈值门迟交、尾部缓冲斜坡尾帧等）在此窗内仍逐帧钉底；
+ * 用户原生滚离底部即作废（见 onScroll）。
+ */
+const ACCORDION_BOTTOM_PIN_GRACE_MS = 700;
+/**
+ * S-B：解锁 DOM 真底终检的残差包络余量（px，衬距开销之外）——终检只
+ * 纠正缺陷量级的偏差（舍入 / 阈值门残差 / 尾部缓冲一帧斜坡步），偏差
+ * 超出包络（用户已滚离等）绝不夺回滚动。
+ */
+const BOTTOM_FINAL_CHECK_SLACK_PX = 32;
+
 /** R2：几何计算结果快照（visibleRange 关键字段 + totalHeight） */
 interface GeometrySnapshot {
   range: VisibleRange;
@@ -59,6 +72,14 @@ export interface UseVirtualScrollOptions {
    * 不做窗口化渲染（visibleRange / totalHeight 不随内容更新）。
    */
   heightOnly?: boolean;
+  /**
+   * 文档总高换算（宿主单点注入）：把模型内容总高换算为滚动文档总高
+   * （含衬距 / 尾部缓冲等渲染层几何）。缺省 = 恒等（内容高即文档高，
+   * 无衬距几何的消费方口径不变）。
+   * 钉底（pinToBottom）以此为唯一口径，保证与渲染层占位高同源——
+   * 聊天宿主注入 chatSpacerHeight(模型总高, 当前尾部缓冲)。
+   */
+  spacerHeightForContent?: (contentHeight: number) => number;
 }
 
 export interface UseVirtualScrollResult {
@@ -114,6 +135,11 @@ export function useVirtualScroll(
   const manager = managerRef.current;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  /** 宿主注入的文档总高换算（渲染期镜像，回调内读最新值；与 idsRef 同模式） */
+  const spacerHeightForContentRef = useRef<
+    UseVirtualScrollOptions['spacerHeightForContent']
+  >(undefined);
+  spacerHeightForContentRef.current = options.spacerHeightForContent;
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(
     DEFAULT_VIEWPORT_HEIGHT_PX
@@ -201,6 +227,24 @@ export function useVirtualScroll(
    */
   const pinToBottomRef = useRef<(() => void) | null>(null);
 
+  /**
+   * S-B：本锁周期判底结论的镜像。manager 的结论在解锁通知发出前已复位
+   * 为 null，解锁处理（再钉 + 宽限 + 终检）需从此镜像读刚结束周期的
+   * 结论；本钩子是 manager 判底结论的唯一写者（setActual 判底采样与
+   * onScroll 让行取消两处），镜像在同两处与 manager 同步更新。
+   */
+  const cyclePinnedRef = useRef(false);
+  /** S-B：判底周期解锁后的钉底宽限窗截止时刻（performance.now 口径） */
+  const pinnedGraceUntilRef = useRef(0);
+  /**
+   * R6：最近一次判底采样 / 钉底时的物理输入计数快照。onScroll 让行取消
+   * 以「计数自快照后变化」为判据（有新的真实物理输入），而非仅凭事件
+   * 位置——滞后送达的程序滚动事件不改变计数，不会误杀钉住。
+   */
+  const pinPhysicalInputCountRef = useRef(0);
+  /** S-B：DOM 真底终检的待执行 rAF 句柄 */
+  const bottomFinalCheckRafRef = useRef<number | null>(null);
+
   /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
   const flushActualMeasurements = useCallback(
     (force = false) => {
@@ -257,17 +301,21 @@ export function useVirtualScroll(
       }
 
       // S折叠同钟 · 判底钉底：锁内逐帧落高后同帧把滚动回收到底边。
-      // 钉底目标取模型总高口径（manager.getTotalHeight），不读 DOM
-      // scrollHeight——占位 .listInner 的高度由 React 按 totalHeight 渲染，
+      // 钉底目标经 pinToBottom 取宿主注入的文档总高（与占位同源），不读
+      // DOM scrollHeight——占位 .listInner 的高度由 React 按总高渲染，
       // DOM 值滞后模型一帧，读它会把钉底拖后一帧。手势让行不在此处检查：
       // 折叠点击本身的 pointerdown 即会激活手势冻结（锚锁钩子 +
       // 手势捕获监听），若以 gestureActiveRef 为判据，判底折叠将永远钉不住；
       // 真正的手势让行由 onScroll 的原生滚动事件判据执行（用户已离底 > ε
       // 即取消 bottomPinned），见 onScroll。pinToBottom 经 ref 调用。
-      if (
-        manager.isAccordionBottomPinned() &&
-        (anyChanged || estimatesChanged)
-      ) {
+      // S-B：解锁宽限窗内（刚结束的周期曾判底、且未进入新锁周期）迟到的
+      // 残差落账同样逐帧钉底，吃掉解锁后才落账的末帧残差。
+      const bottomPinActive =
+        manager.isAccordionBottomPinned() ||
+        (!manager.isAccordionMotionLocked() &&
+          cyclePinnedRef.current === true &&
+          performance.now() < pinnedGraceUntilRef.current);
+      if (bottomPinActive && (anyChanged || estimatesChanged)) {
         pinToBottomRef.current?.();
       }
 
@@ -294,6 +342,7 @@ export function useVirtualScroll(
     performProgrammaticScroll: gesturePerformProgrammaticScroll,
     cancelProgrammaticScroll,
     isProgrammaticScrollEvent,
+    getPhysicalInputCount,
   } = useVirtualScrollGesture({
     containerRef,
     onGestureEnd: flushActualMeasurements,
@@ -322,24 +371,57 @@ export function useVirtualScroll(
   );
 
   /**
-   * S折叠同钟 · 判底钉底：把滚动位置钉到模型总高对应的底边。
+   * S折叠同钟 · 判底钉底：把滚动位置钉到文档底边。
    * 经 performProgrammaticScroll 执行（代际令牌豁免）：钉底产生的原生 scroll
    * 事件被识别为程序滚动，不激活手势冻结、不触发 onScroll 的让行判据。
-   * 目标取模型总高 − 容器可视高，不读 DOM scrollHeight（占位滞后模型一帧）。
+   * 目标 = 宿主注入的文档总高（spacerHeightForContent：聊天宿主注入
+   * chatSpacerHeight(模型总高, 当前尾部缓冲)，与渲染层 .listInner 占位高
+   * 同源、取同一帧的尾部缓冲值）− 容器可视高。旧口径只用裸模型总高，
+   * 与占位高恒差衬距 48+16（进行中回合再差尾部缓冲 160–360）——底部
+   * 展开/收起终态恒距底 ≈64px 的根因（调研2 R1/R2）。仍不读 DOM
+   * scrollHeight：占位由 React 按总高渲染、滞后模型一帧，读它会把钉底
+   * 拖后一帧；终态残差由解锁时的 DOM 真底终检收口（S-B）。
    */
   const pinToBottom = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const targetTop = Math.max(
-      0,
-      manager.getTotalHeight(itemCountRef.current) - el.clientHeight
-    );
+    const contentTotal = manager.getTotalHeight(itemCountRef.current);
+    const spacer = spacerHeightForContentRef.current;
+    const docTotal = spacer ? spacer(contentTotal) : contentTotal;
+    const targetTop = Math.max(0, docTotal - el.clientHeight);
     performProgrammaticScroll(el, targetTop);
-  }, [manager, performProgrammaticScroll]);
+    // R6：钉底后刷新物理输入计数快照——此后无新物理输入时，滞后送达
+    // 的钉底 scroll 事件不得触发 onScroll 让行取消。
+    pinPhysicalInputCountRef.current = getPhysicalInputCount();
+  }, [getPhysicalInputCount, manager, performProgrammaticScroll]);
 
   // 渲染期赋值（与 idsRef / renderedRangeRef 同模式）：flush 定义在手势
   // 钩子之前，经此 ref 调用 pinToBottom。
   pinToBottomRef.current = pinToBottom;
+
+  /**
+   * S-B · DOM 真底终检：解锁再钉后一帧，以真实 DOM 底边校验残差。
+   * 模型与渲染若因舍入、阈值门残差或尾部缓冲斜坡滞后差出数 px，在此
+   * 收口到 DOM 真底；只纠正缺陷包络内的偏差（衬距开销 + 余量），超出
+   * 包络（用户已滚离等）绝不夺回滚动；用户手势进行中跳过。
+   */
+  const scheduleBottomFinalCheck = useCallback(() => {
+    if (bottomFinalCheckRafRef.current != null) return;
+    bottomFinalCheckRafRef.current = requestAnimationFrame(() => {
+      bottomFinalCheckRafRef.current = null;
+      const el = containerRef.current;
+      if (!el || gestureActiveRef.current) return;
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      const dist = maxScroll - el.scrollTop;
+      if (dist <= BOTTOM_STICK_EPSILON_PX) return;
+      const contentTotal = manager.getTotalHeight(itemCountRef.current);
+      const spacer = spacerHeightForContentRef.current;
+      const overhead =
+        (spacer ? spacer(contentTotal) : contentTotal) - contentTotal;
+      if (dist > overhead + BOTTOM_FINAL_CHECK_SLACK_PX) return;
+      performProgrammaticScroll(el, maxScroll);
+    });
+  }, [gestureActiveRef, manager, performProgrammaticScroll]);
 
   const scheduleActualFlush = useCallback(() => {
     if (actualRafRef.current != null) return;
@@ -365,23 +447,38 @@ export function useVirtualScroll(
     flushActualMeasurements(true);
   }, [flushActualMeasurements, resetGestureState]);
 
-  // 手风琴动画落定后触发单次批量提交几何更新
+  // 手风琴动画落定后触发单次批量提交几何更新。
+  // S-B：本周期曾判底时，解锁对账后再以同源公式钉一次（吃掉解锁 flush
+  // 刚落账的残差增量），并开启宽限窗 + 安排一帧 DOM 真底终检——保证
+  // 终态距底 ≈ 0，而不是旧口径的恒差衬距 ≈64px。判底结论从 cyclePinnedRef
+  // 镜像读（manager 结论在解锁通知前已复位）。
   useEffect(() => {
     return manager.onAccordionUnlock(() => {
+      const wasBottomPinned = cyclePinnedRef.current === true;
       if (
         pendingActualRef.current.size > 0 ||
         pendingEstimatesRef.current.size > 0
       ) {
         flushActualMeasurements(true);
       }
+      if (wasBottomPinned) {
+        pinnedGraceUntilRef.current =
+          performance.now() + ACCORDION_BOTTOM_PIN_GRACE_MS;
+        pinToBottomRef.current?.();
+        scheduleBottomFinalCheck();
+      }
     });
-  }, [manager, flushActualMeasurements]);
+  }, [manager, flushActualMeasurements, scheduleBottomFinalCheck]);
 
   useEffect(() => {
     return () => {
       if (actualRafRef.current != null) {
         cancelAnimationFrame(actualRafRef.current);
         actualRafRef.current = null;
+      }
+      if (bottomFinalCheckRafRef.current != null) {
+        cancelAnimationFrame(bottomFinalCheckRafRef.current);
+        bottomFinalCheckRafRef.current = null;
       }
     };
   }, []);
@@ -436,21 +533,53 @@ export function useVirtualScroll(
         return;
       }
       bumpGestureEpoch();
-      // S折叠同钟 · 手势让行（S9 规格 3）：原生滚动事件显示用户已离底
-      // （距底 > BOTTOM_STICK_EPSILON_PX）→ 立即取消本锁的 bottomPinned，
-      // 余下时长回落到现行延迟语义，用户滚动零对抗。钉底自身的 scroll
-      // 事件属程序滚动，已在上方豁免分支返回，不会误触本判据。
+      // S折叠同钟 · 手势让行（S9 规格 3，R6 收紧）：原生滚动事件显示用户
+      // 已离底（距底 > BOTTOM_STICK_EPSILON_PX）且伴有新物理输入 → 立即
+      // 取消本锁的 bottomPinned，余下时长回落到现行延迟语义，用户滚动
+      // 零对抗。钉底自身的 scroll 事件属程序滚动，已在上方豁免分支返回；
+      // 但滞后送达、与最新令牌目标不匹配的钉底事件会落入本分支——R6 的
+      // 物理输入计数判据即为此设（详见下方分支内注释）。
       if (manager.isAccordionBottomPinned()) {
         const el = e.currentTarget;
         const distanceToBottom =
           el.scrollHeight - el.clientHeight - el.scrollTop;
-        if (distanceToBottom > BOTTOM_STICK_EPSILON_PX) {
+        // R6（底部钉底修复续）：让行判据收紧——仅当最近一次钉底之后出现
+        // 了新的物理输入（捕获计数变化）才取消钉住。逐帧钉底时，早先
+        // 钉底产生的 scroll 事件可滞后数帧才送达，其间令牌目标已被后续
+        // 钉底刷新，滞后事件与最新目标不匹配（> ε）而被误判为原生滚动；
+        // 若仅凭事件位置取消钉住，钉底会在动画中途被自己的滞后事件杀死
+        // （实测工具详情展开：钉住在动画中段翻 false，终态距底 74px）。
+        // 真实用户滚离必然先有物理输入（捕获监听先行于其 scroll 事件，
+        // 计数快照在判底采样与每次钉底时刷新），以计数为判据不漏让行；
+        // 键盘滚动无捕获计数，动画 ≤350ms 内不让行，属可接受缺口。
+        if (
+          distanceToBottom > BOTTOM_STICK_EPSILON_PX &&
+          getPhysicalInputCount() !== pinPhysicalInputCountRef.current
+        ) {
           manager.setAccordionBottomPinned(false);
+          cyclePinnedRef.current = false;
+        }
+      }
+      // S-B：宽限窗内用户原生滚离底部 → 宽限作废（与锁内让行同口径；
+      // 钉底自身的程序滚动事件已在上方豁免分支返回，不会误清）。
+      if (pinnedGraceUntilRef.current > 0) {
+        const el = e.currentTarget;
+        if (
+          el.scrollHeight - el.clientHeight - el.scrollTop >
+          BOTTOM_STICK_EPSILON_PX
+        ) {
+          pinnedGraceUntilRef.current = 0;
         }
       }
       applyScrollTop(newScrollTop);
     },
-    [applyScrollTop, bumpGestureEpoch, isProgrammaticScrollEvent, manager]
+    [
+      applyScrollTop,
+      bumpGestureEpoch,
+      getPhysicalInputCount,
+      isProgrammaticScrollEvent,
+      manager,
+    ]
   );
 
   const syncOrder = useCallback(
@@ -488,9 +617,10 @@ export function useVirtualScroll(
       if (manager.isAccordionMotionLocked()) {
         if (!manager.hasAccordionBottomPinnedDecision()) {
           const el = containerRef.current;
-          manager.setAccordionBottomPinned(
-            el != null && isContainerAtBottom(el)
-          );
+          const pinned = el != null && isContainerAtBottom(el);
+          manager.setAccordionBottomPinned(pinned);
+          cyclePinnedRef.current = pinned;
+          pinPhysicalInputCountRef.current = getPhysicalInputCount();
         }
         if (manager.isAccordionBottomPinned()) {
           scheduleActualFlush();
@@ -501,7 +631,7 @@ export function useVirtualScroll(
         scheduleActualFlush();
       }
     },
-    [gestureActiveRef, manager, scheduleActualFlush]
+    [gestureActiveRef, getPhysicalInputCount, manager, scheduleActualFlush]
   );
 
   const preloadEstimates = useCallback(
@@ -530,6 +660,8 @@ export function useVirtualScroll(
   const clearHeights = useCallback(() => {
     pendingActualRef.current.clear();
     pendingEstimatesRef.current.clear();
+    cyclePinnedRef.current = false;
+    pinnedGraceUntilRef.current = 0;
     resetGestureState();
     if (actualRafRef.current != null) {
       cancelAnimationFrame(actualRafRef.current);

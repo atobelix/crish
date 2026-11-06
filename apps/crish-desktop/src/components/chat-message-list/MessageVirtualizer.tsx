@@ -191,6 +191,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     itemCount: messages.length,
     overscan: MESSAGE_VIEWPORT_OVERSCAN,
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
+    // S-A（底部钉底修复）：钉底目标与渲染占位同源——.listInner 占位高由
+    // chatSpacerHeight(模型总高, 尾部缓冲) 渲染（见 computeActiveRowWindow），
+    // 钉底经此注入取同一帧的尾部缓冲值（tailBufferRef 渲染期回填，与其余
+    // chatSpacerHeight 调用点同纪律），杜绝钉底与占位两套总高口径。
+    spacerHeightForContent: (contentHeight) =>
+      chatSpacerHeight(contentHeight, tailBufferRef.current),
   });
   const {
     containerRef,
