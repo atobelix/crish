@@ -554,20 +554,32 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
                       key={item.id}
                       className={`${styles.tickerCell} ${styles.summaryLabel}`}
                     >
-                      {item.text}
+                      <span className={styles.tickerCellText}>{item.text}</span>
+                      {/* S1b：chevron 进每个 ticker 单元格、紧跟该格文本之后 */}
+                      <span
+                        className={styles.chevron}
+                        aria-hidden="true"
+                        data-testid="tool-group-ticker-chevron"
+                      >
+                        &#8250;
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             </Tooltip>
           )}
-          <span
-            className={`${styles.chevron} ${isExpanded ? styles.rot : ''}`}
-            aria-hidden="true"
-            data-testid="tool-group-chevron"
-          >
-            &#8250;
-          </span>
+          {/* S1b：行尾 chevron 只在展开态渲染——折叠态 chevron 已进各 ticker
+              单元格，此处再渲染会成双 chevron；展开态恒为旋转 90° */}
+          {isExpanded ? (
+            <span
+              className={`${styles.chevron} ${styles.rot}`}
+              aria-hidden="true"
+              data-testid="tool-group-chevron"
+            >
+              &#8250;
+            </span>
+          ) : null}
         </div>
 
         <div

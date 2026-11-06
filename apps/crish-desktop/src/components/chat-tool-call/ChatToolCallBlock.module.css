@@ -159,7 +159,9 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  flex: 1;
+  /* S1b（2026-11-06 展开图标贴文字后）：不再吃满剩余宽，chevron 以 6px gap
+   * 贴住意图文本；长文本时盒涨满可用宽，chevron 回到行尾（与改前同位） */
+  flex: 0 1 auto;
   overflow: hidden;
   white-space: nowrap;
   height: 24px;
@@ -463,7 +465,9 @@
 
 .toolRowHead:hover .toolRowChevron,
 .toolRowHead:focus-within .toolRowChevron {
-  color: var(--text-tertiary);
+  /* S1b：hover 态 chevron 由 tertiary 升至 secondary，与组头/思考行同档；
+   * 静止态保持 decor（--text-faint）不变 */
+  color: var(--text-secondary);
 }
 
 .toolRowChevron.rot {

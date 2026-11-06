@@ -157,7 +157,9 @@
 .reasoningSummary {
   min-width: 0;
   overflow: hidden;
-  flex: 1 1 auto;
+  /* S1b（2026-11-06 展开图标贴文字后）：不再吃满剩余宽，chevron 以 6px gap
+   * 贴住摘要文本；长文本时盒涨满可用宽，chevron 回到行尾（与改前同位） */
+  flex: 0 1 auto;
   color: inherit;
   font-size: 14px;
   line-height: 24px;
@@ -171,6 +173,11 @@
   white-space: nowrap;
   font-size: 14px;
   color: inherit;
+  /* 摘要是纯文本渲染，不在 .conex-markdown / .md-rendered 作用域内，全局
+   * text-autospace 规则（markdown-typography.css）覆盖不到，实测 computed
+   * 为 no-autospace；在此单独声明，中英接缝自动留间（2026-11-06 A2）。
+   * 只做渲染层处理，绝不动模型原文。 */
+  text-autospace: normal;
 }
 
 .summaryText :global(.md-p),
@@ -266,8 +273,10 @@
   justify-content: center;
   width: 12px;
   height: 12px;
-  margin-left: auto;
-  color: var(--text-tertiary);
+  /* S1b：删 margin-left: auto——chevron 改由摘要 flex: 0 1 auto 以 6px gap
+   * 贴住文本，不再推到行尾；静止色 tertiary → decor（写 --text-decor，
+   * 不用已弃用的 --text-faint 别名），比行文字浅一档 */
+  color: var(--text-decor);
   transition:
     transform var(--accordion-duration, var(--transition-accordion)),
     color var(--transition-fast, 150ms ease);

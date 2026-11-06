@@ -191,6 +191,31 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/width:\s*100%/);
     });
 
+    it('S1b chevron 贴文字后：摘要 flex 收缩、chevron 无 margin-left:auto、静止色 decor', () => {
+      const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      // 摘要不再吃满剩余宽，chevron 以 6px gap 贴住文本
+      const summary =
+        cssContent.match(/^\.reasoningSummary\s*\{[^}]*\}/m)?.[0] ?? '';
+      expect(summary).toContain('flex: 0 1 auto');
+
+      // chevron 静止色 tertiary → decor（写 --text-decor，不用已弃用别名；
+      // 规则内注释提及别名名与被删属性名是说明文字，负向断言先剥注释再卡声明）
+      const chevron = cssContent.match(/^\.chevron\s*\{[^}]*\}/m)?.[0] ?? '';
+      const chevronCode = chevron.replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(chevron).toContain('color: var(--text-decor)');
+      expect(chevronCode).not.toMatch(/color:\s*var\(--text-faint\)/);
+      // 不再用 margin-left: auto 推到行尾
+      expect(chevronCode).not.toContain('margin-left: auto');
+
+      // hover/focus 态仍为 secondary，展开态仍只靠旋转承载（不另着色）
+      const hover =
+        cssContent.match(/\.reasoningRow:hover \.chevron\s*\{[^}]*\}/)?.[0] ??
+        '';
+      expect(hover).toContain('color: var(--text-secondary)');
+    });
+
     it('滚动红线（HC1 修订）：无 168px 硬编码与旧无界滚动类；正文是唯一的登记封顶滚动区', () => {
       const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
       const cssContent = fs.readFileSync(cssPath, 'utf-8');

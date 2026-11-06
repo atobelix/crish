@@ -12,6 +12,8 @@
  * 6. 视口平滑回退保护。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { FoldableToolGroup } from '../FoldableToolGroup';
@@ -73,8 +75,8 @@ describe('FoldableToolGroup 意图组容器测试', () => {
     const root = getByTestId('foldable-tool-group');
     expect(root.getAttribute('data-expanded')).toBe('false');
 
-    // 验证自然语言标题
-    const label = root.querySelector('[class*="summaryLabel"]');
+    // 验证自然语言标题（S1b：标题文本现居 ticker 单元格内文本段）
+    const label = root.querySelector('[class*="tickerCellText"]');
     expect(label?.textContent).toBe('环境准备与门禁检查');
     // 零计数统计防回归：不得包含步数或命令计数
     expect(root.textContent).not.toContain('已运行');
@@ -115,7 +117,7 @@ describe('FoldableToolGroup 意图组容器测试', () => {
     );
 
     const root = getByTestId('foldable-tool-group');
-    const label = root.querySelector('[class*="summaryLabel"]');
+    const label = root.querySelector('[class*="tickerCellText"]');
     // 自动剥离 Markdown 引用链接语法，纯净提取主文本
     expect(label?.textContent).toBe('正在查看 App.tsx 核心渲染逻辑');
   });
@@ -217,7 +219,7 @@ describe('FoldableToolGroup 意图组容器测试', () => {
     // 恒定存在组头，不出现单工具直出时的裂变属性
     expect(root.querySelector('[class*="groupHeader"]')).not.toBeNull();
     expect(root.getAttribute('data-single-tool')).toBeNull();
-    expect(root.querySelector('[class*="summaryLabel"]')?.textContent).toBe('读取配置');
+    expect(root.querySelector('[class*="tickerCellText"]')?.textContent).toBe('读取配置');
   });
 
   it('封口信号 isSealed 到达且工具非 running 时自动收敛折叠 (工具数 > 3)', () => {
@@ -404,6 +406,118 @@ describe('FoldableToolGroup 意图组容器测试', () => {
       />
     );
     expect(root.getAttribute('data-expanded')).toBe('false');
+  });
+
+  it('S1b 折叠态：chevron 进每个 ticker 单元格、紧跟文本；行尾无 chevron', () => {
+    const items: ToolRenderItem[] = [
+      {
+        kind: 'single',
+        tc: tc('t1', 'run_command', 'success', {
+          intent: '安装项目依赖',
+          arguments: '{"CommandLine":"npm install"}',
+        }),
+      },
+      {
+        kind: 'single',
+        tc: tc('t2', 'run_command', 'success', {
+          intent: '执行类型检查',
+          arguments: '{"CommandLine":"npm run typecheck"}',
+        }),
+      },
+    ];
+
+    const { getByTestId, getAllByTestId, queryByTestId } = render(
+      <FoldableToolGroup
+        items={items}
+        msgId="m1"
+        groupTitle="环境准备与门禁检查"
+        hostProps={{ ...baseHostProps(), items }}
+      />
+    );
+
+    const root = getByTestId('foldable-tool-group');
+    expect(root.getAttribute('data-expanded')).toBe('false');
+
+    // 每个 ticker 单元格各一枚 chevron（标题 + 2 工具意图 = 3 格）
+    const tickerChevrons = getAllByTestId('tool-group-ticker-chevron');
+    expect(tickerChevrons).toHaveLength(3);
+    for (const chevron of tickerChevrons) {
+      expect(chevron.textContent?.trim()).toBe('›');
+    }
+    // 行尾 chevron 折叠态不渲染，避免双 chevron
+    expect(queryByTestId('tool-group-chevron')).toBeNull();
+
+    // 单元格文本段只含文本、不含 chevron 字形
+    const cellText = root.querySelector('[class*="tickerCellText"]');
+    expect(cellText?.textContent).toBe('环境准备与门禁检查');
+    // chevron 紧跟文本段之后（同一单元格内的下一个兄弟）
+    expect(cellText?.nextElementSibling?.getAttribute('data-testid')).toBe(
+      'tool-group-ticker-chevron'
+    );
+  });
+
+  it('S1b 展开态：行尾 chevron 单枚出现且旋转，ticker chevron 全部卸载', () => {
+    const items: ToolRenderItem[] = [
+      {
+        kind: 'single',
+        tc: tc('t1', 'find_by_name', 'success', { intent: '查找源文件' }),
+      },
+      {
+        kind: 'single',
+        tc: tc('t2', 'grep_search', 'success', { intent: '检索调用点' }),
+      },
+    ];
+
+    const { getByTestId, getAllByTestId, queryAllByTestId } = render(
+      <FoldableToolGroup
+        items={items}
+        msgId="m1"
+        groupTitle="代码探索"
+        hostProps={{ ...baseHostProps(), items }}
+      />
+    );
+
+    const root = getByTestId('foldable-tool-group');
+    const header = root.querySelector('[class*="groupHeader"]') as HTMLElement;
+
+    fireEvent.click(header);
+    expect(root.getAttribute('data-expanded')).toBe('true');
+
+    const headerChevron = getByTestId('tool-group-chevron');
+    expect(headerChevron.textContent?.trim()).toBe('›');
+    expect(headerChevron.className).toContain('rot');
+    expect(queryAllByTestId('tool-group-ticker-chevron')).toHaveLength(0);
+
+    // 再收起：行尾 chevron 卸载，ticker chevron 回来
+    fireEvent.click(header);
+    expect(root.getAttribute('data-expanded')).toBe('false');
+    expect(getAllByTestId('tool-group-ticker-chevron').length).toBeGreaterThan(0);
+  });
+
+  it('S1b CSS 契约：文本 flex 收缩、ticker 单元格按内容定宽', () => {
+    const cssPath = path.resolve(
+      __dirname,
+      '../FoldableToolGroup.module.css'
+    );
+    const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+    // 组头摘要不再吃满剩余宽
+    const summaryLabel =
+      cssContent.match(/^\.summaryLabel\s*\{[^}]*\}/m)?.[0] ?? '';
+    expect(summaryLabel).toContain('flex: 0 1 auto');
+    // ticker 视口同理
+    const viewport =
+      cssContent.match(/^\.tickerViewport\s*\{[^}]*\}/m)?.[0] ?? '';
+    expect(viewport).toContain('flex: 0 1 auto');
+    // 单元格按内容定宽、上限 100%（长文本时文本段收缩、chevron 落行尾）
+    const cell = cssContent.match(/^\.tickerCell\s*\{[^}]*\}/m)?.[0] ?? '';
+    expect(cell).toContain('width: max-content');
+    expect(cell).toContain('max-width: 100%');
+    // 单元格内文本段带省略号
+    const cellText =
+      cssContent.match(/^\.tickerCellText\s*\{[^}]*\}/m)?.[0] ?? '';
+    expect(cellText).toContain('text-overflow: ellipsis');
+    expect(cellText).toContain('flex: 0 1 auto');
   });
 
   describe('组级状态点聚合仲裁规则（P4 §8.2 权威仲裁：P0 running > P1 error > P2 pending > P3 success）', () => {

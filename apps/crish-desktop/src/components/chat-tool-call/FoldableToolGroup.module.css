@@ -130,6 +130,8 @@
   }
 }
 
+/* 完成态：与行内版（ChatToolCallBlock）同规格单轨（2026-11-06 A1 收敛）：
+ * opacity 0.45 + scale 0.8、无光环；组头 hover/focus 回满见上方规则 */
 .toolSuccessDot {
   width: 6px;
   height: 6px;
@@ -137,13 +139,13 @@
   min-height: 6px;
   border-radius: 50%;
   background: var(--color-success);
-  opacity: 0.9;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-success) 20%, transparent);
+  display: inline-block;
+  flex-shrink: 0;
+  opacity: 0.45;
+  transform: scale(0.8);
   transition:
     opacity var(--transition-fast, 150ms ease),
     transform var(--transition-fast, 150ms ease);
-  display: inline-block;
-  flex-shrink: 0;
 }
 
 .toolErrorDot {
@@ -177,7 +179,9 @@
 }
 
 .summaryLabel {
-  flex: 1;
+  /* S1b（2026-11-06 展开图标贴文字后）：不再吃满剩余宽，chevron 以 6px gap
+   * 贴住文本；长文本时盒涨满可用宽，chevron 回到行尾（与改前同位） */
+  flex: 0 1 auto;
   min-width: 0;
   font-size: 14px;
   line-height: 24px;
@@ -249,7 +253,8 @@
 
 /* 24px 高度刚性视口剪裁区（F3 任务 B） */
 .tickerViewport {
-  flex: 1;
+  /* S1b：同 summaryLabel，不再吃满剩余宽，视口宽度跟随最宽单元格内容 */
+  flex: 0 1 auto;
   min-width: 0;
   height: 24px;
   line-height: 24px;
@@ -272,6 +277,16 @@
 
 /* 单个意图单元格：高度严格锁定 24px，保证与单工具行 18px 基线严格对齐 */
 .tickerCell {
+  /* S1b：单元格改为横向 flex 行（文本 + chevron），自身按内容定宽（贴住文本），
+   * 上限 100%——长文本时文本段收缩出省略号，chevron 落在视口右端（=改前行尾位）。
+   * 注：此处未采 C 报告字面建议的 track 改 max-content——track 一旦 max-content，
+   * 最宽单元格将失去 100% 上限，长文本的 chevron 会被视口裁掉而非回到行尾；
+   * 视口本身 flex: 0 1 auto 已保证跟随最宽单元格内容定宽，效果等价且不丢 chevron。 */
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  width: max-content;
+  max-width: 100%;
   height: 24px;
   min-height: 24px;
   max-height: 24px;
@@ -283,6 +298,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: none;
+}
+
+/* ticker 单元格内文本：flex 收缩 + 省略号，chevron 贴其后 6px */
+.tickerCellText {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

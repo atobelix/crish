@@ -38,25 +38,6 @@
     color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
-.chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: var(--space-1_5, 6px);
-  font-size: 14px;
-  line-height: 1;
-  color: var(--text-tertiary);
-  transform: rotate(0deg);
-  transition: transform var(--transition-micro, 100ms ease);
-  flex-shrink: 0;
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
 .summaryLabel {
   font-size: 14px;
   line-height: 1.2;
