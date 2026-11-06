@@ -40,6 +40,12 @@ export const DURATION_LANDING_SETTLE_MS = 260;
 /** 新对话落地品牌渐隐时长（对应 tokens.css 中 --duration-landing-fade 260ms） */
 export const DURATION_LANDING_FADE_MS = 260;
 
+/** 持续指示·旋转周期（对应 tokens.css 中 --duration-spin 1000ms；E 类 9 单源） */
+export const DURATION_SPIN_MS = 1000;
+
+/** 持续指示·脉冲周期（对应 tokens.css 中 --duration-pulse 1600ms；E 类 9 单源） */
+export const DURATION_PULSE_MS = 1600;
+
 /** 减速入场曲线（对应 tokens.css 中的 --ease-decelerate） */
 export const EASE_DECELERATE = 'cubic-bezier(0.2, 0, 0, 1)';
 
@@ -58,10 +64,6 @@ export const DURATION_SPRING_SMOOTH_MS = 400;
 export const DURATION_SPRING_MORPH_MS = 420;
 export const DURATION_SPRING_MS = 580;
 
-/** 消息发送入场时效守卫窗口常量（Batch 3 消息发送入场飞行专用） */
-export const BUBBLE_ENTRANCE_WINDOW_MS = 2000;
-export const BUBBLE_ENTRANCE_CLOCK_SKEW_TOLERANCE_MS = 500;
-
 /** 动效时长常量单一真相源（与 tokens.css 严格同步） */
 export const MOTION_DURATION = {
   MICRO_MS: DURATION_MICRO_MS,
@@ -72,16 +74,12 @@ export const MOTION_DURATION = {
   ACCORDION_FADE_MS: DURATION_ACCORDION_FADE_MS,
   LANDING_SETTLE_MS: DURATION_LANDING_SETTLE_MS,
   LANDING_FADE_MS: DURATION_LANDING_FADE_MS,
+  SPIN_MS: DURATION_SPIN_MS,
+  PULSE_MS: DURATION_PULSE_MS,
   SPRING_SNAPPY_MS: DURATION_SPRING_SNAPPY_MS,
   SPRING_SMOOTH_MS: DURATION_SPRING_SMOOTH_MS,
   SPRING_MORPH_MS: DURATION_SPRING_MORPH_MS,
   SPRING_MS: DURATION_SPRING_MS,
-} as const;
-
-/** 消息气泡入场时效配置单一真理源 */
-export const BUBBLE_ENTRANCE_CONFIG = {
-  MAX_AGE_MS: BUBBLE_ENTRANCE_WINDOW_MS,
-  CLOCK_SKEW_TOLERANCE_MS: BUBBLE_ENTRANCE_CLOCK_SKEW_TOLERANCE_MS,
 } as const;
 
 /**
