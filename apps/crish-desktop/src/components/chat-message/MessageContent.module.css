@@ -105,6 +105,22 @@
 }
 
 /*
+ * 【间距刻度 L5 · 流层正文段尾归零（2026-11-06 间距修复批）】
+ * 流层正文（.contentText）内每个 markdown 渲染根的直属末段，其段后距
+ * （--md-paragraph-margin-bottom，chat 变体 0.82em ≈ 11.48px）不得垫高
+ * 块尾：否则可见间距按方向分叉——过程→正文 8、正文→过程 19.4、正文→
+ * 操作行 15.5、相邻正文块之间 --md-block-gap 9.1 被叠成 20.6。
+ * 归零后段尾间距统一由流层 8px gap（L3）与块间 --md-block-gap（L5）
+ * 承担，与上方叙述先例同构（只归渲染根直属末段，段内段间节奏不动）。
+ * 作用域严格限于聊天流正文：文档型 markdown 与其他上下文的排版不受
+ * 影响；五层刻度全文见 chatSpacingScale.contract.test.ts。
+ */
+.contentText :global(.md-rendered) > :global(.md-p:last-child),
+.contentText :global(.conex-markdown) > :global(.md-p:last-child) {
+  margin-bottom: 0;
+}
+
+/*
  * 组内叙述的链接口径（用户裁决 2026-11-05，与工具行 .toolPathLink 同正典）：
  * 超链接默认只有链接色、无下划线；hover 时加下划虚线。
  * 全局 md 规则默认常驻虚线下划线，在此作用域内收敛；路径链接

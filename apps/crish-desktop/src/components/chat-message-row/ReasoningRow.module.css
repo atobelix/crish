@@ -345,6 +345,20 @@
 }
 
 /*
+ * 【间距刻度 L5 · 思考展开体尾部归零（2026-11-06 间距修复批）】
+ * 思考体内 markdown 渲染根的直属末段，其段后距（0.82em ≈ 11.48px）
+ * 不得垫在 .reasoningBody 的 padding-bottom 6px 之内再叠一层：
+ * 展开态思考体尾部原为 6 + 11.48 的双层尾巴，与段内叙述的归零先例
+ * （.narrationText）对齐后只剩 padding 6 一层。只归渲染根直属末段，
+ * 体内段间节奏不动；五层刻度全文见 chatSpacingScale.contract.test.ts
+ * （components/chat-message/）。
+ */
+.reasoningContent :global(.md-rendered) > :global(.md-p:last-child),
+.reasoningContent :global(.conex-markdown) > :global(.md-p:last-child) {
+  margin-bottom: 0;
+}
+
+/*
  * 思考作用域的链接口径（用户裁决 2026-11-05，与工具行链接同正典）：
  * 思考正文整体弱灰（color: inherit）是既定口径，但真正的超链接与路径
  * 链接是链接语义元素，须回到链接色：默认只有颜色、无下划线；
