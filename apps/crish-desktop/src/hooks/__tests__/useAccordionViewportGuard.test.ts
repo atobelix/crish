@@ -179,4 +179,115 @@ describe('useAccordionViewportGuard', () => {
     });
     expect(mockElement.scrollIntoView).not.toHaveBeenCalled();
   });
+
+  // ── S9 判底豁免（底部折叠案）──
+
+  function stubScrollMetrics(
+    el: HTMLElement,
+    metrics: { scrollHeight: number; clientHeight: number; scrollTop: number }
+  ) {
+    Object.defineProperty(el, 'scrollHeight', {
+      value: metrics.scrollHeight,
+      configurable: true,
+    });
+    Object.defineProperty(el, 'clientHeight', {
+      value: metrics.clientHeight,
+      configurable: true,
+    });
+    el.scrollTop = metrics.scrollTop;
+  }
+
+  function stubRectTop(el: HTMLElement, top: number) {
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+      top,
+      bottom: top + 200,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 200,
+      x: 0,
+      y: top,
+      toJSON: () => {},
+    });
+  }
+
+  it('判底时（显式 scrollContainer 距底 ≤ 2px）：即使元素顶滚出视口也不触发任何回收滚动', () => {
+    const container = document.createElement('div');
+    container.scrollTo = vi.fn();
+    stubScrollMetrics(container, {
+      scrollHeight: 1000,
+      clientHeight: 400,
+      scrollTop: 600, // 距底 0px
+    });
+    stubRectTop(mockElement, -120);
+
+    const onBeforeScroll = vi.fn();
+    const { result } = renderHook(() =>
+      useAccordionViewportGuard(targetRef, {
+        offsetPx: 16,
+        scrollContainer: container,
+        onBeforeScroll,
+      })
+    );
+
+    act(() => {
+      result.current.triggerViewportRecovery();
+    });
+
+    expect(container.scrollTo).not.toHaveBeenCalled();
+    expect(mockElement.scrollIntoView).not.toHaveBeenCalled();
+    expect(onBeforeScroll).not.toHaveBeenCalled();
+    expect(result.current.isGuardingRef.current).toBe(false);
+  });
+
+  it('判底时（未传 scrollContainer，向上发现滚动祖先）：同样豁免回收滚动', () => {
+    const scroller = document.createElement('div');
+    scroller.style.overflowY = 'auto';
+    stubScrollMetrics(scroller, {
+      scrollHeight: 2000,
+      clientHeight: 500,
+      scrollTop: 1499, // 距底 1px ≤ 2px 容差
+    });
+    scroller.appendChild(mockElement);
+    document.body.appendChild(scroller);
+    stubRectTop(mockElement, -300);
+
+    const { result } = renderHook(() =>
+      useAccordionViewportGuard(targetRef, { offsetPx: 16 })
+    );
+
+    act(() => {
+      result.current.triggerViewportRecovery();
+    });
+
+    expect(mockElement.scrollIntoView).not.toHaveBeenCalled();
+    document.body.removeChild(scroller);
+  });
+
+  it('接近底部但未判底（距底 100px）：既有回收行为不变，仍触发 scrollTo', () => {
+    const container = document.createElement('div');
+    container.scrollTo = vi.fn();
+    stubScrollMetrics(container, {
+      scrollHeight: 1000,
+      clientHeight: 400,
+      scrollTop: 500, // 距底 100px > 2px
+    });
+    stubRectTop(mockElement, -100);
+
+    const { result } = renderHook(() =>
+      useAccordionViewportGuard(targetRef, {
+        offsetPx: 16,
+        scrollContainer: container,
+      })
+    );
+
+    act(() => {
+      result.current.triggerViewportRecovery();
+    });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({
+      top: 384,
+      behavior: 'smooth',
+    });
+  });
 });

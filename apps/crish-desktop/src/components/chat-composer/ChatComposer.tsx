@@ -28,6 +28,8 @@ import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
+import { useComposerCardHeightGlide } from './useComposerCardHeightGlide';
+import { useComposerModeFlip } from './useComposerModeFlip';
 import { useComposerFileHandlers } from './useComposerFileHandlers';
 import { ComposerEmbeddedNotice } from './ComposerEmbeddedNotice';
 import { useComposerNotice } from './useComposerNotice';
@@ -191,6 +193,12 @@ const ChatComposerInner: React.FC<ChatComposerProps> = ({
   const isMultiline =
     layoutVariant === 'multiline' ||
     (layoutVariant === 'adaptive' && multilineDetected);
+
+  // S9 高度族：卡片实际高度同钟滑翔（H-01 逐行生长 / H-03 发送后回落，
+  // 不再阶梯跳变）+ 单/多行切换时左右控制组的平移补偿（H-02；
+  // useComposerMultiline 的判定迟滞不动，只补呈现侧）
+  useComposerCardHeightGlide(cardContainerRef);
+  useComposerModeFlip(layoutRef, isMultiline);
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
