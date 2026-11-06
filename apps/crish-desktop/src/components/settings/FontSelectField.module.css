@@ -197,7 +197,7 @@
 
 .spinIcon {
   transform-origin: center center;
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
   color: var(--accent-color, var(--brand-deep));
 }
 

@@ -753,7 +753,7 @@
 }
 
 .loadingSpinner {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }
 
 /* ── 4.1 连接与凭据高级卡片折叠栏（大卡片外壳 14px + 舒展内边距） ── */

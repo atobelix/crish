@@ -21,7 +21,7 @@
   gap: 6px;
   padding: 4px;
   background: var(--bg-secondary);
-  border-radius: var(--radius-lg, 9px);
+  border-radius: var(--radius-lg, 10px);
   border: 1px solid var(--border-subtle);
   margin-bottom: 16px;
 }
@@ -39,7 +39,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: none;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   cursor: pointer;
   transition:
     background-color var(--duration-fast, 150ms) ease,
@@ -101,7 +101,7 @@
   height: 26px;
   padding: 0 10px;
   font-size: 11px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
 }
 
 .formGrid {
@@ -152,7 +152,7 @@
   color: var(--text-primary);
   background: var(--surface-input, var(--bg-card));
   border: 1px solid var(--border-subtle);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   box-sizing: border-box;
   resize: vertical;
   outline: none;
@@ -216,7 +216,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -274,7 +274,7 @@
   padding: 12px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 9px);
+  border-radius: var(--radius-lg, 10px);
   transition: background-color var(--duration-fast, 150ms) ease;
 }
 
@@ -377,8 +377,8 @@
 }
 
 .actionBtn {
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--button-radius, 10px);
 }
 .spinning {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }

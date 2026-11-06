@@ -647,5 +647,5 @@
 }
 
 .spinning {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }

@@ -119,7 +119,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 
 .spin {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }
 @media (prefers-reduced-motion: reduce) {
   .spin {

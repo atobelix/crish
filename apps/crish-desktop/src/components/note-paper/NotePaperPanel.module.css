@@ -361,7 +361,7 @@
 }
 
 .spinIcon {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }
 
 /* 容器查询自适应响应 */
@@ -755,6 +755,18 @@ button.badge:focus-visible {
   border-radius: var(--radius-md);
 }
 
+/* 伪元素例外（keyframes 悬空修复批登记）：.stateLoading::before 是伪元素，
+ * 无法 composes 全局工具类，其旋转环以同文件私有关键帧承接——与正典
+ * crish-spin 同值（360° 旋转，周期走 --transition-spin 令牌）。 */
+@keyframes note-paper-loading-ring {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .stateLoading {
   color: var(--text-tertiary);
 }
@@ -766,7 +778,7 @@ button.badge:focus-visible {
   border-radius: 50%;
   border: 2px solid var(--border-color);
   border-top-color: var(--brand-primary);
-  animation: crish-spin var(--transition-spin) infinite;
+  animation: note-paper-loading-ring var(--transition-spin) infinite;
 }
 
 .stateEmpty {

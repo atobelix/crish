@@ -55,7 +55,7 @@
 }
 
 .spinning {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }
 
 /* 双栏主区域 */
@@ -372,7 +372,7 @@
 .previewEmptyIconBox {
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-lg, 7px);
+  border-radius: var(--radius-lg, 10px);
   background-color: var(--bg-card);
   display: flex;
   align-items: center;

@@ -1153,7 +1153,7 @@
 }
 
 .spinner {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
   color: var(--text-tertiary);
   display: inline-block;
   margin-right: var(--space-1);

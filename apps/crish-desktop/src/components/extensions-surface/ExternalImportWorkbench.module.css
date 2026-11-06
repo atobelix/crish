@@ -162,7 +162,7 @@
   align-items: center;
   padding: 1px 6px;
   font-size: 11px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   background-color: var(--bg-card);
   color: var(--text-secondary);
   border: none;
@@ -261,11 +261,11 @@
   font-size: var(--font-size-xs, 12px);
   color: var(--color-success);
   background-color: color-mix(in srgb, var(--color-success) 10%, transparent);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   font-weight: var(--font-weight-medium, 500);
   white-space: nowrap;
 }
 
 .spinning {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }

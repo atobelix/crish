@@ -273,7 +273,7 @@
   border: var(--border-width-emphasis, 2px) solid var(--accent-color);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
   flex-shrink: 0;
 }
 

@@ -413,7 +413,7 @@
 }
 
 .spinnerSvg {
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
   width: 12px;
   height: 12px;
 }
