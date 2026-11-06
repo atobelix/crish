@@ -1,7 +1,14 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import {
   m,
   AnimatePresence,
+  animate,
   useIsPresent,
   useReducedMotion,
 } from 'motion/react';
@@ -134,6 +141,39 @@ export const ToastCard: React.FC<ToastCardProps> = ({
     onDismiss: handleSwipeDismiss,
     reduceMotion,
   });
+
+  // 变换真源（2026-11-06 裁定，见 Toast甲板窥边修复报告）：
+  // 堆叠/扇形几何走 motion 层，以 layoutStack 的 target.y/scale 为唯一口径；
+  // CSS 模块的 transform 规则已退役——根 m.div 的 style 含 MotionValue x/opacity，
+  // motion 会写内联 `transform: none`，在任何特异性下都压制 CSS transform（实测：
+  // 三卡 rect 完全重合、展开态 data-expanded=true 时亦然）。
+  const stackY = target?.y ?? 0;
+  const stackScale = target?.scale ?? 1;
+  // 堆叠位移时钟与 CSS 旧口径一致：--duration-normal 200ms + --ease-decelerate；
+  // 减弱动态时瞬时到位（CSS 的 reduced-motion 媒体查询对 motion 驱动的 transform
+  // 不再生效，由此处承接）。
+  const stackTransition: Transition = useMemo(
+    () =>
+      reduceMotion
+        ? { duration: 0 }
+        : { duration: 0.2, ease: [0.2, 0, 0, 1] },
+    [reduceMotion]
+  );
+
+  // 退场滑出同样走 motion：[data-state='exiting'] 的 CSS transform/opacity 规则
+  // 同被内联样式压制（实测 260ms 内 computed 恒为 none/1，卡片只是定时消失）。
+  // 退出门仍是本地 260ms 定时器（Toast 未接 S4 decideExit，不冲突）；x 滑出后
+  // swipeFade 按 hook 公式派生至 0.25（上限），卡片此时已滑出自身宽度之外，
+  // 视觉上等价于淡出。
+  useEffect(() => {
+    if (!exiting) return;
+    const width = cardRef.current?.offsetWidth || 380;
+    const controls = animate(x, width + 40, {
+      duration: reduceMotion ? 0 : 0.26,
+      ease: [0.4, 0, 1, 1],
+    });
+    return () => controls.stop();
+  }, [exiting, x, reduceMotion]);
 
   // 当 duration 或 updateKey 变更时重置总倒计时
   useEffect(() => {
@@ -300,6 +340,8 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         x,
         opacity: swipeFade,
       }}
+      animate={{ y: stackY, scale: stackScale }}
+      transition={stackTransition}
       className={styles.toastCard}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

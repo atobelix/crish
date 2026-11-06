@@ -414,4 +414,33 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
     expect(result.current.movement.x).toBe(0);
     expect(result.current.movement.y).toBe(0);
   });
+
+  it('点击关闭：立即进入 exiting 态，260ms 定时器后调用 onDismiss', () => {
+    const onDismiss = vi.fn();
+    render(
+      <ToastCard
+        toast={mockToast({ id: 't-exit', message: '待关闭卡片' })}
+        index={0}
+        frontmostHeight={56}
+        offsetY={0}
+        isPaused={false}
+        onHeightMeasure={vi.fn()}
+        onDismiss={onDismiss}
+      />
+    );
+
+    const closeBtn = screen.getByRole('button', { name: '关闭通知' });
+    act(() => {
+      fireEvent.click(closeBtn);
+    });
+
+    const card = screen.getByRole('status');
+    expect(card).toHaveAttribute('data-state', 'exiting');
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
 });

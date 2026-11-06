@@ -74,12 +74,7 @@
    ========================================================================== */
 
 .toastCard {
-  --peek: var(--space-2_5, 10px);
-  --scale: calc(max(0, 1 - (var(--toast-index, 0) * 0.08)));
-  --shrink: calc(1 - var(--scale));
   --height: 48px;
-  --swipe-x: var(--toast-swipe-movement-x, 0px);
-  --swipe-y: var(--toast-swipe-movement-y, 0px);
 
   /* 间距标尺（同心链的 padding 一侧保留在本类，半径一侧已迁生成层，见下） */
   --toast-py: var(--space-2_5, 10px);
@@ -127,11 +122,11 @@
   line-height: var(--line-height-base, 1.4);
   font-family: var(--font-sans);
 
-  /* 堆叠展开是一段真实位移，减速落到展开位（阴影/边框已迁形状层，
-   * 不再随本体 transition——形状层滤镜随变量即时生效） */
-  transition:
-    transform var(--duration-normal) var(--ease-decelerate),
-    opacity var(--duration-fast) var(--ease-decelerate);
+  /* 【变换真源 · 2026-11-06】堆叠/扇形位移与退场滑出走 motion 层（ToastCard
+   * 的 animate={{ y: target.y, scale: target.scale }} + 退场 animate(x)），
+   * 不再走 CSS transform——根 m.div 的 style 含 MotionValue，motion 写内联
+   * transform: none，压制一切 CSS transform 规则（实测）。本体不再声明
+   * transition（transform/opacity 均由 motion 驱动）；will-change 保留。 */
   will-change: transform, opacity;
   touch-action: none;
 }
@@ -159,7 +154,10 @@
 }
 
 /* ==========================================================================
-   底部锚定 3D 堆叠与扇形展开 Transform 计算
+   底部锚定 3D 堆叠与扇形展开（定位与变换原点；位移走 motion 层，见 ToastCard）
+   变换真源 2026-11-06：y/scale 由 motion 的 animate={{ y: target.y,
+   scale: target.scale }} 驱动（layoutStack 唯一口径）；旧 transform 规则
+   被 motion 内联 transform: none 压制，已删除。
    ========================================================================== */
 
 .viewport[data-position^='bottom'] .toastCard,
@@ -168,16 +166,6 @@
   left: 0;
   right: 0;
   transform-origin: 50% 100%;
-
-  /* 堆叠态 Transform */
-  transform: translateX(var(--swipe-x))
-    translateY(
-      calc(
-        var(--swipe-y) - (var(--toast-index, 0) * var(--peek)) -
-          (var(--shrink) * var(--height))
-      )
-    )
-    scale(var(--scale));
 }
 
 /* 悬停扇形展开态 (Hover Expanded - Bottom) */
@@ -186,14 +174,12 @@
   height: auto;
   min-height: 48px;
   max-height: 84px;
-  transform: translateX(var(--swipe-x))
-    translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
   /* 展开阴影升档改由 --toast-g2-shadow 变量切换承接（见 .toastCard 迁移注记），
    * 本体不再声明 box-shadow（会按旧弧边框盒投形） */
 }
 
 /* ==========================================================================
-   顶部锚定 3D 堆叠与展开 Transform 计算
+   顶部锚定 3D 堆叠与展开（定位与变换原点；位移走 motion 层，见 ToastCard）
    ========================================================================== */
 
 .viewport[data-position^='top'] .toastCard {
@@ -201,16 +187,6 @@
   left: 0;
   right: 0;
   transform-origin: 50% 0;
-
-  /* 堆叠态 Transform */
-  transform: translateX(var(--swipe-x))
-    translateY(
-      calc(
-        var(--swipe-y) + (var(--toast-index, 0) * var(--peek)) +
-          (var(--shrink) * var(--height))
-      )
-    )
-    scale(var(--scale));
   /* 阴影统一走 --toast-g2-shadow（deck 主导层近似），本体不再声明 box-shadow */
 }
 
@@ -219,8 +195,6 @@
   height: auto;
   min-height: 48px;
   max-height: 84px;
-  transform: translateX(var(--swipe-x))
-    translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
   /* 展开阴影升档同底部锚定：经 --toast-g2-shadow 变量切换，本体不声明 box-shadow */
 }
 
@@ -244,47 +218,28 @@
 }
 
 /* ==========================================================================
-   入场、退场与手势滑离动画 (向右从容滑出 260ms，阻尼联动)
+   入场、退场与手势滑离动画
+   变换真源 2026-11-06：进/退场与手势滑离均走 motion 层（ToastCard 的 animate /
+   useSwipeDismissMotion 的 MotionValue），CSS 不再写 transform/opacity。
+   - 入场帧 toastEnterBottom 已删除：data-state 从不取 'entering'（ToastCard
+     的 stateAttr 只产 idle/exiting/swiping-dismiss），属死代码；
+   - 退场 260ms 定时器门不变（ToastCard handleDismissAnimation）。
    ========================================================================== */
-
-@keyframes toastEnterBottom {
-  from {
-    opacity: 0;
-    transform: translateY(120%) scale(0.92);
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.toastCard[data-state='entering'] {
-  animation: toastEnterBottom var(--duration-normal) var(--ease-decelerate) both;
-}
 
 .viewport[data-expanded] .toastCard[data-state='exiting'],
 .viewport .toastCard[data-state='exiting'],
 .toastCard[data-state='exiting'] {
-  opacity: 0;
-  transform: translateX(calc(100% + 40px)) scale(0.96);
+  /* 退场滑出走 motion 层（ToastCard 内退场 animate(x)；opacity 由 swipeFade
+   * 派生）。旧的 transform/opacity/transition 声明同被内联样式压制，删除。 */
   pointer-events: none;
-  transition:
-    transform var(--duration-normal) var(--ease-accelerate),
-    opacity var(--duration-fast) var(--ease-accelerate);
-}
-
-.toastCard[data-dragging='true'],
-.viewport[data-expanded] .toastCard[data-state='swiping'],
-.viewport .toastCard[data-state='swiping'],
-.toastCard[data-state='swiping'] {
-  transition: none;
 }
 
 .viewport[data-expanded] .toastCard[data-state='swiping-dismiss'],
 .viewport .toastCard[data-state='swiping-dismiss'],
 .toastCard[data-state='swiping-dismiss'] {
-  opacity: 0;
+  /* 滑离淡出由 hook 的 MotionValue 驱动（x 飞出 + swipeFade 派生）；旧的
+   * opacity/transition 声明同被内联样式压制，删除。 */
   pointer-events: none;
-  transition: opacity var(--duration-fast) var(--ease-accelerate);
 }
 
 /* ==========================================================================
