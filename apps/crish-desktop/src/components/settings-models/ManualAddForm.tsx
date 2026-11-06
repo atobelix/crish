@@ -20,6 +20,7 @@ import { calculateAutofillDraft } from './manualAddAutofill';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
+import { G2Surface } from '../ui/G2Surface';
 
 /**
  * 手动添加模型表单，字段与已有模型配置弹窗一致。
@@ -249,6 +250,18 @@ export const ManualAddForm: React.FC<{
           : `${styles.mrdAddForm} mrd-add-form`
       }
     >
+      {/* G² 形状层（槽 C）：非 plain 变体自有卡面——填充+同路径描边覆盖
+          CSS 底/边框环（.mrdAddForm 已备 isolation，本层负 z 绘于卡底
+          之上、内容之下）；内容距角 ≥14px 内边距起，不入 r16 角域免 clip。
+          plain 变体无自有表面（嵌入宿主卡），不挂层。 */}
+      {plain ? null : (
+        <G2Surface
+          radius="r16"
+          fill="var(--cover-card-bg, var(--bg-card))"
+          stroke="var(--border-panel)"
+          style={{ position: 'absolute', inset: -1, zIndex: -1, pointerEvents: 'none' }}
+        />
+      )}
       {plain ? null : (
         <div className={styles.mrdAddHeaderRow}>
           <span className={styles.mrdAddHeaderLabel}>手动添加模型</span>

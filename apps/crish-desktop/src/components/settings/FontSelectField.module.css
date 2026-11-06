@@ -80,7 +80,10 @@
 .settingsSelectMenu {
   background: var(--bg-card);
   border: var(--hairline-width) solid var(--border-panel);
-  border-radius: var(--radius-xl);
+  /* 档位收敛（G² 槽 C）：设置内菜单归浮层菜单档——外框 16→18
+   * （--radius-menu-outer，与全局浮层菜单正典一致）；形状迁移随浮层族
+   * 收敛批（本面经共享 popover 原语渲染，不在此单点挂形状层）。 */
+  border-radius: var(--radius-menu-outer);
   box-shadow: var(--shadow-dropdown);
   padding: var(--space-1);
   display: flex;
@@ -232,7 +235,8 @@
   background: transparent;
   text-align: left;
   padding: 0 var(--space-2);
-  border-radius: var(--radius-md);
+  /* 菜单项归菜单内档 12（--radius-menu-inner，与外框 18 同心口径） */
+  border-radius: var(--radius-menu-inner);
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);

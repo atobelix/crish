@@ -27,6 +27,7 @@ import {
   coercePermissionMode,
 } from '../../api/permissionModes';
 import { useI18n } from '../../i18n';
+import { G2Surface } from '../ui/G2Surface';
 import styles from './ScheduledTasksPanel.module.css';
 import scheduleStyles from './SettingsScheduleTab.module.css';
 
@@ -564,6 +565,14 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
       role="form"
       aria-label={t('settings.schedule.chatFormAria', '新建计划')}
     >
+      {/* G² 形状层（槽 C）：透明底表单卡仅描边——同路径描边覆盖 CSS 边框环
+          （.schedForm 已备 isolation 层叠上下文，本层负 z 绘于边框之上、
+          内容之下）；内容距角 16px 内边距起，不入 r16 角域，无需 clip。 */}
+      <G2Surface
+        radius="r16"
+        stroke="var(--border-subtle)"
+        style={{ position: 'absolute', inset: -1, zIndex: -1, pointerEvents: 'none' }}
+      />
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>
           {t('settings.schedule.taskName', '任务名称')}

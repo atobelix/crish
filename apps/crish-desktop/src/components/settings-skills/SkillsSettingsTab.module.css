@@ -154,7 +154,11 @@
   font: inherit;
   font-size: var(--font-size-sm);
   padding: 8px 10px;
-  border-radius: var(--radius-md);
+  /* 档位收敛（G² 槽 C）：菜单项归菜单内档 12（--radius-menu-inner）。
+   * 本菜单容器现由 ui/Menu 基座渲染（.skillsMoreMenuBase 仅定宽），外框
+   * 18 与形状归基座/浮层族；下方 .skillsMoreMenu 为迁移前遗留死规则
+   * （无 TSX 引用），本批登记不动。 */
+  border-radius: var(--radius-menu-inner);
   cursor: pointer;
 }
 

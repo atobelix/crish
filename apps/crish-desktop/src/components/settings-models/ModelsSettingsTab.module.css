@@ -363,8 +363,14 @@
 .mrdAddForm {
   padding: var(--space-3_5) var(--space-4);
   border: var(--hairline-width) solid var(--border-panel);
-  border-radius: var(--sep-radius-outer);
+  /* 档位收敛（G² 槽 C）：原借浮层菜单外框档 --sep-radius-outer(18)，表单卡
+   * 归设置卡档 --radius-xl(16)；轮廓由 ManualAddForm 内嵌 G2Surface 形状层
+   * 生成（填充+同路径描边），本声明与 background/border 保留为兜底。
+   * position/isolation 为形状层负 z 定位提供层叠上下文。 */
+  border-radius: var(--radius-xl);
   background: var(--cover-card-bg, var(--bg-card));
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: var(--space-3_5);
@@ -762,7 +768,12 @@
   flex-direction: column;
   background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-panel);
-  border-radius: var(--sep-radius-outer);
+  /* 档位收敛（G² 槽 C）：同 .mrdAddForm——18 归设置卡档 16；轮廓由
+   * ProviderProfileForm 的 G2Surface 根节点生成，本声明为兜底。
+   * 描边色随 hover 变化经 --g2-stroke 通道传递（静止 --border-panel、
+   * hover --border-subtle，与原 border-color 两态一致）。 */
+  border-radius: var(--radius-xl);
+  --g2-stroke: var(--border-panel);
   overflow: hidden;
   transition:
     border-color var(--transition-fast),
@@ -771,6 +782,13 @@
 
 .credentialsContainer:hover {
   border-color: var(--border-subtle);
+  --g2-stroke: var(--border-subtle);
+}
+
+/* G² 形状层为根时放行 overflow：内容改由形状层同路径 clip 承载，
+ * 根自身 overflow:hidden 会以普通圆弧二次裁切、覆盖 G² 轮廓。 */
+.credentialsContainer[data-g2-mode] {
+  overflow: visible;
 }
 
 .credentialsHeader {

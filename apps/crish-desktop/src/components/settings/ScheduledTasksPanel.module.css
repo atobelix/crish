@@ -121,8 +121,15 @@
 /* select */
 .schedForm {
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--sep-radius-outer);
+  /* 档位收敛（G² 槽 C）：原借浮层菜单外框档 --sep-radius-outer(18)，表单卡
+   * 按档位表归设置卡档 --radius-xl(16)（SettingsUI 正典）；轮廓描边由
+   * WorkflowForm 内嵌的 G2Surface 形状层以同路径生成（透明底、仅描边），
+   * 本声明保留为无形状层时的兜底。position/isolation 为形状层负 z 定位
+   * 提供独立层叠上下文（层绘于表单底与内容之间）。 */
+  border-radius: var(--radius-xl);
   background: transparent;
+  position: relative;
+  isolation: isolate;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -227,17 +234,10 @@
   min-width: 0;
 }
 
-.schedSelect :global(.settings-select-trigger),
-.schedField :global(.settings-select-trigger) {
-  width: 100%;
-  min-height: var(--control-height-sm);
-  height: var(--control-height-sm);
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 var(--hairline-width) var(--border-subtle);
-  padding: 0 var(--space-2_5) 0 var(--space-3);
-}
+/* 死规则已删（G² 槽 C · §五 F6）：原 .schedSelect/.schedField
+ * :global(.settings-select-trigger) 规则块——全仓无任何 TSX 发射
+ * settings-select-trigger 类名，该规则永不命中；触发器样式由 ui/Select
+ * 基座自理。 */
 
 .schedFormActions {
   display: flex;

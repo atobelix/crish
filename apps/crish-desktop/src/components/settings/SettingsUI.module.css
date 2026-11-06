@@ -88,6 +88,15 @@
   flex-direction: column;
 }
 
+/* G² 形状层在位（SettingsCard 以 G2Surface 为根）时放行 overflow：卡内容
+ * 改由形状层同路径 clip 承载，根节点自身的 overflow:hidden 会以普通圆弧
+ * 二次裁切、覆盖 G² 轮廓。背景/边框保留为兜底，被同色填充层覆盖。
+ * 暗色卡面色（--settings-card-bg，下方暗色规则在本类上定义）经继承进入
+ * 形状层的 fill 解析，亮度台阶口径不变。 */
+.settingsUiCard[data-g2-mode] {
+  overflow: visible;
+}
+
 .settingsUiRow {
   display: flex;
   align-items: center;

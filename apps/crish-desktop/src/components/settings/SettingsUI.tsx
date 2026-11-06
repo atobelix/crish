@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './SettingsUI.module.css';
+import { G2Surface } from '../ui/G2Surface';
 
 export const SettingsPage: React.FC<{
   title: string;
@@ -63,7 +64,26 @@ export const SettingsSection: React.FC<{
 export const SettingsCard: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => (
-  <div className={`${styles.settingsUiCard} settings-ui-card`}>{children}</div>
+  // G² 形状接入（G² 推广第一波槽 C）：设置卡正典的单一包点——根节点即
+  // G2Surface（r16 档），底色/描边走同路径层（暗色卡面色经 --settings-card-bg
+  // 在卡类上定义、继承进形状层），内容经同路径 clip 承载（.settingsUiCard 的
+  // overflow:hidden 由 [data-g2-mode] 规则放行）。行子元素由 contentStyle
+  // 的 flex 纵列承接，与原卡根 flex 语义一致。
+  <G2Surface
+    radius="r16"
+    fill="var(--settings-card-bg, var(--cover-card-bg, var(--bg-card)))"
+    stroke="var(--border-subtle)"
+    clip
+    className={`${styles.settingsUiCard} settings-ui-card`}
+    contentStyle={{
+      display: 'flex',
+      flexDirection: 'column',
+      flex: '1 1 auto',
+      minHeight: 0,
+    }}
+  >
+    {children}
+  </G2Surface>
 );
 
 export const SettingsRow: React.FC<{

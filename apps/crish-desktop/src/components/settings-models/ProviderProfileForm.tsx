@@ -20,6 +20,7 @@ import {
 } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '@/components/ui/icons';
+import { G2Surface } from '../ui/G2Surface';
 import { t } from '../../i18n';
 import {
   DEFAULT_PROTOCOL,
@@ -199,7 +200,23 @@ export const ProviderProfileForm: React.FC<{
   };
 
   return (
-    <div className={styles.credentialsContainer}>
+    // G² 形状接入（槽 C）：凭据卡以 G2Surface 为根（r16 档）——填充+同路径
+    // 描边（描边色经 CSS --g2-stroke 通道随 hover 两态切换），内容经同路径
+    // clip 承载（.credentialsContainer 的 overflow:hidden 由 [data-g2-mode]
+    // 规则放行）。contentStyle 的 flex 纵列承接原卡根 flex 语义。
+    <G2Surface
+      radius="r16"
+      fill="var(--cover-card-bg, var(--bg-card))"
+      stroke="var(--g2-stroke)"
+      clip
+      className={styles.credentialsContainer}
+      contentStyle={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: '1 1 auto',
+        minHeight: 0,
+      }}
+    >
       <div
         className={styles.credentialsHeader}
         onClick={() => setIsCollapsed((prev) => !prev)}
@@ -349,6 +366,6 @@ export const ProviderProfileForm: React.FC<{
           </div>
         </div>
       )}
-    </div>
+    </G2Surface>
   );
 };
