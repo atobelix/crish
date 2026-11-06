@@ -9,9 +9,15 @@
 // （当前全局默认名 + 本对话后续消息将使用它）；未设默认独立成态；默认
 // 已停用/不在可选集时加注脚，不再静默无选中。列表失败面呈现错误码（M2，
 // 与切换失败面同口径），不再只有一个无解释的「无法获取」。
+import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { ActiveModelInfo, ModelEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
+import {
+  beginInteraction,
+  isInteractionTimingEnabled,
+  type InteractionHandle,
+} from '@/presentation/perf/interactionTiming';
 import {
   AppText,
   ErrorState,
@@ -79,6 +85,22 @@ export function ModelSheet({
   testID = 'model-sheet',
 }: ModelSheetProps) {
   const theme = useTheme();
+  // 公共 Sheet 没有打开完成回调。这里只记「请求打开」和「内容完成布局」。
+  // 完成相位是挂载，不是面板动画结束后用户已经看见。
+  const spanRef = useRef<InteractionHandle | null>(null);
+  const wasVisibleRef = useRef(false);
+  if (visible !== wasVisibleRef.current) {
+    if (visible) {
+      const span = beginInteraction('model-sheet');
+      span.mark('request');
+      spanRef.current = span;
+    } else {
+      spanRef.current?.cancel();
+      spanRef.current = null;
+    }
+    wasVisibleRef.current = visible;
+  }
+  const timingEnabled = isInteractionTimingEnabled();
   return (
     <Sheet
       visible={visible}
@@ -88,6 +110,18 @@ export function ModelSheet({
       size="large"
       testID={testID}
     >
+      {timingEnabled ? (
+        <View
+          pointerEvents="none"
+          onLayout={() => {
+            const span = spanRef.current;
+            if (!span) return;
+            span.mark('mount');
+            span.end('mount');
+            spanRef.current = null;
+          }}
+        />
+      ) : null}
       {!connected ? (
         <View style={styles.center}>
           <AppText variant="body" color="textSecondary">

@@ -4,7 +4,7 @@
 // 按压过渡（手感基建批，改善项 11）：整行按压 opacity 0.6 不再瞬时跳变，
 // 改走 120ms（duration.snappy）过渡（内容包一层 Animated.View 承载，
 // Pressable 本体只保留间距/分隔线几何）。
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -16,6 +16,10 @@ import { useTheme } from '@/adapters/platform/theme';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { formatRelativeTime } from '@/domain/pure/time';
 import { AppText, Badge } from '@/presentation/ui';
+import {
+  beginInteraction,
+  type InteractionHandle,
+} from '@/presentation/perf/interactionTiming';
 
 export type ChatItemStatus = 'running' | 'pending' | 'done';
 
@@ -93,6 +97,7 @@ export const ChatFlatItem = memo(function ChatFlatItem({
   );
   // 按压进度：整行 opacity 向 0.6 过渡（120ms），语义与原瞬时 pressed 一致
   const pressProgress = useSharedValue(0);
+  const spanRef = useRef<InteractionHandle | null>(null);
   const contentFadeStyle = useAnimatedStyle(() => ({
     opacity: 1 - 0.4 * pressProgress.value,
   }));
@@ -108,16 +113,34 @@ export const ChatFlatItem = memo(function ChatFlatItem({
             : '已完成'
       }`}
       onPress={() => onPress(session.id)}
-      onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
+      onLongPress={
+        onLongPress
+          ? () => {
+              const span = spanRef.current;
+              if (span) {
+                span.mark('request');
+                span.end('request');
+                spanRef.current = null;
+              }
+              onLongPress(session.id);
+            }
+          : undefined
+      }
       onPressIn={() => {
         pressProgress.value = withTiming(1, {
           duration: theme.motion.duration.snappy,
         });
+        spanRef.current?.cancel();
+        const span = beginInteraction('chat-row-long-press');
+        span.mark('press');
+        spanRef.current = span;
       }}
       onPressOut={() => {
         pressProgress.value = withTiming(0, {
           duration: theme.motion.duration.snappy,
         });
+        spanRef.current?.cancel();
+        spanRef.current = null;
       }}
       style={[
         {
