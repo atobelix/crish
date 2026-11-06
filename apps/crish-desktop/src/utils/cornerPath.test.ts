@@ -17,6 +17,7 @@ import {
   cornerClipPath,
   cornerPath,
   cornerSvgDataUri,
+  deviceSnappedStrokeWidth,
   kappaPeak,
   superellipseCornerPoints,
 } from './cornerPath';
@@ -186,6 +187,23 @@ describe('cornerPath 数值性质', () => {
     expect(cornerPath(30, 20, 20).startsWith('M10 0')).toBe(true);
     expect(cornerPath(0, 10, 5)).toBe('');
     expect(cornerPath(10, 10, 0)).toBe('M0 0H10V10H0Z');
+  });
+
+  it('描边宽设备像素对齐：与被替代 CSS 边框的实际绘制宽度一致', () => {
+    // DPR 1：恒等（既有描边产物断言的口径不变）
+    expect(deviceSnappedStrokeWidth(1, 1)).toBe(1);
+    expect(deviceSnappedStrokeWidth(2, 1)).toBe(2);
+    // DPR 1.25：1px → 0.8 CSS px（恰 1 设备 px，活测 used 值实证）
+    expect(deviceSnappedStrokeWidth(1, 1.25)).toBeCloseTo(0.8, 10);
+    expect(deviceSnappedStrokeWidth(2, 1.25)).toBeCloseTo(2.4, 10);
+    // DPR 1.5：1px → 2 设备 px = 4/3 CSS px；DPR 2：1px → 2 设备 px = 1 CSS px
+    expect(deviceSnappedStrokeWidth(1, 1.5)).toBeCloseTo(4 / 3, 10);
+    expect(deviceSnappedStrokeWidth(1, 2)).toBe(1);
+    // 退化输入：dpr 非法回落名义值，宽度 ≤0 归零
+    expect(deviceSnappedStrokeWidth(1, 0)).toBe(1);
+    expect(deviceSnappedStrokeWidth(1, NaN)).toBe(1);
+    expect(deviceSnappedStrokeWidth(0, 1.25)).toBe(0);
+    expect(deviceSnappedStrokeWidth(-1, 1.25)).toBe(0);
   });
 
   it('承载形态：SVG data URI 与 clip-path 同源同路径', () => {

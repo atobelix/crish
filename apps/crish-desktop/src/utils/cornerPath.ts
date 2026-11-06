@@ -66,6 +66,26 @@ export function concentricRadius(R: number, padding: number): number {
   return Math.max(0, R - padding);
 }
 
+/**
+ * 描边宽设备像素对齐（同路径描边的绘制口径，生成层收口）：
+ * G² 描边替代的 CSS 边框在 Chromium 中按设备像素对齐绘制——1px 边框在
+ * DPR 1.25 下 used 值实测为 0.8 CSS px（恰 1 设备 px，活测实证 2026-11-06）；
+ * 而 SVG 矢量描边无此对齐：strokeWidth=1 在 DPR 1.25 下实占 1.25 设备 px，
+ * 抗锯齿摊到相邻两列呈半值，面板边缘观感发糊（同批诊断：关形状层回落
+ * CSS 边框时同位置剖面为单列满值）。本函数把名义描边宽（CSS px）对齐到
+ * 设备像素网格 round(css×dpr)/dpr，使矢量描边的实际绘制宽度与被替代的
+ * CSS 边框一致；不改变轮廓几何（内缩半径由接入层按对齐后宽度收口）。
+ * dpr 非法（≤0/非有限）时原样返回名义值；cssWidth ≤0 返回 0。
+ */
+export function deviceSnappedStrokeWidth(
+  cssWidth: number,
+  dpr: number,
+): number {
+  if (!(cssWidth > 0)) return 0;
+  if (!Number.isFinite(dpr) || !(dpr > 0)) return cssWidth;
+  return Math.round(cssWidth * dpr) / dpr;
+}
+
 function normalizeRadii(
   input: CornerRadiiInput,
   w: number,
