@@ -119,12 +119,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 
 .spin {
-  animation: spinKeyframe var(--transition-spin) infinite;
-}
-@keyframes spinKeyframe {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: crish-spin var(--transition-spin) infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .spin {

@@ -413,7 +413,7 @@
 }
 
 .spinnerSvg {
-  animation: rotateSpinner var(--transition-spin) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
   width: 12px;
   height: 12px;
 }
@@ -421,12 +421,6 @@
 .spinnerCircle {
   stroke-linecap: round;
   fill: none;
-}
-
-@keyframes rotateSpinner {
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .agentTeamCardTop {

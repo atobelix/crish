@@ -5,7 +5,9 @@
  * ui/ContentState 契约测试：三态呈现口径——
  * loading = Spinner + 状态文案（不用骨架屏）；error 必带重试槽
  * （onRetry → 按钮且点击回调）；empty = 标题 + 行动槽。
- * 样式源码棘轮：spinner 周期必须经 --transition-spin 令牌，禁止裸时长。
+ * 样式源码棘轮：加载指示已收敛 ui/Spinner 原语（S8）——ContentState
+ * 自身不得再定义关键帧；Spinner 的旋转周期必须经 --transition-spin
+ * 令牌，禁止裸时长。
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -14,10 +16,13 @@ import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ContentState } from './ContentState';
-import styles from './ContentState.module.css';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const CSS_SRC = readFileSync(join(DIR, 'ContentState.module.css'), 'utf8');
+const SPINNER_CSS_SRC = readFileSync(
+  join(DIR, '../Spinner/Spinner.module.css'),
+  'utf8'
+);
 
 describe('ui/ContentState', () => {
   it('loading：Spinner + 状态文案，role=status 且 aria-busy', () => {
@@ -26,7 +31,7 @@ describe('ui/ContentState', () => {
     expect(el).toHaveAttribute('data-kind', 'loading');
     expect(el).toHaveAttribute('aria-busy', 'true');
     expect(el.textContent).toContain('正在加载消息');
-    expect(el.querySelector(`.${styles.spinner}`)).not.toBeNull();
+    expect(el.querySelector('[data-slot="ui-spinner"]')).not.toBeNull();
     // 不用骨架屏：不得出现任何 skeleton 类占位
     expect(el.innerHTML).not.toMatch(/skeleton/i);
   });
@@ -67,13 +72,15 @@ describe('ui/ContentState', () => {
     expect(el).toHaveAttribute('data-kind', 'empty');
     expect(el.textContent).toContain('暂无内容');
     expect(screen.getByRole('button', { name: '去创建' })).not.toBeNull();
-    expect(el.querySelector(`.${styles.spinner}`)).toBeNull();
+    expect(el.querySelector('[data-slot="ui-spinner"]')).toBeNull();
   });
 
-  it('样式棘轮：spinner 动画周期只经 --transition-spin 令牌，无裸时长', () => {
-    expect(CSS_SRC).toMatch(
-      /animation:\s*contentStateSpin\s+var\(--transition-spin\)/
+  it('样式棘轮：指示走 ui/Spinner 正典（crish-spin + --transition-spin），本面无私有关键帧、无裸时长', () => {
+    expect(SPINNER_CSS_SRC).toMatch(
+      /animation:\s*crish-spin\s+var\(--transition-spin\)/
     );
-    expect(CSS_SRC).not.toMatch(/animation:[^;]*\d+(?:\.\d+)?(?:ms|s)\b/);
+    expect(SPINNER_CSS_SRC).not.toMatch(/@keyframes/);
+    expect(CSS_SRC).not.toMatch(/@keyframes/);
+    expect(CSS_SRC).not.toMatch(/animation:/);
   });
 });

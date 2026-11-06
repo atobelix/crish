@@ -312,6 +312,13 @@
   z-index: 5;
 }
 
+/* 进度描边平滑（H-08 / E 类 8）：stroke-dashoffset 经 --transition-normal
+   （200ms standard）过渡，进度阶梯步进不再直跳；百分比徽章数字保持
+   直读（严肃读数不滚动，类 8 同步性条款）。 */
+.attachProgressRect {
+  transition: stroke-dashoffset var(--transition-normal);
+}
+
 .attachProgressBadge {
   position: absolute;
   bottom: 3px;

@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 
 import styles from './PermissionModeMenu.module.css';
-import { Button, Menu, Tooltip } from '@/components/ui';
+import { Button, Menu, TextMorph, Tooltip } from '@/components/ui';
 import { toggleExclusiveMenu } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import {
@@ -102,7 +102,9 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
           <span className={styles.permIcon} aria-hidden="true">
             <AppIcon name={currentMeta.iconName} size={14} />
           </span>
-          <span className={styles.permLabel}>{t(currentMeta.labelKey)}</span>
+          <span className={styles.permLabel}>
+            <TextMorph>{t(currentMeta.labelKey)}</TextMorph>
+          </span>
           <AppIcon
             name="chevron-down"
             size={11}

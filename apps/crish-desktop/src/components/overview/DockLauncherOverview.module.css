@@ -211,7 +211,7 @@
   font-size: 11px;
   font-weight: var(--font-weight-medium, 500);
   font-variant-numeric: tabular-nums;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: color-mix(
     in srgb,
     var(--surface-base) 88%,
@@ -298,9 +298,14 @@
 .dotRunning {
   background: var(--accent-green);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-green) 25%, transparent);
-  animation: pulseDot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulseDot var(--transition-pulse, 1.6s var(--ease-standard)) infinite;
 }
 
+/* 收口登记的独立配方（S8 脉冲收敛复核，禁止合并）：pulseDot 是绿色
+ * 运行点的暗相位脉冲（opacity 1 → 0.65、scale 1 → 1.15），供启动台
+ * 运行态圆点；正典 crish-pulse-dot 的光晕为强调色，与本面绿色语义
+ * 撞色，故独立登记、独立演进。唯一消费方：本文件运行态圆点（周期经
+ * var(--transition-pulse) 驱动）。 */
 @keyframes pulseDot {
   0%,
   100% {

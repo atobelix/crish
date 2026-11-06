@@ -718,23 +718,19 @@
   border: var(--border-width-emphasis, 2px) solid var(--text-tertiary);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin var(--transition-spin) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
   flex-shrink: 0;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .sessionItem.isRunning:not(.active) {
   animation: session-running-pulse var(--transition-pulse) infinite;
 }
 
+/* 收口登记的独立配方（S8 脉冲收敛复核，禁止合并）：session-running-pulse
+ * 动画对象是整行背景洗光（background 透明 ↔ 强调色 6%），不是圆点
+ * 力学，与正典 crish-pulse-dot（圆点缩放+光晕）无从合并，故独立
+ * 登记、独立演进。唯一消费方：本文件运行中会话行（周期经
+ * var(--transition-pulse) 驱动）。 */
 @keyframes session-running-pulse {
   0%,
   100% {

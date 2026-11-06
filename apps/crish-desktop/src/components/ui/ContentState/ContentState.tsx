@@ -17,6 +17,7 @@
 import React from 'react';
 import { useI18n } from '../../../i18n';
 import { Button } from '../Button';
+import { Spinner } from '../Spinner';
 import styles from './ContentState.module.css';
 
 export type ContentStateKind = 'loading' | 'error' | 'empty';
@@ -62,9 +63,7 @@ export const ContentState: React.FC<ContentStateProps> = ({
       aria-live={kind === 'loading' ? 'polite' : undefined}
       aria-busy={kind === 'loading' || undefined}
     >
-      {kind === 'loading' ? (
-        <span className={styles.spinner} aria-hidden="true" />
-      ) : null}
+      {kind === 'loading' ? <Spinner delayed /> : null}
       <p className={styles.title}>{title}</p>
       {description ? <p className={styles.description}>{description}</p> : null}
       {kind === 'error' && onRetry ? (

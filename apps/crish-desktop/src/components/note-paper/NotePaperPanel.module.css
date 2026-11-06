@@ -361,7 +361,7 @@
 }
 
 .spinIcon {
-  animation: note-paper-spin var(--transition-spin, 0.8s linear) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 /* 容器查询自适应响应 */
@@ -766,7 +766,7 @@ button.badge:focus-visible {
   border-radius: 50%;
   border: 2px solid var(--border-color);
   border-top-color: var(--brand-primary);
-  animation: note-paper-spin var(--transition-spin, 0.8s linear) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 .stateEmpty {
@@ -791,12 +791,6 @@ button.badge:focus-visible {
   font-size: var(--font-size-xs, 12px);
   line-height: var(--line-height-ui, 1.35);
   color: var(--text-secondary);
-}
-
-@keyframes note-paper-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* 减弱动态偏好（系统设置专属通道；性能档 eco 不再介入动效，X1 解耦） */

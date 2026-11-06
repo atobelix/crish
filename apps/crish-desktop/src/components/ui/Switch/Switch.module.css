@@ -280,16 +280,7 @@
     width: var(--spinner-size);
     height: var(--spinner-size);
     color: var(--text-secondary);
-    animation: switch-spin var(--transition-spin) infinite;
-  }
-
-  @keyframes switch-spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
+    animation: crish-spin var(--transition-spin) infinite;
   }
 
   /* --- 减弱动态偏好（Reduced Motion） --- */

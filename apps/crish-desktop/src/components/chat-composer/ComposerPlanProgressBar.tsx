@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './ComposerPlanProgressBar.module.css';
-import { Button, Divider, ScrollFadeRegion, Tooltip } from '@/components/ui';
+import { Button, Divider, ScrollFadeRegion, TextMorph, Tooltip } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
 
 export interface PlanStepItem {
@@ -189,8 +189,10 @@ export const ComposerPlanProgressBar: React.FC<
         >
           <div className={`${styles.planRoller} plan-roller`}>
             <div className={`${styles.planRollerTrack} plan-roller-track`}>
+              {/* 步骤文案切换走 TextMorph 逐字形变（H-17 接线）：类名 Roller
+                  为历史名，实际动效是形变而非滚轮位移。 */}
               <div className={`${styles.planStep} plan-step`}>
-                {currentActiveText}
+                <TextMorph>{currentActiveText}</TextMorph>
               </div>
             </div>
           </div>

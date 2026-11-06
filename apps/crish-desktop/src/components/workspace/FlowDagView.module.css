@@ -71,13 +71,7 @@
 .stateDotSpinner {
   border: var(--border-width-emphasis, 2px) solid;
   border-top-color: transparent;
-  animation: flowSpin var(--transition-spin) infinite;
-}
-
-@keyframes flowSpin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 /*           hover      task */

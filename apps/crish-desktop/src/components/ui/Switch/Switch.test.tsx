@@ -510,8 +510,9 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
       expect(lgMatch?.[1]).toMatch(/--thumb-pad:\s*2px/);
     });
 
-    it('包含微型 Spinner 旋转关键帧：switch-spin', () => {
-      expect(css).toMatch(/@keyframes switch-spin/);
+    it('微型 Spinner 走全局共享关键帧 crish-spin（S8 收敛），不再自备私有关键帧', () => {
+      expect(css).toMatch(/animation:\s*crish-spin\s+var\(--transition-spin\)/);
+      expect(css).not.toMatch(/@keyframes\s+switch-spin/);
     });
 
     it('消费项目 Design Tokens（--brand, --border-subtle, --bg-card）且杜绝 --brand-deep 墨黑边', () => {

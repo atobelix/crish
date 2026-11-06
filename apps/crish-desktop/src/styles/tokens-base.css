@@ -35,6 +35,10 @@ html[data-theme='light'] {
   --duration-accordion-fade: 180ms;
   --duration-landing-settle: 260ms;
   --duration-landing-fade: 260ms;
+  /* 持续指示周期（E 类 9 / S8 新增）：旋转与脉冲的唯一时长源，
+     --transition-spin / --transition-pulse 由其组合，禁止各面自取值。 */
+  --duration-spin: 1000ms;
+  --duration-pulse: 1600ms;
 
   --transition-micro: 100ms ease-out;
   --transition-snappy: var(--duration-snappy) var(--ease-standard);
@@ -60,8 +64,8 @@ html[data-theme='light'] {
   --transition-chevron: 150ms var(--ease-decelerate);
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
-  --transition-spin: 0.8s linear;
-  --transition-pulse: 1.6s ease-in-out;
+  --transition-spin: var(--duration-spin) linear;
+  --transition-pulse: var(--duration-pulse) ease-in-out;
 
   /* ── 37 点高精临界阻尼原生弹簧缓动曲线（严禁删除或改动数值） ── */
   --ease-spring: linear(

@@ -470,16 +470,8 @@
     border-radius: 50%;
     border: var(--border-width-emphasis) solid currentColor;
     border-top-color: transparent;
-    animation: button-spin var(--transition-spin) infinite;
+    animation: crish-spin var(--transition-spin) infinite;
     flex-shrink: 0;
   }
 
-  @keyframes button-spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
   }
-}

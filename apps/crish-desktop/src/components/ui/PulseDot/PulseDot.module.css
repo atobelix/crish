@@ -1,0 +1,11 @@
+/* ui/PulseDot：圆点本体（全圆 + 强调色底），脉冲走全局正典
+   crish-pulse-dot、周期走 --transition-pulse 令牌。 */
+
+.pulseDot {
+  display: inline-block;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--accent-color);
+  flex-shrink: 0;
+  animation: crish-pulse-dot var(--transition-pulse) infinite;
+}

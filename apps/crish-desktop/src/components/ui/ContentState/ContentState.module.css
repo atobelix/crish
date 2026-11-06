@@ -1,5 +1,5 @@
 /* ui/ContentState 三态呈现：居中列 + 文字灰阶分层，无边框无底色。
-   动效仅 spinner 旋转一处，周期经 --transition-spin 令牌驱动。 */
+   加载指示走 ui/Spinner 原语（S8 收敛，含防闪烁门），本文件不再自备关键帧。 */
 
 .contentState {
   display: flex;
@@ -11,22 +11,6 @@
   text-align: center;
   flex: 1;
   min-height: 0;
-}
-
-.spinner {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid var(--border-subtle);
-  border-top-color: var(--text-secondary);
-  animation: contentStateSpin var(--transition-spin) infinite;
-  flex-shrink: 0;
-}
-
-@keyframes contentStateSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .title {

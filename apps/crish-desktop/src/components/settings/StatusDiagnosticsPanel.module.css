@@ -16,13 +16,7 @@
 }
 
 .spin {
-  animation: diag-spin var(--transition-spin) infinite;
-}
-
-@keyframes diag-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 .errorBanner {

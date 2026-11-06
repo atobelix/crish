@@ -753,16 +753,7 @@
 }
 
 .loadingSpinner {
-  animation: spin var(--transition-spin) infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  animation: crish-spin var(--transition-spin) infinite;
 }
 
 /* ── 4.1 连接与凭据高级卡片折叠栏（大卡片外壳 14px + 舒展内边距） ── */

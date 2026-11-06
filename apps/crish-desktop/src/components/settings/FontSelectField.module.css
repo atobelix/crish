@@ -197,17 +197,8 @@
 
 .spinIcon {
   transform-origin: center center;
-  animation: font-spin var(--transition-spin) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
   color: var(--accent-color, var(--brand-deep));
-}
-
-@keyframes font-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* 下拉滚动列表 */

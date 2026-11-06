@@ -15,7 +15,7 @@ import React, {
 } from 'react';
 
 import styles from './ComposerFusedTrigger.module.css';
-import { Button, Menu, Tooltip } from '@/components/ui';
+import { Button, Menu, TextMorph, Tooltip } from '@/components/ui';
 import { toggleExclusiveMenu } from '@/components/ui';
 import { getActiveModelRef } from '../../api/modelsCatalogStore';
 import { onUiEvent } from '../../api/uiEvents';
@@ -177,7 +177,9 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
               data-thinking-unset={needsThinkingPick ? 'true' : 'false'}
               onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
             >
-              <span>{thinkingLabel}</span>
+              <span>
+                <TextMorph>{thinkingLabel}</TextMorph>
+              </span>
             </Button>
           </Tooltip>
           {open ? (

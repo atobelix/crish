@@ -1,6 +1,7 @@
+/* 对话顶栏单一「活动」入口与面板样式（M-08 刚性裁决） */
+
 .breadcrumbAgentBtn,
-.agentTrigger,
-.breadcrumbAgentBtn {
+.agentTrigger {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -10,7 +11,7 @@
   padding: 0 6px;
   border: none;
   box-shadow: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control, 8px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -18,6 +19,8 @@
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition:
     background-color var(--transition-snappy),
     color var(--transition-snappy);
@@ -29,10 +32,11 @@
   color: var(--text-primary);
 }
 
+/* 焦点态防护（AGENTS.md §13 铁律：低对比度柔和焦点，混入不超过 10% 文本色） */
 .agentTrigger:focus-visible,
 .breadcrumbAgentBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px var(--focus-border-color);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   background: var(--state-hover);
   color: var(--text-primary);
 }
@@ -42,6 +46,8 @@
   background: var(--state-active);
 }
 
+/* 尺寸/底色留本面，脉冲本体走 ui/PulseDot 正典 crish-pulse-dot（S8 收敛，
+   原私有 agentDotPulse 已删）。 */
 .liveDot,
 .agentLiveDot {
   width: 5px;
@@ -49,27 +55,6 @@
   border-radius: 50%;
   background: var(--accent-color);
   flex-shrink: 0;
-  animation: agentDotPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
-}
-
-/* 收口登记的独立配方（AN2 脉冲归队裁定，禁止合并）：agentDotPulse 是
- * 「缩放 + 透明 + 辉光」点脉冲（scale 1 ↔ 1.35、opacity 0.8 ↔ 1、峰值
- * 带 accent 辉光阴影），供子代理卡头运行态圆点；辉光通道为本面独有，
- * 与其余四处脉冲（tool-dot-pulse / sync-dot-pulse / pulseDot /
- * flowPulse）的语义不同，强行合并会改变子代理卡已验收的体感，故独立
- * 登记、独立演进。唯一消费方：本文件子代理头圆点（周期经
- * var(--transition-pulse) 驱动，fallback 1.4s 为本面自有口径）。 */
-@keyframes agentDotPulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.35);
-    opacity: 1;
-    box-shadow: 0 0 6px color-mix(in srgb, var(--accent-color) 60%, transparent);
-  }
 }
 
 .botIcon {
@@ -85,6 +70,24 @@
   font-feature-settings: 'tnum' 1;
 }
 
+.compactText {
+  display: none;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* 极窄屏响应：收敛为数字 */
+@media (max-width: 440px) {
+  .triggerText {
+    display: none;
+  }
+  .compactText {
+    display: inline;
+  }
+}
+
 .bcChevron {
   color: var(--text-tertiary);
   flex-shrink: 0;
@@ -97,46 +100,94 @@
   color: var(--text-secondary);
 }
 
+/* 活动详情面板容器 */
+.activityMenuPanel,
 .subagentMenuPanel {
-  min-width: 240px;
-  max-width: 320px;
-  padding: 4px;
+  min-width: 300px;
+  max-width: 380px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 10px);
+  box-shadow: var(--shadow-popover);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionTitle {
+  font-size: var(--font-size-xxs, 11px);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.itemList {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.agentItemRow {
+.itemRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
   gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
   transition: background-color var(--transition-snappy);
+  box-sizing: border-box;
 }
 
-.agentItemRow:hover {
+.itemRow:hover {
   background: var(--state-hover);
 }
 
-.agentItemRow:active {
-  background: var(--state-active);
+.itemRow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
-.agentInfo {
-  flex: 1 1 auto;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.agentHeaderLine {
+.itemLeading {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.toolIcon,
+.shellIcon {
+  color: var(--text-secondary);
+}
+
+.itemInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.itemHeaderLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
 
-.agentName {
+.itemName {
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-primary);
@@ -145,48 +196,82 @@
   white-space: nowrap;
 }
 
-.statusBadge {
-  font-size: var(--font-size-xxs);
-  padding: 1px 4px;
-  border-radius: var(--radius-xs);
-  background: var(--state-hover);
-  color: var(--text-tertiary);
-}
-
-.statusBadge.running {
-  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
-  color: var(--accent-color);
-}
-
-.statusBadge.completed {
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
-  color: var(--accent-color);
-}
-
-.statusBadge.failed {
-  background: var(--danger-soft-bg-hover);
-  color: var(--danger-color);
-}
-
-.statusBadge.stopped {
-  background: var(--state-hover);
-  color: var(--text-tertiary);
-}
-
-.agentTask {
-  font-size: var(--font-size-xxs);
+.itemSubline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 2px;
+}
+
+.itemTask {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+
+.itemDuration {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.statusBadge {
+  font-size: var(--font-size-xxs, 10px);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 4px);
+  line-height: 1.2;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badgeRunning {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
+}
+
+.badgeCompleted {
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+}
+
+.badgeFailed {
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: var(--color-error);
+}
+
+.badgeStopped,
+.badgeIdle {
+  background: var(--state-hover);
+  color: var(--text-tertiary);
+}
+
+.itemAction {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .killBtn {
   color: var(--text-tertiary);
-  flex-shrink: 0;
 }
 
 .killBtn:hover {
+  color: var(--danger-color);
+}
+
+.cancelBtn {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-secondary);
+  height: 22px;
+  padding: 0 6px;
+}
+
+.cancelBtn:hover {
   color: var(--danger-color);
 }

@@ -1152,17 +1152,8 @@
   max-width: 100%;
 }
 
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
 .spinner {
-  animation: spin var(--transition-spin) infinite;
+  animation: crish-spin var(--transition-spin) infinite;
   color: var(--text-tertiary);
   display: inline-block;
   margin-right: var(--space-1);

@@ -7,6 +7,7 @@ import '@/styles/tokens.css';
 import '@/styles/tokens-surface.css';
 import '@/styles/z-index.css';
 import '@/styles/design-system.css';
+import '@/styles/indicators.css';
 import '@/styles/focus-visible.css';
 import '@/styles/overlay-scrollbar.css';
 

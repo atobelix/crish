@@ -1,0 +1,27 @@
+/* 持续指示共享层（S8 收敛，E 类 9）：循环指示动画的全仓单源。
+ *
+ * - crish-spin：旋转关键帧唯一定义。历史上 11 个模块 CSS 各自私有定义
+ *   spin / button-spin / diag-spin / font-spin / switch-spin /
+ *   contentStateSpin / flowSpin / rotateSpinner / spinKeyframe /
+ *   sessionReadyCoverSpin / note-paper-spin（同形 rotate 360°、同周期
+ *   --transition-spin），已全部删除，各面只引用本名 + 周期 token，
+ *   尺寸/颜色差异留在各自面内。
+ * - crish-indicator-appear：指示器防闪烁门的显形关键帧（E 类 9 口径：
+ *   出现加 <300ms 延时门槛、消失即时）。由 ui/Spinner 的 delayed 档
+ *   在 250ms 延时后以 forwards 填充显形；短于门槛的状态在显形前已
+ *   卸载，永不闪现。
+ * - 脉冲正典 crish-pulse-dot 在 design-system.css（同为全局层），
+ *   本文件不重复定义；dot 脉冲的组件原语见 ui/PulseDot。
+ */
+
+@keyframes crish-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes crish-indicator-appear {
+  to {
+    opacity: 1;
+  }
+}

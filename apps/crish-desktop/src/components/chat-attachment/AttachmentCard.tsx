@@ -301,6 +301,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   aria-hidden
                 >
                   <rect
+                    className={styles.attachProgressRect}
                     x="1"
                     y="1"
                     width="56"
@@ -411,6 +412,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                 aria-hidden
               >
                 <rect
+                  className={styles.attachProgressRect}
                   x="1"
                   y="1"
                   width="56"

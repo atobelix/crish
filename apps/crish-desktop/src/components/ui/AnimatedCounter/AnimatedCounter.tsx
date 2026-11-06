@@ -15,21 +15,14 @@ import {
 } from './animatedCounterMath';
 import { useStreamingCounter } from './useStreamingCounter';
 import type { AnimatedCounterProps } from './types';
+import { MOTION_SPRING } from '../../../utils/motionTokens';
 import styles from './AnimatedCounter.module.css';
 
 const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-// 临界阻尼弹簧配置：单调无回弹
-const SPRING_SMOOTH = {
-  type: 'spring',
-  visualDuration: 0.4,
-  bounce: 0,
-} as const;
-const SPRING_MORPH = {
-  type: 'spring',
-  visualDuration: 0.38,
-  bounce: 0,
-} as const;
+// 临界阻尼弹簧（单调无回弹）一律读 token 单源 MOTION_SPRING
+// （smooth 0.4s / morph 0.42s，与 tokens-base --duration-spring-* 锁定）。
+// 本地字面量曾漂移（morph 0.38 vs 单源 0.42），S8 已删，禁止再本地定义。
 
 /** 环境安全的视口可见性 Hook（防御 SSR / JSDOM 下缺少 IntersectionObserver 的断裂） */
 function useSafeInView(
@@ -171,7 +164,7 @@ function Column({
     } else {
       setIsAnimating(true);
       const controls = animate(position, state.target, {
-        ...SPRING_SMOOTH,
+        ...MOTION_SPRING.smooth,
         delay: state.revealed ? 0 : delay,
         onComplete: () => {
           setIsAnimating(false);
@@ -190,7 +183,7 @@ function Column({
       className={styles.column}
       data-animating={isAnimating ? 'true' : undefined}
       {...columnPresence}
-      transition={reduceMotion ? { duration: 0 } : SPRING_MORPH}
+      transition={reduceMotion ? { duration: 0 } : MOTION_SPRING.morph}
     >
       {/* 隐藏的 Sizer 撑开布局盒，保证零回流 */}
       <span className={styles.sizer} data-digit="0" />
@@ -286,7 +279,7 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
                 key={part.key}
                 className={styles.symbol}
                 {...columnPresence}
-                transition={reduceMotion ? { duration: 0 } : SPRING_MORPH}
+                transition={reduceMotion ? { duration: 0 } : MOTION_SPRING.morph}
               >
                 {part.text}
               </m.span>
