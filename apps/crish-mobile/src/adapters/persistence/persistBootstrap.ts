@@ -13,9 +13,16 @@ import {
   SqlSettingsDao,
   SqlNotificationsDao,
   SqlLocalThreadsDao,
+  SqlRemoteEventDao,
+  SqlRemoteSessionDao,
+  SqlRemoteSyncDao,
 } from '@/db/dao';
 import type { NotificationsDao } from '@/db/dao';
 import type { SqlDriver } from '@/db/driver';
+import {
+  RemoteSyncEngine,
+  setRemoteSyncEngine,
+} from '@/domain/store/remoteSyncEngine';
 import {
   configureSettingsPersistence,
   type SettingsPersist,
@@ -31,6 +38,7 @@ import {
 import { configureScrollAnchorPersistence } from '@/domain/store/scrollAnchorStore';
 import { configureComposerDraftPersistence } from '@/domain/store/composerDraftStore';
 import { configureSendQueuePersistence } from '@/domain/store/sendQueueStore';
+import { configureToolExecutionBreadcrumbPersistence } from '@/domain/store/toolExecutionBreadcrumbs';
 import { configureLocalChatSessionPersistence } from '@/domain/store/localChatSessionStore';
 import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { InAppNotification } from '@/domain/store/notificationReducers';
@@ -116,4 +124,23 @@ export function configureSqlitePersistence(driver: SqlDriver | null): void {
   configureSendQueuePersistence(
     driver === null ? null : new SqlSettingsDao(driver)
   );
+  // 工具执行面包屑（波 1 要点 3）：同 kv 表（键
+  // tools.execution_breadcrumbs，整环单值落盘）；DB 降级时传
+  // null → 仅进程内内存环，跨启动证据降级（与队列口径一致）。
+  configureToolExecutionBreadcrumbPersistence(
+    driver === null ? null : new SqlSettingsDao(driver)
+  );
+
+  // 远程会话持久化与增量同步引擎（v7 架构）
+  if (driver === null) {
+    setRemoteSyncEngine(null);
+  } else {
+    setRemoteSyncEngine(
+      new RemoteSyncEngine({
+        eventDao: new SqlRemoteEventDao(driver),
+        sessionDao: new SqlRemoteSessionDao(driver),
+        syncDao: new SqlRemoteSyncDao(driver),
+      })
+    );
+  }
 }

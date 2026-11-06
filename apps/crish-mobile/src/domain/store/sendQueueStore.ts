@@ -17,7 +17,7 @@ export interface SendQueueItem {
   id: string;
   /** 用户键入文本（可为空串：纯附件发送） */
   text: string;
-  /** 附件快照（入队时刻的已选区副本；本地线程恒为空数组） */
+  /** 附件快照（入队时刻的已选区副本；远端与本地线程均可携带） */
   attachments: ComposerAttachment[];
   createdAtMs: number;
 }

@@ -21,6 +21,7 @@ import type {
   ToolCallInput,
   ToolExecutionResult,
 } from './types';
+import { recordToolExecutionBreadcrumb } from '@/domain/store/toolExecutionBreadcrumbs';
 
 /**
  * 健壮的自愈 JSON 入参解析器
@@ -358,6 +359,21 @@ export class MobileToolRegistry {
     try {
       const execPromise = tool.execute(parseResult.data, context);
 
+      // 落败兜底（波 1 要点 3）：race 落败（超时/取消先行获胜）后工具
+      // 仍可能迟到 reject，无人接收会成 unhandled rejection；预先给
+      // 原 promise 挂一条 no-op catch 消费迟到失败。race 订阅的仍是
+      // 原 promise，本兜底不改变胜负与结果。
+      void execPromise.catch(() => undefined);
+
+      // 执行面包屑（波 1 要点 3）：开始一条、终局一条，进程若在执行
+      // 中闪退，落盘面留「有 start 无终局」的悬空调用供波 7 对齐。
+      recordToolExecutionBreadcrumb({
+        toolName,
+        toolCallId,
+        stage: 'start',
+        atMs: Date.now(),
+      });
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           reject(new Error(`Tool execution timed out after ${timeoutMs}ms`));
@@ -387,6 +403,13 @@ export class MobileToolRegistry {
 
       if (timer) clearTimeout(timer);
 
+      recordToolExecutionBreadcrumb({
+        toolName,
+        toolCallId,
+        stage: rawResult.ok ? 'success' : 'error',
+        atMs: Date.now(),
+      });
+
       return {
         ...rawResult,
         toolCallId,
@@ -398,6 +421,13 @@ export class MobileToolRegistry {
       const isTimeout = errMsg.includes('timed out');
       const isAborted =
         errMsg.includes('cancelled') || Boolean(context.signal?.aborted);
+
+      recordToolExecutionBreadcrumb({
+        toolName,
+        toolCallId,
+        stage: isTimeout ? 'timeout' : isAborted ? 'aborted' : 'error',
+        atMs: Date.now(),
+      });
 
       return {
         toolCallId,

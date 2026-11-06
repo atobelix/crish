@@ -14,8 +14,9 @@
 //   空态；已配置 = 就绪标题；均不带旁白句——内容净化普查口径）、
 //   renderSheets（LocalModelSheet）。
 // - 不供：composer.contextBar（工作区 / 权限是连上电脑才有的概念，
-//   用户裁决：本地不显示）、composer.submitWithAttachments（本地
-//   不执行附件，附件钮点按给诚实提示）。
+//   用户裁决：本地不显示）、composer.submitWithAttachments（宿主级
+//   富提交形态不供；附件经 onAttachPress 选取后随 submit 发送、
+//   生成中随排队条目携带，组装在 sendLocalChatMessage 内完成）。
 // 批 C ② 补项：草稿按 `local:<threadId>` 键控（composerDraftStore，
 // 切线程不串稿、杀进程恢复）；生成中再发送进本线程发送队列
 // （sendQueueStore 持久化、逐条可撤、生成结束自动续发），呈现走
@@ -48,6 +49,10 @@ import {
   stopLocalChatMessage,
 } from '@/adapters/localChat/localChatEngine';
 import { useVoiceInput } from '@/adapters/asr/useVoiceInput';
+import { useComposerAttachments } from '@/adapters/viewmodels/useComposerAttachments';
+import { AttachmentSheet } from '@/presentation/components/chat/AttachmentSheet';
+import { AttachmentStrip } from '@/presentation/components/chat/AttachmentStrip';
+import { useState as useAttachmentOpenState } from 'react';
 import { buildLocalTimeline } from '@/presentation/timeline/buildLocalTimeline';
 import { LocalModelSheet } from '@/presentation/components/chat/LocalModelSheet';
 import type { DropdownMenuEntry } from '@/presentation/ui/DropdownMenu';
@@ -119,6 +124,15 @@ export function useLocalConversationEngine(
     };
   }, [draftKey]);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  // 附件（2026-11-05 加号解锁）：本地对话与主页同一选取管线——图片/文档
+  // 经 useComposerAttachments 选取，发送随 sendLocalChatMessage 组装
+  // （buildRunPayload 按 local model spec 的 modalities fail-closed）
+  const [attachOpen, setAttachOpen] = useAttachmentOpenState(false);
+  const attachmentsApi = useComposerAttachments({ notify: showToast });
+  const attachments = attachmentsApi.attachments;
+  // 发送受理回调需读最新已选区：经 ref 桥（避免 submit 依赖链抖动）
+  const attachmentsRef = useRef(attachmentsApi);
+  attachmentsRef.current = attachmentsApi;
 
   const config = useStore(localChatStore, (s) => s.config);
   const messages = useStore(localChatSessionStore, (s) =>
@@ -167,7 +181,7 @@ export function useLocalConversationEngine(
   // error 槽的既有面，不把消息静默囤在队列里）。
   const sendQueuedItem = useCallback(
     (item: SendQueueItem): boolean => {
-      const ok = sendLocalChatMessage(threadId, item.text);
+      const ok = sendLocalChatMessage(threadId, item.text, item.attachments);
       if (ok) onSendSuccess?.();
       return ok;
     },
@@ -180,12 +194,16 @@ export function useLocalConversationEngine(
   });
 
   const submit = useCallback(() => {
-    if (prompt.trim() === '') return;
-    // 生成中发送 = 入队（批 C ②）：入队成功才清输入框（稿面转入
-    // 队列行呈现）；队列已满则保留原文并给诚实提示。
+    if (prompt.trim() === '' && attachments.length === 0) return;
+    // 生成中发送 = 入队（批 C ②）：入队成功才清输入框与已选附件
+    // （稿面转入队列行呈现）；队列已满则原文与附件一并保留并给
+    // 诚实提示。附件以快照随条目入队，排空时 sendQueuedItem 经
+    // sendLocalChatMessage 的附件组装链真实发送（2026-11-05 返工
+    // 修复：此前只入队文本、已选附件被静默清掉）。
     if (streaming) {
-      if (queue.enqueue(prompt)) {
+      if (queue.enqueue(prompt, attachments)) {
         setPrompt('');
+        attachmentsRef.current.clear();
       } else {
         showToast('排队消息已达上限，请等前面的消息发出', 'error');
       }
@@ -193,11 +211,14 @@ export function useLocalConversationEngine(
     }
     // 发送被受理才清输入框：未配置等失败保留原文，用户补好配置
     // 后可直接重发（错误已由引擎写进线程 error 槽呈现）。
-    if (sendLocalChatMessage(threadId, prompt)) {
+    // 附件（2026-11-05 加号解锁）：随文本经本地引擎组装发送
+    // （buildRunPayload 视觉 fail-closed），受理才清已选区。
+    if (sendLocalChatMessage(threadId, prompt, attachments)) {
       setPrompt('');
+      attachmentsRef.current.clear();
       onSendSuccess?.();
     }
-  }, [prompt, streaming, threadId, onSendSuccess, queue, setPrompt, showToast]);
+  }, [prompt, attachments, streaming, threadId, onSendSuccess, queue, setPrompt, showToast]);
 
   // 显式文本提交（语音直发）：生成中 → 入队（受理 = 进队列）；
   // 否则受理与否由引擎裁定（未配置 → false，错误同样进 error 槽），
@@ -311,8 +332,9 @@ export function useLocalConversationEngine(
         label: activeLabel ?? '未配置供应商',
         onPress: () => setModelSheetOpen(true),
       },
-      onAttachPress: () => showToast('本地对话暂不支持附件', 'info'),
-      hasAttachments: false,
+      // 加号附件（2026-11-05 解锁）：与主页同一 AttachmentSheet 管线
+      onAttachPress: () => setAttachOpen((v) => !v),
+      hasAttachments: attachments.length > 0,
       voice,
     },
     menuEntries,
@@ -327,7 +349,23 @@ export function useLocalConversationEngine(
     // Composer 上方专属行（批 C ②）：本线程的排队行（无排队时
     // 组件自守为空，不占位）
     renderComposerLead: () => (
-      <SendQueueRows items={queue.items} onWithdraw={queue.withdraw} />
+      <>
+        {/* 已选附件条（2026-11-05 加号解锁）：与主页同组件，发送受理清空 */}
+        <AttachmentStrip
+          attachments={attachments}
+          onRemove={attachmentsApi.remove}
+          picking={attachmentsApi.picking}
+        />
+        <SendQueueRows items={queue.items} onWithdraw={queue.withdraw} />
+        {/* 附件选取面板（toggle 开合，与主页批 A 锚定 Popover 同口径） */}
+        <AttachmentSheet
+          visible={attachOpen}
+          onClose={() => setAttachOpen(false)}
+          onTakePhoto={attachmentsApi.pickFromCamera}
+          onPickImage={attachmentsApi.pickFromLibrary}
+          onPickFile={attachmentsApi.pickFromFiles}
+        />
+      </>
     ),
   };
 }
