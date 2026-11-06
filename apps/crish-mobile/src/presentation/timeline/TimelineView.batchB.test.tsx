@@ -90,6 +90,8 @@ const ANCHOR_KEYS = [
   'remote:anchor-restore',
   'remote:anchor-save',
   'remote:anchor-clear',
+  'remote:anchor-refine',
+  'remote:anchor-refine-drag',
 ];
 
 beforeEach(() => {
@@ -308,6 +310,90 @@ describe('批 B · 阅读锚点（⑱）', () => {
     await view.unmount();
   });
 
+  it('N-3 精修：估算落位后锚点行布局到达 → 按布局图精确重落位一次（波 5）', async () => {
+    const scrollToOffset = jest
+      .spyOn(FlatList.prototype, 'scrollToOffset')
+      .mockImplementation(() => undefined);
+    jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => undefined);
+    saveScrollAnchor('remote:anchor-refine', { blockId: 'm-2', offsetPx: 30 });
+    const view = await wrap(
+      <TimelineView
+        blocks={[
+          msg('m-1', 'assistant', '一', 1000),
+          msg('m-2', 'assistant', '二', 2000),
+          msg('m-3', 'assistant', '三', 3000),
+        ]}
+        follow
+        onFollowChange={() => undefined}
+        anchorKey="remote:anchor-refine"
+      />
+    );
+    // 读盘落位走 scrollToIndex 估算（布局图为空）→ 登记待精修
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    scrollToOffset.mockClear();
+
+    // 锚点行布局到达（顶缘 y=1000）：精修落位 = 1000 + 30 = 1030
+    const node = view.getByText('二');
+    await fireEvent(rowWrapperOf(node), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 1000, width: 390, height: 120 } },
+    });
+    expect(scrollToOffset).toHaveBeenCalledWith({
+      offset: 1030,
+      animated: false,
+    });
+
+    // 精修只发生一次：后续同行布局变化不再重落位（已解除待精修）
+    scrollToOffset.mockClear();
+    await fireEvent(rowWrapperOf(node), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 1040, width: 390, height: 120 } },
+    });
+    expect(scrollToOffset).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('N-3 精修：用户手势介入后待精修作废，不与用户争抢位置', async () => {
+    const scrollToOffset = jest
+      .spyOn(FlatList.prototype, 'scrollToOffset')
+      .mockImplementation(() => undefined);
+    jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => undefined);
+    saveScrollAnchor('remote:anchor-refine-drag', {
+      blockId: 'm-2',
+      offsetPx: 30,
+    });
+    const view = await wrap(
+      <TimelineView
+        blocks={[
+          msg('m-1', 'assistant', '一', 1000),
+          msg('m-2', 'assistant', '二', 2000),
+          msg('m-3', 'assistant', '三', 3000),
+        ]}
+        follow
+        onFollowChange={() => undefined}
+        anchorKey="remote:anchor-refine-drag"
+      />
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    scrollToOffset.mockClear();
+
+    // 用户开始拖拽 → 待精修作废；其后锚点行布局到达也不再重落位
+    const list = view.getByTestId('session-timeline');
+    await fireEvent(list, 'scrollBeginDrag', { nativeEvent: {} });
+    const node = view.getByText('二');
+    await fireEvent(rowWrapperOf(node), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 1000, width: 390, height: 120 } },
+    });
+    expect(scrollToOffset).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
   it('非跟随滚动 → 当前首个可见行节流落盘为锚点', async () => {
     const view = await wrap(
       <TimelineView
@@ -411,13 +497,13 @@ describe('批 B · 流式文本单一真理源直出渲染（彻底废除 tailFr
   });
 });
 
-describe('批 B · 回底按钮键盘跟随（㉔）接线冒烟', () => {
-  it('followKeyboard 开/关两形态均可正常渲染', async () => {
+describe('批 B · 回底按钮键盘解耦（㉔）接线冒烟', () => {
+  it('按钮两形态均可正常渲染（hideOnKeyboard 开/关；遗留 followKeyboard 已删除）', async () => {
     const view = await wrap(
       <ScrollToBottomButton
         onPress={() => undefined}
         bottomOffset={96}
-        followKeyboard
+        hideOnKeyboard
         testID="to-bottom-kb"
       />
     );

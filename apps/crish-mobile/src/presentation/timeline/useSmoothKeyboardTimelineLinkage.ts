@@ -5,9 +5,10 @@
 // 2. 满页触底状态下消息流随键盘 1:1 速度连续平滑推升，收起时无级对称回退，绝对零度反向冲顶；
 // 3. 短对话未触及键盘区域时自动保护保持静止，绝不被推入顶部状态栏；
 // 4. 历史翻阅态（follow === false）视口锁定静止，严禁位移；
-// 5. 纯 UI 线程 Worklet 驱动，零 JS 调度与零 Android requestLayout 重排。
+// 5. 纯 UI 线程 Worklet 驱动，零 JS 调度与零 Android requestLayout 重排；
+// 6. （波 5 追加）触底资格判定计入原生底部内衬总量，与 JS 侧
+//     handleScroll 共用同一判底原点（旧式漏计把资格放宽了整个 inset）。
 import { useEffect } from 'react';
-import type { RefObject } from 'react';
 import type { FlatList } from 'react-native';
 import {
   scrollTo,
@@ -23,14 +24,20 @@ export interface UseSmoothKeyboardTimelineLinkageOptions {
   overlayHeight: number;
   /** 尾部呼吸间隙 (默认 20dp) */
   gap: number;
+  /**
+   * 原生底部内衬总量（extraContentPadding + 键盘活跃 padding）：
+   * 触底判定与 handleScroll 同一原点（波 5 归正）——JS contentSize
+   * 不含原生内衬，漏计会把距真底放大一个 inset
+   */
+  bottomPadding: number;
   /** 顶部头栏避让高度 (默认 0) */
   headerClearance?: number;
   /** 跟随态变更回调 */
   onFollowChange?: (follow: boolean) => void;
 }
 
-export function useSmoothKeyboardTimelineLinkage(
-  scrollViewRef: AnimatedRef<FlatList<any>> | RefObject<FlatList<any> | null>,
+export function useSmoothKeyboardTimelineLinkage<ItemT = any>(
+  scrollViewRef: AnimatedRef<FlatList<ItemT>>,
   options: UseSmoothKeyboardTimelineLinkageOptions
 ) {
   const followSV = useSharedValue(options.follow);
@@ -47,6 +54,11 @@ export function useSmoothKeyboardTimelineLinkage(
   useEffect(() => {
     gapSV.value = options.gap;
   }, [options.gap, gapSV]);
+
+  const bottomPaddingSV = useSharedValue(options.bottomPadding);
+  useEffect(() => {
+    bottomPaddingSV.value = options.bottomPadding;
+  }, [options.bottomPadding, bottomPaddingSV]);
 
   const headerClearanceSV = useSharedValue(options.headerClearance ?? 0);
   useEffect(() => {
@@ -97,12 +109,17 @@ export function useSmoothKeyboardTimelineLinkage(
             return;
           }
 
-          // 判定触底状态：距离内容底部 <= 48dp 认为处于吸底状态
+          // 判定触底状态：距真底 <= 48dp 认为处于吸底状态。真底
+          // 原点与 handleScroll 一致（波 5 归正）：distance =
+          // contentHeight + 原生底部内衬总量 − (scrollY + viewport)。
+          // 旧式漏计内衬使资格实际放宽为 48 + inset（约 200–320dp），
+          // 跟随态下用户上翻数行读旧文时弹键盘会被误判在底而推升
+          // 内容（V4 S3）
           const vHeight = viewportHeight.value;
           const cHeight = contentHeight.value;
           const distanceToBottom = Math.max(
             0,
-            cHeight - (currentScrollY.value + vHeight)
+            cHeight + bottomPaddingSV.value - (currentScrollY.value + vHeight)
           );
           const isAtBottom = distanceToBottom <= 48;
 
@@ -150,7 +167,8 @@ export function useSmoothKeyboardTimelineLinkage(
         );
 
         // 直接在 UI 线程 Worklet 连续调用平滑滚动，无任何 requestLayout 开销
-        scrollTo(scrollViewRef as AnimatedRef<any>, 0, targetScrollY, false);
+        // 依托 useAnimatedRef 注册的跨线程安全句柄，Worklet 序列化时直接命中缓存
+        scrollTo(scrollViewRef, 0, targetScrollY, false);
       },
       onEnd: (e) => {
         'worklet';
@@ -167,6 +185,7 @@ export function useSmoothKeyboardTimelineLinkage(
       options.follow,
       options.overlayHeight,
       options.gap,
+      options.bottomPadding,
       options.headerClearance,
     ]
   );

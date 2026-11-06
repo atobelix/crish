@@ -3,10 +3,14 @@
 // 通透悬浮其上；引擎差异（远端会话 / 本地线程）全部在适配层，界面零分叉。
 // 本文件同时保留远端宿主 SessionDetailScreen（构造远端引擎 → 统一屏），
 // 既有路由与测试入口不变；本地宿主在 (main)/thread 路由（U2）。
+// 2026-11-05 收敛：draft 伪会话状态机整体删除——本屏只被真实会话 id 打开
+// （深链/通知恒真实 id，新建统一走主页，见 navigation/newConversation）；
+// 头栏返回钮接入（导航语义矩阵：返回 = 上一个打开的界面）；regenerate
+// 经 onRegenerate 通道下发（远端暂无桌面命令 → 诚实隐藏入口）。
 // 审批统一交给全局 ApprovalFloat（悬浮于输入框上方）；引擎声明
 // composer.locked 时 Composer 锁定（原型 approval-locked：输入禁用、
 // 占位不换文，锁定以容器实心 + 工具图标变淡的形态表达）。
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -19,6 +23,7 @@ import { TimelineView } from '@/presentation/timeline/TimelineView';
 import { ConversationHeader } from '@/presentation/components/chat/SessionHeader';
 import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
 import { useNewConversation } from '@/presentation/navigation/newConversation';
+import { safeCanGoBack, useSafeBack } from '@/presentation/navigation/useSafeBack';
 import type { ConversationEngine } from '@/adapters/conversation/types';
 import { useTimelineBottomInset } from '@/presentation/timeline/useTimelineBottomInset';
 import { useRemoteConversationEngine } from '@/adapters/conversation/useRemoteConversationEngine';
@@ -36,6 +41,7 @@ import {
   ScrollToBottomButton,
   SoftShadowSurface,
 } from '@/presentation/ui';
+import type { AnchorRect } from '@/presentation/ui/dropdownLayout';
 
 export interface ConversationScreenProps {
   engine: ConversationEngine;
@@ -44,6 +50,12 @@ export interface ConversationScreenProps {
   onFollowChange: (following: boolean) => void;
   /** 打开工具抽屉（宿主导航面；本地引擎无工具行，不传） */
   onOpenTools?: (focusId?: string) => void;
+  /** 点击新建会话回调（统一协议：槽位重置 + 回主页新对话面） */
+  onNewConversation?: () => void;
+  /** 重新生成回调（能力驱动：宿主未声明该能力时工具栏诚实隐藏入口） */
+  onRegenerate?: (messageId: string) => void;
+  /** 是否允许重新生成（宿主按引擎能力注入；缺省 = 引擎空闲态） */
+  canRegenerate?: boolean;
 }
 
 export function ConversationScreen({
@@ -51,23 +63,39 @@ export function ConversationScreen({
   follow,
   onFollowChange,
   onOpenTools,
+  onNewConversation,
+  onRegenerate,
+  canRegenerate = !engine.busy,
 }: ConversationScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const openDrawer = useOpenDrawer();
+  const handleBack = useSafeBack();
   const handleNewConversation = useNewConversation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreAnchor, setMoreAnchor] = useState<AnchorRect | undefined>(
+    undefined
+  );
   // 停止生成 pill 按压反馈（按压过渡统一批口径）
   const stopPress = usePressFade();
   const listRef = useRef<FlatList<TimelineRow> | null>(null);
+  /** 滚动门面（B4 SSOT）：由 TimelineView 装配，回底按钮唯一消费入口 */
+  const scrollFacadeRef = useRef<(() => void) | null>(null);
   // 消费 Reanimated 共享键盘值（方案 19：120fps UI 线程微秒级同步拉伸与回缩）
   const keyboardAnimation = useReanimatedKeyboardAnimation();
+
+  // 头栏返回钮：仅栈内确有上一界面时呈现（诚实呈现——冷启动深链无栈可回
+  // 不造假钮）；路由变化（同屏换 id / push）引发宿主重渲时重估
+  const canGoBack = safeCanGoBack();
 
   // 悬浮 Composer 占高与时间线底部避让推导：
   // 由 useTimelineBottomInset 单一真源管理——实测优先、刚性拦截 <= 0 的初次挂载无效帧、
   // 并以 Composer 实际两行高（98px）/ 单行高（52px）+ 快捷条 + 安全区 + 附件条进行精确物理保底。
   // 保证尾部消息在键盘未激活与激活时，距输入框顶部均保持 16~24px 的舒适空隙（2026-11-03 修复）。
-  const { floatingHeight, overlayHeight, handleOverlayLayout } =
+  // timelineBottomInset（经 deriveTimelineBottomInset 推导、含 minOverlay
+  // 保底）直传 TimelineView 的 bottomInset——波 5 单一推导收敛后，列表内
+  // 不再有第二推导（旧实现 hook 产出无人消费、列表按无保底口径自算）。
+  const { floatingHeight, overlayHeight, handleOverlayLayout, timelineBottomInset } =
     useTimelineBottomInset({
       bottomSafeArea: insets.bottom,
       hasContextBar: Boolean(engine.composer.contextBar),
@@ -90,44 +118,57 @@ export function ConversationScreen({
         emptyTitle={engine.emptyState.title}
         emptyActionLabel={engine.emptyState.actionLabel}
         onEmptyAction={engine.emptyState.onAction}
-        headerClearance={insets.top + theme.size.header + theme.space.lg}
+        headerClearance={insets.top + theme.size.header + 4}
+        bottomInset={timelineBottomInset}
         floatingOverlayHeight={overlayHeight}
         bottomGap={theme.space.xl}
         busy={engine.busy}
         anchorKey={`${engine.kind}:${engine.id}`}
         readyCover
-        canRegenerate={!engine.busy}
+        onRegenerate={onRegenerate}
+        canRegenerate={canRegenerate}
+        scrollFacadeRef={scrollFacadeRef as MutableRefObject<(() => void) | null>}
       />
 
-      {/* 上下羽化：内容临近边缘渐隐（含头栏/输入框背后的过渡区；
+      {/* 上下羽化：内容临近边缘渐隐（顶部羽化适度收紧至头栏高度约 80-84dp，释放阅读视口；
           底部 EdgeFade 消费 Reanimated 共享值，120fps 贴合 Composer，
           严禁越界进入 timelineBottomInset 的 gap 呼吸区，保证最后一条消息完整可见） */}
       <EdgeFade
         side="top"
-        height={insets.top + theme.size.header + theme.space.lg}
+        height={insets.top + theme.size.header}
       />
       <EdgeFade
         side="bottom"
         baseHeight={overlayHeight}
         keyboardHeightSV={keyboardAnimation.height}
         height={Math.max(0, floatingHeight)}
+        fadeSpan={28}
       />
 
-      {/* 悬浮头栏（通透，无底色）：汉堡开抽屉 + 标题胶囊 + 新建 + 更多 */}
+      {/* 悬浮头栏（通透，无底色）：[返回] 汉堡开抽屉 + 标题胶囊 + 新建 + 更多 */}
       <ConversationHeader
         title={engine.title ?? '会话'}
+        onBack={canGoBack ? handleBack : undefined}
         onOpenDrawer={openDrawer}
-        onNewConversation={() => handleNewConversation({ closeDrawer: false })}
+        onNewConversation={() => {
+          if (onNewConversation) {
+            onNewConversation();
+          } else {
+            handleNewConversation({ closeDrawer: false });
+          }
+        }}
         onMore={() => setMenuOpen(true)}
+        onMoreAnchorChange={setMoreAnchor}
       />
 
       {!follow ? (
         <ScrollToBottomButton
-          alignment="left"
+          alignment="right"
           bottomOffset={overlayHeight + theme.space.sm}
           onPress={() => {
             onFollowChange(true);
-            listRef.current?.scrollToEnd({ animated: true });
+            // 滚动 SSOT 门面（B4）：目标含原生 inset 真值，禁直调 scrollToEnd
+            scrollFacadeRef.current?.();
           }}
           testID="session-back-to-bottom"
         />
@@ -147,8 +188,11 @@ export function ConversationScreen({
           },
         ]}
       >
-        {/* 宏观贯穿环境遮蔽大软阴影：位于最底层，贯穿全宽，自输入框容器顶缘向上消散 28dp */}
-        <ComposerAmbientVeil testID="composer-ambient-veil" />
+        {/* 宏观贯穿环境遮蔽大软阴影：位于最底层，贯穿全宽，隐藏消除双重遮罩冲突 */}
+        <ComposerAmbientVeil
+          testID="composer-ambient-veil"
+          style={{ opacity: 0 }}
+        />
 
         {engine.error ? (
           // 常驻错误条（与语音错误条同形态：dangerSoft 底、无阴影、
@@ -238,15 +282,17 @@ export function ConversationScreen({
         />
       </KeyboardStickyView>
 
-      {/* 更多菜单（引擎组装条目；远端 = 运行/终端/工具 + 会话操作） */}
-      <DropdownMenu
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        top={insets.top + theme.size.header + theme.space.md}
-        right={theme.space.md}
-        testID="session-menu"
-        entries={engine.menuEntries}
-      />
+      {/* 更多菜单（引擎组装条目；远端 = 运行/终端/工具 + 会话操作）；
+          几何单一真源 = anchorRect（打开前测量已就位） */}
+      {moreAnchor ? (
+        <DropdownMenu
+          visible={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          anchorRect={moreAnchor}
+          testID="session-menu"
+          entries={engine.menuEntries}
+        />
+      ) : null}
 
       {/* 引擎专属浮层宿主（远端 = 五种 Sheet + 会话操作层） */}
       {engine.renderSheets()}
@@ -255,7 +301,7 @@ export function ConversationScreen({
 }
 
 export interface SessionDetailScreenProps {
-  sessionId: string;
+  sessionId?: string | null;
   onOpenRun?: (runId: string) => void;
   onOpenTerminal?: (runId: string) => void;
   /** 打开工具抽屉；focusId 为某组首个工具 id */
@@ -270,20 +316,35 @@ export default function SessionDetailScreen({
   onOpenTools,
 }: SessionDetailScreenProps) {
   const [follow, setFollow] = useState(true);
+
   const handleSent = useCallback(() => {
     setFollow(true);
   }, []);
+
+  // 顶栏 "+"：统一新建协议——双模槽位重置 + 回主页新对话面
+  //（2026-11-05 裁决；旧"就地变草稿"造成 URL 与画面脱钩，废止）
+  const handleNewConversation = useNewConversation();
+
   const engine = useRemoteConversationEngine(
-    sessionId,
+    sessionId ?? '',
     { onOpenRun, onOpenTerminal, onOpenTools },
-    { follow, onSendSuccess: handleSent }
+    {
+      follow,
+      onSendSuccess: handleSent,
+    }
   );
+
   return (
     <ConversationScreen
       engine={engine}
       follow={follow}
       onFollowChange={setFollow}
       onOpenTools={onOpenTools}
+      onNewConversation={() => handleNewConversation({ closeDrawer: false })}
+      // 远端 regenerate：桌面命令面暂无 regenerate 能力（全库核实），
+      // 诚实隐藏入口（canRegenerate=false），待桌面命令立项后经
+      // onRegenerate 通道开启——不造假钮（H6 口径）
+      canRegenerate={false}
     />
   );
 }

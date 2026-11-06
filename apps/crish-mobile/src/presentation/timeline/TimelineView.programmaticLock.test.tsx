@@ -163,12 +163,13 @@ describe('TimelineView 编程式滚动互斥锁（方案 16 钉案）', () => {
     await view.unmount();
   });
 
-  it('传入 floatingOverlayHeight 与 bottomGap 时正确计算 effectiveBottomInset', async () => {
+  it('宿主单一推导的 bottomInset 即 effectiveBottomInset（波 5 收敛）', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
         follow={false}
         onFollowChange={() => undefined}
+        bottomInset={144}
         floatingOverlayHeight={120}
         bottomGap={24}
       />
@@ -184,7 +185,9 @@ describe('TimelineView 编程式滚动互斥锁（方案 16 钉案）', () => {
     // 方案 18：contentContainerStyle.paddingBottom 恒定为 0，防止与 KeyboardChatScrollView 双重叠加
     expect(hit?.paddingBottom).toBe(0);
 
-    // effectiveBottomInset (120 + 24 = 144) 由 extraContentPadding 唯一托管
+    // effectiveBottomInset = 宿主推导值 144（原 120 + 24 的现场推导已
+    // 删除：推导唯一发生在 useTimelineBottomInset，含 minOverlay 保底），
+    // 由 extraContentPadding 唯一托管
     const flatList = view.getByTestId('session-timeline');
     const scrollComponent = flatList.props.renderScrollComponent({
       children: null,

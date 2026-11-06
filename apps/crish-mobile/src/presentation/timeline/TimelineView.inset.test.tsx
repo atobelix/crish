@@ -73,6 +73,7 @@ describe('TimelineView 底部避让与单一真源 (SSOT)', () => {
         follow={false}
         onFollowChange={() => undefined}
         headerClearance={88}
+        bottomInset={152}
         floatingOverlayHeight={132}
         bottomGap={20}
       />
@@ -82,7 +83,10 @@ describe('TimelineView 底部避让与单一真源 (SSOT)', () => {
     expect(paddingBottomOf(view)).toBe(0);
     expect(scrollIndicatorInsetsOf(view)).toEqual({ top: 88, bottom: 0 });
 
-    // 断言 extraContentPadding 接收到 152 (132 + 20)
+    // 断言 extraContentPadding 接收到宿主单一推导的最终值 152
+    //（= 浮层实测 132 + gap 20 由 useTimelineBottomInset 推导后直传
+    // bottomInset；波 5 收敛后列表内不再按 floatingOverlayHeight +
+    // bottomGap 现场二次推导——旧断言的数值不变量保留、输入契约更新）
     expect(extraContentPaddingOf(view)).toBe(152);
     await view.unmount();
   });
@@ -170,19 +174,19 @@ describe('TimelineView 底部避让与单一真源 (SSOT)', () => {
 });
 
 describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
-  let scrollToEndSpy: jest.SpyInstance;
+  let scrollToOffsetSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    scrollToEndSpy = jest
-      .spyOn(require('react-native').FlatList.prototype, 'scrollToEnd')
+    scrollToOffsetSpy = jest
+      .spyOn(require('react-native').FlatList.prototype, 'scrollToOffset')
       .mockImplementation(() => {});
   });
 
   afterEach(() => {
-    scrollToEndSpy.mockRestore();
+    scrollToOffsetSpy.mockRestore();
   });
 
-  it('follow=true 时 onContentSizeChange 触发 scrollToEnd 安排贴底', async () => {
+  it('follow=true 时 onContentSizeChange 经滚动门面 scrollToOffset 安排贴底', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
@@ -192,7 +196,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
     );
 
     // 清空挂载初始调用的记录
-    scrollToEndSpy.mockClear();
+    scrollToOffsetSpy.mockClear();
 
     // 模拟原生 Yoga 测高完成，汇报新的内容高度（如文本折行撑开高度）
     const { act, fireEvent } = require('@testing-library/react-native');
@@ -206,11 +210,11 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       await new Promise((r) => setTimeout(r, 30));
     });
 
-    expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
+    expect(scrollToOffsetSpy).toHaveBeenCalledWith({ offset: expect.any(Number), animated: false });
     await view.unmount();
   });
 
-  it('follow=false 时 onContentSizeChange 不触发 scrollToEnd（避免打扰用户阅读历史）', async () => {
+  it('follow=false 时 onContentSizeChange 不触发 scrollToOffset（避免打扰用户阅读历史）', async () => {
     const view = await wrap(
       <TimelineView
         blocks={blocks}
@@ -219,7 +223,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       />
     );
 
-    scrollToEndSpy.mockClear();
+    scrollToOffsetSpy.mockClear();
 
     const { act, fireEvent } = require('@testing-library/react-native');
     await act(async () => {
@@ -232,7 +236,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       await new Promise((r) => setTimeout(r, 30));
     });
 
-    expect(scrollToEndSpy).not.toHaveBeenCalled();
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
     await view.unmount();
   });
 
@@ -245,7 +249,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       />
     );
 
-    scrollToEndSpy.mockClear();
+    scrollToOffsetSpy.mockClear();
 
     const { act, fireEvent } = require('@testing-library/react-native');
 
@@ -267,8 +271,8 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       await new Promise((r) => setTimeout(r, 30));
     });
 
-    // 严格断言：拖拽期间手势锁定，绝不能调用 scrollToEnd 打断用户
-    expect(scrollToEndSpy).not.toHaveBeenCalled();
+    // 严格断言：拖拽期间手势锁定，绝不能调用 scrollToOffset 打断用户
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
 
     // 3. 用户手指离开屏幕（拖拽结束）
     await act(async () => {
@@ -292,7 +296,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
       await new Promise((r) => setTimeout(r, 30));
     });
 
-    expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
+    expect(scrollToOffsetSpy).toHaveBeenCalledWith({ offset: expect.any(Number), animated: false });
     await view.unmount();
   });
 
@@ -353,7 +357,7 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
     await view.unmount();
   });
 
-  it('自由浏览态下向下滑动贴近底部 <=32dp 时自动重新吸附贴底', async () => {
+  it('自由浏览态下向下滑动贴近底部（真值距离 <=32dp）时自动重新吸附贴底', async () => {
     const onFollowChange = jest.fn();
     const view = await wrap(
       <TimelineView
@@ -365,10 +369,12 @@ describe('TimelineView 原生排版触底与手势保护 (方案 07)', () => {
 
     const { act, fireEvent } = require('@testing-library/react-native');
     await act(async () => {
-      // 向下滑动到距离底部仅 20px（<= 32px 吸附阈值）
+      // B4 真值口径：物理距底 = contentSize + 原生底部内衬(默认 xxl=24) -
+      // (offset + viewport)。此处 1000 + 24 - (796 + 200) = 28 <= 32 吸附。
+      // 旧口径 y=780 在真值语义下距底 52（> 32），不吸附是正确行为。
       fireEvent.scroll(view.getByTestId('session-timeline'), {
         nativeEvent: {
-          contentOffset: { y: 780, x: 0 },
+          contentOffset: { y: 796, x: 0 },
           contentSize: { height: 1000, width: 390 },
           layoutMeasurement: { height: 200, width: 390 },
         },

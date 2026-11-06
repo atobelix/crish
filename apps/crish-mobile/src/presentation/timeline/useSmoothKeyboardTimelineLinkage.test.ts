@@ -1,5 +1,6 @@
 // useSmoothKeyboardTimelineLinkage 动力学控制器单元测试（方案 19 核心）
 import { renderHook } from '@testing-library/react-native';
+import type { FlatList } from 'react-native';
 import { useSmoothKeyboardTimelineLinkage } from './useSmoothKeyboardTimelineLinkage';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scrollTo } from 'react-native-reanimated';
@@ -26,6 +27,7 @@ describe('useSmoothKeyboardTimelineLinkage - 120fps 满帧平滑动力学控制�
         follow: true,
         overlayHeight: 138,
         gap: 20,
+        bottomPadding: 0,
         headerClearance: 112,
       })
     );
@@ -106,6 +108,7 @@ describe('useSmoothKeyboardTimelineLinkage - 120fps 满帧平滑动力学控制�
         follow: true,
         overlayHeight: 138,
         gap: 20,
+        bottomPadding: 0,
         headerClearance: 112,
       })
     );
@@ -150,6 +153,7 @@ describe('useSmoothKeyboardTimelineLinkage - 120fps 满帧平滑动力学控制�
         follow: true,
         overlayHeight: 138,
         gap: 20,
+        bottomPadding: 0,
         headerClearance: 112,
       })
     );
@@ -188,6 +192,7 @@ describe('useSmoothKeyboardTimelineLinkage - 120fps 满帧平滑动力学控制�
         follow: false, // 用户正在翻看历史记录
         overlayHeight: 138,
         gap: 20,
+        bottomPadding: 0,
         headerClearance: 112,
       })
     );
@@ -211,5 +216,123 @@ describe('useSmoothKeyboardTimelineLinkage - 120fps 满帧平滑动力学控制�
       target: 1,
     });
     expect(mockScrollTo).not.toHaveBeenCalled();
+  });
+
+  it('场景 5：防回归 —— useAnimatedRef 跨线程安全句柄与 FlatList 实例协作', async () => {
+    // 模拟 reanimated 的 useAnimatedRef 结构（既是 ref 又是 callable 句柄）
+    const mockFlatListInstance = {
+      scrollToEnd: jest.fn(),
+      scrollToIndex: jest.fn(),
+    } as unknown as FlatList<any>;
+
+    const mockAnimatedRef: any = Object.assign(
+      jest.fn((instance?: any): any => {
+        if (instance !== undefined) {
+          mockAnimatedRef.current = instance;
+        }
+        return mockAnimatedRef.current;
+      }),
+      { current: null }
+    );
+
+    const { result } = await renderHook(() =>
+      useSmoothKeyboardTimelineLinkage(mockAnimatedRef as any, {
+        follow: true,
+        overlayHeight: 138,
+        gap: 20,
+        bottomPadding: 0,
+        headerClearance: 112,
+      })
+    );
+
+    // 模拟 TimelineView 中 handleFlatListRef 组合分发行为
+    const targetRef = { current: null };
+    const internalRef = { current: null };
+    const handleFlatListRef = (instance: any) => {
+      targetRef.current = instance;
+      internalRef.current = instance;
+      if (typeof mockAnimatedRef === 'function') {
+        try {
+          mockAnimatedRef(instance);
+        } catch {
+          mockAnimatedRef.current = instance;
+        }
+      } else if (mockAnimatedRef && typeof mockAnimatedRef === 'object') {
+        mockAnimatedRef.current = instance;
+      }
+    };
+
+    handleFlatListRef(mockFlatListInstance);
+
+    // 验证所有 ref 同步获得实例，且 Worklet 依然持有着安全句柄 mockAnimatedRef
+    expect(targetRef.current).toBe(mockFlatListInstance);
+    expect(internalRef.current).toBe(mockFlatListInstance);
+    expect(mockAnimatedRef.current).toBe(mockFlatListInstance);
+
+    // 验证驱动键盘联动平移时 scrollTo 正确将 animatedRef 作为跨线程安全句柄传递
+    result.current.notifyLayout(800);
+    result.current.notifyContentHeight(1500);
+    result.current.notifyScroll(700, 800, 1500);
+
+    capturedHandler.onStart({
+      height: 300,
+      progress: 0,
+      duration: 250,
+      target: 1,
+    });
+    capturedHandler.onMove({
+      height: 300,
+      progress: 1.0,
+      duration: 250,
+      target: 1,
+    });
+
+    expect(mockScrollTo).toHaveBeenLastCalledWith(
+      mockAnimatedRef,
+      0,
+      1000,
+      false
+    );
+  });
+
+  it('场景 6：触底判定计入原生底部内衬（波 5 原点归正）——真底才有资格、旧原点的误判被拒', async () => {
+    const mockRef = { current: {} } as any;
+    const { result } = await renderHook(() =>
+      useSmoothKeyboardTimelineLinkage(mockRef, {
+        follow: true,
+        overlayHeight: 138,
+        gap: 20,
+        bottomPadding: 158,
+        headerClearance: 112,
+      })
+    );
+
+    // 真底几何：内容 1500、视口 800、内衬 158 → 真底 scrollY =
+    // 1500 + 158 - 800 = 858。此处 distance = 0 <= 48，有推升资格
+    result.current.notifyLayout(800);
+    result.current.notifyContentHeight(1500);
+    result.current.notifyScroll(858, 800, 1500);
+
+    capturedHandler.onStart({
+      height: 300,
+      progress: 0,
+      duration: 250,
+      target: 1,
+    });
+    expect(result.current.isEligibleForLift.value).toBe(true);
+    expect(result.current.maxDisplacement.value).toBe(300);
+
+    // 反例：scrollY = 700（旧原点下 distance = 0 的位置）在新原点下
+    // 距真底 = 1500 + 158 - (700 + 800) = 158dp > 48 —— 用户已上翻
+    // 约一个 inset 读旧文，绝不误判在底而推升（V4 S3 的回归钉）
+    result.current.notifyScroll(700, 800, 1500);
+    capturedHandler.onStart({
+      height: 300,
+      progress: 0,
+      duration: 250,
+      target: 1,
+    });
+    expect(result.current.isEligibleForLift.value).toBe(false);
+    expect(result.current.maxDisplacement.value).toBe(0);
   });
 });
