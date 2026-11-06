@@ -263,13 +263,16 @@ const item = array[^1];
         <MarkdownText
           text={markdown}
           streaming
-          tailGradient
+          tailFade={{
+            births: Array.from({ length: 24 }, () => 10_000),
+            atTime: 10_000,
+          }}
           sources={MOCK_SOURCES}
         />
       );
 
-      // 流式下末端渐阶分段渲染在场
-      expect(screen.getByTestId('tail-tier-0')).toBeTruthy();
+      // 流式下末端时间渐显分段渲染在场
+      expect(screen.getByTestId('tail-fade-0')).toBeTruthy();
     });
 
     it('全文超限降级期 (text > 50,000) 平稳降级不发生崩溃', async () => {

@@ -25,7 +25,7 @@
 //   旧放大值（0.038/0.042/0.068/0.072）与过渡值（0.013/0.019/0.018/0.027）全部列入回潮断言。
 // 本守卫以源码纪律钉住点名面（代码行口径与 roundButton 守卫同：整行注释
 // 剔除），运行时形状由 roundButton 守卫的渲染断言钉住。
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 const ROOT = join(__dirname, '..', '..');
@@ -64,6 +64,10 @@ const NAMED_FILES = [
   'src/presentation/ui/pressFeedback.tsx',
   'src/presentation/ui/Toast.tsx',
   'src/presentation/ui/VoiceOverlay.tsx',
+  // 流式渐显族（2026-11-05 textShadow 发虚事故回归点名面）
+  'src/domain/pure/markdown/temporalFade.ts',
+  'src/presentation/components/blocks/StreamingText.tsx',
+  'src/presentation/components/blocks/StreamingTailText.tsx',
 ] as const;
 
 const BANNED: ReadonlyArray<{ pattern: RegExp; label: string }> = [
@@ -74,6 +78,10 @@ const BANNED: ReadonlyArray<{ pattern: RegExp; label: string }> = [
   {
     pattern: /\bshadow(Opacity|Color|Radius|Offset)\b/,
     label: 'shadow* 样式键/读取',
+  },
+  {
+    pattern: /\btextShadow(Color|Radius|Offset)\b/,
+    label: 'textShadow* 文字阴影（2026-11-05 用户裁决：流式渐显为纯透明度合成，零阴影零模糊）',
   },
   {
     pattern: /\.shadow\b/,
@@ -127,6 +135,47 @@ describe('原生阴影守卫：点名面零 elevation / shadow*', () => {
     expect(
       codeOf('src/presentation/components/chat/SessionHeader.tsx')
     ).toMatch(/surfaceRaised/);
+  });
+});
+
+describe('textShadow 全局清零（2026-11-05 流式文字发虚事故防回潮）', () => {
+  // 事故口径：StreamingTailText 曾给流式末梢注入与文字同色的
+  // textShadowRadius 2.5 发光晕，且旧测试正向断言钉死、本守卫的
+  // shadow(Opacity|Color|Radius|Offset) 小写模式匹配不到 textShadow*。
+  // 现行裁决：流式渐显 = 纯透明度合成（对齐 D:\download\ai.html），
+  // 全 src 生产代码零 textShadow*（测试文件除外——测试可断言其缺席）。
+  const TEXT_SHADOW_PATTERN = /\btextShadow(Color|Radius|Offset)\b/;
+
+  function walkSourceFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        out.push(...walkSourceFiles(full));
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+    return out;
+  }
+
+  it('src 全部生产代码（非测试）零 textShadow* 属性', () => {
+    const srcDir = join(ROOT, 'src');
+    const offenders: string[] = [];
+    for (const file of walkSourceFiles(srcDir)) {
+      // 测试文件豁免：它们承担"断言 textShadow 缺席"的职责，字面量合法
+      if (file.includes('__tests__') || /\.test\.(ts|tsx)$/.test(file)) {
+        continue;
+      }
+      const code = readFileSync(file, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+        .join('\n');
+      if (TEXT_SHADOW_PATTERN.test(code)) {
+        offenders.push(file);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

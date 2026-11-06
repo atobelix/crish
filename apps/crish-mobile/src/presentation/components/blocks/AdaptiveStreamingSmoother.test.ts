@@ -298,6 +298,165 @@ describe('AdaptiveStreamingSmoother 纯逻辑平准引擎', () => {
     });
   });
 
+  describe('6. 出生登记（birthTime：游标推进决定，亚帧插值）', () => {
+    function makeSmoother(commits: string[]) {
+      return new AdaptiveStreamingSmoother((text) => commits.push(text), {
+        now: scheduler.now,
+        requestAnimationFrame: scheduler.requestAnimationFrame,
+        cancelAnimationFrame: scheduler.cancelAnimationFrame,
+      });
+    }
+
+    it('首发字素的出生时刻 = 发射时刻；后续字素随游标推进逐个登记且单调不减', () => {
+      const commits: string[] = [];
+      const smoother = makeSmoother(commits);
+      scheduler.currentTime = 1000;
+      smoother.updateTarget('平准游标逐字揭示的长文本内容', true);
+
+      const initial = smoother.getTailBirths(64);
+      expect(initial.length).toBe(2); // 首发 2 字素
+      expect(initial.every((b) => b === 1000)).toBe(true);
+
+      for (let i = 0; i < 10; i++) {
+        scheduler.advance(32);
+      }
+      const births = smoother.getTailBirths(64);
+      expect(births.length).toBe(smoother.getDisplayedLength());
+      expect(births.length).toBeGreaterThan(2);
+      for (let i = 1; i < births.length; i++) {
+        expect(births[i]!).toBeGreaterThanOrEqual(births[i - 1]!);
+      }
+      // 后出生的字素出生时刻晚于首发时刻（时间口径，非位置口径）
+      expect(births[births.length - 1]!).toBeGreaterThan(1000);
+      smoother.reset();
+    });
+
+    it('单步内多字素越过时，出生时刻在该步时间窗内插值（亚帧）', () => {
+      const commits: string[] = [];
+      const smoother = makeSmoother(commits);
+      scheduler.currentTime = 1000;
+      smoother.updateTarget('abcdefghij', true);
+      expect(smoother.getTailBirths(64)).toEqual([1000, 1000]);
+
+      // 手动单步：100ms 后游标越过第 3 个字素，其出生时刻应落在本步窗内
+      smoother.step(1100);
+      const births = smoother.getTailBirths(64);
+      expect(births.length).toBeGreaterThanOrEqual(3);
+      expect(births[2]!).toBeGreaterThan(1000);
+      expect(births[2]!).toBeLessThan(1100);
+      smoother.reset();
+    });
+
+    it('节奏均匀性口径：流式期任一 32ms 步内揭示量有界（≤ ⌈70×0.032⌉）', () => {
+      const commits: string[] = [];
+      const smoother = makeSmoother(commits);
+      const burst = '节奏'.repeat(250); // 500 字突发
+      smoother.updateTarget(burst, true);
+      let prev = smoother.getDisplayedLength();
+      // 以 32ms 定步推进约 1.9 秒：逐步断言揭示增量不越界（封顶速度的时间积分）
+      for (let i = 0; i < 60; i++) {
+        scheduler.advance(32);
+        const now = smoother.getDisplayedLength();
+        expect(now - prev).toBeLessThanOrEqual(3);
+        prev = now;
+      }
+      // 总量同样受封顶速度约束（70 字/秒 × 1.92s + 首发余量），且确实在匀速推进
+      expect(prev).toBeLessThanOrEqual(2 + Math.ceil(70 * 1.92));
+      expect(prev).toBeGreaterThanOrEqual(60);
+      smoother.reset();
+    });
+
+    it('文本揭示完毕但渐显未走完：继续产出渐显帧，全部固化后才停钟', () => {
+      const commits: string[] = [];
+      const smoother = makeSmoother(commits);
+      scheduler.currentTime = 1000;
+      smoother.updateTarget('短句', true);
+
+      // 推进至全文揭示（'短句' 2 字首发即全量）后，渐显仍在 560ms 窗内
+      expect(smoother.getDisplayedLength()).toBe(2);
+      const commitsAfterReveal = commits.length;
+      scheduler.advance(32);
+      // 文本不变但仍有新提交（渐显帧）且滴答存续
+      expect(commits.length).toBeGreaterThan(commitsAfterReveal);
+      expect(commits[commits.length - 1]).toBe('短句');
+      expect(smoother.isTicking()).toBe(true);
+
+      // 推进到全部出生登记过期（> 560ms）后停钟
+      for (let i = 0; i < 25; i++) {
+        scheduler.advance(32);
+      }
+      expect(smoother.isTicking()).toBe(false);
+      smoother.reset();
+    });
+  });
+
+  describe('7. 种子化（seed：挂载不重打）', () => {
+    it('seed 全文即已揭示；末尾窗口带年龄梯度出生登记、窗口外无登记', () => {
+      const commits: string[] = [];
+      const smoother = new AdaptiveStreamingSmoother(
+        (text) => commits.push(text),
+        {
+          now: scheduler.now,
+          requestAnimationFrame: scheduler.requestAnimationFrame,
+          cancelAnimationFrame: scheduler.cancelAnimationFrame,
+        }
+      );
+      scheduler.currentTime = 5000;
+      const text = '种'.repeat(100);
+      smoother.seed(text, true);
+
+      expect(smoother.getDisplayedLength()).toBe(100);
+      expect(smoother.getSnapshot().text).toBe(text);
+      const births = smoother.getTailBirths(64);
+      expect(births.length).toBe(64); // 分段窗口（40 渐显 + 24 余量）
+      const stamped = births.filter((b) => b !== null);
+      expect(stamped.length).toBe(40); // 仅渐显窗口内合成出生登记
+      // 年龄梯度：旧→新递增、最旧者在 560ms 窗口内、最末者接近当前时刻
+      for (let i = 1; i < stamped.length; i++) {
+        expect(stamped[i]!).toBeGreaterThanOrEqual(stamped[i - 1]!);
+      }
+      expect(stamped[0]!).toBeGreaterThanOrEqual(5000 - 560);
+      expect(stamped[stamped.length - 1]!).toBeLessThanOrEqual(5000);
+      smoother.reset();
+    });
+
+    it('seed 非流式：无出生登记、无滴答（终态纯文本）', () => {
+      const smoother = new AdaptiveStreamingSmoother(() => {}, {
+        now: scheduler.now,
+        requestAnimationFrame: scheduler.requestAnimationFrame,
+        cancelAnimationFrame: scheduler.cancelAnimationFrame,
+      });
+      smoother.seed('静态全文', false);
+      expect(smoother.getTailBirths(64).every((b) => b === null)).toBe(true);
+      expect(smoother.isTicking()).toBe(false);
+      smoother.reset();
+    });
+
+    it('seed 后追加文本进入平准揭示并获得新鲜出生登记', () => {
+      const commits: string[] = [];
+      const smoother = new AdaptiveStreamingSmoother(
+        (text) => commits.push(text),
+        {
+          now: scheduler.now,
+          requestAnimationFrame: scheduler.requestAnimationFrame,
+          cancelAnimationFrame: scheduler.cancelAnimationFrame,
+        }
+      );
+      scheduler.currentTime = 5000;
+      const base = '基'.repeat(50);
+      smoother.seed(base, true);
+      smoother.updateTarget(base + '新增内容继续生成', true);
+      for (let i = 0; i < 30; i++) {
+        scheduler.advance(32);
+      }
+      expect(smoother.getDisplayedLength()).toBe(base.length + 8);
+      const births = smoother.getTailBirths(64);
+      // 末尾新字素的出生时刻为揭示当下（≥ seed 时刻），非种子合成的旧时刻
+      expect(births[births.length - 1]!).toBeGreaterThanOrEqual(5000);
+      smoother.reset();
+    });
+  });
+
   describe('5. 生命周期与重置机制', () => {
     it('reset 清理状态，新条目接入时无残留干扰', () => {
       const commits: string[] = [];

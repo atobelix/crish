@@ -1,140 +1,99 @@
-// 流式文本渲染节流与平准 hook（R2UX-05-02 渲染节流 + 方案 04 自适应打字平准器）：
-// - 双模架构兼顾：
-//   1. 自适应打字平准模式（smooth=true 或配置平准参数）：接入 AdaptiveStreamingSmoother，
-//      基于 Token 缓冲池、人体黄金阅读速度（25~45 chars/s，上限 70 chars/s）、惯性低通加减速滤波器
-//      与 Unicode 字符簇保护，由 requestAnimationFrame 物理时钟驱动丝滑推进；
-//   2. 经典窗口合并模式（smooth=false 缺省）：由 PreviewFlushScheduler 承载 18ms 滚动窗口与 100ms
-//      强制刷新边界，保持完全向后兼容；
-// - 终态收口（streaming=false）：平滑泄洪或立即交付，确保 100% 文本完整呈现，无残留旧帧覆盖；
-// - 条目键变化（identity 切换）：同步复位重显新文本，清空旧帧；
-// - 首次挂载立即渲染（首帧不延迟，避免空白闪烁）；
-// - 卸载清理：组件退场即退订，重置平准器与调度器，清除动画帧与定时器句柄。
-
+// 流式文本呈现节拍 hook（波 6 达标步收敛：单一平准路径）
+// - 唯一时钟：AdaptiveStreamingSmoother 的浮点游标同时决定「揭示什么、何时
+//   揭示」与每个字素的 birthTime（时间渐显与节奏共用同一游标，无第二套节拍）；
+// - 生产默认即平准路径，不存在模式开关：到达的全文先入缓冲池，按人体阅读
+//   速度（基线 32 字/秒、封顶 70 字/秒，惯性加减速）匀速揭示，网络抖动被
+//   吸收为速度变化而非整段跳变；
+// - 挂载 / 条目切换先种子化：已在屏上的全文视为已揭示（不重打），仅末尾
+//   渐显窗口带合成出生时刻，其后新增文本才进入平准揭示；
+// - 终态（streaming=false）：平准器进入泄洪（100–280ms）收敛至 100% 全文，
+//   泄洪期调用方以「呈现文本 ≠ 目标全文」识别追赶态、维持流式分治与渐显；
+// - 卸载清理：组件退场即重置平准器（清 rAF 与状态），无残留回调。
 import { useEffect, useRef, useState } from 'react';
-import { PreviewFlushScheduler } from '@/domain/pure/previewFlushScheduler';
+import type { TailFadeFrame } from '@/domain/pure/markdown/temporalFade';
 import {
   AdaptiveStreamingSmoother,
   type SmootherOptions,
 } from './AdaptiveStreamingSmoother';
 
-export interface UseStreamingTextOptions extends SmootherOptions {
-  /** 合并窗口（ms，缺省 18；≤0 同步渲染旁路，非 smooth 模式生效） */
-  mergeWindowMs?: number;
-  /** 强制刷新边界（ms，缺省 100，非 smooth 模式生效） */
-  maxWaitMs?: number;
-  /** 是否启用自适应匀速平准器（为保持历史单测与调用无缝兼容，显式指定 smooth=true 或平准参数时激活） */
-  smooth?: boolean;
+/** 呈现帧：渲染文本与尾部渐显帧同源同钟（同一次平准提交产出） */
+export interface StreamingTextFrame {
+  /** 当前应渲染的文本（平准游标已揭示部分，恒为目标全文的前缀） */
+  text: string;
+  /** 尾部时间渐显帧：出生登记 + 本帧时刻（与 birthTime 同时钟） */
+  tailFade: TailFadeFrame;
+}
+
+/** 平准参数（速度档位 / 提交节流 / 时钟注入）；构造期生效，运行中变更不追溯 */
+export type UseStreamingTextOptions = SmootherOptions;
+
+function snapshotFrame(
+  smoother: AdaptiveStreamingSmoother
+): StreamingTextFrame {
+  const snap = smoother.getSnapshot();
+  return {
+    text: snap.text,
+    tailFade: { births: snap.tailBirths, atTime: snap.atTime },
+  };
 }
 
 /**
- * 流式文本渲染 Hook：
- * @param identity 条目稳定键（同 seq 覆盖保持不变；变化 = 新条目，立即渲染）
- * @param latestText 数据面最新全文（preview 帧覆盖式，每次帧更新都会变化）
- * @param streaming 流式期标记（false = 终态已到：终值收敛交付 + 清空调度）
- * @param options 调度与平准参数（支持 smooth / 窗口合并双模式配置）
- * @returns 渲染用文本
+ * 流式文本呈现 Hook：
+ * @param identity 条目稳定键（同 seq 覆盖保持不变；变化 = 新条目，立即种子化）
+ * @param latestText 数据面最新全文（preview 帧覆盖式）
+ * @param streaming 流式期标记（false = 终态已到：泄洪收敛至全文）
+ * @param options 平准参数
+ * @returns 呈现帧（渲染文本 + 尾部渐显帧）
  */
 export function useStreamingText(
   identity: string,
   latestText: string,
   streaming: boolean,
   options: UseStreamingTextOptions = {}
-): string {
-  const isSmooth = Boolean(
-    options.smooth ||
-    options.minCharsPerSec !== undefined ||
-    options.baseCharsPerSec !== undefined ||
-    options.fastCharsPerSec !== undefined ||
-    options.maxCharsPerSec !== undefined ||
-    options.commitThrottleMs !== undefined
-  );
-
-  const [rendered, setRendered] = useState(latestText);
-  // 前一渲染条目键（React 官方「存储上一次渲染信息」模式：渲染期对比 → 同步调整状态）
-  const [prevIdentity, setPrevIdentity] = useState(identity);
-
-  const schedulerRef = useRef<PreviewFlushScheduler | null>(null);
+): StreamingTextFrame {
+  // 平准器单例（渲染期惰性构造，与本文件旧实现同款纪律；构造参数首帧生效）
   const smootherRef = useRef<AdaptiveStreamingSmoother | null>(null);
-
-  if (isSmooth) {
-    if (smootherRef.current === null) {
-      smootherRef.current = new AdaptiveStreamingSmoother(
-        (text) => setRendered(text),
-        options
-      );
-    }
-  } else {
-    if (schedulerRef.current === null) {
-      schedulerRef.current = new PreviewFlushScheduler(
-        (_key, value) => setRendered(value),
-        options
-      );
-    }
+  if (smootherRef.current === null) {
+    const smoother = new AdaptiveStreamingSmoother(() => {
+      setFrame(snapshotFrame(smoother));
+    }, options);
+    smoother.seed(latestText, streaming);
+    smootherRef.current = smoother;
   }
+  const smoother = smootherRef.current;
 
-  // 卸载清理：清空定时器与 pending / rAF（组件退场即退订，M4 §8.2 后台节能条款）
+  const [frame, setFrame] = useState<StreamingTextFrame>(() =>
+    snapshotFrame(smoother)
+  );
+  const [prevIdentity, setPrevIdentity] = useState(identity);
+  const seededIdentityRef = useRef(identity);
+
+  // 数据面推入：挂载首帧已在构造期种子化；条目切换已在渲染期种子化，
+  // effect 只需同步条目键，其余情形把最新全文推给平准器
+  useEffect(() => {
+    if (seededIdentityRef.current !== identity) {
+      seededIdentityRef.current = identity;
+      return;
+    }
+    smoother.updateTarget(latestText, streaming);
+  }, [smoother, identity, latestText, streaming]);
+
+  // 卸载清理：退订平准器（清 rAF），无残留回调
   useEffect(() => {
     return () => {
-      schedulerRef.current?.reset();
-      smootherRef.current?.reset();
+      smoother.reset();
     };
-  }, []);
+  }, [smoother]);
 
-  // 平准器流态推入（仅在 isSmooth 模式生效，严格保证 Hook 顶层无条件调用）
-  useEffect(() => {
-    if (!isSmooth) return;
-    smootherRef.current?.updateTarget(latestText, streaming);
-  }, [isSmooth, latestText, streaming]);
-
-  // 新条目（键变化）：立即渲染其文本（不闪烁），清空旧条目的待渲染帧/平准器状态
+  // 新条目（键变化）：立即种子化新全文（不闪烁、不重打），旧状态全清
   if (identity !== prevIdentity) {
     setPrevIdentity(identity);
-    schedulerRef.current?.reset();
-    smootherRef.current?.reset();
-    if (latestText !== rendered) {
-      setRendered(latestText);
-    }
-    return latestText;
+    smoother.reset();
+    smoother.seed(latestText, streaming);
+    const snap = snapshotFrame(smoother);
+    setFrame(snap);
+    return snap;
   }
 
-  // ===== 平准器模式（smooth=true）=====
-  if (isSmooth) {
-    return rendered;
-  }
-
-  // ===== 经典窗口合并模式（PreviewFlushScheduler 兼容路径）=====
-  const scheduler = schedulerRef.current!;
-
-  if (!streaming) {
-    // 终值替换（流式结束 / 终态覆盖）：最新全文立即渲染，清空调度——
-    // 残留 pending 也必须清掉（防止旧帧延迟回调覆盖终值，不闪烁不跳动）
-    if (latestText !== rendered) {
-      setRendered(latestText);
-    }
-    if (scheduler.pendingCount() > 0 || scheduler.isScheduled()) {
-      scheduler.reset();
-    }
-    return rendered;
-  }
-
-  // 流式期：最新文本变化 → 推进度给调度器（窗口内合并；首帧 rendered=latest 不推）
-  if (latestText !== rendered) {
-    scheduler.push(identity, latestText);
-  }
-  return rendered;
-}
-
-/**
- * 自适应打字平准 Hook（便捷快捷入口，默认开启 smooth=true）
- */
-export function useAdaptiveStreamingText(
-  identity: string,
-  latestText: string,
-  streaming: boolean,
-  options: Omit<UseStreamingTextOptions, 'smooth'> = {}
-): string {
-  return useStreamingText(identity, latestText, streaming, {
-    ...options,
-    smooth: true,
-  });
+  return frame;
 }

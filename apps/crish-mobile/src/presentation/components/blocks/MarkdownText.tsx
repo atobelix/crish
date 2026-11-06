@@ -58,6 +58,7 @@ import { AppText, Icon } from '@/presentation/ui';
 import { MarkdownImage } from './MarkdownImage';
 import { WebContentBlock } from './WebContentBlock';
 import { StreamingTailText } from './StreamingTailText';
+import type { TailFadeFrame } from '@/domain/pure/markdown/temporalFade';
 import { CitationPill } from './CitationPill';
 import type { WebSearchSource } from '@crish/shared-types';
 import { parseMessageCitations } from '@crish/shared-utils';
@@ -69,8 +70,8 @@ export interface MarkdownTextProps {
   text: string;
   /** 流式期：走草稿分治（封口块定型 + 尾块分治）；false = 终态全量解析 */
   streaming?: boolean;
-  /** 是否开启末端模糊渐显 (缺省 false；由 StreamingText 显式传入控制) */
-  tailGradient?: boolean;
+  /** 末端时间渐显帧（出生登记 + 帧时刻；缺省 null = 不渐显，由 StreamingText 透传） */
+  tailFade?: TailFadeFrame | null;
   /** 正文基础样式（缺省 theme.type.chat + textPrimary；气泡等场景由调用方透传既有 Text 样式） */
   baseStyle?: StyleProp<TextStyle>;
   /** 流式光标符号（由 StreamingText 透传；落在最后一个块的末尾） */
@@ -131,7 +132,7 @@ function blockSignature(block: MdBlock): string {
 export function MarkdownText({
   text,
   streaming = false,
-  tailGradient = false,
+  tailFade = null,
   baseStyle,
   cursorSymbol,
   cursorTestID,
@@ -142,7 +143,8 @@ export function MarkdownText({
   highlightedCitationIndex,
 }: MarkdownTextProps) {
   const theme = useTheme();
-  const degraded = text.length > MARKDOWN_DEGRADE_THRESHOLD;
+  const safeText = typeof text === 'string' ? text : '';
+  const degraded = safeText.length > MARKDOWN_DEGRADE_THRESHOLD;
 
   // sealedCount：流式期前 sealedCount 块为封口块（最终形态，可高亮 /
   // WebView 化)，其后为生长尾块（保持原文呈现，批 E 封口教义）；静态期全封口
@@ -152,15 +154,15 @@ export function MarkdownText({
   } => {
     if (degraded) return { blocks: null, sealedCount: 0 };
     if (streaming) {
-      const prepared = prepareStreamingMarkdown(text);
+      const prepared = prepareStreamingMarkdown(safeText);
       return {
         blocks: [...prepared.sealed, ...prepared.tail],
         sealedCount: prepared.sealed.length,
       };
     }
-    const all = parseMarkdown(text);
+    const all = parseMarkdown(safeText);
     return { blocks: all, sealedCount: all.length };
-  }, [text, streaming, degraded]);
+  }, [safeText, streaming, degraded]);
 
   const flatBase = useMemo(
     () => (baseStyle ? StyleSheet.flatten(baseStyle) : undefined),
@@ -195,9 +197,10 @@ export function MarkdownText({
         </AppText>
         <StreamingTailText
           selectable
-          text={text}
+          text={safeText}
           streaming={streaming}
-          tailGradient={tailGradient}
+          tailFade={tailFade}
+          color={ctx.color}
           style={[theme.type.chat, { color: ctx.color }, flatBase]}
         />
         {cursorBox.node}
@@ -218,7 +221,7 @@ export function MarkdownText({
             block={block}
             ctx={ctx}
             sealed={index < sealedCount}
-            tailGradient={isLast && streaming ? tailGradient : false}
+            tailFade={isLast && streaming ? tailFade : null}
             cursorBox={isLast && cursorInline ? cursorBox : null}
           />
         );
@@ -236,13 +239,13 @@ const MarkdownBlockView = memo(
     ctx,
     cursorBox,
     sealed,
-    tailGradient,
+    tailFade,
   }: {
     block: MdBlock;
     ctx: RenderCtx;
     cursorBox: CursorBox | null;
     sealed: boolean;
-    tailGradient?: boolean;
+    tailFade?: TailFadeFrame | null;
   }) {
     return (
       <BlockNode
@@ -250,7 +253,7 @@ const MarkdownBlockView = memo(
         ctx={ctx}
         cursorBox={cursorBox}
         sealed={sealed}
-        tailGradient={tailGradient}
+        tailFade={tailFade}
       />
     );
   },
@@ -262,7 +265,7 @@ const MarkdownBlockView = memo(
     prev.ctx.onCitationPress === next.ctx.onCitationPress &&
     prev.ctx.highlightedCitationIndex === next.ctx.highlightedCitationIndex &&
     prev.sealed === next.sealed &&
-    prev.tailGradient === next.tailGradient &&
+    prev.tailFade === next.tailFade &&
     (prev.cursorBox?.node ?? null) === (next.cursorBox?.node ?? null)
 );
 
@@ -271,13 +274,13 @@ function BlockNode({
   ctx,
   cursorBox,
   sealed,
-  tailGradient,
+  tailFade,
 }: {
   block: MdBlock;
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
-  tailGradient?: boolean;
+  tailFade?: TailFadeFrame | null;
 }) {
   const theme = useTheme();
   switch (block.type) {
@@ -297,11 +300,7 @@ function BlockNode({
       }
       return (
         <Text style={[theme.type.chat, { color: ctx.color }]}>
-          <SpanNodes
-            spans={block.spans}
-            ctx={ctx}
-            tailGradient={tailGradient}
-          />
+          <SpanNodes spans={block.spans} ctx={ctx} tailFade={tailFade} />
           {consumeCursor(cursorBox)}
         </Text>
       );
@@ -309,11 +308,7 @@ function BlockNode({
     case 'heading':
       return (
         <Text style={[headingStyle(theme, block.level), { color: ctx.color }]}>
-          <SpanNodes
-            spans={block.spans}
-            ctx={ctx}
-            tailGradient={tailGradient}
-          />
+          <SpanNodes spans={block.spans} ctx={ctx} tailFade={tailFade} />
           {consumeCursor(cursorBox)}
         </Text>
       );
@@ -342,7 +337,7 @@ function BlockNode({
           lang={block.lang}
           text={block.text}
           sealed={sealed}
-          tailGradient={tailGradient}
+          tailFade={tailFade}
         />
       );
     case 'list':
@@ -354,7 +349,7 @@ function BlockNode({
           ctx={ctx}
           cursorBox={cursorBox}
           sealed={sealed}
-          tailGradient={tailGradient}
+          tailFade={tailFade}
         />
       );
     case 'quote':
@@ -364,7 +359,7 @@ function BlockNode({
           ctx={ctx}
           cursorBox={cursorBox}
           sealed={sealed}
-          tailGradient={tailGradient}
+          tailFade={tailFade}
         />
       );
     case 'table':
@@ -417,17 +412,21 @@ function headingStyle(theme: Theme, level: 1 | 2 | 3 | 4 | 5 | 6): TextStyle {
 function SpanNodes({
   spans,
   ctx,
-  tailGradient,
+  tailFade,
+  textColor,
 }: {
   spans: MdSpan[];
   ctx: RenderCtx;
-  tailGradient?: boolean;
+  tailFade?: TailFadeFrame | null;
+  /** 当前行内层级实际生效的文字色（link 层覆盖为品牌色；渐显 alpha 由此派生） */
+  textColor?: ColorValue;
 }) {
   const theme = useTheme();
+  const effectiveColor = textColor ?? ctx.color;
 
   // 若开启末端渐显，定位到最后一个可承载渐变的 text span
   let lastTextSpanIndex = -1;
-  if (tailGradient) {
+  if (tailFade) {
     for (let i = spans.length - 1; i >= 0; i--) {
       if (spans[i]!.type === 'text') {
         lastTextSpanIndex = i;
@@ -442,13 +441,14 @@ function SpanNodes({
         const isLastSpan = index === spans.length - 1;
         switch (span.type) {
           case 'text': {
-            if (tailGradient && index === lastTextSpanIndex) {
+            if (tailFade && index === lastTextSpanIndex) {
               return (
                 <StreamingTailText
                   key={index}
                   text={span.text}
                   streaming
-                  tailGradient
+                  tailFade={tailFade}
+                  color={effectiveColor}
                 />
               );
             }
@@ -504,7 +504,8 @@ function SpanNodes({
                 <SpanNodes
                   spans={span.children}
                   ctx={ctx}
-                  tailGradient={isLastSpan ? tailGradient : false}
+                  tailFade={isLastSpan ? tailFade : null}
+                  textColor={effectiveColor}
                 />
               </Text>
             );
@@ -514,7 +515,8 @@ function SpanNodes({
                 <SpanNodes
                   spans={span.children}
                   ctx={ctx}
-                  tailGradient={isLastSpan ? tailGradient : false}
+                  tailFade={isLastSpan ? tailFade : null}
+                  textColor={effectiveColor}
                 />
               </Text>
             );
@@ -524,7 +526,8 @@ function SpanNodes({
                 <SpanNodes
                   spans={span.children}
                   ctx={ctx}
-                  tailGradient={isLastSpan ? tailGradient : false}
+                  tailFade={isLastSpan ? tailFade : null}
+                  textColor={effectiveColor}
                 />
               </Text>
             );
@@ -563,7 +566,8 @@ function SpanNodes({
                 <SpanNodes
                   spans={span.children}
                   ctx={ctx}
-                  tailGradient={isLastSpan ? tailGradient : false}
+                  tailFade={isLastSpan ? tailFade : null}
+                  textColor={theme.colors.brand}
                 />
               </Text>
             );
@@ -599,7 +603,7 @@ interface CodeBlockProps {
   lang: string | null;
   text: string;
   sealed: boolean;
-  tailGradient?: boolean;
+  tailFade?: TailFadeFrame | null;
 }
 
 /** 代码块：定型容器（亮度台阶底、无边框）+ 常驻顶栏（语言标签 + 14dp 复制按钮）
@@ -609,7 +613,7 @@ const CodeBlock = memo(function CodeBlock({
   lang,
   text,
   sealed,
-  tailGradient,
+  tailFade,
 }: CodeBlockProps) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
@@ -731,11 +735,12 @@ const CodeBlock = memo(function CodeBlock({
                   token.text
                 );
               })
-            ) : tailGradient ? (
+            ) : tailFade ? (
               <StreamingTailText
                 text={text}
                 streaming
-                tailGradient
+                tailFade={tailFade}
+                color={theme.colors.textPrimary}
                 style={[theme.type.mono, { color: theme.colors.textPrimary }]}
               />
             ) : (
@@ -786,7 +791,7 @@ function ListBlock({
   ctx,
   cursorBox,
   sealed,
-  tailGradient,
+  tailFade,
 }: {
   ordered: boolean;
   start: number;
@@ -794,7 +799,7 @@ function ListBlock({
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
-  tailGradient?: boolean;
+  tailFade?: TailFadeFrame | null;
 }) {
   const theme = useTheme();
   return (
@@ -840,7 +845,7 @@ function ListBlock({
                     block={child}
                     ctx={ctx}
                     sealed={sealed}
-                    tailGradient={isLastChild ? tailGradient : false}
+                    tailFade={isLastChild ? tailFade : null}
                     cursorBox={isLastChild ? cursorBox : null}
                   />
                 );
@@ -859,13 +864,13 @@ function QuoteBlock({
   ctx,
   cursorBox,
   sealed,
-  tailGradient,
+  tailFade,
 }: {
   blocks: MdBlock[];
   ctx: RenderCtx;
   cursorBox: CursorBox | null;
   sealed: boolean;
-  tailGradient?: boolean;
+  tailFade?: TailFadeFrame | null;
 }) {
   const theme = useTheme();
   const quoteCtx: RenderCtx = {
@@ -893,7 +898,7 @@ function QuoteBlock({
               block={child}
               ctx={quoteCtx}
               sealed={sealed}
-              tailGradient={isLastChild ? tailGradient : false}
+              tailFade={isLastChild ? tailFade : null}
               cursorBox={isLastChild ? cursorBox : null}
             />
           );

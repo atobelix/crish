@@ -1,10 +1,11 @@
-// StreamingText 组件单测（R2UX-05-02 流式文本渲染面）：
-// - preview 渐进渲染：流式期文本按窗口合并渐进更新（只跳最新值）；
-// - 光标位置：静态「▍」恒定置于流式文本尾部（R2UX §2.6-3 / 裁决 A3）；
-// - 终值替换：streaming=false 立即渲染终值 + 光标消失（同节点更新，无闪烁）；
-// - 节流调度：帧合并次数 / 强制刷新 / 终值 flush 在组件面验证。
+// StreamingText 组件单测（波 6 达标步：单一平准路径 + 时间渐显）
+// - 平准揭示：流式期文本经平准游标匀速揭示（缓冲池吸收网络抖动），
+//   不整段跳变到最新值；
+// - 种子化：挂载即呈现已到达全文（不重打），光标恒定置于尾部；
+// - 终态：streaming=false 后泄洪收敛（≤ 约 300ms）至全文 + 光标消失；
+// - 末端时间渐显默认开启：尾部分段以 color alpha 渲染（无节点 opacity)，
+//   终态分段销毁；tailFade=false 回退传统静态光标。
 // 注：RNTL v14 的 rerender / act 均为异步 API（须 await）；
-//     rerender 取自 render 返回值（screen 仅提供查询面）；
 //     byText 匹配递归文本内容（外层 Text 含光标子节点 → 断言用组合串）。
 import { act, render, screen } from '@testing-library/react-native';
 import {
@@ -25,7 +26,7 @@ async function renderStreaming(overrides: Partial<StreamingTextProps> = {}) {
   );
 }
 
-describe('preview 渐进渲染（R2UX-05-02）', () => {
+describe('平准揭示（单一平准路径）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -33,7 +34,7 @@ describe('preview 渐进渲染（R2UX-05-02）', () => {
     jest.useRealTimers();
   });
 
-  it('首帧立即显示 + 光标在尾部', async () => {
+  it('首帧立即显示（种子化）+ 光标在尾部', async () => {
     await renderStreaming();
     expect(screen.getByTestId(PROPS.testID)).toBeTruthy();
     // 流式期正文 = 文本 + 前置空格 + 光标（组合串匹配）
@@ -41,33 +42,34 @@ describe('preview 渐进渲染（R2UX-05-02）', () => {
     expect(screen.getByTestId(PROPS.cursorTestID)).toBeTruthy();
   });
 
-  it('窗口内多帧合并：文本保持旧帧，窗口到期后跳到最新值', async () => {
-    const { rerender } = await renderStreaming();
-    await rerender(<StreamingText {...PROPS} text="帧2" streaming />);
-    await rerender(<StreamingText {...PROPS} text="帧3" streaming />);
-    expect(screen.getByText(`首帧 ${STREAMING_CURSOR}`)).toBeTruthy(); // 窗口未到期
-    await act(async () => {
-      jest.advanceTimersByTime(18);
-    });
-    expect(screen.getByText(`帧3 ${STREAMING_CURSOR}`)).toBeTruthy(); // 一次跳到最新值
-    expect(screen.queryByText(`首帧 ${STREAMING_CURSOR}`)).toBeNull();
-    expect(screen.queryByText(`帧2 ${STREAMING_CURSOR}`)).toBeNull(); // 中间帧被合并
-  });
+  it('突发长文不整段跳变：游标追完积压后才完整呈现', async () => {
+    const burst = '起' + '突发到达的长文本内容'.repeat(20); // 201 字
+    const { rerender } = await render(
+      <StreamingText identity="seq:burst" text="起" streaming testID="burst" />
+    );
+    await rerender(
+      <StreamingText
+        identity="seq:burst"
+        text={burst}
+        streaming
+        testID="burst"
+      />
+    );
 
-  it('连续帧流：maxWaitMs 内至少渲染一次（强制刷新边界）', async () => {
-    const { rerender } = await renderStreaming();
-    for (let i = 0; i < 12; i += 1) {
-      await act(async () => {
-        jest.advanceTimersByTime(10);
-      });
-      await rerender(<StreamingText {...PROPS} text={`帧${i}`} streaming />);
-    }
-    // 本波首帧 +100ms 强制刷新交付当时最新值（帧9）；帧流暂停后窗口 flush 帧11
-    expect(screen.getByText(`帧9 ${STREAMING_CURSOR}`)).toBeTruthy();
     await act(async () => {
-      jest.advanceTimersByTime(18);
+      jest.advanceTimersByTime(100);
     });
-    expect(screen.getByText(`帧11 ${STREAMING_CURSOR}`)).toBeTruthy();
+    // 100ms 内仅揭示封顶速度内的一小段，全文尚未出现（旧整段替换会立即全显）
+    expect(screen.queryByText(burst)).toBeNull();
+
+    // 持续推进：游标匀速追赶，最终完整呈现（呈现恒为全文的忠实渲染）
+    for (let i = 0; i < 40; i++) {
+      await act(async () => {
+        jest.advanceTimersByTime(200);
+      });
+      if (screen.queryByText(burst)) break;
+    }
+    expect(screen.getByText(burst)).toBeTruthy();
   });
 });
 
@@ -104,7 +106,7 @@ describe('光标（R2UX §2.6-3 / 裁决 A3：静态 ▍ 置于流式文本尾�
   });
 });
 
-describe('终值替换（不闪烁不跳动：同节点更新）', () => {
+describe('终态收敛（泄洪至全文，同节点更新）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -112,31 +114,34 @@ describe('终值替换（不闪烁不跳动：同节点更新）', () => {
     jest.useRealTimers();
   });
 
-  it('流式结束：终值立即渲染 + 光标消失', async () => {
+  it('流式结束：泄洪收敛后终值完整渲染 + 光标消失', async () => {
     const { rerender } = await renderStreaming();
     await rerender(
       <StreamingText {...PROPS} text="最终全文" streaming={false} />
     );
-    expect(screen.getByText('最终全文')).toBeTruthy(); // 同步立即
-    expect(screen.queryByTestId(PROPS.cursorTestID)).toBeNull();
+    // 泄洪窗口 ≤ 280ms：推进 300ms 后收敛完成
     await act(async () => {
-      jest.advanceTimersByTime(100);
+      jest.advanceTimersByTime(300);
     });
-    expect(screen.getByText('最终全文')).toBeTruthy(); // 无旧帧覆盖
+    expect(screen.getByText('最终全文')).toBeTruthy();
+    expect(screen.queryByTestId(PROPS.cursorTestID)).toBeNull();
   });
 
-  it('终值替换同节点更新：节点未重挂载（testID 恒定，无闪烁）', async () => {
+  it('终值同节点更新：节点未重挂载（testID 恒定，无闪烁）', async () => {
     const { rerender } = await renderStreaming();
     await rerender(
       <StreamingText {...PROPS} text="最终全文" streaming={false} />
     );
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
     const node = screen.getByTestId(PROPS.testID);
     expect(node).toBeTruthy();
-    expect(node).toHaveTextContent('最终全文'); // 同节点内容替换为终值
+    expect(node).toHaveTextContent('最终全文');
   });
 });
 
-describe('节流调度（帧合并 / 强制刷新 / 终值 flush 组件面）', () => {
+describe('末端时间渐显（2026-11-05 用户题 10 裁决）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -144,115 +149,66 @@ describe('节流调度（帧合并 / 强制刷新 / 终值 flush 组件面）', 
     jest.useRealTimers();
   });
 
-  it('mergeWindowMs 配置生效：更长窗口合并更多帧', async () => {
-    const { rerender } = await render(
-      <StreamingText {...PROPS} text="a" streaming mergeWindowMs={50} />
-    );
-    await rerender(
-      <StreamingText {...PROPS} text="b" streaming mergeWindowMs={50} />
-    );
-    await rerender(
-      <StreamingText {...PROPS} text="c" streaming mergeWindowMs={50} />
-    );
-    expect(screen.getByText(`a ${STREAMING_CURSOR}`)).toBeTruthy(); // 50ms 窗口未到
-    await act(async () => {
-      jest.advanceTimersByTime(49);
-    });
-    expect(screen.getByText(`a ${STREAMING_CURSOR}`)).toBeTruthy();
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-    });
-    expect(screen.getByText(`c ${STREAMING_CURSOR}`)).toBeTruthy(); // 三帧合并为一次渲染
-  });
-
-  it('mergeWindowMs=0 同步路径：每帧立即渲染（测试旁路）', async () => {
-    const { rerender } = await render(
-      <StreamingText {...PROPS} text="a" streaming mergeWindowMs={0} />
-    );
-    await rerender(
-      <StreamingText {...PROPS} text="b" streaming mergeWindowMs={0} />
-    );
-    expect(screen.getByText(`b ${STREAMING_CURSOR}`)).toBeTruthy(); // 无窗口延迟
-  });
-
-  it('终值 flush：窗口挂起期间到达终值 → 立即渲染最新值', async () => {
-    const { rerender } = await renderStreaming();
-    await rerender(<StreamingText {...PROPS} text="帧2" streaming />); // 窗口挂起
-    await rerender(<StreamingText {...PROPS} text="终值" streaming={false} />);
-    expect(screen.getByText('终值')).toBeTruthy(); // 不等窗口
-    expect(screen.queryByText(`帧2 ${STREAMING_CURSOR}`)).toBeNull();
-  });
-});
-
-describe('末端模糊渐显与光标淘汰（方案 25）', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('默认启用 tailGradient 时且无显式光标注入：淘汰机械打字机光标，渲染渐变梯级', async () => {
+  it('默认开启：尾部分段以 color alpha 渲染（无节点 opacity)，且无机械光标', async () => {
     const longText =
       '回望历史，中华文明是人类历史上唯一绵延不断、从未中断的伟大文明。四大发明的璀璨光芒曾照亮人类文明的暗夜。';
     await render(
       <StreamingText
-        identity="seq:gradient-test"
+        identity="seq:fade-test"
         text={longText}
         streaming
         testID="stream-container"
       />
     );
 
-    // 1. 机械打字机光标彻底被淘汰，不出现 ▍
+    // 机械打字机光标被淘汰，不出现 ▍
     expect(screen.queryByText(new RegExp(STREAMING_CURSOR))).toBeNull();
 
-    // 2. 梯级节点成功挂载
-    const tier0 = screen.getByTestId('tail-tier-0');
-    expect(tier0).toBeTruthy();
-    expect(tier0.props.style).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ opacity: expect.any(Number) }),
-      ])
-    );
+    // 时间渐显分段挂载：样式恰为 { color: rgba(...) }——color alpha 通道，
+    // 精确形状断言天然禁绝 opacity / 阴影等任何附加键回流
+    const seg0 = screen.getByTestId('tail-fade-0');
+    expect(seg0).toBeTruthy();
+    expect(seg0.props.style).toEqual({
+      color: expect.stringMatching(/^rgba\(/),
+    });
   });
 
-  it('终态收口（streaming=false）：销毁所有渐显梯级节点，回归纯净静态文本', async () => {
+  it('终态收口（streaming=false）：渐显分段销毁，回归纯净静态文本', async () => {
     const longText =
       '回望历史，中华文明是人类历史上唯一绵延不断、从未中断的伟大文明。四大发明的璀璨光芒曾照亮人类文明的暗夜。';
     const { rerender } = await render(
       <StreamingText
-        identity="seq:gradient-test"
+        identity="seq:fade-test"
         text={longText}
         streaming
         testID="stream-container"
       />
     );
-
-    expect(screen.getByTestId('tail-tier-0')).toBeTruthy();
+    expect(screen.getByTestId('tail-fade-0')).toBeTruthy();
 
     await rerender(
       <StreamingText
-        identity="seq:gradient-test"
+        identity="seq:fade-test"
         text={longText}
         streaming={false}
         testID="stream-container"
       />
     );
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
 
-    // 梯级节点已完全销毁
-    expect(screen.queryByTestId('tail-tier-0')).toBeNull();
-    // 纯文本完整显示
+    expect(screen.queryByTestId('tail-fade-0')).toBeNull();
     expect(screen.getByText(longText)).toBeTruthy();
   });
 
-  it('显式 tailGradient=false 时：平滑回退传统打字机光标', async () => {
+  it('显式 tailFade=false 时：平滑回退传统打字机光标', async () => {
     await render(
       <StreamingText
-        identity="seq:gradient-fallback"
+        identity="seq:fade-fallback"
         text="回退传统光标"
         streaming
-        tailGradient={false}
+        tailFade={false}
       />
     );
 
