@@ -7,6 +7,13 @@
 // 内容可信度由固定哈希保证，与来源无关。
 // 状态机对 UI 诚实：缺失 / 下载中（带进度）/ 校验中 / 就绪 / 失败可重试，
 // 不伪装「已就绪」。
+//
+// 平行实现标注（2026-11-06 端侧模型波收口裁决）：本机 GGUF 模型管理
+// 器（src/adapters/onDevice/onDeviceModelManager.ts）按本文件的接口
+// 形状平行实现（多模型目录 + 断点续传 + 空间预检），经评估不抽共享
+// 基类（理由见彼处文件头），维持双实现并互相标注。两处下载/校验语
+// 义如需变更，须同步评估对方；纯函数 toNativeFilePath / formatBytes
+// 由彼处直接导入本模块复用，无第二份。
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import * as FileSystem from 'expo-file-system/legacy';
