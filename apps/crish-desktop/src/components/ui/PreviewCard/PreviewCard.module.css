@@ -25,7 +25,10 @@
   box-sizing: border-box;
 }
 
-/* 预览卡入场：短距上浮后落定；退场加速离开 */
+/* 预览卡入/退场：值已对齐共享 popover 配方（design-system.css 的
+ * crish-popover-enter-top / exit-top：scale 0.97 + translateY 4px，
+ * 时长走 --transition-popover-enter/exit token）。类级收敛（改用共享
+ * .ui-popover-animate 等）登记待后续，本模块先只对齐值、收敛组数。 */
 .enter {
   animation: previewCardEnter var(--transition-popover-enter) forwards;
 }
@@ -42,22 +45,22 @@
 @keyframes previewCardEnter {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.97);
+    transform: scale(0.97) translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 @keyframes previewCardExit {
   from {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
   to {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.97) translateY(4px);
   }
 }
 
@@ -117,30 +120,7 @@
   margin: 0;
 }
 
-/* 减弱动态适配 */
-@media (prefers-reduced-motion: reduce) {
-  .enter {
-    animation: previewCardFadeIn var(--duration-micro, 100ms) linear forwards;
-  }
-  .exit {
-    animation: previewCardFadeOut var(--duration-micro, 100ms) linear forwards;
-  }
-}
-
-@keyframes previewCardFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes previewCardFadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
+/* 减动效不再自备 fade 对：--transition-popover-enter/exit 已在
+ * tokens-base.css / reduced-motion.css 的减动效口径下归零，本组
+ * keyframes 在减动效时即时完成，与全局口径一致（S7 · 2026-11-06
+ * 删除 previewCardFadeIn/FadeOut 私有对，四组收敛为一组）。 */

@@ -27,6 +27,7 @@ import { LeafDockResizer } from './LeafDockResizer';
 import { PaneHeader } from './PaneHeader';
 import { computePaneEdges } from './paneEdgeGeometry';
 import { DockSplitWorkspace } from './DockSplitWorkspace';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import styles from './BinaryTreeWorkspace.module.css';
 import {
   openToolInLeaf,
@@ -80,6 +81,28 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const { t } = useI18n();
     const leafElRef = useRef<HTMLDivElement>(null);
     const leafBodyRef = useRef<HTMLDivElement>(null);
+    // 窗格入场走统一入场通道（S7 · L1 收敛）：叶按 leaf.id 键控稳定挂载，
+    // 挂载本身即实况事件（分栏 / 新建窗格），故 liveOnMount 判定；呈现
+    // 记忆保证同叶同会话只播一次。退场侧待 S4 通道退场判定层，本处不
+    // 自创私有退场。根 style 只携带 --reveal-delay 自定义属性，几何键
+    // 永不进 React style（几何仍由下方 layoutEffect 直写 DOM）。
+    const {
+      entering: paneEntering,
+      delayMs: paneDelayMs,
+      handleAnimationEnd: paneAnimationEnd,
+      rootRef: paneRootRef,
+    } = useEntranceReveal({
+      key: `pane:${leaf.id}`,
+      variant: 'fade',
+      liveOnMount: true,
+    });
+    const setLeafEl = useCallback(
+      (el: HTMLDivElement | null) => {
+        leafElRef.current = el;
+        paneRootRef(el);
+      },
+      [paneRootRef]
+    );
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
     const isChatSurface = chatMainSurface === 'chat';
 
@@ -284,8 +307,15 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     return (
       <div
-        ref={leafElRef}
-        className={styles.leaf}
+        ref={setLeafEl}
+        className={`${styles.leaf}${paneEntering ? ' crish-entrance-fade' : ''}`}
+        data-entering={paneEntering ? 'true' : undefined}
+        onAnimationEnd={paneAnimationEnd}
+        style={
+          paneEntering
+            ? ({ '--reveal-delay': `${paneDelayMs}ms` } as React.CSSProperties)
+            : undefined
+        }
         data-leaf-id={leaf.id}
         data-panel-id="chat"
         data-tab-count={tabCount}

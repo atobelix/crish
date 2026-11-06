@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: 0 4px;
-  /* 沉浸式外层通底：不画底边直线，由下方 .leafBody 内容矩形自适应圆角与框线承担分界，根除割裂圆角的水平死线 */
+  /* 沉浸式外层通底：不画底边直线，由下方 .leafBody 内容矩形的底色台阶与圆角承担分界（框线已删，2026-11-06），根除割裂圆角的水平死线 */
   border-bottom: none;
   user-select: none;
   flex-shrink: 0;

@@ -206,7 +206,9 @@ describe('三档底色契约', () => {
     expect(fade).not.toMatch(/#[0-9a-f]{3,6}\b|hsl\(|rgb\(/i);
   });
 
-  it('内容矩形框线：token 独立，只画左/顶 1px，右/底无边', () => {
+  it('内容矩形无框线：token 保留待裁，卡片靠底色台阶 + 圆角区分', () => {
+    // --content-frame-border token 本体保留（去留归 token 治理裁决）：
+    // 字面值仍在册，但 .leafBody 已停用（2026-11-06 用户裁决删整圈描边）
     expect(decl(light, '--content-frame-border')).toBe('#ececec'); // 7% 纯中性边框
     expect(decl(dark, '--content-frame-border')).toBe('#222121'); // 外层 L10.2% + 3 → 13.2%
     const ws = readFileSync(
@@ -217,18 +219,15 @@ describe('三档底色契约', () => {
       'utf8'
     ).replace(/\r\n/g, '\n');
     const body = ws.match(/\n\.leafBody \{([\s\S]*?)\n\}/)?.[1] ?? '';
-    expect(body).toMatch(
-      /border-left:\s*1px solid var\(--content-frame-border/
-    );
-    expect(body).toMatch(/border-top:\s*1px solid var\(--content-frame-border/);
-    expect(body).toMatch(/border-right:\s*0;/);
-    expect(body).toMatch(/border-bottom:\s*0;/);
+    expect(body).not.toContain('--content-frame-border');
+    expect(body).not.toMatch(/border-(left|top|right|bottom)\s*:/);
     expect(body).toMatch(/border-radius:\s*var\(--radius-l\)/);
-    // 活动叶不得把框线换成别的颜色
+    expect(body).toMatch(/background:\s*var\(--leaf-card-bg/);
+    // 活动叶不得再给卡片设描边色（旧同色 border-color 空转规则已删）
     const active =
       ws.match(/\.leaf\[data-active='true'\] \.leafBody \{([\s\S]*?)\}/)?.[1] ??
       '';
-    expect(active).toMatch(/border-color:\s*var\(--content-frame-border/);
+    expect(active).not.toMatch(/border-color/);
   });
 
   it('圆角：完备偶数阶梯 + 按钮用户锁 10px（2026-11-01 由 7px 调整）', () => {

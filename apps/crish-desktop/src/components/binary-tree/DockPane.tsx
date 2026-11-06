@@ -28,6 +28,7 @@ import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import { AppIcon } from '@/components/ui/icons';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '../../i18n';
+import { useEntranceReveal } from '../motion/useEntranceReveal';
 import styles from './DockPane.module.css';
 
 export interface DockPaneProps {
@@ -69,6 +70,20 @@ export const DockPane: React.FC<DockPaneProps> = React.memo(
     const { t } = useI18n();
     const paneId = propLeafId || flatLeaf.leafId;
     const paneBodyRef = useRef<HTMLDivElement>(null);
+    // 窗格入场走统一入场通道（S7 · L1 收敛，与 TreeLeafPanel 同口径）：
+    // 坞窗格按 dock leaf id 键控挂载，挂载即实况事件（分栏 / 新开窗
+    // 格），liveOnMount 判定，同键同会话只播一次；退场待 S4 通道退场
+    // 判定层，本处不自创私有退场。
+    const {
+      entering: paneEntering,
+      delayMs: paneDelayMs,
+      handleAnimationEnd: paneAnimationEnd,
+      rootRef: paneRootRef,
+    } = useEntranceReveal({
+      key: `dockpane:${paneId}`,
+      variant: 'fade',
+      liveOnMount: true,
+    });
 
     // 尺寸量测与 Tier 状态
     const [widthTier, setWidthTier] = useState<'narrow' | 'compact' | 'normal'>(
@@ -150,8 +165,18 @@ export const DockPane: React.FC<DockPaneProps> = React.memo(
 
     return (
       <div
-        className={styles.pane}
-        style={paneStyle}
+        ref={paneRootRef}
+        className={`${styles.pane}${paneEntering ? ' crish-entrance-fade' : ''}`}
+        style={
+          paneEntering
+            ? ({
+                ...paneStyle,
+                '--reveal-delay': `${paneDelayMs}ms`,
+              } as React.CSSProperties)
+            : paneStyle
+        }
+        data-entering={paneEntering ? 'true' : undefined}
+        onAnimationEnd={paneAnimationEnd}
         data-leaf-id={paneId}
         data-dock-leaf-id={paneId}
         data-active={flatLeaf.isActive ? 'true' : 'false'}
