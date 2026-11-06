@@ -3,18 +3,15 @@
 // 失败 = 危险色图标 + 「失败」弱文字（批 D：上一轮运行失败打点
 // lastRunFailedAtMs）。徽标单槽优先级：待审批（要用户决策）> 运行中
 // （新一轮已在路上，旧失败已被数据面清打点）> 失败。
-import { memo, useRef } from 'react';
+import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { AppText, Badge } from '@/presentation/ui';
 import { usePressFade } from '@/presentation/ui/pressFeedback';
-import {
-  beginInteraction,
-  type InteractionHandle,
-} from '@/presentation/perf/interactionTiming';
 import { RunningPulseDot } from '@/presentation/components/status/RunningPulseDot';
+import { useSessionRowActions } from './useSessionRowActions';
 import { RowFailureBadge } from './RowFailureBadge';
 
 /** 行状态徽标的单槽裁决（纯函数，呈现口径的单一真理） */
@@ -61,40 +58,25 @@ export const SessionListItem = memo(function SessionListItem({
   const theme = useTheme();
   const badge = sessionRowBadge(session);
   const press = usePressFade();
-  const spanRef = useRef<InteractionHandle | null>(null);
+  const rowActions = useSessionRowActions({
+    rowId: session.id,
+    onPress,
+    onLongPress,
+    timingName: 'session-row-long-press',
+    onPressInVisual: press.onPressIn,
+    onPressOutVisual: press.onPressOut,
+  });
   return (
     <Pressable
       testID={`session-row-${session.id}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={sessionA11yLabel(session)}
-      onPress={() => onPress(session.id)}
-      onLongPress={
-        onLongPress
-          ? () => {
-              const span = spanRef.current;
-              if (span) {
-                span.mark('request');
-                // 操作表的可见完成在未纳入本轮的公共控制器里，这里只记到请求。
-                span.end('request');
-                spanRef.current = null;
-              }
-              onLongPress(session.id);
-            }
-          : undefined
-      }
-      onPressIn={() => {
-        press.onPressIn();
-        spanRef.current?.cancel();
-        const span = beginInteraction('session-row-long-press');
-        span.mark('press');
-        spanRef.current = span;
-      }}
-      onPressOut={() => {
-        press.onPressOut();
-        spanRef.current?.cancel();
-        spanRef.current = null;
-      }}
+      delayLongPress={rowActions.delayLongPress}
+      onPress={rowActions.onPress}
+      onLongPress={onLongPress ? rowActions.onLongPress : undefined}
+      onPressIn={rowActions.onPressIn}
+      onPressOut={rowActions.onPressOut}
       style={[
         styles.row,
         {
