@@ -66,6 +66,15 @@ export class VirtualScrollManager {
   private accordionMotionLockCount = 0;
   private accordionUnlockListeners = new Set<() => void>();
 
+  /**
+   * 手风琴锁周期的判底钉住结论（S折叠同钟 · S9 规格 1）：
+   * - null = 本锁周期尚未判定（锁刚取得、首个 locked 写入未到）；
+   * - true = 判底（容器在底边），锁内逐帧落高 + 同帧钉底；
+   * - false = 非判底，锁内行为与现状完全一致（延迟落高 + 解锁对账）。
+   * 随锁计数生命周期：计数 0→1（新周期开始）与回落到 0（周期结束）时复位为 null。
+   */
+  private accordionBottomPinned: boolean | null = null;
+
   /** 所属作用域信息 (W2-5 / VULN-04) */
   private paneId: string | null = null;
   private sessionId: string | null = null;
@@ -310,6 +319,11 @@ export class VirtualScrollManager {
   /** 设置手风琴动画锁状态 */
   public setAccordionMotionLock(locked: boolean): void {
     if (locked) {
+      // 新锁周期开始（计数 0→1）：判底结论复位，待首个 locked 写入重判。
+      // 嵌套加锁（计数已 >0）属同一周期，保留既有结论。
+      if (this.accordionMotionLockCount === 0) {
+        this.accordionBottomPinned = null;
+      }
       this.accordionMotionLockCount++;
     } else {
       const wasLocked = this.accordionMotionLockCount > 0;
@@ -318,9 +332,26 @@ export class VirtualScrollManager {
         this.accordionMotionLockCount - 1
       );
       if (wasLocked && this.accordionMotionLockCount === 0) {
+        // 锁周期结束：判底结论复位，下个周期重判。
+        this.accordionBottomPinned = null;
         this.notifyAccordionUnlock();
       }
     }
+  }
+
+  /** 当前锁周期是否已判定为判底钉住（未判定 null 时为 false） */
+  public isAccordionBottomPinned(): boolean {
+    return this.accordionBottomPinned === true;
+  }
+
+  /** 当前锁周期是否已有判底结论（true/false 均算已判定；null 为未判定） */
+  public hasAccordionBottomPinnedDecision(): boolean {
+    return this.accordionBottomPinned !== null;
+  }
+
+  /** 设定本锁周期的判底钉住结论（仅锁活跃期间由 useVirtualScroll 调用） */
+  public setAccordionBottomPinned(pinned: boolean): void {
+    this.accordionBottomPinned = pinned;
   }
 
   /**

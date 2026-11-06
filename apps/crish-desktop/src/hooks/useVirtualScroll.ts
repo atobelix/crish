@@ -12,11 +12,13 @@ import {
 } from '../api/VirtualScrollManager';
 import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 import {
+  BOTTOM_STICK_EPSILON_PX,
   DEFAULT_OVERSCAN,
   DEFAULT_VIEWPORT_HEIGHT_PX,
   NEAR_BOTTOM_EPSILON_PX,
   SIGNIFICANT_HEIGHT_DELTA_PX,
 } from './virtualScrollConstants';
+import { isContainerAtBottom } from './useAccordionViewportGuard';
 import {
   useVirtualScrollGesture,
   type PerformProgrammaticScrollFn,
@@ -192,11 +194,24 @@ export function useVirtualScroll(
   const pendingEstimatesRef = useRef<Map<string, number>>(new Map());
   const actualRafRef = useRef<number | null>(null);
 
+  /**
+   * S折叠同钟 · 判底钉底函数句柄（渲染期赋值，与 idsRef / renderedRangeRef
+   * 同模式）：pinToBottom 定义在手势钩子之后（需 performProgrammaticScroll），
+   * 而 flushActualMeasurements 定义在前，故经 ref 间接调用，避免回调依赖环。
+   */
+  const pinToBottomRef = useRef<(() => void) | null>(null);
+
   /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
   const flushActualMeasurements = useCallback(
     (force = false) => {
-      // 手风琴动画锁保护：处于折叠/展开过渡期间且非强制刷新时，阻断 actualTick 重渲染
-      if (!force && manager.isAccordionMotionLocked()) {
+      // 手风琴动画锁保护：处于折叠/展开过渡期间且非强制刷新时，阻断 actualTick 重渲染。
+      // S折叠同钟例外：本锁周期已判定在底部（bottomPinned）时不短路——
+      // 锁内逐帧落高是单程回收的必要条件，钉底见本函数末尾。
+      if (
+        !force &&
+        manager.isAccordionMotionLocked() &&
+        !manager.isAccordionBottomPinned()
+      ) {
         return;
       }
       // R2：写入前几何快照——收口时与写入后快照比较，净零变化不递增 actualTick
@@ -239,6 +254,21 @@ export function useVirtualScroll(
           latestScrollTopRef.current = el.scrollTop;
           applyScrollTop(el.scrollTop);
         }
+      }
+
+      // S折叠同钟 · 判底钉底：锁内逐帧落高后同帧把滚动回收到底边。
+      // 钉底目标取模型总高口径（manager.getTotalHeight），不读 DOM
+      // scrollHeight——占位 .listInner 的高度由 React 按 totalHeight 渲染，
+      // DOM 值滞后模型一帧，读它会把钉底拖后一帧。手势让行不在此处检查：
+      // 折叠点击本身的 pointerdown 即会激活手势冻结（锚锁钩子 +
+      // 手势捕获监听），若以 gestureActiveRef 为判据，判底折叠将永远钉不住；
+      // 真正的手势让行由 onScroll 的原生滚动事件判据执行（用户已离底 > ε
+      // 即取消 bottomPinned），见 onScroll。pinToBottom 经 ref 调用。
+      if (
+        manager.isAccordionBottomPinned() &&
+        (anyChanged || estimatesChanged)
+      ) {
+        pinToBottomRef.current?.();
       }
 
       // 只要模型变了就刷新占位。只改树、不改渲染高度，会在下一次切标签时跳几个像素。
@@ -291,11 +321,37 @@ export function useVirtualScroll(
     [applyScrollTop, gesturePerformProgrammaticScroll]
   );
 
+  /**
+   * S折叠同钟 · 判底钉底：把滚动位置钉到模型总高对应的底边。
+   * 经 performProgrammaticScroll 执行（代际令牌豁免）：钉底产生的原生 scroll
+   * 事件被识别为程序滚动，不激活手势冻结、不触发 onScroll 的让行判据。
+   * 目标取模型总高 − 容器可视高，不读 DOM scrollHeight（占位滞后模型一帧）。
+   */
+  const pinToBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const targetTop = Math.max(
+      0,
+      manager.getTotalHeight(itemCountRef.current) - el.clientHeight
+    );
+    performProgrammaticScroll(el, targetTop);
+  }, [manager, performProgrammaticScroll]);
+
+  // 渲染期赋值（与 idsRef / renderedRangeRef 同模式）：flush 定义在手势
+  // 钩子之前，经此 ref 调用 pinToBottom。
+  pinToBottomRef.current = pinToBottom;
+
   const scheduleActualFlush = useCallback(() => {
     if (actualRafRef.current != null) return;
     actualRafRef.current = requestAnimationFrame(() => {
       actualRafRef.current = null;
-      if (gestureActiveRef.current || manager.isAccordionMotionLocked()) return;
+      // S折叠同钟：判底锁内逐帧落高，手势/锁门控均豁免——手势让行改由
+      // onScroll 的原生滚动事件判据执行（见 flush 内注释：折叠点击本身即
+      // 激活手势冻结，以 gestureActiveRef 为判据会使判底折叠永远钉不住）。
+      if (gestureActiveRef.current && !manager.isAccordionBottomPinned())
+        return;
+      if (manager.isAccordionMotionLocked() && !manager.isAccordionBottomPinned())
+        return;
       flushActualMeasurements();
     });
   }, [flushActualMeasurements, gestureActiveRef, manager]);
@@ -380,9 +436,21 @@ export function useVirtualScroll(
         return;
       }
       bumpGestureEpoch();
+      // S折叠同钟 · 手势让行（S9 规格 3）：原生滚动事件显示用户已离底
+      // （距底 > BOTTOM_STICK_EPSILON_PX）→ 立即取消本锁的 bottomPinned，
+      // 余下时长回落到现行延迟语义，用户滚动零对抗。钉底自身的 scroll
+      // 事件属程序滚动，已在上方豁免分支返回，不会误触本判据。
+      if (manager.isAccordionBottomPinned()) {
+        const el = e.currentTarget;
+        const distanceToBottom =
+          el.scrollHeight - el.clientHeight - el.scrollTop;
+        if (distanceToBottom > BOTTOM_STICK_EPSILON_PX) {
+          manager.setAccordionBottomPinned(false);
+        }
+      }
       applyScrollTop(newScrollTop);
     },
-    [applyScrollTop, bumpGestureEpoch, isProgrammaticScrollEvent]
+    [applyScrollTop, bumpGestureEpoch, isProgrammaticScrollEvent, manager]
   );
 
   const syncOrder = useCallback(
@@ -413,7 +481,23 @@ export function useVirtualScroll(
         return;
       }
       pendingActualRef.current.set(id, height);
-      if (!gestureActiveRef.current && !manager.isAccordionMotionLocked()) {
+      // S折叠同钟 · 锁内判底（S9 规格 1）：首个 locked 写入时以容器几何
+      // 判底并给本锁周期打标（与列表自身贴底判定共用 BOTTOM_STICK_EPSILON_PX，
+      // 经 useAccordionViewportGuard.isContainerAtBottom；无容器时判假）。
+      // 判底则逐帧落高；非判底锁行为与现状完全一致（延迟落高 + 解锁对账）。
+      if (manager.isAccordionMotionLocked()) {
+        if (!manager.hasAccordionBottomPinnedDecision()) {
+          const el = containerRef.current;
+          manager.setAccordionBottomPinned(
+            el != null && isContainerAtBottom(el)
+          );
+        }
+        if (manager.isAccordionBottomPinned()) {
+          scheduleActualFlush();
+        }
+        return;
+      }
+      if (!gestureActiveRef.current) {
         scheduleActualFlush();
       }
     },

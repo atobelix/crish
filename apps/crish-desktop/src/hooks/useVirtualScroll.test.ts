@@ -747,3 +747,329 @@ describe('R2：vs 身份稳定 / actualTick 按需递增 / onScroll 同步提交
     expect(result.current).toBe(before);
   });
 });
+
+describe('S折叠同钟 · 判底折叠逐帧落高 + 钉底（S9 规格 1–6）', () => {
+  /** 带可写几何的假容器（与 W3-A / VS-02 同模式） */
+  function makeFoldContainer(
+    scrollHeight: number,
+    clientHeight: number,
+    scrollTop: number
+  ) {
+    const el = document.createElement('div');
+    Object.defineProperties(el, {
+      scrollTop: { value: scrollTop, writable: true, configurable: true },
+      scrollHeight: {
+        value: scrollHeight,
+        writable: true,
+        configurable: true,
+      },
+      clientHeight: {
+        value: clientHeight,
+        writable: true,
+        configurable: true,
+      },
+    });
+    return el;
+  }
+
+  /** 折叠场景：g 为折叠行（700 起），t1/t2 为下方行（各 300）；容器 600 高 */
+  function setupFold() {
+    const { result } = renderHook(() =>
+      useVirtualScroll({
+        ids: ['g', 't1', 't2'],
+        itemCount: 3,
+        fallbackHeight: 100,
+      })
+    );
+    act(() => {
+      result.current.manager.setActual('g', 700);
+      result.current.manager.setActual('t1', 300);
+      result.current.manager.setActual('t2', 300);
+    });
+    // 模型总高 1300；容器在底边（scrollTop 700 = 1300 − 600）
+    const container = makeFoldContainer(1300, 600, 700);
+    // @ts-expect-error test container injection
+    result.current.containerRef.current = container;
+    return { result, container };
+  }
+
+  /** 派发原生 scroll 事件（模拟浏览器在 scrollTop 写入后派发） */
+  function fireScroll(
+    result: ReturnType<typeof setupFold>['result'],
+    container: HTMLDivElement
+  ) {
+    act(() => {
+      result.current.onScroll({
+        currentTarget: container,
+      } as unknown as React.UIEvent<HTMLDivElement>);
+    });
+  }
+
+  /**
+   * 驱动一帧折叠：RO 测得新高 → rAF flush → 钉底 → 派发 scroll 事件 →
+   * 同步占位 scrollHeight 到模型总高（模拟 React 按 totalHeight 重渲染
+   * .listInner）。返回该帧后的模型总高。
+   */
+  function driveFoldFrame(
+    setup: ReturnType<typeof setupFold>,
+    nextGHeight: number
+  ) {
+    const { result, container } = setup;
+    act(() => {
+      result.current.setActual('g', nextGHeight);
+    });
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+    const modelTotal = result.current.manager.getTotalHeight(3);
+    // 关键断言：钉底读模型总高——占位尚未来得及同步（scrollHeight 仍为
+    // 旧值）时，scrollTop 已先行等于新模型底边，不滞后一帧。
+    expect(container.scrollTop).toBe(Math.max(0, modelTotal - 600));
+    fireScroll(result, container);
+    // 占位随后同步到模型总高（React 渲染）；逐帧底边距 ≤ 1px 契约。
+    container.scrollHeight = modelTotal;
+    expect(
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    ).toBeLessThanOrEqual(1);
+    expect(result.current.scrollTop).toBe(
+      Math.max(0, modelTotal - 600)
+    );
+    return modelTotal;
+  }
+
+  it('判底折叠：锁内逐帧落高、scrollTop 同帧钉底，解锁阶跃 ≤ 1px', () => {
+    vi.useFakeTimers();
+    try {
+      const setup = setupFold();
+      const { result, container } = setup;
+
+      let releaseLock!: () => void;
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      expect(result.current.manager.isAccordionMotionLocked()).toBe(true);
+
+      // 五帧折叠：g 700 → 100（每帧 −120）
+      const totals = [580, 460, 340, 220, 100].map((h) =>
+        driveFoldFrame(setup, h)
+      );
+      expect(totals).toEqual([1180, 1060, 940, 820, 700]);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(true);
+      // 钉底 scroll 事件属程序滚动：手势冻结绝不激活
+      expect(result.current.isGestureActive()).toBe(false);
+      expect(container.scrollTop).toBe(100);
+      expect(result.current.totalHeight).toBe(700);
+
+      // 解锁对账：锁内已逐帧提交，解锁帧总高阶跃 ≤ 1px（S9 规格 4）
+      const beforeUnlock = result.current.manager.getTotalHeight(3);
+      act(() => {
+        releaseLock();
+      });
+      const afterUnlock = result.current.manager.getTotalHeight(3);
+      expect(Math.abs(afterUnlock - beforeUnlock)).toBeLessThanOrEqual(1);
+      expect(result.current.manager.isAccordionMotionLocked()).toBe(false);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(false);
+      expect(result.current.totalHeight).toBe(700);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('非判底折叠：锁内行为与现状一致（冻结到解锁一次性提交）', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useVirtualScroll({
+          ids: ['g', 't1', 't2'],
+          itemCount: 3,
+          fallbackHeight: 100,
+        })
+      );
+      act(() => {
+        result.current.manager.setActual('g', 700);
+        result.current.manager.setActual('t1', 300);
+        result.current.manager.setActual('t2', 300);
+      });
+      // 距底 100px（> 2px）：非判底
+      const container = makeFoldContainer(1300, 600, 600);
+      // @ts-expect-error test container injection
+      result.current.containerRef.current = container;
+
+      let releaseLock!: () => void;
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      act(() => {
+        result.current.setActual('g', 100);
+      });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+      // 锁内冻结：模型未变
+      expect(result.current.manager.getActualHeight('g')).toBe(700);
+      expect(result.current.manager.hasAccordionBottomPinnedDecision()).toBe(
+        true
+      );
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(false);
+
+      // 解锁一次性提交全部 ΔH（现状快照）
+      act(() => {
+        releaseLock();
+      });
+      expect(result.current.manager.getActualHeight('g')).toBe(100);
+      expect(result.current.totalHeight).toBe(700);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('手势让行：用户滚离底部 → 取消钉住，余下时长回落延迟语义', () => {
+    vi.useFakeTimers();
+    try {
+      const setup = setupFold();
+      const { result, container } = setup;
+
+      let releaseLock!: () => void;
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      driveFoldFrame(setup, 580);
+      driveFoldFrame(setup, 460);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(true);
+      expect(container.scrollTop).toBe(460);
+
+      // 物理滚轮在捕获阶段打断程序滚动豁免并激活手势保护
+      act(() => {
+        container.dispatchEvent(
+          new WheelEvent('wheel', { deltaY: -40, bubbles: true })
+        );
+      });
+      expect(result.current.isGestureActive()).toBe(true);
+
+      // 用户向上滚动 100px：原生 scroll 事件显示已离底 > 2px
+      container.scrollTop = 360;
+      fireScroll(result, container);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(false);
+
+      // 余下折叠不再逐帧提交：模型冻结到解锁
+      act(() => {
+        result.current.setActual('g', 340);
+      });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+      expect(result.current.manager.getActualHeight('g')).toBe(460);
+      expect(container.scrollTop).toBe(360);
+
+      act(() => {
+        releaseLock();
+      });
+      expect(result.current.manager.getActualHeight('g')).toBe(340);
+      expect(result.current.totalHeight).toBe(940);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('折叠中途反向展开：逐帧跟踪回升，锁周期复位后重判', () => {
+    vi.useFakeTimers();
+    try {
+      const setup = setupFold();
+      const { result, container } = setup;
+
+      // 第一锁周期：折叠两帧
+      let releaseLock!: () => void;
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      driveFoldFrame(setup, 580);
+      driveFoldFrame(setup, 460);
+      expect(container.scrollTop).toBe(460);
+
+      // 反向（生产侧：释放旧锁 + 新锁周期）；解锁帧无阶跃
+      const beforeReverse = result.current.manager.getTotalHeight(3);
+      act(() => {
+        releaseLock();
+      });
+      expect(
+        Math.abs(result.current.manager.getTotalHeight(3) - beforeReverse)
+      ).toBeLessThanOrEqual(1);
+      expect(
+        result.current.manager.hasAccordionBottomPinnedDecision()
+      ).toBe(false);
+
+      // 第二锁周期：展开两帧，scrollTop 逐帧回升
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      driveFoldFrame(setup, 580);
+      driveFoldFrame(setup, 700);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(true);
+      expect(container.scrollTop).toBe(700);
+      expect(result.current.totalHeight).toBe(1300);
+
+      const beforeUnlock = result.current.manager.getTotalHeight(3);
+      act(() => {
+        releaseLock();
+      });
+      expect(
+        Math.abs(result.current.manager.getTotalHeight(3) - beforeUnlock)
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('边界：无容器锁内不判底、不崩溃；空锁释放无副作用', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useVirtualScroll({
+          ids: ['a'],
+          itemCount: 1,
+          fallbackHeight: 100,
+        })
+      );
+      // 未注入容器：判底为假，行为与旧锁一致
+      let releaseLock!: () => void;
+      act(() => {
+        releaseLock = result.current.manager.acquireAccordionMotionLock(300);
+      });
+      act(() => {
+        result.current.setActual('a', 200);
+      });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+      // 未注入容器：判底结论为假（已判定，非未判定），行为与旧锁一致
+      expect(
+        result.current.manager.hasAccordionBottomPinnedDecision()
+      ).toBe(true);
+      expect(result.current.manager.isAccordionBottomPinned()).toBe(false);
+      expect(result.current.manager.getActualHeight('a')).toBeNull();
+
+      // 空锁：无 pending 时释放不抛错、不改模型
+      const other = renderHook(() =>
+        useVirtualScroll({
+          ids: [],
+          itemCount: 0,
+          fallbackHeight: 100,
+        })
+      );
+      let releaseEmpty!: () => void;
+      act(() => {
+        releaseEmpty =
+          other.result.current.manager.acquireAccordionMotionLock(300);
+      });
+      act(() => {
+        releaseEmpty();
+      });
+      expect(other.result.current.manager.getTotalHeight(0)).toBe(0);
+      expect(other.result.current.manager.isAccordionBottomPinned()).toBe(
+        false
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
