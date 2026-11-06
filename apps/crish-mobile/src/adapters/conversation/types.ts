@@ -40,7 +40,9 @@ export interface ConversationEngine {
   composer: {
     prompt: string;
     setPrompt: (t: string) => void;
-    submit: () => void;
+    submit: (text?: string) => void;
+    /** 草稿键。输入框用它把逐字内容写入内存真源，不靠父级逐字重渲染。 */
+    draftKey?: string;
     submitText: (t: string) => void | Promise<boolean>;
     /** 带附件提交（远端专有；本地不提供） */
     submitWithAttachments?: (

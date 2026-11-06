@@ -76,6 +76,7 @@ import {
   AppText,
   Composer,
   DEFAULT_COMPOSER_PLACEHOLDER,
+  HOME_COMPOSER_DRAFT_KEY,
   DropdownMenu,
   IconButton,
   Screen,
@@ -737,6 +738,7 @@ export default function HomeScreen({
           value={quickRun.prompt}
           onChangeText={quickRun.setPrompt}
           onSubmit={handleSubmit}
+          draftKey={HOME_COMPOSER_DRAFT_KEY}
           canSubmit={
             remoteMode
               ? quickRun.canSubmit ||

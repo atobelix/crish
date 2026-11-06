@@ -193,32 +193,46 @@ export function useLocalConversationEngine(
     send: sendQueuedItem,
   });
 
-  const submit = useCallback(() => {
-    if (prompt.trim() === '' && attachments.length === 0) return;
-    // 生成中发送 = 入队（批 C ②）：入队成功才清输入框与已选附件
-    // （稿面转入队列行呈现）；队列已满则原文与附件一并保留并给
-    // 诚实提示。附件以快照随条目入队，排空时 sendQueuedItem 经
-    // sendLocalChatMessage 的附件组装链真实发送（2026-11-05 返工
-    // 修复：此前只入队文本、已选附件被静默清掉）。
-    if (streaming) {
-      if (queue.enqueue(prompt, attachments)) {
+  const submit = useCallback(
+    (explicit?: string) => {
+      const text = explicit ?? prompt;
+      if (text.trim() === '' && attachments.length === 0) return;
+      // 生成中发送 = 入队（批 C ②）：入队成功才清输入框与已选附件
+      // （稿面转入队列行呈现）；队列已满则原文与附件一并保留并给
+      // 诚实提示。附件以快照随条目入队，排空时 sendQueuedItem 经
+      // sendLocalChatMessage 的附件组装链真实发送（2026-11-05 返工
+      // 修复：此前只入队文本、已选附件被静默清掉）。
+      if (streaming) {
+        if (queue.enqueue(text, attachments)) {
+          setPrompt('');
+          attachmentsRef.current.clear();
+        } else {
+          showToast('排队消息已达上限，请等前面的消息发出', 'error');
+        }
+        return;
+      }
+      // 发送被受理才清输入框：未配置等失败保留原文，用户补好配置
+      // 后可直接重发（错误已由引擎写进线程 error 槽呈现）。
+      // 显式文本优先于父级 prompt：输入框不再逐字抬升父级状态。
+      // 附件（2026-11-05 加号解锁）：随文本经本地引擎组装发送
+      // （buildRunPayload 视觉 fail-closed），受理才清已选区。
+      if (sendLocalChatMessage(threadId, text, attachments)) {
         setPrompt('');
         attachmentsRef.current.clear();
-      } else {
-        showToast('排队消息已达上限，请等前面的消息发出', 'error');
+        onSendSuccess?.();
       }
-      return;
-    }
-    // 发送被受理才清输入框：未配置等失败保留原文，用户补好配置
-    // 后可直接重发（错误已由引擎写进线程 error 槽呈现）。
-    // 附件（2026-11-05 加号解锁）：随文本经本地引擎组装发送
-    // （buildRunPayload 视觉 fail-closed），受理才清已选区。
-    if (sendLocalChatMessage(threadId, prompt, attachments)) {
-      setPrompt('');
-      attachmentsRef.current.clear();
-      onSendSuccess?.();
-    }
-  }, [prompt, attachments, streaming, threadId, onSendSuccess, queue, setPrompt, showToast]);
+    },
+    [
+      prompt,
+      attachments,
+      streaming,
+      threadId,
+      onSendSuccess,
+      queue,
+      setPrompt,
+      showToast,
+    ]
+  );
 
   // 显式文本提交（语音直发）：生成中 → 入队（受理 = 进队列）；
   // 否则受理与否由引擎裁定（未配置 → false，错误同样进 error 槽），
@@ -319,6 +333,7 @@ export function useLocalConversationEngine(
       setPrompt,
       submit,
       submitText,
+      draftKey,
       // 生成中也可提交（= 入队，批 C ②）；输入不再随生成锁定——
       // 停止钮（宿主屏 busy && stop）与发送钮并存
       canSubmit: prompt.trim() !== '',

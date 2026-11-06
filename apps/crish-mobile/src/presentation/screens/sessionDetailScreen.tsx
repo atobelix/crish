@@ -270,6 +270,7 @@ export function ConversationScreen({
           value={engine.composer.prompt}
           onChangeText={engine.composer.setPrompt}
           onSubmit={engine.composer.submit}
+          draftKey={engine.composer.draftKey}
           canSubmit={engine.composer.canSubmit}
           editable={engine.composer.editable}
           locked={engine.composer.locked}
