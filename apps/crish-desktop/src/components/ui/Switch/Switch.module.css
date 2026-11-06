@@ -280,7 +280,7 @@
     width: var(--spinner-size);
     height: var(--spinner-size);
     color: var(--text-secondary);
-    animation: crish-spin var(--transition-spin) infinite;
+    composes: crish-anim-spin from global;
   }
 
   /* --- 减弱动态偏好（Reduced Motion） --- */

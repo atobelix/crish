@@ -8,15 +8,12 @@
   border: 2px solid var(--border-subtle);
   border-top-color: var(--text-secondary);
   flex-shrink: 0;
-  animation: crish-spin var(--transition-spin) infinite;
+  composes: crish-anim-spin from global;
 }
 
 /* 防闪烁门：先隐形，250ms 后经共享显形关键帧以 forwards 填充显形；
    状态在门槛前结束（组件卸载）则永不显形。 */
 .delayed {
   opacity: 0;
-  animation:
-    crish-spin var(--transition-spin) infinite,
-    crish-indicator-appear var(--duration-fast) var(--ease-standard) 250ms
-      forwards;
+  composes: crish-anim-spin-appear from global;
 }

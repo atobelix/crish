@@ -510,8 +510,8 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
       expect(lgMatch?.[1]).toMatch(/--thumb-pad:\s*2px/);
     });
 
-    it('微型 Spinner 走全局共享关键帧 crish-spin（S8 收敛），不再自备私有关键帧', () => {
-      expect(css).toMatch(/animation:\s*crish-spin\s+var\(--transition-spin\)/);
+    it('微型 Spinner 经全局工具类消费 crish-spin（S8 收敛、悬空修复批改判消费形态），不再自备私有关键帧', () => {
+      expect(css).toMatch(/composes:\s*crish-anim-spin\s+from\s+global/);
       expect(css).not.toMatch(/@keyframes\s+switch-spin/);
     });
 

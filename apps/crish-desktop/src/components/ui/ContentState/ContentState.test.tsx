@@ -23,6 +23,10 @@ const SPINNER_CSS_SRC = readFileSync(
   join(DIR, '../Spinner/Spinner.module.css'),
   'utf8'
 );
+const INDICATORS_CSS_SRC = readFileSync(
+  join(DIR, '../../../styles/indicators.css'),
+  'utf8'
+);
 
 describe('ui/ContentState', () => {
   it('loading：Spinner + 状态文案，role=status 且 aria-busy', () => {
@@ -75,9 +79,16 @@ describe('ui/ContentState', () => {
     expect(el.querySelector('[data-slot="ui-spinner"]')).toBeNull();
   });
 
-  it('样式棘轮：指示走 ui/Spinner 正典（crish-spin + --transition-spin），本面无私有关键帧、无裸时长', () => {
+  it('样式棘轮：指示走 ui/Spinner 正典（经全局工具类消费 crish-spin + --transition-spin），本面无私有关键帧、无裸时长', () => {
+    // keyframes 悬空修复批：模块侧钉 composes 接线，全局侧钉工具类本体。
     expect(SPINNER_CSS_SRC).toMatch(
-      /animation:\s*crish-spin\s+var\(--transition-spin\)/
+      /composes:\s*crish-anim-spin\s+from\s+global/
+    );
+    expect(SPINNER_CSS_SRC).toMatch(
+      /composes:\s*crish-anim-spin-appear\s+from\s+global/
+    );
+    expect(INDICATORS_CSS_SRC).toMatch(
+      /\.crish-anim-spin\s*\{\s*animation:\s*crish-spin\s+var\(--transition-spin\)/
     );
     expect(SPINNER_CSS_SRC).not.toMatch(/@keyframes/);
     expect(CSS_SRC).not.toMatch(/@keyframes/);

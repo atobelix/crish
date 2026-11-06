@@ -177,18 +177,42 @@ describe('持续指示收敛契约（S8 / E 类 9）', () => {
     expect(motionTokens).toContain('DURATION_PULSE_MS = 1600');
   });
 
-  it('原语接线：Spinner 走 crish-spin、PulseDot 走 crish-pulse-dot，周期全经令牌', () => {
+  it('原语接线：Spinner/PulseDot 经全局工具类消费 crish-spin、crish-pulse-dot，周期全经令牌', () => {
+    // keyframes 悬空修复批（2026-11-06）：模块 CSS 禁按名引用全局关键帧
+    //（工具链改名后悬空），消费改走 design-system.css §4b 全局工具类
+    // composes；本断言随之转指：模块侧钉 composes 接线，全局侧钉工具类
+    // 本体仍是正典名 + 令牌周期（原语义不变）。
     const spinnerCss = readFileSync(
       join(SRC_ROOT, 'components/ui/Spinner/Spinner.module.css'),
       'utf8'
     );
-    expect(spinnerCss).toMatch(/animation:\s*crish-spin\s+var\(--transition-spin\)/);
+    expect(spinnerCss).toMatch(/composes:\s*crish-anim-spin\s+from\s+global/);
+    expect(spinnerCss).toMatch(
+      /composes:\s*crish-anim-spin-appear\s+from\s+global/
+    );
     const pulseDotCss = readFileSync(
       join(SRC_ROOT, 'components/ui/PulseDot/PulseDot.module.css'),
       'utf8'
     );
     expect(pulseDotCss).toMatch(
-      /animation:\s*crish-pulse-dot\s+var\(--transition-pulse\)/
+      /composes:\s*crish-anim-pulse-dot\s+from\s+global/
+    );
+    const indicatorsCss = readFileSync(
+      join(SRC_ROOT, 'styles/indicators.css'),
+      'utf8'
+    );
+    expect(indicatorsCss).toMatch(
+      /\.crish-anim-spin\s*\{\s*animation:\s*crish-spin\s+var\(--transition-spin\)/
+    );
+    expect(indicatorsCss).toMatch(
+      /\.crish-anim-spin-appear\s*\{[^}]*crish-indicator-appear\s+var\(--duration-fast\)/
+    );
+    const dsCss = readFileSync(
+      join(SRC_ROOT, 'styles/design-system.css'),
+      'utf8'
+    );
+    expect(dsCss).toMatch(
+      /\.crish-anim-pulse-dot\s*\{\s*animation:\s*crish-pulse-dot\s+var\(--transition-pulse\)/
     );
   });
 });

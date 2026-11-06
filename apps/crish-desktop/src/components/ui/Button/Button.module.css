@@ -470,7 +470,7 @@
     border-radius: 50%;
     border: var(--border-width-emphasis) solid currentColor;
     border-top-color: transparent;
-    animation: crish-spin var(--transition-spin) infinite;
+    composes: crish-anim-spin from global;
     flex-shrink: 0;
   }
 

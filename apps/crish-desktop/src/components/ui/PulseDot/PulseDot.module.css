@@ -7,5 +7,5 @@
   border-radius: 50%;
   background: var(--accent-color);
   flex-shrink: 0;
-  animation: crish-pulse-dot var(--transition-pulse) infinite;
+  composes: crish-anim-pulse-dot from global;
 }
