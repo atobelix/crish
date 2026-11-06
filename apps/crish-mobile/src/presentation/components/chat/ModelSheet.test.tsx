@@ -4,9 +4,14 @@
 // - 未设默认 → 独立态「桌面未设全局默认」；
 // - 列表失败面呈现错误码 + 重试（M2）；未连接面与失败面分开。
 import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { ActiveModelInfo, ModelEntry } from '@crish/shared-types';
-import { ModelSheet, type ModelSheetProps } from './ModelSheet';
+import {
+  ModelSheet,
+  modelSheetListMaxHeight,
+  type ModelSheetProps,
+} from './ModelSheet';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
 
 const metrics: Metrics = {
@@ -130,5 +135,81 @@ describe('ModelSheet 纯净平铺与厂商徽标呈现', () => {
     // 点选行触发切换
     await fireEvent.press(view.getByTestId('model-sheet-option-openai-gpt-x'));
     expect(onSelectModel).toHaveBeenCalledWith('openai', 'gpt-x');
+  });
+});
+
+describe('ModelSheet 列表高度与虚拟化', () => {
+  it('可用高度等于窗口比例减去 Sheet 实际绘出的纵向构件', () => {
+    // 844 * 0.8 - (8+4+4+14+30+16+34+4) = 561.2，向下取整
+    expect(
+      modelSheetListMaxHeight({
+        windowHeight: 844,
+        maxHeightRatio: 0.8,
+        paddingTop: 8,
+        handleMarginTop: 4,
+        handleHeight: 4,
+        handleMarginBottom: 14,
+        headerRowHeight: 30,
+        headerMarginBottom: 16,
+        paddingBottom: 34,
+        scrollContentPaddingBottom: 4,
+      })
+    ).toBe(561);
+  });
+
+  it('短列表不锁死高度，内部不滚动', async () => {
+    const view = await renderSheet();
+    const list = view.getByTestId('model-sheet-list');
+    const style = StyleSheet.flatten(list.props.style);
+    expect(style.maxHeight).toEqual(expect.any(Number));
+    expect(style.maxHeight).toBeGreaterThan(0);
+    expect(style.height).toBeUndefined();
+    expect(list.props.scrollEnabled).toBe(false);
+  });
+
+  it('超过首屏才锁高度并窗口化，重渲染后仍调用最新选择回调', async () => {
+    const models: ModelEntry[] = Array.from({ length: 40 }, (_, index) => ({
+      providerId: 'openai',
+      modelId: `m${index}`,
+      displayName: `模型 ${index}`,
+      active: true,
+    }));
+    const onSelectModel = jest.fn();
+    const onSelectNext = jest.fn();
+    const view = await renderSheet({
+      models,
+      activeModelId: modelRefKey('openai', 'm0'),
+      onSelectModel,
+    });
+    const list = view.getByTestId('model-sheet-list');
+    const style = StyleSheet.flatten(list.props.style);
+    expect(style.height).toEqual(expect.any(Number));
+    expect(style.height).toBeGreaterThan(0);
+    expect(list.props.nestedScrollEnabled).toBe(true);
+    expect(list.props.scrollEnabled).toBe(true);
+    expect(view.getByTestId('model-sheet-option-openai-m0')).toBeTruthy();
+    expect(view.queryByTestId('model-sheet-option-openai-m30')).toBeNull();
+    const rendered = view.getAllByTestId(/^model-sheet-option-openai-m/);
+    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered.length).toBeLessThan(models.length);
+    await view.rerender(
+      <ModelSheet
+        visible
+        onClose={jest.fn()}
+        connected
+        models={models}
+        status="loaded"
+        activeModelId={modelRefKey('openai', 'm0')}
+        activeModel={ACTIVE_A}
+        activeModelSelectable
+        switching={false}
+        errorCode={null}
+        onSelectModel={onSelectNext}
+        onRetry={jest.fn()}
+      />
+    );
+    await fireEvent.press(view.getByTestId('model-sheet-option-openai-m0'));
+    expect(onSelectNext).toHaveBeenCalledWith('openai', 'm0');
+    expect(onSelectModel).not.toHaveBeenCalled();
   });
 });
