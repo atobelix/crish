@@ -9,7 +9,7 @@
   border-radius: var(--radius-sm);
   user-select: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   background: transparent;
   transition: opacity var(--transition-micro);
@@ -24,19 +24,19 @@
 }
 
 .text {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-tertiary);
   letter-spacing: 0.01em;
 }
 
 .separator {
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .timer {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
