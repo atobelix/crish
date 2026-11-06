@@ -272,6 +272,11 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
     <Dialog
       open={open}
       onClose={onClose}
+      // 用户点名（2026-11-06 截图反馈：项目管理面板仍有阴影）：经基座
+      // surface.shadow='none' 通道整体关闭形状层 filter（与删除对话确认
+      // 面板同口径，去掉而非调淡；活测证实本面阴影单一来源即基座
+      // [data-g2-layer] 双层 drop-shadow 近似）；轮廓仍为基座 modal 档 G²。
+      surface={{ shadow: 'none' }}
       title={
         mode === 'create'
           ? t('workspace.project.create')
