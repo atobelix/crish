@@ -81,12 +81,30 @@
   --swipe-x: var(--toast-swipe-movement-x, 0px);
   --swipe-y: var(--toast-swipe-movement-y, 0px);
 
-  /* 同心几何标尺：外圆角 = 内圆角 (8px) + 等距内边距 (10px) = 18px，内外圆弧平行同心 */
+  /* 间距标尺（同心链的 padding 一侧保留在本类，半径一侧已迁生成层，见下） */
   --toast-py: var(--space-2_5, 10px);
   --toast-px-start: var(--space-3_5, 14px);
   --toast-px-end: var(--space-2_5, 10px);
-  --toast-btn-radius: var(--radius-md, 8px);
-  --toast-radius: calc(var(--toast-btn-radius) + var(--toast-py));
+
+  /* 【G² 迁移 · 第一波甲槽 A，2026-11-06】卡面着漆迁入 ui/G2Surface 形状层：
+   * - 外圆角 18 由接入点声明 menuOuter 档（原本地同心链 --toast-radius =
+   *   --toast-btn-radius(8) + --toast-py(10) 就此退役；同心关系改在生成层
+   *   收口——内钮半径 concentricRadius(18, 10) = 8 = --radius-md，钮侧
+   *   直接消费 --radius-md，不再经本地变量中转）；
+   * - 填充/边框经下列两个变量喂给形状层的 path（fill/stroke），类型变体
+   *   改写变量而非本体 background/border（path 的 style 才解析 var()）；
+   * - 阴影改由形状层 drop-shadow 跟随 G² 轮廓：--toast-g2-shadow 取
+   *   --notice-shadow-deck-1 的主导层（0 4px 14px / 影色 4%），次层
+   *   （0 1px 3px / 2%）在 drop-shadow 单层口径下舍去（待裁决 #6 (a)
+   *   近似口径，差距登记于本波报告）；
+   * - 内容裁切改由形状层同路径 clip-path 承接（原 overflow: hidden 跟随
+   *   border-radius 旧弧，与 G² 轮廓角部错位，故本体不再声明 overflow /
+   *   background / border / box-shadow；border-radius 仅作无形状层时的
+   *   兜底圆弧保留）。 */
+  --toast-surface: var(--bg-elevated);
+  --toast-border: var(--border-subtle);
+  --toast-g2-shadow: 0 4px 14px
+    color-mix(in srgb, var(--shadow-color) 4%, transparent);
 
   position: absolute;
   z-index: calc(1000 - var(--toast-index, 0));
@@ -102,33 +120,42 @@
   height: auto;
   min-height: var(--height);
   max-height: 84px;
-  overflow: hidden;
 
-  /* 背景与发丝边框适配：纯净磨砂中性底色，告别廉价大色块 */
-  background-color: var(--bg-elevated);
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--toast-radius);
-  padding: var(--toast-py) var(--toast-px-end) var(--toast-py)
-    var(--toast-px-start);
+  border-radius: var(--radius-menu-outer);
   font-size: var(--font-size-sm, 13px);
   line-height: var(--line-height-base, 1.4);
   font-family: var(--font-sans);
 
-  display: flex;
-  align-items: center;
-
-  /* 物理阴影：对齐改浅一半的 Token 规范 */
-  box-shadow: var(--notice-shadow-deck-1);
-
-  /* 堆叠展开是一段真实位移，减速落到展开位 */
+  /* 堆叠展开是一段真实位移，减速落到展开位（阴影/边框已迁形状层，
+   * 不再随本体 transition——形状层滤镜随变量即时生效） */
   transition:
     transform var(--duration-normal) var(--ease-decelerate),
-    opacity var(--duration-fast) var(--ease-decelerate),
-    box-shadow var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard);
+    opacity var(--duration-fast) var(--ease-decelerate);
   will-change: transform, opacity;
   touch-action: none;
+}
+
+/* G² 形状层宿主（G2Surface 根节点）：满高承接卡面尺寸——堆叠态后排卡被
+ * 外层规则强制为首卡高度时，形状层随之覆盖整卡（实测对象即本层根节点） */
+.toastSurface {
+  height: 100%;
+}
+
+/* 暗色：deck 阴影为纯黑双层，drop-shadow 取主导层（0 6px 18px / 0.4） */
+:global(html[data-theme='dark']) .toastCard {
+  --toast-g2-shadow: 0 6px 18px hsl(0 0% 0% / 0.4);
+}
+
+/* 扇形展开态：阴影升档至 --shadow-lg 的主导层（原 box-shadow: var(--shadow-lg)
+ * 的 drop-shadow 近似，次层舍去——待裁决 #6 (a) 口径） */
+.viewport[data-expanded='true'] .toastCard {
+  --toast-g2-shadow: 0 4px 16px
+    color-mix(in srgb, var(--shadow-color) 4%, transparent);
+}
+
+:global(html[data-theme='dark']) .viewport[data-expanded='true'] .toastCard {
+  --toast-g2-shadow: 0 4px 18px hsl(0 0% 0% / 0.28);
 }
 
 /* ==========================================================================
@@ -161,10 +188,8 @@
   max-height: 84px;
   transform: translateX(var(--swipe-x))
     translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
-  box-shadow: var(
-    --shadow-lg,
-    0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent)
-  );
+  /* 展开阴影升档改由 --toast-g2-shadow 变量切换承接（见 .toastCard 迁移注记），
+   * 本体不再声明 box-shadow（会按旧弧边框盒投形） */
 }
 
 /* ==========================================================================
@@ -186,9 +211,7 @@
       )
     )
     scale(var(--scale));
-  box-shadow:
-    0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 6%, transparent),
-    0 2px 6px -1px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  /* 阴影统一走 --toast-g2-shadow（deck 主导层近似），本体不再声明 box-shadow */
 }
 
 /* 悬停扇形展开态 (Hover Expanded - Top) */
@@ -198,10 +221,7 @@
   max-height: 84px;
   transform: translateX(var(--swipe-x))
     translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
-  box-shadow: var(
-    --shadow-lg,
-    0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent)
-  );
+  /* 展开阴影升档同底部锚定：经 --toast-g2-shadow 变量切换，本体不声明 box-shadow */
 }
 
 /* ==========================================================================
@@ -279,6 +299,9 @@
   height: 2px;
   background: transparent;
   overflow: hidden;
+  /* G² 化后（第一波甲槽 A）：本轨道渲染于 G2Surface 的 clip 层内时，角部由
+   * 同路径 clip-path 裁切（逐像素贴合 G² 轮廓）；下方 inherit 圆角仅为
+   * 轨道独立挂载时的旧弧兜底，不再是角部真源 */
   border-bottom-left-radius: inherit;
   border-bottom-right-radius: inherit;
   pointer-events: none;
@@ -313,46 +336,44 @@
 /* 1. 中断与错误态（警示红）：醒目的背景警示色与边框 */
 .toastCard[data-type='stop'],
 .toastCard[data-toast-type='stop'] {
-  border-color: var(--notice-border-stop);
-  background-color: var(--notice-bg-stop);
+  --toast-border: var(--notice-border-stop);
+  --toast-surface: var(--notice-bg-stop);
   color: var(--notice-text-stop);
 }
 
 .toastCard[data-type='error'],
 .toastCard[data-toast-type='error'] {
-  border-color: var(--notice-border-error);
-  background-color: var(--notice-bg-error);
+  --toast-border: var(--notice-border-error);
+  --toast-surface: var(--notice-bg-error);
   color: var(--notice-text-error);
 }
 
 /* 2. 警告态（告警橙）：暖色警示背景与边框 */
 .toastCard[data-type='warning'],
 .toastCard[data-toast-type='warning'] {
-  border-color: var(--notice-border-warn);
-  background-color: var(--notice-bg-warn);
+  --toast-border: var(--notice-border-warn);
+  --toast-surface: var(--notice-bg-warn);
   color: var(--notice-text-warn);
 }
 
 /* 3. 信息态与常规通知：高级磨砂中性底色（纯通知），不带刺眼大色块 */
 .toastCard[data-type='info'],
 .toastCard[data-toast-type='info'] {
-  border-color: var(--notice-border-info);
-  background-color: var(--notice-bg-info);
+  --toast-border: var(--notice-border-info);
+  --toast-surface: var(--notice-bg-info);
   color: var(--notice-text-info);
 }
 
 /* 4. 成功态：淡雅翡翠绿卡片与边框 */
 .toastCard[data-type='success'],
 .toastCard[data-toast-type='success'] {
-  border-color: var(--notice-border-success);
-  background-color: var(--notice-bg-success);
+  --toast-border: var(--notice-border-success);
+  --toast-surface: var(--notice-bg-success);
   color: var(--notice-text-success);
 }
 
-/* 顶部锚定：阴影对齐 Token 体系（改浅一半，无黑浊感） */
-.viewport[data-position^='top'] .toastCard {
-  box-shadow: var(--notice-shadow-deck-1);
-}
+/* 顶部锚定：阴影与底部锚定同口径——原此处 box-shadow: var(--notice-shadow-deck-1)
+ * 已随 G² 迁移并入 --toast-g2-shadow 默认值（deck 主导层），规则删除 */
 
 /* ==========================================================================
    卡片内部布局与组件元素
@@ -364,6 +385,11 @@
   gap: 10px;
   width: 100%;
   height: 100%;
+  /* 卡内边距原在 .toastCard 本体，G² 化后本体不再着漆、内容位于形状层
+   * clip 层内，内边距随内容层承接（数值与同心链口径不变） */
+  padding: var(--toast-py) var(--toast-px-end) var(--toast-py)
+    var(--toast-px-start);
+  box-sizing: border-box;
   transition: opacity var(--duration-fast, 150ms) var(--ease-standard, ease);
 }
 
@@ -447,7 +473,7 @@
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
   cursor: pointer;
-  border-radius: var(--toast-btn-radius, var(--radius-md, 8px));
+  border-radius: var(--radius-md, 8px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -478,7 +504,7 @@
   min-height: 28px;
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium, 500);
-  border-radius: var(--toast-btn-radius, var(--radius-md, 8px));
+  border-radius: var(--radius-md, 8px);
   cursor: pointer;
   background-color: var(--state-hover);
   color: var(--text-primary);

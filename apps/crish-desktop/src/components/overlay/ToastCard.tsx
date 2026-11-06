@@ -13,6 +13,7 @@ import { useSwipeDismissMotion } from './useSwipeDismissMotion';
 import styles from './ToastStackModern.module.css';
 import { Button } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
+import { G2Surface } from '../ui/G2Surface';
 
 const standardEase = [0.2, 0, 0, 1] as [number, number, number, number];
 
@@ -306,137 +307,150 @@ export const ToastCard: React.FC<ToastCardProps> = ({
       onPointerCancel={onPointerCancel}
       onLostPointerCapture={onPointerCancel}
     >
-      <div
-        className={styles.cardBody}
-        style={{
-          opacity: contentOpacity,
-        }}
+      {/* G² 形状层（第一波甲槽 A）：卡面填充/边框/阴影改由生成路径绘制
+          （menuOuter 档 = 原同心链 18px；色值经 --toast-surface/--toast-border
+          变量按类型变体切换），内容经同一路径 clip 裁切——堆叠 transform 与
+          进/退场仍挂在 .toastCard 本体，形状层只承着漆面（详见模块 CSS 注记） */}
+      <G2Surface
+        className={styles.toastSurface}
+        radius="menuOuter"
+        fill="var(--toast-surface)"
+        stroke="var(--toast-border)"
+        dropShadow="var(--toast-g2-shadow)"
+        clip
       >
-        <span className={styles.iconWrapper} aria-hidden="true">
-          <AnimatePresence mode="popLayout" initial={false}>
-            <Swap key={toast.type} className={styles.glyph} {...iconSwapMotion}>
-              {getIcon()}
-            </Swap>
-          </AnimatePresence>
-        </span>
-
-        <div className={styles.contentWrapper}>
-          {toast.title && (
-            <div className={styles.title}>
-              <AnimatePresence mode="popLayout" initial={false}>
-                <Swap
-                  key={
-                    typeof toast.title === 'string' ||
-                    typeof toast.title === 'number'
-                      ? toast.title
-                      : 'toast-title'
-                  }
-                  className={styles.line}
-                  {...textSwapMotion}
-                >
-                  {toast.title}
-                </Swap>
-              </AnimatePresence>
-            </div>
-          )}
-          <div className={styles.message}>
+        <div
+          className={styles.cardBody}
+          style={{
+            opacity: contentOpacity,
+          }}
+        >
+          <span className={styles.iconWrapper} aria-hidden="true">
             <AnimatePresence mode="popLayout" initial={false}>
-              <Swap
-                key={
-                  typeof toast.message === 'string' ||
-                  typeof toast.message === 'number'
-                    ? toast.message
-                    : 'toast-msg'
-                }
-                className={styles.line}
-                {...textSwapMotion}
-              >
-                {toast.message}
+              <Swap key={toast.type} className={styles.glyph} {...iconSwapMotion}>
+                {getIcon()}
               </Swap>
             </AnimatePresence>
-          </div>
-          {toast.description && (
-            <div className={styles.description}>
+          </span>
+
+          <div className={styles.contentWrapper}>
+            {toast.title && (
+              <div className={styles.title}>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <Swap
+                    key={
+                      typeof toast.title === 'string' ||
+                      typeof toast.title === 'number'
+                        ? toast.title
+                        : 'toast-title'
+                    }
+                    className={styles.line}
+                    {...textSwapMotion}
+                  >
+                    {toast.title}
+                  </Swap>
+                </AnimatePresence>
+              </div>
+            )}
+            <div className={styles.message}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <Swap
                   key={
-                    typeof toast.description === 'string' ||
-                    typeof toast.description === 'number'
-                      ? toast.description
-                      : 'toast-desc'
+                    typeof toast.message === 'string' ||
+                    typeof toast.message === 'number'
+                      ? toast.message
+                      : 'toast-msg'
                   }
                   className={styles.line}
                   {...textSwapMotion}
                 >
-                  {toast.description}
+                  {toast.message}
                 </Swap>
               </AnimatePresence>
             </div>
-          )}
-        </div>
+            {toast.description && (
+              <div className={styles.description}>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <Swap
+                    key={
+                      typeof toast.description === 'string' ||
+                      typeof toast.description === 'number'
+                        ? toast.description
+                        : 'toast-desc'
+                    }
+                    className={styles.line}
+                    {...textSwapMotion}
+                  >
+                    {toast.description}
+                  </Swap>
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
 
-        <div className={styles.actionsRow}>
-          {toast.onUndo && (
+          <div className={styles.actionsRow}>
+            {toast.onUndo && (
+              <Button
+                type="button"
+                variant="ghost"
+                className={styles.undoButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toast.onUndo?.();
+                  handleDismissAnimation();
+                }}
+              >
+                撤销
+              </Button>
+            )}
+
+            <AnimatePresence initial={false}>
+              {toast.action ? (
+                <m.div
+                  key="action"
+                  className={styles.actionSlot}
+                  initial={
+                    reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }
+                  }
+                  animate={{ width: 'auto', opacity: 1 }}
+                  exit={reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }}
+                  transition={{
+                    width: { type: 'spring', visualDuration: 0.32, bounce: 0 },
+                    opacity: { duration: 0.16 },
+                  }}
+                >
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    data-variant={toast.action.variant ?? 'primary'}
+                    className={styles.actionButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.action?.onClick(e);
+                    }}
+                  >
+                    {toast.action.label}
+                  </Button>
+                </m.div>
+              ) : null}
+            </AnimatePresence>
+
             <Button
               type="button"
               variant="ghost"
-              className={styles.undoButton}
+              size="sm"
+              aria-label="关闭通知"
+              className={styles.closeButton}
               onClick={(e) => {
                 e.stopPropagation();
-                toast.onUndo?.();
                 handleDismissAnimation();
               }}
             >
-              撤销
+              <AppIcon name="x" size={14} aria-hidden="true" />
             </Button>
-          )}
-
-          <AnimatePresence initial={false}>
-            {toast.action ? (
-              <m.div
-                key="action"
-                className={styles.actionSlot}
-                initial={
-                  reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }
-                }
-                animate={{ width: 'auto', opacity: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }}
-                transition={{
-                  width: { type: 'spring', visualDuration: 0.32, bounce: 0 },
-                  opacity: { duration: 0.16 },
-                }}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  data-variant={toast.action.variant ?? 'primary'}
-                  className={styles.actionButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toast.action?.onClick(e);
-                  }}
-                >
-                  {toast.action.label}
-                </Button>
-              </m.div>
-            ) : null}
-          </AnimatePresence>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label="关闭通知"
-            className={styles.closeButton}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDismissAnimation();
-            }}
-          >
-            <AppIcon name="x" size={14} aria-hidden="true" />
-          </Button>
+          </div>
         </div>
-      </div>
+      </G2Surface>
     </m.div>
   );
 };
