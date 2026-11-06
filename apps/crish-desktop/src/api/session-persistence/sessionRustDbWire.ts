@@ -32,7 +32,9 @@ import type { SessionIndexEntry } from './sessionPersistenceTypes';
  * Rust SessionMessage 形状（conex-types::SessionMessage 的 JS 投影）。
  * 与 store/types.ts 的 SessionMessage 区别：
  *   - toolCalls/blocks/toolCallResults 在 Rust 侧序列化为 JSON 字符串
- *   - streamTextOffset/thinkingTime 仅命名差异（serde camelCase 已对齐）
+ *   - thinkingTime 仅命名差异（serde camelCase 已对齐）
+ * 注：前端已删除 streamTextOffset（单一偏移模型）；Rust 侧即便仍回传
+ * 该字段，fromRust 也不再读入（正文分段状态只认 blocks）。
  */
 export interface RustSessionMessage {
   id: string;
@@ -41,7 +43,6 @@ export interface RustSessionMessage {
   thinking?: string | null;
   timestamp: number;
   status?: string | null;
-  streamTextOffset?: number | null;
   thinkingTime?: number | null;
   toolCallsJson?: string | null;
   blocksJson?: string | null;
@@ -185,7 +186,6 @@ export function toRustSessionMessage(msg: SessionMessage): RustSessionMessage {
   if (msg.text != null) out.text = msg.text;
   if (msg.thinking != null) out.thinking = msg.thinking;
   if (msg.status != null) out.status = msg.status;
-  if (msg.streamTextOffset != null) out.streamTextOffset = msg.streamTextOffset;
   if (msg.thinkingTime != null) out.thinkingTime = msg.thinkingTime;
   const tc = messageToolCallsToJson(msg.toolCalls);
   if (tc != null) out.toolCallsJson = tc;
@@ -282,9 +282,6 @@ export function fromRustSessionMessage(
     ...(rust.text != null ? { text: rust.text } : {}),
     ...(rust.thinking != null ? { thinking: rust.thinking } : {}),
     ...(rust.status != null ? { status: rust.status } : {}),
-    ...(rust.streamTextOffset != null
-      ? { streamTextOffset: rust.streamTextOffset }
-      : {}),
     ...(rust.thinkingTime != null ? { thinkingTime: rust.thinkingTime } : {}),
     ...(rust.toolCallsJson != null
       ? { toolCalls: parseJsonArray<unknown[]>(rust.toolCallsJson, []) }

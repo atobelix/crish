@@ -63,16 +63,31 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           ) {
             if (!target.arguments && toolCall.arguments)
               target.arguments = toolCall.arguments;
-            if (!target.explanation && toolCall.explanation)
-              target.explanation = toolCall.explanation;
+            if (!target.intent && toolCall.intent)
+              target.intent = toolCall.intent;
+            if (!target.group && toolCall.group)
+              target.group = toolCall.group;
+            if (!target.groupId && toolCall.groupId)
+              target.groupId = toolCall.groupId;
+            if (target.isInternal === undefined && toolCall.isInternal !== undefined)
+              target.isInternal = toolCall.isInternal;
             return;
           }
           const prevStatus = target.status;
           const prevOut = target.output;
           const prevArgs = target.arguments;
+          const prevIntent = target.intent;
+          const prevGroup = target.group;
+          const prevGroupId = target.groupId;
+          const prevIsInternal = target.isInternal;
           Object.assign(target, toolCall);
           if (!toolCall.arguments && prevArgs) target.arguments = prevArgs;
           if (!toolCall.output && prevOut) target.output = prevOut;
+          if (!toolCall.intent && prevIntent) target.intent = prevIntent;
+          if (!toolCall.group && prevGroup) target.group = prevGroup;
+          if (!toolCall.groupId && prevGroupId) target.groupId = prevGroupId;
+          if (toolCall.isInternal === undefined && prevIsInternal !== undefined)
+            target.isInternal = prevIsInternal;
           if (
             (prevStatus === 'success' || prevStatus === 'error') &&
             toolCall.status === 'running'
@@ -87,11 +102,11 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           return;
         }
 
-        msg.streamTextOffset = (msg.text || '').length;
-        const lastB = msg.blocks[msg.blocks.length - 1];
-        if (lastB && lastB.type === 'text' && !(lastB.content || '').trim()) {
-          msg.blocks.pop();
-        }
+        // 分段记账：本 tool_call 块追加到 blocks 末尾即成为物理界标，其前
+        // 一段正文自此封口（前置正文已由工具事件前的快照落块，事件序即
+        // blocks 序）。旧动作——推进 streamTextOffset 游标、弹掉尾部空
+        // text 块——已随单一偏移模型整段删除：偏移游标不存在，空段块在新
+        // 模型下不会产生（段块只在有内容时创建），亦无弹除的必要。
         msg.toolCalls.push(toolCall);
         if (
           !msg.blocks.some(
@@ -130,7 +145,7 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
       sessionId,
       messageId,
       status,
-      thinkingTime,
+      _thinkingTime,
       opts
     ) =>
       set((state) => {
@@ -138,8 +153,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
         if (!hit) return;
         if (
           hit.message.status === status &&
-          (thinkingTime === undefined ||
-            hit.message.thinkingTime === thinkingTime) &&
           !opts?.errorDetail
         ) {
           return;
@@ -158,9 +171,6 @@ export function createSessionMessageActionsTools<T extends SessionStoreSlice>(
           return;
         }
         hit.message.status = status;
-        if (thinkingTime !== undefined) {
-          hit.message.thinkingTime = thinkingTime;
-        }
         if (opts?.errorDetail) {
           hit.message.errorDetail = opts.errorDetail;
         }

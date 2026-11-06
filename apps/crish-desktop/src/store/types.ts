@@ -345,7 +345,14 @@ export interface MessageToolCall {
   status: MessageToolCallStatus;
   output?: string | undefined;
   diffs?: FileDiff[] | undefined;
-  explanation?: string | undefined;
+  /** 单步业务目的（AI 主动声明；空或缺失时 UI 回退工具展示名） */
+  intent?: string | undefined;
+  /** 所属意图组标题 */
+  group?: string | undefined;
+  /** 引擎分配的意图组稳定 ID（存在则成组，不存在则单行直出） */
+  groupId?: string | undefined;
+  /** 内部轮询/计时器静默标识 */
+  isInternal?: boolean | undefined;
   /** approval-requested 带来的后端风险元数据 */
   approvalMeta?: MessageToolApprovalMeta | undefined;
   /**
@@ -503,7 +510,7 @@ export type MessageTimelineBlockType =
 /**
  * 消息时间线块（按发生顺序交错 thought / text / tool_call / image / context_injection）。
  * - thought：单步思考块（一等公民），content 承载思考文本，turnIndex 标记轮次
- * - text：content 为该段正文；流式时由 streamTextOffset 切分
+ * - text：content 为该段正文；一段正文一个块（分段记账，id 为 `text-seg-<序号>`）
  * - tool_call：id 对齐 MessageToolCall.id；content 可选摘要
  * - context_injection：id 对齐 MessageContextInjection.id；也可直接挂 injection 全量载荷
  * - image：images 承载结构化图片引用
@@ -530,6 +537,14 @@ export interface MessageTimelineBlock {
   images?: MessageImageRef[];
   /** type === 'context_injection' 时挂载的结构化数据（或经 id 从 injections 查表） */
   injection?: MessageContextInjection;
+  /** tool_call 扩展：单步业务意图 */
+  intent?: string;
+  /** tool_call 扩展：所属意图组标题 */
+  group?: string;
+  /** tool_call 扩展：意图组稳定 ID */
+  groupId?: string;
+  /** tool_call 扩展：内部工具静默标识 */
+  isInternal?: boolean;
 }
 
 export interface TimelineThoughtBlock extends MessageTimelineBlock {
@@ -556,6 +571,11 @@ export interface SessionMessage extends Pick<
   metadata?: unknown | undefined;
   /** 流式思考过程，与正式正文分离，避免互相覆盖 */
   thinking?: string | undefined;
+  /**
+   * 思考耗时（毫秒）。
+   * @deprecated 前端已全面收敛至 thinkingTurns 与 timeline blocks，保留仅为类型向后兼容。
+   */
+  thinkingTime?: number | undefined;
   /** 结构化思考分段列表（支持多轮回放与交错还原） */
   thinkingTurns?: Array<{
     turnIndex: number;
@@ -589,13 +609,12 @@ export interface SessionMessage extends Pick<
   injections?: MessageContextInjection[] | undefined;
   /**
    * 时间线：按发生顺序交错 thought / text / tool_call。
-   * 流式累计正文用 streamTextOffset 切分到当前 text 段。
+   * 流式正文按段记账：每段正文是带稳定 id 的 text 块，段间以
+   * tool_call / thought 块为界标（applyStreamedTextToBlocks 维护）。
+   * 【已删除】旧字段 streamTextOffset（单一累计偏移切片模型）已整段
+   * 移除——偏移失效时尾段永不落块、收口整段拼尾的事故出于该模型。
    */
   blocks?: MessageTimelineBlock[] | undefined;
-  /** 上一工具插入时 text 的长度，用于把累计正文切成段 */
-  streamTextOffset?: number | undefined;
-  /** 思考耗时（秒或 ms，由 setSessionMessageStatus 写入侧约定） */
-  thinkingTime?: number | undefined;
   /** 本条消息中所有图片的结构化索引（跨 text block + tool call 汇总） */
   images?: MessageImageRef[] | undefined;
   /** 本条消息携带的附件信息（用户上传或拖拽的图片/文件/代码段） */

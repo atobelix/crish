@@ -476,7 +476,7 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
       expect(thoughts[1]?.content).toBe('保留思考 2');
     });
 
-    it('在仅有 text 块与 thought 块时，正确注入缺失的 tool_call 块且保全两者', () => {
+    it('在仅有 text 块与 thought 块时，正确注入缺失的 tool_call 块且保全两者（无时戳就后追加）', () => {
       const blocks: MessageTimelineBlock[] = [
         { type: 'thought', content: '分析中', turnIndex: 0 },
         { type: 'text', content: '准备就绪', turnIndex: 0 },
@@ -490,10 +490,10 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
 
       expect(aligned.map((b) => b.type)).toEqual([
         'thought',
-        'tool_call',
         'text',
+        'tool_call',
       ]);
-      expect(aligned[1]).toEqual({ type: 'tool_call', id: 'injected-tool' });
+      expect(aligned[2]).toEqual({ type: 'tool_call', id: 'injected-tool' });
     });
   });
 
@@ -795,7 +795,7 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         ).toEqual(['early', 'mid', 'late']);
       });
 
-      it('无时间戳时兜底插到首个 text 块之前（负向：绝不追加到全部正文之后）', () => {
+      it('无时间戳时兜底就后追加（负向：严禁越过已有正文逆序前置）', () => {
         const blocks: MessageTimelineBlock[] = [
           { type: 'thought', content: '思考', turnIndex: 0 },
           { type: 'text', content: '正文 1', turnIndex: 0 },
@@ -808,9 +808,9 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         const aligned = alignToolCallBlocks(blocks, tools);
         expect(aligned.map((b) => b.type)).toEqual([
           'thought',
+          'text',
+          'text',
           'tool_call',
-          'text',
-          'text',
         ]);
       });
     });
@@ -864,23 +864,62 @@ describe('时间线 Blocks 保全合并算法与防退避测试套件', () => {
         expect(texts[0]?.content).toBe('新正文');
       });
 
-      it('游标校准：新轮次思考开启时 streamTextOffset 推进到当前正文长度', () => {
+      it('分段封口：新轮次思考开启后，后续正文另起新段（不并入上一段）', () => {
+        // 【旧契约已删除】原测试钉 updateMessageThinking 把 streamTextOffset
+        // 推进到当前正文长度（游标校准）。分段记账下无任何游标：thought
+        // 块落入 blocks 即成物理界标，其前一段封口、其后正文另起新段。
         seedSession([
           makeMessage({
             id: MSG_ID,
             sender: 'assistant',
             text: '已累计正文',
-            streamTextOffset: 0,
             blocks: [{ type: 'text', content: '已累计正文', turnIndex: 0 }],
           }),
         ]);
         const store = useSessionStore.getState();
         store.updateMessageThinking(SESS_ID, MSG_ID, '新的思考', 1);
+        store.updateMessageText(SESS_ID, MSG_ID, '已累计正文新一轮正文');
 
         const msg = useSessionStore
           .getState()
           .sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
-        expect(msg?.streamTextOffset).toBe('已累计正文'.length);
+        const texts = msg?.blocks?.filter((b) => b.type === 'text') ?? [];
+        expect(texts).toHaveLength(2);
+        expect(texts[0]?.content).toBe('已累计正文');
+        expect(texts[1]?.content).toBe('新一轮正文');
+        expect(msg?.blocks?.map((b) => b.type)).toEqual([
+          'text',
+          'thought',
+          'text',
+        ]);
+        expect(msg?.streamTextOffset).toBeUndefined();
+      });
+
+      it('工具调用后紧随正文时：在工具之后新建正文段，维持因果序不沉底', () => {
+        seedSession([
+          makeMessage({
+            id: MSG_ID,
+            sender: 'assistant',
+            text: '前序说明',
+            blocks: [
+              { type: 'text', content: '前序说明', turnIndex: 0 },
+              { type: 'tool_call', id: 'tc-first' },
+            ],
+          }),
+        ]);
+        const store = useSessionStore.getState();
+        store.updateMessageText(SESS_ID, MSG_ID, '前序说明后续跟进说明');
+
+        const msg = useSessionStore
+          .getState()
+          .sessionsById[SESS_ID]?.messages.find((m) => m.id === MSG_ID);
+        expect(msg?.blocks?.length).toBe(3);
+        expect(msg?.blocks?.[0]?.type).toBe('text');
+        expect(msg?.blocks?.[0]?.content).toBe('前序说明');
+        expect(msg?.blocks?.[1]?.type).toBe('tool_call');
+        expect(msg?.blocks?.[1]?.id).toBe('tc-first');
+        expect(msg?.blocks?.[2]?.type).toBe('text');
+        expect(msg?.blocks?.[2]?.content).toBe('后续跟进说明');
       });
     });
   });

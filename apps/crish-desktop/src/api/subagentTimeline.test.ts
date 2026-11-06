@@ -7,7 +7,7 @@ function engineToolStart(call: {
   id: string;
   toolName: string;
   input?: Record<string, unknown>;
-  summary?: string;
+  intent?: string;
 }) {
   return {
     type: 'tool-start',
@@ -15,7 +15,7 @@ function engineToolStart(call: {
       id: call.id,
       toolName: call.toolName,
       input: call.input ?? {},
-      summary: call.summary ?? call.toolName,
+      intent: call.intent,
       category: 'filesystem',
       concurrency: 'exclusive',
     },
@@ -51,7 +51,7 @@ describe('applySubagentEventToMessages tool-start/end', () => {
         id: 'tc-1',
         toolName: 'read_file',
         input: { path: 'src/a.ts' },
-        summary: '读取 a.ts',
+        intent: '读取 a.ts',
       })
     );
 
@@ -63,7 +63,7 @@ describe('applySubagentEventToMessages tool-start/end', () => {
       id: 'tc-1',
       name: 'read_file',
       status: 'running',
-      explanation: '读取 a.ts',
+      intent: '读取 a.ts',
     });
     expect(asst1!.toolCalls![0]!.arguments).toContain('src/a.ts');
     // R4a：tool-start 落 startedAt（本地接收时刻近似，此前从不写）
@@ -72,7 +72,9 @@ describe('applySubagentEventToMessages tool-start/end', () => {
     expect(
       asst1!.blocks?.some((b) => b.type === 'tool_call' && b.id === 'tc-1')
     ).toBe(true);
-    expect(typeof asst1!.streamTextOffset).toBe('number');
+    // 分段记账：streamTextOffset 已随单一偏移模型删除，tool-start 不再写它；
+    // 交错顺序由 blocks 中 tool_call 块的位置本身承载。
+    expect(asst1!.streamTextOffset).toBeUndefined();
 
     messages = applySubagentEventToMessages(
       messages,

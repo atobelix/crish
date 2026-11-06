@@ -5,6 +5,10 @@
 
 import type { MessageToolCall, SessionMessage } from '../store/types';
 import { blockText } from './chat-bridge/handlers/eventUtils';
+import {
+  applyStreamedTextToBlocks,
+  TEXT_SEGMENT_ID_PREFIX,
+} from './tool-presentation/timelineReconciler';
 
 type AnyRec = Record<string, unknown>;
 
@@ -17,7 +21,10 @@ function toolCallFields(call: unknown): {
   id: string;
   name: string;
   args: string;
-  explanation: string;
+  intent?: string;
+  group?: string;
+  groupId?: string;
+  isInternal?: boolean;
 } {
   const c = asRec(call) || {};
   const id = String(c.id ?? c.toolCallId ?? '');
@@ -41,12 +48,19 @@ function toolCallFields(call: unknown): {
       args = String(c.parameters);
     }
   }
-  const explanation = String(c.summary ?? c.description ?? name);
+  const intent = typeof c.intent === 'string' && c.intent.trim() ? c.intent.trim() : undefined;
+  const group = typeof c.group === 'string' && c.group.trim() ? c.group.trim() : undefined;
+  const rawGroupId = c.groupId ?? c.group_id;
+  const groupId = typeof rawGroupId === 'string' && rawGroupId.trim() ? rawGroupId.trim() : undefined;
+  const isInternal = typeof c.isInternal === 'boolean' ? c.isInternal : undefined;
   return {
     id: id || `tc-${Date.now().toString(36)}`,
     name,
     args,
-    explanation,
+    intent,
+    group,
+    groupId,
+    isInternal,
   };
 }
 
@@ -137,8 +151,13 @@ export function applySubagentEventToMessages(
     if (b.type === 'thought' || b.kind === 'thought') {
       a.thinking = (a.thinking || '') + t;
     } else {
-      a.text = (a.text || '') + t;
+      // 正文 delta 同步分段建块（与主流路径同一实现）：此前只累积
+      // a.text、从不建 text 块，面板渲染只能靠已删除的归拢兜底拼凑。
+      const prev = a.text || '';
+      a.text = prev + t;
       a.status = 'processing';
+      if (!a.blocks) a.blocks = [];
+      applyStreamedTextToBlocks(a.blocks, prev, a.text);
     }
     return next;
   }
@@ -162,7 +181,47 @@ export function applySubagentEventToMessages(
           thought += blockText(b);
         else if (b.type === 'text') text += blockText(b);
       }
-      if (text.trim()) a.text = text.trim();
+      if (text.trim()) {
+        // 本轮权威正文落段：delta 已建活跃段（内容与权威正文前缀重叠）
+        // 时就地替换为权威版；否则（快照式整段到达）另起新段追加到
+        // blocks 末尾——位置即事件序（本轮工具块在此之后才到达）。
+        // 【旧行为】a.text 被本轮正文整段覆写、blocks 从不建 text 块，
+        // 多轮正文在面板里只剩最后一轮、且顺序靠归拢兜底虚构。
+        const segText = text.trim();
+        if (!a.blocks) a.blocks = [];
+        const blocks = a.blocks;
+        let lastDelimiterIdx = -1;
+        let lastTextIdx = -1;
+        blocks.forEach((bl, i) => {
+          if (bl.type === 'text') lastTextIdx = i;
+          else if (bl.type === 'tool_call' || bl.type === 'thought')
+            lastDelimiterIdx = i;
+        });
+        const activeBlock =
+          lastTextIdx > lastDelimiterIdx ? blocks[lastTextIdx] : undefined;
+        const activeContent = (activeBlock?.content || '').trim();
+        if (
+          activeBlock &&
+          activeContent &&
+          (segText.startsWith(activeContent) ||
+            activeContent.startsWith(segText))
+        ) {
+          activeBlock.content = segText;
+        } else {
+          const ordinal = blocks.filter((bl) => bl.type === 'text').length;
+          blocks.push({
+            type: 'text',
+            id: `${TEXT_SEGMENT_ID_PREFIX}${ordinal}`,
+            content: segText,
+          });
+        }
+        // a.text 以段块为唯一真相源重建（各段按序以空行连接）
+        a.text = blocks
+          .filter((bl) => bl.type === 'text')
+          .map((bl) => (bl.content || '').trim())
+          .filter(Boolean)
+          .join('\n\n');
+      }
       if (thought.trim()) a.thinking = thought.trim();
       a.status = 'processing';
     }
@@ -173,17 +232,19 @@ export function applySubagentEventToMessages(
     const a = ensureAsst();
     if (!a.toolCalls) a.toolCalls = [];
     if (!a.blocks) a.blocks = [];
-    const { id, name, args, explanation } = toolCallFields(event.call);
-    // 工具前固化正文偏移，便于 text / tool_call 交错时间线
-    a.streamTextOffset = (a.text || '').length;
+    const { id, name, args, intent, group, groupId, isInternal } = toolCallFields(event.call);
+    // 分段记账下无需偏移固化：ensureToolBlock 把 tool_call 块按事件序
+    // 追加，其位置本身即封口前一段正文（旧 streamTextOffset 已删除）。
     a.status = 'processing';
 
     const existing = a.toolCalls.find((t) => t.id === id);
     if (existing) {
       existing.name = name || existing.name;
       existing.arguments = args || existing.arguments;
-      const exp = explanation || existing.explanation;
-      if (exp !== undefined) existing.explanation = exp;
+      if (intent !== undefined) existing.intent = intent;
+      if (group !== undefined) existing.group = group;
+      if (groupId !== undefined) existing.groupId = groupId;
+      if (isInternal !== undefined) existing.isInternal = isInternal;
       // 已终态的不因重放 tool-start 回退为 running；待审批同理——桥接层
       // R7b 镜像可能先于 tool-start 投影落下 pending 条目（携带
       // approvalMeta），迟到的 tool-start 只补 startedAt，状态与元数据
@@ -200,12 +261,15 @@ export function applySubagentEventToMessages(
         id,
         name,
         arguments: args,
-        explanation,
         status: 'running',
         // 工具时刻补写（R4a）：引擎 ToolBatchCall 不带时刻字段，startedAt
         // 以前端接收 tool-start 的本地时刻近似（与主对话工具行同为本地钟口径；
         // 此前子 agent 工具调用从不写此字段，侧栏详情无耗时可显示）
         startedAt: Date.now(),
+        ...(intent !== undefined ? { intent } : {}),
+        ...(group !== undefined ? { group } : {}),
+        ...(groupId !== undefined ? { groupId } : {}),
+        ...(isInternal !== undefined ? { isInternal } : {}),
       });
       ensureToolBlock(a, id);
     }
@@ -259,7 +323,7 @@ export function applySubagentEventToMessages(
         id: newId,
         name,
         arguments: '',
-        explanation: name,
+        
         status,
         output,
         // 漏收 tool-start 的终态：startedAt 无从得知（不伪造），

@@ -13,11 +13,19 @@ import type { AssistantTimelineItem } from './toolPresentationTypes';
 import { buildToolRenderItems } from './toolRenderItems';
 import { parseInlineThoughtAndTextSafely } from './inlineTagParser';
 
-export { buildToolRenderItems, dedupeToolCalls } from './toolRenderItems';
+export {
+  buildToolRenderItems,
+  dedupeToolCalls,
+  cleanIntent,
+  toolDisplayName,
+} from './toolRenderItems';
 export {
   alignToolCallBlocks,
   reconcileAssistantMessageBlocks,
   normalizeAssistantTimeline,
+  applyStreamedTextToBlocks,
+  sliceActiveStreamText,
+  TEXT_SEGMENT_ID_PREFIX,
 } from './timelineReconciler';
 export {
   parseInlineThoughtAndTextSafely,
@@ -120,9 +128,14 @@ export function buildAssistantTimeline(
     const xi = { val: 0 };
     const thi = { val: 0 };
 
-    const flushTools = () => {
+    const isTurnLive = msg.status === 'processing';
+
+    const flushTools = (isFollowedByNonTool = false) => {
       if (!toolBuf.length) return;
-      const rendered = buildToolRenderItems(toolBuf);
+      const rendered = buildToolRenderItems(toolBuf, {
+        isTurnLive,
+        isFollowedByNonTool,
+      });
       if (rendered.length) {
         const firstStartedAt =
           toolBuf.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
@@ -164,7 +177,7 @@ export function buildAssistantTimeline(
 
       for (const b of blocks) {
         if (b.type === 'context_injection') {
-          flushTools();
+          flushTools(true);
           const inj = (b.id ? injectionsById.get(b.id) : undefined) || b.injection;
           if (inj) {
             items.push({
@@ -178,7 +191,7 @@ export function buildAssistantTimeline(
             usedInjections.add(inj.id);
           }
         } else if (b.type === 'thought') {
-          flushTools();
+          flushTools(true);
           const thoughtContent = (b.content || '').trim();
           const isPlaceholder = isNonContentThought(thoughtContent);
           if (!isPlaceholder && (thoughtContent || b.isStreaming)) {
@@ -195,7 +208,7 @@ export function buildAssistantTimeline(
             });
           }
         } else if (b.type === 'text') {
-          flushTools();
+          flushTools(true);
           const c = b.content || '';
           if (c.trim() || b.isStreaming) {
             pushParsedText(
@@ -212,28 +225,25 @@ export function buildAssistantTimeline(
         } else if (b.type === 'tool_call' && b.id) {
           const found = toolsById.get(b.id);
           if (found) {
-            // 【只读铁律】store 里的消息对象经 immer auto-freeze 后为只读；
-            // 渲染期严禁原地 mutate —— 否则 ES module 严格模式抛
-            // `TypeError: Cannot add property ... object is not extensible`，
-            // 被本函数 catch 吞掉后静默降级为「只渲染正文」，导致思考行与
-            // 工具块整体消失（2026-09-19 真实宿主实证）。
-            // 需要补齐时间戳时构造新对象，绝不改写入参。
-            const needStartedAt = found.startedAt == null && b.startTime != null;
-            const needDuration = found.durationMs == null && b.durationMs != null;
-            const tc =
-              needStartedAt || needDuration
-                ? {
-                    ...found,
-                    ...(needStartedAt ? { startedAt: b.startTime } : {}),
-                    ...(needDuration ? { durationMs: b.durationMs } : {}),
-                  }
-                : found;
-            toolBuf.push(tc);
             usedTools.add(b.id);
+            // 内部工具（tc.isInternal === true）静默过滤，不进入主视觉流
+            if (!found.isInternal) {
+              const needStartedAt = found.startedAt == null && b.startTime != null;
+              const needDuration = found.durationMs == null && b.durationMs != null;
+              const tc =
+                needStartedAt || needDuration
+                  ? {
+                      ...found,
+                      ...(needStartedAt ? { startedAt: b.startTime } : {}),
+                      ...(needDuration ? { durationMs: b.durationMs } : {}),
+                    }
+                  : found;
+              toolBuf.push(tc);
+            }
           }
         }
       }
-      flushTools();
+      flushTools(false);
 
       // 孤儿注入兜底：injections 存在但 blocks 未声明的项，置顶挂载
       const orphanInjections = injections.filter(
@@ -247,9 +257,12 @@ export function buildAssistantTimeline(
         });
       }
 
-      const orphan = tools.filter((t) => !usedTools.has(t.id));
+      const orphan = tools.filter((t) => !usedTools.has(t.id) && !t.isInternal);
       if (orphan.length) {
-        const rendered = buildToolRenderItems(orphan);
+        const rendered = buildToolRenderItems(orphan, {
+          isTurnLive,
+          isFollowedByNonTool: false,
+        });
         if (rendered.length) {
           const firstStartedAt =
             orphan.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
@@ -273,17 +286,30 @@ export function buildAssistantTimeline(
       return applyDurationFallback(msg, items);
     }
 
-    // 历史无 blocks 消息兼容降级：按 injections -> thoughts -> tools -> text 顺序列出
+    // 无 blocks（无分段账本）消息：各数据源只按自身内部顺序平铺——
+    // injections（独立条目）→ thoughts（thinkingTurns 自身有序）→ tools
+    // （toolCalls 自身有序）→ 全文单段；数据源之间不虚构交错关系。
+    // 【已删除的旧兜底】原实现按 streamTextOffset 把全文切成「工具前 /
+    // 工具后」两段再按类型归拢拼接：偏移失效（≥全文长）时整条正文沉到
+    // 全部工具之后，是交错时序被系统性抹平的机关之一（S5）。分段记账
+    // 落地后所有在产路径都建 blocks；存量无 blocks 会话由事件重放重建
+    // （F3 批），连 events 都没有的远古数据走此平铺路径（缺口已在 F1
+    // 报告登记），此处不为其保留任何归拢 / 切分逻辑。
     for (const inj of injections) {
       items.push({ kind: 'injection', key: `injection-${inj.id}`, injection: inj });
     }
     pushFallbackTurns(msg, items);
-    if (tools.length) {
-      const rendered = buildToolRenderItems(tools);
+    const visibleTools = tools.filter((t) => !t.isInternal);
+
+    if (visibleTools.length) {
+      const rendered = buildToolRenderItems(visibleTools, {
+        isTurnLive,
+        isFollowedByNonTool: Boolean((msg.text || '').trim()),
+      });
       if (rendered.length) {
         const firstStartedAt =
-          tools.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
-        const totalDuration = tools.reduce((acc, t) => {
+          visibleTools.find((t) => t.startedAt != null)?.startedAt ?? msg.timestamp;
+        const totalDuration = visibleTools.reduce((acc, t) => {
           const d =
             t.durationMs ??
             (t.finishedAt && t.startedAt && t.finishedAt >= t.startedAt
@@ -301,7 +327,14 @@ export function buildAssistantTimeline(
       }
     }
     if ((msg.text || '').trim()) {
-      pushParsedText(msg.text || '', undefined, msg.status === 'processing', items, thi, xi);
+      pushParsedText(
+        msg.text || '',
+        undefined,
+        msg.status === 'processing',
+        items,
+        thi,
+        xi
+      );
     }
     return applyDurationFallback(msg, items);
   } catch (err) {

@@ -2,7 +2,7 @@
  * 工具调用收口后的后续引导建议（纯函数，不写消息时间线）。
  *
  * 契约（保证流式顺序不被污染）：
- * - 绝不写入 SessionMessage.blocks / text / streamTextOffset / toolCalls
+ * - 绝不写入 SessionMessage.blocks / text / toolCalls
  * - 仅在整轮助手 status=completed 且工具均已终态后由 UI 派生
  * - 渲染位置在时间线 body 之外（完成态 meta 旁），不参与 buildAssistantTimeline
  */

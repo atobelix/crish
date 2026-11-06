@@ -97,10 +97,10 @@ export function toolCallPatchHasChanges(
   if (updates.status !== undefined && tc.status !== updates.status) return true;
   if (updates.output !== undefined && tc.output !== updates.output) return true;
   if (updates.diffs !== undefined && tc.diffs !== updates.diffs) return true;
-  if (
-    updates.explanation !== undefined &&
-    tc.explanation !== updates.explanation
-  )
+  if (updates.intent !== undefined && tc.intent !== updates.intent) return true;
+  if (updates.group !== undefined && tc.group !== updates.group) return true;
+  if (updates.groupId !== undefined && tc.groupId !== updates.groupId) return true;
+  if (updates.isInternal !== undefined && tc.isInternal !== updates.isInternal)
     return true;
   if (
     updates.approvalMeta !== undefined &&
@@ -162,8 +162,10 @@ export function applyMessageToolCallPatch(
   if (updates.status !== undefined) target.status = updates.status;
   if (updates.output !== undefined) target.output = updates.output;
   if (updates.diffs !== undefined) target.diffs = updates.diffs;
-  if (updates.explanation !== undefined)
-    target.explanation = updates.explanation;
+  if (updates.intent !== undefined) target.intent = updates.intent;
+  if (updates.group !== undefined) target.group = updates.group;
+  if (updates.groupId !== undefined) target.groupId = updates.groupId;
+  if (updates.isInternal !== undefined) target.isInternal = updates.isInternal;
   if (updates.approvalMeta !== undefined)
     target.approvalMeta = updates.approvalMeta;
   if (updates.approvalDecision !== undefined)
@@ -289,20 +291,8 @@ export function mergeSessionMessageFields(
       existing.blocks = incoming.blocks;
     }
   }
-  if (incoming.streamTextOffset !== undefined) {
-    const exOff =
-      typeof existing.streamTextOffset === 'number'
-        ? existing.streamTextOffset
-        : undefined;
-    const inOff = incoming.streamTextOffset;
-    const exTerm = isTerminalSessionMessageStatus(existing.status);
-    const inTerm = isTerminalSessionMessageStatus(incoming.status);
-    if (exTerm && !inTerm && exOff !== undefined && inOff < exOff) {
-      // partial 不回退终态 offset
-    } else {
-      existing.streamTextOffset = inOff;
-    }
-  }
+  // 【已删除】streamTextOffset 合并规则随偏移模型一并移除：正文分段
+  // 状态只存在于 blocks（上方 blocks 合并规则承载），无独立偏移可合并。
   if (incoming.thinkingTime !== undefined) {
     const exTerm = isTerminalSessionMessageStatus(existing.status);
     const inTerm = isTerminalSessionMessageStatus(incoming.status);

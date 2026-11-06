@@ -122,8 +122,14 @@ export function commitToolPatchToSession(
   sessionId: string,
   messageId: string,
   toolId: string,
-  patch: StreamToolCallPatch | StreamToolLive
+  patch: StreamToolCallPatch | StreamToolLive,
+  options?: { sync?: boolean }
 ): void {
+  // 分段封口（S3）：工具块入队前先把当前流式正文快照落块——保证批量
+  // flush 时本工具的前置正文段已按序存在于 blocks，工具块只会落在段
+  // 之后，绝不反超。经 upsertToolCall 的调用此前已快照过，此处同值
+  // 短路为无操作；未经快照的直提路径（审批/错误补丁等）由此补齐。
+  snapshotStreamTextToSession(sessionId, messageId);
   const lite = getStreamTools(sessionId, messageId)?.[toolId];
   const key = pendingToolKey(sessionId, messageId, toolId);
   const pending = pendingToolCommits.get(key);
@@ -140,12 +146,30 @@ export function commitToolPatchToSession(
       : lite?.arguments !== undefined
         ? lite.arguments
         : existing?.arguments;
-  const explanation =
-    patch.explanation !== undefined
-      ? patch.explanation
-      : lite?.explanation !== undefined
-        ? lite.explanation
-        : existing?.explanation;
+  const intent =
+    patch.intent !== undefined
+      ? patch.intent
+      : lite?.intent !== undefined
+        ? lite.intent
+        : existing?.intent;
+  const group =
+    patch.group !== undefined
+      ? patch.group
+      : lite?.group !== undefined
+        ? lite.group
+        : existing?.group;
+  const groupId =
+    patch.groupId !== undefined
+      ? patch.groupId
+      : lite?.groupId !== undefined
+        ? lite.groupId
+        : existing?.groupId;
+  const isInternal =
+    patch.isInternal !== undefined
+      ? patch.isInternal
+      : lite?.isInternal !== undefined
+        ? lite.isInternal
+        : existing?.isInternal;
   const status = (patch.status ||
     lite?.status ||
     existing?.status ||
@@ -199,7 +223,10 @@ export function commitToolPatchToSession(
     if (patch.name !== undefined || (!existing.name && name))
       updates.name = name;
     if (argumentsText !== undefined) updates.arguments = argumentsText;
-    if (explanation !== undefined) updates.explanation = explanation;
+    if (intent !== undefined) updates.intent = intent;
+    if (group !== undefined) updates.group = group;
+    if (groupId !== undefined) updates.groupId = groupId;
+    if (isInternal !== undefined) updates.isInternal = isInternal;
     if (status !== undefined) updates.status = status;
     if (output !== undefined) updates.output = output;
     if (approvalMeta !== undefined) updates.approvalMeta = approvalMeta;
@@ -230,7 +257,10 @@ export function commitToolPatchToSession(
       arguments: argumentsText || '',
       status,
       ...(output !== undefined ? { output } : {}),
-      ...(explanation !== undefined ? { explanation } : {}),
+      ...(intent !== undefined ? { intent } : {}),
+      ...(group !== undefined ? { group } : {}),
+      ...(groupId !== undefined ? { groupId } : {}),
+      ...(isInternal !== undefined ? { isInternal } : {}),
       ...(approvalMeta !== undefined ? { approvalMeta } : {}),
       ...(diffs !== undefined ? { diffs } : {}),
       ...(startedAt !== undefined ? { startedAt } : {}),
@@ -249,7 +279,11 @@ export function commitToolPatchToSession(
       updates: null,
     });
   }
-  scheduleToolCommitFlush();
+  if (options?.sync) {
+    flushPendingToolCommits();
+  } else {
+    scheduleToolCommitFlush();
+  }
 }
 
 /**
@@ -333,7 +367,8 @@ export function commitStreamToSession(
 /**
  * Snapshot current stream text into the session store WITHOUT clearing the
  * streaming entry (UI keeps reading the live buffer). Used before tool
- * patches so streamTextOffset / blocks stay correct for interleaving.
+ * patches so the preceding text segment is sealed into blocks (segmented
+ * bookkeeping) before the tool block lands — interleaving stays correct.
  *
  * T4.2（R-05）：同值短路——streamText 与现有 msg.text 相同时跳过
  * updateMessageText（工具开始调用时文本常未变，避免无谓 messages 引用

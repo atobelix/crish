@@ -16,6 +16,7 @@ import {
   markStreamingActive,
 } from '../api/streamStop';
 import { publishToolDiffs } from '../api/publishToolDiffs';
+import { applyStreamedTextToBlocks } from '../api/tool-presentation/timelineReconciler';
 import {
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
@@ -114,7 +115,7 @@ export function buildAgentStreamCallbacks(
         status: 'running',
       });
     },
-    onThought: (t: string, _turnIndex?: number, mode?: 'append' | 'set') =>
+    onThought: (t: string, turnIndex?: number, mode?: 'append' | 'set') =>
       pa((m) => {
         // R6：t 为 delta 增量（mode='append'，下游累积）或全文覆写
         // （mode='set'：轮次首帧 / message-end 权威收口）；mode 缺省按 set
@@ -124,11 +125,12 @@ export function buildAgentStreamCallbacks(
         m.thinking = replacing ? t : (m.thinking ?? '') + t;
         // 同时维护 m.blocks 中的思考块，支持多轮独立思考卡片交错展示
         if (!m.blocks) m.blocks = [];
-        // 取当前活跃轮次（由 turnIndex 字段跟踪，默认 0）
+        // 轮次取回调参数 turnIndex。【已删除的死读】旧实现读消息上的
+        // `_activeTurnIndex` 字段——全仓无任何写入方，恒为 0，于是多轮
+        // 思考全塌缩进 thought-turn-0 一块、后轮 'set' 覆盖前轮。
         const currentTurn: number =
-          typeof (m as { _activeTurnIndex?: unknown })._activeTurnIndex ===
-          'number'
-            ? (m as { _activeTurnIndex?: number })._activeTurnIndex!
+          typeof turnIndex === 'number' && Number.isFinite(turnIndex)
+            ? Math.max(0, Math.floor(turnIndex))
             : 0;
         const thoughtKey = `thought-turn-${currentTurn}`;
         const existingIdx = m.blocks.findIndex(
@@ -157,14 +159,25 @@ export function buildAgentStreamCallbacks(
       }),
     onChunk: (c: string) =>
       pa((m) => {
+        const prev = m.text || '';
         m.text = c;
         if (m.thinking === '正在处理…') m.thinking = '';
+        if (!m.blocks) m.blocks = [];
+        // 正文分段记账（与主流路径同一实现 applyStreamedTextToBlocks）：
+        // c 为累计全文快照，增量并入活跃段、权威改写走锚点重对齐，
+        // 段按事件序入 blocks。【旧行为】此处只写 m.text、从不建 text
+        // 块，完成收口必然命中「无 text 块」补偿、整条正文沉底——子
+        // 代理/面板路径的交错时序此前无从保全。
+        applyStreamedTextToBlocks(m.blocks, prev, c);
       }),
     onToolStart: (
       toolId: string,
       name: string,
       args: string,
-      explanation?: string
+      intent?: string,
+      group?: string,
+      groupId?: string,
+      isInternal?: boolean
     ) =>
       pa((m) => {
         if (!m.toolCalls) m.toolCalls = [];
@@ -174,10 +187,20 @@ export function buildAgentStreamCallbacks(
             id: toolId,
             name,
             arguments: args,
-            ...(explanation !== undefined ? { explanation } : {}),
+            ...(intent !== undefined ? { intent } : {}),
+            ...(group !== undefined ? { group } : {}),
+            ...(groupId !== undefined ? { groupId } : {}),
+            ...(isInternal !== undefined ? { isInternal } : {}),
             status: 'running',
           });
-          m.blocks.push({ type: 'tool_call', id: toolId });
+          m.blocks.push({
+            type: 'tool_call',
+            id: toolId,
+            ...(intent !== undefined ? { intent } : {}),
+            ...(group !== undefined ? { group } : {}),
+            ...(groupId !== undefined ? { groupId } : {}),
+            ...(isInternal !== undefined ? { isInternal } : {}),
+          });
         }
       }),
     onToolSuccess: (
@@ -215,7 +238,7 @@ export function buildAgentStreamCallbacks(
       toolId: string,
       name: string,
       args: string,
-      explanation: string,
+      intent?: string,
       approvalMeta?: MessageToolApprovalMeta
     ) =>
       pa((m) => {
@@ -225,14 +248,14 @@ export function buildAgentStreamCallbacks(
         if (existing) {
           existing.status = 'pending_approval';
           existing.arguments = args || existing.arguments;
-          if (explanation) existing.explanation = explanation;
+          if (intent !== undefined) existing.intent = intent;
           if (approvalMeta) existing.approvalMeta = approvalMeta;
         } else {
           const entry: MessageToolCall = {
             id: toolId,
             name,
             arguments: args,
-            explanation,
+            ...(intent !== undefined ? { intent } : {}),
             status: 'pending_approval',
           };
           if (approvalMeta) entry.approvalMeta = approvalMeta;
@@ -240,7 +263,11 @@ export function buildAgentStreamCallbacks(
           if (
             !m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)
           ) {
-            m.blocks.push({ type: 'tool_call', id: toolId });
+            m.blocks.push({
+              type: 'tool_call',
+              id: toolId,
+              ...(intent !== undefined ? { intent } : {}),
+            });
           }
         }
       }),

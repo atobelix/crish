@@ -82,7 +82,20 @@ function parseToolCall(raw: unknown): MessageToolCall | null {
       : 'error';
   const tc: MessageToolCall = { id, name, arguments: args, status };
   if (typeof o.output === 'string') tc.output = o.output;
-  if (typeof o.explanation === 'string') tc.explanation = o.explanation;
+  if (typeof o.intent === 'string' && o.intent.trim()) {
+    tc.intent = o.intent.trim();
+  }
+  if (typeof o.group === 'string' && o.group.trim()) {
+    tc.group = o.group.trim();
+  }
+  const rawGroupId = o.groupId ?? o.group_id;
+  if (typeof rawGroupId === 'string' && rawGroupId.trim()) {
+    tc.groupId = rawGroupId.trim();
+  }
+  const rawIsInternal = o.isInternal ?? o.is_internal;
+  if (typeof rawIsInternal === 'boolean') {
+    tc.isInternal = rawIsInternal;
+  }
   if (Array.isArray(o.diffs)) tc.diffs = o.diffs as FileDiff[];
   if (o.approvalMeta && typeof o.approvalMeta === 'object')
     tc.approvalMeta = o.approvalMeta as MessageToolApprovalMeta;
@@ -197,12 +210,8 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
   ) {
     msg.status = o.status as NonNullable<SessionMessage['status']>;
   }
-  if (
-    typeof o.streamTextOffset === 'number' &&
-    Number.isFinite(o.streamTextOffset)
-  ) {
-    msg.streamTextOffset = o.streamTextOffset;
-  }
+  // streamTextOffset 已随单一偏移模型删除：存量 JSON 中的该字段不再读入
+  // （正文分段状态只认 blocks）。
   if (typeof o.thinkingTime === 'number' && Number.isFinite(o.thinkingTime)) {
     msg.thinkingTime = o.thinkingTime;
   }

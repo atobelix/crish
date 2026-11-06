@@ -110,17 +110,34 @@ describe('timelineNormalizer', () => {
   });
 
   describe('buildToolRenderItems', () => {
-    it('groups consecutive non-inspecting or running inspect tools', () => {
+    it('groups consecutive tools sharing the same groupId', () => {
       const tools: MessageToolCall[] = [
-        makeToolCall({ id: 't1', name: 'list_dir', status: 'running' }),
-        makeToolCall({ id: 't2', name: 'list_dir', status: 'running' }),
+        makeToolCall({
+          id: 't1',
+          name: 'list_dir',
+          status: 'running',
+          groupId: 'grp_0_0',
+          group: '查看目录结构',
+        }),
+        makeToolCall({
+          id: 't2',
+          name: 'list_dir',
+          status: 'running',
+          groupId: 'grp_0_0',
+          group: '查看目录结构',
+        }),
       ];
       const items = buildToolRenderItems(tools);
       expect(items.length).toBe(1);
       expect(items[0]?.kind).toBe('group');
+      if (items[0]?.kind === 'group') {
+        expect(items[0].groupTitle).toBe('查看目录结构');
+        expect(items[0].label).toBe('查看目录结构');
+        expect(items[0].tools).toHaveLength(2);
+      }
     });
 
-    it('returns single items for tools with displayable results', () => {
+    it('returns single items for tools without groupId', () => {
       const tools: MessageToolCall[] = [
         makeToolCall({
           id: 't1',
@@ -134,107 +151,88 @@ describe('timelineNormalizer', () => {
       expect(items[0]?.kind).toBe('single');
     });
 
-    it('V1-γ 折叠单源：连续可折叠 inspect 组 label 复活为折叠头文案', () => {
-      const tools: MessageToolCall[] = [
-        makeToolCall({ id: 't1', name: 'list_dir', status: 'running' }),
-        makeToolCall({ id: 't2', name: 'list_dir', status: 'running' }),
-        makeToolCall({ id: 't3', name: 'list_dir', status: 'running' }),
-      ];
-      const items = buildToolRenderItems(tools);
-      expect(items.length).toBe(1);
-      expect(items[0]?.kind).toBe('group');
-      if (items[0]?.kind === 'group') {
-        expect(items[0].tools).toHaveLength(3);
-        // label = 本组动作分布（formatProcessActionsSummary 单一来源，R8/D-6）
-        expect(items[0].label).toBe('已搜索 3 次');
-        expect(items[0].id).toBe('grp-t1');
-      }
-    });
-
-    it('V1-γ 同轮并行（turnId 相同 + startedAt ≤200ms）也并入投影层 group', () => {
+    it('M-01 静态身份律：不同 groupId 分组且无 groupId 独立直出', () => {
       const tools: MessageToolCall[] = [
         makeToolCall({
-          id: 'p1',
-          name: 'run_command',
-          status: 'success',
-          turnId: 'turn-1',
-          startedAt: 1000,
-        }),
-        makeToolCall({
-          id: 'p2',
-          name: 'run_command',
-          status: 'success',
-          turnId: 'turn-1',
-          startedAt: 1100,
-        }),
-      ];
-      const items = buildToolRenderItems(tools);
-      expect(items.length).toBe(1);
-      expect(items[0]?.kind).toBe('group');
-      if (items[0]?.kind === 'group') {
-        expect(items[0].tools.map((t) => t.id)).toEqual(['p1', 'p2']);
-        expect(items[0].label).toBe('已运行 2 条命令');
-      }
-    });
-
-    it('V1-γ 跨轮同 turnId 但 startedAt 相距 >200ms 不并入（保持单条）', () => {
-      const tools: MessageToolCall[] = [
-        makeToolCall({
-          id: 'p1',
-          name: 'run_command',
-          status: 'success',
-          turnId: 'turn-1',
-          startedAt: 1000,
-        }),
-        makeToolCall({
-          id: 'p2',
-          name: 'run_command',
-          status: 'success',
-          turnId: 'turn-1',
-          startedAt: 2000,
-        }),
-      ];
-      const items = buildToolRenderItems(tools);
-      expect(items.every((i) => i.kind === 'single')).toBe(true);
-    });
-
-    it('V1-γ 可展示结果 inspect 中断折叠流（单条，不并入 running 组）', () => {
-      const tools: MessageToolCall[] = [
-        makeToolCall({
-          id: 't1',
+          id: 'g1_1',
           name: 'list_dir',
           status: 'success',
-          output: 'src\nnode_modules',
+          groupId: 'grp_1',
+          group: '第一阶段',
         }),
-        makeToolCall({ id: 't2', name: 'list_dir', status: 'running' }),
-        makeToolCall({ id: 't3', name: 'list_dir', status: 'running' }),
+        makeToolCall({
+          id: 's1',
+          name: 'read_file',
+          status: 'success',
+          intent: '独立读取文件',
+        }),
+        makeToolCall({
+          id: 'g2_1',
+          name: 'run_command',
+          status: 'running',
+          groupId: 'grp_2',
+          group: '第二阶段',
+        }),
       ];
       const items = buildToolRenderItems(tools);
-      expect(items[0]?.kind).toBe('single');
-      expect(items[1]?.kind).toBe('group');
-      if (items[1]?.kind === 'group') {
-        expect(items[1].tools.map((t) => t.id)).toEqual(['t2', 't3']);
+      expect(items).toHaveLength(3);
+      expect(items[0]?.kind).toBe('group');
+      expect(items[1]?.kind).toBe('single');
+      expect(items[2]?.kind).toBe('group');
+      if (items[0]?.kind === 'group') {
+        expect(items[0].groupTitle).toBe('第一阶段');
+      }
+      if (items[2]?.kind === 'group') {
+        expect(items[2].groupTitle).toBe('第二阶段');
+      }
+    });
+
+    it('buildAssistantTimeline 中静默过滤 isInternal === true 的内部工具', () => {
+      const msg = makeMessage({
+        id: 'msg-internal',
+        sender: 'assistant',
+        blocks: [
+          { type: 'tool_call', id: 't-normal' },
+          { type: 'tool_call', id: 't-internal' },
+        ],
+        toolCalls: [
+          makeToolCall({
+            id: 't-normal',
+            name: 'read_file',
+            status: 'success',
+            isInternal: false,
+          }),
+          makeToolCall({
+            id: 't-internal',
+            name: 'manage_task',
+            status: 'success',
+            isInternal: true,
+          }),
+        ],
+      });
+      const timeline = buildAssistantTimeline(msg);
+      const toolItems = timeline.filter((i) => i.kind === 'tools');
+      expect(toolItems).toHaveLength(1);
+      if (toolItems[0]?.kind === 'tools') {
+        const ids = toolItems[0].items.map((it) =>
+          it.kind === 'single' ? it.tc.id : it.tools.map((t) => t.id).join(',')
+        );
+        expect(ids).toEqual(['t-normal']);
       }
     });
   });
 
   describe('alignToolCallBlocks（V1-δ 单一对齐源）', () => {
-    it('注入缺失 tool_call 块：仅 text 时置前', () => {
+    it('注入缺失 tool_call 块：仅 text 时兜底就后追加，绝不逆序置顶', () => {
       const blocks = [{ type: 'text' as const, content: '正文' }];
       const next = alignToolCallBlocks(blocks, [
         makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
       ]);
-      expect(next[0]).toEqual({ type: 'tool_call', id: 't1' });
-      expect(next[1]).toEqual({ type: 'text', content: '正文' });
+      expect(next[0]).toEqual({ type: 'text', content: '正文' });
+      expect(next[1]).toEqual({ type: 'tool_call', id: 't1' });
     });
 
-    /**
-     * 【契约变更 · 断层 3 根治】旧实现一律插到「最后一个 text 块之前」，
-     * 于是「正文 1 → 工具 2 → 正文 2」场景下缺失的工具 1 会被插到正文 2 之前
-     * （即工具 2 之后），时序彻底倒流。现按因果时间戳就近插位，
-     * 无时间戳时兜底插到**首个正文块之前**。
-     */
-    it('注入缺失 tool_call 块：无时间戳则插到首个 text 块之前（严禁盲目置到尾部正文前）', () => {
+    it('注入缺失 tool_call 块：无时间戳则就后追加（严禁越过已有正文逆序前置）', () => {
       const blocks = [
         { type: 'tool_call' as const, id: 't1' },
         { type: 'text' as const, content: '前半' },
@@ -246,26 +244,36 @@ describe('timelineNormalizer', () => {
       ]);
       expect(next.map((b) => b.type)).toEqual([
         'tool_call',
+        'text',
+        'text',
         'tool_call',
-        'text',
-        'text',
       ]);
-      expect(next[1]).toEqual({ type: 'tool_call', id: 't2' });
+      expect(next[3]).toEqual({ type: 'tool_call', id: 't2' });
     });
 
-    it('断层 3 根治：正文 1 → 工具 2 → 正文 2 场景下缺失工具 1 必须插到正文 1 之前', () => {
+    it('断层 3 根治：带 startedAt 的缺失工具按时间戳插回，无时间戳则就后追加', () => {
+      const T0 = 1_700_000_000_000;
       const blocks = [
-        { type: 'text' as const, content: '正文 1' },
-        { type: 'tool_call' as const, id: 't2' },
-        { type: 'text' as const, content: '正文 2' },
+        { type: 'text' as const, content: '正文 1', startTime: T0 + 1000 },
+        { type: 'tool_call' as const, id: 't2', startTime: T0 + 2000 },
+        { type: 'text' as const, content: '正文 2', startTime: T0 + 3000 },
       ];
-      const next = alignToolCallBlocks(blocks, [
+      const nextWithTime = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success', startedAt: T0 + 500 }),
+        makeToolCall({ id: 't2', name: 'bash', status: 'success', startedAt: T0 + 2000 }),
+      ]);
+      // t1 时间早于正文 1，按时间戳插在正文 1 之前
+      expect(nextWithTime.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
+        ['t1', 'text', 't2', 'text']
+      );
+
+      // 若 t1 无时间戳，兜底就后追加，绝不逆序插在正文 1 之前
+      const nextNoTime = alignToolCallBlocks(blocks, [
         makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
         makeToolCall({ id: 't2', name: 'bash', status: 'success' }),
       ]);
-      // 负向断言：t1 绝不能被插到「正文 2」之前（即 t2 之后）
-      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
-        ['t1', 'text', 't2', 'text']
+      expect(nextNoTime.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
+        ['text', 't2', 'text', 't1']
       );
     });
 
@@ -547,6 +555,31 @@ describe('timelineNormalizer', () => {
       expect(timeline[1]?.kind).toBe('text');
       expect((timeline[1] as { content?: string })?.content).toBe(
         '已为你创建项目。'
+      );
+    });
+
+    it('无 blocks（无分段账本）时不归拢重构：tools 一组 + 全文单段平铺，绝不按偏移切分正文', () => {
+      // 【旧行为已删除】原实现按 streamTextOffset 把全文切成「工具前 /
+      // 工具后」两段拼接（偏移失效时全文沉底）。分段记账落地后，无
+      // blocks 消息只按各数据源自身顺序平铺，不虚构交错关系。
+      const msg = makeMessage({
+        id: 'msg-degraded-offset',
+        sender: 'assistant',
+        text: '阶段一说明正文\n阶段二总结正文',
+        toolCalls: [
+          makeToolCall({
+            id: 'tc-fallback',
+            name: 'bash',
+            status: 'success',
+          }),
+        ],
+      });
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline.length).toBe(2);
+      expect(timeline[0]?.kind).toBe('tools');
+      expect(timeline[1]?.kind).toBe('text');
+      expect((timeline[1] as { content?: string })?.content).toBe(
+        '阶段一说明正文\n阶段二总结正文'
       );
     });
   });

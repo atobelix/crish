@@ -22,6 +22,10 @@ import {
   upsertMessageById,
 } from './sessionSharedHelpers';
 import { invalidateEditObjects } from '../api/chat-bridge/editSessionConsumer';
+import {
+  applyStreamedTextToBlocks,
+  TEXT_SEGMENT_ID_PREFIX,
+} from '../api/tool-presentation/timelineReconciler';
 
 /** 核心 actions 子集：消息增删 / 文本 / 思考 / 撤回 / 时间线截断 / 审批 */
 export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
@@ -52,7 +56,12 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const newMsg = { ...message, timestamp, blocks: message.blocks || [] };
         if (newMsg.blocks.length === 0) {
           if (newMsg.text)
-            newMsg.blocks.push({ type: 'text' as const, content: newMsg.text });
+            newMsg.blocks.push({
+              type: 'text' as const,
+              id: `${TEXT_SEGMENT_ID_PREFIX}0`,
+              content: newMsg.text,
+              turnIndex: 0,
+            });
           newMsg.toolCalls?.forEach((tc) => {
             newMsg.blocks.push({ type: 'tool_call' as const, id: tc.id });
           });
@@ -198,61 +207,14 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         const prev = msg.text || '';
         msg.text = text;
         if (!msg.blocks) msg.blocks = [];
-        let offset =
-          typeof msg.streamTextOffset === 'number' ? msg.streamTextOffset : 0;
-        const resetNeeded =
-          text.length < offset ||
-          (prev &&
-            text.length < prev.length &&
-            !prev.startsWith(text) &&
-            !text.startsWith(
-              prev.slice(0, Math.min(prev.length, text.length))
-            ));
-        if (resetNeeded) {
-          offset = 0;
-          msg.streamTextOffset = 0;
-          msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
-        }
-        const rawSegment = text.length >= offset ? text.slice(offset) : text;
-        const segment =
-          offset > 0 ? rawSegment.replace(/^\n+/, '') : rawSegment;
-        /**
-         * 【双重物理界标隔离】定位可承接当前段落的最新 text 块时，
-         * 必须确保该正文块位于「最后一个工具块」**与**「最后一个思考块」之后。
-         *
-         * 历史缺陷：仅以 `lastToolIdx` 为界标，于是
-         *   正文 1 → 思考 2 → 正文 2
-         * 这种「无工具 + 多轮思考交错」场景下，倒序查找会命中思考 2 之前的正文 1，
-         * 把正文 2 的内容追加合并进正文 1，中间的 thought 被挤到末尾或彻底错乱。
-         */
-        const blockTypes = msg.blocks.map((b) => b.type);
-        const lastDelimiterIdx = Math.max(
-          blockTypes.lastIndexOf('tool_call'),
-          blockTypes.lastIndexOf('thought')
-        );
-        let targetTextIdx = -1;
-        for (let i = msg.blocks.length - 1; i >= 0; i--) {
-          if (msg.blocks[i]?.type === 'text') {
-            if (lastDelimiterIdx === -1 || i > lastDelimiterIdx)
-              targetTextIdx = i;
-            break;
-          }
-        }
-
-        const now = Date.now();
-        if (targetTextIdx >= 0) {
-          const target = msg.blocks[targetTextIdx]!;
-          target.content = segment;
-          if (target.startTime)
-            target.durationMs = Math.max(0, now - target.startTime);
-        } else if (segment.length > 0) {
-          msg.blocks.push({
-            type: 'text' as const,
-            content: segment,
-            startTime: now,
-            durationMs: 0,
-          });
-        }
+        // 正文分段记账（唯一实现：timelineReconciler.applyStreamedTextToBlocks）：
+        // 每段正文是带稳定 id + turnIndex 的 text 块，按事件序入 blocks，
+        // tool_call / thought 块为段间物理界标；流式增量并入活跃段，
+        // 权威改写走锚点重对齐，已封口段永不丢失、永不沉底。
+        // 【已删除的旧模型】单一 streamTextOffset 偏移切片 + 双界标查找 +
+        // 「游标保护」补丁分支：最终权威正文短于偏移时尾段永不落块，
+        // 收口只能把整条正文拼成一块追加末尾（sess-1793884211510 事故）。
+        applyStreamedTextToBlocks(msg.blocks, prev, text);
       }),
 
     updateMessageThinking: (sessionId, messageId, thinking, turnIndex = 0) =>
@@ -343,16 +305,9 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
             };
           }
         } else if (thinking.trim()) {
-          /**
-           * 【游标校准】开启新轮次思考的瞬间，把流式正文游标推进到当前累计正文长度。
-           *
-           * 历史缺陷：`streamTextOffset` 仅在 `addMessageToolCall` 时推进，
-           * 导致无工具调用但多轮思考的场景下，后续正文的 `segment` 切片
-           * 仍从旧游标起算，把新正文整段重复拼回上一个正文块。
-           */
-          const nextOffset = (msg.text || '').length;
-          // 仅在确有累计正文时推进游标：无正文时保持状态不变，以维系「同字符串重复调用为零副作用」的既有契约。
-          if (nextOffset > 0) msg.streamTextOffset = nextOffset;
+          // 分段记账下无需任何正文游标校准：本 thought 块落入 blocks 即成为
+          // 物理界标，其前一段正文自此封口，其后正文由 applyStreamedTextToBlocks
+          // 另起新段——旧 streamTextOffset 推进逻辑已随偏移模型整段删除。
           const newBlock = {
             type: 'thought' as const,
             id: thoughtKey,

@@ -11,7 +11,7 @@
  *   - JS SessionMessage.toolCalls   ↔ Rust SessionMessage.tool_calls_json  (JSON 字符串)
  *   - JS SessionMessage.blocks      ↔ Rust SessionMessage.blocks_json     (JSON 字符串)
  *   - JS SessionMessage.toolCallResults ↔ Rust SessionMessage.tool_call_results_json
- *   - JS SessionMessage.streamTextOffset ↔ Rust SessionMessage.stream_text_offset (仅命名差异，serde camelCase 已对齐)
+ *   - （JS 侧已删除 streamTextOffset 单一偏移模型：正文分段状态只存于 blocks；Rust 侧同名字段前端不再读写）
  *   - JS SessionMessage.thinkingTime ↔ Rust SessionMessage.thinking_time (serde camelCase 已对齐)
  *   - JS SessionAgent.subagentPath  ↔ Rust SessionAgent.subagent_path_json (JSON 字符串)
  *   - JS SessionIndexEntry.pinnedMessageIds: string[] ↔ Rust SessionIndexEntry.pinned_message_ids: Option<String> (JSON 字符串)

@@ -257,7 +257,9 @@ describe('回读面：usage_json → cacheMetrics（R6-D5 回放链）', () => {
     expect(m?.text).toBe('hi');
     expect(m?.thinking).toBe('thought');
     expect(m?.status).toBe('completed');
-    expect(m?.streamTextOffset).toBe(2);
+    // streamTextOffset 已随单一偏移模型删除：Rust 侧即便仍回传（夹具上方
+    // 保留该字段模拟存量），前端模型也不再读入——正文分段只认 blocks。
+    expect(m?.streamTextOffset).toBeUndefined();
     expect(m?.thinkingTime).toBe(3);
     expect(m?.blocks).toEqual([
       {

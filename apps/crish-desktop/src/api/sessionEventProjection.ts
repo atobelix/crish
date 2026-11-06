@@ -15,7 +15,10 @@ import {
   mergeSessionMessageFields,
   sortMessagesByOrder,
 } from '../store/sessionSharedHelpers';
-import { normalizeAssistantTimeline } from './toolPresentation';
+import {
+  applyStreamedTextToBlocks,
+  normalizeAssistantTimeline,
+} from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
 import { blockText } from './chat-bridge/handlers/eventUtils';
 import {
@@ -127,7 +130,70 @@ export function projectEventsToMessages(events: unknown[]): {
   let maxSequence = 0;
   let msgSeq = 0;
   const messageIndex = new Map<string, number>();
-  const turnTextByMessage = new Map<string, { turnIndex: number; text: string }>();
+
+  /**
+   * 分段记账状态（按本地助手消息 id）：段的身份是**引擎消息 id**，不是
+   * turnIndex——引擎 turnIndex 可整轮退化为 0（事故实测），同 turn 的后到
+   * message-end 曾把先段正文/思考整段覆盖丢失（第 2 轮首段正文丢失、
+   * 第 3 轮前几段思考只剩最后一段皆出于此）。有效轮次：引擎给出且严格
+   * 递增时用引擎值，否则按到达序合成（lastTurn + 1）；同一引擎消息的
+   * 重放按 id 命中同一轮次，幂等不重复建段。
+   */
+  interface AssistantSegmentState {
+    turnByEngineMsgId: Map<string, number>;
+    lastTurn: number;
+    seenEnds: number;
+    /** 最近 message-start / message-end 的引擎消息 id（delta 归属判定） */
+    openEngineMsgId?: string;
+    /** 已写入活跃正文段的引擎消息 id；与当前消息不同即需封口上一段 */
+    activeSegmentEngineId?: string;
+    /** 上一次 message-end 的段身份（修订识别：同段重发是覆盖，不是新段） */
+    lastEndEngineMsgId?: string;
+    lastEndTurnIndex?: number;
+    textByTurn: Map<number, string>;
+    thoughtByTurn: Map<number, string>;
+  }
+  const segmentStateByMessage = new Map<string, AssistantSegmentState>();
+  const getSegmentState = (assistantId: string): AssistantSegmentState => {
+    let st = segmentStateByMessage.get(assistantId);
+    if (!st) {
+      st = {
+        turnByEngineMsgId: new Map(),
+        lastTurn: -1,
+        seenEnds: 0,
+        textByTurn: new Map(),
+        thoughtByTurn: new Map(),
+      };
+      segmentStateByMessage.set(assistantId, st);
+    }
+    return st;
+  };
+  const resolveEffectiveTurn = (
+    st: AssistantSegmentState,
+    engineMsgId: string | undefined,
+    rawTurn: number
+  ): number => {
+    if (engineMsgId) {
+      const known = st.turnByEngineMsgId.get(engineMsgId);
+      if (known !== undefined) return known;
+    }
+    const cleanRaw = Number.isFinite(rawTurn)
+      ? Math.max(0, Math.floor(rawTurn))
+      : 0;
+    const eff =
+      st.lastTurn < 0
+        ? cleanRaw
+        : cleanRaw > st.lastTurn
+          ? cleanRaw
+          : st.lastTurn + 1;
+    if (engineMsgId) st.turnByEngineMsgId.set(engineMsgId, eff);
+    st.lastTurn = eff;
+    return eff;
+  };
+  const engineMsgIdOf = (msg: unknown): string | undefined => {
+    const id = (msg as { id?: unknown } | null | undefined)?.id;
+    return typeof id === 'string' && id ? id : undefined;
+  };
 
   const pushUser = (
     msg: AgentMessage,
@@ -266,6 +332,21 @@ export function projectEventsToMessages(events: unknown[]): {
           );
         }
         applyProjectedOrderMeta(currentAssistant, ts, seq);
+        // 登记本段引擎消息：后续 delta 以此归属分段（段身份 = 引擎消息 id）
+        if (msg && currentAssistant) {
+          const engineMsgId = engineMsgIdOf(msg);
+          if (engineMsgId) {
+            const st = getSegmentState(currentAssistant.id);
+            st.openEngineMsgId = engineMsgId;
+            const rawStartTurn = (event as { turnIndex?: unknown })
+              .turnIndex;
+            resolveEffectiveTurn(
+              st,
+              engineMsgId,
+              typeof rawStartTurn === 'number' ? rawStartTurn : 0
+            );
+          }
+        }
       }
       continue;
     }
@@ -293,10 +374,36 @@ export function projectEventsToMessages(events: unknown[]): {
         rekeyAssistantIfStable(messages, a, id, messageIndex);
         a.status = 'completed';
         applyProjectedOrderMeta(a, ts, seq);
-        const turnIndex =
+        // 分段记账：段身份 = 引擎消息 id；有效轮次由 resolveEffectiveTurn
+        // 裁决（引擎 turnIndex 退化时按序合成），逐段独立、互不覆盖。
+        // 修订识别：同一段的重复/修订 message-end（同引擎消息 id；无 id
+        // 载荷则同 turnIndex）是权威覆盖，绝不追加成新段；只有真正的新
+        // 段才封口上一段——无工具间隔的相邻两段不得被并成一段（第 2 轮
+        // 首段正文丢失的同族机制）。
+        const engineMsgId = engineMsgIdOf(msg);
+        const st = getSegmentState(a.id);
+        const rawTurnIndex =
           typeof event.turnIndex === 'number' ? event.turnIndex : 0;
+        const turnIndex = engineMsgId
+          ? resolveEffectiveTurn(st, engineMsgId, rawTurnIndex)
+          : Math.max(0, Math.floor(rawTurnIndex) || 0);
+        if (!engineMsgId) {
+          st.lastTurn = Math.max(st.lastTurn, turnIndex);
+        }
+        const isRevision =
+          st.seenEnds > 0 &&
+          (engineMsgId !== undefined
+            ? st.lastEndEngineMsgId === engineMsgId
+            : st.lastEndTurnIndex === turnIndex);
+        const sealActive =
+          !isRevision &&
+          st.seenEnds > 0 &&
+          (engineMsgId === undefined ||
+            (st.activeSegmentEngineId !== undefined &&
+              st.activeSegmentEngineId !== engineMsgId));
         if (thought) {
-          a.thinking = thought;
+          st.thoughtByTurn.set(turnIndex, thought);
+          a.thinking = [...st.thoughtByTurn.values()].join('\n\n');
           if (!a.thinkingTurns) a.thinkingTurns = [];
           const thoughtKey = `thought-turn-${turnIndex}`;
           const ttIdx = a.thinkingTurns.findIndex(
@@ -311,9 +418,7 @@ export function projectEventsToMessages(events: unknown[]): {
             });
           if (!a.blocks) a.blocks = [];
           const blkIdx = a.blocks.findIndex(
-            (b) =>
-              b.type === 'thought' &&
-              (b.id === thoughtKey || b.turnIndex === turnIndex)
+            (b) => b.type === 'thought' && b.id === thoughtKey
           );
           if (blkIdx >= 0) a.blocks[blkIdx]!.content = thought;
           else
@@ -325,22 +430,36 @@ export function projectEventsToMessages(events: unknown[]): {
             });
         }
         if (text) {
-          const st = turnTextByMessage.get(a.id) ?? { turnIndex: -1, text: '' };
-          if (turnIndex === st.turnIndex) {
-            st.text = text;
-            a.text = text;
-          } else {
-            st.turnIndex = turnIndex;
-            st.text = st.text ? `${st.text}\n\n${text}` : text;
-            a.text = st.text;
-          }
-          turnTextByMessage.set(a.id, st);
+          const prevText = a.text || '';
+          const prevSegmentText = st.textByTurn.get(turnIndex);
+          st.textByTurn.set(turnIndex, text);
+          a.text = [...st.textByTurn.values()].join('\n\n');
           if (!a.blocks) a.blocks = [];
-          const last = a.blocks[a.blocks.length - 1];
-          if (last?.type === 'text') last.content = text;
-          else a.blocks.push({ type: 'text', content: text, turnIndex });
-          a.streamTextOffset = text.length;
+          let handled = false;
+          if (isRevision && prevSegmentText !== undefined) {
+            // 修订同段：按旧内容定位该段块并就地换成修订版（段位置不变）
+            const idx = a.blocks.findLastIndex(
+              (b) =>
+                b.type === 'text' &&
+                (b.content || '').trim() === prevSegmentText.trim()
+            );
+            if (idx >= 0) {
+              a.blocks[idx]!.content = text;
+              handled = true;
+            }
+          }
+          if (!handled) {
+            applyStreamedTextToBlocks(a.blocks, prevText, a.text, {
+              turnHint: turnIndex,
+              sealActive,
+            });
+          }
+          if (engineMsgId) st.activeSegmentEngineId = engineMsgId;
         }
+        if (engineMsgId) st.openEngineMsgId = engineMsgId;
+        st.lastEndEngineMsgId = engineMsgId;
+        st.lastEndTurnIndex = turnIndex;
+        st.seenEnds += 1;
       }
       continue;
     }
@@ -356,10 +475,18 @@ export function projectEventsToMessages(events: unknown[]): {
           ? (event as { turnIndex?: unknown }).turnIndex
           : undefined;
       const turn = typeof rawTurn === 'number' ? rawTurn : 0;
+      const st = getSegmentState(a.id);
+      // delta 归属：以 message-start 登记的引擎消息为准解析有效轮次；
+      // 无登记时沿用当前轮次（delta 只做增量追加，不新合成轮次）。
+      const effTurn = st.openEngineMsgId
+        ? resolveEffectiveTurn(st, st.openEngineMsgId, turn)
+        : st.lastTurn >= 0
+          ? st.lastTurn
+          : turn;
       if (b.type === 'thought') {
         a.thinking = (a.thinking || '') + t;
         if (!a.blocks) a.blocks = [];
-        const thoughtKey = `thought-turn-${turn}`;
+        const thoughtKey = `thought-turn-${effTurn}`;
         const existingIdx = a.blocks.findIndex(
           (bl) => bl.type === 'thought' && bl.id === thoughtKey
         );
@@ -371,38 +498,45 @@ export function projectEventsToMessages(events: unknown[]): {
             type: 'thought',
             id: thoughtKey,
             content: t,
-            turnIndex: turn,
+            turnIndex: effTurn,
           });
         }
       } else {
-        a.text = (a.text || '') + t;
+        // 正文 delta 走分段记账唯一实现：并入活跃段；引擎消息已切换时
+        // 先封口上一段再另起新段。旧实现按 streamTextOffset 切片回填
+        // 尾块（覆盖式），已随偏移模型删除。
+        const sealActive =
+          st.openEngineMsgId !== undefined &&
+          st.activeSegmentEngineId !== undefined &&
+          st.activeSegmentEngineId !== st.openEngineMsgId;
+        const prevText = a.text || '';
+        a.text = prevText + t;
         if (!a.blocks) a.blocks = [];
-        const offset =
-          typeof a.streamTextOffset === 'number' ? a.streamTextOffset : 0;
-        const segment =
-          (a.text || '').length >= offset
-            ? (a.text || '').slice(offset)
-            : a.text || '';
-        const last = a.blocks[a.blocks.length - 1];
-        if (last?.type === 'text') last.content = segment;
-        else if (segment) a.blocks.push({ type: 'text', content: segment });
+        applyStreamedTextToBlocks(a.blocks, prevText, a.text, {
+          turnHint: effTurn,
+          sealActive,
+        });
+        if (st.openEngineMsgId) st.activeSegmentEngineId = st.openEngineMsgId;
       }
       continue;
     }
 
     if (event.type === 'tool-start') {
-      const { id, name, args, explanation } = toolCallFieldsFromEvent(
-        event as unknown as Record<string, unknown>
-      );
+      const { id, name, args, intent, group, groupId, isInternal } =
+        toolCallFieldsFromEvent(event as unknown as Record<string, unknown>);
       const a = ensureAssistant(ts, undefined, seq);
       if (!a.toolCalls) a.toolCalls = [];
       if (!a.blocks) a.blocks = [];
-      a.streamTextOffset = (a.text || '').length;
+      // 分段记账下无需偏移固化：下方 tool_call 块按事件序追加，其位置
+      // 本身即封口前一段正文（旧 streamTextOffset 赋值已随偏移模型删除）。
       const existing = a.toolCalls.find((t) => t.id === id);
       if (existing) {
         existing.name = name;
         if (args) existing.arguments = args;
-        if (explanation) existing.explanation = explanation;
+        if (intent !== undefined) existing.intent = intent;
+        if (group !== undefined) existing.group = group;
+        if (groupId !== undefined) existing.groupId = groupId;
+        if (isInternal !== undefined) existing.isInternal = isInternal;
         if (existing.status !== 'success' && existing.status !== 'error') {
           existing.status = 'running';
         }
@@ -412,10 +546,20 @@ export function projectEventsToMessages(events: unknown[]): {
           name,
           arguments: args,
           status: 'running',
-          ...(explanation ? { explanation } : {}),
+          ...(intent !== undefined ? { intent } : {}),
+          ...(group !== undefined ? { group } : {}),
+          ...(groupId !== undefined ? { groupId } : {}),
+          ...(isInternal !== undefined ? { isInternal } : {}),
         });
         if (!a.blocks.some((b) => b.type === 'tool_call' && b.id === id)) {
-          a.blocks.push({ type: 'tool_call', id });
+          a.blocks.push({
+            type: 'tool_call',
+            id,
+            ...(intent !== undefined ? { intent } : {}),
+            ...(group !== undefined ? { group } : {}),
+            ...(groupId !== undefined ? { groupId } : {}),
+            ...(isInternal !== undefined ? { isInternal } : {}),
+          });
         }
       }
       continue;

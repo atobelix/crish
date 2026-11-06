@@ -12,11 +12,13 @@ import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlo
 import {
   buildAssistantTimelineCached,
   partitionTimelineSegments,
+  sliceActiveStreamText,
   type AssistantTimelineItem,
   type ProcessTimelineSegment,
   type TimelineSegment,
   type ToolRenderItem,
 } from '../../api/toolPresentation';
+import type { TimelineTextItem } from '../../api/tool-presentation/toolPresentationTypes';
 import {
   reconcileTimelineItems,
   reconcileTimelineSegments,
@@ -144,21 +146,21 @@ function estimateSegmentNodes(seg: TimelineSegment): number {
   return nodes;
 }
 
-/** 组体占位估算高度（px）：仅需量级接近，真实挂载后由 VSM 重测纠正 */
+/** 组体占位估算高度（px）：仅需量级接近，真实挂载后由 VSM 重测纠正（M-06 / R5 §1） */
 function estimateProcessSectionHeightPx(seg: ProcessTimelineSegment): number {
-  let px = 36;
+  let px = 28;
   for (const item of seg.items) {
     if (item.kind === 'thought' || item.kind === 'text') {
       px += 22 + Math.ceil(item.content.length / 55) * 17;
     } else if (item.kind === 'tools') {
       for (const ri of item.items) {
-        px += ri.kind === 'single' ? 30 : 26 + ri.tools.length * 30;
+        px += ri.kind === 'single' ? 24 : (ri.isSealed ? 28 : 28 + ri.tools.length * 24);
       }
     } else {
       px += 20;
     }
   }
-  return Math.max(40, px);
+  return Math.max(28, px);
 }
 
 export const MessageContent: React.FC<MessageContentProps> = React.memo(
@@ -283,23 +285,59 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     }
 
     // 单轨交错线性时间线：相邻同文案的上下文状态提示只留一条（S-5 唯一折叠实现）
-    const linearItems = useMemo(
-      () =>
-        collapseContextState(
-          timeline,
-          (item) =>
-            item.kind === 'injection' &&
-            isContextStateInjection(item.injection),
-          {
-            keep: 'first-same-key',
-            stateKey: (item) =>
-              item.kind === 'injection'
-                ? formatContextStateDisplayText(item.injection)
-                : '',
+    const linearItems = useMemo(() => {
+      const base = collapseContextState(
+        timeline,
+        (item) =>
+          item.kind === 'injection' &&
+          isContextStateInjection(item.injection),
+        {
+          keep: 'first-same-key',
+          stateKey: (item) =>
+            item.kind === 'injection'
+              ? formatContextStateDisplayText(item.injection)
+              : '',
+        }
+      );
+      // 流式正文单轨同构：流式中且有有效正文时，若尾部尚无在最后工具块之后的 text 项，
+      // 合成末尾正文项进入 segments 渲染，实现流式态与终态 100% 结构同构，收口零 DOM 重建
+      if (streaming && streamText && streamText.trim().length > 0) {
+        let lastToolIdx = -1;
+        for (let i = base.length - 1; i >= 0; i--) {
+          if (base[i]!.kind === 'tools') {
+            lastToolIdx = i;
+            break;
           }
-        ),
-      [timeline]
-    );
+        }
+        let hasTrailingText = false;
+        for (let i = base.length - 1; i >= 0; i--) {
+          if (base[i]!.kind === 'text') {
+            if (lastToolIdx === -1 || i > lastToolIdx) {
+              hasTrailingText = true;
+            }
+            break;
+          }
+        }
+        if (!hasTrailingText) {
+          // 统计已有 text 数量，使 key 格式与 timelineNormalizer 内部的 text-${xi.val++} 严格同构，避免收口时 unmount/remount
+          let textCount = 0;
+          for (const it of base) {
+            if (it.kind === 'text') textCount++;
+          }
+          // 尾段正文 = 流式缓冲剥离全部已封口段后的剩余（分段记账口径）；
+          // 旧 streamTextOffset 切片已随单一偏移模型删除。
+          const tailText = sliceActiveStreamText(streamText, msg.blocks);
+          const tailTextItem: TimelineTextItem = {
+            kind: 'text',
+            content: tailText,
+            key: `text-${textCount}`,
+            isFinal: true,
+          };
+          return [...base, tailTextItem];
+        }
+      }
+      return base;
+    }, [timeline, streaming, streamText, msg.id]);
 
     // ── 分段唯一权威：`partitionTimelineSegments`（R9 过程组口径） ──
     const hasStreamText = Boolean(streamText != null && streamText.length > 0);
@@ -343,19 +381,35 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return next;
     }, [rawSegments, msg.id]);
 
-    // R9 组级窗口化计划：逐组以「组内条目数 + 估算节点数」双阈值判定，
-    // 命中的组登记其组体占位高度（口径见文件头常量区）
+    // R9 组级窗口化计划（M-06 / R5 §1）：消息级全局条目预算。
+    // 当整条消息过程项累积越过全局预算时，对非活跃且非末位的过程段激活窗口化，
+    // 避免拆小段后每段 1-4 项无法达到阈值导致 DOM 爆炸。
     const windowPlan = useMemo(() => {
       if (typeof IntersectionObserver === 'undefined') {
         return { engaged: false, heights: EMPTY_SECTION_HEIGHTS };
       }
-      const heights = new Map<string, number>();
+      let totalProcessItems = 0;
+      let totalProcessNodes = 0;
+      const processSegments: ProcessTimelineSegment[] = [];
+
       for (const seg of segments) {
         if (seg.kind !== 'process_section') continue;
-        if (seg.items.length < GROUP_WINDOW_MIN_ITEMS) continue;
-        if (estimateSegmentNodes(seg) < GROUP_WINDOW_MIN_NODES) continue;
-        heights.set(seg.id, estimateProcessSectionHeightPx(seg));
+        processSegments.push(seg);
+        totalProcessItems += seg.items.length;
+        totalProcessNodes += estimateSegmentNodes(seg);
       }
+
+      const shouldEngage =
+        totalProcessItems >= GROUP_WINDOW_MIN_ITEMS ||
+        totalProcessNodes >= GROUP_WINDOW_MIN_NODES;
+
+      const heights = new Map<string, number>();
+      if (shouldEngage) {
+        for (const seg of processSegments) {
+          heights.set(seg.id, estimateProcessSectionHeightPx(seg));
+        }
+      }
+
       return {
         engaged: heights.size > 0,
         heights: heights as ReadonlyMap<string, number>,
@@ -553,6 +607,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return null;
     }, [linearItems]);
 
+    const hasFinalAnswerNow = Boolean(
+      displayMsg.text?.trim() || streamText?.trim()
+    );
+
     /**
      * 顶层常驻指示器的去重闸门（单一真理源 SSOT）。
      *
@@ -566,7 +624,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           (seg.kind === 'text_narrative' && seg.isStreaming)
       ) ||
       streaming ||
-      Boolean(displayMsg.thinkingTurns?.some((tt) => tt.isStreaming));
+      Boolean(displayMsg.thinkingTurns?.some((tt) => tt.isStreaming)) ||
+      hasFinalAnswerNow ||
+      segments.length > 0;
 
     /**
      * 过程组渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）。
@@ -582,9 +642,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
      * 流式期间引用恒定；hasFinalAnswer 取派生布尔（整个回合至多翻转
      * 一次），不再依赖每帧变化的正文串。
      */
-    const hasFinalAnswerNow = Boolean(
-      displayMsg.text?.trim() || streamText?.trim()
-    );
     const renderProcessItem = useCallback(
       (item: AssistantTimelineItem, _index: number) => (
         <ProcessItemRenderer
@@ -615,12 +672,57 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       ]
     );
 
-    // ── 渲染分支（全部位于 Hooks 之后，绝不影响 Hook 序列） ──
-
     const fallbackText = stripThoughtPlaceholders(
       displayMsg.text || streamText || ''
     );
     const hasSegments = segments.length > 0;
+
+    // ── 等待态到内容态的平滑过渡（150ms 折叠淡出动效） ──
+    const hasRenderableContent =
+      hasSegments || Boolean(fallbackText.trim()) || Boolean(streaming);
+
+    const prevMsgIdRef = useRef(msg.id);
+    const hadWaitingRef = useRef(false);
+    const [dismissTime, setDismissTime] = useState<number | null>(null);
+
+    // 切换消息时重置状态
+    if (prevMsgIdRef.current !== msg.id) {
+      prevMsgIdRef.current = msg.id;
+      hadWaitingRef.current = false;
+      setDismissTime(null);
+    }
+
+    if (!hasRenderableContent && (isInitialWaiting || isLiveTurn)) {
+      hadWaitingRef.current = true;
+    }
+
+    // 当从等待态跃迁到内容态时，在渲染阶段立即标记 dismissTime 与退出动效
+    let shouldExitNow = false;
+    if (hasRenderableContent && hadWaitingRef.current && dismissTime === null) {
+      const now = Date.now();
+      setDismissTime(now);
+      shouldExitNow = true;
+    }
+
+    useEffect(() => {
+      if (dismissTime !== null && dismissTime > 0) {
+        const elapsed = Date.now() - dismissTime;
+        const remaining = Math.max(0, 150 - elapsed);
+        const timer = setTimeout(() => {
+          setDismissTime(0); // 0 表示完全退出并卸载
+          hadWaitingRef.current = false;
+        }, remaining);
+        return () => {
+          clearTimeout(timer);
+        };
+      }
+      return undefined;
+    }, [dismissTime]);
+
+    const isIndicatorExiting =
+      shouldExitNow || (dismissTime !== null && dismissTime > 0);
+
+    // ── 渲染分支（全部位于 Hooks 之后，绝不影响 Hook 序列） ──
 
     // 分支 α：无任何可渲染内容
     if (!hasSegments && !fallbackText.trim() && !streaming) {
@@ -648,14 +750,28 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!hasSegments) {
       return (
         <div className={`${styles.contentText} ${className || ''}`}>
-          <StreamingMarkdownView
-            text={fallbackText}
-            isStreaming={streaming}
-            priority={
-              msg.status === 'processing' ? Priority.Normal : Priority.High
-            }
-            messageId={msg.id}
-          />
+          {isIndicatorExiting && (
+            <div
+              className={`${styles.topProcessHeader} ${styles.indicatorExiting}`}
+              data-testid="top-live-header"
+              data-exiting="true"
+            >
+              <WorkingStatusIndicator
+                startTime={msg.timestamp}
+                mode="initial"
+              />
+            </div>
+          )}
+          <div className={isLiveTurn ? styles.firstContentEnter : undefined}>
+            <StreamingMarkdownView
+              text={fallbackText}
+              isStreaming={streaming}
+              priority={
+                msg.status === 'processing' ? Priority.Normal : Priority.High
+              }
+              messageId={msg.id}
+            />
+          </div>
           {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
           {interruptedMark}
         </div>
@@ -665,9 +781,23 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     // 分支 γ：正常交错分段渲染
     let textCursor = 0;
     return (
-      <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
+      <div
+        className={`${styles.assistantTimelineStream} ${className || ''}`}
+        data-live-turn={isLiveTurn ? 'true' : undefined}
+      >
+        {/* 等待态->内容退出动效：150ms 平滑折叠淡出 */}
+        {isIndicatorExiting && (
+          <div
+            className={`${styles.topProcessHeader} ${styles.indicatorExiting}`}
+            data-testid="top-live-header"
+            data-exiting="true"
+          >
+            <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
+          </div>
+        )}
+
         {/* 顶层常驻态（生成中）：时间线内已有任何活跃过程节点时让位，杜绝双状态栏 */}
-        {isLiveTurn && !hasLiveProcessIndicator && (
+        {!isIndicatorExiting && isLiveTurn && !hasLiveProcessIndicator && (
           <div
             className={styles.topProcessHeader}
             data-testid="top-live-header"
@@ -695,20 +825,12 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             );
             textCursor += 1;
             // 仅活跃流式项注入；历史项 undefined（引用稳定，FE-INV-6）。
-            // offset 语义与原版一致：textCursor>1 时才应用 streamTextOffset 切片。
+            // 活跃段语义：注入流式缓冲剥离全部已封口段后的剩余正文
+            // （分段记账口径 sliceActiveStreamText；旧 streamTextOffset
+            // 切片已随单一偏移模型删除）。无缓冲时保持 undefined。
             let narrativeContent: string | undefined;
-            if (isThisStreaming) {
-              if (
-                textCursor > 1 &&
-                msg.streamTextOffset &&
-                msg.streamTextOffset > 0 &&
-                streamText &&
-                streamText.length >= msg.streamTextOffset
-              ) {
-                narrativeContent = streamText.slice(msg.streamTextOffset);
-              } else {
-                narrativeContent = streamText;
-              }
+            if (isThisStreaming && streamText) {
+              narrativeContent = sliceActiveStreamText(streamText, msg.blocks);
             }
             return (
               <ProcessItemRenderer
@@ -735,7 +857,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           // 组体先以等高占位替代挂载，IntersectionObserver 在占位进入
           // 预热区时真实挂载组体（口径见文件头常量区）。
           const deferBody =
-            !isExpanded &&
             windowPlan.heights.has(seg.id) &&
             !seg.isLive &&
             segIndex < segments.length - 1 &&
@@ -767,23 +888,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             />
           );
         })}
-
-        {streaming && !streamingTextItem && streamText && (
-          <div className={styles.contentText}>
-            <StreamingMarkdownView
-              text={stripThoughtPlaceholders(
-                msg.streamTextOffset &&
-                  msg.streamTextOffset > 0 &&
-                  streamText.length >= msg.streamTextOffset
-                  ? streamText.slice(msg.streamTextOffset)
-                  : streamText
-              )}
-              isStreaming={true}
-              priority={Priority.Normal}
-              messageId={msg.id}
-            />
-          </div>
-        )}
 
         {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
         {interruptedMark}
