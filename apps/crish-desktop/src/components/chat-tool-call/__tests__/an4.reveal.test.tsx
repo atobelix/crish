@@ -178,10 +178,18 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
     };
   }
 
-  it('组内排空未落定 → 不折叠；settle 后折叠', () => {
+  // 【口径变更 · 2026-11-06 用户裁决第 8 条】运行态默认折叠取代「视线保护」
+  // 运行顶开后，本协调段原守护的「展开态等排空落定再折叠」失去触发源：
+  // 组在运行期恒折叠，无任何自动展开生产者，排空落定与否不改变展开状态。
+  // 以下两条保留排空编排，断言翻转为新口径的安全性（恒折叠）；
+  // 排空延后折叠机制本体保留于 FoldableToolGroup，若日后重现自动展开
+  // 路径，其协调语义随之复活（入场专批知悉）。
+  it('运行态默认折叠：组内排空未落定与 settle 都不改变折叠状态 (工具数 > 3)', () => {
     const runningItems: ToolRenderItem[] = [
       { kind: 'single', tc: gtc('g1', 'running') },
       { kind: 'single', tc: gtc('g2', 'running') },
+      { kind: 'single', tc: gtc('g3', 'running') },
+      { kind: 'single', tc: gtc('g4', 'running') },
     ];
     const { getByTestId, rerender } = render(
       <FoldableToolGroup
@@ -191,12 +199,15 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
       />
     );
     const root = getByTestId('foldable-tool-group');
-    expect(root.getAttribute('data-expanded')).toBe('true');
+    // 运行中默认折叠（旧口径此处为展开）
+    expect(root.getAttribute('data-expanded')).toBe('false');
 
     registerToolDrain('g1', vi.fn());
     const doneItems: ToolRenderItem[] = [
       { kind: 'single', tc: gtc('g1', 'success') },
       { kind: 'single', tc: gtc('g2', 'success') },
+      { kind: 'single', tc: gtc('g3', 'success') },
+      { kind: 'single', tc: gtc('g4', 'success') },
     ];
     rerender(
       <FoldableToolGroup
@@ -205,8 +216,8 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
         hostProps={hostProps(doneItems)}
       />
     );
-    // 排空未落定：自动折叠被延后
-    expect(root.getAttribute('data-expanded')).toBe('true');
+    // 排空未落定：展开状态不变（恒折叠）
+    expect(root.getAttribute('data-expanded')).toBe('false');
 
     act(() => {
       unregisterToolDrain('g1');
@@ -214,11 +225,13 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
     expect(root.getAttribute('data-expanded')).toBe('false');
   });
 
-  it('排空永不落定 → 900ms 硬顶后折叠', () => {
+  it('运行态默认折叠：排空永不落定时越过 900ms 硬顶仍恒折叠 (工具数 > 3)', () => {
     vi.useFakeTimers();
     const runningItems: ToolRenderItem[] = [
       { kind: 'single', tc: gtc('h1', 'running') },
       { kind: 'single', tc: gtc('h2', 'running') },
+      { kind: 'single', tc: gtc('h3', 'running') },
+      { kind: 'single', tc: gtc('h4', 'running') },
     ];
     const { getByTestId, rerender } = render(
       <FoldableToolGroup
@@ -228,10 +241,13 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
       />
     );
     const root = getByTestId('foldable-tool-group');
+    expect(root.getAttribute('data-expanded')).toBe('false');
     registerToolDrain('h1', vi.fn());
     const doneItems: ToolRenderItem[] = [
       { kind: 'single', tc: gtc('h1', 'success') },
       { kind: 'single', tc: gtc('h2', 'success') },
+      { kind: 'single', tc: gtc('h3', 'success') },
+      { kind: 'single', tc: gtc('h4', 'success') },
     ];
     rerender(
       <FoldableToolGroup
@@ -240,11 +256,11 @@ describe('AN4 · FoldableToolGroup 自动折叠延后（协调段）', () => {
         hostProps={hostProps(doneItems)}
       />
     );
-    expect(root.getAttribute('data-expanded')).toBe('true');
+    expect(root.getAttribute('data-expanded')).toBe('false');
     act(() => {
       vi.advanceTimersByTime(899);
     });
-    expect(root.getAttribute('data-expanded')).toBe('true');
+    expect(root.getAttribute('data-expanded')).toBe('false');
     act(() => {
       vi.advanceTimersByTime(1);
     });

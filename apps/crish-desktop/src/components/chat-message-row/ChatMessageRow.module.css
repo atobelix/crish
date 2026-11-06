@@ -595,7 +595,9 @@ button.iconBtn,
 }
 
 .timelineTools {
-  margin: 2px 0;
+  /* 间距刻度收敛（2026-11-05）：段内相邻恒定为 0，原 2px 上下外边距令含
+   * 工具的段比纯思考段多出 4px 且相邻关系不齐，一并归零 */
+  margin: 0;
   contain: layout style;
   border: none;
   border-top: none;
