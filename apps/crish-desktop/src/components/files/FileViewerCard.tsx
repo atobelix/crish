@@ -19,6 +19,7 @@ import {
 } from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
 import {
+  dispatchOpenFileRequest,
   readTextFile,
   getWorkspacePath,
   pathRelativeToRoot,
@@ -55,11 +56,10 @@ const HISTORY_LABEL = '查看历史编辑情况';
 const MORE_ACTIONS_LABEL = '更多操作';
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
-  ({ filePath, initialMode = 'plain', sessionId, leafId }) => {
+  ({ filePath, initialMode = 'plain', sessionId }) => {
     const { showToast } = useToast();
     const scope = useLeafScope();
     const scopedSessionId = useScopedSessionId(sessionId);
-    const effectiveLeafId = leafId ?? scope.leafId;
 
     const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
 
@@ -206,22 +206,21 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [absolutePath, showToast]);
 
     const handleLocateInFiles = useCallback(() => {
-      window.dispatchEvent(
-        new CustomEvent('crish-open-file', {
-          detail: {
-            path: absolutePath,
-            sessionId: scopedSessionId,
-            leafId: effectiveLeafId,
-          },
-        })
-      );
+      // 经统一投递原语定址到本会话（绝不带本叶 leafId：文件面板在同
+      // 会话的工具坞叶，带发送叶 ID 会被消费方守卫确定性丢弃，旧实现
+      // 只有与文件面板同叶时才偶然生效）；面板未挂载时由 pending
+      // 暂存兜底。定位反馈由文件面板打开 + 树行选中脉冲直接呈现，
+      // 不再无条件弹「已定位」假成功提示。
+      dispatchOpenFileRequest({
+        path: absolutePath,
+        sessionId: scopedSessionId ?? undefined,
+      });
       if (scope.openTool) {
         scope.openTool('files');
       } else if (scopedSessionId) {
         openToolInSession(scopedSessionId, 'files');
       }
-      showToast('已在本地文件树中定位该文件');
-    }, [absolutePath, scopedSessionId, effectiveLeafId, scope, showToast]);
+    }, [absolutePath, scopedSessionId, scope]);
 
     // 系统单轨 Unified 比对渲染项计算
     const unifiedRenderItems = useMemo(() => {

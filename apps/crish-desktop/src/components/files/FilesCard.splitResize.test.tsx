@@ -50,6 +50,11 @@ vi.mock('../../api/workspaceFsApi', () => ({
   resolveReadableFilePath: (p: string) => p,
   resolveWorkspacePath: () => null,
   takePendingOpenPath: () => null,
+  peekPendingOpenFileRequest: () => null,
+  takePendingOpenFileRequest: () => null,
+  pathDirname: (p: string) => p,
+  isSameFsPath: () => false,
+  toCanonicalFsPath: (p: string) => p,
 }));
 
 vi.mock('./hooks/useFileNavigation', () => ({

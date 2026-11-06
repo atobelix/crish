@@ -39,6 +39,11 @@ export interface ThinkingBlockProps {
   turnIndex?: number;
   defaultOpen?: boolean;
   onLinkClick?: (href: string) => void;
+  /** 思考内路径链接打开（与正文 markdown 同轨，经宿主 navigation 投递） */
+  onOpenPath?: (
+    path: string,
+    location?: { line?: number; col?: number }
+  ) => void;
 }
 
 export function ThinkingBlock({
@@ -48,6 +53,7 @@ export function ThinkingBlock({
   durationMs,
   defaultOpen = false,
   onLinkClick,
+  onOpenPath,
 }: ThinkingBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   const [liveSec, setLiveSec] = useState(0);
@@ -198,9 +204,9 @@ export function ThinkingBlock({
           }
         }
       }
-      handleMarkdownEvent(e, { t });
+      handleMarkdownEvent(e, { t, ...(onOpenPath ? { onOpenPath } : {}) });
     },
-    [onLinkClick, t]
+    [onLinkClick, onOpenPath, t]
   );
 
   return (

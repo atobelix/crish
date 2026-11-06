@@ -30,12 +30,8 @@ import styles from './narrative.module.css';
 const DESKTOP_HUMANIZE: HumanizeHooks = {
   label: (tc) =>
     toolHumanLabel({
-      id: tc.id,
       name: tc.name,
-      arguments: tc.arguments,
-      status: tc.status,
-      output: tc.output,
-      explanation: tc.explanation,
+      intent: (tc as any).intent ?? tc.explanation,
     }),
 };
 
@@ -46,7 +42,8 @@ function purposesOf(msg: SessionMessage): PurposeNode[] {
 }
 
 export function renderNarrativeThought(
-  args: ChatNarrativeRenderThoughtArgs
+  args: ChatNarrativeRenderThoughtArgs,
+  onOpenPath?: (filePath: string) => void
 ): ReactNode {
   return (
     <ThinkingBlock
@@ -56,6 +53,11 @@ export function renderNarrativeThought(
       messageId={args.messageId}
       turnIndex={args.turnIndex}
       defaultOpen={args.defaultOpen}
+      onOpenPath={
+        // 行号口径与正文 markdown 通道一致：只透传 path（宿主
+        // openPathInFilesPanel 自行再解析路径后缀），location 不透传
+        onOpenPath ? (path: string) => onOpenPath(path) : undefined
+      }
     />
   );
 }
@@ -103,12 +105,16 @@ export function renderNarrativeTools(
   );
 }
 
-export function createNarrativeRenderers(messages: SessionMessage[]): {
+export function createNarrativeRenderers(
+  messages: SessionMessage[],
+  options?: { onOpenPath?: (filePath: string) => void }
+): {
   renderTools: ChatNarrativeRenderTools;
   renderThought: ChatNarrativeRenderThought;
 } {
   return {
     renderTools: (args) => renderNarrativeTools({ ...args, messages }),
-    renderThought: renderNarrativeThought,
+    renderThought: (args) =>
+      renderNarrativeThought(args, options?.onOpenPath),
   };
 }

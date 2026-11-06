@@ -5,12 +5,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  dispatchOpenFileRequest,
   extractFilePathFromToolArgs,
   looksLikeOpenableFilePath,
   openFileInPanel,
   pathFromFileOpenClickTarget,
+  peekPendingOpenFileRequest,
   registerFileViewerOpener,
   resolveFilePreviewHost,
+  takePendingOpenFileRequest,
   takePendingOpenPath,
 } from './filePanelOpener';
 
@@ -164,6 +167,66 @@ describe('openFileInPanel', () => {
     expect(openFileInPanel('src/app.ts')).toBe('files');
     expect(ev).toHaveBeenCalledTimes(1);
     window.removeEventListener('crish-open-file', ev);
+  });
+});
+
+describe('dispatchOpenFileRequest 统一投递原语（S1a）', () => {
+  it('派发定址到目标会话的事件（sessionId/line/lineRange），且绝不携带 leafId', () => {
+    const ev = vi.fn();
+    window.addEventListener('crish-open-file', ev);
+
+    dispatchOpenFileRequest({
+      path: 'c:/work/src/app.ts',
+      line: 12,
+      lineRange: [12, 20],
+      sessionId: 'sess-a',
+    });
+
+    expect(ev).toHaveBeenCalledTimes(1);
+    const dispatched = ev.mock.calls[0]?.[0] as CustomEvent<
+      Record<string, unknown>
+    >;
+    expect(dispatched.type).toBe('crish-open-file');
+    expect(dispatched.detail).toEqual({
+      path: 'c:/work/src/app.ts',
+      line: 12,
+      lineRange: [12, 20],
+      sessionId: 'sess-a',
+    });
+    // RC1 回归钉：发送方 leafId 一旦出现，消费方守卫会按 leafId 短路丢弃
+    expect(dispatched.detail).not.toHaveProperty('leafId');
+
+    window.removeEventListener('crish-open-file', ev);
+  });
+
+  it('投递同时写完整 pending 暂存：peek 不消费、take 取出完整载荷并清空', () => {
+    dispatchOpenFileRequest({
+      path: 'c:/work/src/app.ts',
+      line: 3,
+      sessionId: 'sess-a',
+    });
+    expect(peekPendingOpenFileRequest()).toEqual({
+      path: 'c:/work/src/app.ts',
+      line: 3,
+      sessionId: 'sess-a',
+    });
+    // peek 只读：再次 peek 仍在
+    expect(peekPendingOpenFileRequest()).not.toBeNull();
+    expect(takePendingOpenFileRequest()).toEqual({
+      path: 'c:/work/src/app.ts',
+      line: 3,
+      sessionId: 'sess-a',
+    });
+    expect(takePendingOpenFileRequest()).toBeNull();
+    expect(takePendingOpenPath()).toBeNull();
+  });
+
+  it('openFileInPanel 经同一原语暂存（广播语义：无 sessionId、无 leafId）', () => {
+    expect(openFileInPanel('docs/readme.md')).toBe('files');
+    const pending = peekPendingOpenFileRequest();
+    expect(pending?.path.replace(/\\/g, '/')).toMatch(/docs\/readme\.md$/);
+    expect(pending?.sessionId).toBeUndefined();
+    takePendingOpenFileRequest();
   });
 });
 

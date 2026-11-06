@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { onScopedUiEvent } from '../../hooks/useLeafUiEvent';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
 import {
+  dispatchOpenFileRequest,
   openFileInPanel,
   resolveWorkspacePath,
   isAbsoluteFsPath,
@@ -129,9 +130,9 @@ export function useChatSessionActions({
       const cleanPath = trimmed.replace(/:\d+(?:-\d+)?(?::\d+)?$/, '');
       const lineMatch = trimmed.match(/:(\d+)(?:-(\d+))?(?::\d+)?$/);
       const parsedLine = lineMatch ? Number(lineMatch[1]) : undefined;
-      const parsedRange =
+      const parsedRange: [number, number] | undefined =
         lineMatch && lineMatch[2]
-          ? `${lineMatch[1]}-${lineMatch[2]}`
+          ? [Number(lineMatch[1]), Number(lineMatch[2])]
           : undefined;
 
       const isOfficeOrBinary =
@@ -149,17 +150,15 @@ export function useChatSessionActions({
             } else {
               openToolInActiveTab('files');
             }
-            window.dispatchEvent(
-              new CustomEvent('crish-open-file', {
-                detail: {
-                  path: resolved,
-                  line: parsedLine,
-                  lineRange: parsedRange,
-                  sessionId: activeSessionId ?? undefined,
-                  leafId: scopeRef.current.leafId ?? undefined,
-                },
-              })
-            );
+            // 统一投递原语：定址到目标会话（绝不带发送叶 leafId——文件
+            // 面板在目标会话的工具坞叶，带发送叶 ID 会被消费方守卫丢弃）
+            // + pending 暂存兜底面板未挂载的冷启动点击。
+            dispatchOpenFileRequest({
+              path: resolved,
+              line: parsedLine,
+              lineRange: parsedRange,
+              sessionId: activeSessionId ?? undefined,
+            });
             if (isOfficeOrBinary) {
               void openPathDefault(resolved).catch(() => {
                 /* swallow-ok: 文件面板已打开；系统关联拉起失败不打断主路径 */
@@ -182,17 +181,13 @@ export function useChatSessionActions({
             } else {
               openToolInActiveTab('files');
             }
-            window.dispatchEvent(
-              new CustomEvent('crish-open-file', {
-                detail: {
-                  path: resolved,
-                  line: parsedLine,
-                  lineRange: parsedRange,
-                  sessionId: activeSessionId ?? undefined,
-                  leafId: scopeRef.current.leafId ?? undefined,
-                },
-              })
-            );
+            // 统一投递原语（同探活成功支：会话定址 + pending 暂存）
+            dispatchOpenFileRequest({
+              path: resolved,
+              line: parsedLine,
+              lineRange: parsedRange,
+              sessionId: activeSessionId ?? undefined,
+            });
             if (isOfficeOrBinary) {
               void openPathDefault(resolved).catch(() => {
                 /* swallow-ok: 文件面板已打开；系统关联拉起失败不打断主路径 */

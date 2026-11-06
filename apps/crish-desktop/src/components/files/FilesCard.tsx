@@ -12,10 +12,14 @@ import { Button, Tooltip, Input } from '@/components/ui';
 
 import {
   countPendingFileAnnotations,
+  isSameFsPath,
   openPathDefault,
+  pathDirname,
+  peekPendingOpenFileRequest,
   resolveReadableFilePath,
   resolveWorkspacePath,
-  takePendingOpenPath,
+  takePendingOpenFileRequest,
+  toCanonicalFsPath,
 } from '../../api/workspaceFsApi';
 import { logInternalError } from '../../api/userFacingErrors';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -248,6 +252,30 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         const resolved = resolveReadableFilePath(path);
         const wsPath = resolveWorkspacePath(path);
         if (wsPath) {
+          // 目录目标：展开父链 + 选中目录行，绝不按文件读内容（父目录
+          // 清单里目标条目的 isDir 即真值；探测失败时按文件处理）。
+          const parentDir = pathDirname(wsPath);
+          let isDirTarget = false;
+          if (parentDir && !isSameFsPath(parentDir, wsPath)) {
+            try {
+              const siblings = await nav.loadDir(parentDir);
+              isDirTarget = siblings.some(
+                (e) => e.isDir && isSameFsPath(e.path, wsPath)
+              );
+            } catch {
+              /* 目录探测失败时按文件处理，不阻断打开 */
+            }
+          }
+          if (isDirTarget) {
+            try {
+              await nav.revealPath(wsPath);
+            } catch {
+              /* 定位失败时不阻断选中 */
+            }
+            preview.setSelected(toCanonicalFsPath(wsPath) || wsPath);
+            preview.setView('browse');
+            return;
+          }
           try {
             await nav.revealPath(wsPath);
           } catch {
@@ -344,8 +372,21 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
 
     useEffect(() => {
       void nav.refresh().then(() => {
-        const pending = takePendingOpenPath() || (initialPath ?? null);
-        if (pending) void handleOpenFile(pending);
+        // pending 暂存优先于 initialPath；带 sessionId 定址的暂存只由
+        // 目标会话自己的文件面板消费，不属于本面板时原样留给目标面板。
+        const pending = peekPendingOpenFileRequest();
+        if (
+          pending &&
+          (!pending.sessionId || pending.sessionId === scopedSessionId)
+        ) {
+          takePendingOpenFileRequest();
+          void handleOpenFile(pending.path, {
+            line: pending.line,
+            lineRange: pending.lineRange,
+          });
+          return;
+        }
+        if (initialPath) void handleOpenFile(initialPath);
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps -- 挂载一次性：仅消费挂载时待打开路径，不随依赖变更重放
     }, []);
@@ -371,7 +412,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         ) {
           return;
         }
-        takePendingOpenPath();
+        takePendingOpenFileRequest();
         const resolved = resolveReadableFilePath(detail.path);
         void handleOpenFile(resolved || detail.path, {
           line: detail.line,
@@ -653,7 +694,12 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                     preview.setDirty(d);
                   },
                   onError: (msg) => nav.setError(msg),
-                  onOpenFile: handleOpenFromPreview,
+                  // 预览内链接打开的是被点击的路径（在面板内定位打开），
+                  // 不再丢弃路径去重开当前选中文件
+                  onOpenFile: (path: string) => {
+                    void handleOpenFile(path);
+                  },
+                  onOpenDefault: handleOpenFromPreview,
                 }}
               />
             </div>

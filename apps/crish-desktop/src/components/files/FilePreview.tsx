@@ -41,12 +41,15 @@ interface FilePreviewPreviewProps {
   highlightLineRange?: [number, number] | null;
 }
 
-/** 预览操作回调域（加载更多、编辑缓冲变更、错误清除、外部打开）。 */
+/** 预览操作回调域（加载更多、编辑缓冲变更、错误清除、链接打开、外部打开）。 */
 interface FilePreviewActionsProps {
   onLoadMore: () => void;
   onEditBufChange: (v: string, dirty: boolean) => void;
   onError: (msg: string) => void;
-  onOpenFile: () => void;
+  /** 预览内 markdown 链接点击：打开被点击的路径（参数即点击目标） */
+  onOpenFile: (path: string) => void;
+  /** 「用默认应用打开」：以系统默认应用打开当前选中文件 */
+  onOpenDefault: () => void;
 }
 
 /** Props 分组：file（标识/能力）+ preview（内容/加载/编辑态）+ actions（回调）。 */
@@ -82,7 +85,8 @@ export const FilePreview = React.memo(function FilePreview({
     isFormatted,
     highlightLineRange,
   } = previewState;
-  const { onLoadMore, onEditBufChange, onError, onOpenFile } = actions;
+  const { onLoadMore, onEditBufChange, onError, onOpenFile, onOpenDefault } =
+    actions;
   const previewPaneRef = useRef<HTMLDivElement>(null);
 
   const displayContent =
@@ -272,7 +276,7 @@ export const FilePreview = React.memo(function FilePreview({
               size="sm"
               className={styles.filesSoftBtn}
               style={{ marginTop: 10 }}
-              onClick={onOpenFile}
+              onClick={onOpenDefault}
               icon={<AppIcon name="external-link" size={13} />}
             >
               用默认应用打开

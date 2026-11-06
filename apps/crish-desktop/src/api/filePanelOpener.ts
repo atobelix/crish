@@ -16,13 +16,56 @@ import {
 } from './workspaceFileKinds';
 import { resolveReadableFilePath } from './workspacePathResolver';
 
-/** 面板尚未挂载时暂存待打开路径 */
-let pendingOpenPath: string | null = null;
+/**
+ * `crish-open-file` 事件载荷（全应用唯一投递契约）。
+ *
+ * 定址口径（S1a 修复 RC1）：只携带目标会话 `sessionId`，绝不携带发送方
+ * 叶子 `leafId`——文件面板活在目标会话的工具坞叶里，发送叶 ID 与消费方
+ * 叶 ID 永不相等，消费方守卫 `shouldConsumeScopedEvent` 会按 leafId
+ * 优先短路、确定性丢弃事件（点击只剩「面板切到前台、停在根目录」）。
+ * 无 sessionId 时为广播语义（旁路通道），由激活叶消费。
+ */
+export interface CrishOpenFileDetail {
+  path: string;
+  line?: number;
+  lineRange?: [number, number];
+  sessionId?: string;
+}
+
+/** 面板尚未挂载时暂存待打开请求（完整载荷，含行号与定址） */
+let pendingOpenRequest: CrishOpenFileDetail | null = null;
 
 export function takePendingOpenPath(): string | null {
-  const p = pendingOpenPath;
-  pendingOpenPath = null;
+  const p = pendingOpenRequest;
+  pendingOpenRequest = null;
+  return p?.path ?? null;
+}
+
+/** 只读暂存（不消费）：供消费方先核对 sessionId 定址是否属于自己 */
+export function peekPendingOpenFileRequest(): CrishOpenFileDetail | null {
+  return pendingOpenRequest;
+}
+
+/** 消费暂存的完整请求（取出并清空） */
+export function takePendingOpenFileRequest(): CrishOpenFileDetail | null {
+  const p = pendingOpenRequest;
+  pendingOpenRequest = null;
   return p;
+}
+
+/**
+ * 文件打开投递原语（全应用唯一）：先写 pending 暂存（面板未挂载时由
+ * FilesCard 挂载兜底消费），再派发定址到目标会话的 `crish-open-file`
+ * 事件。对话通道、旁路通道与 FileViewerCard 定位一律经此投递，
+ * 禁止再各自裸派发事件或自带发送方 leafId。
+ */
+export function dispatchOpenFileRequest(detail: CrishOpenFileDetail): void {
+  pendingOpenRequest = { ...detail };
+  window.dispatchEvent(
+    new CustomEvent<CrishOpenFileDetail>('crish-open-file', {
+      detail: { ...detail },
+    })
+  );
 }
 
 let fileViewerOpener:
@@ -100,7 +143,8 @@ export function pathFromFileOpenClickTarget(
  * 在 files / file-viewer 叶打开工作区路径。
  *
  * 核心修复（CRIT-01）：
- * 1. 无条件设置 pendingOpenPath 并向 window 派发 'crish-open-file' 事件；
+ * 1. 无条件经统一投递原语 dispatchOpenFileRequest 暂存并派发
+ *    'crish-open-file' 事件（广播语义，无 sessionId 定址）；
  * 2. 独立分流处理右侧预览呈现；
  * 3. 彻底根除因 fileViewerOpener 提前 return 导致左侧目录树完全伪连通的核弹级 Bug。
  */
@@ -114,11 +158,8 @@ export function openFileInPanel(
   const path = resolveReadableFilePath(trimmed);
   if (!path) return null;
 
-  // 1. 无条件激活左侧主目录树的联动定位链路（SSOT 广播）
-  pendingOpenPath = path;
-  window.dispatchEvent(
-    new CustomEvent('crish-open-file', { detail: { path } })
-  );
+  // 1. 无条件经统一投递原语激活左侧主目录树的联动定位链路（暂存 + 广播）
+  dispatchOpenFileRequest({ path });
 
   // 2. 独立分流处理右侧预览呈现
   const host = resolveFilePreviewHost(path, mode);

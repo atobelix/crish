@@ -433,11 +433,15 @@ export {
 // hub 经 re-export 保持对外契约不变
 export {
   takePendingOpenPath,
+  peekPendingOpenFileRequest,
+  takePendingOpenFileRequest,
+  dispatchOpenFileRequest,
   registerFileViewerOpener,
   openFileInPanel,
   extractFilePathFromToolArgs,
   resolveFilePreviewHost,
   looksLikeOpenableFilePath,
   pathFromFileOpenClickTarget,
+  type CrishOpenFileDetail,
   type FilePreviewLeafHost,
 } from './filePanelOpener';

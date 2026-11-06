@@ -37,9 +37,12 @@ export function ConversationFlowHost(
 ): ReactElement {
   const list = props.messages.messages;
   const nodeCount = useMemo(() => countAssistantFlowNodes(list), [list]);
+  // 思考块内路径链接与正文同轨：宿主 navigation.onOpenPath 透传给
+  // ThinkingBlock（此前思考内链接无 onOpenPath 注入、点击无反应）
+  const onOpenPath = props.navigation?.onOpenPath;
   const { renderTools, renderThought } = useMemo(
-    () => createNarrativeRenderers(list),
-    [list]
+    () => createNarrativeRenderers(list, { onOpenPath }),
+    [list, onOpenPath]
   );
 
   return (
