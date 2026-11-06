@@ -7,12 +7,14 @@
  * - 视觉遵循 UI 铁律：无重阴影、焦点/激活边框 ≤10% 混入、HSLA。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import styles from './DraftUndoToast.module.css';
 import { Button } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import { AppIcon } from '@/components/ui/icons';
+import { useClosingFlag } from '../motion/useExitReveal';
+import { DURATION_POPOVER_EXIT_MS } from '../../utils/motionTokens';
 
 export interface DraftUndoToastProps {
   /** 是否存在可撤销历史（外部模板覆盖后为 true） */
@@ -30,29 +32,43 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
   autoDismissMs = 6000,
 }) => {
   const { t } = useI18n();
-  const [visible, setVisible] = useState(false);
   const displayMessage = message ?? t('chat.composer.appliedTemplateSnapshot');
 
+  // S4 退场宿主：show 翻 false（自动淡出/撤销/关闭）时不立即隐藏——
+  // 先播 120ms 退场再卸载。自动淡出（6s）与撤销/关闭均走同一 closing
+  // （170ms 后隐藏）；show 再翻 true 即取消退场（新一次可撤销历史）。
+  // toast 不走入场通道（本地 undoToastIn），entered 取「曾经显示过」。
+  const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
-    if (show) {
-      setVisible(true);
-      const timer = window.setTimeout(() => setVisible(false), autoDismissMs);
-      return () => window.clearTimeout(timer);
+    if (!show) {
+      setDismissed(false);
+      return undefined;
     }
-    setVisible(false);
-    return undefined;
+    setDismissed(false);
+    const timer = window.setTimeout(() => setDismissed(true), autoDismissMs);
+    return () => window.clearTimeout(timer);
   }, [show, autoDismissMs]);
 
-  if (!visible) return null;
+  const shownRef = useRef(false);
+  if (show && !dismissed) shownRef.current = true;
+  const toastClosing = useClosingFlag(show && !dismissed, {
+    key: 'draft-undo',
+    durationMs: DURATION_POPOVER_EXIT_MS,
+    entered: shownRef.current,
+  });
 
-  const dismiss = () => setVisible(false);
+  if (!toastClosing.visible) return null;
+
+  const dismiss = () => setDismissed(true);
 
   return (
     <div
       className={styles.undoToast}
       role="status"
       aria-live="polite"
+      aria-hidden={toastClosing.closing ? true : undefined}
       data-draft-undo-toast=""
+      data-closing={toastClosing.closing ? 'true' : undefined}
     >
       <span className={styles.toastText}>{displayMessage}</span>
       <Button

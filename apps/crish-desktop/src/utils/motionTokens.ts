@@ -46,6 +46,27 @@ export const DURATION_SPIN_MS = 1000;
 /** 持续指示·脉冲周期（对应 tokens.css 中 --duration-pulse 1600ms；E 类 9 单源） */
 export const DURATION_PULSE_MS = 1600;
 
+/**
+ * 退场主档时长（对应 tokens-base.css --duration-exit 150ms；E 类 1）：
+ * 流内行/卡的高度收敛 + 淡出共用此档，恒短于或等于入场（fast 150ms
+ * 与 accordion 展开 150–220ms）。退场判定见 toolRevealState.decideExit。
+ */
+export const DURATION_EXIT_MS = 150;
+
+/**
+ * 浮层退场时长（对应 tokens-base.css --transition-popover-exit
+ * 120ms var(--ease-accelerate)；高频面档）：菜单/浮层类退场沿用此档，
+ * 不升 modal 档，否则连续开合会「黏」（F 册 §七.2）。
+ */
+export const DURATION_POPOVER_EXIT_MS = 120;
+
+/**
+ * 退场卸载余量（ms）：宿主在退场动画结束后才卸载子元素，留给
+ * transitionend / animationend 落定漂移的调度余量——不是视觉时长，
+ * 不得作为动画时长使用。
+ */
+export const EXIT_SETTLE_BUFFER_MS = 50;
+
 /** 减速入场曲线（对应 tokens.css 中的 --ease-decelerate） */
 export const EASE_DECELERATE = 'cubic-bezier(0.2, 0, 0, 1)';
 
@@ -76,6 +97,8 @@ export const MOTION_DURATION = {
   LANDING_FADE_MS: DURATION_LANDING_FADE_MS,
   SPIN_MS: DURATION_SPIN_MS,
   PULSE_MS: DURATION_PULSE_MS,
+  EXIT_MS: DURATION_EXIT_MS,
+  POPOVER_EXIT_MS: DURATION_POPOVER_EXIT_MS,
   SPRING_SNAPPY_MS: DURATION_SPRING_SNAPPY_MS,
   SPRING_SMOOTH_MS: DURATION_SPRING_SMOOTH_MS,
   SPRING_MORPH_MS: DURATION_SPRING_MORPH_MS,

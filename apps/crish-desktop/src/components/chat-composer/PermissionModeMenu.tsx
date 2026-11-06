@@ -114,14 +114,16 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
         </Button>
       </Tooltip>
 
-      {open && (
-        <Menu
-          openState={{
-            open,
-            onOpenChange: (nextOpen) => {
-              if (!nextOpen) setOpen(false);
-            },
-          }}
+      {/* S4 退场：Menu 常渲染。{open &&} 条件会杀死 Base UI 自身的
+          Presence 退场保活（与 ui/Menu 的 anchor 早退同病）；关闭态由
+          Menu 的 [data-state='closed'] 规则接管。 */}
+      <Menu
+        openState={{
+          open,
+          onOpenChange: (nextOpen) => {
+            if (!nextOpen) setOpen(false);
+          },
+        }}
           anchor={pillBtnRef}
           options={options}
           position={{ side: 'top', align: 'start', sideOffset: 6 }}
@@ -168,7 +170,6 @@ export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
             );
           }}
         />
-      )}
     </div>
   );
 };

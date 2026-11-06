@@ -23,6 +23,12 @@ interface SmartPanelCascadeSubmenuProps {
   onRequestClose: () => void;
   /** 点击级联子菜单条目时是否关闭整个展开面板（默认 true） */
   closeOnCascadeSelect?: boolean;
+  /**
+   * S4 退场：宿主（SmartExpandablePanel）在父项失活/面板关闭时保持
+   * 挂载播退场。closing=true 时 data-state 翻 'closed'，播本地
+   * crish-popover-exit（120ms accelerate）+ 禁指针命中。
+   */
+  closing?: boolean | undefined;
 }
 
 /**
@@ -45,6 +51,7 @@ export const SmartPanelCascadeSubmenu: React.FC<
   onSelect,
   onRequestClose,
   closeOnCascadeSelect = true,
+  closing = false,
 }) => {
   // 分离可滚动数据条目区与尾部常驻动作区（如「分割线 + 管理技能...」）
   const { bodyItems, footerItems } = useMemo(() => {
@@ -64,7 +71,7 @@ export const SmartPanelCascadeSubmenu: React.FC<
       ref={cascadeSubmenuRef}
       className={styles.cascadeSubmenu}
       role="menu"
-      data-state="open"
+      data-state={closing ? 'closed' : 'open'}
       data-side={side}
       aria-label={ariaLabel}
       style={submenuStyle}

@@ -56,6 +56,7 @@ import {
 } from './useApprovalCountdown';
 import { useApprovalKeyboard } from './useApprovalKeyboard';
 import { useEntranceReveal } from '../motion/useEntranceReveal';
+import { useExitReveal } from '../motion/useExitReveal';
 import { AppIcon } from '@/components/ui/icons';
 
 export type { ApprovalTimeoutPolicy };
@@ -87,6 +88,12 @@ export interface ApprovalAskCardProps {
   isPaused?: boolean | undefined;
   /** 遗留兼容超时回调 (仅纯 UI 钩子，严禁调 IPC) */
   onTimeout?: (() => void) | undefined;
+  /**
+   * S4 退场：宿主（CompactToolRow）在裁决已发出后保持挂载播退场。
+   * closing=true 时卡片高度收敛 + 淡出，指针/键盘决策均已锁死；
+   * onAllow/onDeny 在 closing 置位前已发出，不被退场延迟。
+   */
+  closing?: boolean | undefined;
 }
 
 /** 归一化风险事实与 payload 载荷 */
@@ -139,6 +146,7 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
   remainingMs,
   isPaused,
   onTimeout,
+  closing = false,
 }) => {
   const [note, setNote] = useState('');
   const { t } = useI18n();
@@ -160,6 +168,9 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
     liveOnMount: true,
     variant: 'grow',
   });
+  // S4 退场：closing 翻 true 时收敛高度并淡出（见 useExitReveal 契约）；
+  // 退场期间入场生长让位（data-exiting 标志），由 useEntranceReveal 认领。
+  const exit = useExitReveal({ closing });
 
   const titleId = useId();
   const descId = useId();
@@ -330,6 +341,8 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
   }, [effectiveBusy]);
 
   const fireAllow = useCallback(() => {
+    // S4 退场中：裁决已发出，键盘/按钮不得重复决策
+    if (closing) return;
     // 倒计时已到期或处理中时坚决阻断任何 IPC 决策请求
     if (effectiveBusy) return;
     const phase = nextAllowConfirmPhase(needsDouble, confirmArmed);
@@ -339,14 +352,16 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
     }
     setConfirmArmed(false);
     onAllow(note);
-  }, [effectiveBusy, needsDouble, confirmArmed, onAllow, note]);
+  }, [effectiveBusy, needsDouble, confirmArmed, onAllow, note, closing]);
 
   const handleDeny = useCallback(() => {
+    // S4 退场中：裁决已发出，键盘/按钮不得重复决策
+    if (closing) return;
     if (confirmArmed) disarm();
     // 倒计时已到期或处理中时坚决阻断
     if (effectiveBusy) return;
     onDeny();
-  }, [confirmArmed, disarm, effectiveBusy, onDeny]);
+  }, [confirmArmed, disarm, effectiveBusy, onDeny, closing]);
 
   const handleEnterAllow = useCallback(() => {
     if (effectiveBusy) return;
@@ -388,18 +403,24 @@ export const ApprovalAskCard: React.FC<ApprovalAskCardProps> = ({
       ref={(el) => {
         rootRef.current = el;
         entrance.rootRef(el);
+        exit.rootRef(el);
       }}
       className={`${styles.approvalCard} ${needsDouble ? styles.approvalCardElevated : ''} ${
         confirmArmed ? styles.isConfirmArmed : ''
-      } ${approvalCardClassName({ needsDouble, confirmArmed })}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+      } ${approvalCardClassName({ needsDouble, confirmArmed })}${entrance.entering ? ' crish-entrance-fade' : ''}${closing ? ' crish-exit-fade' : ''}`}
       style={
-        entrance.entering
+        entrance.entering || closing
           ? ({
-              '--reveal-delay': `${entrance.delayMs}ms`,
+              ...(entrance.entering
+                ? { '--reveal-delay': `${entrance.delayMs}ms` }
+                : null),
+              ...(closing ? { pointerEvents: 'none' } : null),
             } as React.CSSProperties)
           : undefined
       }
       data-entering={entrance.entering ? 'true' : undefined}
+      data-exiting={closing ? 'true' : undefined}
+      aria-hidden={closing ? true : undefined}
       onAnimationEnd={entrance.handleAnimationEnd}
       role="region"
       aria-label={regionLabel}

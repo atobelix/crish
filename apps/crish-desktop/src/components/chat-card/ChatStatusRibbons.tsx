@@ -10,7 +10,7 @@
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import styles from './ChatStatusRibbons.module.css';
 
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -33,6 +33,10 @@ import { SetupHintBanner, type SetupHintState } from './SetupHintBanner';
 import { GoalRibbon, type GoalRibbonState } from './GoalRibbon';
 import { ApprovalDock } from './ApprovalDock';
 import { ComposerErrorBar } from './ComposerErrorBar';
+import {
+  useClosingFlag,
+  useClosingValue,
+} from '../motion/useExitReveal';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { connectionManager } from '../../services/ConnectionManager';
 import {
@@ -234,6 +238,37 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     hasSetupHint,
     onEmptySurface,
   });
+
+  // S4 退场宿主：ribbons 的条件渲染是 dock/errorBar 的上一级——宿主
+  // 必须在此，子元素自身保不住自己（父级卸载即连同宿主一起消失）。
+  // 队列/错误消解时保持最后一次快照播 150ms 退场，再交出条带位。
+  // shown 标志：只有真正渲染过的条带才播退场，首屏即无条带时直落。
+  const dockShownRef = useRef(false);
+  if (activeRibbon === 'approval' && !omitApprovalDock) {
+    dockShownRef.current = true;
+  }
+  const dockClosing = useClosingValue(
+    activeRibbon === 'approval' && !omitApprovalDock
+      ? {
+          show: showApprovalDock,
+          pendingCount: pendingApprovalCount,
+          summary: pendingApprovalSummary,
+          toolId: pendingApprovalToolId,
+          msgId: pendingApprovalMsgId,
+          activeSessionId,
+        }
+      : null,
+    {
+      key: `dock:${pendingApprovalToolId || pendingApprovalMsgId}`,
+      entered: dockShownRef.current,
+    }
+  );
+  const errorBarShownRef = useRef(false);
+  if (activeRibbon === 'runtime-error') errorBarShownRef.current = true;
+  const errorBarClosing = useClosingFlag(activeRibbon === 'runtime-error', {
+    key: `errbar:${activeSessionId ?? ''}`,
+    entered: errorBarShownRef.current,
+  });
   const keySoftHintText = resolveNeedsKeySoftHintText({ onEmptySurface });
   const modelSoftHintText = resolveNeedsModelSoftHintText({ onEmptySurface });
   const engineDownText = resolveEngineDownSoftHintText({ onEmptySurface });
@@ -354,22 +389,24 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       {between}
 
       {/* 会话运行终态错误唯一承载体（ComposerErrorBar → failed 相位） */}
-      {activeRibbon === 'runtime-error' ? (
+      {errorBarClosing.visible ? (
         <ComposerErrorBar
           activeSessionId={activeSessionId ?? null}
           onOpenModelSettings={onOpenModelSettings}
+          closing={errorBarClosing.closing}
         />
       ) : null}
 
       {/* 审批 sticky：队列/子 agent 待确认时显示 */}
-      {activeRibbon === 'approval' && !omitApprovalDock ? (
+      {dockClosing.value != null ? (
         <ApprovalDock
-          show={showApprovalDock}
-          pendingCount={pendingApprovalCount}
-          summary={pendingApprovalSummary}
-          toolId={pendingApprovalToolId}
-          msgId={pendingApprovalMsgId}
-          activeSessionId={activeSessionId}
+          show={dockClosing.value.show}
+          pendingCount={dockClosing.value.pendingCount}
+          summary={dockClosing.value.summary}
+          toolId={dockClosing.value.toolId}
+          msgId={dockClosing.value.msgId}
+          activeSessionId={dockClosing.value.activeSessionId}
+          closing={dockClosing.closing}
         />
       ) : null}
     </AppErrorBoundary>

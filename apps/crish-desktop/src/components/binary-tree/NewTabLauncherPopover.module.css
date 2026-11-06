@@ -49,6 +49,31 @@
   }
 }
 
+/* S4 退场：本地退场配方（与入场同值反向，120ms accelerate；Radix
+ * Presence 保活，data-state='closed' 期播退场）。 */
+@keyframes launcherExit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+.popoverContent[data-state='closed'] {
+  animation: launcherExit var(--transition-popover-exit) forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popoverContent,
+  .popoverContent[data-state='closed'] {
+    animation: none;
+  }
+}
+
 /* 顶栏加号按钮 (PaneHeader 嵌入 · 28x28px, 8px 圆角矩形金标) */
 .newTabBtn {
   position: relative;

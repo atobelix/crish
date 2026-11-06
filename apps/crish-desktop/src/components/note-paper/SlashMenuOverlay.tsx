@@ -28,7 +28,7 @@
  * - 目标：装配壳显著 &lt;400（结构债 SD-13 黄边）；切开 ≠ 关 EL
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   BP_SLASH_HOST,
   BP_SLASH_OPEN,
@@ -46,6 +46,8 @@ import {
 import { useSlashMenuKeymap } from './useSlashMenuKeymap';
 import { useSlashMenuModelSync } from './useSlashMenuModelSync';
 import { useSlashMenuSelect } from './useSlashMenuSelect';
+import { useClosingValue } from '../motion/useExitReveal';
+import { DURATION_POPOVER_EXIT_MS } from '../../utils/motionTokens';
 
 // 公共类型再导出：调用方仍从本文件 import（strictSlashBinding / index 等）
 export type {
@@ -82,6 +84,20 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
 
   const snap = menu.getSnapshot();
 
+  // S4 退场宿主：model 关闭时菜单不立即卸载——宿主保持最后一次打开
+  // 的 snap 播 120ms 退场（全局 .crish-exit-popover，design-system.css
+  // 内定义即安全）。菜单不走入场通道（无入场动画），entered 取「曾经
+  // 打开过」。关闭由 model 驱动，closing 不干扰 finishClose 回调时序；
+  // 键盘映射仍取实况 snap.open，退场期不响应 ↑↓/Enter。
+  const shownRef = useRef(false);
+  if (snap.open) shownRef.current = true;
+  const closingSnap = useClosingValue(snap.open ? snap : null, {
+    key: 'slash-menu',
+    durationMs: DURATION_POPOVER_EXIT_MS,
+    entered: shownRef.current,
+  });
+  const renderSnap = closingSnap.value;
+
   const resolvedWriteMode = resolveSlashWriteMode(writeMode);
   const isReadOnly = isSlashReadOnly(resolvedWriteMode);
   const dataWriteMode = toSlashDataWriteMode(resolvedWriteMode, sink);
@@ -98,7 +114,7 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
     });
 
   const segments = useMemo(
-    () => groupSlashCatalogItems(snap.items),
+    () => groupSlashCatalogItems(renderSnap?.items ?? []),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version 指纹驱动
     [version]
   );
@@ -110,17 +126,22 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
     finishClose,
   });
 
-  if (!snap.open) {
+  if (!renderSnap) {
     return null;
   }
 
-  const rootClass = ['bp-slash-host', 'np-slash-overlay', className]
+  const rootClass = [
+    'bp-slash-host',
+    'np-slash-overlay',
+    className,
+    closingSnap.closing ? 'crish-exit-popover' : '',
+  ]
     .filter(Boolean)
     .join(' ');
 
   const activeOptionId =
-    snap.items[snap.activeIndex] != null
-      ? `np-slash-opt-${snap.items[snap.activeIndex]!.id}`
+    renderSnap.items[renderSnap.activeIndex] != null
+      ? `np-slash-opt-${renderSnap.items[renderSnap.activeIndex]!.id}`
       : undefined;
 
   return (
@@ -132,8 +153,10 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
       {...{ [BP_SLASH_OPEN]: '1' }}
       data-slash-ui="react"
       data-slash-write-mode={dataWriteMode}
-      data-block-id={snap.blockId ?? undefined}
-      data-slash-query={snap.query}
+      data-block-id={renderSnap.blockId ?? undefined}
+      data-slash-query={renderSnap.query}
+      data-exiting={closingSnap.closing ? 'true' : undefined}
+      aria-hidden={closingSnap.closing ? true : undefined}
       role="listbox"
       aria-label={isReadOnly ? '斜杠命令（只读）' : '斜杠命令'}
       aria-disabled={isReadOnly ? true : undefined}
@@ -146,8 +169,8 @@ export const SlashMenuOverlay: React.FC<SlashMenuOverlayProps> = ({
         pending={pending}
         emptyMessage={emptyMessage}
         readOnlyMessage={readOnlyMessage}
-        items={snap.items}
-        activeIndex={snap.activeIndex}
+        items={renderSnap.items}
+        activeIndex={renderSnap.activeIndex}
         segments={segments}
         menu={menu}
         onSelectItem={(id) => {

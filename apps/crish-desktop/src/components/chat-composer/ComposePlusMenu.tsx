@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../store/storeAccess';
@@ -6,6 +6,8 @@ import { navigateToSurface } from '../../store/storeAccess';
 import { useI18n } from '../../i18n';
 import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
 import { AppIcon } from '@/components/ui/icons';
+import { useClosingFlag } from '../motion/useExitReveal';
+import { DURATION_POPOVER_EXIT_MS } from '../../utils/motionTokens';
 
 export interface ComposePlusMenuProps {
   open: boolean;
@@ -31,6 +33,19 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
   const [skills, setSkills] = useState<
     Array<{ id: string; name: string; cmd?: string }>
   >([]);
+
+  // S4 退场宿主：open 翻 false 时不立即卸载 SEP——须让 Radix Presence
+  // 有机会把 Popover.Content 置为 data-state='closed' 并播 120ms 退场
+  // （menuContent 的 [data-state='closed'] 规则）。宿主多留 170ms 再卸
+  // 载；期间仍向 SEP 传实况 open（false），由 Radix 走正常关闭流程。
+  // SEP 自身不走入场通道，entered 取「曾经打开过」。
+  const shownRef = useRef(false);
+  if (open) shownRef.current = true;
+  const plusClosing = useClosingFlag(open, {
+    key: 'compose-plus',
+    durationMs: DURATION_POPOVER_EXIT_MS,
+    entered: shownRef.current,
+  });
 
   useEffect(() => {
     let active = true;
@@ -136,7 +151,10 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
     restoreFocusRef,
   ]);
 
-  if (!open) return null;
+  // S4 退场：不得在此早退。`if (!open) return null` 会在关闭瞬间卸载
+  // 整个 SEP（含 Radix Root/Content），Radix Presence 根本没机会播退场。
+  // 改为宿主门：closing 期仍渲染 SEP（open 已为 false，Radix 走正常关闭）。
+  if (!plusClosing.visible) return null;
 
   return (
     <SmartExpandablePanel

@@ -33,6 +33,7 @@ import {
 } from './contextStateUtils';
 import { WorkingStatusIndicator } from '../chat-message-row/WorkingStatusIndicator';
 import { InFlowStatusLine } from '../chat-message-row/InFlowStatusLine';
+import { useClosingValue } from '../motion/useExitReveal';
 import { FoldableProcessSection } from './FoldableProcessSection';
 import {
   subscribeMessageProcessExpansion,
@@ -220,6 +221,17 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       runtimeStatus?.phase === 'retrying'
         ? runtimeStatus.retry
         : undefined;
+    // S4 退场宿主：retrying 相位结束时状态行不立即卸载——宿主保持
+    // 最后一次非空 retry 值播 150ms 退场（行高收敛），再卸载。键取
+    // 最后一次出现过的 retry（与 InFlowStatusLine 的入场键同构），
+    // entered 缺省读入场记忆：从未出现过的行直落。
+    const retryKeyRef = useRef('');
+    if (inFlowRetry) {
+      retryKeyRef.current = `retry:${inFlowRetry.attempt}:${inFlowRetry.errorKind ?? ''}`;
+    }
+    const closingRetry = useClosingValue(inFlowRetry, {
+      key: retryKeyRef.current,
+    });
     // 单轨收敛 §2.3：有正文的失败轮次状态为 error——流内只留一行事实标记
     //（无按钮、无详情；行动入口唯一在 ComposerErrorBar）。零正文失败已被 withdraw，不会到这里。
     const interruptedMark =
@@ -773,7 +785,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
                 mode="initial"
               />
             </div>
-            {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
+            {closingRetry.value && <InFlowStatusLine retry={closingRetry.value} closing={closingRetry.closing} />}
           </div>
         );
       }
@@ -807,7 +819,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               messageId={msg.id}
             />
           </div>
-          {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
+          {closingRetry.value && <InFlowStatusLine retry={closingRetry.value} closing={closingRetry.closing} />}
           {interruptedMark}
         </div>
       );
@@ -924,7 +936,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           );
         })}
 
-        {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
+        {closingRetry.value && <InFlowStatusLine retry={closingRetry.value} closing={closingRetry.closing} />}
         {interruptedMark}
       </div>
     );

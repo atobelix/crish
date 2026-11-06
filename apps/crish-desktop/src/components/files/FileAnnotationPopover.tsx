@@ -4,6 +4,8 @@ import { Button, Textarea, Tooltip } from '@/components/ui';
 import { addPendingFileAnnotation } from '../../api/workspaceFsApi';
 import { useSessionStore } from '../../store/storeAccess';
 import { AppIcon } from '@/components/ui/icons';
+import { useClosingValue } from '../motion/useExitReveal';
+import { DURATION_POPOVER_EXIT_MS } from '../../utils/motionTokens';
 
 export interface FileAnnotationPopoverProps {
   filePath: string;
@@ -29,6 +31,23 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
       top: number;
       left: number;
     } | null>(null);
+
+    // S4 退场宿主：选区消失/提交/Esc 时浮层不立即卸载——宿主保持最后一
+    // 次 {selText, selAnchor, commentDraft} 播 120ms 退场。浮层不走入
+    // 场通道（本地 popoverFadeIn），entered 取「曾经打开过」；disabled
+    // 翻 true 时直落（判定层门控）。新选区到达即取消退场（值重新非空）。
+    const wasOpenRef = useRef(false);
+    if (selText && selAnchor) wasOpenRef.current = true;
+    const closingPop = useClosingValue(
+      selText && selAnchor ? { selText, selAnchor, commentDraft } : null,
+      {
+        key: 'file-annotation',
+        durationMs: DURATION_POPOVER_EXIT_MS,
+        entered: wasOpenRef.current,
+        disabled,
+      }
+    );
+    const renderPop = closingPop.value;
 
     const clearSelectionHighlight = useCallback(() => {
       if (typeof CSS !== 'undefined' && CSS.highlights) {
@@ -250,11 +269,11 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
       handleClose,
     ]);
 
-    if (!selText || !selAnchor || disabled) {
+    if (!renderPop || disabled) {
       return null;
     }
 
-    const hasInput = Boolean(commentDraft.trim());
+    const hasInput = Boolean(renderPop.commentDraft.trim());
 
     return (
       <div
@@ -262,10 +281,12 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
         className={styles.popover}
         role="dialog"
         aria-label="添加代码批注"
+        aria-hidden={closingPop.closing ? true : undefined}
         data-annotation-popover="true"
+        data-closing={closingPop.closing ? 'true' : undefined}
         style={{
-          top: `${selAnchor.top}px`,
-          left: `${selAnchor.left}px`,
+          top: `${renderPop.selAnchor.top}px`,
+          left: `${renderPop.selAnchor.left}px`,
         }}
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -275,7 +296,7 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
           bare
           ref={textareaRef}
           className={styles.nativeTextarea}
-          value={commentDraft}
+          value={renderPop.commentDraft}
           rows={1}
           onChange={(e) => {
             setCommentDraft(e.target.value);

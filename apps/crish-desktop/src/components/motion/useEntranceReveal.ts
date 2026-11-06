@@ -191,12 +191,17 @@ export function useEntranceReveal(
     let done = false;
 
     const restore = () => {
+      // 退场接管中（data-exiting 由 useExitReveal 置）：不清除退场方
+      // 的内联高度/过渡，入场收尾让位（S4 契约 7）。
+      if (el.dataset.exiting === 'true') return;
       el.style.removeProperty('height');
       el.style.removeProperty('overflow');
       el.style.removeProperty('transition');
     };
     const onTransitionEnd = (ev: TransitionEvent) => {
       if (ev.propertyName !== 'height' || ev.target !== el) return;
+      // 退场接管的高度过渡不属于入场生长：不认作入场完成
+      if (el.dataset.exiting === 'true') return;
       growDoneRef.current = true;
       tryFinish();
     };
@@ -219,6 +224,8 @@ export function useEntranceReveal(
 
     const retarget = () => {
       if (done) return;
+      // 退场接管中：停止重靶向生长高度，循环即刻让位（S4 契约 7）
+      if (el.dataset.exiting === 'true') return;
       const nowTarget = el.scrollHeight;
       if (Math.abs(nowTarget - target) > 2) {
         target = nowTarget;

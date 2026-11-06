@@ -115,8 +115,11 @@
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
-  /* 浮层配方归队（AN2 / A6）：与全域菜单同一进场（popover-enter token + 共享 keyframes） */
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  /* S4 退场：入/退场由 ui/Menu 的 menuContent 并集选择器
+   * （[data-ending-style] + [data-state='closed']）承载
+   * （本地 keyframes + Base UI Presence）。本类不得再挂 animation——
+   * 未分层声明会压过 @layer components 内的退场规则，且其引用的
+   * keyframes 在本模块无定义（悬空，入场本就是死的）。 */
 }
 
 .permMenuItem {

@@ -16,6 +16,8 @@ import {
   shouldRenderApprovalDock,
 } from './chatStatusRibbonsLib';
 import { useEntranceReveal } from '../motion/useEntranceReveal';
+import { useClosingValue } from '../motion/useExitReveal';
+import { useExitReveal } from '../motion/useExitReveal';
 import { AppIcon } from '@/components/ui/icons';
 
 function escapeCss(id: string): string {
@@ -34,6 +36,12 @@ export type ApprovalDockProps = {
   toolId: string;
   msgId: string;
   activeSessionId: string | null | undefined;
+  /**
+   * S4 退场：外部宿主（ChatStatusRibbons）发放的 closing 标志；未传时
+   * dock 自宿主（覆盖 ChatComposerWrapper 路径）。closing=true 时 dock
+   * 高度收敛 + 淡出，父级保证挂载到退场播完。
+   */
+  closing?: boolean | undefined;
 };
 
 export const ApprovalDock: React.FC<ApprovalDockProps> = ({
@@ -43,6 +51,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
   toolId,
   msgId,
   activeSessionId,
+  closing: closingProp,
 }) => {
   const { showToast } = useToast();
   const dockRef = useRef<HTMLButtonElement | null>(null);
@@ -55,10 +64,35 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
     variant: 'grow',
   });
 
-  if (!shouldRenderApprovalDock(show, pendingCount)) return null;
+  // S4 退场：dock 自宿主（覆盖 ChatComposerWrapper 路径——wrapper 无条件
+  // 渲染、dock 自门）。队列清空时保持最后一次快照播 150ms 退场。
+  // 外部宿主（ChatStatusRibbons）传入 closing 时以外来标志为准，父级
+  // 保证挂载；未传时用自宿主的保活值与 closing。
+  const selfClosing = useClosingValue(
+    shouldRenderApprovalDock(show, pendingCount)
+      ? { pendingCount, summary, toolId, msgId, activeSessionId }
+      : null,
+    { key: `dock:${toolId || msgId}` }
+  );
+  const renderValue =
+    closingProp !== undefined
+      ? { pendingCount, summary, toolId, msgId, activeSessionId }
+      : selfClosing.value;
+  const closing = closingProp !== undefined ? closingProp : selfClosing.closing;
+  // S4 退场：closing 翻 true 时收敛高度并淡出；退场期间入场生长让位。
+  const exit = useExitReveal({ closing });
 
-  const ariaLabel = resolveApprovalDockAriaLabel(pendingCount, summary);
-  const labelText = resolveApprovalDockLabelText(pendingCount, summary);
+  if (renderValue == null) return null;
+  const {
+    pendingCount: vCount,
+    summary: vSummary,
+    toolId: vToolId,
+    msgId: vMsgId,
+    activeSessionId: vSid,
+  } = renderValue;
+
+  const ariaLabel = resolveApprovalDockAriaLabel(vCount, vSummary);
+  const labelText = resolveApprovalDockLabelText(vCount, vSummary);
 
   const handleClick = (e?: React.MouseEvent<HTMLButtonElement>) => {
     const targetEl =
@@ -69,8 +103,8 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
       targetEl?.parentElement ??
       document;
 
-    const escToolId = toolId ? escapeCss(toolId) : '';
-    const escMsgId = msgId ? escapeCss(msgId) : '';
+    const escToolId = vToolId ? escapeCss(vToolId) : '';
+    const escMsgId = vMsgId ? escapeCss(vMsgId) : '';
 
     const byTool = escToolId
       ? root.querySelector(
@@ -97,7 +131,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
       }
       return;
     }
-    const sess = activeSessionId ? getSessionById(activeSessionId) : undefined;
+    const sess = vSid ? getSessionById(vSid) : undefined;
     const pendingAgent = (sess?.agents || []).find((ag) =>
       (ag.messages || []).some((m) =>
         (m.toolCalls || []).some((tc) => tc.status === 'pending_approval')
@@ -106,7 +140,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
     if (pendingAgent) {
       // 打开侧栏即反馈，不 toast「已打开…」
       openAgentInSidePanel(pendingAgent.id, {
-        sessionId: activeSessionId || undefined,
+        sessionId: vSid || undefined,
       });
       return;
     }
@@ -120,21 +154,27 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
         ref={(el: HTMLButtonElement | null) => {
           dockRef.current = el;
           entrance.rootRef(el);
+          exit.rootRef(el);
         }}
         type="button"
         variant="ghost"
         size="sm"
-        className={`${styles.approvalDock} ${styles.slim} ${styles.docked}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+        className={`${styles.approvalDock} ${styles.slim} ${styles.docked}${entrance.entering ? ' crish-entrance-fade' : ''}${closing ? ' crish-exit-fade' : ''}`}
         style={
-          entrance.entering
+          entrance.entering || closing
             ? ({
-                '--reveal-delay': `${entrance.delayMs}ms`,
+                ...(entrance.entering
+                  ? { '--reveal-delay': `${entrance.delayMs}ms` }
+                  : null),
+                ...(closing ? { pointerEvents: 'none' } : null),
               } as React.CSSProperties)
             : undefined
         }
         aria-label={ariaLabel}
-        data-pending-count={pendingCount}
+        aria-hidden={closing ? true : undefined}
+        data-pending-count={vCount}
         data-entering={entrance.entering ? 'true' : undefined}
+        data-exiting={closing ? 'true' : undefined}
         onAnimationEnd={entrance.handleAnimationEnd}
         onClick={handleClick}
       >

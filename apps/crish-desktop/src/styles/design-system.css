@@ -243,6 +243,47 @@
   }
 }
 
+/* 统一退场通道呈现类（S4 · components/motion/useExitReveal 的对偶面）：
+ * - .crish-exit-fade：流内行/卡退场 = crish-row-enter 的反向（透明 1→0 +
+ *   上浮 -4px），时长/缓动走退场主档 --duration-exit + --ease-accelerate，
+ *   恒短于或等于入场。高度收敛由 useExitReveal 内联驱动（与 grow 入场
+ *   对称），本类只负责透明与位移；
+ * - .crish-exit-popover：浮层退场 = crish-popover-enter 的反向（scale
+ *   0.97 / -4px），走 --transition-popover-exit（120ms 档）。供无本地
+ *   CSS 文件的浮层（如 SlashMenuOverlay）在 closing 态挂载；
+ *   有本地 CSS 文件的浮层仍在各自模块内定义同值 keyframes（S5a
+ *   本地定义口径），不用此类。
+ * 两类退场期间均禁指针命中（E 类 1 翻车形态：退场元素仍可点击）。
+ * 全局类自身文件内定义即安全：Vite CSS Modules 的 keyframes 改名
+ * 只影响模块 CSS 内的引用，全局类不受影响（S5a 实机证伪的反面）。 */
+@keyframes crish-row-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.crish-exit-fade {
+  animation: crish-row-exit var(--duration-exit) var(--ease-accelerate) both;
+  pointer-events: none;
+}
+
+.crish-exit-popover {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crish-exit-fade,
+  .crish-exit-popover {
+    animation: none;
+  }
+}
+
 /* ==========================================================================
    5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
    ========================================================================== */

@@ -308,7 +308,34 @@
 }
 
 /* 级联展开动画已归队全域浮层配方（AN2 / A6）：共享 keyframes crish-popover-enter
- * + popover-enter token；data-side 只决定 transform-origin，不再各备一份 keyframes。 */
+ * + popover-enter token；data-side 只决定 transform-origin，不再各备一份 keyframes。
+ * S4：keyframes 保留本模块定义——Vite CSS Modules 按名跨模块消费共享 keyframes
+ * 会静默失效（S5a 实机证伪；此前入场本就是死的）。退场走本地
+ * crish-popover-exit（120ms accelerate，[data-state='closed']）。 */
+
+/* 进/退场 keyframes 与 ui/Menu/Menu.module.css 的本地副本同值
+ * （scale 0.97 / ∓4px）。本模块副本不可删，见上。 */
+@keyframes crish-popover-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes crish-popover-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
 
 /* 二级子菜单卡片（18px 外圆角 / 6px 内衬 / 12px 条目，Shell-Body-Footer 解耦） */
 .cascadeSubmenu {
@@ -341,10 +368,20 @@
   transform-origin: top left;
 }
 
+/* S4 退场：宿主（SmartExpandablePanel）保持挂载播退场，closing 期
+ * data-state='closed'。减动效时 animation:none（见下方 media 段）。 */
+.cascadeSubmenu[data-state='closed'] {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cascadeSubmenu {
     animation: none;
     transition: opacity var(--duration-micro, 100ms) var(--ease-standard);
+  }
+  .cascadeSubmenu[data-state='closed'] {
+    animation: none;
   }
 }
 

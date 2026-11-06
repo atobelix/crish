@@ -113,6 +113,16 @@ describe('标签条动效单一真理路径契约', () => {
     expect(motionTs).toContain('DURATION_FAST_MS = 150');
   });
 
+  it('退场时长档位 TS/CSS 双向同步（S4：150ms 主档 / 120ms 浮层档）', () => {
+    expect(tokensCss).toContain('--duration-exit: 150ms');
+    expect(tokensCss).toContain(
+      '--transition-popover-exit: 120ms var(--ease-accelerate)'
+    );
+    expect(motionTs).toContain('DURATION_EXIT_MS = 150');
+    expect(motionTs).toContain('DURATION_POPOVER_EXIT_MS = 120');
+    expect(motionTs).toContain('EXIT_SETTLE_BUFFER_MS = 50');
+  });
+
   it('等宽锁定为单变量通道： PaneHeader 无 --tab-locked-width 与 !important 声明', () => {
     expect(paneCss).not.toContain('--tab-locked-width');
     expect(paneCss).not.toMatch(/!important\s*[;}]/);

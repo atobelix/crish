@@ -40,6 +40,14 @@ describe('统一入场通道守卫', () => {
     expect(hook).toContain('decideEntrance');
   });
 
+  it('入场钩子在退场接管时让位（S4：data-exiting 三处守卫）', () => {
+    const hook = read('components/motion/useEntranceReveal.ts');
+    const guards = hook.match(/dataset\.exiting === 'true'/g) ?? [];
+    expect(guards.length).toBeGreaterThanOrEqual(3);
+    const exitHook = read('components/motion/useExitReveal.ts');
+    expect(exitHook).toContain("el.dataset.exiting = 'true'");
+  });
+
   it('AN4 旧钩子文件只剩 re-export 垫片（无第二份实现）', () => {
     const shim = read('components/chat-tool-call/useRevealEntrance.ts');
     expect(shim).toContain('useEntranceReveal as useRevealEntrance');

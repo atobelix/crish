@@ -13,13 +13,20 @@ import { AppIcon } from '@/components/ui/icons';
 import type { RuntimeRetryInfo } from '../../store';
 import { formatRetryStatusText } from './inFlowStatusLineLib';
 import { useEntranceReveal } from '../motion/useEntranceReveal';
+import { useExitReveal } from '../motion/useExitReveal';
 
 export interface InFlowStatusLineProps {
   retry: RuntimeRetryInfo;
+  /**
+   * S4 退场：宿主（MessageContent）在 retrying 相位结束时保持挂载播
+   * 退场。closing=true 时行高收敛 + 淡出，退场期间下方内容不上跳
+   * （与入场 grow 同为高度动画，虚拟滚动测高已同理处理）。
+   */
+  closing?: boolean | undefined;
 }
 
 export const InFlowStatusLine: React.FC<InFlowStatusLineProps> = React.memo(
-  function InFlowStatusLine({ retry }) {
+  function InFlowStatusLine({ retry, closing = false }) {
     // 统一入场通道：retrying 相位是纯实况瞬态（存在本身即事件、无可用
     // 事件戳下发到本组件），以 liveOnMount 判定 + grow 变体让 24px 行
     // 高度同步生长，不再瞬时弹入顶开下方内容。
@@ -28,21 +35,32 @@ export const InFlowStatusLine: React.FC<InFlowStatusLineProps> = React.memo(
       liveOnMount: true,
       variant: 'grow',
     });
+    // S4 退场：closing 翻 true 时收敛行高并淡出（见 useExitReveal 契约）；
+    // 退场期间入场生长让位（data-exiting 标志），由 useEntranceReveal 认领。
+    const exit = useExitReveal({ closing });
     return (
       <div
-        ref={entrance.rootRef}
-        className={`${styles.statusLine}${entrance.entering ? ' crish-entrance-fade' : ''}`}
+        ref={(el) => {
+          entrance.rootRef(el);
+          exit.rootRef(el);
+        }}
+        className={`${styles.statusLine}${entrance.entering ? ' crish-entrance-fade' : ''}${closing ? ' crish-exit-fade' : ''}`}
         style={
-          entrance.entering
+          entrance.entering || closing
             ? ({
-                '--reveal-delay': `${entrance.delayMs}ms`,
+                ...(entrance.entering
+                  ? { '--reveal-delay': `${entrance.delayMs}ms` }
+                  : null),
+                ...(closing ? { pointerEvents: 'none' } : null),
               } as React.CSSProperties)
             : undefined
         }
         role="status"
         aria-live="polite"
+        aria-hidden={closing ? true : undefined}
         data-testid="in-flow-status-line"
         data-entering={entrance.entering ? 'true' : undefined}
+        data-exiting={closing ? 'true' : undefined}
         onAnimationEnd={entrance.handleAnimationEnd}
       >
         <AppIcon

@@ -16,6 +16,9 @@ import {
   updatePendingFileAnnotationComment,
 } from '../../api/workspaceFsApi';
 import { AppIcon } from '@/components/ui/icons';
+import { useClosingFlag } from '../motion/useExitReveal';
+import { useExitReveal } from '../motion/useExitReveal';
+import { DURATION_POPOVER_EXIT_MS } from '../../utils/motionTokens';
 
 export interface AnnotationChipItemProps {
   attachment: ChatAttachment;
@@ -24,6 +27,12 @@ export interface AnnotationChipItemProps {
   onRequestClose: () => void;
   onRemove: (name: string) => void;
   onOpenPath?: (path: string) => void;
+  /**
+   * S4 退场：条带移除该 chip 时置 true。chip 根横向收敛 + 淡出；
+   * hover 定时器取消、popover 不再打开；popover 自身走下面的
+   * useClosingFlag 播 120ms 退场（在 chip 的 200ms 退场窗内播完）。
+   */
+  closing?: boolean | undefined;
 }
 
 export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
@@ -34,6 +43,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
     onRequestClose,
     onRemove,
     onOpenPath,
+    closing = false,
   }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [draftComment, setDraftComment] = useState(
@@ -48,6 +58,35 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
     const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
       undefined
     );
+
+    // S4 退场宿主（popover）：isOpen 翻 false 时保持 portal 挂载播
+    // 120ms 退场。popover 不走入场通道（本地 annPopoverFadeIn），
+    // entered 取「曾经打开过」——首挂即关闭时直落。
+    const wasPopoverOpenRef = useRef(false);
+    if (isOpen) wasPopoverOpenRef.current = true;
+    const popoverClosing = useClosingFlag(isOpen, {
+      key: 'ann-popover',
+      durationMs: DURATION_POPOVER_EXIT_MS,
+      entered: wasPopoverOpenRef.current,
+    });
+    // S4 退场（chip 本体）：closing 翻 true 时横向收敛 + 淡出。
+    // chip 根自带 composerAttachArrive 入场动画，故直接在根上退场，
+    // 不包 wrapper（wrapper 会重挂 chip、入场重播与退场冲突）。
+    const exit = useExitReveal({ closing, axis: 'horizontal', gapPx: 8 });
+
+    // S4：退场开始即取消 hover 定时器，杜绝退场中途重开 popover。
+    useEffect(() => {
+      if (!closing) return undefined;
+      if (showTimerRef.current) {
+        clearTimeout(showTimerRef.current);
+        showTimerRef.current = undefined;
+      }
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = undefined;
+      }
+      return undefined;
+    }, [closing]);
 
     useEffect(() => {
       setDraftComment(attachment.annotation?.comment || '');
@@ -65,11 +104,13 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
     }, []);
 
     const handleMouseEnter = useCallback(() => {
+      // S4 退场中：不重开 popover
+      if (closing) return;
       clearTimers();
       showTimerRef.current = setTimeout(() => {
         onRequestOpen();
       }, 120);
-    }, [clearTimers, onRequestOpen]);
+    }, [clearTimers, onRequestOpen, closing]);
 
     const handleMouseLeave = useCallback(() => {
       clearTimers();
@@ -186,7 +227,10 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
     return (
       <>
         <span
-          ref={chipRef}
+          ref={(el) => {
+            chipRef.current = el;
+            exit.rootRef(el);
+          }}
           role="listitem"
           tabIndex={0}
           data-testid="composer-attach-card"
@@ -194,7 +238,10 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
           data-file-type="annotation"
           data-file-name={attachment.name}
           data-file-open-path={attachment.path || attachment.name}
-          className={`${attachStyles.fileCard} ${attachStyles.attachChip} file-card`}
+          data-exiting={closing ? 'true' : undefined}
+          aria-hidden={closing ? true : undefined}
+          className={`${attachStyles.fileCard} ${attachStyles.attachChip} file-card${closing ? ' crish-exit-fade' : ''}`}
+          style={closing ? ({ animation: 'none', pointerEvents: 'none' } as React.CSSProperties) : undefined}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           onClick={(e) => {
@@ -246,7 +293,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
           </Button>
         </span>
 
-        {isOpen &&
+        {popoverClosing.visible &&
           posStyle &&
           typeof document !== 'undefined' &&
           createPortal(
@@ -254,6 +301,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
               ref={popoverRef}
               className={styles.annPopoverCard}
               style={posStyle}
+              data-closing={popoverClosing.closing ? 'true' : undefined}
               onMouseEnter={handlePopoverMouseEnter}
               onMouseLeave={handlePopoverMouseLeave}
               onClick={(e) => e.stopPropagation()}

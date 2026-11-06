@@ -112,14 +112,29 @@
     animation-name: crish-popover-enter-top;
   }
 
+  /* S4 退场（2026-11-06 实机证伪后修正）：Base UI v1.9 的 MenuPopup
+   * 根本不写 data-state（其属性是 data-open/data-closed/
+   * data-starting-style/data-ending-style，见 node_modules/@base-ui/react
+   * menu/popup/MenuPopupDataAttributes.d.ts）。旧 [data-state='closed']
+   * 选择器对 Base UI 菜单永远匹配不上，退场动画是死的、Presence
+   * 约 19ms 即卸载。改为并集：[data-ending-style] 覆盖 Base UI 菜单，
+   * [data-state='closed'] 保留给 Radix 弹层（如 SEP 主面板，其
+   * Popover.Content 确实写 data-state）。退场 keyframes/时长（120ms
+   * accelerate）与减动效归零均不变。注意：入场 [data-state='open']
+   * 对 Base UI 同样是死的（Popup 打开时也无 data-state），属 S5b
+   * 弹层收敛待修项，本批只动退场。 */
   .menuContent[data-state='closed'],
-  .popup[data-state='closed'] {
+  .menuContent[data-ending-style],
+  .popup[data-state='closed'],
+  .popup[data-ending-style] {
     animation: crish-popover-exit var(--transition-popover-exit) forwards;
     pointer-events: none;
   }
 
   .menuContent[data-state='closed'][data-side='top'],
-  .popup[data-state='closed'][data-side='top'] {
+  .menuContent[data-ending-style][data-side='top'],
+  .popup[data-state='closed'][data-side='top'],
+  .popup[data-ending-style][data-side='top'] {
     animation-name: crish-popover-exit-top;
   }
 

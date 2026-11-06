@@ -144,6 +144,47 @@ export function decideEntrance(input: EntranceDecisionInput): boolean {
   return isLiveEventTimestamp(input.eventTs, input.now);
 }
 
+/* ───── 退场判定（S4 · decideEntrance 的对偶，E 类 1 缺口 #1） ───── */
+
+export interface ExitDecisionInput {
+  key: string;
+  /**
+   * 该键是否已完成过入场（呈现记忆）；缺省读 enteredKeys。
+   * 未入场者退场亦直落：历史回放里瞬时出现的元素，消失时也不播退场
+   * （与入场「历史安静」对称）。引擎/浮层宿主（Base UI / Radix /
+   * 自研 closing 态）若已在挂载期亲眼见过元素，可显式传 true——
+   * 它们不走入场通道，呈现记忆里没有它们的键。
+   */
+  entered?: boolean | undefined;
+  /** 调用方门控未就绪 */
+  disabled?: boolean | undefined;
+  /**
+   * 处于虚拟窗口内：虚拟器驱动的卸载（滚动出窗）不走退场宿主，
+   * 直落。数据驱动的退场（状态变化）不受此限。
+   */
+  inVirtualWindow?: boolean | undefined;
+}
+
+/**
+ * 退场判定（纯函数，副作用仅读注册表）——decideEntrance 的对偶：
+ * - 空键 / 门控未就绪 → 直落；
+ * - 虚拟窗口内卸载 → 直落（宿主结构上就播不了退场）；
+ * - 系统减动效 → 直落（减动效只响应系统设置，见 isRevealDegraded）；
+ * - 该键从未入场 → 直落（无戳：瞬时出现的元素瞬时消失）。
+ *
+ * 「同键退场只播一次」不在此处用全局注册表强制：同一键在新的挂载
+ * 周期里可再次合法退场（例如同一轮次再次失败的错误条）。一次挂载
+ * 周期内只播一次由宿主的状态机保证（closing 标志 + 重挂取消），
+ * 快速增删合并亦由宿主处理（重挂即取消待退场）。
+ */
+export function decideExit(input: ExitDecisionInput): boolean {
+  if (!input.key || input.disabled || input.inVirtualWindow) return false;
+  if (isRevealDegraded()) return false;
+  const entered = input.entered ?? hasEntered(input.key);
+  if (!entered) return false;
+  return true;
+}
+
 /* ───── 入场交错协调（同批挂载序 = 渲染序 = 视觉行序） ───── */
 
 let lastEntranceClaimAt = Number.NEGATIVE_INFINITY;
