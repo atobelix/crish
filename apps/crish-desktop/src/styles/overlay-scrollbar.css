@@ -141,10 +141,13 @@
   background: transparent;
 }
 
-/* ScrollArea 视口原生滚动支撑（隐藏系统滚动条避免双条重叠） */
+/* ScrollArea 视口原生滚动支撑（隐藏系统滚动条避免双条重叠）。
+ * 主聊天列表（S3 路线 B）同入此范式：原生条关停，呈现由同宿主自研悬浮条
+ * ChatOverlayScrollbar 接管，正文列不再为条让出布局宽度。 */
 .viewport::-webkit-scrollbar,
 [data-viewport]::-webkit-scrollbar,
-[data-scroll-area-viewport]::-webkit-scrollbar {
+[data-scroll-area-viewport]::-webkit-scrollbar,
+[data-chat-scroll-container]::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;

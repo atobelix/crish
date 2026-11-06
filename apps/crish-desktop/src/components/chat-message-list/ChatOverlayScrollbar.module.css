@@ -1,0 +1,102 @@
+/* 主聊天列表自研悬浮滚动条（S3 路线 B，ScrollArea 先例同构）。
+ *
+ * 右侧预留带常量组（三处同组钉死，改一处必须同改三处）：
+ * - 本条列：right: 2px、宽 var(--scrollbar-thumb-width) = 10px → 占位 [2px, 12px]；
+ * - ChatMessageList .streamHost 渐隐遮罩右避让：14px（calc(var(--scrollbar-thumb-width, 10px) + 4px)）；
+ * - FlowScrubber .wrapper right：同上 14px，其 24px 宽占 [14px, 38px]。
+ * 正文列现有净空（margin ≥24px + padding 20px ≥ 44px）已覆盖 14px 预留带，
+ * 本条不新增任何正文 padding（A 报告 §5.2 核实口径）。
+ *
+ * 时长/曲线只消费 token（--duration-* / --transition-fast），
+ * prefers-reduced-motion 下由 tokens-base 的归零段统一接管，本文件不写媒体查询分支。
+ */
+
+/* 悬浮列：绝对定位于 .streamHost 右缘内侧，不占布局；overflow:hidden 自裁剪，
+   使 track 的滑入/滑出永远不溢出宿主右缘（不依赖祖先裁剪）。 */
+.bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  width: var(--scrollbar-thumb-width, 10px);
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-emphasized);
+  user-select: none;
+}
+
+/* 入场：150ms decelerate + 100ms 延迟（与 ScrollArea .visible 三元组逐项相同）；
+   track 同时从右向左滑入（translateX 100%+2px → 0）。 */
+.barVisible {
+  opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
+}
+
+.track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transform: translateX(calc(100% + 2px));
+  transition: transform var(--duration-normal) var(--ease-emphasized);
+}
+
+.barVisible .track {
+  transform: translateX(0);
+  transition: transform var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
+}
+
+/* 滑块：与原生细条同一构造——整列 10px 可抓取，净宽 6px 由左右 2px
+   透明边框（--scrollbar-track-safe-gap）收出，背景 clip 到 padding-box。 */
+.thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  box-sizing: border-box;
+  background: var(--tint-scrollbar-thumb);
+  background-clip: padding-box;
+  border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
+  border-radius: var(--scrollbar-thumb-radius);
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+  touch-action: none;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  transition: background-color var(--transition-fast);
+}
+
+/* 平滑门控（由组件按 decideThumbSync 逐帧写 data-smooth）：
+   size = 仅高度走 150ms standard 过渡（总高与位置同帧变化时，位置直写跟手）；
+   both = 高度与位移同走过渡（纯总高阶跃帧）。none（缺省）= 全直写。
+   用户手势窗 / 拖拽 / 布局尺寸变化时组件恒写 none，本文件不另设手势分支。 */
+.thumb[data-smooth='size'] {
+  transition:
+    background-color var(--transition-fast),
+    height var(--duration-fast) var(--ease-standard);
+}
+
+.thumb[data-smooth='both'] {
+  transition:
+    background-color var(--transition-fast),
+    height var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+/* 铁律同 ScrollArea：hover 与 dragging 统统 --scrollbar-thumb-active，无第三态 */
+.thumb:hover,
+.thumb.dragging {
+  background: var(--scrollbar-thumb-active);
+  background-clip: padding-box;
+}
+
+.thumb.dragging {
+  cursor: grabbing;
+}

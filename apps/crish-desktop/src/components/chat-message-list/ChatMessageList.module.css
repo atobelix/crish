@@ -21,13 +21,16 @@
   animation: streamHostEnter var(--transition-fast) var(--ease-emphasized) both;
 }
 
-/* 顶部与底部平滑渐隐遮罩（双极过渡，文字进出视野不生硬，且右侧避让滚动条轨道） */
+/* 顶部与底部平滑渐隐遮罩（双极过渡，文字进出视野不生硬，且右侧避让滚动条轨道）
+   右避让 14px = 右侧预留带常量组：悬浮条列占 [2px,12px]（right:2 + 宽 10），
+   遮罩与 FlowScrubber 同从 14px 起（calc(var(--scrollbar-thumb-width, 10px) + 4px)），
+   三处同组钉死，见 ChatOverlayScrollbar.module.css 头注释。 */
 .streamHost::before,
 .streamHost::after {
   content: '';
   position: absolute;
   left: 0;
-  right: calc(var(--scrollbar-thumb-width, 8px) + 2px);
+  right: calc(var(--scrollbar-thumb-width, 10px) + 4px);
   height: 48px;
   pointer-events: none;
   z-index: 5;
@@ -86,6 +89,10 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* S3 路线 B：原生条关停（webkit 侧由 overlay-scrollbar.css 隐藏范式对
+     [data-chat-scroll-container] 落 display:none），呈现由同宿主的
+     ChatOverlayScrollbar 悬浮条接管，正文列不再为条让出布局宽度。 */
+  scrollbar-width: none;
   overflow-anchor: none;
   position: relative;
   overscroll-behavior-y: contain;

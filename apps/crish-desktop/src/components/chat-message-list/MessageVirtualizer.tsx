@@ -19,6 +19,7 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
+import { ChatOverlayScrollbar } from './ChatOverlayScrollbar';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 import { useStableRowMeasureRef } from './messageVirtualizerMeasure';
 import {
@@ -763,6 +764,9 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current
         }
       />
+      {/* S3 路线 B：自研悬浮滚动条（原生条已关停，只读 scroller 几何，
+          拖拽外不反写滚动位置；口径见 ChatOverlayScrollbar 头注释） */}
+      <ChatOverlayScrollbar scrollerRef={vs.containerRef} />
       {/* 批 B ⑳：就绪遮罩（数据已到、布局未稳时盖住首帧；与 Loading 出口互斥不叠画） */}
       {sessionCover && <SessionReadyCover fading={sessionCover.fading} />}
     </div>
