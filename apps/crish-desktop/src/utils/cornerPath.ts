@@ -227,7 +227,11 @@ const fmt = (v: number): number => {
  *   起始尺寸轮廓（立项方案 §2.2-5，槽 E 首个实测此策略）；
  * - w/h ≤ 0 返回空串；全角为 0 返回普通矩形路径；
  * - 轮廓族由 scheme 决定（缺省经全局方案选择点，默认 'g2'）；显式 n 仍可
- *   覆盖指数（底层逃生口，解析序见 resolveCornerExponent）。
+ *   覆盖指数（底层逃生口，解析序见 resolveCornerExponent）；
+ * - origin（可选，尾参）：输出坐标整体平移 (x, y)——供 G2Surface 的 clip
+ *   层把边框盒轮廓平移到流内内容层的坐标系（内容层原点相对边框盒原点
+ *   偏移 (borderLeft+paddingLeft, borderTop+paddingTop)）；缺省/零偏移时
+ *   fx/fy 与 fmt 逐字等价（v + 0 === v），既有全部调用产物不变。
  */
 export function cornerPath(
   w: number,
@@ -235,15 +239,20 @@ export function cornerPath(
   radii: CornerRadiiInput,
   n?: number,
   scheme?: CornerScheme,
+  origin?: { x: number; y: number },
 ): string {
   if (!(w > 0) || !(h > 0)) return '';
   const e = resolveCornerExponent(n, scheme);
   const r = normalizeRadii(radii, w, h);
   const { tl, tr, br, bl } = r;
+  const ox = origin?.x ?? 0;
+  const oy = origin?.y ?? 0;
+  const fx = (v: number): number => fmt(v + ox);
+  const fy = (v: number): number => fmt(v + oy);
   if (tl === 0 && tr === 0 && br === 0 && bl === 0) {
-    return `M0 0H${fmt(w)}V${fmt(h)}H0Z`;
+    return `M${fx(0)} ${fy(0)}H${fx(w)}V${fy(h)}H${fx(0)}Z`;
   }
-  const seg: string[] = [`M${fmt(tl)} 0`, `H${fmt(w - tr)}`];
+  const seg: string[] = [`M${fx(tl)} ${fy(0)}`, `H${fx(w - tr)}`];
   // 四角均由典范角点列（superellipseCornerPoints，自 (R,0) 至 (0,R)）镜像生成，
   // 逐角的局部方程 (R−a)^n + (R−b)^n = R^n 由典范方程直接传递（数值测试逐角验）：
   // TR：(cx, cy) → (w − cx, cy)，跳过首点（与 H 端点重合）
@@ -252,43 +261,43 @@ export function cornerPath(
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
-      seg.push(`L${fmt(w - pt[0])} ${fmt(pt[1])}`);
+      seg.push(`L${fx(w - pt[0])} ${fy(pt[1])}`);
     }
   } else {
-    seg.push(`L${fmt(w)} 0`);
+    seg.push(`L${fx(w)} ${fy(0)}`);
   }
-  seg.push(`V${fmt(h - br)}`);
+  seg.push(`V${fy(h - br)}`);
   // BR：(cx, cy) → (w − cy, h − cx)，跳过首点（与 V 端点重合）
   if (br > 0) {
     const pts = superellipseCornerPoints(br, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
-      seg.push(`L${fmt(w - pt[1])} ${fmt(h - pt[0])}`);
+      seg.push(`L${fx(w - pt[1])} ${fy(h - pt[0])}`);
     }
   } else {
-    seg.push(`L${fmt(w)} ${fmt(h)}`);
+    seg.push(`L${fx(w)} ${fy(h)}`);
   }
-  seg.push(`H${fmt(bl)}`);
+  seg.push(`H${fx(bl)}`);
   // BL：(cx, cy) → (cx, h − cy)，跳过首点（与 H 端点重合）
   if (bl > 0) {
     const pts = superellipseCornerPoints(bl, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
-      seg.push(`L${fmt(pt[0])} ${fmt(h - pt[1])}`);
+      seg.push(`L${fx(pt[0])} ${fy(h - pt[1])}`);
     }
   } else {
-    seg.push(`L0 ${fmt(h)}`);
+    seg.push(`L${fx(0)} ${fy(h)}`);
   }
-  seg.push(`V${fmt(tl)}`);
+  seg.push(`V${fy(tl)}`);
   // TL：典范角逆序（自 (0, tl) 回到 (tl, 0)），跳过两端点（与直线/Z 重合）
   if (tl > 0) {
     const pts = superellipseCornerPoints(tl, e);
     for (let k = pts.length - 2; k >= 1; k--) {
       const pt = pts[k];
       if (!pt) continue;
-      seg.push(`L${fmt(pt[0])} ${fmt(pt[1])}`);
+      seg.push(`L${fx(pt[0])} ${fy(pt[1])}`);
     }
   }
   seg.push('Z');

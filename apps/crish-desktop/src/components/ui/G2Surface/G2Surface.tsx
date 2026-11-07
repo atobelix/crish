@@ -11,6 +11,14 @@
  * - mode="measured"（默认）：ResizeObserver 实测尺寸生成行内 SVG 背景层；
  *   尺寸落定才重算，动画/拖拽中由宿主保持挂载尺寸即天然冻结（生成结果按
  *   (w,h,R) 记忆，尺寸未变不重复生成）；
+ *   尺寸口径 = 宿主**边框盒**（2026-11-07 订正）：旧实现取 entry.contentRect
+ *   （内容盒），宿主带 padding 时形状恒短 padL+padR / padT+padB、相对内容
+ *   错位 pad（浮动菜单族活体实测坐实：错位恒 6px、双向短 12px）。描边数学、
+ *   根节点兜底圆弧与回滚口径本就以边框盒为界——现量测优先取
+ *   entry.borderBoxSize，缺失时以 contentRect + 计算样式的 padding/border
+ *   重建；SVG 贴附按边框宽负偏移补偿（贴附原点是填充盒原点，边框外缘须
+ *   回退 bl/bt 才与边框盒原点重合），clip 路径按 -(bl+pl) / -(bt+pt)
+ *   平移进内容层坐标系。pad/border 皆 0 的宿主产物逐字不变；
  * - mode="stretch"：可拉伸 SVG 背景层（preserveAspectRatio="none"），
  *   适合 max-content 宽表面；须传 width/height 作为生成尺寸口径；
  * - 带阴影面：dropShadow 以 filter: drop-shadow 跟随轮廓（§2.2-6）；
@@ -157,10 +165,16 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
       },
       [ref]
     );
-    const [measured, setMeasured] = React.useState<{ w: number; h: number }>({
-      w: 0,
-      h: 0,
-    });
+    // 量测状态：边框盒尺寸 (w, h) + 左/上边框宽 (bl, bt) + 左/上内距
+    // (pl, pt)——后四者供 SVG 贴附补偿与 clip 路径平移（见文件头订正）。
+    const [measured, setMeasured] = React.useState<{
+      w: number;
+      h: number;
+      bl: number;
+      bt: number;
+      pl: number;
+      pt: number;
+    }>({ w: 0, h: 0, bl: 0, bt: 0, pl: 0, pt: 0 });
 
     React.useLayoutEffect(() => {
       if (mode !== 'measured' || width !== undefined || height !== undefined) {
@@ -179,10 +193,40 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
       const cb = (entry: ResizeObserverEntry) => {
         const rect = entry.contentRect;
         if (!rect) return;
+        // 边框盒重建：优先 entry.borderBoxSize；缺失时以 contentRect 加
+        // 计算样式的 padding/border 补回（contentRect 是唯一必备字段，
+        // 老引擎/测试替身可能不带 borderBoxSize）。bl/bt/pl/pt 每帧现读
+        // 计算样式——它们同时是 SVG 贴附补偿与 clip 平移的输入。
+        const cs = getComputedStyle(el);
+        const px = (v: string): number => {
+          const n = parseFloat(v);
+          return Number.isFinite(n) ? n : 0;
+        };
+        const bl = px(cs.borderLeftWidth);
+        const br = px(cs.borderRightWidth);
+        const bt = px(cs.borderTopWidth);
+        const bb = px(cs.borderBottomWidth);
+        const pl = px(cs.paddingLeft);
+        const pr = px(cs.paddingRight);
+        const pt = px(cs.paddingTop);
+        const pb = px(cs.paddingBottom);
+        let bw = rect.width + pl + pr + bl + br;
+        let bh = rect.height + pt + pb + bt + bb;
+        const bbs = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (bbs && bbs.inlineSize > 0 && bbs.blockSize > 0) {
+          bw = bbs.inlineSize;
+          bh = bbs.blockSize;
+        }
         setMeasured((prev) =>
-          Math.abs(prev.w - rect.width) > 0.5 ||
-          Math.abs(prev.h - rect.height) > 0.5
-            ? { w: rect.width, h: rect.height }
+          Math.abs(prev.w - bw) > 0.5 ||
+          Math.abs(prev.h - bh) > 0.5 ||
+          prev.bl !== bl ||
+          prev.bt !== bt ||
+          prev.pl !== pl ||
+          prev.pt !== pt
+            ? { w: bw, h: bh, bl, bt, pl, pt }
             : prev
         );
       };
@@ -227,6 +271,21 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
       );
     }, [stroke, sizeKnown, mode, w, h, input, strokeWidthSnapped, scheme]);
 
+    // clip 路径：内容层 wrapper 是流内子元素，其坐标原点位于边框盒的
+    // (bl+pl, bt+pt) 处；填充轮廓 d 以边框盒为原点，须按 -(bl+pl) /
+    // -(bt+pt) 平移才与表面轮廓在内容层坐标系内重合。显式尺寸面不走
+    // 量测（measured 恒 0）→ 偏移 0、产物与既往逐字一致。
+    const clipD = React.useMemo(
+      () =>
+        sizeKnown
+          ? cornerPath(w, h, input, undefined, scheme, {
+              x: -(measured.bl + measured.pl),
+              y: -(measured.bt + measured.pt),
+            })
+          : '',
+      [sizeKnown, w, h, input, scheme, measured]
+    );
+
     const tierAttr = typeof radius === 'string' ? radius : undefined;
     const hasLayer = Boolean(fill || (stroke && strokeD));
 
@@ -265,6 +324,10 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
             style={{
               position: 'absolute',
               inset: 0,
+              // 贴附补偿：绝对定位原点是宿主填充盒原点（边框内侧），形状
+              // 按边框盒绘制须回退边框宽；无边框宿主不写该键、产物不变。
+              ...(measured.bl ? { left: -measured.bl } : null),
+              ...(measured.bt ? { top: -measured.bt } : null),
               filter: dropShadow ? `drop-shadow(${dropShadow})` : undefined,
               pointerEvents: 'none',
             }}
@@ -288,7 +351,7 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
             style={{
               position: 'relative',
               height: '100%',
-              clipPath: `path('${d}')`,
+              clipPath: `path('${clipD}')`,
               ...contentStyle,
             }}
           >

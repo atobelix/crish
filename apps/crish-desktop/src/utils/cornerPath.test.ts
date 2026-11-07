@@ -387,3 +387,42 @@ describe('双方案体系（g2 主方案 / concentric 同心圆弧后退方案�
     );
   });
 });
+
+describe('cornerPath origin 原点偏移（G2Surface clip 平移接入，2026-11-07）', () => {
+  it('缺省/零偏移与无 origin 调用逐字一致（既有产物不变）', () => {
+    expect(cornerPath(200, 100, 20, undefined, undefined, { x: 0, y: 0 })).toBe(
+      cornerPath(200, 100, 20),
+    );
+    expect(
+      cornerPath(90, 40, { tl: 12, br: 6 }, undefined, 'concentric', {
+        x: 0,
+        y: 0,
+      }),
+    ).toBe(cornerPath(90, 40, { tl: 12, br: 6 }, undefined, 'concentric'));
+    expect(cornerPath(100, 50, 0, undefined, undefined, { x: 0, y: 0 })).toBe(
+      cornerPath(100, 50, 0),
+    );
+  });
+
+  it('矩形轮廓：整体平移 (x, y)', () => {
+    expect(cornerPath(100, 50, 0, undefined, undefined, { x: -7, y: -7 })).toBe(
+      'M-7 -7H93V43H-7Z',
+    );
+  });
+
+  it('圆角轮廓：每点坐标按 (x, y) 平移（点列对账）', () => {
+    const base = parsePath(cornerPath(200, 100, 20));
+    const shifted = parsePath(
+      cornerPath(200, 100, 20, undefined, undefined, { x: 5, y: 3 }),
+    );
+    expect(shifted.length).toBe(base.length);
+    shifted.forEach((p, i) => {
+      expect(p[0]).toBeCloseTo(base[i]![0] + 5, 3);
+      expect(p[1]).toBeCloseTo(base[i]![1] + 3, 3);
+    });
+    // 负偏移（clip 层的实际用法）：M 起点按 (tl+x, y) 落位
+    expect(
+      cornerPath(200, 100, 20, undefined, undefined, { x: -7, y: -3 }),
+    ).toMatch(/^M13 -3/);
+  });
+});

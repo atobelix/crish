@@ -7,14 +7,15 @@
  * (w,h,R) 的输出逐字一致、非空且满足角域隐式方程。keyframes 悬空事故
  * 缺失的正是这一环（守卫全绿而产物无定义）。
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import React from 'react';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { G2Surface } from './G2Surface';
 import {
   cornerPath,
   setCornerScheme,
 } from '../../../utils/cornerPath';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 
 describe('G2Surface 产物验证', () => {
   it('measured 形态：渲染出的 SVG 背景层携带 cornerPath 的真实几何', () => {
@@ -167,5 +168,218 @@ describe('G2Surface 产物验证', () => {
     } finally {
       setCornerScheme('g2');
     }
+  });
+});
+
+describe('G2Surface 量测路径（RO 驱动 · 边框盒订正 2026-11-07）', () => {
+  // 可控 RO 替身：G2Surface 经 ResizeObserverManager 单例订阅量测，本组
+  // 在渲染前把全局 ResizeObserver 换成可手动 fire 的替身并重置单例，以
+  // entry 直接驱动量测回调（既有组全部走显式宽高，量测路径此前零覆盖）。
+  class ControllableResizeObserver {
+    static last: ControllableResizeObserver | null = null;
+    private readonly cb: (entries: ResizeObserverEntry[]) => void;
+    constructor(cb: (entries: ResizeObserverEntry[]) => void) {
+      this.cb = cb;
+      ControllableResizeObserver.last = this;
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    fire(entries: ResizeObserverEntry[]): void {
+      this.cb(entries);
+    }
+  }
+
+  const originalRO = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    ControllableResizeObserver.last = null;
+    globalThis.ResizeObserver =
+      ControllableResizeObserver as unknown as typeof ResizeObserver;
+    ResizeObserverManager.resetInstanceForTest();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalRO;
+    ResizeObserverManager.resetInstanceForTest();
+  });
+
+  function fireEntry(
+    host: Element,
+    init: {
+      contentW: number;
+      contentH: number;
+      borderW?: number;
+      borderH?: number;
+    },
+  ): void {
+    const ro = ControllableResizeObserver.last;
+    expect(ro, '量测订阅应已创建 RO 实例').not.toBeNull();
+    const entry = {
+      target: host,
+      contentRect: { width: init.contentW, height: init.contentH },
+      borderBoxSize:
+        init.borderW === undefined
+          ? undefined
+          : [{ inlineSize: init.borderW, blockSize: init.borderH }],
+    } as unknown as ResizeObserverEntry;
+    act(() => {
+      ro!.fire([entry]);
+    });
+  }
+
+  it('带 pad 壳：形状按边框盒生成（填充路径 == cornerPath(边框盒尺寸, R)）', () => {
+    const { container } = render(
+      <G2Surface radius={18} fill="#ffffff" testID="g2ro" style={{ padding: 6 }}>
+        <span>菜单内容</span>
+      </G2Surface>,
+    );
+    const host = container.querySelector('[data-testid="g2ro"]')!;
+    // 权限菜单活体同构数：内容盒 248×174.8、边框盒 260×186.8（pad 6）
+    fireEntry(host, {
+      contentW: 248,
+      contentH: 174.8,
+      borderW: 260,
+      borderH: 186.8,
+    });
+    const layer = container.querySelector(
+      '[data-g2-layer="measured"]',
+    ) as unknown as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.getAttribute('width')).toBe('260');
+    expect(layer.getAttribute('height')).toBe('186.8');
+    expect(layer.querySelector('path')!.getAttribute('d')).toBe(
+      cornerPath(260, 186.8, 18),
+    );
+    // 无边框宿主不写贴附偏移（left/top 无负值）
+    expect(layer.style.left).not.toMatch(/^-/);
+    expect(layer.style.top).not.toMatch(/^-/);
+  });
+
+  it('带边框宿主：SVG 按边框宽负偏移贴附（填充盒原点 → 边框盒原点）', () => {
+    const { container } = render(
+      <G2Surface
+        radius={18}
+        fill="#ffffff"
+        stroke="#dddddd"
+        testID="g2ro"
+        style={{
+          padding: 6,
+          borderWidth: 1,
+          borderStyle: 'solid',
+          borderColor: '#000000',
+        }}
+      >
+        <span>带边框面</span>
+      </G2Surface>,
+    );
+    const host = container.querySelector('[data-testid="g2ro"]')!;
+    // 模型菜单活体同构数：内容盒 276×140、边框盒 290×154（pad 6 + 边框 1）
+    fireEntry(host, {
+      contentW: 276,
+      contentH: 140,
+      borderW: 290,
+      borderH: 154,
+    });
+    const layer = container.querySelector(
+      '[data-g2-layer="measured"]',
+    ) as unknown as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.style.left).toBe('-1px');
+    expect(layer.style.top).toBe('-1px');
+    expect(layer.querySelector('path')!.getAttribute('d')).toBe(
+      cornerPath(290, 154, 18),
+    );
+  });
+
+  it('borderBoxSize 缺失：以 contentRect + 计算样式 padding/border 重建边框盒', () => {
+    const { container } = render(
+      <G2Surface
+        radius={18}
+        fill="#ffffff"
+        testID="g2ro"
+        style={{
+          padding: 6,
+          borderWidth: 1,
+          borderStyle: 'solid',
+          borderColor: '#000000',
+        }}
+      >
+        <span>重建路径</span>
+      </G2Surface>,
+    );
+    const host = container.querySelector('[data-testid="g2ro"]')!;
+    // 不带 borderBoxSize：276 + 2×(6+1) = 290、140 + 2×(6+1) = 154
+    fireEntry(host, { contentW: 276, contentH: 140 });
+    const layer = container.querySelector(
+      '[data-g2-layer="measured"]',
+    ) as unknown as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.querySelector('path')!.getAttribute('d')).toBe(
+      cornerPath(290, 154, 18),
+    );
+    expect(layer.style.left).toBe('-1px');
+    expect(layer.style.top).toBe('-1px');
+  });
+
+  it('clip 层：边框盒轮廓按 -(bl+pl) / -(bt+pt) 平移进内容层坐标系', () => {
+    const { container } = render(
+      <G2Surface
+        radius={18}
+        clip
+        testID="g2ro"
+        style={{
+          padding: 6,
+          borderWidth: 1,
+          borderStyle: 'solid',
+          borderColor: '#000000',
+        }}
+      >
+        <span>被裁内容</span>
+      </G2Surface>,
+    );
+    const host = container.querySelector('[data-testid="g2ro"]')!;
+    fireEntry(host, {
+      contentW: 276,
+      contentH: 140,
+      borderW: 290,
+      borderH: 154,
+    });
+    const clipped = Array.from(container.querySelectorAll('div')).find((el) =>
+      (el as HTMLElement).style.clipPath.includes('path('),
+    ) as HTMLElement;
+    expect(clipped).toBeTruthy();
+    // 边框 1 + 内距 6 → 平移 (-7, -7) 的同一条边框盒轮廓
+    expect(clipped.style.clipPath).toContain(
+      cornerPath(290, 154, 18, undefined, undefined, { x: -7, y: -7 }),
+    );
+    expect(clipped.style.clipPath).not.toContain(
+      `path('${cornerPath(290, 154, 18)}')`,
+    );
+  });
+
+  it('pad/border 皆 0：量测产物与边框盒口径逐字一致（零回归）', () => {
+    const { container } = render(
+      <G2Surface radius={20} fill="#ffffff" testID="g2ro">
+        <span>叶面同构</span>
+      </G2Surface>,
+    );
+    const host = container.querySelector('[data-testid="g2ro"]')!;
+    fireEntry(host, {
+      contentW: 200,
+      contentH: 100,
+      borderW: 200,
+      borderH: 100,
+    });
+    const layer = container.querySelector(
+      '[data-g2-layer="measured"]',
+    ) as unknown as HTMLElement;
+    expect(layer).not.toBeNull();
+    expect(layer.getAttribute('width')).toBe('200');
+    expect(layer.querySelector('path')!.getAttribute('d')).toBe(
+      cornerPath(200, 100, 20),
+    );
+    expect(layer.style.left).not.toMatch(/^-/);
+    expect(layer.style.top).not.toMatch(/^-/);
   });
 });
