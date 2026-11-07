@@ -369,9 +369,11 @@ describe('G² 真相源守卫（g2-corner）', () => {
     // 作为本批收敛的回归钉连圆角一并禁，与 G6 消费类口径一致）。
     // G6 已钉 SEP 外壳与一部消费类，本契约补齐其余浮动面宿主类。
     // 登记豁免（不在断言面内）：Dialog 外层壳——已登记的嵌套兜底形态
-    // （外层 CSS 壳 + 内层 G2Surface），残余曲线族差已接受；输入框大
-    // 胶囊的卡本体——其形状层是卡内独立子层（inset:-1 外扩盖住边框
-    // 环），卡保留自身边框环是该形态的设计前提（D-良性类）。
+    // （外层 CSS 壳 + 内层 G2Surface），残余曲线族差已接受；输入框
+    // 胶囊的卡本体——其形状层是卡内独立子层（inset:-1），卡本体保留
+    // 回滚兜底油漆（背景/占位边框/圆弧），豁免仅及于该形态本身；其
+    // 形状层已按用户裁决 2026-11-07 去描边、去阴影，卡面聚焦零变化
+    // （状态机已删，见 ChatComposer.module.css 的状态纪律注释）。
     const readCss = (...segments: string[]) =>
       readFileSync(resolve(srcDir, ...segments), 'utf8');
     const blockOf = (cssRaw: string, cls: string) => {
@@ -448,5 +450,93 @@ describe('G² 真相源守卫（g2-corner）', () => {
     expect(mbMenu, '.mbMenu 不得自绘 border-radius').not.toMatch(
       /border-radius\s*:/,
     );
+    // 第二轮收敛（2026-11-07）：设置快捷菜单主面板同为组合式 Menu 的
+    // SepPanelShell 宿主（panel.contentClassName），自带全套油漆成
+    // 双轨，与 .mbMenu 同病同法（删油漆、只留布局，连圆角一并禁）。
+    const sbQuickMenu = blockOf(
+      readCss(
+        'components',
+        'settings',
+        'SettingsQuickMenu.module.css',
+      ),
+      'sbQuickMenu',
+    );
+    expectNoPaint(sbQuickMenu, '.sbQuickMenu');
+    expect(sbQuickMenu, '.sbQuickMenu 不得自绘 border-radius').not.toMatch(
+      /border-radius\s*:/,
+    );
+    // 项目管理弹窗：表面收敛到 Dialog 基座单一表面——.modalPanel 不得
+    // 再自带 border/box-shadow/background（border-radius 是同心契约
+    // 锚点 + 回滚兜底，不在禁面，与本契约对兜底圆弧的一般口径一致）。
+    expectNoPaint(
+      blockOf(
+        readCss(
+          'components',
+          'sidebar',
+          'session-list',
+          'ProjectManageModal.module.css',
+        ),
+        'modalPanel',
+      ),
+      '.modalPanel',
+    );
+    // 设置卡：根即 G2Surface，基类保留回滚兜底油漆（形状层缺位时
+    // 成立），故不断言基类无油漆；断言 [data-g2-mode] 在位规则必须
+    // 把兜底油漆中和（background/border/border-radius），使形状层
+    // 成为唯一表面（底两角浅灰直角的防再犯钉，2026-11-07）。
+    const settingsCss = stripComments(
+      readCss('components', 'settings', 'SettingsUI.module.css'),
+    );
+    const g2ModeBlock = settingsCss.match(
+      /\.settingsUiCard\[data-g2-mode\]\s*\{([^}]+)\}/,
+    );
+    expect(
+      g2ModeBlock,
+      '.settingsUiCard[data-g2-mode] 规则必须存在',
+    ).toBeTruthy();
+    expect(g2ModeBlock![1]).toMatch(/background\s*:/);
+    expect(g2ModeBlock![1]).toMatch(/(^|[^-])border\s*:/);
+    expect(g2ModeBlock![1]).toMatch(/border-radius\s*:/);
+  });
+
+  it('契约 G8：原语装配的 Popup 必须挂 SepPanelShell 表面层（缺壳透明防再犯 · 2026-11-07）', () => {
+    // 背景：侧栏排序/分组 flyout 与 ui/ContextMenu 都是绕过组合式
+    // 组件、直接装配 Base UI Menu 原语的消费方——G² 迁移把油漆从
+    // .menuContent CSS 收敛到 SepPanelShell 后，它们只借类名不挂壳，
+    // 面板完全透明（用户实机投诉）。组合式 Menu/Popover 的壳接线
+    // 是正典（各一处），原语装配面必须逐个同法挂壳：断言每个文件
+    // 中 render={<SepPanelShell />} 的出现次数不少于其 Popup 数量
+    // 口径（flyout 主面板 + 级联 = 2；ContextMenu 主面板 + 子菜单
+    // = 2）。新增原语装配消费方时必须同步登记到本契约。
+    const readTsx = (...segments: string[]) =>
+      readFileSync(resolve(srcDir, ...segments), 'utf8');
+    // 计数前剥离注释：文件头与行内注释会以引用形式出现同一字面量
+    // （如 flyout 头注「同法 render={<SepPanelShell />}」），不算接线。
+    const shellCount = (text: string) =>
+      stripComments(text).split('render={<SepPanelShell />}').length - 1;
+    expect(
+      shellCount(
+        readTsx('components', 'ui', 'Menu', 'Menu.tsx'),
+      ),
+      '组合式 Menu 的 SepPanelShell 接线必须在位',
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      shellCount(
+        readTsx('components', 'ui', 'Popover', 'Popover.tsx'),
+      ),
+      '组合式 Popover 的 SepPanelShell 接线必须在位',
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      shellCount(
+        readTsx('components', 'sidebar', 'ContextMenuFlyout.tsx'),
+      ),
+      'ContextMenuFlyout 的两个 Popup 必须各挂 SepPanelShell',
+    ).toBe(2);
+    expect(
+      shellCount(
+        readTsx('components', 'ui', 'ContextMenu', 'ContextMenu.tsx'),
+      ),
+      'ui/ContextMenu 的两个 Popup 必须各挂 SepPanelShell',
+    ).toBe(2);
   });
 });
