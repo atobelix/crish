@@ -45,8 +45,16 @@ describe('Runtime Background & Workspace Zero-Flash SSOT Test Suite', () => {
     expect(tabStripCss).toMatch(/\.toolbar\s*\{[^}]*background:\s*var\(--bg-card/);
     expect(tabStripCss).toMatch(/\.launcherHubWrapper\s*\{[^}]*background:\s*var\(--bg-card/);
 
-    const previewCss = readCss('components/workspace/PreviewCard.module.css');
-    expect(previewCss).toMatch(/\.histPanel\s*\{[^}]*background:\s*var\(--bg-card/);
+    // 【G² 第二波戊】.histPanel 的油漆已迁至形状层：PreviewHistoryPanel 内
+    // G2Surface（control 档 8）以 fill 承接，.histPanel 本体不再声明
+    // background。故此处改断言 tsx 的 fill：主值须为 elevated 面；
+    // --bg-primary 仅为已定义 token --bg-elevated 的兜底，不得为主值。
+    const previewTsx = fs.readFileSync(
+      path.resolve(__dirname, '../PreviewHistoryPanel.tsx'),
+      'utf-8'
+    );
+    expect(previewTsx).toMatch(/fill="var\(--bg-elevated/);
+    expect(previewTsx).not.toMatch(/fill="var\(--bg-primary/);
   });
 
   it('FLASH-05: 入口链包含常用工具视图 Chunk 的闲时预热逻辑', () => {
