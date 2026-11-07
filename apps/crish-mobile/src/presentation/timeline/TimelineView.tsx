@@ -62,6 +62,7 @@ import { ToolSummaryRow } from './ToolSummaryRow';
 import { ReasoningCard } from './ReasoningCard';
 import { MessageActionBar } from './MessageActionBar';
 import { UserMessageRow } from './UserMessageRow';
+import { appendedUserEntryIds } from './userEntryQualification';
 import {
   formatTimeSeparator,
   insertTimeSeparators,
@@ -260,6 +261,19 @@ export function TimelineView({
   totalBottomPaddingRef.current = effectiveBottomInset + keyboardHeight;
   const display = useMemo(() => groupToolRuns(blocks), [blocks]);
   const rows = useMemo(() => insertTimeSeparators(display), [display]);
+  // R8 用户行一次性入场资格：仅 append-only 增长的新增用户行获得资格；
+  // 首挂/恢复/会话切换/截断重放一律不入场（纯函数 userEntryQualification）。
+  const blockIds = useMemo(() => blocks.map((b) => b.id), [blocks]);
+  const prevBlockIdsRef = useRef<readonly string[]>([]);
+  const userEntryQualified = useMemo(() => {
+    const qualified = appendedUserEntryIds(
+      prevBlockIdsRef.current,
+      blockIds,
+      blocks
+    );
+    prevBlockIdsRef.current = blockIds;
+    return qualified;
+  }, [blocks, blockIds]);
   // ── 批 B 状态面：折叠选择 / 锚点 / 就绪遮罩 ─────────────
   // 折叠区展开选择按块 id 记忆：FlatList 回收重挂载不丢用户在该块上
   // 的选择（Map 由本组件持有、引用稳定，不进渲染状态）。
@@ -827,6 +841,9 @@ export function TimelineView({
         >
           <TimelineBlockView
             block={item}
+            animateEntry={
+              item.kind === 'message' && userEntryQualified.has(item.id)
+            }
             onOpenTools={stableOpenTools}
             onSelectSource={handleSelectSource}
             onCitationPress={handleCitationPress}
@@ -848,6 +865,7 @@ export function TimelineView({
       highlightedSourceIndex,
       stableOpenTools,
       stableRegenerate,
+      userEntryQualified,
     ]
   );
   const renderTimelineScroll = useCallback(
@@ -998,6 +1016,7 @@ function TimeSeparatorRow({ atMs }: { atMs: number }) {
 
 const TimelineBlockView = memo(function TimelineBlockView({
   block,
+  animateEntry,
   onOpenTools,
   onSelectSource,
   onCitationPress,
@@ -1008,6 +1027,8 @@ const TimelineBlockView = memo(function TimelineBlockView({
   canRegenerate,
 }: {
   block: DisplayBlock;
+  /** R8 一次性入场资格（仅新增用户行首次为 true；重挂/历史不重播） */
+  animateEntry?: boolean;
   onOpenTools?: (focusId: string) => void;
   onSelectSource?: (source: WebSearchSource) => void;
   onCitationPress?: (index: number) => void;
@@ -1024,6 +1045,7 @@ const TimelineBlockView = memo(function TimelineBlockView({
       return (
         <MessageView
           block={block}
+          animateEntry={animateEntry}
           canRegenerate={canRegenerate}
           onRegenerate={onRegenerate}
           onCitationPress={onCitationPress}
@@ -1070,11 +1092,14 @@ const TimelineBlockView = memo(function TimelineBlockView({
 
 function MessageView({
   block,
+  animateEntry,
   canRegenerate,
   onRegenerate,
   onCitationPress,
 }: {
   block: AssistantMessageBlock;
+  /** R8 一次性入场资格透传（UserMessageRow 行级守卫消耗） */
+  animateEntry?: boolean;
   canRegenerate?: boolean;
   onRegenerate?: (messageId: string) => void;
   onCitationPress?: (index: number) => void;
@@ -1086,6 +1111,7 @@ function MessageView({
         id={block.id}
         text={block.text ?? ''}
         deliveryStatus={block.delivery}
+        animateEntry={animateEntry}
       />
     );
   }

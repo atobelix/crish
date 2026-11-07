@@ -12,7 +12,7 @@
 // 3. 无障碍单源减动效：
 //    严格消费 @/adapters/platform/useReducedMotion 单源信号，开启减弱动态时
 //    安全回退为瞬时终态。
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -23,6 +23,7 @@ import Animated, {
 import { useTheme } from '@/adapters/platform/theme';
 import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import { MarkdownText } from '@/presentation/components/blocks/MarkdownText';
+import { consumeUserEntryAnimation } from './userEntryQualification';
 
 export interface UserMessageRowProps {
   id?: string;
@@ -43,7 +44,21 @@ export const UserMessageRow = memo(function UserMessageRow({
 }: UserMessageRowProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
-  const shouldAnimate = Boolean(animateEntry && !reducedMotion);
+  // R8 一次性入场守卫：资格只在首次挂载判定（同 id 重挂/切回不重播）。
+  // ref 按 id 缓存判定结果，资格消耗是幂等的一次性动作。
+  const entryRef = useRef<{ id?: string; allowed: boolean }>({
+    id: undefined,
+    allowed: false,
+  });
+  if (entryRef.current.id !== id) {
+    // 资格无条件消耗（减动效下也不回补），保证同 id 全生命周期至多播一次
+    const consumed = id !== undefined ? consumeUserEntryAnimation(id) : false;
+    entryRef.current = {
+      id,
+      allowed: Boolean(animateEntry) && !reducedMotion && consumed,
+    };
+  }
+  const shouldAnimate = entryRef.current.allowed;
 
   const translateY = useSharedValue(shouldAnimate ? 24 : 0);
   const opacity = useSharedValue(shouldAnimate ? 0 : 1);
