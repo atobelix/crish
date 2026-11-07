@@ -5,8 +5,9 @@
 //   和大圆角（radius.sheet 28dp）呈现，不存在随进度平移或渐变的半透明黑色遮罩；
 // - 立体感 = 色阶差 + 大圆角，零描边、零缩放、抽屉本体零投影（符合 2026-11-02 晚用户裁决，禁止加阴影）；
 // - 开合动效：物理弹簧曲线（theme.motion.spring.drawer，overshootClamping: true）；
-// - 手势与手感（2026-11-05 卡手修复 + 返工收口后口径）：
-//   * manualActivation 精确仲裁——关闭态屏幕左侧 75% 范围横向意图（dx > 14 且 dx > 0.7|dy|）顺滑激活；
+// - 手势与手感（2026-11-05 卡手修复 + 返工收口后口径，2026-11-07 E 步修订）：
+//   * manualActivation 精确仲裁——关闭态内容区全域可起手，横向意图（dx > 14 且 dx > 0.7|dy|）顺滑激活；
+//     起始线（屏宽 75%）与 dx < -10 瞬时判死已于 2026-11-07 经真实回调序列复现定案拆除（见 onTouchesMove 内注）；
 //   * 纵向滚动优先——垂直位移明显大于横向时让位给列表滚动；判 fail 须纵向
 //     占优连续 3 个采样点成立（去噪定案），单帧抖动/斜擦不误杀手势；
 //   * 生命周期收口——手势未激活结束、被判 fail 或被系统取消时，onFinalize
@@ -259,16 +260,15 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
           failDyStreak.value = 0;
 
           if (progress.value === 0) {
-            // 关闭态：超出左侧 75% 区域直接放弃手势
-            if (touchStartX.value > width * 0.75) {
-              stateManager.fail();
-              return;
-            }
-            // 左滑快速失败
-            if (dx < -10) {
-              stateManager.fail();
-              return;
-            }
+            // 关闭态起手不限位、反向不判死（2026-11-07 E 步复现定案）：
+            // 旧口径两条瞬时判死——起手在屏宽 75% 以右首个采样即 fail、
+            // dx < -10 即 fail——经真实回调序列复现坐实为「经常打不开」
+            // 的两条静态首因：右半屏横向右滑（dx=30）在首个采样就被判
+            // 死、开抽屉意图根本到不了激活门；先轻微左偏再回摆右滑的
+            // 起手同样首采样作废整条手势。现与打开态 S-C 同一口径：不
+            // 激活即不消费触摸——起手位置不限（内容区全域可起手），反
+            // 向摇摆不判死、回摆越过激活门仍可激活；纵向列表优先仍由
+            // 上方纵向三采样判 fail 独占保障，不因起手放开而削弱。
             // 向右拖动且横向占优时激活
             if (dx > ACTIVATION_DX && dx > absDy * 0.7) {
               stateManager.activate();
@@ -364,7 +364,6 @@ export function CrishDrawerLayout({ children }: { children: ReactNode }) {
       reduceMotion,
       startProgress,
       theme.motion.spring.drawer,
-      width,
     ]
   );
 

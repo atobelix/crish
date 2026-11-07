@@ -258,7 +258,7 @@ describe('抽屉动作面稳定性（C-PERF）', () => {
 });
 
 describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/纵向去噪让位/键盘异步收起）', () => {
-  it('源码铁律：FAIL_DY 为 12dp 且判 fail 须多采样确认，杜绝首帧触碰跨线程调度，闭合态 75% 限制与打开态仅向左收起，onFinalize 收口在位', () => {
+  it('源码铁律：FAIL_DY 为 12dp 且判 fail 须多采样确认，杜绝首帧触碰跨线程调度，闭合态全域起手（无起始线、无反向瞬时判死）与打开态仅向左收起，onFinalize 收口在位', () => {
     const source = readFileSync(
       join(__dirname, 'CrishDrawerLayout.tsx'),
       'utf8'
@@ -286,8 +286,12 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/纵
     expect(source).toMatch(
       /\.onStart\(\(\) => \{[\s\S]*?dismissKeyboardAndBlur[\s\S]*?\}\)/
     );
-    expect(source).toContain('touchStartX.value > width * 0.75');
-    expect(source).toContain('dx < -10');
+    // 起始线与反向瞬时判死已拆除（2026-11-07 E 步复现定案）：关闭态
+    // 不得再按起手位置（屏宽 75%）或 dx < -10 在 onTouchesMove 里瞬时
+    // 判 fail——两条都是复现坐实的「经常打不开」首因；关闭态判 fail
+    // 只允许来自上方纵向三采样让位
+    expect(source).not.toMatch(/touchStartX\.value > width \* 0\.75/);
+    expect(source).not.toMatch(/if \(dx < -10\)/);
     expect(source).toContain('dx < -ACTIVATION_DX && absDx > absDy * 0.7');
     // 打开态右摇不判死（2026-11-05 卡手修复 S-C）：旧 `dx > ACTIVATION_DX
     // → fail()` 永久放弃手势的策略已删除——不激活即不消费触摸，方向回摆
@@ -299,7 +303,7 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/纵
     expect(source).not.toContain('onTouchStart={handleDrawerClose}');
   });
 
-  it('手势全生命周期行为：手到即停(cancelAnimation)、纵向去噪让位(FAIL_DY=12×3 采样)、闭合区范围限制与打开态单向收起', async () => {
+  it('手势全生命周期行为：手到即停(cancelAnimation)、纵向去噪让位(FAIL_DY=12×3 采样)、闭合态全域起手与反向不判死、打开态单向收起', async () => {
     const capturedPan: any = {};
     const panSpy = jest.spyOn(Gesture, 'Pan').mockImplementation(() => {
       const handler: any = {
@@ -390,19 +394,39 @@ describe('CrishDrawerLayout 侧滑手势重塑与即时接管（手到即停/纵
     capturedPan.onTouchesMove({ allTouches: [{ x: 55, y: 121 }] }, smReset); // 纵向 3，定案
     expect(smReset.fail).toHaveBeenCalledTimes(1);
 
-    // 4. onTouchesMove - 关闭态触碰超过左侧 75% 宽度直接失败（假设屏幕宽 750dp，750 * 0.75 = 562.5）
+    // 4. onTouchesMove - 关闭态右半屏起手横向右滑激活（2026-11-07 E 步
+    //    复现定案：旧口径起手在屏宽 75% 以右首个采样即 fail——屏幕宽
+    //    750dp 时 75% 线 = 562.5，x=600 起手 dx=30 的纯横向开抽屉意图
+    //    被判死；起始线拆除后内容区全域可起手）
     capturedPan.onTouchesDown({ allTouches: [{ x: 600, y: 100 }] });
     const smEdge = { fail: jest.fn(), activate: jest.fn() };
     capturedPan.onTouchesMove({ allTouches: [{ x: 630, y: 102 }] }, smEdge); // dx = 30
-    expect(smEdge.fail).toHaveBeenCalledTimes(1);
-    expect(smEdge.activate).not.toHaveBeenCalled();
+    expect(smEdge.activate).toHaveBeenCalledTimes(1);
+    expect(smEdge.fail).not.toHaveBeenCalled();
 
-    // 5. onTouchesMove - 关闭态左滑快速失败（dx < -10）
+    // 5. onTouchesMove - 关闭态先左偏再回摆右滑不判死（2026-11-07 E 步
+    //    复现定案：旧口径 dx < -10 首个采样即 fail，「先轻微左偏再向
+    //    右」的起手整条作废；拆除后与打开态 S-C 同口径——反向摇摆不
+    //    激活也不判死，回摆越过激活门仍可激活）
     capturedPan.onTouchesDown({ allTouches: [{ x: 50, y: 100 }] });
     const smLeft = { fail: jest.fn(), activate: jest.fn() };
     capturedPan.onTouchesMove({ allTouches: [{ x: 35, y: 100 }] }, smLeft); // dx = -15
-    expect(smLeft.fail).toHaveBeenCalledTimes(1);
+    expect(smLeft.fail).not.toHaveBeenCalled();
     expect(smLeft.activate).not.toHaveBeenCalled();
+    capturedPan.onTouchesMove({ allTouches: [{ x: 90, y: 102 }] }, smLeft); // dx = +40：回摆激活
+    expect(smLeft.activate).toHaveBeenCalledTimes(1);
+    expect(smLeft.fail).not.toHaveBeenCalled();
+
+    // 5b. onTouchesMove - 右半屏起手纵向滑仍须满 3 采样才判 fail（起始
+    //     线拆除后纵向列表优先不削弱：不得因起手位置被瞬时判死）
+    capturedPan.onTouchesDown({ allTouches: [{ x: 600, y: 100 }] });
+    const smEdgeVertical = { fail: jest.fn(), activate: jest.fn() };
+    capturedPan.onTouchesMove({ allTouches: [{ x: 605, y: 116 }] }, smEdgeVertical); // 纵向 1
+    capturedPan.onTouchesMove({ allTouches: [{ x: 606, y: 120 }] }, smEdgeVertical); // 纵向 2
+    expect(smEdgeVertical.fail).not.toHaveBeenCalled();
+    capturedPan.onTouchesMove({ allTouches: [{ x: 607, y: 124 }] }, smEdgeVertical); // 纵向 3，定案
+    expect(smEdgeVertical.fail).toHaveBeenCalledTimes(1);
+    expect(smEdgeVertical.activate).not.toHaveBeenCalled();
 
     // 6. onTouchesMove - 关闭态有效右滑激活抽屉（dx > 14 且 dx > absDy * 0.7）
     capturedPan.onTouchesDown({ allTouches: [{ x: 50, y: 100 }] });
