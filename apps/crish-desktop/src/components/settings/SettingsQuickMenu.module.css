@@ -48,13 +48,14 @@
 
 .sbQuickMenu {
   z-index: var(--z-modal);
-  background: var(--surface-overlay);
-  border: var(--hairline-width) solid var(--border-panel);
-  border-radius: var(
-    --sep-radius-outer
-  ); /* 方案 A 标尺：浮层外壳圆角锁 14px，根治 -6px 极端窒息挤压 */
-  box-shadow: var(--shadow-dropdown);
-  padding: 6px; /* 方案 A 标尺：内衬 6px (14 = 8 + 6 绝对同心) */
+  /* 油漆收敛（2026-11-07，同 .mbMenu 口径）：本类经组合式 Menu 的
+   * panel.contentClassName 挂在 SepPanelShell 宿主上，此前自带
+   * background / border / border-radius / box-shadow 与 G² 形状层
+   * 并存成双轨（可见角为整壳 CSS 圆弧、形状层成内侧接缝），已删；
+   * 油漆由形状层单一承接（填充 surface-overlay + 同路径描边
+   * border-panel + --sep-g2-shadow），本类只留布局。防再犯见
+   * g2-corner.contract.test.ts 的 G7。 */
+  padding: 6px; /* 方案 A 标尺：内衬 6px */
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
