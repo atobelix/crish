@@ -180,6 +180,9 @@ export function useSessionComposer(
         saveComposerDraft(draftKey, snapshot.text);
         typedDuringWaitRef.current = false;
       }
+      // R6 失败语义触觉：一次发送至多一次触感——受理 tap 已发，失败以
+      // failure 收尾（不再叠加成功触感，不在失败前宣称 success）
+      haptics.failure();
       setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
       send?.onFailed?.(pendingId, {
         restoredToInput: restored,
@@ -210,6 +213,9 @@ export function useSessionComposer(
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
       clearPrompt();
+      // R6 发送只震一次：受理语义触觉在受理点发声（Composer 按压处不再
+      // 叠加 tap）；ACK 不再叠加 success（受理触觉即本次发送的唯一触感）
+      haptics.tap();
       send?.onPending?.(pendingId, snapshot.text);
       try {
         const isDraft = !sessionId || sessionId === 'draft';
@@ -227,8 +233,6 @@ export function useSessionComposer(
           ...(cwd ? { cwd } : {}),
         });
         if (aliveRef.current) {
-          // 发送被受理（ACK）→ 成功触感与成功反馈同帧（触觉门面，手感基建批）
-          haptics.success();
           setFeedback({ kind: 'success', message: null });
         }
         send?.onAcked?.(
@@ -285,6 +289,8 @@ export function useSessionComposer(
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
       clearPrompt();
+      // R6 发送只震一次：受理语义触觉在受理点发声（同文本路径）
+      haptics.tap();
       send?.onPending?.(pendingId, snapshot.text);
       try {
         const isDraft = !sessionId || sessionId === 'draft';
@@ -306,8 +312,6 @@ export function useSessionComposer(
           ...(cwd ? { cwd } : {}),
         });
         if (aliveRef.current) {
-          // 发送被受理（ACK）→ 成功触感与成功反馈同帧（触觉门面，手感基建批）
-          haptics.success();
           setFeedback({ kind: 'success', message: null });
         }
         send?.onAcked?.(

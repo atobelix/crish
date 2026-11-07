@@ -195,12 +195,12 @@ export function useQuickRunVm(
       setBusy(true);
       setFeedback({ kind: 'sending' });
       setPromptState('');
+      // R6 发送只震一次：受理语义触觉在受理点发声（ACK 不再叠加 success）
+      haptics.tap();
       void ctx.repository
         .runTask(params)
         .then((res) => {
           if (!aliveRef.current) return;
-          // 发送被受理（ACK）→ 成功触感与成功反馈同帧（触觉门面，手感基建批）
-          haptics.success();
           setFeedback({
             kind: 'success',
             runId: res.runId,
@@ -216,6 +216,8 @@ export function useQuickRunVm(
             setPromptState(snapshotText);
             typedDuringWaitRef.current = false;
           }
+          // R6 失败语义触觉：受理 tap 已发，失败以 failure 收尾
+          haptics.failure();
           setFeedback({
             kind: 'error',
             code,

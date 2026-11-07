@@ -34,6 +34,7 @@ import {
   threadRuntimeSnapshot,
 } from '@/domain/store/localChatSessionStore';
 import { InMemorySecureStore } from '@/db/secureStore';
+import { haptics } from '@/adapters/platform/haptics';
 import type { SettingsPersist } from '@/domain/store/settingsStore';
 import { MemorySqlDriver } from '@/db/driver';
 import { migrateIfNeeded } from '@/db/db';
@@ -174,6 +175,38 @@ function metaOf(threadId: string) {
     .getState()
     .threads.find((t) => t.id === threadId);
 }
+
+describe('R6 发送只震一次（本地引擎语义触觉）', () => {
+  it('发送受理 success 恰一次，tap/failure 不发声', async () => {
+    const successSpy = jest.spyOn(haptics, 'success');
+    const tapSpy = jest.spyOn(haptics, 'tap');
+    const failureSpy = jest.spyOn(haptics, 'failure');
+    const threadId = localChatSessionStore.getState().createThread({
+      providerId: 'p1',
+      modelId: 'm1',
+    });
+    expect(sendLocalChatMessage(threadId, '受理触觉一次')).toBe(true);
+    expect(successSpy).toHaveBeenCalledTimes(1);
+    expect(tapSpy).not.toHaveBeenCalled();
+    expect(failureSpy).not.toHaveBeenCalled();
+    successSpy.mockRestore();
+    tapSpy.mockRestore();
+    failureSpy.mockRestore();
+  });
+
+  it('未配置拒绝：failure 恰一次，不宣称 success', () => {
+    const successSpy = jest.spyOn(haptics, 'success');
+    const failureSpy = jest.spyOn(haptics, 'failure');
+    const threadId = localChatSessionStore
+      .getState()
+      .createThread({ providerId: 'ghost', modelId: 'none' });
+    expect(sendLocalChatMessage(threadId, '未配置')).toBe(false);
+    expect(failureSpy).toHaveBeenCalledTimes(1);
+    expect(successSpy).not.toHaveBeenCalled();
+    successSpy.mockRestore();
+    failureSpy.mockRestore();
+  });
+});
 
 describe('AI 标题触发（首轮完成点）', () => {
   it('生成成功：消毒后以 ai 来源落盘（DAO 读回一致），请求为非流式小调用', async () => {

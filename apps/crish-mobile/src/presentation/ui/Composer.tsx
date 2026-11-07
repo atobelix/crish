@@ -792,7 +792,8 @@ export const Composer = memo(function Composer({
     if (text !== committedRef.current) publish(text);
     const key = draftKeyRef.current;
     if (key) void flushComposerDraft(key);
-    haptics.tap();
+    // R6 发送只震一次：按压处不发触感——受理语义触觉由 VM 受理点统一
+    // 发声（本地 success / 远程受理 tap），避免按压+受理双震。
     inputRef.current?.blur();
     Keyboard.dismiss();
     setIsFocused(false);

@@ -339,6 +339,8 @@ export function sendLocalChatMessage(
   if (!thread) return false;
   const sel = resolveThreadSelection(localChatStore.getState().config, thread);
   if (!sel) {
+    // R6 失败语义触觉：发送被拒一次 failure（与受理 success 互斥，单次发送至多一震）
+    haptics.failure();
     session.setError(withErrorMessage(notConfiguredError()), threadId);
     return false;
   }
@@ -366,6 +368,8 @@ export function sendLocalChatMessage(
   if (payload !== null) {
     const sizeCheck = checkRunPayloadSizes(payload);
     if (!sizeCheck.ok) {
+      // R6 失败语义触觉：附件超限拒绝一次 failure
+      haptics.failure();
       session.setError(
         withErrorMessage({
           kind: 'payloadTooLarge',

@@ -11,6 +11,7 @@ import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { settingsStore } from '@/domain/store/settingsStore';
+import { haptics } from '@/adapters/platform/haptics';
 import {
   resetQuickRunContextForTest,
   RunTaskCommandError,
@@ -569,9 +570,48 @@ describe('useQuickRunVm R5：受理与 ACK 分离', () => {
       result.current.submit();
     });
     unmount();
-    await act(async () => {
-      resolveRunner({ runId: 'r-late', sessionId: 's-late' });
-    });
+    // 卸载后不再进 act（渲染器已死；aliveRef 守卫保证结算路径无 setState）
+    resolveRunner({ runId: 'r-late', sessionId: 's-late' });
     // 无崩溃即通过
+  });
+});
+
+describe('useQuickRunVm R6：发送只震一次', () => {
+  it('受理 tap 恰一次，ACK 不叠加 success，失败叠加 failure 恰一次', async () => {
+    connectionStore.getState().setPhase('ready');
+    const tapSpy = jest.spyOn(haptics, 'tap');
+    const successSpy = jest.spyOn(haptics, 'success');
+    const failureSpy = jest.spyOn(haptics, 'failure');
+    const { ctx, runTask } = makeContext();
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.setPrompt('触觉一次的任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    // 成功路径：受理 tap 一次，无 success/failure
+    expect(tapSpy).toHaveBeenCalledTimes(1);
+    expect(successSpy).not.toHaveBeenCalled();
+    expect(failureSpy).not.toHaveBeenCalled();
+    expect(runTask).toHaveBeenCalledTimes(1);
+
+    // 失败路径：受理 tap 一次 + 失败 failure 一次，无 success
+    const rejectCtx = makeContext({ reject: () => new Error('x') });
+    const result2 = await renderHook(() => useQuickRunVm(rejectCtx.ctx));
+    await act(async () => {
+      result2.result.current.setPrompt('失败的任务');
+    });
+    tapSpy.mockClear();
+    await act(async () => {
+      result2.result.current.submit();
+    });
+    expect(tapSpy).toHaveBeenCalledTimes(1);
+    expect(failureSpy).toHaveBeenCalledTimes(1);
+    expect(successSpy).not.toHaveBeenCalled();
+
+    tapSpy.mockRestore();
+    successSpy.mockRestore();
+    failureSpy.mockRestore();
   });
 });
