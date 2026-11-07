@@ -23,7 +23,9 @@ import { ON_DEVICE_PROVIDER_ID } from '@/adapters/onDevice/onDeviceProviderSync'
 import { localChatStore } from '@/domain/store/localChatStore';
 
 /** 从目录 id 解析量化标签（如 ...-q4_k_m → Q4_K_M）；解析不出返回 null，不编造 */
-export function onDeviceQuantLabel(spec: OnDeviceModelSpec): string | null {
+export function onDeviceQuantLabel(
+  spec: Pick<OnDeviceModelSpec, 'id'>
+): string | null {
   const match = /[-_](q\d+(?:_k)?(?:_[a-z0-9]+)?)$/i.exec(spec.id);
   return match ? match[1]!.toUpperCase() : null;
 }
