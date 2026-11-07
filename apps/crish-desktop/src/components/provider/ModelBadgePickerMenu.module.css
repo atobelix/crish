@@ -128,13 +128,16 @@
   color: var(--sep-text-primary, var(--text-primary));
 }
 
-/* 模型滚动列表区 (紧凑 150px，保证底部高级选项 100% 可见) */
+/* 模型滚动列表区 (紧凑 150px，保证底部高级选项 100% 可见)
+ * 高度内容自适应：原 min-height: 60px 在只有一行模型时把列表区强撑出
+ * ~32px 死白（用户 2026-11-07 实机投诉「莫名其妙的间距」），已删；
+ * 全空态（零供应商）自身的最小高度由该空态的行内样式承载（160px），
+ * 不再由滚动区兜底。 */
 .modelScrollArea {
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-height: 150px;
-  min-height: 60px;
   overflow-y: auto;
   padding: 2px 0;
 }
