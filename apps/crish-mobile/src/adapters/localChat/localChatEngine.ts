@@ -394,7 +394,14 @@ export function sendLocalChatMessage(
         }
       : {}),
   };
-  session.appendUser(userMessage, threadId);
+  // R7 发送单事务：用户消息与助手占位一个 set 原子落位（一次通知/一次
+  // 持久化排程）；占位 id 直接交给补全内核，内核不再自行 beginAssistant
+  const initialAssistantId = nextId('lcm');
+  session.appendUserAndBeginAssistant(
+    userMessage,
+    { id: initialAssistantId, role: 'assistant', content: '' },
+    threadId
+  );
 
   return startLocalCompletion(threadId, {
     currentSel,
@@ -402,6 +409,7 @@ export function sendLocalChatMessage(
     thinkingTier,
     thinkingFormat,
     maxTokens,
+    prebuiltAssistantId: initialAssistantId,
   });
 }
 
@@ -414,10 +422,15 @@ interface LocalCompletionContext {
   thinkingTier: LocalThinkingTier | undefined;
   thinkingFormat: LocalThinkingFormat | undefined;
   maxTokens: number | undefined;
+  /**
+   * 已就位的助手槽位 id（R7：发送路径由 appendUserAndBeginAssistant 原子
+   * 落位）；未传 = 内核自行 beginAssistant（重新生成路径无新用户消息）
+   */
+  prebuiltAssistantId?: string;
 }
 
 /**
- * 本地补全内核：从"用户消息已就位的历史"起——建新一轮助手槽位、注册
+ * 本地补全内核：从"助手槽位已就位（或此处开场）的历史"起——注册
  * 线程句柄（级联 AbortController）、读密钥并驱动多轮 Agent 循环。
  * sendLocalChatMessage（发送）与 regenerateLocalThread（重新生成）共用。
  */
@@ -429,11 +442,15 @@ function startLocalCompletion(
     context;
   const session = localChatSessionStore.getState();
 
-  const initialAssistantId = nextId('lcm');
-  session.beginAssistant(
-    { id: initialAssistantId, role: 'assistant', content: '' },
-    threadId
-  );
+  let initialAssistantId = context.prebuiltAssistantId;
+  if (initialAssistantId === undefined) {
+    // 重新生成路径：无新用户消息，槽位在此单独开场（beginAssistant 独立语义）
+    initialAssistantId = nextId('lcm');
+    session.beginAssistant(
+      { id: initialAssistantId, role: 'assistant', content: '' },
+      threadId
+    );
+  }
 
   // 初始化多轮 Agent Loop 控制块与级联 AbortController
   const runAbortController = new AbortController();
@@ -686,14 +703,10 @@ function startLocalCompletion(
                       toolCallId: tc.id,
                       content: resultOutput,
                     };
-                    const store = localChatSessionStore.getState() as any;
-                    if (typeof store.appendToolMessage === 'function') {
-                      store.appendToolMessage(toolMsg, threadId);
-                    } else {
-                      localChatSessionStore
-                        .getState()
-                        .appendUser(toolMsg, threadId);
-                    }
+                    // R7：工具结果落位走组合动作（assistant 传 null = 仅追加）
+                    localChatSessionStore
+                      .getState()
+                      .appendUserAndBeginAssistant(toolMsg, null, threadId);
                   }
 
                   if (runAbortController.signal.aborted) {
