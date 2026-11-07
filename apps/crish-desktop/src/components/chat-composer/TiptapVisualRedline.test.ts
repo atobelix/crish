@@ -121,9 +121,15 @@ describe('chat-composer 视觉红线（T10 & P6）', () => {
     expect(rule).toContain('var(--text-tertiary)');
   });
 
-  it('落地面特例：session-empty 焦点混色 ≤5%（--edge-focus-empty 或 var(--border-color) ≥95%，AGENTS.md §13 & T6-7）', () => {
-    expect(HOST_CSS.css).toMatch(
-      /data-empty-kind=['"]session-empty['"][^{]*focus-within[^{]*\{[\s\S]*?(?:--edge-focus-empty|var\(--border-subtle\))/
+  it('落地面特例：session-empty 聚焦零变化（用户裁决 2026-11-07 覆盖 AGENTS.md §13 & T6-7 柔焦混色）', () => {
+    // 旧特例（session-empty 焦点经 --edge-focus-empty 混色 3%）已被
+    // 裁决取代：输入框全态静态，聚焦仅光标——宿主 CSS（注释剥离后）
+    // 不得再有 --edge-focus 族变量，也不得有 session-empty 的
+    // focus-within 油漆规则。
+    const code = HOST_CSS.css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).not.toMatch(/--edge-focus/);
+    expect(code).not.toMatch(
+      /data-empty-kind=['"]session-empty['"][^{]*:focus/
     );
   });
 

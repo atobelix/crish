@@ -195,6 +195,13 @@ const ChatComposerInner: React.FC<ChatComposerProps> = ({
     layoutVariant === 'multiline' ||
     (layoutVariant === 'adaptive' && multilineDetected);
 
+  // 输入框表面形态（用户裁决 2026-11-07 03:08，覆盖此前 G² 口径）：
+  // 会话内形态（adaptive，含其多行生长态）是胶囊——两端必须纯圆
+  // （同心圆弧 + 半径 = 单行高/2 = 21），G² 超椭圆「大圆角」不对；
+  // 新对话大输入框（layoutVariant 'multiline'）是「框」不是胶囊，
+  // 保留 dock 档 G² 轮廓。两形态共用无描边口径（见下方形状层）。
+  const capsuleForm = layoutVariant !== 'multiline';
+
   // S9 高度族：卡片实际高度同钟滑翔（H-01 逐行生长 / H-03 发送后回落，
   // 不再阶梯跳变）+ 单/多行切换时左右控制组的平移补偿（H-02；
   // useComposerMultiline 的判定迟滞不动，只补呈现侧）
@@ -234,18 +241,19 @@ const ChatComposerInner: React.FC<ChatComposerProps> = ({
           data-empty-kind={emptyKind}
           data-disabled={disabled ? 'true' : undefined}
         >
-          {/* G² 形状层（G² 推广第一波 · 枢纽档）：卡轮廓由本层以 dock 档
-              生成——填充 + 同路径描边（§2.3 边框面 (a)）；描边色经 CSS
-              --g2-stroke 通道跟随卡的边框色状态机（静止/聚焦/空态聚焦）。
-              本层为绝对定位负 z（inset -1 使层盒与卡 border box 精确
-              重合，描边带即边框环）：绘于卡底/边框之上、内容之下；内容由卡
-              6–10px 内边距与角区错开，不入 R20 角域，无需 clip。内嵌顶槽
-              与卡的「上半」关系不变：顶槽仍是卡内首个在流子元素，审批面板
-              将来迁入时继续以顶槽为接入点，不经本层嵌套递减。 */}
+          {/* 形状层（G² 推广第一波 · 枢纽档，用户裁决 2026-11-07 修订）：
+              卡轮廓由本层单一承接——只有填充，无描边、无阴影（输入框
+              点击前后零变化：不加描边、不加阴影，聚焦仅光标）。几何按
+              capsuleForm 分档（见上方定义）：胶囊走同心圆弧 R21 纯圆端，
+              大输入框走 dock 档 G²。本层为绝对定位负 z（inset -1 使层盒
+              与卡 border box 精确重合）：绘于卡底之上、内容之下；内容由
+              卡 6–10px 内边距与角区错开，不入角域，无需 clip。内嵌顶槽
+              与卡的「上半」关系不变：顶槽仍是卡内首个在流子元素，审批
+              面板将来迁入时继续以顶槽为接入点，不经本层嵌套递减。 */}
           <G2Surface
-            radius="dock"
+            radius={capsuleForm ? 21 : 'dock'}
+            scheme={capsuleForm ? 'concentric' : undefined}
             fill="var(--composer-bg, var(--surface-input))"
-            stroke="var(--g2-stroke)"
             style={{
               position: 'absolute',
               inset: -1,

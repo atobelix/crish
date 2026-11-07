@@ -231,16 +231,19 @@ describe('P6 输入坞一体化契约 (composerNotice.contract)', () => {
     expect(permCss).toMatch(/color:\s*var\(--text-secondary\)/);
   });
 
-  it('T6-1 & T6-7: 柔焦护栏符合 AGENTS.md §13（常规 6%，空态 3% ≤ 5%）且 20 个死类彻底清零', () => {
+  it('T6-1 & T6-7: 输入框聚焦零变化（用户裁决 2026-11-07 覆盖 AGENTS.md §13 柔焦护栏）且 20 个死类彻底清零', () => {
     const mainCss = readComposerFile('ChatComposer.module.css');
 
-    // 常规焦点混入 6%（≤ 10%），session-empty 混入 3%（≤ 5%）
-    expect(mainCss).toMatch(
-      /--edge-focus,\s*color-mix\(in srgb,\s*var\(--border-color\)\s*94%,\s*var\(--text-primary\)\s*6%\)/
-    );
-    expect(mainCss).toMatch(
-      /--edge-focus-empty,\s*color-mix\(in srgb,\s*var\(--border-color\)\s*97%,\s*var\(--text-primary\)\s*3%\)/
-    );
+    // 旧柔焦护栏（常规焦点混入 6%、session-empty 混入 3%，经
+    // --edge-focus / --edge-focus-empty 与 --g2-stroke 描边色通道在
+    // 聚焦时改写边框/描边色）已被用户裁决 2026-11-07 取代：输入框
+    // 点击/聚焦前后零变化——不加描边、不加阴影、背景不变，聚焦仅
+    // 光标。状态机整组删除，本断言钉其零残留（注释剥离后判定，
+    // CSS 内的纪律说明文字不算残留）。
+    const mainCssCode = mainCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(mainCssCode).not.toMatch(/--edge-focus|--g2-stroke/);
+    expect(mainCssCode).not.toMatch(/\.composerCard:(?:focus|active|hover)/);
+    expect(readComposerFile('ChatComposer.tsx')).not.toMatch(/--g2-stroke/);
 
     // 20 个死类在所有 CSS 模块中 0 残留
     const deadClasses = [

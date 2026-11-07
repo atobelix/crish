@@ -40,6 +40,8 @@
  * - 轮廓方案（双方案体系）：生成时经真源选择点 getCornerScheme() 现读
  *   （与 DPR 同口径，每次渲染现读）；默认 'g2' 时产物与既往逐字一致，
  *   切到 'concentric' 时填充/描边/clip/拉伸四路同换同心圆弧轮廓。
+ *   单面产品裁决可经 scheme prop 显式覆写（生成层解析序的显式位，
+ *   见 props 定义）；缺省时本组件行为不变。
  *
  * 回滚口径（§2.5）：宿主原 border-radius 声明不由本组件删除；本组件根节点
  * 以同名义半径的普通圆弧作兜底（borderRadius 样式），摘掉 SVG 层即回到
@@ -55,6 +57,7 @@ import {
   getCornerScheme,
   type CornerRadii,
   type CornerRadiiInput,
+  type CornerScheme,
   type G2RadiusTier,
 } from '../../../utils/cornerPath';
 import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
@@ -65,6 +68,14 @@ export interface G2SurfaceProps extends Omit<
 > {
   /** 档位名（首选）或名义半径数值/逐角对象——接入面只声明档位或名义值 */
   radius: G2RadiusTier | CornerRadiiInput;
+  /**
+   * 单面轮廓方案覆写（生成层解析序的「显式 scheme」位）：缺省走全局
+   * 方案选择点 getCornerScheme()，产物与既往逐字一致。仅限有明确产品
+   * 裁决要求该面偏离全局方案时使用（如输入框胶囊的纯圆端裁决
+   * 2026-11-07：端部须为真圆弧而非 G² 超椭圆）；禁止以此另立选择点
+   * 或作逐面风格微调。
+   */
+  scheme?: CornerScheme;
   /** 填充色（形状层的唯一绘制色）；不传则不画背景层（仅 clip 形态可用） */
   fill?: string;
   /**
@@ -135,6 +146,7 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
   function G2Surface(
     {
       radius,
+      scheme: schemeProp,
       fill,
       stroke,
       strokeWidth = 1,
@@ -238,9 +250,10 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
     const w = width ?? measured.w;
     const h = height ?? measured.h;
     const sizeKnown = w > 0 && h > 0;
-    // 圆角方案：每次渲染现读真源选择点（与下方 DPR 同口径）——主题/设置层
-    // 注入新方案后，下一次渲染/量测即按新方案生成；默认 'g2' 时产物逐字不变。
-    const scheme = getCornerScheme();
+    // 圆角方案：显式 prop（单面产品裁决）优先，否则每次渲染现读真源
+    // 选择点（与下方 DPR 同口径）——主题/设置层注入新方案后，下一次
+    // 渲染/量测即按新方案生成；默认 'g2' 时产物逐字不变。
+    const scheme = schemeProp ?? getCornerScheme();
     const d = React.useMemo(
       () => (sizeKnown ? cornerPath(w, h, input, undefined, scheme) : ''),
       [sizeKnown, w, h, input, scheme]

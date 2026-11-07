@@ -28,9 +28,6 @@
     var(--border-subtle) 98%,
     var(--text-primary) 2%
   );
-  /* G² 形状层描边色通道（G² 推广第一波 · 枢纽档）：与 border-color 状态机
-   * 同步——静止取 --composer-border，各聚焦规则内与 --edge-focus 同步覆写 */
-  --g2-stroke: var(--composer-border);
   --composer-shadow:
     0 2px 5px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 5px 16px -2px color-mix(in srgb, var(--shadow-color) 2%, transparent);
@@ -76,85 +73,20 @@
   gap: 6px;
 }
 
-.composerCard:hover {
-  border-color: var(--composer-border);
-  box-shadow: var(--composer-shadow);
-}
+/* 输入框状态纪律（用户裁决 2026-11-07 03:08）：点击/聚焦前后卡面零
+ * 变化——不加描边、不加阴影、背景不变，聚焦反馈仅光标。此前本处有
+ * 一套聚焦状态机（:hover/:focus/:focus-within/:active 与空态特例经
+ * --edge-focus / --g2-stroke 同步改写描边色与 border-color），已整组
+ * 删除；本文件不得再为 .composerCard 添加任何状态相关的
+ * border-color / box-shadow / background 覆写。 */
 
-.composerCard:focus,
-.composerCard:focus-visible,
-.composerCard:focus-within {
-  --edge-focus: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  --g2-stroke: var(
-    --edge-focus,
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
-  );
-  border-color: var(
-    --edge-focus,
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
-  );
-  box-shadow: var(--composer-shadow);
-  outline: none;
-}
-
-.composerCard:active {
-  --g2-stroke: var(
-    --edge-focus,
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
-  );
-  border-color: var(
-    --edge-focus,
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
-  );
-  box-shadow: var(--composer-shadow);
-  outline: none;
-}
-
-/* RL-01 特例：全页空态落地输入焦点边框（保持静态无位移，零跳变，点击与激活前后无边框变化） */
-.composerCard[data-empty-kind='session-empty']:focus,
-.composerCard[data-empty-kind='session-empty']:focus-visible,
-.composerCard[data-empty-kind='session-empty']:focus-within {
-  --edge-focus-empty: color-mix(
-    in srgb,
-    var(--border-color) 97%,
-    var(--text-primary) 3%
-  );
-  --g2-stroke: var(
-    --edge-focus-empty,
-    color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%)
-  );
-  border-color: var(
-    --edge-focus-empty,
-    color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%)
-  );
-  box-shadow: var(--composer-shadow);
-  outline: none;
-}
-
-/* G² 形状层在位（ChatComposer 内嵌 G2Surface）：卡自身 border/box-shadow
- * 让位于形状层——边框改走同路径描边（色经 --g2-stroke 与上方状态机同步，
- * 描边过渡由形状层 path 的 stroke transition 承接）、阴影改走形状层
- * filter（--composer-shadow 的 drop-shadow 近似，裁定 #6(a)：偏移与
- * 不透明度照原值、模糊取半）。border 声明保留占位（border-box 不变），
- * 背景保留为兜底（被同色填充层覆盖）。本规则置于全部卡状态规则之后，
- * 以同特异性靠后胜出压制各状态规则重申的 box-shadow。 */
+/* 形状层在位（ChatComposer 内嵌 G2Surface）：卡自身 border/box-shadow
+ * 让位于形状层（填充单一表面，无描边、无阴影——形状层的 drop-shadow
+ * filter 与描边 path 均已按上方裁决去除）。border 声明保留占位
+ * （border-box 不变），背景保留为兜底（被同色填充层覆盖）。 */
 .composerCard:has(> [data-g2-mode]) {
   border-color: transparent;
   box-shadow: none;
-}
-
-.composerCard [data-g2-layer] {
-  filter:
-    drop-shadow(0 2px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent))
-    drop-shadow(0 5px 8px color-mix(in srgb, var(--shadow-color) 2%, transparent));
-}
-
-.composerCard [data-g2-layer] path {
-  transition: stroke var(--transition-fast) var(--ease-decelerate);
 }
 
 /* ==========================================================================
