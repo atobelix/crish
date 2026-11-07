@@ -189,7 +189,12 @@ export interface ModalityCardProps {
   testID?: string;
 }
 
-/** 单个模态卡片：120ms 按压透明度平滑过渡，圆盘图标盒 + 标题 + 绿色对号 */
+/**
+ * 单个模态卡片：120ms 按压透明度平滑过渡，圆盘图标盒 + 标题 + 选中点。
+ * 选中语言与 ModelSelectCard 统一（P3）：边框恒 hairline、不涂 brand/
+ * actionPrimary；选中 = textPrimary 实心点（size.dot），未选 = hairline
+ * 空心点；无障碍 checkbox + checked 保留，整卡为点击热区。
+ */
 export function ModalityCard({
   item,
   selected,
@@ -215,7 +220,7 @@ export function ModalityCard({
           backgroundColor: selected
             ? theme.colors.surfaceRaised
             : theme.colors.surface,
-          borderColor: selected ? theme.colors.brand : theme.colors.hairline,
+          borderColor: theme.colors.hairline,
           paddingHorizontal: theme.space.md + theme.space.xxs,
           paddingVertical: theme.space.md,
         },
@@ -227,9 +232,7 @@ export function ModalityCard({
           styles.iconBadge,
           {
             borderRadius: theme.radius.pill,
-            backgroundColor: selected
-              ? theme.colors.actionPrimary
-              : theme.colors.fillSubtle,
+            backgroundColor: theme.colors.fillSubtle,
           },
         ]}
       >
@@ -237,9 +240,7 @@ export function ModalityCard({
           name={item.icon}
           size={18}
           color={
-            selected
-              ? theme.colors.actionPrimaryText
-              : theme.colors.textSecondary
+            selected ? theme.colors.textPrimary : theme.colors.textSecondary
           }
         />
       </View>
@@ -253,14 +254,19 @@ export function ModalityCard({
         </AppText>
       </View>
       <View style={styles.checkIndicator}>
-        {selected ? (
-          <Icon
-            name="check"
-            size={18}
-            color={theme.colors.actionPrimary}
-            strokeWidth={2.4}
-          />
-        ) : null}
+        <View
+          testID={testID ? `${testID}-dot` : undefined}
+          style={{
+            width: theme.size.dot,
+            height: theme.size.dot,
+            borderRadius: theme.radius.pill,
+            backgroundColor: selected
+              ? theme.colors.textPrimary
+              : 'transparent',
+            borderWidth: selected ? 0 : 1,
+            borderColor: theme.colors.hairline,
+          }}
+        />
       </View>
     </AnimatedPressable>
   );
