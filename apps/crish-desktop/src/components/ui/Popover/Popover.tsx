@@ -16,6 +16,7 @@
 import React, { useState, useId, useRef } from 'react';
 import { Popover as BasePopover } from '@base-ui/react/popover';
 import { splitFloatingProps } from '../internal/floating';
+import { SepPanelShell } from '../G2Surface/SepPanelShell';
 import {
   useLayerRegistration,
   LayerProvider,
@@ -202,11 +203,18 @@ export const Popover: PopoverComponent = Object.assign(
               ref={popupRef}
               className={`${styles.popup} ${className || ''}`.trim()}
               {...extraPopup}
+              // 【G² 第一波丙 · 槽 B】弹窗油漆收敛到 SepPanelShell（单挂接点）：
+              // render 使 Base UI 的 ref/data-*/定位直接落在形状层根节点上；
+              // 滚动由内层 .popupScroll 承载（根节点不再是滚动容器，形状层
+              // 背景不随内容滚动）；箭头留在滚动层外（不随内容滚动）。
+              render={<SepPanelShell />}
             >
               {showArrow && <BasePopover.Arrow className={styles.arrow} />}
-              <LayerProvider layerId={popoverId} tier="popover">
-                {popupContent}
-              </LayerProvider>
+              <div className={styles.popupScroll}>
+                <LayerProvider layerId={popoverId} tier="popover">
+                  {popupContent}
+                </LayerProvider>
+              </div>
             </BasePopover.Popup>
           </BasePopover.Positioner>
         </BasePopover.Portal>

@@ -24,6 +24,7 @@ import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { resolveElement } from '../internal/layer-stack/layerStackTypes';
 import { CheckIcon } from '../Select/internal/SelectIcons';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
+import { SepPanelShell } from '../G2Surface/SepPanelShell';
 import { shouldSuppressMenuReopen } from './menuOpenGuard';
 import { handleMenuKeyDown } from './menuKeyNavigation';
 import styles from './Menu.module.css';
@@ -460,9 +461,12 @@ export const Menu: MenuComponent = Object.assign(
         ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--available-height, calc(100vh - 32px)), calc(100vh - 32px))`
         : 'min(var(--available-height, calc(100vh - 32px)), calc(100vh - 32px), 640px)';
 
-    if (anchor && !isOpen) {
-      return null;
-    }
+    // S4 退场：不得在此早退。带 anchor 且关闭时卸载整个 Menu 子树会杀死
+    // Base UI 自身的 Presence 退场保活（popup 的退场动画播不出——Base UI
+    // 关闭时挂 [data-ending-style]，不写 data-state）。关闭态的 popup 由
+    // Base UI + menuContent 的并集选择器（[data-ending-style] +
+    // [data-state='closed']，本地 keyframes，120ms）接管，settled
+    // 后 Base UI 自行卸载；Root/触发器保持挂载是 Base UI 的既定形态。
 
     return (
       <LayerProvider layerId={menuId} tier="popover">
@@ -563,86 +567,93 @@ export const Menu: MenuComponent = Object.assign(
                         }
                       : undefined
                   }
+                  // 【G² 第一波丙 · 槽 B】弹窗油漆收敛到 SepPanelShell（单挂接点）：
+                  // render 使 Base UI 的 ref/data-*/定位直接落在形状层根节点上；
+                  // 滚动由内层 .menuScroll 承载（根节点不再是滚动容器，形状层
+                  // 背景不随内容滚动）。
+                  render={<SepPanelShell />}
                 >
-                  {title != null ? (
-                    <div className={styles.menuTitle}>{title}</div>
-                  ) : null}
+                  <div className={styles.menuScroll}>
+                      {title != null ? (
+                        <div className={styles.menuTitle}>{title}</div>
+                      ) : null}
 
-                  {children != null ? (
-                    children
-                  ) : (
-                    <div className={styles.menuList}>
-                      {options.map((opt, index) => {
-                        const isFocused = index === focusedIndex;
-                        const isSelected = Boolean(opt.selected);
+                      {children != null ? (
+                        children
+                      ) : (
+                        <div className={styles.menuList}>
+                        {options.map((opt, index) => {
+                          const isFocused = index === focusedIndex;
+                          const isSelected = Boolean(opt.selected);
 
-                        if (renderItem) {
+                          if (renderItem) {
+                            return (
+                              <React.Fragment key={opt.id}>
+                                {renderItem(opt, index, isFocused)}
+                              </React.Fragment>
+                            );
+                          }
+
                           return (
-                            <React.Fragment key={opt.id}>
-                              {renderItem(opt, index, isFocused)}
-                            </React.Fragment>
-                          );
-                        }
-
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            role="menuitem"
-                            disabled={opt.disabled}
-                            className={[
-                              styles.menuItem,
-                              opt.disabled ? styles.menuItemDisabled : null,
-                              opt.danger ? styles.menuItemDanger : null,
-                              isSelected ? styles.isSelected : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' ')}
-                            onMouseEnter={() => setFocusedIndex(index)}
-                            onClick={() => {
-                              if (opt.disabled) return;
-                              opt.onClick?.();
-                              onSelect?.(opt.id, opt);
-                              handleOpenChange(false);
-                            }}
-                          >
-                            {opt.icon != null ? (
-                              <span
-                                className={styles.menuItemIcon}
-                                aria-hidden="true"
-                              >
-                                {opt.icon}
-                              </span>
-                            ) : null}
-                            {opt.description ? (
-                              <div className={styles.textCol}>
-                                <span className={styles.title}>
+                            <button
+                              key={opt.id}
+                              type="button"
+                              role="menuitem"
+                              disabled={opt.disabled}
+                              className={[
+                                styles.menuItem,
+                                opt.disabled ? styles.menuItemDisabled : null,
+                                opt.danger ? styles.menuItemDanger : null,
+                                isSelected ? styles.isSelected : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                              onMouseEnter={() => setFocusedIndex(index)}
+                              onClick={() => {
+                                if (opt.disabled) return;
+                                opt.onClick?.();
+                                onSelect?.(opt.id, opt);
+                                handleOpenChange(false);
+                              }}
+                            >
+                              {opt.icon != null ? (
+                                <span
+                                  className={styles.menuItemIcon}
+                                  aria-hidden="true"
+                                >
+                                  {opt.icon}
+                                </span>
+                              ) : null}
+                              {opt.description ? (
+                                <div className={styles.textCol}>
+                                  <span className={styles.title}>
+                                    {opt.label}
+                                  </span>
+                                  <span className={styles.desc}>
+                                    {opt.description}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className={styles.menuItemLabel}>
                                   {opt.label}
                                 </span>
-                                <span className={styles.desc}>
-                                  {opt.description}
+                              )}
+                              {opt.hint != null && !opt.description ? (
+                                <span className={styles.menuItemHint}>
+                                  {opt.hint}
                                 </span>
-                              </div>
-                            ) : (
-                              <span className={styles.menuItemLabel}>
-                                {opt.label}
-                              </span>
-                            )}
-                            {opt.hint != null && !opt.description ? (
-                              <span className={styles.menuItemHint}>
-                                {opt.hint}
-                              </span>
-                            ) : null}
-                            {isSelected ? (
-                              <span className={styles.menuItemCheck}>
-                                <CheckIcon size={14} />
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                              ) : null}
+                              {isSelected ? (
+                                <span className={styles.menuItemCheck}>
+                                  <CheckIcon size={14} />
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      )}
+                  </div>
                 </BaseMenu.Popup>
               </BaseMenu.Positioner>
             </BaseMenu.Portal>

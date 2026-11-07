@@ -330,7 +330,12 @@
 
 /* Leaf body：对话列 +（坞未折叠时）内部 resizer + 抽屉。卡片皮肤 token 不动。禁带边框
  * （2026-11-06 用户裁决与本实现对齐：内容矩形整圈描边删除，区分只靠底色
- * 台阶 + 大圆角；--content-frame-border token 本体保留待裁，本处停用。） */
+ * 台阶 + 大圆角；--content-frame-border token 已退役（裁决施工 b0baf8e9b），本处停用。）
+ * 【G² 第一波丙 · 尾批（裁定 #3(a)）】填充迁入 G2Surface（TSX，档位 card 12，
+ * 数值不变）；overflow:hidden 保留——最大化抽屉是全尺寸不透明矩形（背景
+ * var(--bg-card)，与叶体填充同色），无此裁剪时最大化态角部会露直角；
+ * 保留后子内容裁于 12px 旧圆弧、填充沿 G² 轮廓，弧与 G² 之间同色不可见，
+ * 可见角形即 G² 轮廓。border-radius 保留作兜底与裁剪口径（12 不变）。 */
 
 .leafBody {
   flex: 1 1 0%;
@@ -344,7 +349,6 @@
   align-items: stretch;
   padding-top: 0;
   margin-top: 0;
-  background: var(--leaf-card-bg, var(--bg-card));
   /* 内容矩形（主界面 + 右侧栏共用）：大圆角，坐在外层通底上，无框线 */
   border-radius: var(--radius-l);
 }

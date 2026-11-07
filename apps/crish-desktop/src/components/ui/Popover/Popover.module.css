@@ -5,16 +5,21 @@
     z-index: var(--z-popover);
   }
 
+  /* 【G² 第一波丙 · 槽 B】外壳油漆收敛到 SepPanelShell（单挂接点）：
+   * background/border/box-shadow 不再在此声明（由形状层 G² 路径填充/
+   * 同路径描边/drop-shadow 承载）；滚动由内层 .popupScroll 承载
+   * （根节点不再是滚动容器，形状层背景不随内容滚动）。
+   * 本规则只留布局 + 兜底圆弧 + 进/退场过渡（@starting-style 与
+   * [data-ending-style] 均以 .popup 为目标，根节点类名不变，不受影响）。 */
   .popup {
     z-index: var(--z-popover);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-panel);
     border-radius: var(--radius-menu-outer, 18px);
-    box-shadow: var(--shadow-popover);
     outline: none;
     box-sizing: border-box;
     max-height: min(var(--available-height, 480px), calc(100vh - 32px));
-    overflow: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     transform-origin: var(--transform-origin, top center);
     /* 入场对齐共享浮层配方（S5a 收敛）：180ms decelerate（--transition-popover-enter） */
     transition:
@@ -24,6 +29,14 @@
     transform: scale(1);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 内层滚动容器：承接原根节点的滚动（overflow）。形状层
+   * （SepPanelShell 背景）挂在根节点，不随本容器滚动。 */
+  .popupScroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
   }
 
   /* 起始/结束帧对齐共享配方几何：scale 0.97 + 朝触发器方向 ∓4px；

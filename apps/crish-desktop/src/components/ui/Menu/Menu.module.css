@@ -6,7 +6,12 @@
     z-index: var(--z-dropdown);
   }
 
-  /* 菜单卡片主体 */
+  /* 菜单卡片主体
+   * 【G² 第一波丙 · 槽 B】外壳油漆收敛到 SepPanelShell（单挂接点）：
+   * background/border/box-shadow 不再在此声明（由形状层 G² 路径填充/
+   * 同路径描边/drop-shadow 承载）；滚动由内层 .menuScroll 承载
+   * （根节点不再是滚动容器，形状层背景不随内容滚动）；gap 随滚动
+   * 一并迁入 .menuScroll。本规则只留布局 + 兜底圆弧 + 进/退场过渡。 */
   .menuContent,
   .popup {
     z-index: var(--z-dropdown);
@@ -20,19 +25,12 @@
       calc(100vh - 32px),
       640px
     );
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    min-height: 0;
 
     padding: 6px;
     border-radius: var(--radius-menu-outer);
-    border: 1px solid var(--border-panel);
-    background: var(--surface-overlay);
-    box-shadow: var(--shadow-popover, var(--shadow-lg));
     display: flex;
     flex-direction: column;
-    gap: 2px;
     font-family: var(--font-sans);
     transform-origin: var(--transform-origin);
     will-change: transform, opacity;
@@ -45,39 +43,32 @@
     /* S5b 入场（Base UI）：Popup 不写 data-state，[data-state='open']
      * 动画规则对 Base UI 永远匹配不上。入场改走 Base UI 的
      * data-starting-style 属性 + 过渡（与退场 [data-ending-style]
-     * 对称）；Radix 面（SEP 主面板）仍走 [data-state='open'] 关键帧，
-     * 动画优先于过渡，两者不冲突。 */
+     * 对称）。 */
     transition:
       opacity var(--transition-popover-enter),
       transform var(--transition-popover-enter);
   }
 
+  /* 内层滚动容器：承接原根节点的滚动（overflow-y）与条目间距（gap）。
+   * 形状层（SepPanelShell 背景）挂在根节点，不随本容器滚动。 */
+  .menuScroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   /* 进/退场 keyframes 与共享层正典同值（styles/design-system.css，scale 0.97 / ∓4px）。
-   * 本模块副本不可删：Vite CSS Modules 会把 animation 引用名 scoped 化，
-   * 模块内无同名 @keyframes 定义时引用名悬空、动画静默失效（S5a 2026-11-06
-   * 实机证伪「按名跨模块消费」；真单轨待共享层工具类 + TSX 采纳批）。 */
-  @keyframes crish-popover-enter {
-    0% {
-      opacity: 0;
-      transform: scale(0.97) translateY(-4px);
-    }
-    100% {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
-  }
-
-  @keyframes crish-popover-enter-top {
-    0% {
-      opacity: 0;
-      transform: scale(0.97) translateY(4px);
-    }
-    100% {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
-  }
-
+   * 【G² 第一波丙 · 槽 B】入场两份副本已删除：其唯一 Radix 消费面（SEP 主面板）
+   * 已脱离 .menuContent、改走全局工具类 .crish-popover-anim；Base UI 面
+   * 从不写 data-state，[data-state='open'] 规则对它永远是死的。
+   * 退场两份副本保留：Base UI 退场只认 [data-ending-style]，仍需本地定义
+   * （Vite CSS Modules 按名跨模块消费共享 keyframes 会静默失效，S5a 实机证伪）。 */
   @keyframes crish-popover-exit {
     from {
       opacity: 1;
@@ -110,19 +101,10 @@
     transform-origin: var(--transform-origin);
   }
 
-  .menuContent[data-state='open'],
-  .popup[data-state='open'] {
-    animation: crish-popover-enter var(--transition-popover-enter) forwards;
-  }
-
-  .menuContent[data-state='open'][data-side='top'],
-  .popup[data-state='open'][data-side='top'] {
-    animation-name: crish-popover-enter-top;
-  }
-
   /* S5b 入场（Base UI，见基类过渡注释）：挂载首帧带
    * data-starting-style，属性摘除时过渡到基态；side=top 时从下往上
-   * 微浮 +4px。Radix 面不写该属性，不受影响。 */
+   * 微浮 +4px。Radix 面不写该属性，不受影响。
+   * 【G² 第一波丙】[data-state='open'] 入场规则已删除（见上 keyframes 注释）。 */
   .menuContent[data-starting-style],
   .popup[data-starting-style] {
     opacity: 0;
@@ -139,24 +121,18 @@
    * data-starting-style/data-ending-style，见 node_modules/@base-ui/react
    * menu/popup/MenuPopupDataAttributes.d.ts）。旧 [data-state='closed']
    * 选择器对 Base UI 菜单永远匹配不上，退场动画是死的、Presence
-   * 约 19ms 即卸载。改为并集：[data-ending-style] 覆盖 Base UI 菜单，
-   * [data-state='closed'] 保留给 Radix 弹层（如 SEP 主面板，其
-   * Popover.Content 确实写 data-state）。退场 keyframes/时长（120ms
-   * accelerate）与减动效归零均不变。注意：入场 [data-state='open']
-   * 对 Base UI 同样是死的（Popup 打开时也无 data-state），S5b 已补
-   * data-starting-style + 过渡入场（见基类与本段上方的规则）；
-   * [data-state='open'] 规则保留给 Radix 面。 */
-  .menuContent[data-state='closed'],
+   * 约 19ms 即卸载。退场只认 [data-ending-style]。
+   * 【G² 第一波丙】[data-state='closed'] 选择器已删除：其保留理由
+   * （Radix 弹层 SEP 主面板）已随 SEP 脱离 .menuContent 而失效，
+   * .menuContent 上不再有任何 Radix 面。退场 keyframes/时长（120ms
+   * accelerate）与减动效归零均不变。 */
   .menuContent[data-ending-style],
-  .popup[data-state='closed'],
   .popup[data-ending-style] {
     animation: crish-popover-exit var(--transition-popover-exit) forwards;
     pointer-events: none;
   }
 
-  .menuContent[data-state='closed'][data-side='top'],
   .menuContent[data-ending-style][data-side='top'],
-  .popup[data-state='closed'][data-side='top'],
   .popup[data-ending-style][data-side='top'] {
     animation-name: crish-popover-exit-top;
   }

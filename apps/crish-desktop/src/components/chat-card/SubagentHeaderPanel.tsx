@@ -130,7 +130,7 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
         }
       }}
       position={{ align: 'start', side: 'bottom', sideOffset: 6 }}
-      className={styles.activityMenuPanel}
+      className={styles.activityPanelOuter}
     >
       <div
         className={styles.activityMenuPanel}

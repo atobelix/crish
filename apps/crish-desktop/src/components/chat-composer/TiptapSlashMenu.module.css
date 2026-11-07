@@ -5,9 +5,18 @@
  *                /    z-index   var(--z-popover) 
  */
 
+/* 【G² 第一波丙 · 槽 D】外壳油漆迁入 G2Surface（TSX 直用，不走 SepPanelShell）：
+ * background/border/box-shadow 不再在此声明（由形状层 G² 路径填充/同路径
+ * 描边/drop-shadow 承载）；滚动由内层 .slashScroll 承载（根节点不再是
+ * 滚动容器，形状层背景不随内容滚动）；--slash-radius-outer 随之外迁
+ * （仅本规则自用），--slash-radius-inner 保留（.menuItem 条目圆角，
+ * 小半径档，待裁决 #1）。backdrop-filter: blur(20px) 保留在根节点：
+ * 填充 --slash-menu-bg 为半透色，磨砂效果仍由根节点 backdrop 承载；
+ * 模糊区沿根节点 18px 旧圆弧、填充沿 G² 轮廓，对角线处约 ≤1px 偏差，
+ * 以放大角部截图验收为准。本规则只留布局 + 兜底圆弧 + 全局弹层动画
+ * composes（[data-state] 由 Radix 写，[data-positioned='true'] 由 TSX 置真值）。 */
 .popoverContent {
   --slash-pad: 6px;
-  --slash-radius-outer: var(--radius-menu-outer, 18px);
   --slash-radius-inner: var(--radius-menu-inner, 12px);
 
   z-index: var(--z-popover);
@@ -19,17 +28,14 @@
     65vh,
     420px
   );
-  overflow-y: auto;
-  background: var(--slash-menu-bg, var(--surface-overlay));
-  border: var(--hairline-width, 1px) solid var(--border-panel);
-  border-radius: var(--slash-radius-outer);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--radius-menu-outer, 18px);
   padding: var(--slash-pad);
   outline: none;
-  box-shadow: var(
-    --shadow-lift-card,
-    0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent)
-  );
   backdrop-filter: blur(20px);
+  composes: crish-popover-anim from global;
   will-change: transform, opacity;
   transform-origin: var(
     --radix-popover-content-transform-origin,
@@ -38,75 +44,23 @@
   -webkit-app-region: no-drag;
 }
 
+/* 内层滚动容器：承接原根节点的滚动（overflow-y）。形状层
+ * （G2Surface 背景）挂在根节点，不随本容器滚动。 */
+.slashScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* 浮层配方归队（AN2 / A6）：进/出场走与共享层正典同值的本地 keyframes
  * （design-system.css）+ popover token。S5b：此前本文件无本地定义、
  * 按名引用正典是悬空的（Vite CSS Modules 会把 animation 引用名
  * scoped 化，模块内无同名 @keyframes 定义时引用名悬空、动画静默
  * 失效），进/退场全死；现补 4 份本地定义（与 ui/Menu/Menu.module.css
- * 同值），删除待 keyframes 全局工具类迁移批（真单轨）。 */
-
-@keyframes crish-popover-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-enter-top {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-}
-
-@keyframes crish-popover-exit-top {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-}
-
-.popoverContent[data-state='open'][data-side='top'] {
-  animation: crish-popover-enter-top var(--transition-popover-enter) forwards;
-}
-
-.popoverContent[data-state='open'][data-side='bottom'] {
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
-}
-
-/* 退场按弹出方向分发（S5a 修复）：默认（side='bottom'）走 exit，
-   side='top' 覆盖为 exit-top 镜像；此前无分发，底部弹出也播向上退场。 */
-.popoverContent[data-state='closed'] {
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
-  pointer-events: none;
-}
-
-.popoverContent[data-state='closed'][data-side='top'] {
-  animation-name: crish-popover-exit-top;
-}
+ * 同值），删除待 keyframes 全局工具类迁移批（真单轨）。
+ * 【G² 第一波丙 · 槽 D】4 份本地副本已删除：进/退场改走全局工具类
+ * .crish-popover-anim（composes，见 .popoverContent）；减动效由全局类
+ * 的 reduced-motion 段覆盖，本文件 media 段一并删除。 */
 
 .menuList {
   display: flex;
@@ -212,11 +166,4 @@
   color: var(--text-tertiary);
   text-align: center;
   user-select: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .popoverContent,
-  .popoverContent[data-state='closed'] {
-    animation: none;
-  }
 }

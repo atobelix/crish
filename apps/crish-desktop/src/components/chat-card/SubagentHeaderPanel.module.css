@@ -100,7 +100,13 @@
   color: var(--text-secondary);
 }
 
-/* 活动详情面板容器 */
+/* 活动详情面板容器
+ * 【G² 第一波丙 · 槽 B 收敛】同一类名曾同时用于 SEP 外壳与内层内容卡，
+ * 两处油漆同值异轨（外壳 18 档 surface-overlay / 内层 12 档 surface-card）：
+ * 现拆分——外壳只留布局（.activityPanelOuter，下），内层内容卡保留
+ * 本规则完整油漆（卡片档 12 / surface-card / border-color /
+ * shadow-popover，Wave 2 卡片族迁移面）。内层 max-height 440 +
+ * overflow-y auto 为其自身滚动上限（外壳 .panel 另有 640 上限）。 */
 .activityMenuPanel,
 .subagentMenuPanel {
   min-width: 300px;
@@ -115,6 +121,14 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card, 12px);
   box-shadow: var(--shadow-popover);
+}
+
+/* SEP 外壳布局：只留宽度（外壳油漆由 .panel + SepPanelShell 承载）。
+ * 与 .panel 同元素时 min/max-width 需胜出——与拆分前同文件同加载序，
+ * 行为与原 .activityMenuPanel 一致。 */
+.activityPanelOuter {
+  min-width: 300px;
+  max-width: 380px;
 }
 
 .section {

@@ -99,27 +99,21 @@
    Menu Popover (Portal / Floating)
    ========================================================================== */
 
+/* 【G² 第一波丙 · 槽 B 收敛】本规则只留布局 + 排版：外壳油漆（背景/边框/
+ * 阴影/圆角/内衬）收敛到 SepPanelShell（单挂接点），由 .menuContent
+ * （ui/Menu）的布局 + SepPanelShell 的形状层承载；此处不再重复声明。
+ * S4 退场：入/退场由 ui/Menu 的 menuContent 分层规则（[data-ending-style]）
+ * 承载（Base UI 面无 data-state；Radix 面已由全局类接管）。本类不得再挂
+ * animation——未分层声明会压过 @layer components 内的退场规则，且其引用的
+ * keyframes 在本模块无定义（悬空，入场本就是死的）。 */
 .permMenu {
   min-width: 220px;
   max-width: 260px;
-  padding: 6px;
   margin: 0;
   list-style: none;
-  border-radius: var(--radius-menu-outer, 18px);
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
-  /* S4 退场：入/退场由 ui/Menu 的 menuContent 并集选择器
-   * （[data-ending-style] + [data-state='closed']）承载
-   * （本地 keyframes + Base UI Presence）。本类不得再挂 animation——
-   * 未分层声明会压过 @layer components 内的退场规则，且其引用的
-   * keyframes 在本模块无定义（悬空，入场本就是死的）。 */
 }
 
 .permMenuItem {

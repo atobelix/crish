@@ -10,7 +10,7 @@ import { useLayerRegistration } from '../internal/layer-registration/useLayerReg
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { shouldSuppressMenuReopen } from '../Menu/menuOpenGuard';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
-import menuStyles from '../Menu/Menu.module.css';
+import { SepPanelShell } from '../G2Surface/SepPanelShell';
 import styles from './SmartExpandablePanel.module.css';
 import {
   cascadeStyle,
@@ -19,6 +19,10 @@ import {
   placeCascadeSubmenu,
   readCascadeSize,
 } from './PositionEngine';
+import {
+  useClosingValue,
+  DURATION_POPOVER_EXIT_MS,
+} from '../../motion/useExitReveal';
 
 export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   items = [],
@@ -63,6 +67,28 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const triggerRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const cascadeSubmenuRef = useRef<HTMLDivElement | null>(null);
+
+  // S4 退场宿主（级联子菜单）：父项失活/面板关闭时子菜单不立即卸载——
+  // 宿主保持最后一次 {parent, style, side} 播 120ms 退场。子菜单不走
+  // 入场通道（本地 CSS 入场），entered 取「曾经展开过」。
+  const submenuShownRef = useRef(false);
+  if (activeSubmenu?.children && submenuStyle) {
+    submenuShownRef.current = true;
+  }
+  const closingSubmenu = useClosingValue(
+    activeSubmenu?.children && submenuStyle
+      ? {
+          parent: { ...activeSubmenu, children: activeSubmenu.children },
+          style: submenuStyle,
+          side: submenuSide,
+        }
+      : null,
+    {
+      key: 'sep-cascade',
+      durationMs: DURATION_POPOVER_EXIT_MS,
+      entered: submenuShownRef.current,
+    }
+  );
   const safeAimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -383,15 +409,14 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const side = position?.side ?? 'bottom';
   const sideOffset = position?.sideOffset ?? 6;
 
-  const panelClasses = [menuStyles.menuContent, styles.panel, className]
-    .filter(Boolean)
-    .join(' ');
+  const panelClasses = [styles.panel, className].filter(Boolean).join(' ');
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
       {renderedTrigger}
       <Popover.Portal container={dialogOverlay ?? undefined}>
         <Popover.Content
+          asChild
           ref={(node) => {
             (contentRef as any).current = node;
             if (externalPanelRef) {
@@ -401,13 +426,13 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
             }
           }}
           data-testid={dataTestId}
+          data-positioned="true"
           align={align}
           side={side}
           sideOffset={sideOffset}
           avoidCollisions={avoidCollisions}
           onCloseAutoFocus={onCloseAutoFocus}
           collisionPadding={12}
-          className={panelClasses}
           style={style}
           onMouseEnter={handleContentMouseEnter}
           onMouseLeave={handleContentMouseLeave}
@@ -432,72 +457,80 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
             }
           }}
         >
-          <div
-            role="menu"
-            aria-label={ariaLabel || '选择项目'}
-            className={styles.menuWrapper}
-            onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
-          >
-            {enableSearch && (
-              <SmartPanelHeader
-                query={query}
-                onQueryChange={setQuery}
-                placeholder={searchPlaceholder}
-                inputRef={searchInputRef}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape' && query) {
-                    e.stopPropagation();
-                    setQuery('');
-                  }
-                }}
-              />
-            )}
+          {/* 【G² 第一波丙 · 槽 B】面板油漆收敛到 SepPanelShell（单挂接点）：
+           * asChild 使 Radix 的 data-state/定位/ref 直接落在形状层根节点上，
+           * .panel 只留布局 + 全局弹层动画 composes；data-positioned="true"
+           * 为真值（Radix 定位后挂载），使全局 .crish-popover-anim 的
+           * [data-positioned='true'] 开场规则命中。 */}
+          <SepPanelShell className={panelClasses}>
+            <div
+              role="menu"
+                aria-label={ariaLabel || '选择项目'}
+                className={styles.menuWrapper}
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
+              >
+              {enableSearch && (
+                <SmartPanelHeader
+                  query={query}
+                  onQueryChange={setQuery}
+                  placeholder={searchPlaceholder}
+                  inputRef={searchInputRef}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && query) {
+                      e.stopPropagation();
+                      setQuery('');
+                    }
+                  }}
+                />
+              )}
 
-            {children != null ? (
-              children
-            ) : (
-              <SmartPanelList
-                items={filteredItems}
-                enableDivider={enableDivider}
-                query={query}
-                activeSubmenuId={activeSubmenu?.id}
-                renderItem={renderItem}
-                onSelect={(item, _ev) => {
-                  onSelect?.(item);
-                  if (
-                    !item.children ||
-                    item.children.length === 0 ||
-                    item.closeOnSelect
-                  ) {
-                    handleOpenChange(false);
-                  }
-                }}
-                onHoverSubmenu={handleHoverSubmenu}
-                onHoverItem={handleHoverItem}
-              />
-            )}
+              {children != null ? (
+                children
+              ) : (
+                <SmartPanelList
+                  items={filteredItems}
+                  enableDivider={enableDivider}
+                  query={query}
+                  activeSubmenuId={activeSubmenu?.id}
+                  renderItem={renderItem}
+                  onSelect={(item, _ev) => {
+                    onSelect?.(item);
+                    if (
+                      !item.children ||
+                      item.children.length === 0 ||
+                      item.closeOnSelect
+                    ) {
+                      handleOpenChange(false);
+                    }
+                  }}
+                  onHoverSubmenu={handleHoverSubmenu}
+                  onHoverItem={handleHoverItem}
+                />
+              )}
 
-            {/* 二级级联子菜单 (8px 同心圆角 / 4px 内衬 / 4px-6px 条目) */}
-            {activeSubmenu?.children && submenuStyle && (
-              <SmartPanelCascadeSubmenu
-                parent={{ ...activeSubmenu, children: activeSubmenu.children }}
-                ariaLabel={activeSubmenu.label || '子菜单'}
-                style={submenuStyle}
-                side={submenuSide}
-                submenuRef={cascadeSubmenuRef}
-                closeOnCascadeSelect={closeOnCascadeSelect}
-                container={
-                  dialogOverlay ??
-                  (typeof document !== 'undefined' ? document.body : null)!
-                }
-                onPointerEnter={cancelSafeAimClose}
-                onPointerLeave={handleSubmenuPointerLeave}
-                onSelect={(item) => onSelect?.(item)}
-                onRequestClose={() => handleOpenChange(false)}
-              />
-            )}
-          </div>
+              {/* 二级级联子菜单 (8px 同心圆角 / 4px 内衬 / 4px-6px 条目) */}
+              {closingSubmenu.value != null && (
+                <SmartPanelCascadeSubmenu
+                  parent={closingSubmenu.value.parent}
+                  ariaLabel={closingSubmenu.value.parent.label || '子菜单'}
+                  style={closingSubmenu.value.style}
+                  side={closingSubmenu.value.side}
+                  submenuRef={cascadeSubmenuRef}
+                  closeOnCascadeSelect={closeOnCascadeSelect}
+                  container={
+                    dialogOverlay ??
+                    (typeof document !== 'undefined' ? document.body : null)!
+                  }
+                  onPointerEnter={cancelSafeAimClose}
+                  onPointerLeave={handleSubmenuPointerLeave}
+                  onSelect={(item) => onSelect?.(item)}
+                  onRequestClose={() => handleOpenChange(false)}
+                  closing={closingSubmenu.closing}
+                />
+              )}
+            </div>
+          </SepPanelShell>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

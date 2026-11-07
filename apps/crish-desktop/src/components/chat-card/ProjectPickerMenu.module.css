@@ -1,9 +1,9 @@
-/* ProjectPickerMenu：基于 SmartExpandablePanel 契约与 Design Tokens */
-
+/* ProjectPickerMenu：基于 SmartExpandablePanel 契约与 Design Tokens
+ * 【G² 第一波丙 · 槽 B 收敛】本规则只留布局宽度：外壳油漆（圆角/内衬）
+ * 收敛到 SepPanelShell（单挂接点），由 .panel（SmartExpandablePanel）
+ * 的布局 + SepPanelShell 的形状层承载；此处不再重复声明。 */
 .pickerPanel {
   width: 230px;
-  border-radius: var(--sep-radius-outer, 18px);
-  padding: 6px;
 }
 
 .item {

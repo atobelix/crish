@@ -2,17 +2,29 @@
    SmartExpandablePanel CSS Modules (Concentric Radii & Zero-Blue Tokens)
    ========================================================================== */
 
+/* 【G² 第一波丙 · 槽 B】面板油漆收敛到 SepPanelShell（单挂接点）：
+ * background/border/box-shadow 不再在此声明（由形状层 G² 路径填充/
+ * 同路径描边/drop-shadow 承载）；本规则只留布局 + 兜底圆弧（形状层
+ * 未量测前的首帧）+ 最大高度（原 Menu .menuContent 的滚动上限，随
+ * .menuContent 脱离一并迁入）+ 弹层动画（全局工具类 composes，
+ * [data-state] 由 Radix 写，[data-positioned='true'] 由 TSX 置真值）。
+ * 注意：本面板根节点不滚动（滚动在内层 .listContainer），形状层
+ * 背景不随内容滚动。 */
 .panel {
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 180px;
   max-width: 360px;
+  max-height: min(
+    var(--radix-popover-content-available-height, calc(100vh - 32px)),
+    calc(100vh - 32px),
+    640px
+  );
   padding: 6px;
   border-radius: var(--radius-menu-outer, 18px);
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
+  transform-origin: var(--radix-popover-content-transform-origin, center bottom);
+  composes: crish-popover-anim from global;
   color: var(--text-primary);
   font-family: var(--font-sans, sans-serif);
   box-sizing: border-box;
@@ -309,35 +321,15 @@
 
 /* 级联展开动画已归队全域浮层配方（AN2 / A6）：共享 keyframes crish-popover-enter
  * + popover-enter token；data-side 只决定 transform-origin，不再各备一份 keyframes。
- * S4：keyframes 保留本模块定义——Vite CSS Modules 按名跨模块消费共享 keyframes
- * 会静默失效（S5a 实机证伪；此前入场本就是死的）。退场走本地
- * crish-popover-exit（120ms accelerate，[data-state='closed']）。 */
+ * 【G² 第一波丙 · 槽 B】本地两份 keyframes 副本已删除（keyframes 批在
+ * design-system.css §4b 建了全局工具类 .crish-popover-anim，本规则 composes
+ * 它）；S4 注释中「本模块副本不可删」的理由随之失效。进/退场均由全局类
+ * 驱动（[data-state='open'][data-positioned='true'] / [data-state='closed']）。
+ * 减动效由全局类的 reduced-motion 段覆盖。 */
 
-/* 进/退场 keyframes 与 ui/Menu/Menu.module.css 的本地副本同值
- * （scale 0.97 / ∓4px）。本模块副本不可删，见上。 */
-@keyframes crish-popover-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes crish-popover-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-4px);
-  }
-}
-
-/* 二级子菜单卡片（18px 外圆角 / 6px 内衬 / 12px 条目，Shell-Body-Footer 解耦） */
+/* 二级子菜单卡片（18px 外圆角 / 6px 内衬 / 12px 条目，Shell-Body-Footer 解耦）
+ * 【G² 第一波丙 · 槽 B】油漆收敛到 SepPanelShell（单挂接点）：本规则只留
+ * 布局 + 兜底圆弧 + transform-origin + 全局弹层动画 composes。 */
 .cascadeSubmenu {
   position: fixed;
   margin: 0;
@@ -347,16 +339,13 @@
   height: auto;
   overflow: visible; /* 外层卡片绝不出现滚动条，圆角与阴影保持 100% 纯净 */
   border-radius: var(--radius-menu-outer, 18px);
-  border: 1px solid var(--border-panel);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
   padding: 6px;
   display: flex;
   flex-direction: column;
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
   transform-origin: top left;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  composes: crish-popover-anim from global;
   will-change: transform, opacity;
 }
 
@@ -366,23 +355,6 @@
 
 .cascadeSubmenu[data-side='right'] {
   transform-origin: top left;
-}
-
-/* S4 退场：宿主（SmartExpandablePanel）保持挂载播退场，closing 期
- * data-state='closed'。减动效时 animation:none（见下方 media 段）。 */
-.cascadeSubmenu[data-state='closed'] {
-  animation: crish-popover-exit var(--transition-popover-exit) forwards;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cascadeSubmenu {
-    animation: none;
-    transition: opacity var(--duration-micro, 100ms) var(--ease-standard);
-  }
-  .cascadeSubmenu[data-state='closed'] {
-    animation: none;
-  }
 }
 
 /* 内部可滚动条目容器：限制最大高度约 7 项（240px），仅在溢出时内部滚动 */

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import type { MenuItem } from './types';
 import { SmartPanelItem } from './SmartPanelItem';
+import { SepPanelShell } from '../G2Surface/SepPanelShell';
 import styles from './SmartExpandablePanel.module.css';
 
 interface SmartPanelCascadeSubmenuProps {
@@ -25,15 +26,18 @@ interface SmartPanelCascadeSubmenuProps {
   closeOnCascadeSelect?: boolean;
   /**
    * S4 退场：宿主（SmartExpandablePanel）在父项失活/面板关闭时保持
-   * 挂载播退场。closing=true 时 data-state 翻 'closed'，播本地
-   * crish-popover-exit（120ms accelerate）+ 禁指针命中。
+   * 挂载播退场。closing=true 时 data-state 翻 'closed'，播全局
+   * .crish-popover-anim 的 crish-popover-exit（120ms）+ 禁指针命中。
+   * （2026-11-06 收口：父组件 SmartExpandablePanel 已传 closing，
+   * 经 useClosingValue 保活的级联子菜单播 120ms 退场再卸载。）
    */
   closing?: boolean | undefined;
 }
 
 /**
  * 二级级联子菜单 (Shell - Body - Footer 三段式解耦架构)
- * - Shell (.cascadeSubmenu): 纯粹负责外层 14px 圆角、6px 统一内衬、背景与阴影，绝对无滚动条；
+ * - Shell (.cascadeSubmenu)：纯粹负责外层 18px 圆角、6px 统一内衬，绝对无滚动条；
+ *   油漆（背景/边框/阴影）收敛到 SepPanelShell（G² 第一波丙 · 槽 B 单挂接点）；
  * - Body (.cascadeListBody): 限制最大高度约 240px，仅在条目超出时在内部展示 4px 微调滚动条；
  * - Footer (.cascadeFooter): 将尾部常驻操作（如管理技能...）吸附在卡片底端，不随滚动移出视野。
  */
@@ -67,12 +71,16 @@ export const SmartPanelCascadeSubmenu: React.FC<
   }, [activeSubmenu.children]);
 
   return ReactDOM.createPortal(
-    <div
+    // 【G² 第一波丙 · 槽 B】外壳油漆收敛到 SepPanelShell（单挂接点）：
+    // data-positioned="true" 为真值（PositionEngine 定位后才挂载），使全局
+    // .crish-popover-anim 的 [data-positioned='true'] 开场规则命中。
+    <SepPanelShell
       ref={cascadeSubmenuRef}
       className={styles.cascadeSubmenu}
       role="menu"
       data-state={closing ? 'closed' : 'open'}
       data-side={side}
+      data-positioned="true"
       aria-label={ariaLabel}
       style={submenuStyle}
       onMouseEnter={onPointerEnter}
@@ -119,7 +127,7 @@ export const SmartPanelCascadeSubmenu: React.FC<
           ))}
         </div>
       )}
-    </div>,
+    </SepPanelShell>,
     container
   );
 };

@@ -3,17 +3,13 @@
  * min-width: 188px, 18px outer / 12px inner item radius, 24x24 icon box with 4px radius
  */
 
+/* 【G² 第一波丙 · 槽 B 收敛】本规则只留布局 + 排版：外壳油漆（背景/边框/
+ * 阴影/圆角/内衬）收敛到 SepPanelShell（单挂接点），由 .panel
+ * （SmartExpandablePanel）的布局 + SepPanelShell 的形状层承载；
+ * 此处不再重复声明。 */
 .plusMenu {
   min-width: 188px;
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel);
-  border-radius: var(--radius-menu-outer, 18px);
-  box-shadow: var(--shadow-popover, var(--shadow-lg));
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));

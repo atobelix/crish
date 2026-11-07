@@ -20,6 +20,7 @@ import * as Popover from '@radix-ui/react-popover';
 
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import { goalCommandDisplayLabel, isGoalCommand } from './goalChipLabel';
+import { G2Surface } from '../ui/G2Surface/G2Surface';
 import styles from './TiptapSlashMenu.module.css';
 import {
   isPhysicallyVisibleNonZeroRect,
@@ -399,17 +400,8 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         </Popover.Anchor>
         <Popover.Portal>
           <Popover.Content
-            className={styles.popoverContent}
-            style={{
-              width:
-                anchor && anchor.width >= 48
-                  ? `${Math.round(anchor.width)}px`
-                  : undefined,
-              maxWidth:
-                anchor && anchor.width >= 48
-                  ? `${Math.round(anchor.width)}px`
-                  : undefined,
-            }}
+            asChild
+            data-positioned="true"
             side={side}
             align="start"
             sideOffset={8}
@@ -418,22 +410,49 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             onOpenAutoFocus={(e) => e.preventDefault()}
             onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            <div
-              className={styles.menuList}
-              role="listbox"
-              aria-label={label}
-              id={listboxId}
+            {/* 【G² 第一波丙 · 槽 D】斜杠菜单直接用 G2Surface（不用 SepPanelShell）：
+             * 填充为半透 --slash-menu-bg（backdrop blur(20px) 的磨砂底仍在
+             * .popoverContent 上）+ 阴影为单层 --shadow-lift-card（无展宽，
+             * drop-shadow() 可直接承载，两主题同值口径）；data-positioned
+             * 为真值（Radix 定位后挂载），使全局 .crish-popover-anim 的
+             * [data-positioned='true'] 开场规则命中；滚动由内层 .slashScroll
+             * 承载（根节点不再是滚动容器，形状层背景不随内容滚动）。 */}
+            <G2Surface
+              radius="menuOuter"
+              fill="var(--slash-menu-bg, var(--surface-overlay))"
+              stroke="var(--border-panel)"
+              dropShadow="var(--shadow-lift-card)"
+              className={styles.popoverContent}
+              style={{
+                width:
+                  anchor && anchor.width >= 48
+                    ? `${Math.round(anchor.width)}px`
+                    : undefined,
+                maxWidth:
+                  anchor && anchor.width >= 48
+                    ? `${Math.round(anchor.width)}px`
+                    : undefined,
+              }}
             >
-              {skillEntries.length > 0 && systemEntries.length > 0 ? (
-                <>
-                  {systemEntries.map(renderItemButton)}
-                  <div className={styles.groupHeader}>技能</div>
-                  {skillEntries.map(renderItemButton)}
-                </>
-              ) : (
-                items.map((item, index) => renderItemButton({ item, index }))
-              )}
-            </div>
+              <div className={styles.slashScroll}>
+                <div
+                  className={styles.menuList}
+                  role="listbox"
+                  aria-label={label}
+                  id={listboxId}
+                >
+                  {skillEntries.length > 0 && systemEntries.length > 0 ? (
+                    <>
+                      {systemEntries.map(renderItemButton)}
+                      <div className={styles.groupHeader}>技能</div>
+                      {skillEntries.map(renderItemButton)}
+                    </>
+                  ) : (
+                    items.map((item, index) => renderItemButton({ item, index }))
+                  )}
+                </div>
+              </div>
+            </G2Surface>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>

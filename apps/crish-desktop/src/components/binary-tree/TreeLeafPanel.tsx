@@ -1,5 +1,6 @@
 import { AppIcon } from '@/components/ui/icons';
 import { Button, Tooltip } from '@/components/ui';
+import { G2Surface } from '../ui/G2Surface/G2Surface';
 /**
  * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
@@ -444,12 +445,19 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             isChat
             isTopRow={edges.isTopRow}
           />
-          <div
+          <G2Surface
             ref={leafBodyRef}
+            radius="card"
+            fill="var(--leaf-card-bg, var(--bg-card))"
             className={styles.leafBody}
             data-dock-open={dockOpen ? 'true' : 'false'}
             data-dock-present={dockOpen || dockClosing ? 'true' : 'false'}
           >
+            {/* 【G² 第一波丙 · 尾批（裁定 #3(a)）】只改形状、不改数值：档位 card
+             * 12 保持（12→20 会改变所有叶面可用角域，是设计变更、不乘这波）。
+             * 无描边（本面禁带边框，用户裁决）、无阴影、无 clip（clip 会在
+             * 首测时重挂子树——主对话面滚动与输入焦点不可接受；裁剪仍由
+             * .leafBody 的 overflow:hidden 承担，见该规则注释）。 */}
             <div className={styles.leafChatColumn}>
               {isChatSurface &&
                 !isLeafDraft &&
@@ -538,7 +546,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                 )}
               </div>
             )}
-          </div>
+          </G2Surface>
           {isChatSurface && !isLeafDraft && !isStandaloneTab && (
             <Tooltip
               content={t(
