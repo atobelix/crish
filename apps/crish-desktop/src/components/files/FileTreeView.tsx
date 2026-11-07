@@ -35,6 +35,13 @@ export interface FileTreeViewProps {
   root?: string;
   flatTree: TreeNode[];
   selected: string | null;
+  /**
+   * 揭示鉴别键（格式见 buildRevealSelectionKey：路径 + 一次性 nonce）：
+   * 滚动居中 + 抢焦点 + 绿脉冲三件套只由本键的变化触发；普通 selected
+   * 变化（树内点选 / 键盘选中 / 带恢复选中重挂载）只更新选中呈现。
+   * 缺省（不传 / null）= 永不触发三件套。
+   */
+  revealSelectionKey?: string | null;
   expanded: Record<string, unknown>;
   loading: boolean;
   error: string;
@@ -53,6 +60,23 @@ export interface FileTreeViewProps {
   onCopyPath?: (path: string, mode: 'abs' | 'rel') => void;
 }
 
+/**
+ * 揭示鉴别键的单一真源：`${seq}:${path}`。seq 为宿主侧单调递增计数，
+ * 保证同一路径被重复揭示时也能产生新键、再次触发三件套；
+ * path 天然可含 ':'（如盘符），故解析只认首段数字前缀、其余整体为路径。
+ */
+export function buildRevealSelectionKey(path: string, seq: number): string {
+  return `${seq}:${path}`;
+}
+
+function parseRevealSelectionKey(key: string): string | null {
+  const sep = key.indexOf(':');
+  if (sep <= 0) return null;
+  if (!/^\d+$/.test(key.slice(0, sep))) return null;
+  const path = key.slice(sep + 1);
+  return path ? path : null;
+}
+
 const ITEM_HEIGHT = 28;
 
 export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
@@ -60,6 +84,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     root: _root,
     flatTree,
     selected,
+    revealSelectionKey,
     expanded,
     loading,
     error,
@@ -94,7 +119,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     }, [flatTree, startIndex, endIndex]);
 
     const [pulseTarget, setPulseTarget] = useState<string | null>(null);
-    const prevSelectedRef = useRef<string | null>(null);
+    /** 已消费的揭示键：三件套只认 revealSelectionKey 的新值，与 selected 变化无关 */
+    const consumedRevealKeyRef = useRef<string | null>(null);
 
     /**
      * S6 文件树展开/折叠动效（G §3.1 + 审计 A 2-1）：
@@ -149,25 +175,32 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     );
 
     // 核心时序闭环：W3C 原生 scrollend 停泊守护与脉冲高亮挂载（CRIT-04 & MIN-05）
+    // 触发源已收窄为 revealSelectionKey（外部揭示）：selected 单独变化
+    // （树内点选 / Enter 选中 / 带恢复选中重挂载）不再滚动、不再抢焦、不再脉冲；
+    // 目标行由键内路径定位，与 selected 的到达时序无关。
     useEffect(() => {
-      if (!selected || !containerRef.current) {
-        prevSelectedRef.current = selected;
+      const key = revealSelectionKey ?? null;
+      if (!key || !containerRef.current) {
+        return;
+      }
+      if (key === consumedRevealKeyRef.current) return;
+
+      const revealPath = parseRevealSelectionKey(key);
+      if (!revealPath) {
+        // 格式非法：消费掉，避免后续渲染反复解析
+        consumedRevealKeyRef.current = key;
         return;
       }
 
       const targetIndex = flatTree.findIndex((n) =>
-        isSameFsPath(n.path, selected)
+        isSameFsPath(n.path, revealPath)
       );
       if (targetIndex === -1) {
+        // 目标行尚未进树（揭示落点展开父链后才会出现）：不消费，
+        // 等 flatTree 就绪后由本 effect 重跑触发
         return;
       }
-
-      const isNewSelection =
-        !prevSelectedRef.current ||
-        !isSameFsPath(prevSelectedRef.current, selected);
-      prevSelectedRef.current = selected;
-
-      if (!isNewSelection) return;
+      consumedRevealKeyRef.current = key;
 
       const container = containerRef.current;
       const viewHeight = container.clientHeight;
@@ -196,7 +229,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
       let cleanupScrollEnd: (() => void) | null = null;
 
       const triggerFocusAndPulse = () => {
-        setPulseTarget(selected);
+        setPulseTarget(revealPath);
         // S6：与 fileRowPulse 动画时长 1.6s 对齐（原 1400ms 会在动画约 87% 处截断尾巴）
         pulseTimer = window.setTimeout(() => {
           setPulseTarget(null);
@@ -246,7 +279,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         if (pulseTimer != null) window.clearTimeout(pulseTimer);
         cleanupScrollEnd?.();
       };
-    }, [selected, flatTree, focusTreeRow, containerRef, totalHeight]);
+    }, [revealSelectionKey, flatTree, focusTreeRow, containerRef, totalHeight]);
 
     // S6 展开/折叠动效主 effect：flatTree 变化后、首漆前执行。
     // 滚动引起的 visibleRange 变化会同 effect 重跑，此时 diff 为 null（无切换记录），

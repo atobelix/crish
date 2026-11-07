@@ -6,7 +6,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, act } from '@testing-library/react';
-import { FileTreeView } from './FileTreeView';
+import { buildRevealSelectionKey, FileTreeView } from './FileTreeView';
 import type { TreeNode } from './hooks/useFileNavigation';
 
 function makeNode(partial: Partial<TreeNode> & { path: string }): TreeNode {
@@ -22,6 +22,7 @@ function defaultProps(flatTree: TreeNode[]) {
   return {
     flatTree,
     selected: null,
+    revealSelectionKey: null,
     expanded: {},
     loading: false,
     error: '',
@@ -208,11 +209,18 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true, configurable: true });
     scrollContainer.scrollTo = scrollToMock;
 
-    // 选中第 20 项（itemTop = 20 * 28 = 560px，超出视口 280px 范围）
+    // 揭示第 20 项（itemTop = 20 * 28 = 560px，超出视口 280px 范围）；
+    // 收窄后三件套只认 revealSelectionKey，单独改 selected 不再触发（见 REVEAL-01）
     const targetPath = DEEP_TREE[20].path;
 
     act(() => {
-      rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />);
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={buildRevealSelectionKey(targetPath, 1)}
+        />
+      );
     });
 
     // 理想居中位移：rawScrollTop = 560 - Math.floor((280 - 28) / 2) = 560 - 126 = 434px
@@ -227,8 +235,14 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
       fireEvent(scrollContainer, new Event('scrollend'));
     });
 
-    // 验证脉冲状态被设置
-    rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />);
+    // 验证脉冲状态被设置（同 key 重渲染不重复触发，仅确认状态留存）
+    rerender(
+      <FileTreeView
+        {...defaultProps(DEEP_TREE)}
+        selected={targetPath}
+        revealSelectionKey={buildRevealSelectionKey(targetPath, 1)}
+      />
+    );
     const targetRow = container.querySelector(`[data-tree-index="20"]`);
     if (targetRow) {
       expect(targetRow.className).toMatch(/isSelectedPulse|filesRow/);
@@ -250,7 +264,13 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     const targetPath = DEEP_TREE[20].path;
 
     act(() => {
-      rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />);
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={buildRevealSelectionKey(targetPath, 1)}
+        />
+      );
     });
 
     expect(scrollToMock).toHaveBeenCalledTimes(1);
@@ -276,11 +296,18 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true, configurable: true });
     scrollContainer.scrollTo = scrollToMock;
 
-    // 选中第 0 项（itemTop = 0, itemBottom = 28 <= 50，已完全处于 50px 视口内）
+    // 揭示第 0 项（itemTop = 0, itemBottom = 28 <= 50，已完全处于 50px 视口内）；
+    // 带上揭示键确保命中的是矮视口几何判定本身，而非「无触发源」的空过
     const inViewPath = DEEP_TREE[0].path;
 
     act(() => {
-      rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={inViewPath} />);
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={inViewPath}
+          revealSelectionKey={buildRevealSelectionKey(inViewPath, 1)}
+        />
+      );
     });
 
     // 矮视口无缓冲包含判定生效，严禁触发死循环滚动
@@ -292,7 +319,7 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     const targetPath = DEEP_TREE[0].path;
 
     // 先空选渲染并模拟视口尺寸（jsdom 下 clientHeight 默认为 0，脉冲 effect 会提前返回），
-    // 再切到选中态，脉冲才真实触发——中段正向断言借此不再是空真通过。
+    // 再以揭示键切到目标行，脉冲才真实触发——中段正向断言借此不再是空真通过。
     const { container, rerender } = render(
       <FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />
     );
@@ -312,7 +339,11 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
 
     act(() => {
       rerender(
-        <FileTreeView {...defaultProps(DEEP_TREE)} selected={targetPath} />
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={buildRevealSelectionKey(targetPath, 1)}
+        />
       );
     });
 
@@ -336,6 +367,160 @@ describe('files/FileTreeView 树形语义（F7-F35）与单轨重构', () => {
     const updatedRow = container.querySelector('[data-tree-index="0"]');
     expect(updatedRow?.className).toMatch(/isSelected/);
     expect(updatedRow?.className).not.toMatch(/isSelectedPulse/);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 脉冲收窄新增用例：三件套（滚动居中/抢焦点/绿脉冲）只认 revealSelectionKey
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('[REVEAL-01] 树内点选（仅 selected 变化，含同路径往返重选）不触发滚动/抢焦/脉冲', () => {
+    const scrollToMock = vi.fn();
+    const { container, rerender } = render(
+      <FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />
+    );
+    const scrollContainer = container.querySelector(
+      '[role="tree"]'
+    ) as HTMLDivElement;
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 280,
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
+    scrollContainer.scrollTo = scrollToMock;
+
+    // 视区外行被树内点选：只更新选中呈现，不滚动居中
+    const farPath = DEEP_TREE[20].path;
+    act(() => {
+      rerender(
+        <FileTreeView {...defaultProps(DEEP_TREE)} selected={farPath} />
+      );
+    });
+    expect(scrollToMock).not.toHaveBeenCalled();
+
+    // 视区内行被树内点选：无脉冲类、焦点不被抢到该行
+    const nearPath = DEEP_TREE[0].path;
+    act(() => {
+      rerender(
+        <FileTreeView {...defaultProps(DEEP_TREE)} selected={nearPath} />
+      );
+    });
+    const firstRow = container.querySelector('[data-tree-index="0"]');
+    expect(firstRow).toBeTruthy();
+    expect(firstRow?.className).toMatch(/isSelected/);
+    expect(firstRow?.className).not.toMatch(/isSelectedPulse/);
+    expect(firstRow).not.toHaveFocus();
+
+    // 同路径取消选中再重选（往返）：仍不触发任何一件
+    act(() => {
+      rerender(<FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />);
+    });
+    act(() => {
+      rerender(
+        <FileTreeView {...defaultProps(DEEP_TREE)} selected={nearPath} />
+      );
+    });
+    const reselectedRow = container.querySelector('[data-tree-index="0"]');
+    expect(reselectedRow?.className).toMatch(/isSelected/);
+    expect(reselectedRow?.className).not.toMatch(/isSelectedPulse/);
+    expect(reselectedRow).not.toHaveFocus();
+    expect(scrollToMock).not.toHaveBeenCalled();
+  });
+
+  it('[REVEAL-02] 外部揭示触发一次三件套；同 key 重渲染（flatTree 换新数组）不重复触发', () => {
+    const scrollToMock = vi.fn();
+    const targetPath = DEEP_TREE[20].path;
+    const key = buildRevealSelectionKey(targetPath, 1);
+    const { container, rerender } = render(
+      <FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />
+    );
+    const scrollContainer = container.querySelector(
+      '[role="tree"]'
+    ) as HTMLDivElement;
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 280,
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
+    scrollContainer.scrollTo = scrollToMock;
+
+    act(() => {
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={key}
+        />
+      );
+    });
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    expect(scrollToMock).toHaveBeenCalledWith({
+      top: 434,
+      behavior: 'smooth',
+    });
+
+    // flatTree 换新数组（树刷新/展开折叠）令 effect 重跑：同 key 已消费，不再滚动
+    act(() => {
+      rerender(
+        <FileTreeView
+          {...defaultProps([...DEEP_TREE])}
+          selected={targetPath}
+          revealSelectionKey={key}
+        />
+      );
+    });
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('[REVEAL-03] 同路径以新 nonce 再次揭示可再触发一次（重复揭示不被吞）', () => {
+    const scrollToMock = vi.fn();
+    const targetPath = DEEP_TREE[20].path;
+    const { container, rerender } = render(
+      <FileTreeView {...defaultProps(DEEP_TREE)} selected={null} />
+    );
+    const scrollContainer = container.querySelector(
+      '[role="tree"]'
+    ) as HTMLDivElement;
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 280,
+      configurable: true,
+    });
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
+    scrollContainer.scrollTo = scrollToMock;
+
+    act(() => {
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={buildRevealSelectionKey(targetPath, 1)}
+        />
+      );
+    });
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+
+    // selected 不变、仅 nonce 递增：新一次揭示成立，再次滚动定位
+    act(() => {
+      rerender(
+        <FileTreeView
+          {...defaultProps(DEEP_TREE)}
+          selected={targetPath}
+          revealSelectionKey={buildRevealSelectionKey(targetPath, 2)}
+        />
+      );
+    });
+    expect(scrollToMock).toHaveBeenCalledTimes(2);
   });
 
   it('[NEG-05] 刚性负向断言：严禁在组件内越权调用全局 document.querySelector 查询 data-tree-index 行', () => {

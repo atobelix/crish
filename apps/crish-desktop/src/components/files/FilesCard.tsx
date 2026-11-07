@@ -26,7 +26,7 @@ import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useFileNavigation } from './hooks/useFileNavigation';
 import { useFilePreview } from './hooks/useFilePreview';
 import { FileBreadcrumb } from './FileBreadcrumb';
-import { FileTreeView } from './FileTreeView';
+import { buildRevealSelectionKey, FileTreeView } from './FileTreeView';
 import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
 import { AppIcon } from '@/components/ui/icons';
@@ -104,6 +104,21 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const filterInputRef = useRef<HTMLInputElement>(null);
     const bodySplitRef = useRef<HTMLDivElement>(null);
     const [listWidthRatio, setListWidthRatio] = useFileListRatio();
+
+    // 揭示鉴别键：只由外部揭示来源经 handleOpenFile 的 revealPath 落点写入
+    // （聊天路径链接 / crish-open-file 事件 / 待打开请求与 initialPath），
+    // 驱动 FileTreeView 对目标行滚动居中 + 抢焦点 + 绿脉冲。树内点选、双击、
+    // 面包屑、预览内链接、刷新重开等面板内来源一律不写，文件树保持安静。
+    const [revealSelectionKey, setRevealSelectionKey] = useState<
+      string | null
+    >(null);
+    const revealSeqRef = useRef(0);
+    const noteReveal = useCallback((path: string) => {
+      revealSeqRef.current += 1;
+      setRevealSelectionKey(
+        buildRevealSelectionKey(path, revealSeqRef.current)
+      );
+    }, []);
 
     // ── 分栏拖拽（分割线统一波次 R5：手势协议收编至统一 hook） ──────────
     // 架构分工与 R3 DockResizeSash 同构：
@@ -246,7 +261,10 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const handleOpenFile = useCallback(
       async (
         path: string,
-        target?: { line?: number; lineRange?: [number, number] }
+        target?: { line?: number; lineRange?: [number, number] },
+        // 来源鉴别：reveal=true 仅限外部揭示入口（见 revealSelectionKey 注释）；
+        // 树内点击与双击同样汇入本 funnel，缺省 false，绝不写入揭示键
+        options?: { reveal?: boolean }
       ) => {
         if (!(await nav.confirmNavigation())) return;
         const resolved = resolveReadableFilePath(path);
@@ -274,6 +292,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             }
             preview.setSelected(toCanonicalFsPath(wsPath) || wsPath);
             preview.setView('browse');
+            if (options?.reveal) noteReveal(wsPath);
             return;
           }
           try {
@@ -281,10 +300,11 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
           } catch {
             /* 外部路径或定位失败时不阻断预览 */
           }
+          if (options?.reveal) noteReveal(wsPath);
         }
         await preview.openFile(resolved || path, target);
       },
-      [nav, preview]
+      [nav, preview, noteReveal]
     );
 
     const handleRefresh = useCallback(async () => {
@@ -380,13 +400,18 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
           (!pending.sessionId || pending.sessionId === scopedSessionId)
         ) {
           takePendingOpenFileRequest();
-          void handleOpenFile(pending.path, {
-            line: pending.line,
-            lineRange: pending.lineRange,
-          });
+          void handleOpenFile(
+            pending.path,
+            {
+              line: pending.line,
+              lineRange: pending.lineRange,
+            },
+            { reveal: true }
+          );
           return;
         }
-        if (initialPath) void handleOpenFile(initialPath);
+        if (initialPath)
+          void handleOpenFile(initialPath, undefined, { reveal: true });
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps -- 挂载一次性：仅消费挂载时待打开路径，不随依赖变更重放
     }, []);
@@ -414,10 +439,14 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         }
         takePendingOpenFileRequest();
         const resolved = resolveReadableFilePath(detail.path);
-        void handleOpenFile(resolved || detail.path, {
-          line: detail.line,
-          lineRange: detail.lineRange,
-        });
+        void handleOpenFile(
+          resolved || detail.path,
+          {
+            line: detail.line,
+            lineRange: detail.lineRange,
+          },
+          { reveal: true }
+        );
       };
       window.addEventListener('crish-open-file', onOpen);
       return () => window.removeEventListener('crish-open-file', onOpen);
@@ -631,6 +660,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 root={nav.root}
                 flatTree={nav.flatTree}
                 selected={preview.selected}
+                revealSelectionKey={revealSelectionKey}
                 expanded={nav.expanded}
                 loading={nav.loading}
                 error={nav.error}
