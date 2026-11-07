@@ -3,7 +3,11 @@
 // domain/pure/permissionMode 单点映射申报（与桌面三档口径一致，不写死 ask）。
 // 草稿键控（批 C ②）：输入稿按 `remote:<sessionId>` 键存入
 // composerDraftStore——切会话不串稿、杀进程后经 loadComposerDraft
-// 回填；发送成功即清该会话草稿（clearPrompt 单点收敛两个成功路径）。
+// 回填；受理即清该会话草稿（clearPrompt 单点收敛两个受理路径）。
+// R5 受理与 ACK 分离：本地校验通过即受理——快照锁定草稿/附件、立即清可视
+// 输入、立即 pending 回显（onPending）；仓储回执（ACK）与失败（reject）
+// 各自回调，等待与受理明确分离；失败按「输入是否被新写」恢复快照或保留
+// 新稿，不假 runId/sessionId、不提前宣称服务器成功。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { selectEffectiveChatMode } from '@/domain/store/connectionStore';
@@ -35,6 +39,39 @@ export interface SessionComposerFeedback {
   message: string | null;
 }
 
+/** 发送回调组（R5 受理/ACK/失败三段分离；pendingId 为本地受理标识，非 runId） */
+export interface SessionComposerSend {
+  /**
+   * 受理回调：本地校验通过、即将调用仓储时立即触发一次（早于任何网络
+   * 回执）。宿主据此立即追加 pending 回显；快照文本随行。
+   */
+  onPending?: (pendingId: string, text: string) => void;
+  /**
+   * ACK 回调：仓储受理成功。runId 为服务器真实回执（不伪造）；
+   * isDraft 受理路径创建新会话时带 createdSessionId。
+   */
+  onAcked?: (
+    pendingId: string,
+    runId: string,
+    createdSessionId?: string
+  ) => void;
+  /**
+   * 失败回调：restoredToInput=true 表示等待期间输入未被新写、快照已恢复
+   * 进输入框（pending 回显可撤）；false 表示用户新稿保留、快照文本随行
+   * （宿主保留失败回显供手动重发）。attachments 为受理时附件快照。
+   */
+  onFailed?: (
+    pendingId: string,
+    info: {
+      restoredToInput: boolean;
+      text: string;
+      attachments: readonly ComposerAttachment[];
+    }
+  ) => void;
+  /** 新建会话（isDraft 受理路径 ACK 后切会话） */
+  onSessionCreated?: (createdSessionId: string) => void;
+}
+
 export interface SessionComposerVm {
   /** 远端会话管线是否可用（CON-2：中央派生反推；本页恒为远程会话，断线只禁用本管线并由页面给出本地出路，不在此切换模式） */
   connected: boolean;
@@ -43,6 +80,10 @@ export interface SessionComposerVm {
   feedback: SessionComposerFeedback;
   canSubmit: boolean;
   setPrompt: (text: string) => void;
+  /**
+   * 提交（R5 口径）：返回 true = 已受理（可视输入已清、pending 已回显，
+   * ACK/失败由回调异步送达）；false = 未受理（校验/守卫拒绝，状态不变）。
+   */
   submit: () => Promise<boolean>;
   /** 以显式文本提交（语音输入松开直发：回填与提交同刻发生，不能依赖 prompt 状态时序） */
   submitText: (text: string) => Promise<boolean>;
@@ -61,7 +102,7 @@ export interface SessionComposerVm {
 
 export function useSessionComposer(
   sessionId: string | null,
-  onSent?: (prompt: string, runId: string, createdSessionId?: string) => void
+  send?: SessionComposerSend
 ): SessionComposerVm {
   const connected = useConnectionStore(
     (s) => selectEffectiveChatMode(s.phase) === 'remote'
@@ -77,6 +118,18 @@ export function useSessionComposer(
   // 用户已在本会话键入 → 迟到的持久回填不得覆盖（loadComposerDraft
   // 的内存优先只防跨挂载竞态，本 ref 防同挂载内时序）
   const touchedRef = useRef(false);
+  // R5：受理→结算窗口内输入是否被新写（失败恢复判据：未被新写才恢复快照）
+  const typedDuringWaitRef = useRef(false);
+  // 受理标识计数（本地单调，非 runId/sessionId 语义）
+  const pendingSeqRef = useRef(0);
+  // 卸载守卫：迟到回执不触碰已卸载 VM 的状态（回调仍送达宿主，状态面跳过）
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   // 持久草稿回填（挂载一次）：内存面已有（含上次挂载残留）时首帧
   // 即命中，本回填只补「冷启动后首次进本会话」的落盘稿。
@@ -94,6 +147,7 @@ export function useSessionComposer(
   const setPrompt = useCallback(
     (text: string) => {
       touchedRef.current = true;
+      typedDuringWaitRef.current = true;
       setPromptState(text);
       saveComposerDraft(draftKey, text);
       setFeedback((current) =>
@@ -103,11 +157,39 @@ export function useSessionComposer(
     [draftKey]
   );
 
-  /** 发送成功清稿（状态 + 键控草稿一并清，两个成功路径共用） */
+  /** 受理清稿（状态 + 键控草稿一并清，两个受理路径共用） */
   const clearPrompt = useCallback(() => {
     setPromptState('');
     saveComposerDraft(draftKey, '');
   }, [draftKey]);
+
+  /**
+   * 失败恢复（R5）：等待期间输入未被新写 → 快照文本恢复进输入框与落盘稿
+   * （可重试），restoredToInput=true；已被新写 → 新稿原样保留（绝不覆盖），
+   * 快照文本经 onFailed 随行给宿主保留失败回显。
+   */
+  const settleFailure = useCallback(
+    (
+      pendingId: string,
+      snapshot: { text: string; attachments: readonly ComposerAttachment[] },
+      code: string
+    ): boolean => {
+      const restored = !typedDuringWaitRef.current;
+      if (restored) {
+        setPromptState(snapshot.text);
+        saveComposerDraft(draftKey, snapshot.text);
+        typedDuringWaitRef.current = false;
+      }
+      setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
+      send?.onFailed?.(pendingId, {
+        restoredToInput: restored,
+        text: snapshot.text,
+        attachments: snapshot.attachments,
+      });
+      return false;
+    },
+    [draftKey, send]
+  );
 
   const submitWithText = useCallback(
     async (rawText: string): Promise<boolean> => {
@@ -120,9 +202,15 @@ export function useSessionComposer(
         });
         return false;
       }
+      const pendingId = `pending-${++pendingSeqRef.current}`;
+      // R5 受理点：快照锁定 + 立即清可视输入 + 立即 pending 回显
+      const snapshot = { text, attachments: [] as readonly ComposerAttachment[] };
+      typedDuringWaitRef.current = false;
       busyRef.current = true;
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
+      clearPrompt();
+      send?.onPending?.(pendingId, snapshot.text);
       try {
         const isDraft = !sessionId || sessionId === 'draft';
         const cwd = filesStore.getState().activeWorkspaceRoot || undefined;
@@ -138,14 +226,18 @@ export function useSessionComposer(
           ),
           ...(cwd ? { cwd } : {}),
         });
-        clearPrompt();
-        // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
-        haptics.success();
-        setFeedback({ kind: 'success', message: null });
-        if (isDraft) {
-          onSent?.(text, result.runId, result.sessionId);
-        } else {
-          onSent?.(text, result.runId);
+        if (aliveRef.current) {
+          // 发送被受理（ACK）→ 成功触感与成功反馈同帧（触觉门面，手感基建批）
+          haptics.success();
+          setFeedback({ kind: 'success', message: null });
+        }
+        send?.onAcked?.(
+          pendingId,
+          result.runId,
+          isDraft ? result.sessionId : undefined
+        );
+        if (isDraft && result.sessionId) {
+          send?.onSessionCreated?.(result.sessionId);
         }
         return true;
       } catch (error) {
@@ -153,19 +245,13 @@ export function useSessionComposer(
           error instanceof RunTaskCommandError
             ? error.code
             : RUN_TASK_ERROR_INTERNAL;
-        setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
-        return false;
+        return settleFailure(pendingId, snapshot, code);
       } finally {
         busyRef.current = false;
-        setBusy(false);
+        if (aliveRef.current) setBusy(false);
       }
     },
-    [connected, onSent, sessionId, clearPrompt]
-  );
-
-  const submit = useCallback(
-    (): Promise<boolean> => submitWithText(prompt),
-    [submitWithText, prompt]
+    [connected, sessionId, clearPrompt, send, settleFailure]
   );
 
   const submitWithAttachments = useCallback(
@@ -191,9 +277,15 @@ export function useSessionComposer(
         });
         return false;
       }
+      const pendingId = `pending-${++pendingSeqRef.current}`;
+      // R5 受理点：附件随文本一并快照锁定（失败恢复依据）
+      const snapshot = { text: rawText.trim(), attachments };
+      typedDuringWaitRef.current = false;
       busyRef.current = true;
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
+      clearPrompt();
+      send?.onPending?.(pendingId, snapshot.text);
       try {
         const isDraft = !sessionId || sessionId === 'draft';
         const cwd = filesStore.getState().activeWorkspaceRoot || undefined;
@@ -213,19 +305,18 @@ export function useSessionComposer(
           hasImages: payload.hasImages,
           ...(cwd ? { cwd } : {}),
         });
-        clearPrompt();
-        // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
-        haptics.success();
-        setFeedback({ kind: 'success', message: null });
-        // 本地 echo 只回显用户键入的文本：纯附件发送无文本可回显，
-        // 消息经事件流落窗（附件块正文即 prompt，回显会与流内消息重复）
-        const text = rawText.trim();
-        if (text.length > 0) {
-          if (isDraft) {
-            onSent?.(text, result.runId, result.sessionId);
-          } else {
-            onSent?.(text, result.runId);
-          }
+        if (aliveRef.current) {
+          // 发送被受理（ACK）→ 成功触感与成功反馈同帧（触觉门面，手感基建批）
+          haptics.success();
+          setFeedback({ kind: 'success', message: null });
+        }
+        send?.onAcked?.(
+          pendingId,
+          result.runId,
+          isDraft ? result.sessionId : undefined
+        );
+        if (isDraft && result.sessionId) {
+          send?.onSessionCreated?.(result.sessionId);
         }
         return true;
       } catch (error) {
@@ -233,14 +324,18 @@ export function useSessionComposer(
           error instanceof RunTaskCommandError
             ? error.code
             : RUN_TASK_ERROR_INTERNAL;
-        setFeedback({ kind: 'error', message: runTaskErrorTextOf(code) });
-        return false;
+        return settleFailure(pendingId, snapshot, code);
       } finally {
         busyRef.current = false;
-        setBusy(false);
+        if (aliveRef.current) setBusy(false);
       }
     },
-    [connected, onSent, sessionId, submitWithText, clearPrompt]
+    [connected, sessionId, submitWithText, clearPrompt, send, settleFailure]
+  );
+
+  const submit = useCallback(
+    (): Promise<boolean> => submitWithText(prompt),
+    [submitWithText, prompt]
   );
 
   return {

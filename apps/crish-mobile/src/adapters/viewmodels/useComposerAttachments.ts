@@ -30,8 +30,10 @@ export interface ComposerAttachmentsApi {
   pickFromLibrary: () => void;
   pickFromFiles: () => void;
   remove: (id: string) => void;
-  /** 发送成功后清空（失败路径不得调用） */
+  /** 发送受理后清空（失败路径不得调用） */
   clear: () => void;
+  /** 失败恢复（R5）：受理快照整体还原已选区（替换语义，不追加去重） */
+  restore: (items: readonly ComposerAttachment[]) => void;
 }
 
 export function useComposerAttachments(
@@ -92,6 +94,10 @@ export function useComposerAttachments(
     setAttachments([]);
   }, []);
 
+  const restore = useCallback((items: readonly ComposerAttachment[]) => {
+    setAttachments([...items]);
+  }, []);
+
   return {
     attachments,
     picking,
@@ -100,5 +106,6 @@ export function useComposerAttachments(
     pickFromFiles,
     remove,
     clear,
+    restore,
   };
 }

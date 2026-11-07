@@ -13,7 +13,7 @@
 //    严格消费 @/adapters/platform/useReducedMotion 单源信号，开启减弱动态时
 //    安全回退为瞬时终态。
 import { memo, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -29,6 +29,8 @@ export interface UserMessageRowProps {
   text: string;
   /** 是否需要飞入进场动画（默认为 false） */
   animateEntry?: boolean;
+  /** 投递状态提示（R5 回显块携带）：pending = 发送中；failed = 未送达可重发 */
+  deliveryStatus?: 'pending' | 'failed';
   testID?: string;
 }
 
@@ -36,6 +38,7 @@ export const UserMessageRow = memo(function UserMessageRow({
   id,
   text,
   animateEntry = false,
+  deliveryStatus,
   testID,
 }: UserMessageRowProps) {
   const theme = useTheme();
@@ -99,6 +102,14 @@ export const UserMessageRow = memo(function UserMessageRow({
           baseStyle={[theme.type.chat, { color: theme.colors.bubbleUserText }]}
         />
       </Animated.View>
+      {deliveryStatus !== undefined ? (
+        <Text
+          style={[styles.deliveryHint, { color: theme.colors.textSecondary }]}
+          testID={`${rowTestID}-delivery`}
+        >
+          {deliveryStatus === 'failed' ? '未送达' : '发送中'}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -110,6 +121,10 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     maxWidth: '82%',
+  },
+  deliveryHint: {
+    marginTop: 4,
+    fontSize: 11,
   },
 });
 

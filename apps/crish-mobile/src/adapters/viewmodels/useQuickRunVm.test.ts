@@ -465,3 +465,113 @@ describe('useQuickRunVm 带附件提交（G5b）', () => {
     expect(result.current.busy).toBe(false);
   });
 });
+
+describe('useQuickRunVm R5：受理与 ACK 分离', () => {
+  it('延迟 Promise 下受理即清输入（早于回执），busy 置忙防双点', async () => {
+    connectionStore.getState().setPhase('ready');
+    let resolveRunner!: (v: RunTaskResult) => void;
+    const runTask = jest.fn(
+      () =>
+        new Promise<RunTaskResult>((resolve) => {
+          resolveRunner = resolve;
+        })
+    );
+    const ctx = { repository: { runTask } } as unknown as QuickRunContext;
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.setPrompt('等待中的任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    // 受理即清输入、sending pending、busy 置忙；仓库尚未回执
+    expect(result.current.prompt).toBe('');
+    expect(result.current.busy).toBe(true);
+    expect(result.current.feedback.kind).toBe('sending');
+
+    await act(async () => {
+      resolveRunner({ runId: 'r-real-7', sessionId: 's-7' });
+    });
+    expect(result.current.feedback).toMatchObject({
+      kind: 'success',
+      runId: 'r-real-7',
+    });
+    expect(result.current.busy).toBe(false);
+  });
+
+  it('reject 且输入未被新写：快照恢复进输入框（可重试）', async () => {
+    connectionStore.getState().setPhase('ready');
+    let rejectRunner!: (e: unknown) => void;
+    const runTask = jest.fn(
+      () =>
+        new Promise<RunTaskResult>((_resolve, reject) => {
+          rejectRunner = reject;
+        })
+    );
+    const ctx = { repository: { runTask } } as unknown as QuickRunContext;
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.setPrompt('要恢复的任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    await act(async () => {
+      rejectRunner(new Error('x'));
+    });
+    expect(result.current.prompt).toBe('要恢复的任务');
+    expect(result.current.feedback.kind).toBe('error');
+    expect(result.current.busy).toBe(false);
+  });
+
+  it('reject 且等待期间用户新写：新稿保留不被快照覆盖', async () => {
+    connectionStore.getState().setPhase('ready');
+    let rejectRunner!: (e: unknown) => void;
+    const runTask = jest.fn(
+      () =>
+        new Promise<RunTaskResult>((_resolve, reject) => {
+          rejectRunner = reject;
+        })
+    );
+    const ctx = { repository: { runTask } } as unknown as QuickRunContext;
+    const { result } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.setPrompt('旧任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    await act(async () => {
+      result.current.setPrompt('等待期间的新任务');
+    });
+    await act(async () => {
+      rejectRunner(new Error('x'));
+    });
+    expect(result.current.prompt).toBe('等待期间的新任务');
+    expect(result.current.feedback.kind).toBe('error');
+  });
+
+  it('卸载后迟到回执：不再触碰状态面（无崩溃）', async () => {
+    connectionStore.getState().setPhase('ready');
+    let resolveRunner!: (v: RunTaskResult) => void;
+    const runTask = jest.fn(
+      () =>
+        new Promise<RunTaskResult>((resolve) => {
+          resolveRunner = resolve;
+        })
+    );
+    const ctx = { repository: { runTask } } as unknown as QuickRunContext;
+    const { result, unmount } = await renderHook(() => useQuickRunVm(ctx));
+    await act(async () => {
+      result.current.setPrompt('卸载前的任务');
+    });
+    await act(async () => {
+      result.current.submit();
+    });
+    unmount();
+    await act(async () => {
+      resolveRunner({ runId: 'r-late', sessionId: 's-late' });
+    });
+    // 无崩溃即通过
+  });
+});

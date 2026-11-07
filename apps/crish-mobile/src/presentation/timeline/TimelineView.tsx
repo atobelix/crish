@@ -1081,7 +1081,13 @@ function MessageView({
 }) {
   const theme = useTheme();
   if (block.role === 'user') {
-    return <UserMessageRow id={block.id} text={block.text ?? ''} />;
+    return (
+      <UserMessageRow
+        id={block.id}
+        text={block.text ?? ''}
+        deliveryStatus={block.delivery}
+      />
+    );
   }
   const cleanText = (block.text ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   // 渲染层严格非空守门：收口后若无正文内容，绝不渲染幽灵空气泡
