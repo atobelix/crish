@@ -12,6 +12,7 @@
 //   收尾（删的正是当前打开的线程时回主页）。
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
+import { haptics } from '@/adapters/platform/haptics';
 import { useTheme } from '@/adapters/platform/theme';
 import {
   abortLocalThread,
@@ -62,6 +63,7 @@ export function useLocalThreadOpsController(
   onDeletedRef.current = options?.onThreadDeleted;
 
   const openActions = useCallback((thread: LocalThreadMeta) => {
+    haptics.selection();
     setSheetThread(thread);
     setSheetOpen(true);
   }, []);

@@ -5,7 +5,10 @@ import type { LocalThreadMeta } from '../types/localChat';
 import {
   buildDrawerRows,
   filterLocalThreads,
+  findDrawerLocalThread,
+  findDrawerRemoteSession,
   type DrawerLocalThreadInput,
+  type DrawerRow,
 } from './drawerRows';
 
 // 本地时间 2026-10-29 15:00（与 sessionList.test 同基准，避免时区影响）
@@ -205,5 +208,38 @@ describe('buildDrawerRows 本地分区', () => {
     expect(ids(result.today)).toEqual(['local-lth-1']);
     // 计数仍是未过滤事实
     expect(result.localTotal).toBe(3);
+  });
+});
+
+describe('抽屉长按查找', () => {
+  it('刷新后读到新行，另一种类和缺失身份不打开', () => {
+    const first = session({ id: 's-1', title: '旧' });
+    const next = session({ id: 's-1', title: '新' });
+    const local = thread({ id: 'lth-1' });
+    const rows: DrawerRow[] = [
+      {
+        kind: 'remote',
+        id: 's-1',
+        updatedAt: NOW,
+        session: first,
+      },
+      {
+        kind: 'local',
+        id: 'lth-1',
+        updatedAt: NOW,
+        thread: local,
+        streaming: false,
+        failed: false,
+      },
+    ];
+    expect(findDrawerRemoteSession(rows, 's-1')).toBe(first);
+    expect(findDrawerRemoteSession(rows, 'lth-1')).toBeNull();
+    expect(findDrawerLocalThread(rows, 'lth-1')).toBe(local);
+    expect(findDrawerLocalThread(rows, 's-1')).toBeNull();
+    const refreshed: DrawerRow[] = [
+      { kind: 'remote', id: 's-1', updatedAt: NOW, session: next },
+    ];
+    expect(findDrawerRemoteSession(refreshed, 's-1')).toBe(next);
+    expect(findDrawerRemoteSession(refreshed, 's-1')).not.toBe(first);
   });
 });

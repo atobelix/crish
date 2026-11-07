@@ -27,7 +27,11 @@ import { useSessionListVm } from '@/adapters/viewmodels/useSessionListVm';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { useApprovalStore } from '@/adapters/hooks/useAppStore';
 import { countUserDecisions } from '@/domain/pure/approvalAttention';
-import type { DrawerRow } from '@/domain/pure/drawerRows';
+import {
+  findDrawerLocalThread,
+  findDrawerRemoteSession,
+  type DrawerRow,
+} from '@/domain/pure/drawerRows';
 import {
   AppText,
   EmptyState,
@@ -152,19 +156,18 @@ export const CrishDrawerContent = memo(function CrishDrawerContent({
   const vm = useSessionListVm(mountNowMs);
   // 会话操作（G3）：远端行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）。
   // 回调稳定化（C-PERF）：行组件已 memo，回调逐渲染换新引用会把 memo
-  // 击穿——本区全部行回调 useCallback 化，依赖只取行数组与控制器内
-  // 稳定的 openActions 本体（不依赖控制器对象整体）。
+  // 击穿。openActions 本体稳定；行数据写入 ref，查找不进入依赖，
+  // 列表刷新不再换新的长按入口。
   const sessionOps = useSessionOpsController();
   const sessionOpenActions = sessionOps.openActions;
+  const sessionRowsRef = useRef<readonly DrawerRow[]>([]);
+  sessionRowsRef.current = [...vm.today, ...vm.earlier];
   const openSessionActions = useCallback(
     (sessionId: string) => {
-      const target = [...vm.today, ...vm.earlier].find(
-        (row): row is Extract<DrawerRow, { kind: 'remote' }> =>
-          row.kind === 'remote' && row.id === sessionId
-      );
-      if (target) sessionOpenActions(target.session);
+      const session = findDrawerRemoteSession(sessionRowsRef.current, sessionId);
+      if (session) sessionOpenActions(session);
     },
-    [vm.today, vm.earlier, sessionOpenActions]
+    [sessionOpenActions]
   );
   // 本地线程操作：本地分区行长按 → 操作 Sheet（重命名/清空/删除，
   // 作用于本地真源，不经桌面命令通道）
@@ -183,13 +186,10 @@ export const CrishDrawerContent = memo(function CrishDrawerContent({
   const localOpenActions = localOps.openActions;
   const openLocalThreadActions = useCallback(
     (threadId: string) => {
-      const target = [...vm.today, ...vm.earlier].find(
-        (row): row is Extract<DrawerRow, { kind: 'local' }> =>
-          row.kind === 'local' && row.id === threadId
-      );
-      if (target) localOpenActions(target.thread);
+      const thread = findDrawerLocalThread(sessionRowsRef.current, threadId);
+      if (thread) localOpenActions(thread);
     },
-    [vm.today, vm.earlier, localOpenActions]
+    [localOpenActions]
   );
 
   // 搜索态：0 = 常态（扫一扫/通知展开），1 = 搜索（叉号展开、动作钮收拢）

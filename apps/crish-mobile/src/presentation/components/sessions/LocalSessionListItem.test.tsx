@@ -1,6 +1,8 @@
 // 本地线程行（抽屉本地分区）：标题在位、行上无「本地」标识（分区
 // 口径：身份由会话区标题表达）；生成中呼吸点在位、未生成时无；
 // 点按/长按回传 threadId。
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { LocalThreadMeta } from '@/domain/types/localChat';
@@ -82,9 +84,20 @@ describe('LocalSessionListItem', () => {
         onLongPress={onLongPress}
       />
     );
-    await fireEvent.press(view.getByTestId('local-row-lth-1'));
+    const row = view.getByTestId('local-row-lth-1');
+    const source = readFileSync(
+      join(__dirname, 'LocalSessionListItem.tsx'),
+      'utf8'
+    );
+    expect(source).toContain('delayLongPress={rowActions.delayLongPress}');
+    await fireEvent.press(row);
     expect(onPress).toHaveBeenCalledWith('lth-1');
-    await fireEvent(view.getByTestId('local-row-lth-1'), 'longPress');
+    expect(onLongPress).not.toHaveBeenCalled();
+    await fireEvent(row, 'pressIn');
+    await fireEvent(row, 'pressOut');
+    expect(onLongPress).not.toHaveBeenCalled();
+    await fireEvent(row, 'longPress');
+    expect(onLongPress).toHaveBeenCalledTimes(1);
     expect(onLongPress).toHaveBeenCalledWith('lth-1');
   });
 
