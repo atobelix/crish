@@ -7,6 +7,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import {
   Button,
   ConfirmDialog,
+  ContentState,
   SegmentedControl,
   Tooltip,
 } from '@/components/ui';
@@ -162,27 +163,14 @@ export const SettingsUsageTab: React.FC<Props> = () => {
   return (
     <SettingsPage title={t('settings.usage.title', '用量')} meta={headerMeta}>
       {loading && !dashboardData ? (
-        /* 骨架按新分区结构：四段「标题 + 卡面」占位，与加载后版式同构 */
-        <div className={styles.skeletonContainer} aria-hidden="true">
-          <div className={styles.skeletonGroup}>
-            <div className={styles.skeletonTitle} />
-            <div
-              className={`${styles.skeletonCard} ${styles.skeletonOverview}`}
-            />
-          </div>
-          <div className={styles.skeletonGroup}>
-            <div className={styles.skeletonTitle} />
-            <div className={`${styles.skeletonCard} ${styles.skeletonChart}`} />
-          </div>
-          <div className={styles.skeletonGroup}>
-            <div className={styles.skeletonTitle} />
-            <div className={`${styles.skeletonCard} ${styles.skeletonBlock}`} />
-          </div>
-          <div className={styles.skeletonGroup}>
-            <div className={styles.skeletonTitle} />
-            <div className={`${styles.skeletonCard} ${styles.skeletonBlock}`} />
-          </div>
-        </div>
+        /* 整面骨架已退役（N10 方案 A）：首载走正典 ContentState 加载指示
+           （内含 Spinner delayed 防闪门）；代价是首载内容「长出」时的
+           布局位移大于原位替换，见施工报告。 */
+        <ContentState
+          kind="loading"
+          title={t('settings.usage.loading', '正在加载用量数据')}
+          testId="settings-usage-loading"
+        />
       ) : (
         dashboardData && (
           <>

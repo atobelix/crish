@@ -5,7 +5,8 @@ import { openSettings } from '../store/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import type { SettingsTabType } from '../store/types';
 import type { WizardStep } from '../components/firstRunWizardLib';
-import { useAnimatedPresence } from '@/components/ui';
+import { ContentState, useAnimatedPresence } from '@/components/ui';
+import { useI18n } from '../i18n';
 
 /** 设置弹窗退场时长：与 Dialog 基座退场（--duration-exit 150ms）一致，动画播完才卸载 */
 const SETTINGS_EXIT_MS = 150;
@@ -30,6 +31,12 @@ const SettingsPanel = lazy(() =>
     })
 );
 
+/**
+ * 懒加载兜底（N10 方案 A）：原实现挂 `skel-shimmer` 类名，但全仓无任何
+ * CSS 定义——分片未到时渲染的是透明空盒（设置面板/首运向导/侧栏/工作区
+ * 四处消费点同病）。现改走正典 ContentState 加载指示（内含 Spinner
+ * delayed 防闪门），签名与调用点不动。
+ */
 export function SkeletonFallback({
   height,
   width,
@@ -37,16 +44,19 @@ export function SkeletonFallback({
   height?: number | string;
   width?: number | string;
 }) {
+  const { t } = useI18n();
   return (
     <div
-      className="skel-shimmer"
       style={{
         height: height || '100%',
         width: width || '100%',
-        borderRadius: 'var(--radius-m)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
-      aria-hidden="true"
-    />
+    >
+      <ContentState kind="loading" title={t('common.loading', '正在加载')} />
+    </div>
   );
 }
 
@@ -73,6 +83,7 @@ export function AppGlobalDialogs({
   activeWorkspaceId,
   settingsActiveTab,
 }: AppGlobalDialogsProps) {
+  const { t } = useI18n();
   // 设置弹窗挂载跟随动画状态而非开关本身：关闭时先以 isOpen=false 驱动 Dialog 退场，
   // 退场结束后再卸载（条件渲染直接卸载会让退场动画来不及播，只能硬切）
   const { isMounted: settingsMounted } = useAnimatedPresence({
@@ -131,21 +142,12 @@ export function AppGlobalDialogs({
         >
           <Suspense
             fallback={
-              <div
-                className="settings-suspense-fallback"
-                aria-busy="true"
-                aria-label="正在加载设置"
-                role="status"
-              >
-                <div
-                  className="settings-suspense-skel settings-suspense-skel--nav"
-                  aria-hidden="true"
-                />
-                <div
-                  className="settings-suspense-skel settings-suspense-skel--main"
-                  aria-hidden="true"
-                />
-              </div>
+              /* 与 SkeletonFallback 同病同治：原两处 settings-suspense-skel
+                 占位块同样全仓无 CSS 定义，渲染为空白；改走正典指示。 */
+              <ContentState
+                kind="loading"
+                title={t('settings.loading', '正在加载设置')}
+              />
             }
           >
             <SettingsPanel

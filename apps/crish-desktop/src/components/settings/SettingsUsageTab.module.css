@@ -1,6 +1,8 @@
 /* SettingsUsageTab.module.css - 用量页主布局（R3 一期分离）
    原 .usageDashboardCard（边框+阴影巨卡）已退役：内容拆为四张标准分组卡
-   （SettingsSection + SettingsCard），本文件只剩页头工具、页尾操作行与骨架。 */
+   （SettingsSection + SettingsCard），本文件只剩页头工具与页尾操作行。
+   整面骨架已退役（N10 方案 A）：首载走正典 ContentState 加载指示，
+   本文件不再含任何骨架类。 */
 
 .headerTools {
   display: flex;
@@ -15,52 +17,3 @@
   justify-content: space-between;
   padding: 0 var(--space-0_5);
 }
-
-/* 骨架屏：按新分区结构排布（标题条 + 卡面块 × 4），与加载后版式同构 */
-.skeletonContainer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.skeletonGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.skeletonTitle {
-  width: 48px;
-  height: var(--space-3_5);
-  background: var(--bg-subtle);
-  border-radius: var(--radius-sm);
-  composes: crish-anim-skeleton-pulse from global;
-}
-
-.skeletonCard {
-  background: var(--bg-subtle);
-  border-radius: var(--radius-xl);
-  composes: crish-anim-skeleton-pulse from global;
-}
-
-.skeletonOverview {
-  height: 118px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
-}
-
-.skeletonChart {
-  height: 264px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
-}
-
-.skeletonBlock {
-  height: 190px; /* 刻度外裸值：骨架占位须与真实分区等高，无既有档，授权保留 */
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeletonTitle,
-  .skeletonCard {
-    animation: none;
-  }
-}
-
-/* 骨架脉冲 keyframes 已归队共享定义 crish-skeleton-pulse
-   （styles/design-system.css 落位），本文件不再自带 keyframes。 */

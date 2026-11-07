@@ -32,7 +32,6 @@
     --transition-accordion: 0ms !important;
     --transition-chevron: 0ms !important;
     --transition-press: 0ms !important;
-    --transition-skeleton: 0ms !important;
     --transition-spin: 0ms !important;
     --transition-pulse: 0ms !important;
     --duration-micro: 0ms !important;
@@ -72,7 +71,6 @@
   --transition-accordion: 0ms !important;
   --transition-chevron: 0ms !important;
   --transition-press: 0ms !important;
-  --transition-skeleton: 0ms !important;
   --transition-spin: 0ms !important;
   --transition-pulse: 0ms !important;
   --duration-micro: 0ms !important;

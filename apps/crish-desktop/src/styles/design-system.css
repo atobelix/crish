@@ -135,23 +135,6 @@
   }
 }
 
-/* 骨架占位共享配方（批 A 归队）：crish-skeleton-pulse 是「骨架块 opacity
- * 脉冲」（0.5 ↔ 0.85），供无渐变载体的骨架占位表达加载中状态；周期由
- * 消费方经 var(--transition-skeleton) 驱动。首个消费方为设置域用量页
- * 骨架（原 SettingsUsageTab 本地 @keyframes shimmer 已删除并归队至此）。
- * 与扫光族分工：渐变扫光走 crish-shine-sweep；ChatMessageRow 本地的
- * skeleton-shimmer 是扫光族的模块私有变体（方向相反、已 token 驱动），
- * 登记确认保留，不并入本配方。 */
-@keyframes crish-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.85;
-  }
-}
-
 /* AN4 共享入场（工具行 / 分派卡 / 工具组头消费）：与消息行入场
  * messageRowFadeSlideIn 同体（opacity .6→1 + translateY 4px→0），
  * 落共享层供跨模块按名引用。消息行模块内的同名 keyframes 为其
@@ -245,10 +228,6 @@
   animation: crish-pulse-dot var(--transition-pulse) infinite;
 }
 
-.crish-anim-skeleton-pulse {
-  animation: crish-skeleton-pulse var(--transition-skeleton) infinite;
-}
-
 .crish-anim-shine-sweep {
   animation: crish-shine-sweep var(--transition-pulse) infinite;
 }
@@ -285,7 +264,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .crish-anim-pulse-dot,
-  .crish-anim-skeleton-pulse,
   .crish-anim-shine-sweep,
   .crish-anim-text-breathe,
   .crish-anim-fade-in,

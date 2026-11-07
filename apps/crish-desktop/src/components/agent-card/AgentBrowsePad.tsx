@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import styles from './AgentCard.module.css';
-import { Button, Tooltip } from '@/components/ui';
+import { Button, ContentState, Tooltip } from '@/components/ui';
 
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { useI18n } from '../../i18n';
@@ -44,6 +44,12 @@ export function AgentBrowsePad({
   const parentId = parentSessionId || activeSessionId;
   const parent = parentId ? sessionsById[parentId] : undefined;
   const agents = useMemo(() => parent?.agents || [], [parent]);
+  // 加载 / 空态拆分（N10 施工前置）：agents.length === 0 原先混同两态——
+  // 会话记录未入 store，或 agents 字段尚未由激活水合填入（激活后恒为数组，
+  // 见 sessionActivateHydrate），才是「加载中」；字段已到且为空数组才是
+  // 「真空」。parentId 本身为空（无活动会话）时不是加载，是空态。
+  const agentsLoading =
+    parentId != null && (parent === undefined || parent.agents === undefined);
   const sorted = useMemo(() => sortAgentsForBrowse(agents), [agents]);
   const runningCount = useMemo(
     () => agents.filter((a) => a.status === 'running').length,
@@ -135,34 +141,21 @@ export function AgentBrowsePad({
       </header>
 
       <div className={styles.agentLaunchBody}>
-        {agents.length === 0 ? (
-          <div
-            className={styles.skeletonContainer}
-            role="status"
-            aria-live="polite"
-          >
-            <div className={styles.skeletonTitleRow}>
-              <AppIcon
-                name="bot"
-                size={13}
-                className={styles.skeletonBotIcon}
-                aria-hidden
-              />
-              <span>暂无活跃协作</span>
-            </div>
-            <div className={styles.skeletonGrid}>
-              {[1, 2, 3].map((i) => (
-                <div key={i} className={styles.skeletonCard}>
-                  <div className={styles.skeletonCardHeader}>
-                    <div className={styles.skeletonDot} />
-                    <div className={styles.skeletonLineShort} />
-                  </div>
-                  <div className={styles.skeletonLineLong} />
-                  <div className={styles.skeletonLineMedium} />
-                </div>
-              ))}
-            </div>
-          </div>
+        {agentsLoading ? (
+          /* 整面骨架已退役（N10 方案 A）：加载中走正典 ContentState
+             加载指示（内含 Spinner delayed 防闪门）。 */
+          <ContentState
+            kind="loading"
+            title={t('chat.agentBrowse.loading', '正在加载协作列表')}
+            testId="agent-browse-loading"
+          />
+        ) : agents.length === 0 ? (
+          /* 真空态：诚实空态，文案沿用原骨架标题行「暂无活跃协作」。 */
+          <ContentState
+            kind="empty"
+            title={t('chat.agentBrowse.noActiveAgents', '暂无活跃协作')}
+            testId="agent-browse-empty"
+          />
         ) : (
           <div
             className={styles.agentLaunchList}

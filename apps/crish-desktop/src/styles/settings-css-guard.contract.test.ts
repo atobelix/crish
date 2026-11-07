@@ -55,6 +55,7 @@ const GUARDED_FILES = [
   'components/settings/SettingsSecurityTab.module.css',
   'components/settings/SettingsShortcutsTab.module.css',
   'components/settings/SettingsUI.module.css',
+  'components/settings/SettingsUsageTab.module.css',
   'components/settings/StatusDiagnosticsPanel.module.css',
   'components/settings/WorkflowEditModal.module.css',
   'components/settings/usage/UsageSummaryHero.module.css',
@@ -74,6 +75,8 @@ const GUARDED_FILES = [
  * 入档（--expand-max-h-viewport-sm）清零，移入 GUARDED_FILES；
  * ModelsSettingsTab 下拉 210 入档（8 → 7）；SkillEditorModal 候选 220
  * 入档（6 → 5）。
+ * 烧减记录（2026-11-06，N10 整面骨架退役）：SettingsUsageTab 三处骨架
+ * 占位高度（118/264/190px）随骨架整段删除清零，移入 GUARDED_FILES。
  */
 const DEBT_FILES: Record<string, number> = {
   'components/account/account.module.css': 1,
@@ -90,7 +93,6 @@ const DEBT_FILES: Record<string, number> = {
   'components/settings/ScheduledTasksPanel.module.css': 2,
   'components/settings/SettingsAboutTab.module.css': 1,
   'components/settings/SettingsRulesTab.module.css': 2,
-  'components/settings/SettingsUsageTab.module.css': 3,
   'components/settings/usage/ActivityMatrixHeatmap.module.css': 1,
   'components/settings/usage/ModelDistributionSection.module.css': 2,
   'components/settings/usage/UsageTrendChart.module.css': 3,

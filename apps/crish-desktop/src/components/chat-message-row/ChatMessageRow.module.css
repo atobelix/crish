@@ -652,28 +652,6 @@ button.iconBtn,
   }
 }
 
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-.skeletonLine {
-  height: var(--font-size-base);
-  border-radius: var(--radius-xs);
-  background: linear-gradient(
-    90deg,
-    var(--bg-secondary) 25%,
-    var(--state-hover) 37%,
-    var(--bg-secondary) 63%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer var(--transition-skeleton) infinite;
-  margin-bottom: var(--space-1_5);
-}
-
 /* ─── 固定颜色选择器悬浮浮层 ─── */
 .pinPickerWrapper {
   position: relative;

@@ -63,7 +63,6 @@ html[data-theme='light'] {
   --transition-landing-fade: var(--duration-landing-fade) var(--ease-emphasized);
   --transition-chevron: 150ms var(--ease-decelerate);
   --transition-press: 80ms ease-out;
-  --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: var(--duration-spin) linear;
   --transition-pulse: var(--duration-pulse) ease-in-out;
 
