@@ -398,7 +398,11 @@ export function useTimelineAutoScroll<ItemT = unknown>({
     if (isProgrammaticScrollingRef.current) {
       return;
     }
-    if (busyRef.current) {
+    // 落位口径与 handleContentSizeChange / scrollToTrueBottom 同一真源：
+    // 测试环境与减弱动效一律一次离散落位，流式追赶只在动效开启时介入。
+    // 旧实现在此无条件走追赶，减动效下浮层变高/变矮都会滑行到位（D-M4/D-M5）。
+    const isTestEnv = process.env.NODE_ENV === 'test' && !forceSmoothScroll;
+    if (busyRef.current && !isTestEnv && !reducedMotion) {
       ensureUiChase(true);
       return;
     }
@@ -413,6 +417,8 @@ export function useTimelineAutoScroll<ItemT = unknown>({
     ensureUiChase,
     snapToBottom,
     targetY,
+    forceSmoothScroll,
+    reducedMotion,
   ]);
 
   useEffect(() => {
