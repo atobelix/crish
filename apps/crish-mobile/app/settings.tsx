@@ -25,6 +25,8 @@ export default function SettingsScreen() {
       onOpenWebSearch={() => router.push('/settings-web-search')}
       onOpenScan={() => router.push('/pair/scan')}
       onOpenLocalProviders={() => router.push('/settings-local-providers')}
+      onOpenDefaultModel={() => router.push('/settings-local-default-model')}
+      onOpenOnDeviceModels={() => router.push('/settings-local-ondevice')}
       onConfirmRemove={onConfirmRemove}
     />
   );

@@ -25,6 +25,7 @@ import { FONT_SCALE_LABELS } from './SettingsFontView';
 import { HAPTICS_STRENGTH_LABELS } from './SettingsHapticsView';
 import { useAccountStore } from '@/adapters/hooks/useAccountStore';
 import { useLocalChatStore } from '@/adapters/hooks/useAppStore';
+import { ON_DEVICE_PROVIDER_ID } from '@/adapters/onDevice/onDeviceProviderSync';
 import { resolveActiveSelection } from '@/domain/pure/localChatProtocol';
 import { logoutAccount } from '@/adapters/account/accountService';
 import { AccountAvatar } from '@/presentation/account/ui';
@@ -48,6 +49,10 @@ export interface SettingsScreenViewProps {
    * hub 与抽屉，不在设置组里）；供应商/密钥等管理面仍归设置。
    */
   onOpenLocalProviders?: () => void;
+  /** 默认模型页入口（L3：默认模型的显式选择面，失效原因在页内明示） */
+  onOpenDefaultModel?: () => void;
+  /** 本机模型页入口（L3：与「默认模型」同组呈现端侧模型管理面） */
+  onOpenOnDeviceModels?: () => void;
   /** 语音输入子页入口（端侧 ASR 状态与模型管理，归设置） */
   onOpenVoice?: () => void;
   /** 震动反馈子页入口（开关 + 强度，2026-11-03 裁决：震感归设置控制） */
@@ -84,6 +89,8 @@ export default function SettingsScreenView({
   onOpenScan: _onOpenScan,
   onConfirmRemove,
   onOpenLocalProviders,
+  onOpenDefaultModel,
+  onOpenOnDeviceModels,
   onOpenVoice,
   onOpenHaptics,
   onOpenWebSearch,
@@ -118,6 +125,19 @@ export default function SettingsScreenView({
       : Object.keys(localConfig.providers).length > 0
         ? '未选当前供应商'
         : '未配置';
+  // 默认模型行摘要（L3）：有效选择报模型名；失效与未设置都写「未设置」
+  // （失效原因在默认模型页内明示，设置行不替它下结论）
+  const defaultModelSummary =
+    localSelection !== null
+      ? (localSelection.model.displayName ?? localSelection.modelId)
+      : '未设置';
+  // 本机模型行摘要（L3）：条目 models[] 只含已就绪模型（同步纪律），
+  // 计数即已就绪数；条目不存在或为空 = 还没有就绪模型
+  const onDeviceEntry = localConfig.providers[ON_DEVICE_PROVIDER_ID];
+  const onDeviceSummary =
+    onDeviceEntry && onDeviceEntry.models.length > 0
+      ? `${onDeviceEntry.models.length} 个已就绪`
+      : '未下载';
   // 语音行摘要：模型就绪态（方案 21：文件 I/O 延后至 InteractionManager 释放后执行，不抢占转场帧）
   const [voiceSummary, setVoiceSummary] = useState('');
   useEffect(() => {
@@ -305,22 +325,55 @@ export default function SettingsScreenView({
           ) : null}
         </SettingsGroup>
 
-        {onOpenLocalProviders ? (
+        {onOpenLocalProviders || onOpenDefaultModel || onOpenOnDeviceModels ? (
           <SettingsGroup label="本地助手">
-            {/* CON-2 摘行：「本地对话」入口已移除（对话归主页 hub/抽屉）；
-                本组只留供应商配置，当前选择摘要随行呈现 */}
-            <ListRow
-              title="供应商配置"
-              leading={<RowIcon name="settings" />}
-              trailing={
-                <AppText variant="footnote" color="textTertiary">
-                  {localSummary}
-                </AppText>
-              }
-              showChevron
-              onPress={onOpenLocalProviders}
-              divider={Boolean(onOpenWebSearch)}
-            />
+            {/* CON-2 摘行：「本地对话」入口已移除（对话归主页 hub/抽屉）。
+                L3 增行：默认模型（显式选择面）与本机模型（端侧管理面），
+                各行摘要随真源呈现——默认报模型名/未设置，本机报已就绪数 */}
+            {onOpenLocalProviders ? (
+              <ListRow
+                title="供应商配置"
+                leading={<RowIcon name="settings" />}
+                trailing={
+                  <AppText variant="footnote" color="textTertiary">
+                    {localSummary}
+                  </AppText>
+                }
+                showChevron
+                onPress={onOpenLocalProviders}
+                divider={Boolean(
+                  onOpenDefaultModel || onOpenOnDeviceModels || onOpenWebSearch
+                )}
+              />
+            ) : null}
+            {onOpenDefaultModel ? (
+              <ListRow
+                title="默认模型"
+                leading={<RowIcon name="check" />}
+                trailing={
+                  <AppText variant="footnote" color="textTertiary">
+                    {defaultModelSummary}
+                  </AppText>
+                }
+                showChevron
+                onPress={onOpenDefaultModel}
+                divider={Boolean(onOpenOnDeviceModels)}
+              />
+            ) : null}
+            {onOpenOnDeviceModels ? (
+              <ListRow
+                title="本机模型"
+                leading={<RowIcon name="smartphone" />}
+                trailing={
+                  <AppText variant="footnote" color="textTertiary">
+                    {onDeviceSummary}
+                  </AppText>
+                }
+                showChevron
+                onPress={onOpenOnDeviceModels}
+                divider={false}
+              />
+            ) : null}
           </SettingsGroup>
         ) : null}
 
