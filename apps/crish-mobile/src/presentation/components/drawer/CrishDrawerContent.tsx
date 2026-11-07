@@ -118,6 +118,10 @@ export const CrishDrawerContent = memo(function CrishDrawerContent({
   // 优先级：显式 prop 优先，回退到 context 控制器状态
   const isOpen = propIsOpen ?? controller.isOpen;
 
+  // R10 抽屉活跃态（关闭时暂停 VM 不可见派生订阅/计算）：与下方静默门
+  // 同一边界——打开或 opening 期间活跃，closing/idle 冻结。
+  const drawerActive = isOpen || controller.phase === 'opening';
+
   // 【流畅度方案 20/21·核心优化】：抽屉闭合静默门与状态机
   // 只要处于 closing 或 idle 态，彻底切断外部路由变动、数据更新对抽屉内部的重算响应；
   // 阻断会话切换与返回转场动画期间隐式触发的 buildDrawerRows 批量对象分配与 20+ 会话行组件重排重绘；
@@ -153,7 +157,7 @@ export const CrishDrawerContent = memo(function CrishDrawerContent({
 
   // 静态时钟基准：挂载时初始化一次，避免每次 isOpen 状态翻转触发 render 阶段二次重绘
   const [mountNowMs] = useState(() => Date.now());
-  const vm = useSessionListVm(mountNowMs);
+  const vm = useSessionListVm(mountNowMs, { active: drawerActive });
   // 会话操作（G3）：远端行长按 → 操作 Sheet（改名/置顶/归档/导出/删除）。
   // 回调稳定化（C-PERF）：行组件已 memo，回调逐渲染换新引用会把 memo
   // 击穿。openActions 本体稳定；行数据写入 ref，查找不进入依赖，

@@ -131,3 +131,69 @@ it('分区互斥：本地分区只列本地线程，远端当值后只列远端�
   expect(currentVm().today[0]?.kind).toBe('remote');
   expect(currentVm().hasSessions).toBe(true);
 });
+
+// ── R10 关闭态冻结订阅 ────────────────────────────────────────────────────
+describe('R10 关闭态冻结订阅（useSessionListVm active）', () => {
+  function ActiveProbe(props: { active: boolean }): React.ReactElement | null {
+    latest = useSessionListVm(NOW, { active: props.active });
+    return null;
+  }
+
+  beforeEach(() => {
+    latest = null;
+    sessionStore.setState({ sessions: [], selectedSessionId: null });
+    connectionStore.setState({ phase: 'disconnected', lastError: null });
+    accountStore.getState().reset();
+    localChatSessionStore.setState({
+      threads: [],
+      activeThreadId: null,
+      streaming: false,
+      inactive: {},
+      hydrated: true,
+    });
+  });
+
+  it('关闭期间本地会话面高频变更不重算（快照冻结）；重开首帧即最新', async () => {
+    localChatSessionStore.setState({
+      threads: [thread()],
+      activeThreadId: null,
+      streaming: false,
+      inactive: {},
+      hydrated: true,
+    });
+    const view = await render(<ActiveProbe active={false} />);
+    // 关闭态首帧：冻结快照照常呈现既有数据
+    expect(currentVm().today.map((r) => r.id)).toEqual(['lth-1']);
+
+    // 关闭期间流式高频变更（新线程 + 生成态），VM 不追新
+    await act(async () => {
+      localChatSessionStore.setState((s) => ({
+        threads: [...s.threads, thread({ id: 'lth-2', title: '关闭中新增' })],
+        streaming: true,
+      }));
+    });
+    expect(currentVm().today.map((r) => r.id)).toEqual(['lth-1']);
+
+    // 重开：回到实时读取，首帧即最新（订阅始终在线，无需补挂）
+    await act(async () => {
+      view.rerender(<ActiveProbe active={true} />);
+    });
+    expect(currentVm().today.map((r) => r.id)).toEqual(['lth-1', 'lth-2']);
+  });
+
+  it('活跃期间订阅实时（默认 active=true 行为不变）', async () => {
+    const view = await render(<ActiveProbe active={true} />);
+    expect(currentVm().today).toEqual([]);
+    await act(async () => {
+      localChatSessionStore.setState({
+        threads: [thread()],
+        activeThreadId: null,
+        streaming: false,
+        inactive: {},
+        hydrated: true,
+      });
+    });
+    expect(currentVm().today.map((r) => r.id)).toEqual(['lth-1']);
+    await view.unmount();
+  });
+});

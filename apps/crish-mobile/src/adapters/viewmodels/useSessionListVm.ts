@@ -11,9 +11,10 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
-import { useStore } from 'zustand';
+import { useStore, type StoreApi } from 'zustand';
 import type { SessionSyncStatus } from '@/domain/store/connectionStore';
 import { useSessionsVm } from '@/adapters/viewmodels/useSessionsVm';
 import { useDeviceStatusVm } from '@/adapters/viewmodels/useDeviceStatusVm';
@@ -59,7 +60,67 @@ export interface SessionListVm {
   localHydrated: boolean;
 }
 
-export function useSessionListVm(nowMs: number): SessionListVm {
+export interface SessionListVmOptions {
+  /**
+   * R10 抽屉活跃态：false = 关闭态冻结本地会话面订阅（选择器返回冻结
+   * 快照引用，zustand 判等即不重渲、rows 不重算——不可见工作暂停）；
+   * 重开即回到实时读取（订阅始终在线，重开首帧即最新，无需补挂）。
+   * 缺省 true（挂载即活跃，兼容直接消费方与既有测试）。
+   */
+  active?: boolean;
+}
+
+// 本地会话面选择器（模块级常量：引用稳定是冻结机制的前提）
+type LocalChatSessionState = ReturnType<typeof localChatSessionStore.getState>;
+const selectThreads = (s: LocalChatSessionState) => s.threads;
+const selectActiveThreadId = (s: LocalChatSessionState) => s.activeThreadId;
+const selectStreaming = (s: LocalChatSessionState) => s.streaming;
+const selectError = (s: LocalChatSessionState) => s.error;
+const selectInactive = (s: LocalChatSessionState) => s.inactive;
+const selectHydrated = (s: LocalChatSessionState) => s.hydrated;
+
+/**
+ * R10 冻结订阅读取：非活跃期间选择器返回首次快照（引用稳定 → store
+ * 后续变更不再触发重渲/重算）；活跃期间实时读取。订阅始终挂载，
+ * 恢复活跃的第一帧即拿到最新真源（不复制第二套 store）。
+ */
+function useFrozenStore<TState, TSelected>(
+  store: StoreApi<TState>,
+  selector: (state: TState) => TSelected,
+  active: boolean
+): TSelected {
+  const frozenRef = useRef<{
+    has: boolean;
+    value: TSelected;
+  } | null>(null);
+  const wasActiveRef = useRef(active);
+  if (active && !wasActiveRef.current) {
+    // 重开：清冻结缓存，回到实时读取
+    frozenRef.current = null;
+  }
+  wasActiveRef.current = active;
+  return useStore(
+    store,
+    useCallback(
+      (state: TState) => {
+        if (!active) {
+          if (frozenRef.current === null) {
+            frozenRef.current = { has: true, value: selector(state) };
+          }
+          return frozenRef.current.value;
+        }
+        return selector(state);
+      },
+      [active, selector]
+    )
+  );
+}
+
+export function useSessionListVm(
+  nowMs: number,
+  options?: SessionListVmOptions
+): SessionListVm {
+  const active = options?.active ?? true;
   const { sessions, connected, refresh, syncStatus, lastReconcileAt } =
     useSessionsVm();
   // 分区判定与主页设备胶囊同源（useDeviceStatusVm 的设备身份派生）：
@@ -73,16 +134,26 @@ export function useSessionListVm(nowMs: number): SessionListVm {
 
   // 本地线程面：逐线程生成态与 useLocalHubEntryVm 同一派生口径——活动
   // 线程看顶层投影，非活动线程看 inactive 运行时（抽屉与主页同源，
-  // 不复制第二套本地数据面）
-  const threads = useStore(localChatSessionStore, (s) => s.threads);
-  const activeThreadId = useStore(
+  // 不复制第二套本地数据面）。
+  // R10：关闭态冻结（快照引用稳定，流式高频变更不再驱动不可见重算）。
+  const threads = useFrozenStore(localChatSessionStore, selectThreads, active);
+  const activeThreadId = useFrozenStore(
     localChatSessionStore,
-    (s) => s.activeThreadId
+    selectActiveThreadId,
+    active
   );
-  const activeStreaming = useStore(localChatSessionStore, (s) => s.streaming);
-  const activeError = useStore(localChatSessionStore, (s) => s.error);
-  const inactive = useStore(localChatSessionStore, (s) => s.inactive);
-  const localHydrated = useStore(localChatSessionStore, (s) => s.hydrated);
+  const activeStreaming = useFrozenStore(
+    localChatSessionStore,
+    selectStreaming,
+    active
+  );
+  const activeError = useFrozenStore(localChatSessionStore, selectError, active);
+  const inactive = useFrozenStore(localChatSessionStore, selectInactive, active);
+  const localHydrated = useFrozenStore(
+    localChatSessionStore,
+    selectHydrated,
+    active
+  );
 
   // 与主页同款补水合兜底（dbBootstrap 启动期已水合，此处防未及）
   useEffect(() => {
