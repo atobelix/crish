@@ -29,6 +29,9 @@
  * - ref 转发（G² 第一波丙接入）：根节点 ref 向外转发，组件可直接充当
  *   Radix asChild / Base UI render 的弹层元素（SEP 主面板、Menu/Popover
  *   弹窗、.leafBody 的量测 ref 均挂在此根节点上）；内部量测仍用 hostRef。
+ * - 轮廓方案（双方案体系）：生成时经真源选择点 getCornerScheme() 现读
+ *   （与 DPR 同口径，每次渲染现读）；默认 'g2' 时产物与既往逐字一致，
+ *   切到 'concentric' 时填充/描边/clip/拉伸四路同换同心圆弧轮廓。
  *
  * 回滚口径（§2.5）：宿主原 border-radius 声明不由本组件删除；本组件根节点
  * 以同名义半径的普通圆弧作兜底（borderRadius 样式），摘掉 SVG 层即回到
@@ -36,12 +39,12 @@
  */
 import React from 'react';
 import {
-  CORNER_EXPONENT,
   G2_TIERS,
   concentricRadius,
   cornerPath,
   cornerSvgDataUri,
   deviceSnappedStrokeWidth,
+  getCornerScheme,
   type CornerRadii,
   type CornerRadiiInput,
   type G2RadiusTier,
@@ -191,9 +194,12 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
     const w = width ?? measured.w;
     const h = height ?? measured.h;
     const sizeKnown = w > 0 && h > 0;
+    // 圆角方案：每次渲染现读真源选择点（与下方 DPR 同口径）——主题/设置层
+    // 注入新方案后，下一次渲染/量测即按新方案生成；默认 'g2' 时产物逐字不变。
+    const scheme = getCornerScheme();
     const d = React.useMemo(
-      () => (sizeKnown ? cornerPath(w, h, input, CORNER_EXPONENT) : ''),
-      [sizeKnown, w, h, input]
+      () => (sizeKnown ? cornerPath(w, h, input, undefined, scheme) : ''),
+      [sizeKnown, w, h, input, scheme]
     );
     // 描边绘制宽度：名义宽按当前 devicePixelRatio 对齐设备像素网格（生成层
     // 收口）。每次渲染现读——DPR 随窗口跨屏变化时下一次渲染即跟随；jsdom/无
@@ -216,9 +222,10 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
         w - sw,
         h - sw,
         insetRadiiForStroke(input, sw / 2),
-        CORNER_EXPONENT
+        undefined,
+        scheme
       );
-    }, [stroke, sizeKnown, mode, w, h, input, strokeWidthSnapped]);
+    }, [stroke, sizeKnown, mode, w, h, input, strokeWidthSnapped, scheme]);
 
     const tierAttr = typeof radius === 'string' ? radius : undefined;
     const hasLayer = Boolean(fill || (stroke && strokeD));
@@ -240,7 +247,7 @@ export const G2Surface = React.forwardRef<HTMLDivElement, G2SurfaceProps>(
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundImage: `url("${cornerSvgDataUri(w, h, input, fill)}")`,
+              backgroundImage: `url("${cornerSvgDataUri(w, h, input, fill, undefined, scheme)}")`,
               backgroundSize: '100% 100%',
               backgroundRepeat: 'no-repeat',
               filter: dropShadow ? `drop-shadow(${dropShadow})` : undefined,

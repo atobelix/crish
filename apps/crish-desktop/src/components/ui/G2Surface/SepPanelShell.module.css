@@ -1,0 +1,19 @@
+/**
+ * apps/crish-desktop/src/components/ui/G2Surface/SepPanelShell.module.css
+ *
+ * SEP 族浮层面单挂接点的阴影变量（G² 第一波丙 · 槽 B）：
+ * --sep-g2-shadow 取 --shadow-popover（= --shadow-lg）主导层；
+ * 次层 0 1px 3px 在 drop-shadow 单层口径下舍去（裁定 #6(a) 近似）；
+ * 浅色主导层带 -2px 展宽，drop-shadow() 不接受展宽，此处已剔除。
+ * 本文件只承载该变量，不画任何油漆（油漆在 SepPanelShell.tsx 的
+ * G2Surface 正典 props 里）。
+ */
+.shell {
+  --sep-g2-shadow: 0 4px 16px
+    color-mix(in srgb, var(--shadow-color) 4%, transparent);
+}
+
+/* 暗色：--shadow-lg 主导层为纯黑 0.28 */
+:global(html[data-theme='dark']) .shell {
+  --sep-g2-shadow: 0 4px 18px hsl(0 0% 0% / 0.28);
+}
