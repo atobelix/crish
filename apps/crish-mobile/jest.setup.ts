@@ -147,6 +147,36 @@ jest.mock('react-native-gesture-handler', () => {
 // 手势/动画语义的真机验收走集中验收清单；单测只覆盖回调逻辑与渲染结构。
 jest.mock('react-native-reanimated', () => {
   const React = jest.requireActual<typeof ReactModule>('react');
+  (
+    globalThis as {
+      __CRISH_FRAME_CALLBACKS__?: Array<{
+        callback: (frame: unknown) => void;
+        active: boolean;
+      }>;
+      __CRISH_STEP_FRAME_CALLBACKS__?: (times?: number) => void;
+    }
+  ).__CRISH_FRAME_CALLBACKS__ = [];
+  (
+    globalThis as {
+      __CRISH_STEP_FRAME_CALLBACKS__?: (times?: number) => void;
+    }
+  ).__CRISH_STEP_FRAME_CALLBACKS__ = (times = 1) => {
+    const bucket =
+      (
+        globalThis as {
+          __CRISH_FRAME_CALLBACKS__?: Array<{
+            callback: (frame: unknown) => void;
+            active: boolean;
+          }>;
+        }
+      ).__CRISH_FRAME_CALLBACKS__ ?? [];
+    for (let step = 0; step < times; step += 1) {
+      for (const entry of bucket) {
+        if (!entry.active) continue;
+        entry.callback({ timestamp: 0, timeSincePreviousFrame: 16 });
+      }
+    }
+  };
   const { View, Text } =
     jest.requireActual<typeof ReactNativeModule>('react-native');
   const chainable = (): Record<string, unknown> => {
@@ -206,6 +236,59 @@ jest.mock('react-native-reanimated', () => {
     }),
     useAnimatedReaction: () => {},
     scrollTo: jest.fn(),
+    // 帧回调桩：默认不启动。测试用 __CRISH_STEP_FRAME_CALLBACKS__ 推进一步。
+    // isActive 是布尔值，与真库一致，不是函数。
+    useFrameCallback: (callback: (frame: unknown) => void, autostart = true) => {
+      const store = React.useRef<{
+        entry: { callback: (frame: unknown) => void; active: boolean };
+        handle: {
+          setActive: (next: boolean) => void;
+          isActive: boolean;
+          callbackId: number;
+        };
+      } | null>(null);
+      if (!store.current) {
+        const entry = { callback, active: autostart !== false };
+        const bucket =
+          (
+            globalThis as {
+              __CRISH_FRAME_CALLBACKS__?: Array<{
+                callback: (frame: unknown) => void;
+                active: boolean;
+              }>;
+            }
+          ).__CRISH_FRAME_CALLBACKS__ ?? [];
+        bucket.push(entry);
+        const handle = {
+          setActive(next: boolean) {
+            entry.active = next;
+            handle.isActive = next;
+          },
+          isActive: autostart !== false,
+          callbackId: bucket.length,
+        };
+        store.current = { entry, handle };
+      }
+      store.current.entry.callback = callback;
+      React.useEffect(() => {
+        const entry = store.current?.entry;
+        return () => {
+          const bucket = (
+            globalThis as {
+              __CRISH_FRAME_CALLBACKS__?: Array<{
+                callback: (frame: unknown) => void;
+                active: boolean;
+              }>;
+            }
+          ).__CRISH_FRAME_CALLBACKS__;
+          if (!entry || !bucket) return;
+          const index = bucket.indexOf(entry);
+          if (index >= 0) bucket.splice(index, 1);
+        };
+      }, []);
+      return store.current.handle;
+    },
+    useAnimatedScrollHandler: (handler: unknown) => handler,
     useAnimatedRef: () => {
       const ref = React.useRef(null);
       return ref;
@@ -313,10 +396,25 @@ beforeEach(() => {
 afterEach(() => {
   // 延迟 require：本文件在部分用例上下文里先于模块图求值，顶层 import 会
   // 把 store 依赖链提前拉起来；此处按需取用即可。
-  const { stopAccountRuntime } = jest.requireActual(
-    '@/adapters/runtime/accountRuntime'
-  ) as { stopAccountRuntime: () => void };
-  stopAccountRuntime();
+  // 本分支已提交的 DAO 桶引用 remoteSessionDao 等文件，但这些实现不在
+  // 本提交里。运行时因此无法装载，也就没有心跳定时器可停。只放过这一处
+  // 缺失；其它装载失败仍然抛出。
+  try {
+    const { stopAccountRuntime } = jest.requireActual(
+      '@/adapters/runtime/accountRuntime'
+    ) as { stopAccountRuntime: () => void };
+    stopAccountRuntime();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes('remoteSessionDao') ||
+      message.includes('remoteEventDao') ||
+      message.includes('remoteSyncDao')
+    ) {
+      return;
+    }
+    throw error;
+  }
 });
 
 export {};

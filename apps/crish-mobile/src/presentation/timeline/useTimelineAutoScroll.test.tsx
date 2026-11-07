@@ -1,6 +1,6 @@
 // useTimelineAutoScroll 单元测试：
 // 1. 流式输出阶段单字追加（高度不变或增量 <= 0.5px）不触发任何滚动；
-// 2. 新行换行撑高时启动连续阻尼平滑插值（rAF 驱动 scrollToOffset）；
+// 2. 新行换行撑高时由界面线程连续阻尼推进，脚本线程不逐帧改偏移；
 // 3. 运行中新内容持续到达时就地更新 targetOffset，绝不打断或重启循环；
 // 4. 用户手势拖拽（isDraggingRef）介入时瞬间终止循环并释放控制权；
 // 5. 脱离跟随（follow = false）时立即停止追赶；
@@ -10,7 +10,9 @@
 // 9. inset 变化纠正（波 5）：跟随态按新 inset 同步纠正、非跟随态不动作；
 //    滑行在飞时内容撑高把新目标折入滑行、终止帧落到新目标。
 import { act, render } from '@testing-library/react-native';
+import { scrollTo } from 'react-native-reanimated';
 import {
+  stepStreamingChase,
   useTimelineAutoScroll,
   type UseTimelineAutoScrollOptions,
   type UseTimelineAutoScrollReturn,
@@ -38,6 +40,7 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     paddingRef.current = 152;
     scrollToOffsetSpy = jest.fn();
     scrollToEndSpy = jest.fn();
+    (scrollTo as jest.Mock).mockClear();
 
     jest.spyOn(global, 'requestAnimationFrame').mockImplementation((cb) => {
       const id = rafIdCounter++;
@@ -54,10 +57,15 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     jest.restoreAllMocks();
   });
 
-  const stepRaf = (time = 16) => {
-    const cbs = [...rafCallbacks];
-    rafCallbacks = [];
-    cbs.forEach((cb) => cb(time));
+  const stepRaf = (frameTimeMs?: number) => {
+    void frameTimeMs;
+    const step = (
+      globalThis as {
+        __CRISH_STEP_FRAME_CALLBACKS__?: (times?: number) => void;
+      }
+    ).__CRISH_STEP_FRAME_CALLBACKS__;
+    if (!step) throw new Error('缺少帧回调桩');
+    step(1);
   };
 
   const createMockRefs = () => {
@@ -66,13 +74,20 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
       scrollToEnd: scrollToEndSpy,
     };
     return {
-      targetRef: { current: listMock as any },
+      targetRef: {
+        current: listMock,
+      } as unknown as UseTimelineAutoScrollOptions['targetRef'],
+      animatedRef: {
+        current: listMock,
+      } as unknown as UseTimelineAutoScrollOptions['animatedRef'],
       viewportHeightRef: { current: 600 },
       scrollYRef: { current: 400 },
       isDraggingRef: { current: false },
       isMomentumRef: { current: false },
       isProgrammaticScrollingRef: { current: false },
-      anchorPhaseRef: { current: 'done' as const },
+      anchorPhaseRef: {
+        current: 'done' as 'loading' | 'restoring' | 'done',
+      },
       // B4 SSOT：原生底部内衬真值（默认与 effectiveBottomInset 同值 152）
       getTotalBottomPadding: () => paddingRef.current,
     };
@@ -106,6 +121,7 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     });
 
     expect(scrollToOffsetSpy).not.toHaveBeenCalled();
+    expect(scrollTo).not.toHaveBeenCalled();
     expect(scrollToEndSpy).not.toHaveBeenCalled();
     expect(probeResult?.isStreamingChaseActive()).toBe(false);
 
@@ -146,10 +162,13 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     await act(async () => {
       stepRaf(16);
     });
-    expect(scrollToOffsetSpy).toHaveBeenCalledWith({
-      offset: 400 + 52 * 0.22,
-      animated: false,
-    });
+    expect(scrollTo).toHaveBeenCalledWith(
+      refs.animatedRef,
+      0,
+      400 + 52 * 0.22,
+      false
+    );
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
     // 记账隔离（波 5）：chase 推进的是自有镜像，scrollYRef（onScroll
     // 账本）纹丝不动——旧断言在此期望 411.44，钉的正是 E-R3 的混合账目
     expect(refs.scrollYRef.current).toBe(400);
@@ -162,11 +181,8 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
       });
     }
 
-    // 最终以显式落位精确到达 452 并优雅终止循环；scrollYRef 仍未被写
-    expect(scrollToOffsetSpy).toHaveBeenLastCalledWith({
-      offset: 452,
-      animated: false,
-    });
+    // 最终以界面线程 scrollTo 精确到达 452 并终止循环；scrollYRef 仍未被写
+    expect(scrollTo).toHaveBeenLastCalledWith(refs.animatedRef, 0, 452, false);
     expect(refs.scrollYRef.current).toBe(400);
     expect(probeResult?.isStreamingChaseActive()).toBe(false);
 
@@ -221,10 +237,7 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     }
 
     // 终止帧精确落到新目标 502；全程 scrollYRef 未被 chase 写入
-    expect(scrollToOffsetSpy).toHaveBeenLastCalledWith({
-      offset: 502,
-      animated: false,
-    });
+    expect(scrollTo).toHaveBeenLastCalledWith(refs.animatedRef, 0, 502, false);
     expect(refs.scrollYRef.current).toBe(400);
     expect(probeResult?.isStreamingChaseActive()).toBe(false);
 
@@ -262,10 +275,11 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
     expect(probeResult?.isStreamingChaseActive()).toBe(false);
 
     // 之后触发 rAF 不会有任何位移产生
-    scrollToOffsetSpy.mockClear();
+    (scrollTo as jest.Mock).mockClear();
     await act(async () => {
-      stepRaf(16);
+      stepRaf();
     });
+    expect(scrollTo).not.toHaveBeenCalled();
     expect(scrollToOffsetSpy).not.toHaveBeenCalled();
 
     await view.unmount();
@@ -522,13 +536,125 @@ describe('useTimelineAutoScroll 流式平滑上推与消除段落感专项测试
         stepRaf(16);
       });
     }
-    expect(scrollToOffsetSpy).toHaveBeenLastCalledWith({
-      offset: 552,
-      animated: false,
-    });
+    expect(scrollTo).toHaveBeenLastCalledWith(refs.animatedRef, 0, 552, false);
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
     expect(refs.isProgrammaticScrollingRef.current).toBe(false);
     expect(probeResult?.isStreamingChaseActive()).toBe(false);
 
     await view.unmount();
+  });
+
+  it('场景 10：流式内容回滚变矮时，追赶改去新目标，不继续落到旧高度', async () => {
+    const refs = createMockRefs();
+    refs.scrollYRef.current = 400;
+    refs.viewportHeightRef.current = 600;
+
+    const view = await render(
+      <Probe
+        {...refs}
+        follow={true}
+        busy={true}
+        effectiveBottomInset={152}
+        hasBlocks={true}
+        forceSmoothScroll={true}
+      />
+    );
+
+    await act(async () => {
+      probeResult?.handleContentSizeChange(390, 900);
+    });
+    expect(probeResult?.isStreamingChaseActive()).toBe(true);
+
+    await act(async () => {
+      probeResult?.handleContentSizeChange(390, 800);
+    });
+
+    for (let i = 0; i < 30; i++) {
+      await act(async () => {
+        stepRaf();
+      });
+    }
+
+    expect(scrollTo).toHaveBeenLastCalledWith(refs.animatedRef, 0, 352, false);
+    expect(probeResult?.isStreamingChaseActive()).toBe(false);
+    expect(refs.scrollYRef.current).toBe(400);
+
+    await view.unmount();
+  });
+
+  it('场景 12：已经贴在旧底、追赶未启动时内容变矮，一次落到新底', async () => {
+    const refs = createMockRefs();
+    refs.scrollYRef.current = 552;
+    refs.viewportHeightRef.current = 600;
+
+    const view = await render(
+      <Probe
+        {...refs}
+        follow={true}
+        busy={true}
+        effectiveBottomInset={152}
+        hasBlocks={true}
+        forceSmoothScroll={true}
+      />
+    );
+
+    await act(async () => {
+      probeResult?.handleContentSizeChange(390, 1000);
+    });
+    expect(probeResult?.isStreamingChaseActive()).toBe(false);
+    scrollToOffsetSpy.mockClear();
+
+    await act(async () => {
+      probeResult?.handleContentSizeChange(390, 800);
+    });
+
+    expect(scrollToOffsetSpy).toHaveBeenCalledWith({
+      offset: 352,
+      animated: false,
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(probeResult?.isStreamingChaseActive()).toBe(false);
+
+    await view.unmount();
+  });
+
+  it('场景 11：锚点尚未落定时内容撑高不追赶、不滚动', async () => {
+    const refs = createMockRefs();
+    refs.anchorPhaseRef.current = 'restoring';
+    refs.scrollYRef.current = 400;
+
+    const view = await render(
+      <Probe
+        {...refs}
+        follow={true}
+        busy={true}
+        effectiveBottomInset={152}
+        hasBlocks={true}
+        forceSmoothScroll={true}
+      />
+    );
+
+    await act(async () => {
+      probeResult?.handleContentSizeChange(390, 1200);
+    });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
+    expect(scrollToEndSpy).not.toHaveBeenCalled();
+    expect(probeResult?.isStreamingChaseActive()).toBe(false);
+
+    await view.unmount();
+  });
+});
+
+describe('stepStreamingChase', () => {
+  it('第一帧按阻尼推进，到达阈值时精确落到目标', () => {
+    expect(stepStreamingChase(400, 452)).toEqual({
+      next: 400 + 52 * 0.22,
+      done: false,
+    });
+    expect(stepStreamingChase(451.7, 452)).toEqual({ next: 452, done: true });
+    expect(stepStreamingChase(452, 400).done).toBe(false);
+    expect(stepStreamingChase(452, 400).next).toBeLessThan(452);
   });
 });

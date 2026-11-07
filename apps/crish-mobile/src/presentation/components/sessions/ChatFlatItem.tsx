@@ -16,6 +16,7 @@ import { useTheme } from '@/adapters/platform/theme';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { formatRelativeTime } from '@/domain/pure/time';
 import { AppText, Badge } from '@/presentation/ui';
+import { useSessionRowActions } from './useSessionRowActions';
 
 export type ChatItemStatus = 'running' | 'pending' | 'done';
 
@@ -93,6 +94,22 @@ export const ChatFlatItem = memo(function ChatFlatItem({
   );
   // 按压进度：整行 opacity 向 0.6 过渡（120ms），语义与原瞬时 pressed 一致
   const pressProgress = useSharedValue(0);
+  const rowActions = useSessionRowActions({
+    rowId: session.id,
+    onPress,
+    onLongPress,
+    timingName: 'chat-row-long-press',
+    onPressInVisual: () => {
+      pressProgress.value = withTiming(1, {
+        duration: theme.motion.duration.snappy,
+      });
+    },
+    onPressOutVisual: () => {
+      pressProgress.value = withTiming(0, {
+        duration: theme.motion.duration.snappy,
+      });
+    },
+  });
   const contentFadeStyle = useAnimatedStyle(() => ({
     opacity: 1 - 0.4 * pressProgress.value,
   }));
@@ -107,18 +124,11 @@ export const ChatFlatItem = memo(function ChatFlatItem({
             ? '待审批'
             : '已完成'
       }`}
-      onPress={() => onPress(session.id)}
-      onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
-      onPressIn={() => {
-        pressProgress.value = withTiming(1, {
-          duration: theme.motion.duration.snappy,
-        });
-      }}
-      onPressOut={() => {
-        pressProgress.value = withTiming(0, {
-          duration: theme.motion.duration.snappy,
-        });
-      }}
+      delayLongPress={rowActions.delayLongPress}
+      onPress={rowActions.onPress}
+      onLongPress={onLongPress ? rowActions.onLongPress : undefined}
+      onPressIn={rowActions.onPressIn}
+      onPressOut={rowActions.onPressOut}
       style={[
         {
           paddingBottom: theme.space.xl,

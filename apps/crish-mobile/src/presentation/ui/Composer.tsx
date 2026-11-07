@@ -46,7 +46,20 @@
 //   无背景（composer.css 原注「无背景！」），不补底托——收纳感由零误差
 //   对齐 + 与卡同宽 + 5 下距达成。（G1 旧口径「展开时整条变淡 0.5」随
 //   恒两行形态废止：无展开态，条恒全透明度。）
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  flushComposerDraft,
+  peekComposerDraft,
+  saveComposerDraft,
+} from '@/domain/store/composerDraftStore';
 import {
   AccessibilityInfo,
   Keyboard,
@@ -133,6 +146,11 @@ export interface ComposerProps {
   model?: ComposerModelControl;
   /** 输入框 testID；发送钮为 `${testID}-send`（麦克风钮已于 2026-11-03 删除） */
   testID?: string;
+  /**
+   * 草稿键。有值时每次编辑立刻写入内存真源，失焦、卸载和发送时刷盘。
+   * 父级状态只在空与非空切换时更新，不能代替这份逐字草稿。
+   */
+  draftKey?: string;
 }
 
 /** 快捷条数据面（宿主自 useComposerContextVm 装配） */
@@ -542,6 +560,17 @@ export function inputVoiceGestureEnabled(args: {
 
 export const DEFAULT_COMPOSER_PLACEHOLDER = '点击发消息、长按语音输入';
 
+/** 主页输入框的草稿键。主页 VM 不持有逐字稿，恢复走这份内存真源。 */
+export const HOME_COMPOSER_DRAFT_KEY = 'home';
+
+function initialEditBuffer(value: string | undefined, draftKey?: string): string {
+  if (draftKey) {
+    const mem = peekComposerDraft(draftKey);
+    if (mem !== '') return mem;
+  }
+  return value ?? '';
+}
+
 export const Composer = memo(function Composer({
   value,
   onChangeText,
@@ -557,21 +586,24 @@ export const Composer = memo(function Composer({
   contextBar,
   model,
   testID,
+  draftKey,
 }: ComposerProps) {
   const theme = useTheme();
   const { colors, radius, size, space } = theme;
   const reduceTransparency = useReduceTransparency();
 
-  // 原生输入框实例与文本镜像引用（缓冲隔离设计）：
-  // textRef 实时镜像原生 TextInput 的当前内容，用于提交时直接读取最新文本并清空原生输入；
+  // 编辑缓冲是输入框的显示真源。父级 value 只在外部回填、清空和
+  // 我们主动同步过的文本上对齐，避免逐字 setState 把宿主整页拉起重渲染。
   const inputRef = useRef<TextInput | null>(null);
-  const textRef = useRef(value ?? '');
+  const [buffer, setBuffer] = useState(() => initialEditBuffer(value, draftKey));
+  const textRef = useRef(buffer);
+  const committedRef = useRef(value ?? '');
+  const onChangeTextRef = useRef(onChangeText);
+  onChangeTextRef.current = onChangeText;
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
 
-  // 发送钮显隐按「有无内容」：受控 value 之外再记内部态——
-  // 逐键守卫（C-PERF）：改走 ref 比对，仅在 hasText 布尔值发生真实翻转（空 -> 非空 或 非空 -> 空）时
-  // 才触发内部状态重新计算（控制发送按钮颜色/显隐）；在连续敲击字母时，hasText 恒为 true，
-  // 不触发组件额外重绘！
-  const [hasText, setHasText] = useState(() => (value ?? '').trim().length > 0);
+  const [hasText, setHasText] = useState(() => buffer.trim().length > 0);
   const hasTextRef = useRef(hasText);
   const applyHasText = useCallback((next: boolean) => {
     if (hasTextRef.current === next) return;
@@ -579,19 +611,80 @@ export const Composer = memo(function Composer({
     setHasText(next);
   }, []);
 
-  // 保持受控属性 value 更新（如语音输入回填、外部重置草稿）的兼容性：
-  // 当外部传入的 value 发生变更时，同步更新 textRef 与 hasText 翻转状态
+  const publish = useCallback((text: string) => {
+    if (text === committedRef.current) return;
+    committedRef.current = text;
+    onChangeTextRef.current(text);
+  }, []);
+
+  // 只认父级 value 自身的变化。逐字输入时父级停在上次语义快照，
+  // 不能因为缓冲已经超前就把输入盖回去。
+  const seenValueRef = useRef(value ?? '');
+  const appliedKeyRef = useRef(draftKey);
+
+  useLayoutEffect(() => {
+    const next = value ?? '';
+    if (appliedKeyRef.current !== draftKey) {
+      // 清理函数先于本效果执行，旧键上的最新缓冲已经刷盘。
+      appliedKeyRef.current = draftKey;
+      const restored = initialEditBuffer(next, draftKey);
+      seenValueRef.current = next;
+      committedRef.current = next;
+      textRef.current = restored;
+      setBuffer(restored);
+      applyHasText(restored.trim().length > 0);
+      if (restored !== next) publish(restored);
+      return;
+    }
+    if (next === seenValueRef.current) return;
+    seenValueRef.current = next;
+    if (next === textRef.current) {
+      committedRef.current = next;
+      return;
+    }
+    committedRef.current = next;
+    textRef.current = next;
+    setBuffer(next);
+    applyHasText(next.trim().length > 0);
+    if (draftKey) saveComposerDraft(draftKey, next);
+  }, [value, draftKey, applyHasText, publish]);
+
   useEffect(() => {
-    const nextText = value ?? '';
-    textRef.current = nextText;
-    applyHasText(nextText.trim().length > 0);
-  }, [value, applyHasText]);
+    if (textRef.current !== committedRef.current) {
+      publish(textRef.current);
+    }
+  }, [publish]);
+
+  useLayoutEffect(() => {
+    const key = draftKey;
+    return () => {
+      if (!key) return;
+      // 内存稿已在每次编辑时写好。这里只刷盘，不把未编辑的空稿标成已触碰。
+      void flushComposerDraft(key);
+    };
+  }, [draftKey]);
 
   const handleChangeText = (text: string) => {
-    textRef.current = text;
-    applyHasText(text.trim().length > 0);
-    onChangeText(text);
+    const limited =
+      maxLength !== undefined && text.length > maxLength
+        ? text.slice(0, maxLength)
+        : text;
+    textRef.current = limited;
+    setBuffer(limited);
+    const nowEmpty = limited.trim().length === 0;
+    const wasEmpty = committedRef.current.trim().length === 0;
+    if (wasEmpty !== nowEmpty) publish(limited);
+    const key = draftKeyRef.current;
+    if (key) saveComposerDraft(key, limited);
+    applyHasText(!nowEmpty);
   };
+
+  const syncLatest = useCallback(() => {
+    const text = textRef.current;
+    if (text !== committedRef.current) publish(text);
+    const key = draftKeyRef.current;
+    if (key) void flushComposerDraft(key);
+  }, [publish]);
 
   // 多行增高：实测内容高（onContentSizeChange）驱动。
   // 方案 05 优化（消灭 280ms 延时追赶）：直接瞬时同步 inputHeight.value = next，
@@ -694,16 +787,17 @@ export const Composer = memo(function Composer({
   const handleSubmitPress = useCallback(() => {
     if (!canSubmit) return;
     const text = textRef.current;
-    textRef.current = '';
-    applyHasText(false);
-    inputRef.current?.clear();
-    // 发送消息生命周期闭环：触感反馈 + 强制失焦并收起软键盘，让输入框平滑回到最下面
+    // 先把最新全文交给父级，失败时父级不改 value，缓冲仍可重试。
+    // 成功清空由父级 value 变空驱动，不在这里另写一份文本。
+    if (text !== committedRef.current) publish(text);
+    const key = draftKeyRef.current;
+    if (key) void flushComposerDraft(key);
     haptics.tap();
     inputRef.current?.blur();
     Keyboard.dismiss();
     setIsFocused(false);
     latestCallbacksRef.current.onSubmit(text);
-  }, [canSubmit, applyHasText]);
+  }, [canSubmit, publish]);
   const handleAttachPress = useCallback(() => {
     latestCallbacksRef.current.onAttachPress?.();
   }, []);
@@ -994,7 +1088,7 @@ export const Composer = memo(function Composer({
               ref={inputRef}
               testID={testID}
               multiline
-              value={value}
+              value={buffer}
               onChangeText={handleChangeText}
               onContentSizeChange={handleContentSizeChange}
               editable={editable}
@@ -1013,7 +1107,11 @@ export const Composer = memo(function Composer({
                   : colors.textSecondary
               }
               onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
+              onBlur={() => {
+                setIsFocused(false);
+                syncLatest();
+              }}
+              onEndEditing={syncLatest}
               style={[
                 styles.input,
                 theme.type.body,

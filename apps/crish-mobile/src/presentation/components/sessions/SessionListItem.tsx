@@ -11,6 +11,7 @@ import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { AppText, Badge } from '@/presentation/ui';
 import { usePressFade } from '@/presentation/ui/pressFeedback';
 import { RunningPulseDot } from '@/presentation/components/status/RunningPulseDot';
+import { useSessionRowActions } from './useSessionRowActions';
 import { RowFailureBadge } from './RowFailureBadge';
 
 /** 行状态徽标的单槽裁决（纯函数，呈现口径的单一真理） */
@@ -57,16 +58,25 @@ export const SessionListItem = memo(function SessionListItem({
   const theme = useTheme();
   const badge = sessionRowBadge(session);
   const press = usePressFade();
+  const rowActions = useSessionRowActions({
+    rowId: session.id,
+    onPress,
+    onLongPress,
+    timingName: 'session-row-long-press',
+    onPressInVisual: press.onPressIn,
+    onPressOutVisual: press.onPressOut,
+  });
   return (
     <Pressable
       testID={`session-row-${session.id}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={sessionA11yLabel(session)}
-      onPress={() => onPress(session.id)}
-      onLongPress={onLongPress ? () => onLongPress(session.id) : undefined}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
+      delayLongPress={rowActions.delayLongPress}
+      onPress={rowActions.onPress}
+      onLongPress={onLongPress ? rowActions.onLongPress : undefined}
+      onPressIn={rowActions.onPressIn}
+      onPressOut={rowActions.onPressOut}
       style={[
         styles.row,
         {

@@ -7,6 +7,8 @@
 // 隔离仍成立，跨启动不保留——诚实降级，同锚点口径）。
 // 草稿是用户未发送的原文：写入失败不阻断输入（内存副本恒同步），
 // 读取失败视为无草稿，绝不抛进交互路径。
+// 非空稿按键合并 400ms 后落盘；空稿取消等待并立刻删除。
+// flushComposerDraft 供发送、切键、失焦、卸载、进后台立刻写最新值。
 
 /** 草稿持久接口（SqlSettingsDao 的 get/set/delete 与之同形） */
 export interface ComposerDraftPersist {
@@ -25,8 +27,26 @@ export function composerDraftKey(draftKey: string): string {
 /** 默认持久化实现（接线层启动时注入一次，同 scrollAnchorStore 模式） */
 let defaultPersist: ComposerDraftPersist | null = null;
 
+/** 非空稿合并落盘的等待（毫秒）。空稿与立即刷盘不走这段等待。 */
+const PERSIST_DELAY_MS = 400;
+
 /** 内存读面（同步真源：挂载首帧与切换会话时直接命中） */
 const memoryDrafts = new Map<string, string>();
+
+/** 本进程内用户已经写过的键。清空也算写过，迟到回填不得恢复旧稿。 */
+const touchedKeys = new Set<string>();
+
+interface PersistSlot {
+  timer: ReturnType<typeof setTimeout> | null;
+  writing: boolean;
+  dirty: boolean;
+  inflight: Promise<void> | null;
+}
+
+const persistSlots = new Map<string, PersistSlot>();
+
+/** 测试复位后，进行中的落盘不得再写回新一轮状态。 */
+let isolationEpoch = 0;
 
 /** 接线层注入默认持久化（persistBootstrap 装配；传 null 复位为内存形态） */
 export function configureComposerDraftPersistence(
@@ -41,16 +61,21 @@ export function peekComposerDraft(draftKey: string): string {
 }
 
 /**
- * 从持久面回填一条草稿到内存面并返回最终值：内存已有更新的输入时
- * 以内存为准（用户已在本会话键入，不许迟到的回填覆盖）；持久面读
- * 失败 = 保持内存值，不报错。
+ * 从持久面回填一条草稿到内存面并返回最终值。用户已经写过该键
+ * （包括清空）或内存里已有稿时，迟到的回填不得覆盖。持久面读失败
+ * 时保持内存值，不报错。
  */
 export async function loadComposerDraft(draftKey: string): Promise<string> {
   const persist = defaultPersist;
   if (!persist) return peekComposerDraft(draftKey);
   try {
     const raw = await persist.get(composerDraftKey(draftKey));
-    if (raw !== null && raw !== '' && !memoryDrafts.has(draftKey)) {
+    if (
+      raw !== null &&
+      raw !== '' &&
+      !touchedKeys.has(draftKey) &&
+      !memoryDrafts.has(draftKey)
+    ) {
       memoryDrafts.set(draftKey, raw);
     }
   } catch {
@@ -59,31 +84,125 @@ export async function loadComposerDraft(draftKey: string): Promise<string> {
   return peekComposerDraft(draftKey);
 }
 
-/** 写草稿（内存同步更新 + 尽力持久化；空串 = 删除该会话草稿） */
-export function saveComposerDraft(draftKey: string, text: string): void {
-  if (text === '') {
-    memoryDrafts.delete(draftKey);
-  } else {
-    memoryDrafts.set(draftKey, text);
-  }
-  const persist = defaultPersist;
-  if (!persist) return;
-  const key = composerDraftKey(draftKey);
-  if (text === '') {
-    if (persist.delete) {
-      void persist.delete(key).catch(() => undefined);
-    } else {
-      void persist.set(key, '').catch(() => undefined);
-    }
-  } else {
-    void persist.set(key, text).catch(() => {
-      // 草稿是可重建的输入态：写入失败不阻断输入（内存副本仍在）
-    });
-  }
+function slotOf(draftKey: string): PersistSlot {
+  const existing = persistSlots.get(draftKey);
+  if (existing) return existing;
+  const created: PersistSlot = {
+    timer: null,
+    writing: false,
+    dirty: false,
+    inflight: null,
+  };
+  persistSlots.set(draftKey, created);
+  return created;
 }
 
-/** 测试隔离：清空内存面与注入（仅测试调用） */
+function cancelTimer(slot: PersistSlot): void {
+  if (slot.timer === null) return;
+  clearTimeout(slot.timer);
+  slot.timer = null;
+}
+
+function armTimer(draftKey: string): void {
+  const slot = slotOf(draftKey);
+  cancelTimer(slot);
+  slot.timer = setTimeout(() => {
+    slot.timer = null;
+    void persistLatest(draftKey);
+  }, PERSIST_DELAY_MS);
+}
+
+function writeMemory(draftKey: string, text: string): void {
+  touchedKeys.add(draftKey);
+  if (text === '') memoryDrafts.delete(draftKey);
+  else memoryDrafts.set(draftKey, text);
+}
+
+/**
+ * 写草稿。内存同步更新；非空稿按键合并，400ms 内只把最终文本交给持久面。
+ * 空串取消该键尚未到期的写入，并立刻删除持久稿。
+ */
+export function saveComposerDraft(draftKey: string, text: string): void {
+  const slot = slotOf(draftKey);
+  writeMemory(draftKey, text);
+  cancelTimer(slot);
+  slot.dirty = true;
+  if (text === '') {
+    void persistLatest(draftKey);
+    return;
+  }
+  if (slot.writing) return;
+  armTimer(draftKey);
+}
+
+/**
+ * 把该键的最新内存稿立刻交给持久面，并取消尚未到期的合并计时。
+ * 发送、切键、失焦、卸载、进后台应由调用方在这些边界上调用。
+ * 从未写入过的键不做删除，避免把尚未回填的落盘稿清掉。
+ */
+export function flushComposerDraft(draftKey: string): Promise<void> {
+  const slot = slotOf(draftKey);
+  cancelTimer(slot);
+  if (!touchedKeys.has(draftKey) && !memoryDrafts.has(draftKey)) {
+    return Promise.resolve();
+  }
+  if (slot.writing && slot.inflight) {
+    slot.dirty = true;
+    return slot.inflight;
+  }
+  return persistLatest(draftKey);
+}
+
+function persistLatest(draftKey: string): Promise<void> {
+  const slot = slotOf(draftKey);
+  if (slot.writing && slot.inflight) {
+    slot.dirty = true;
+    return slot.inflight;
+  }
+  const epoch = isolationEpoch;
+  const persist = defaultPersist;
+  if (!persist) {
+    slot.dirty = false;
+    return Promise.resolve();
+  }
+  const text = memoryDrafts.get(draftKey) ?? '';
+  const key = composerDraftKey(draftKey);
+  slot.writing = true;
+  slot.dirty = false;
+  const run = (async () => {
+    let failed = false;
+    try {
+      if (text === '') {
+        if (persist.delete) await persist.delete(key);
+        else await persist.set(key, '');
+      } else {
+        await persist.set(key, text);
+      }
+    } catch {
+      // 写入失败不阻断输入，内存副本仍是真源。
+      failed = true;
+      slot.dirty = true;
+    }
+    slot.writing = false;
+    slot.inflight = null;
+    if (epoch !== isolationEpoch) return;
+    const latest = memoryDrafts.get(draftKey) ?? '';
+    if (failed) {
+      if (latest !== text) armTimer(draftKey);
+      return;
+    }
+    if (slot.dirty || latest !== text) await persistLatest(draftKey);
+  })();
+  slot.inflight = run;
+  return run;
+}
+
+/** 测试隔离：清空内存面、合并计时与注入（仅测试调用） */
 export function resetComposerDraftsForTest(): void {
+  isolationEpoch += 1;
+  for (const slot of persistSlots.values()) cancelTimer(slot);
+  persistSlots.clear();
+  touchedKeys.clear();
   memoryDrafts.clear();
   defaultPersist = null;
 }

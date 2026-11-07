@@ -21,6 +21,7 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ScrollViewProps,
   type ViewToken,
 } from 'react-native';
 import type { RefObject } from 'react';
@@ -100,6 +101,13 @@ export type FollowChangeReason = 'user-toggled-disclosure' | 'anchor-restored';
 function rowKey(row: TimelineRow): string {
   return `${row.kind}:${row.id}`;
 }
+
+/** 首屏行数。手机一屏大约这些，不必把 16 行历史提前挂上。 */
+const TIMELINE_INITIAL_RENDER = 8;
+/** 每批补挂行数。小于首屏，避免一批吃完整段历史。 */
+const TIMELINE_BATCH = 6;
+/** 视口倍数。比原来的 9 略紧，仍留前后各约三屏，滚动时不露白。 */
+const TIMELINE_WINDOW = 7;
 
 /** 点内容区收键盘（模块级稳定引用：FlatList props 逐渲染不变，
  * 不给列表引入额外重渲染面）。失焦判定接线见 TimelineView 的
@@ -259,6 +267,8 @@ export function TimelineView({
   // 回调内读最新值的镜像 refs（避免把高频变化值塞进 useCallback 依赖）
   const followRef = useRef(follow);
   followRef.current = follow;
+  const onFollowChangeRef = useRef(onFollowChange);
+  onFollowChangeRef.current = onFollowChange;
   const anchorKeyRef = useRef(anchorKey);
   anchorKeyRef.current = anchorKey;
   const rowsRef = useRef(rows);
@@ -619,12 +629,17 @@ export function TimelineView({
   // 手势与滚动调度守卫：保护用户手动拖拽浏览，防止流式打字与 Yoga 排版测高抢夺手势
   const isDraggingRef = useRef(false);
   const isMomentumRef = useRef(false);
+  const getTotalBottomPadding = useCallback(
+    () => totalBottomPaddingRef.current,
+    []
+  );
   const autoScroll = useTimelineAutoScroll({
     targetRef,
+    animatedRef: animatedListRef,
     follow,
     busy,
     effectiveBottomInset,
-    getTotalBottomPadding: () => totalBottomPaddingRef.current,
+    getTotalBottomPadding,
     viewportHeightRef,
     scrollYRef,
     isDraggingRef,
@@ -664,46 +679,52 @@ export function TimelineView({
     scrollToTrueBottomRef.current(false);
   }, [follow, blocks.length]);
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    scrollYRef.current = contentOffset.y;
-    viewportHeightRef.current = layoutMeasurement.height;
-    // 同步给动力学联动控制器（方案 19）
-    linkage.notifyScroll(
-      contentOffset.y,
-      layoutMeasurement.height,
-      contentSize.height
-    );
+  // 虚拟列表在 JavaScript 线程调用 onScroll。把它换成动画滚动处理器
+  // 不会跑到界面线程，还会拆掉键盘联动已经接上的滚动监听。
+  // 逐帧追赶只走上面的 scrollTo；这里只处理跟随翻转和锚点这类离散副作用。
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      scrollYRef.current = contentOffset.y;
+      viewportHeightRef.current = layoutMeasurement.height;
+      // 同步给动力学联动控制器（方案 19）
+      linkage.notifyScroll(
+        contentOffset.y,
+        layoutMeasurement.height,
+        contentSize.height
+      );
 
-    // 关键守卫：如果在编程式平滑回底过程中，绝对禁止逆向翻转 follow 状态！（方案 16）
-    if (isProgrammaticScrollingRef.current) {
+      // 关键守卫：如果在编程式平滑回底过程中，绝对禁止逆向翻转 follow 状态！（方案 16）
+      if (isProgrammaticScrollingRef.current) {
+        const distance =
+          contentSize.height +
+          totalBottomPaddingRef.current -
+          (contentOffset.y + layoutMeasurement.height);
+        if (distance <= 32) {
+          // 已经提前平滑到达底部，提前释放互斥锁
+          isProgrammaticScrollingRef.current = false;
+        }
+        return; // 屏蔽后续的 evaluateFollowState，防止动画半途中被误杀
+      }
+
       const distance =
         contentSize.height +
         totalBottomPaddingRef.current -
         (contentOffset.y + layoutMeasurement.height);
-      if (distance <= 32) {
-        // 已经提前平滑到达底部，提前释放互斥锁
-        isProgrammaticScrollingRef.current = false;
+      const isInteracting = isDraggingRef.current || isMomentumRef.current;
+      // 传入 isInteracting：仅当用户明确手势滑动且离开底部 >64dp 时退出跟随；内容自然膨胀绝不退出
+      const following = evaluateFollowState(distance, followRef.current, isInteracting);
+      if (following !== followRef.current) {
+        if (!following) {
+          autoScroll.cancelStreamingChase();
+        }
+        onFollowChangeRef.current(following);
       }
-      return; // 屏蔽后续的 evaluateFollowState，防止动画半途中被误杀
-    }
-
-    const distance =
-      contentSize.height +
-      totalBottomPaddingRef.current -
-      (contentOffset.y + layoutMeasurement.height);
-    const isInteracting = isDraggingRef.current || isMomentumRef.current;
-    // 传入 isInteracting：仅当用户明确手势滑动且离开底部 >64dp 时退出跟随；内容自然膨胀绝不退出
-    const following = evaluateFollowState(distance, follow, isInteracting);
-    if (following !== follow) {
-      if (!following) {
-        autoScroll.cancelStreamingChase();
-      }
-      onFollowChange(following);
-    }
-    // 锚点节流落盘（仅非跟随态，见 persistAnchorThrottled）
-    persistAnchorThrottled();
-  };
+      // 锚点节流落盘（仅非跟随态，见 persistAnchorThrottled）
+      persistAnchorThrottled();
+    },
+    [autoScroll, linkage, persistAnchorThrottled]
+  );
 
   const handleContentSizeChange = useCallback(
     (_w: number, _h: number) => {
@@ -722,10 +743,9 @@ export function TimelineView({
       isProgrammaticScrollingRef.current = false;
       // 手势已接管阅读位置：锚点待精修作废（N-3 精修不与用户争抢）
       anchorRefineRef.current = null;
-      // 手势中断感知：一旦用户触摸屏幕拖动，瞬间取消自动推升循环，绝不与用户手势争抢
-      autoScroll.cancelStreamingChase();
-      // 锁定手势：用户手动拖拽期间严禁流式更新或 Yoga 排版重排打断手势响应链
+      // 先置拖拽，再取消追赶：帧回调读到拖拽标记后不再 scrollTo。
       isDraggingRef.current = true;
+      autoScroll.cancelStreamingChase();
       isMomentumRef.current = false;
     },
     [autoScroll]
@@ -776,55 +796,84 @@ export function TimelineView({
     );
   }, [blocks, busy]);
 
+  const onOpenToolsRef = useRef(onOpenTools);
+  onOpenToolsRef.current = onOpenTools;
+  const onRegenerateRef = useRef(onRegenerate);
+  onRegenerateRef.current = onRegenerate;
+  const stableOpenTools = useCallback((focusId: string) => {
+    onOpenToolsRef.current?.(focusId);
+  }, []);
+  const stableRegenerate = useCallback((messageId: string) => {
+    onRegenerateRef.current?.(messageId);
+  }, []);
+  const extractRowKey = useCallback((row: TimelineRow) => rowKey(row), []);
+  const renderRow = useCallback(
+    ({ item }: { item: TimelineRow }) => {
+      const key = rowKey(item);
+      if (item.kind === 'timeSeparator') {
+        return (
+          <View
+            style={{ width: '100%' }}
+            onLayout={(event) => handleRowLayout(key, event)}
+          >
+            <TimeSeparatorRow atMs={item.atMs} />
+          </View>
+        );
+      }
+      return (
+        <View
+          style={{ width: '100%' }}
+          onLayout={(event) => handleRowLayout(key, event)}
+        >
+          <TimelineBlockView
+            block={item}
+            onOpenTools={stableOpenTools}
+            onSelectSource={handleSelectSource}
+            onCitationPress={handleCitationPress}
+            highlightedSourceIndex={highlightedSourceIndex}
+            disclosureStore={disclosureRef.current}
+            onToggleDisclosure={handleToggleDisclosure}
+            onRegenerate={stableRegenerate}
+            canRegenerate={canRegenerate}
+          />
+        </View>
+      );
+    },
+    [
+      canRegenerate,
+      handleCitationPress,
+      handleRowLayout,
+      handleSelectSource,
+      handleToggleDisclosure,
+      highlightedSourceIndex,
+      stableOpenTools,
+      stableRegenerate,
+    ]
+  );
+  const renderTimelineScroll = useCallback(
+    (props: ScrollViewProps) => (
+      <KeyboardChatScrollView
+        {...props}
+        keyboardLiftBehavior="never"
+        extraContentPadding={extraPaddingSV}
+      />
+    ),
+    [extraPaddingSV]
+  );
+
   return (
     <>
       <FlatList
         ref={handleFlatListRef}
         testID="session-timeline"
         data={rows}
-        keyExtractor={(row) => rowKey(row)}
-        renderScrollComponent={(props) => (
-          <KeyboardChatScrollView
-            {...props}
-            keyboardLiftBehavior="never"
-            extraContentPadding={extraPaddingSV}
-          />
-        )}
+        keyExtractor={extractRowKey}
+        renderScrollComponent={renderTimelineScroll}
         // 滚动复用免动画（实现波总方案 F5/N04：删除每项 FadeIn 包裹——
         // 回收再挂载反复淡入是高刷滚动闪烁根因）；首击不吞噬 + 滑动收键盘
         // 每行包一层 onLayout 壳回填布局图（锚点/尾部冻结地基）；壳无
         // 样式、布局语义与原先直子一致（contentContainer 的 gap 落在壳上）
-        renderItem={({ item }) => {
-          const key = rowKey(item);
-          if (item.kind === 'timeSeparator') {
-            return (
-              <View
-                style={{ width: '100%' }}
-                onLayout={(event) => handleRowLayout(key, event)}
-              >
-                <TimeSeparatorRow atMs={item.atMs} />
-              </View>
-            );
-          }
-          return (
-            <View
-              style={{ width: '100%' }}
-              onLayout={(event) => handleRowLayout(key, event)}
-            >
-              <TimelineBlockView
-                block={item}
-                onOpenTools={onOpenTools}
-                onSelectSource={handleSelectSource}
-                onCitationPress={handleCitationPress}
-                highlightedSourceIndex={highlightedSourceIndex}
-                disclosureStore={disclosureRef.current}
-                onToggleDisclosure={handleToggleDisclosure}
-                onRegenerate={onRegenerate}
-                canRegenerate={canRegenerate}
-              />
-            </View>
-          );
-        }}
+        renderItem={renderRow}
         viewabilityConfig={viewabilityConfigRef.current}
         onViewableItemsChanged={handleViewableItemsChanged}
         onLayout={(event) => {
@@ -863,9 +912,9 @@ export function TimelineView({
         ]}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        initialNumToRender={16}
-        maxToRenderPerBatch={16}
-        windowSize={9}
+        initialNumToRender={TIMELINE_INITIAL_RENDER}
+        maxToRenderPerBatch={TIMELINE_BATCH}
+        windowSize={TIMELINE_WINDOW}
         ListEmptyComponent={
           <EmptyState
             title={emptyTitle}
@@ -1007,7 +1056,17 @@ const TimelineBlockView = memo(function TimelineBlockView({
     default:
       return null;
   }
-});
+}, (prev, next) =>
+  prev.block === next.block &&
+  prev.onOpenTools === next.onOpenTools &&
+  prev.onSelectSource === next.onSelectSource &&
+  prev.onCitationPress === next.onCitationPress &&
+  prev.highlightedSourceIndex === next.highlightedSourceIndex &&
+  prev.disclosureStore === next.disclosureStore &&
+  prev.onToggleDisclosure === next.onToggleDisclosure &&
+  prev.onRegenerate === next.onRegenerate &&
+  prev.canRegenerate === next.canRegenerate
+);
 
 function MessageView({
   block,

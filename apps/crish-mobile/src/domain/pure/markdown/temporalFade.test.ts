@@ -10,6 +10,7 @@ import {
   FADE_WINDOW_GRAPHEMES,
   fadeAlphaAt,
   partitionTemporalFade,
+  resetGraphemeSegmenterForTest,
   splitGraphemes,
   withAlpha,
 } from './temporalFade';
@@ -225,7 +226,60 @@ describe('withAlpha 颜色 alpha 派生', () => {
 });
 
 describe('splitGraphemes（自旧模块迁入，行为不变）', () => {
+  afterEach(() => {
+    resetGraphemeSegmenterForTest();
+  });
+
   it('对 Emoji 复合字符簇保真切分', () => {
     expect(splitGraphemes('A👩‍💻B')).toEqual(['A', '👩‍💻', 'B']);
+  });
+
+  it('同一模块内 Intl.Segmenter 只构造一次', () => {
+    resetGraphemeSegmenterForTest();
+    const Original = Intl.Segmenter;
+    const ctor = jest.fn(function (
+      this: Intl.Segmenter,
+      locales?: ConstructorParameters<typeof Intl.Segmenter>[0],
+      options?: ConstructorParameters<typeof Intl.Segmenter>[1]
+    ) {
+      return new Original(locales, options);
+    });
+    Object.defineProperty(Intl, 'Segmenter', {
+      configurable: true,
+      writable: true,
+      value: ctor,
+    });
+    try {
+      expect(splitGraphemes('ab')).toEqual(['a', 'b']);
+      expect(splitGraphemes('cd')).toEqual(['c', 'd']);
+      expect(splitGraphemes('A👩‍💻B')).toEqual(['A', '👩‍💻', 'B']);
+      expect(ctor).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', {
+        configurable: true,
+        writable: true,
+        value: Original,
+      });
+    }
+  });
+
+  it('Intl.Segmenter 不可用时回退 Array.from', () => {
+    resetGraphemeSegmenterForTest();
+    const Original = Intl.Segmenter;
+    Object.defineProperty(Intl, 'Segmenter', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const text = 'A👩‍💻B';
+      expect(splitGraphemes(text)).toEqual(Array.from(text));
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', {
+        configurable: true,
+        writable: true,
+        value: Original,
+      });
+    }
   });
 });

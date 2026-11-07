@@ -8,7 +8,7 @@
 // 5. 纯 UI 线程 Worklet 驱动，零 JS 调度与零 Android requestLayout 重排；
 // 6. （波 5 追加）触底资格判定计入原生底部内衬总量，与 JS 侧
 //     handleScroll 共用同一判底原点（旧式漏计把资格放宽了整个 inset）。
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { FlatList } from 'react-native';
 import {
   scrollTo,
@@ -36,7 +36,7 @@ export interface UseSmoothKeyboardTimelineLinkageOptions {
   onFollowChange?: (follow: boolean) => void;
 }
 
-export function useSmoothKeyboardTimelineLinkage<ItemT = any>(
+export function useSmoothKeyboardTimelineLinkage<ItemT = unknown>(
   scrollViewRef: AnimatedRef<FlatList<ItemT>>,
   options: UseSmoothKeyboardTimelineLinkageOptions
 ) {
@@ -75,23 +75,33 @@ export function useSmoothKeyboardTimelineLinkage<ItemT = any>(
   const currentLiftProgress = useSharedValue(0);
   const isClosing = useSharedValue(false);
 
-  // 供 FlatList 事件同步视口与几何尺寸至 UI 线程
-  const notifyScroll = (offsetY: number, layoutH: number, contentH: number) => {
-    'worklet';
-    currentScrollY.value = offsetY;
-    if (layoutH > 0) viewportHeight.value = layoutH;
-    if (contentH > 0) contentHeight.value = contentH;
-  };
+  // 供 FlatList 事件同步视口与几何尺寸至 UI 线程。
+  // 回调身份在流式期间保持稳定，避免滚动监听每次出字都换新函数。
+  const notifyScroll = useCallback(
+    (offsetY: number, layoutH: number, contentH: number) => {
+      'worklet';
+      currentScrollY.value = offsetY;
+      if (layoutH > 0) viewportHeight.value = layoutH;
+      if (contentH > 0) contentHeight.value = contentH;
+    },
+    [contentHeight, currentScrollY, viewportHeight]
+  );
 
-  const notifyLayout = (height: number) => {
-    'worklet';
-    if (height > 0) viewportHeight.value = height;
-  };
+  const notifyLayout = useCallback(
+    (height: number) => {
+      'worklet';
+      if (height > 0) viewportHeight.value = height;
+    },
+    [viewportHeight]
+  );
 
-  const notifyContentHeight = (height: number) => {
-    'worklet';
-    if (height > 0) contentHeight.value = height;
-  };
+  const notifyContentHeight = useCallback(
+    (height: number) => {
+      'worklet';
+      if (height > 0) contentHeight.value = height;
+    },
+    [contentHeight]
+  );
 
   useKeyboardHandler(
     {
@@ -190,13 +200,24 @@ export function useSmoothKeyboardTimelineLinkage<ItemT = any>(
     ]
   );
 
-  return {
-    notifyScroll,
-    notifyLayout,
-    notifyContentHeight,
-    isEligibleForLift,
-    maxDisplacement,
-    currentLiftProgress,
-    currentScrollY,
-  };
+  return useMemo(
+    () => ({
+      notifyScroll,
+      notifyLayout,
+      notifyContentHeight,
+      isEligibleForLift,
+      maxDisplacement,
+      currentLiftProgress,
+      currentScrollY,
+    }),
+    [
+      currentLiftProgress,
+      currentScrollY,
+      isEligibleForLift,
+      maxDisplacement,
+      notifyContentHeight,
+      notifyLayout,
+      notifyScroll,
+    ]
+  );
 }

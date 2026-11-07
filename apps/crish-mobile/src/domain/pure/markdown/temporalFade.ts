@@ -57,15 +57,30 @@ export interface TemporalFadeConfig {
 
 /**
  * Unicode 字素安全切分（与 tailGradient 旧址同实现，迁入本模块继续服役）
+ * 切分器按模块缓存：构造一次，后续调用复用；Intl 不可用时保持 Array.from 回退。
  */
+let graphemeSegmenter: Intl.Segmenter | null | undefined;
+
+function resolveGraphemeSegmenter(): Intl.Segmenter | null {
+  if (graphemeSegmenter !== undefined) return graphemeSegmenter;
+  graphemeSegmenter =
+    typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      : null;
+  return graphemeSegmenter;
+}
+
 export function splitGraphemes(str: string): string[] {
-  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
-    const segmenter = new Intl.Segmenter(undefined, {
-      granularity: 'grapheme',
-    });
+  const segmenter = resolveGraphemeSegmenter();
+  if (segmenter) {
     return Array.from(segmenter.segment(str), (s) => s.segment);
   }
   return Array.from(str);
+}
+
+/** 测试隔离：丢掉已缓存的字素切分器，便于重跑构造与回退。 */
+export function resetGraphemeSegmenterForTest(): void {
+  graphemeSegmenter = undefined;
 }
 
 /**

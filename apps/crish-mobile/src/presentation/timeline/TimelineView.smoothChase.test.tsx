@@ -1,10 +1,11 @@
 // TimelineView 流式满帧丝滑推升与消除段落感集成测试（动效调优专项）
-// 1. busy && follow 期间内容撑高触发 scrollToOffset 连续平滑推升，彻底杜绝段落顿挫；
+// 1. busy && follow 期间内容撑高由界面线程 scrollTo 连续平滑推升，不逐帧 scrollToOffset；
 // 2. 用户手势拖拽（scrollBeginDrag）介入时瞬间取消追赶循环，绝对零争抢；
 // 3. 用户上划翻阅历史脱离跟随态时，自动推升保持静止。
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { createRef } from 'react';
 import { FlatList } from 'react-native';
+import { scrollTo } from 'react-native-reanimated';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import { TimelineView } from './TimelineView';
 import type { TimelineBlock } from './buildTimeline';
@@ -75,13 +76,18 @@ describe('TimelineView 流式满帧平滑上推消除段落感 (端到端集成�
     jest.restoreAllMocks();
   });
 
-  const stepRaf = (time = 16) => {
-    const cbs = [...rafCallbacks];
-    rafCallbacks = [];
-    cbs.forEach((cb) => cb(time));
+  const stepRaf = (frameTimeMs?: number) => {
+    void frameTimeMs;
+    const step = (
+      globalThis as {
+        __CRISH_STEP_FRAME_CALLBACKS__?: (times?: number) => void;
+      }
+    ).__CRISH_STEP_FRAME_CALLBACKS__;
+    if (!step) throw new Error('缺少帧回调桩');
+    step(1);
   };
 
-  it('场景 1：流式中新行撑高时，以 scrollToOffset 连续阻尼推升，绝不频繁打断重置 scrollToEnd', async () => {
+  it('场景 1：流式中新行撑高时，由界面线程 scrollTo 连续阻尼推升，不逐帧 scrollToOffset', async () => {
     const listRef = createRef<FlatList<TimelineRow> | null>();
     const onFollowChange = jest.fn();
 
@@ -109,6 +115,7 @@ describe('TimelineView 流式满帧平滑上推消除段落感 (端到端集成�
 
     scrollToOffsetSpy.mockClear();
     scrollToEndSpy.mockClear();
+    (scrollTo as jest.Mock).mockClear();
 
     // 初始高度 800 (effectiveBottomInset = 140（宿主推导直传）, target = 800 + 140 - 600 = 340)
     await act(async () => {
@@ -135,8 +142,9 @@ describe('TimelineView 流式满帧平滑上推消除段落感 (端到端集成�
       stepRaf(16);
     });
 
-    // 严格断言：流式平滑追赶采用 scrollToOffset，绝不调用会引起打断顿挫的 scrollToEnd
-    expect(scrollToOffsetSpy).toHaveBeenCalled();
+    // 流式追赶走界面线程 scrollTo，不用逐帧 scrollToOffset，也不调用 scrollToEnd
+    expect(scrollTo).toHaveBeenCalled();
+    expect(scrollToOffsetSpy).not.toHaveBeenCalled();
     expect(scrollToEndSpy).not.toHaveBeenCalled();
 
     await view.unmount();
@@ -190,12 +198,14 @@ describe('TimelineView 流式满帧平滑上推消除段落感 (端到端集成�
     });
 
     scrollToOffsetSpy.mockClear();
+    (scrollTo as jest.Mock).mockClear();
 
     // 后续帧不应再被追赶循环推动
     await act(async () => {
-      stepRaf(16);
+      stepRaf();
     });
 
+    expect(scrollTo).not.toHaveBeenCalled();
     expect(scrollToOffsetSpy).not.toHaveBeenCalled();
 
     await view.unmount();

@@ -2,8 +2,8 @@
 // （灰度分层、无边框滥用、代码块等宽、表格横滑；守卫禁止裸色值 / 数字圆角 /
 // 数字字号，本文件一律经 useTheme 取档）。
 // 口径（审计 §C)：
-// - 静态（streaming=false）走 parseMarkdown 全量解析；流式走
-//   prepareStreamingMarkdown：封口块最终形态按内容签名 memo、尾块分治呈现；
+// - 静态（streaming=false）走 parseMarkdown 全量解析；流式走增量投影：
+//   封口块按引用复用，尾块单独分治；块比较只认引用，不再序列化整块；
 // - 超限降级：全文超 MARKDOWN_DEGRADE_THRESHOLD 时降级纯文本 + 可见标注
 //   （不静默），原文仍可长按选择；
 // - 链接一律经 openLink 统一出口（协议白名单在出口层），呈现层不裸调 openURL；
@@ -43,7 +43,11 @@ import {
   usePressFade,
 } from '@/presentation/ui/pressFeedback';
 import { parseMarkdown } from '@/domain/pure/markdown/parseMarkdown';
-import { prepareStreamingMarkdown } from '@/domain/pure/markdown/closeDraft';
+import {
+  projectStreamingMarkdown,
+  shareBlockPrefix,
+  type StreamingProjection,
+} from '@/domain/pure/markdown/closeDraft';
 import {
   tokenizeCode,
   type CodeTokenRole,
@@ -125,10 +129,6 @@ function blockConsumesCursor(block: MdBlock): boolean {
   }
 }
 
-function blockSignature(block: MdBlock): string {
-  return JSON.stringify(block);
-}
-
 export function MarkdownText({
   text,
   streaming = false,
@@ -145,23 +145,38 @@ export function MarkdownText({
   const theme = useTheme();
   const safeText = typeof text === 'string' ? text : '';
   const degraded = safeText.length > MARKDOWN_DEGRADE_THRESHOLD;
+  const projectionRef = useRef<StreamingProjection | null>(null);
 
   // sealedCount：流式期前 sealedCount 块为封口块（最终形态，可高亮 /
-  // WebView 化)，其后为生长尾块（保持原文呈现，批 E 封口教义）；静态期全封口
+  // WebView 化)，其后为生长尾块（保持原文呈现，批 E 封口教义）；静态期全封口。
+  // 投影挂在实例上：封口文本不变就复用块引用。切到静态后只解析一次，并丢掉流式投影。
   const { blocks, sealedCount } = useMemo((): {
     blocks: MdBlock[] | null;
     sealedCount: number;
   } => {
-    if (degraded) return { blocks: null, sealedCount: 0 };
+    if (degraded) {
+      projectionRef.current = null;
+      return { blocks: null, sealedCount: 0 };
+    }
     if (streaming) {
-      const prepared = prepareStreamingMarkdown(safeText);
+      const projected = projectStreamingMarkdown(safeText, projectionRef.current);
+      projectionRef.current = projected;
       return {
-        blocks: [...prepared.sealed, ...prepared.tail],
-        sealedCount: prepared.sealed.length,
+        blocks: [...projected.sealed, ...projected.tail],
+        sealedCount: projected.sealed.length,
       };
     }
-    const all = parseMarkdown(safeText);
-    return { blocks: all, sealedCount: all.length };
+    const parsed = parseMarkdown(safeText);
+    const previous = projectionRef.current;
+    projectionRef.current = null;
+    if (previous && previous.source === safeText) {
+      const shared = shareBlockPrefix(
+        [...previous.sealed, ...previous.tail],
+        parsed
+      );
+      return { blocks: shared, sealedCount: shared.length };
+    }
+    return { blocks: parsed, sealedCount: parsed.length };
   }, [safeText, streaming, degraded]);
 
   const flatBase = useMemo(
@@ -231,7 +246,7 @@ export function MarkdownText({
   );
 }
 
-/** 单块渲染（memo：签名不变不重渲——封口块在流式期间靠此保持静止；
+/** 单块渲染（memo：块引用不变不重渲——封口块在流式期间靠此保持静止；
  * sealed 翻转（尾块封口）须击穿 memo 触发着色 / WebView 化，故入比较） */
 const MarkdownBlockView = memo(
   function MarkdownBlockView({
@@ -258,7 +273,7 @@ const MarkdownBlockView = memo(
     );
   },
   (prev, next) =>
-    blockSignature(prev.block) === blockSignature(next.block) &&
+    prev.block === next.block &&
     prev.ctx.color === next.ctx.color &&
     prev.ctx.inBubble === next.ctx.inBubble &&
     prev.ctx.sources === next.ctx.sources &&

@@ -2,7 +2,7 @@
 // 失败 = 上一轮运行失败打点（lastRunFailedAtMs），呈现为危险色
 // 图标 + 「失败」弱文字；已完成态无徽标（内容净化裁决）。
 import { StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { SessionListItem, sessionRowBadge } from './SessionListItem';
 
@@ -76,6 +76,25 @@ describe('SessionListItem 失败呈现', () => {
     );
     expect(view.getByTestId('session-approval-badge')).toBeTruthy();
     expect(view.queryByTestId('session-failed-badge')).toBeNull();
+  });
+
+  it('短按进入会话，长按才打开菜单', async () => {
+    const onPress = jest.fn();
+    const onLongPress = jest.fn();
+    const view = await render(
+      <SessionListItem
+        session={session()}
+        onPress={onPress}
+        onLongPress={onLongPress}
+      />
+    );
+    const row = view.getByTestId('session-row-s-1');
+    await fireEvent.press(row);
+    expect(onPress).toHaveBeenCalledWith('s-1');
+    expect(onLongPress).not.toHaveBeenCalled();
+    await fireEvent(row, 'longPress');
+    expect(onLongPress).toHaveBeenCalledWith('s-1');
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });
 

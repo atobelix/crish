@@ -587,20 +587,24 @@ export function useRemoteConversationEngine(
     composer: {
       prompt: composer.prompt,
       setPrompt: composer.setPrompt,
-      submit: () => {
+      submit: (explicit?: string) => {
         // 发送即收附件菜单（锚定 Popover 的关闭路径之一，批 A）
         setAttachOpen(false);
+        // 输入框把最新全文作为参数传入。父级 prompt 可能还停在
+        // 上次空与非空切换，不能拿它当发送正文。
+        const text = explicit ?? composer.prompt;
         // 生成中发送 = 入队（批 C ②）：发送钮不消失、点击入队，
         // 生成结束自动续发；非生成中走既有发送路径
         if (sendBusy) {
-          if (composer.prompt.trim().length > 0 || hasAttachments) {
-            enqueueCurrentDraft(composer.prompt, hasAttachments);
+          if (text.trim().length > 0 || hasAttachments) {
+            enqueueCurrentDraft(text, hasAttachments);
           }
           return;
         }
-        if (hasAttachments) submitRich(composer.prompt);
-        else void composer.submit();
+        if (hasAttachments) submitRich(text);
+        else void composer.submitText(text);
       },
+      draftKey: `remote:${noSession ? null : sessionId}`,
       submitText,
       submitWithAttachments: composer.submitWithAttachments,
       canSubmit:

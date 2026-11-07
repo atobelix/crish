@@ -11,7 +11,11 @@ export { default as Card } from './Card';
 export type { CardProps, CardTone } from './Card';
 export { default as Collapsible } from './Collapsible';
 export type { CollapsibleProps } from './Collapsible';
-export { default as Composer, DEFAULT_COMPOSER_PLACEHOLDER } from './Composer';
+export {
+  default as Composer,
+  DEFAULT_COMPOSER_PLACEHOLDER,
+  HOME_COMPOSER_DRAFT_KEY,
+} from './Composer';
 export type { ComposerProps } from './Composer';
 export {
   ComposerAmbientVeil,
