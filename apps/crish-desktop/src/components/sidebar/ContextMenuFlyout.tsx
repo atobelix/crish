@@ -8,6 +8,12 @@
  * Base UI SubmenuRoot/SubmenuTrigger/RadioGroup 原生承担悬停意图、安全悬停路径、
  * 碰撞翻转与键盘导航；LayerStack 登记与 Esc 分层语义保持收敛前契约：
  * 子菜单打开时 Esc 只收子菜单并回焦行触发器，第二次 Esc 才关整个菜单。
+ *
+ * 表面补接（2026-11-07）：G² 迁移把菜单油漆从 .menuContent CSS 收敛到
+ * SepPanelShell 后，本文件的原语装配只借类名未挂壳，面板一度完全透明；
+ * 现两个 Popup 均按组合式 Menu 同法 render={<SepPanelShell />} 并以
+ * .menuScroll 承载滚动。同病普查与防再犯断言见 styles/g2-corner
+ * .contract.test.ts 的 G7/G8。
  */
 
 import React, {
@@ -18,6 +24,7 @@ import React, {
   useRef,
 } from 'react';
 import { Menu, useLayerRegistration, LayerProvider } from '@/components/ui';
+import { SepPanelShell } from '../ui/G2Surface/SepPanelShell';
 import { DialogOverlayContext } from '../ui/Dialog/dialogOverlayContext';
 import menuStyles from '../ui/Menu/Menu.module.css';
 import styles from './SidebarContextMenus.module.css';
@@ -260,7 +267,14 @@ export const ContextMenuFlyout: React.FC<ContextMenuFlyoutProps> = ({
               ref={mergedPopupRef}
               className={`${menuStyles.menuContent} ${styles.sortFilterMenu} no-drag`}
               style={{ minWidth: 212 }}
+              // 【G² 收敛补接 2026-11-07】原语装配的 Popup 必须与组合式
+              // Menu（ui/Menu/Menu.tsx）同法挂 SepPanelShell：菜单油漆已
+              // 从 .menuContent CSS 收敛到形状层，只借类名不挂壳 = 面板
+              // 完全透明（用户实机投诉「背景怎么没了」）。滚动由内层
+              // .menuScroll 承载，与组合式 Menu 同构。
+              render={<SepPanelShell />}
             >
+              <div className={menuStyles.menuScroll}>
               {sections.map((sec) => {
                 const subOpen = fly === sec.type;
                 return (
@@ -309,7 +323,11 @@ export const ContextMenuFlyout: React.FC<ContextMenuFlyoutProps> = ({
                         <Menu.Popup
                           className={menuStyles.menuContent}
                           style={{ minWidth: 152 }}
+                          // 同主面板：原语装配必须挂 SepPanelShell 表面层
+                          // （见上方主 Popup 注释，2026-11-07 收敛补接）。
+                          render={<SepPanelShell />}
                         >
+                          <div className={menuStyles.menuScroll}>
                           <Menu.RadioGroup
                             value={sec.value}
                             onValueChange={(v) => sec.onPick(v as string)}
@@ -335,12 +353,14 @@ export const ContextMenuFlyout: React.FC<ContextMenuFlyoutProps> = ({
                               );
                             })}
                           </Menu.RadioGroup>
+                          </div>
                         </Menu.Popup>
                       </Menu.Positioner>
                     </Menu.Portal>
                   </Menu.SubmenuRoot>
                 );
               })}
+              </div>
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>

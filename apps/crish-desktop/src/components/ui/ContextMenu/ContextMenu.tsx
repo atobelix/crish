@@ -13,6 +13,10 @@
  * - Esc 分层：LayerStack 全局 keydown 为捕获相，先于一切元素级处理；
  *   子菜单打开时由本组件的登记钩子先行收起子菜单并消费事件，
  *   第二次 Esc 才关闭整个菜单（与旧 ContextMenuFlyout 的分层语义一致）。
+ * - 表面（2026-11-07 补接）：菜单油漆已从 .menuContent CSS 收敛到
+ *   SepPanelShell，本组件的两个 Popup（主面板/子菜单）均按组合式 Menu
+ *   同法 render={<SepPanelShell />} 挂壳；在补接前只借类名、无表面层，
+ *   面板完全透明（防再犯断言见 g2-corner.contract.test.ts 的 G8）。
  */
 import React, {
   useCallback,
@@ -32,6 +36,7 @@ import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { resolveElement } from '../internal/layer-stack/layerStackTypes';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { AppIcon } from '../icons';
+import { SepPanelShell } from '../G2Surface/SepPanelShell';
 import menuStyles from '../Menu/Menu.module.css';
 import type {
   ContextMenuAnchor,
@@ -276,8 +281,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 data-testid={dataTestId}
                 aria-label={ariaLabel}
                 finalFocus={anchorElForFocus ? () => anchorElForFocus : false}
+                // 【G² 收敛补接 2026-11-07】与组合式 Menu（ui/Menu/Menu
+                // .tsx）同法挂 SepPanelShell：菜单油漆已从 .menuContent
+                // CSS 收敛到形状层，本组件的原语装配只借类名未挂壳，
+                // 面板一度完全透明（与侧栏 ContextMenuFlyout 同病）。
+                // 滚动由内层 .menuScroll 承载，与组合式 Menu 同构。
+                render={<SepPanelShell />}
               >
-                {children}
+                <div className={menuStyles.menuScroll}>{children}</div>
               </BaseMenu.Popup>
             </BaseMenu.Positioner>
           </BaseMenu.Portal>
@@ -458,8 +469,11 @@ export const ContextMenuSubContent: React.FC<ContextMenuSubContentProps> = ({
           className={[menuStyles.menuContent, className]
             .filter(Boolean)
             .join(' ')}
+          // 同 ContextMenuContent：原语装配必须挂 SepPanelShell 表面层
+          // （见上方注释，2026-11-07 收敛补接）。
+          render={<SepPanelShell />}
         >
-          {children}
+          <div className={menuStyles.menuScroll}>{children}</div>
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
