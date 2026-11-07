@@ -18,6 +18,7 @@ import {
   type ProviderWizardVm,
   type UseProviderWizardVmOptions,
 } from '@/adapters/viewmodels/useProviderWizardVm';
+import { withThinkingDefaultTier } from '@/adapters/viewmodels/useModelSpecDraft';
 import type { LocalPricingSpec } from '@/adapters/localChat/providerPresets';
 import {
   AnimatedPressable,
@@ -76,11 +77,16 @@ const MODALITY_MAP: Record<string, string> = {
 function formatPricingText(pricing?: LocalPricingSpec): string {
   if (!pricing) return '未配置';
   const sym = pricing.currency === 'USD' ? '$' : '¥';
+  // 未设置的价格如实显示「未设置」，不用 1.00 / 2.00 冒充已保存值
   const inPrice =
-    pricing.input !== undefined ? pricing.input.toFixed(2) : '1.00';
+    pricing.input !== undefined ? `${sym}${pricing.input.toFixed(2)}` : '未设置';
   const outPrice =
-    pricing.output !== undefined ? pricing.output.toFixed(2) : '2.00';
-  return `${sym}${inPrice} / ${sym}${outPrice}`;
+    pricing.output !== undefined
+      ? `${sym}${pricing.output.toFixed(2)}`
+      : '未设置';
+  if (pricing.input === undefined && pricing.output === undefined)
+    return '未设置';
+  return `${inPrice} / ${outPrice}`;
 }
 
 function formatThinkingTier(tier?: string): string {
@@ -159,6 +165,16 @@ export default function ProviderWizardView({
     vm.pingStatus === 'success' && vm.latencyMs != null
       ? `模型列表请求耗时 ${vm.latencyMs}ms`
       : null;
+
+  // Step 3 数值摘要：未设置显示「自动」（发送时协议默认），不伪造 128k / 8k
+  const currentContextWindow = vm.currentSpec?.contextWindow;
+  const step3ContextText =
+    currentContextWindow != null
+      ? formatTokenPreset(currentContextWindow)
+      : '自动';
+  const currentMaxOutput = vm.currentSpec?.maxOutputTokens;
+  const step3OutputText =
+    currentMaxOutput != null ? formatTokenPreset(currentMaxOutput) : '自动';
 
   const handleBack = useCallback(() => {
     if (vm.step === 3) vm.goToPrevStep();
@@ -594,7 +610,7 @@ export default function ProviderWizardView({
                 subtitle="设置模型可接收的最大上下文 Token 上限"
                 trailing={
                   <AppText variant="callout" color="textSecondary">
-                    {formatTokenPreset(vm.currentSpec?.contextWindow ?? 131072)}
+                    {step3ContextText}
                   </AppText>
                 }
                 showChevron
@@ -606,7 +622,7 @@ export default function ProviderWizardView({
                 subtitle="设置模型单次回复生成的最大 Token 限制"
                 trailing={
                   <AppText variant="callout" color="textSecondary">
-                    {formatTokenPreset(vm.currentSpec?.maxOutputTokens ?? 8192)}
+                    {step3OutputText}
                   </AppText>
                 }
                 showChevron
@@ -743,20 +759,10 @@ export default function ProviderWizardView({
         onClose={() => setActiveSheet(null)}
         selectedTier={vm.currentSpec?.thinking?.defaultTier ?? 'off'}
         onApply={(tier) =>
-          vm.updateCurrentModelSpec((prev) => ({
-            ...prev,
-            thinking: {
-              supported: tier !== 'off',
-              availableTiers: prev.thinking?.availableTiers ?? [
-                'off',
-                'low',
-                'medium',
-                'high',
-                'max',
-              ],
-              defaultTier: tier,
-            },
-          }))
+          // 与详情页共用同一提交函数：只改默认档，availableTiers 原样保留
+          vm.updateCurrentModelSpec((prev) =>
+            withThinkingDefaultTier(prev, tier)
+          )
         }
         testID="sheet-thinking"
       />
