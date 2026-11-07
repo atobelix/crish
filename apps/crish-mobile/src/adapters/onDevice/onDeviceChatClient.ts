@@ -182,9 +182,34 @@ function mapFinishReason(result: OnDeviceCompletionResult): string {
   return 'stop';
 }
 
+/**
+ * 本机模型运行时面（IA §3.8）：已加载状态只存在于客户端内存，
+ * 这里只提供只读查询与显式加载/释放——绝不把结果写进 store
+ * 当第二真源。详情页与本机首页消费，离开页面不轮询。
+ */
+export interface OnDeviceRuntime {
+  /** 当前已加载的模型 id；未加载为 null（加载进行中以已定格的 active 为准） */
+  loadedModelId(): string | null;
+  /** 是否有一次加载（initLlama）正在进行 */
+  isLoading(): boolean;
+  /**
+   * 显式加载就绪模型（详情页主动作）：未就绪抛既有诚实错误
+   * （LocalChatError 形态，与对话路径同源）；初始化失败抛 unknown。
+   */
+  loadModel(modelId: string): Promise<void>;
+  /**
+   * 释放当前上下文；未加载时无操作。释放失败会抛出——删除已加载
+   * 模型的流程据此中止删文件（IA §3.4），不吞。
+   */
+  releaseLoaded(): Promise<void>;
+}
+
+/** 端侧对话客户端 = 通用 LocalChatClient + 本机运行时面 */
+export type OnDeviceChatClient = LocalChatClient & OnDeviceRuntime;
+
 export function createOnDeviceChatClient(
   deps: OnDeviceChatClientDeps
-): LocalChatClient {
+): OnDeviceChatClient {
   // 单例原生上下文（按 modelId 复用；切换模型 release 旧的）
   let active: { modelId: string; context: OnDeviceLlamaContext } | null =
     null;
@@ -485,6 +510,38 @@ export function createOnDeviceChatClient(
     async fetchProviderModelsRobust() {
       const states = await deps.manager.checkAll();
       return readyModelSpecs(states);
+    },
+
+    loadedModelId() {
+      return active?.modelId ?? null;
+    },
+
+    isLoading() {
+      return pendingInit !== null;
+    },
+
+    async loadModel(modelId: string) {
+      const ready = await resolveReadyModel(modelId);
+      try {
+        await ensureContext(modelId, ready.nativePath, ready.spec);
+      } catch (e) {
+        throw withErrorMessage(nativeError('加载本机模型', e));
+      }
+    },
+
+    async releaseLoaded() {
+      if (pendingInit) {
+        try {
+          await pendingInit;
+        } catch {
+          // 初始化失败则无上下文可释放，继续走 active 收口
+        }
+      }
+      const current = active;
+      active = null;
+      if (current) {
+        await current.context.release();
+      }
     },
   };
 }

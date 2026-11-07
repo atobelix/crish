@@ -14,7 +14,11 @@ import {
   type OnDeviceModelState,
 } from '@/adapters/onDevice/onDeviceModelManager';
 import type { OnDeviceModelSpec } from '@/adapters/onDevice/onDeviceModelCatalog';
-import { getOnDeviceModelManager } from '@/adapters/onDevice/onDeviceWiring';
+import type { OnDeviceRuntime } from '@/adapters/onDevice/onDeviceChatClient';
+import {
+  getOnDeviceModelManager,
+  getOnDeviceRuntime,
+} from '@/adapters/onDevice/onDeviceWiring';
 import { syncOnDeviceProvider } from '@/adapters/onDevice/onDeviceProviderSync';
 
 /** 单个目录模型的管理面投影（纯数据，视图直接渲染） */
@@ -58,12 +62,22 @@ export interface OnDeviceModelsVm {
   readonly readyCount: number;
   /** 最近一次同步到选择器的失败原因（成功时为 null；界面必须可见） */
   readonly syncErrorText: string | null;
+  /** 核对磁盘失败的原因（首页错误态：暂时无法读取模型目录；成功时为 null） */
+  readonly loadErrorText: string | null;
+  /** 当前可用磁盘字节（实测透传；读不到为 null，界面写「未能读取」不估算） */
+  readonly freeDiskSpaceBytes: number | null;
+  /** 未完成数量：未完成/待校验/失败/进行中（首页摘要；已取消不计——磁盘已清） */
+  readonly incompleteCount: number;
+  /** 当前已加载的模型 id（运行时内存真源的只读投影；未加载为 null） */
+  readonly loadedModelId: string | null;
   /** 触发下载（或失败重试）：走管理器 ensureReady，完成后回写条目 */
   readonly download: (modelId: string) => void;
   /** 取消进行中的下载（终态经订阅回流：cancelling → cancelled） */
   readonly cancelDownload: (modelId: string) => Promise<void>;
   /** 删除模型文件并回写条目（活动模型回退由 store 自愈兜底） */
   readonly removeModel: (modelId: string) => Promise<void>;
+  /** 删除未完成文件：只清 .part 与续传记录，正式文件不动（存储页清理） */
+  readonly removeIncomplete: (modelId: string) => Promise<void>;
   /** 重新全量核对（checkAll + 占用 + 同步） */
   readonly refresh: () => Promise<void>;
 }
@@ -137,17 +151,27 @@ export function onDeviceRowOf(
 }
 
 export function useOnDeviceModelsVm(
-  managerOverride?: OnDeviceModelManager
+  managerOverride?: OnDeviceModelManager,
+  runtimeOverride?: OnDeviceRuntime
 ): OnDeviceModelsVm {
   const manager = useMemo(
     () => managerOverride ?? getOnDeviceModelManager(),
     [managerOverride]
+  );
+  const runtime = useMemo(
+    () => runtimeOverride ?? getOnDeviceRuntime(),
+    [runtimeOverride]
   );
   const specs = useMemo(() => manager.listSpecs(), [manager]);
   const [states, setStates] = useState<Record<string, OnDeviceModelState>>({});
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const [syncErrorText, setSyncErrorText] = useState<string | null>(null);
+  const [loadErrorText, setLoadErrorText] = useState<string | null>(null);
+  const [freeDiskSpaceBytes, setFreeDiskSpaceBytes] = useState<number | null>(
+    null
+  );
+  const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
@@ -205,8 +229,19 @@ export function useOnDeviceModelsVm(
 
   const refresh = useCallback(async () => {
     const seqAtStart = new Map(stateSeqRef.current);
-    const all = await manager.checkAll();
+    let all: OnDeviceModelState[];
+    try {
+      all = await manager.checkAll();
+    } catch (error) {
+      // 核对磁盘失败：进入可见错误态（IA §3.3），不保留假就绪快照
+      if (!aliveRef.current) return;
+      setLoadErrorText(
+        error instanceof Error ? error.message : '暂时无法读取模型目录'
+      );
+      return;
+    }
     if (!aliveRef.current) return;
+    setLoadErrorText(null);
     // 逐模型合并：核对期间已有更新状态（订阅先到）落地的模型，
     // 其旧观测不得覆盖新终态；其余模型照常以核对结果为准。
     for (const state of all) {
@@ -225,11 +260,15 @@ export function useOnDeviceModelsVm(
         if (!aliveRef.current) return;
       }
     }
+    // 运行时已加载与可用空间：只读实测投影，不写回任何 store
+    setLoadedModelId(runtime.loadedModelId());
+    setFreeDiskSpaceBytes(await manager.freeDiskSpace());
+    if (!aliveRef.current) return;
     await refreshUsage();
     // 挂载核对即回写：校验失效（文件被外部删除/标记不在案）在此如实
     // 反映到内置条目，选择器不留假可用模型。
     await runSync();
-  }, [manager, applyState, refreshUsage, runSync]);
+  }, [manager, runtime, applyState, refreshUsage, runSync]);
 
   // 挂载：先用管理器保留态补齐（离开期间完成的下载立即可见），
   // 再订阅事件流，最后跑一次全量核对。
@@ -284,6 +323,21 @@ const removeModel = useCallback(
     [manager, applyState, refreshUsage, runSync, setBusy]
   );
 
+  const removeIncomplete = useCallback(
+    async (modelId: string) => {
+      setBusy(modelId, true);
+      try {
+        await manager.removeIncomplete(modelId);
+        const next = await manager.check(modelId);
+        applyState(next);
+        await refreshUsage();
+      } finally {
+        setBusy(modelId, false);
+      }
+    },
+    [manager, applyState, refreshUsage, setBusy]
+  );
+
   const rows = useMemo<readonly OnDeviceModelRow[]>(
     () =>
       specs.map((spec) =>
@@ -305,15 +359,33 @@ const removeModel = useCallback(
     () => Object.values(states).filter((s) => s.kind === 'ready').length,
     [states]
   );
+  const incompleteCount = useMemo(
+    () =>
+      Object.values(states).filter(
+        (s) =>
+          s.kind === 'partial' ||
+          s.kind === 'unverified' ||
+          s.kind === 'error' ||
+          s.kind === 'downloading' ||
+          s.kind === 'verifying' ||
+          s.kind === 'cancelling'
+      ).length,
+    [states]
+  );
 
   return {
     rows,
     totalUsageText: formatBytes(totalUsageBytes),
     readyCount,
     syncErrorText,
+    loadErrorText,
+    freeDiskSpaceBytes,
+    incompleteCount,
+    loadedModelId,
     download,
     cancelDownload,
     removeModel,
+    removeIncomplete,
     refresh,
   };
 }

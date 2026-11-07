@@ -12,6 +12,8 @@ import type { LocalChatClient } from '../localChat/localChatClient';
 import {
   createLlamaRnBridge,
   createOnDeviceChatClient,
+  type OnDeviceChatClient,
+  type OnDeviceRuntime,
 } from './onDeviceChatClient';
 import {
   onDeviceModelManager,
@@ -55,10 +57,9 @@ export function getOnDeviceModelManager(): OnDeviceModelManager {
   return onDeviceModelManager(kvOf());
 }
 
-let clientSingleton: LocalChatClient | null = null;
+let clientSingleton: OnDeviceChatClient | null = null;
 
-/** 端侧对话客户端单例（惰性组装：真 llama.rn 桥 + 管理器单例） */
-export function getOnDeviceChatClient(): LocalChatClient {
+function clientOf(): OnDeviceChatClient {
   if (clientSingleton === null) {
     clientSingleton = createOnDeviceChatClient({
       manager: getOnDeviceModelManager(),
@@ -66,6 +67,16 @@ export function getOnDeviceChatClient(): LocalChatClient {
     });
   }
   return clientSingleton;
+}
+
+/** 端侧对话客户端单例（惰性组装：真 llama.rn 桥 + 管理器单例） */
+export function getOnDeviceChatClient(): LocalChatClient {
+  return clientOf();
+}
+
+/** 本机运行时面（与对话客户端同一单例的只读加载状态出口，IA §3.8） */
+export function getOnDeviceRuntime(): OnDeviceRuntime {
+  return clientOf();
 }
 
 /** 测试隔离：清空客户端单例与 kv 注入（管理器单例在 O2 工厂内，不在此复位） */

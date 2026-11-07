@@ -91,6 +91,8 @@ interface FakeScript {
   error?: Error;
   /** 挂起门：completion 等此 Promise 才返回（abort 测试用） */
   gate?: Promise<void>;
+  /** release 失败注入（显式释放必须把失败抛给调用方） */
+  releaseError?: Error;
 }
 
 const BASE_RESULT: OnDeviceCompletionResult = {
@@ -128,6 +130,7 @@ class FakeContext implements OnDeviceLlamaContext {
 
   async release(): Promise<void> {
     this.releaseCalls += 1;
+    if (this.script.releaseError) throw this.script.releaseError;
   }
 }
 
@@ -762,5 +765,71 @@ describe('引擎工具闸（端侧线程）', () => {
       ).toBe(true);
     });
     expect(getLocalChatClient()).toBeDefined();
+  });
+});
+
+describe('onDeviceChatClient 运行时只读面（L2 / IA §3.8）', () => {
+  it('初始未加载：loadedModelId 为 null、isLoading 为 false', async () => {
+    const client = createOnDeviceChatClient({
+      manager: makeFakeManager({ readyIds: new Set([MODEL_15B]) }),
+      llama: new FakeBridge(),
+    });
+    expect(client.loadedModelId()).toBeNull();
+    expect(client.isLoading()).toBe(false);
+  });
+
+  it('loadModel 后可查已加载；releaseLoaded 后回 null 且原生 release 被调用', async () => {
+    const bridge = new FakeBridge();
+    const client = createOnDeviceChatClient({
+      manager: makeFakeManager({ readyIds: new Set([MODEL_15B]) }),
+      llama: bridge,
+    });
+    await client.loadModel(MODEL_15B);
+    expect(client.loadedModelId()).toBe(MODEL_15B);
+    expect(bridge.initCalls).toHaveLength(1);
+    await client.releaseLoaded();
+    expect(client.loadedModelId()).toBeNull();
+    expect(bridge.contexts[0]!.releaseCalls).toBe(1);
+  });
+
+  it('loadModel 未就绪模型：抛诚实错误且不调 initLlama', async () => {
+    const bridge = new FakeBridge();
+    const client = createOnDeviceChatClient({
+      manager: makeFakeManager({ readyIds: new Set() }),
+      llama: bridge,
+    });
+    await expect(client.loadModel(MODEL_15B)).rejects.toMatchObject({
+      kind: 'notConfigured',
+    });
+    expect(bridge.initCalls).toHaveLength(0);
+    expect(client.loadedModelId()).toBeNull();
+  });
+
+  it('releaseLoaded 未加载时无操作不抛；释放失败时抛出（删文件前据此中止）', async () => {
+    const bridge = new FakeBridge();
+    const client = createOnDeviceChatClient({
+      manager: makeFakeManager({ readyIds: new Set([MODEL_15B]) }),
+      llama: bridge,
+    });
+    await expect(client.releaseLoaded()).resolves.toBeUndefined();
+    await client.loadModel(MODEL_15B);
+    // FakeContext 持有 script 引用：突变字段即可让已建上下文的 release 失败
+    bridge.script.releaseError = new Error('native release boom');
+    await expect(client.releaseLoaded()).rejects.toThrow(
+      'native release boom'
+    );
+  });
+
+  it('对话路径加载后运行时面同步可见（同一内存真源，不写 store）', async () => {
+    const bridge = new FakeBridge();
+    const client = createOnDeviceChatClient({
+      manager: makeFakeManager({ readyIds: new Set([MODEL_15B]) }),
+      llama: bridge,
+    });
+    const { rec, callbacks } = makeCallbacks();
+    client.streamChatCompletion(streamInput(), callbacks);
+    await flushAsync();
+    expect(rec.errors).toHaveLength(0);
+    expect(client.loadedModelId()).toBe(MODEL_15B);
   });
 });

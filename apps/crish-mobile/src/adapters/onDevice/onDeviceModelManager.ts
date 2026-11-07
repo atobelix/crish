@@ -385,6 +385,36 @@ await this.deps.remove(this.dirOf(spec));
 await this.deps.kv.delete(this.resumeKeyOf(spec));
 this.emit({ kind: 'missing', modelId});
 }
+/** 当前可用磁盘字节（存储页实测行）；取不到返回 null（界面写「未能读取」，不估算） */
+async freeDiskSpace(): Promise<number | null> {
+return this.deps.freeDiskSpace();
+}
+/**
+* 是否存在可用的断点续传凭据：记录在案、url 属于目录源、fileUri
+* 与本模型 .part 路径一致、且 .part 文件确实还在——与下载入口的
+* 续传判据同源。详情页据此区分「继续下载」与「重新下载（会覆盖
+* 半成品）」，无凭据时绝不显示可继续。
+*/
+async hasResumeCredential(modelId: string): Promise<boolean> {
+const spec = this.byId.get(modelId);
+if (!spec) return false;
+const saved = await this.readSavedResume(spec);
+if (!saved) return false;
+if (saved.fileUri!== this.partPathOf(spec)) return false;
+if (!spec.urls.includes(saved.url)) return false;
+return (await this.deps.fileSize(this.partPathOf(spec)))!== null;
+}
+/**
+* 删除未完成文件（存储清理 / 详情共用）：只清 .part 与续传记录，
+* 正式文件、标记、目录一律不动。正在下载的行由界面层排除，
+* 本方法不负责取消在途任务。
+*/
+async removeIncomplete(modelId: string): Promise<void> {
+const spec = this.byId.get(modelId);
+if (!spec) return;
+await this.deps.remove(this.partPathOf(spec));
+await this.deps.kv.delete(this.resumeKeyOf(spec));
+}
 /** 高效校验单个文件：尺寸预检 + 原生加速哈希（降级纯 JS 分块）比对 */
 async verifyFile(
 spec: OnDeviceModelSpec,

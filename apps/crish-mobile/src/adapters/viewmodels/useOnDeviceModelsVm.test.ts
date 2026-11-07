@@ -290,8 +290,9 @@ class VmFakeStore implements OnDeviceModelStoreDeps {
       this.files.delete(from);
     }
   }
+  freeSpaceValue: number | null = Number.MAX_SAFE_INTEGER;
   async freeDiskSpace(): Promise<number | null> {
-    return Number.MAX_SAFE_INTEGER;
+    return this.freeSpaceValue;
   }
   createResumableDownload(
     url: string,
@@ -465,6 +466,103 @@ describe('useOnDeviceModelsVm · L1 取消', () => {
         store.rootDir + SPEC_A.id + '/' + SPEC_A.fileName + '.part'
       )
     ).toBe(false);
+    vm.unmount();
+  });
+});
+
+describe('useOnDeviceModelsVm · L2 首页/存储支撑', () => {
+  beforeEach(() => {
+    localChatStore.setState({
+      config: { version: 2, providers: {}, activeModel: null },
+      hydrated: true,
+      keyPresence: {},
+    });
+  });
+
+  it('核对磁盘失败 → loadErrorText 可见，不假装空列表', async () => {
+    class BrokenManager extends OnDeviceModelManager {
+      async checkAll(): Promise<OnDeviceModelState[]> {
+        throw new Error('disk gone');
+      }
+    }
+    const manager = new BrokenManager(new VmFakeStore(), [SPEC_A]);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      expect(vm.result.current.loadErrorText).toBe('disk gone');
+    });
+    vm.unmount();
+  });
+
+  it('freeDiskSpaceBytes 为实测透传，读不到时为 null', async () => {
+    const store = new VmFakeStore();
+    store.freeSpaceValue = 987654;
+    const manager = makeVmManager(store);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      expect(vm.result.current.freeDiskSpaceBytes).toBe(987654);
+    });
+    store.freeSpaceValue = null;
+    await act(async () => {
+      await vm.result.current.refresh();
+    });
+    expect(vm.result.current.freeDiskSpaceBytes).toBeNull();
+    vm.unmount();
+  });
+
+  it('incompleteCount：未完成计入，ready/missing 不计', async () => {
+    const store = new VmFakeStore();
+    const manager = makeVmManager(store);
+    store.files.set(
+      formalPathOf(store) + '.part',
+      utf8ToBytes(CONTENT_A.slice(0, 9))
+    );
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      expect(vm.result.current.incompleteCount).toBe(1);
+    });
+    await act(async () => {
+      await manager.ensureReady(SPEC_A.id, () => undefined);
+      await vm.result.current.refresh();
+    });
+    expect(vm.result.current.incompleteCount).toBe(0);
+    vm.unmount();
+  });
+
+  it('loadedModelId 来自运行时只读面（不写 store）', async () => {
+    const store = new VmFakeStore();
+    const manager = makeVmManager(store);
+    const runtime = {
+      loadedModelId: () => SPEC_A.id,
+      isLoading: () => false,
+      loadModel: async () => undefined,
+      releaseLoaded: async () => undefined,
+    };
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager, runtime));
+    await waitFor(() => {
+      expect(vm.result.current.loadedModelId).toBe(SPEC_A.id);
+    });
+    expect(localChatStore.getState().config.activeModel).toBeNull();
+    vm.unmount();
+  });
+
+  it('removeIncomplete 清半成品：占用归零、行回未下载', async () => {
+    const store = new VmFakeStore();
+    const manager = makeVmManager(store);
+    store.files.set(
+      formalPathOf(store) + '.part',
+      utf8ToBytes(CONTENT_A.slice(0, 9))
+    );
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('未完成');
+    });
+    await act(async () => {
+      await vm.result.current.removeIncomplete(SPEC_A.id);
+    });
+    const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+    expect(row?.statusText).toBe('未下载');
+    expect(vm.result.current.totalUsageText).toBe('0 B');
     vm.unmount();
   });
 });

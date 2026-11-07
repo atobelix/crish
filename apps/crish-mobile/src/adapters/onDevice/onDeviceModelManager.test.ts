@@ -898,3 +898,77 @@ describe('OnDeviceModelManager · L1 取消、竞态、空间与 206', () => {
     expect(ok.kind).toBe('ready');
   });
 });
+
+describe('OnDeviceModelManager · L2 页面支撑面', () => {
+  it('freeDiskSpace 透传依赖面：有值回值、读不到回 null（不虚报）', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    store.freeSpace = 123456;
+    expect(await manager.freeDiskSpace()).toBe(123456);
+    store.freeSpace = null;
+    expect(await manager.freeDiskSpace()).toBeNull();
+  });
+
+  it('hasResumeCredential：记录在案且 url、.part 路径、文件三者齐备才为真', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    expect(await manager.hasResumeCredential(SPEC_A.id)).toBe(false);
+    const partPath = pathOf(store, SPEC_A) + '.part';
+    store.kvData.set(
+      `ondevice.resume.${SPEC_A.id}`,
+      JSON.stringify({
+        url: SPEC_A.urls[0],
+        fileUri: partPath,
+        resumeData: '10',
+        savedAt: 1,
+      })
+    );
+    // 记录在但 .part 已不在 → 不算可续（点了「继续」也无从续起）
+    expect(await manager.hasResumeCredential(SPEC_A.id)).toBe(false);
+    store.seedFile(partPath, CONTENT_A.slice(0, 10));
+    expect(await manager.hasResumeCredential(SPEC_A.id)).toBe(true);
+    // url 对不上目录源 → 不是这条模型的凭据
+    store.kvData.set(
+      `ondevice.resume.${SPEC_A.id}`,
+      JSON.stringify({
+        url: 'https://example.invalid/x.gguf',
+        fileUri: partPath,
+        resumeData: '10',
+        savedAt: 1,
+      })
+    );
+    expect(await manager.hasResumeCredential(SPEC_A.id)).toBe(false);
+  });
+
+  it('removeIncomplete：只删 .part 与续传记录，正式文件与标记不动', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    await manager.ensureReady(SPEC_A.id, () => undefined);
+    const partPath = pathOf(store, SPEC_A) + '.part';
+    store.seedFile(partPath, CONTENT_A.slice(0, 8));
+    store.kvData.set(
+      `ondevice.resume.${SPEC_A.id}`,
+      JSON.stringify({
+        url: SPEC_A.urls[0],
+        fileUri: partPath,
+        resumeData: '8',
+        savedAt: 1,
+      })
+    );
+    await manager.removeIncomplete(SPEC_A.id);
+    expect(store.files.has(partPath)).toBe(false);
+    expect(store.kvData.has(`ondevice.resume.${SPEC_A.id}`)).toBe(false);
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(true);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+  });
+
+  it('removeIncomplete：未完成模型删后回 missing、占用归零', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    const partPath = pathOf(store, SPEC_A) + '.part';
+    store.seedFile(partPath, CONTENT_A.slice(0, 10));
+    await manager.removeIncomplete(SPEC_A.id);
+    expect(await manager.usageBytes(SPEC_A.id)).toBe(0);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('missing');
+  });
+});
