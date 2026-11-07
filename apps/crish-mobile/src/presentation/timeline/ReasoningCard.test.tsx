@@ -81,7 +81,7 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       await view.unmount();
     });
 
-    it('正在思考 status="thinking" 保持视口可见；流转为 status="done" 时刚性折叠', async () => {
+    it('正在思考 status="thinking" 保持视口可见；流转为 status="done" 时收拢卸载（无实测高度时即时收折）', async () => {
       const view = await renderCard(
         <ReasoningCard
           status="thinking"
@@ -94,7 +94,7 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       expect(view.getByTestId('reasoning-content-box')).toBeTruthy();
       expect(view.getByText('正在深度思考...')).toBeTruthy();
 
-      // 状态机翻转为 done，触发刚性收拢
+      // 状态机翻转为 done：无实测高度（测试环境 onLayout 未触发）→ 即时收折
       await view.rerender(
         <ReasoningCard
           status="done"
@@ -106,6 +106,41 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
 
       expect(view.queryByTestId('reasoning-content-box')).toBeNull();
       expect(view.getByText('已深度思考 5 秒')).toBeTruthy();
+      await view.unmount();
+    });
+
+    it('R9 连续收拢：有实测高度时先保持挂载收拢；收拢中点胶囊中断回到展开', async () => {
+      const view = await renderCard(
+        <ReasoningCard
+          status="thinking"
+          text="连续收拢的思考全文。"
+          minResidencyMs={0}
+        />
+      );
+      // 模拟实测高度（原生 onLayout）
+      await act(async () => {
+        fireEvent(view.getByTestId('reasoning-collapse-wrapper'), 'layout', {
+          nativeEvent: { layout: { height: 160, width: 340 } },
+        });
+      });
+
+      await view.rerender(
+        <ReasoningCard
+          status="done"
+          text="连续收拢的思考全文。"
+          durationMs={4500}
+          minResidencyMs={0}
+        />
+      );
+
+      // 收拢进行中：内容框仍挂载（高度动画承载负 delta）
+      expect(view.queryByTestId('reasoning-content-box')).not.toBeNull();
+      // 收拢中点胶囊 → 中断收拢回到展开，内容不丢
+      await act(async () => {
+        fireEvent.press(view.getByTestId('reasoning-header'));
+      });
+      expect(view.queryByTestId('reasoning-content-box')).not.toBeNull();
+      expect(view.getByText('连续收拢的思考全文。')).toBeTruthy();
       await view.unmount();
     });
 
@@ -186,7 +221,7 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       await view.unmount();
     });
 
-    it('流式思考中内容高度超过 160dp 时触发自动吸底滚到底部', async () => {
+    it('流式思考中内容高度超过 160dp 时随内容事件瞬时落底（无动画重启）', async () => {
       const scrollSpy = jest.fn();
       const protoSpy = jest
         .spyOn(ScrollView.prototype, 'scrollToEnd')
@@ -203,15 +238,15 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       const scrollView = view.getByTestId('reasoning-scroll-view');
       await act(async () => {
         fireEvent(scrollView, 'contentSizeChange', 350, 220);
-        await new Promise((r) => setTimeout(r, 30));
       });
 
-      expect(scrollSpy).toHaveBeenCalledWith({ animated: true });
+      // R9：瞬时落底（animated: false），不是动画重启
+      expect(scrollSpy).toHaveBeenCalledWith({ animated: false });
       protoSpy.mockRestore();
       await view.unmount();
     });
 
-    it('在 100ms 窗口内高频触发 contentSizeChange 时受到节流防抖控制，杜绝逐字动画冲突', async () => {
+    it('R9 高频内容事件逐次瞬时落底（无节流定时器、无动画冲突面）', async () => {
       const scrollSpy = jest.fn();
       const protoSpy = jest
         .spyOn(ScrollView.prototype, 'scrollToEnd')
@@ -230,11 +265,89 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
         onContentSizeChange(350, 200);
         onContentSizeChange(350, 210);
         onContentSizeChange(350, 220);
-        // 等待 120ms 让 trailing edge 在当前 act 作用域内完整执行
-        await new Promise((r) => setTimeout(r, 120));
       });
 
-      // 5 次密集触发最终仅执行 2 次 scrollToEnd (leading 1 次 + trailing 1 次)，杜绝逐字动画冲突
+      // 每次 contentSizeChange 一次瞬时落底；无 trailing 定时器残留
+      expect(scrollSpy).toHaveBeenCalledTimes(5);
+      expect(scrollSpy).toHaveBeenLastCalledWith({ animated: false });
+
+      protoSpy.mockRestore();
+      await view.unmount();
+    });
+
+    it('R9 用户拖动立即取消跟随：拖动后内容增长不再抢读', async () => {
+      const scrollSpy = jest.fn();
+      const protoSpy = jest
+        .spyOn(ScrollView.prototype, 'scrollToEnd')
+        .mockImplementation(scrollSpy);
+
+      const view = await renderCard(
+        <ReasoningContentBox text="拖动取消跟随" isThinking={true} />
+      );
+      const scrollView = view.getByTestId('reasoning-scroll-view');
+
+      await act(async () => {
+        fireEvent(scrollView, 'contentSizeChange', 350, 220);
+      });
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        fireEvent(scrollView, 'scrollBeginDrag');
+      });
+      await act(async () => {
+        fireEvent(scrollView, 'contentSizeChange', 350, 300);
+      });
+      // 拖动后不再自动落底（阅读历史不抢读）
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+
+      protoSpy.mockRestore();
+      await view.unmount();
+    });
+
+    it('R9 上滑阅读后跟随解除，回到底部自动恢复', async () => {
+      const scrollSpy = jest.fn();
+      const protoSpy = jest
+        .spyOn(ScrollView.prototype, 'scrollToEnd')
+        .mockImplementation(scrollSpy);
+
+      const view = await renderCard(
+        <ReasoningContentBox text="上滑阅读恢复跟随" isThinking={true} />
+      );
+      const scrollView = view.getByTestId('reasoning-scroll-view');
+
+      await act(async () => {
+        fireEvent(scrollView, 'contentSizeChange', 350, 220);
+      });
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+
+      // 用户上滑（离底 100dp）→ 脱离跟随
+      await act(async () => {
+        fireEvent(scrollView, 'scroll', {
+          nativeEvent: {
+            contentSize: { height: 300, width: 350 },
+            contentOffset: { x: 0, y: 0 },
+            layoutMeasurement: { height: 160, width: 350 },
+          },
+        });
+      });
+      await act(async () => {
+        fireEvent(scrollView, 'contentSizeChange', 350, 320);
+      });
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+
+      // 回到底部（离底 <40dp）→ 恢复跟随
+      await act(async () => {
+        fireEvent(scrollView, 'scroll', {
+          nativeEvent: {
+            contentSize: { height: 320, width: 350 },
+            contentOffset: { x: 0, y: 130 },
+            layoutMeasurement: { height: 160, width: 350 },
+          },
+        });
+      });
+      await act(async () => {
+        fireEvent(scrollView, 'contentSizeChange', 350, 340);
+      });
       expect(scrollSpy).toHaveBeenCalledTimes(2);
 
       protoSpy.mockRestore();
