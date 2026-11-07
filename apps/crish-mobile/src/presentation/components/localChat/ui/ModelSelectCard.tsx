@@ -1,10 +1,12 @@
 // 模型选择卡片（向导第 2 步）：
-// - 呈现单个待选模型：左侧多选复选框（圆角 6dp，未选浅灰边，选中品牌色勾选）、
-//   中间模型 ID 与上下文大小标签、右侧固定能力槽位（Canonical Slots）；
+// - 呈现单个待选模型：左侧选中点（选中 = textPrimary 实心圆，未选 = hairline
+//   空心圆，同为 size.dot 尺寸）、中间模型 ID 与上下文大小标签、右侧固定
+//   能力槽位（Canonical Slots）；选中不用品牌色描边与方框勾；
 // - 固定能力槽位绝对对齐：严格按照 [文本] -> [视觉] -> [文档] -> [思考] -> [语音]
 //   5 槽位排列（每个槽位 16px 宽，间距 4px）。未支持能力保留相同宽度透明占位
 //   （opacity: 0），使整列卡片纵向绝对对齐无参差；
-// - 选中态：背景轻微提亮，柔和边框，零突兀黑粗边（对比度 <= 10%）；
+// - 选中态：背景轻微提亮，边框恒 hairline（对比度 <= 10%）；整卡仍是点击
+//   目标，热区不缩小；无障碍 checkbox + checked 保留；
 // - 按压动效：usePressFade 120ms 平滑过渡。
 import { memo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -209,36 +211,27 @@ export const ModelSelectCard = memo(function ModelSelectCard({
           backgroundColor: selected
             ? theme.colors.surfaceRaised
             : theme.colors.surface,
-          borderColor: selected ? theme.colors.brand : theme.colors.hairline,
+          borderColor: theme.colors.hairline,
         },
         fadeStyle,
         style,
       ]}
     >
-      {/* 1. 左侧多选复选框（圆角 6dp，未选浅灰边，选中品牌色勾选） */}
-      <View
-        style={[
-          styles.checkbox,
-          {
-            borderRadius: theme.radius.xs, // 6dp
-            borderColor: selected
-              ? theme.colors.actionPrimary
-              : theme.colors.borderStrong,
+      {/* 1. 左侧选中点：实心 = 已选（textPrimary），空心 = 未选（hairline 描边） */}
+      <View style={styles.markerSlot}>
+        <View
+          testID={`model-select-dot-${id}`}
+          style={{
+            width: theme.size.dot,
+            height: theme.size.dot,
+            borderRadius: theme.radius.pill,
             backgroundColor: selected
-              ? theme.colors.actionPrimary
-              : theme.colors.surface,
-          },
-        ]}
-        testID={`model-checkbox-${id}`}
-      >
-        {selected ? (
-          <Icon
-            name="check"
-            size={13}
-            color={theme.colors.actionPrimaryText}
-            strokeWidth={2.4}
-          />
-        ) : null}
+              ? theme.colors.textPrimary
+              : 'transparent',
+            borderWidth: selected ? 0 : 1,
+            borderColor: theme.colors.hairline,
+          }}
+        />
       </View>
 
       {/* 2. 中间模型 ID 与上下文大小标签 */}
@@ -326,10 +319,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  checkbox: {
+  markerSlot: {
     width: 20,
     height: 20,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
