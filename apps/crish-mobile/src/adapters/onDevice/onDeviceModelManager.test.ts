@@ -64,6 +64,11 @@ class FakeResumable implements OnDeviceResumableDownload {
     return { status: 200 };
   }
   savable(): { url: string; fileUri: string; resumeData?: string } {
+    // 生产形开关：真实 DownloadResumable 在未 pauseAsync 前 savable()
+    // 不带 resumeData；omitResumeData 时模拟这一形态。
+    if (this.store.omitResumeData) {
+      return { url: this.url, fileUri: this.destPath };
+    }
     return {
       url: this.url,
       fileUri: this.destPath,
@@ -97,6 +102,11 @@ class FakeStore implements OnDeviceModelStoreDeps {
   sha256Calls: string[] = [];
   freeSpace: number | null = Number.MAX_SAFE_INTEGER;
   chunkDelayMs = 0;
+  /** true 时假下载器的 savable() 不返回 resumeData（生产形态） */
+  omitResumeData = false;
+  /** 设置后：第一次读 .part 大小时挂起，释放后返回当时的旧观测（null） */
+  partReadGate: Promise<void> | null = null;
+  private partGateConsumed = false;
   contentBytes(url: string, bad: boolean): Uint8Array {
     const fileName = url.split('/').pop() ?? '';
     const bytes = utf8ToBytes(this.contents.get(fileName) ?? '');
@@ -107,6 +117,15 @@ class FakeStore implements OnDeviceModelStoreDeps {
   }
   async ensureDir(): Promise<void> {}
   async fileSize(path: string): Promise<number | null> {
+    if (
+      this.partReadGate !== null &&
+      !this.partGateConsumed &&
+      path.endsWith('.part')
+    ) {
+      this.partGateConsumed = true;
+      await this.partReadGate;
+      return null;
+    }
     const data = this.files.get(path);
     return data ? data.length : null;
   }
@@ -534,5 +553,168 @@ describe('OnDeviceModelManager', () => {
     const result = await manager.ensureReady('nope', () => undefined);
     expect(result.kind).toBe('error');
     if (result.kind === 'error') expect(result.canRetry).toBe(false);
+  });
+});
+
+describe('OnDeviceModelManager · L0 磁盘形态区分（check 不再把有字节说成未下载）', () => {
+  it('五种形态：无字节 missing / 只有 .part 为 partial / 正式文件无标记 unverified / 尺寸不符的正式文件 partial / 已标记 ready', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    // 无字节 → missing
+    expect((await manager.check(SPEC_A.id)).kind).toBe('missing');
+    // 只有完整 .part → partial（未完成），占用仍在
+    store.seedFile(pathOf(store, SPEC_A) + '.part', CONTENT_A);
+    const partial = await manager.check(SPEC_A.id);
+    expect(partial.kind).toBe('partial');
+    if (partial.kind === 'partial') {
+      expect(partial.receivedBytes).toBe(SPEC_A.size);
+    }
+    expect(await manager.usageBytes(SPEC_A.id)).toBe(SPEC_A.size);
+    // 正式文件在、尺寸正确、无标记 → unverified（待校验）
+    store.files.delete(pathOf(store, SPEC_A) + '.part');
+    store.seedFile(pathOf(store, SPEC_A), CONTENT_A);
+    const unverified = await manager.check(SPEC_A.id);
+    expect(unverified.kind).toBe('unverified');
+    if (unverified.kind === 'unverified') {
+      expect(unverified.sizeBytes).toBe(SPEC_A.size);
+    }
+    // 正式文件尺寸不符（被截断）且无 .part → partial，不是 missing
+    store.seedFile(pathOf(store, SPEC_A), CONTENT_A.slice(0, 7));
+    const truncated = await manager.check(SPEC_A.id);
+    expect(truncated.kind).toBe('partial');
+    if (truncated.kind === 'partial') {
+      expect(truncated.receivedBytes).toBe(7);
+    }
+    // 标记在案 → ready（走 ensureReady 落盘后复核）
+    store.files.delete(pathOf(store, SPEC_A));
+    await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+  });
+
+  it('verifyExisting：无标记的好文件只校验补标记、不下载，终态 ready', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    store.seedFile(pathOf(store, SPEC_A), CONTENT_A);
+    const states: OnDeviceModelState[] = [];
+    const result = await manager.verifyExisting(SPEC_A.id, (s) =>
+      states.push(s)
+    );
+    expect(result.kind).toBe('ready');
+    expect(store.createCalls).toHaveLength(0);
+    expect(states.map((s) => s.kind)).toEqual(['verifying', 'ready']);
+    expect(store.files.has(dirOf(store, SPEC_A) + 'verified.json')).toBe(
+      true
+    );
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+  });
+
+  it('verifyExisting：内容被篡改 → 诚实 error，不下载、不删既有文件', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    const tampered = 'X' + CONTENT_A.slice(1);
+    store.seedFile(pathOf(store, SPEC_A), tampered);
+    const result = await manager.verifyExisting(SPEC_A.id, () => undefined);
+    expect(result.kind).toBe('error');
+    if (result.kind === 'error') {
+      expect(result.message).toContain('哈希');
+      expect(result.canRetry).toBe(true);
+    }
+    expect(store.createCalls).toHaveLength(0);
+    // 非破坏性：既有正式文件原样保留，check 仍如实报 unverified
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(true);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('unverified');
+  });
+
+  it('verifyExisting：missing / ready 时是无副作用的直查', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    expect((await manager.verifyExisting(SPEC_A.id, () => undefined)).kind)
+      .toBe('missing');
+    await manager.ensureReady(SPEC_A.id, () => undefined);
+    store.sha256Calls = [];
+    expect((await manager.verifyExisting(SPEC_A.id, () => undefined)).kind)
+      .toBe('ready');
+    expect(store.sha256Calls).toHaveLength(0);
+  });
+
+  it('下载内容哈希不符：.part 与续传记录一并清除（错误字节不得成为续传前缀）', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    for (const url of SPEC_A.urls) store.behavior.set(url, 'badContent');
+    const result = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(result.kind).toBe('error');
+    expect(store.files.has(pathOf(store, SPEC_A) + '.part')).toBe(false);
+    expect(store.kvData.has(`ondevice.resume.${SPEC_A.id}`)).toBe(false);
+    expect(await manager.usageBytes(SPEC_A.id)).toBe(0);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('missing');
+  });
+});
+
+describe('OnDeviceModelManager · L0 状态订阅与终态保留', () => {
+  it('订阅者收到与 onState 相同的状态流；终态保留可供新订阅方读取', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    const seen: OnDeviceModelState[] = [];
+    const unsubscribe = manager.subscribe((s) => seen.push(s));
+    const result = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(result.kind).toBe('ready');
+    expect(seen.some((s) => s.kind === 'downloading')).toBe(true);
+    expect(seen[seen.length - 1]?.kind).toBe('ready');
+    expect(manager.lastKnownState(SPEC_A.id)?.kind).toBe('ready');
+    expect(
+      manager.lastKnownStates().map((s) => s.modelId)
+    ).toContain(SPEC_A.id);
+    // 退订后不再收到；remove 的 missing 终态仍被保留
+    unsubscribe();
+    const seenCount = seen.length;
+    await manager.remove(SPEC_A.id);
+    expect(seen.length).toBe(seenCount);
+    expect(manager.lastKnownState(SPEC_A.id)?.kind).toBe('missing');
+  });
+
+  it('先开始的 check 迟到返回旧观测时，不得覆盖已保留的 ready 终态', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    let release!: () => void;
+    store.partReadGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // check 先行：正式文件为空后，读 .part 大小时被挂起（旧观测尚未返回）
+    const checking = manager.check(SPEC_A.id);
+    // 期间下载完整完成，ready 终态经订阅通道保留
+    const ready = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(ready.kind).toBe('ready');
+    release();
+    const stale = await checking;
+    // 查询本身如实返回它观测到的旧真值（当时确无文件）
+    expect(stale.kind).toBe('missing');
+    // 但保留态不被旧结果覆盖
+    expect(manager.lastKnownState(SPEC_A.id)?.kind).toBe('ready');
+  });
+});
+
+describe('OnDeviceModelManager · L0 生产形 savable（无 resumeData 不写可恢复记录）', () => {
+  it('savable 不带 resumeData 时：失败后 kv 无续传记录、界面无从声称可继续，重试是整文件新下载', async () => {
+    const store = new FakeStore();
+    store.omitResumeData = true;
+    const manager = makeManager(store);
+    for (const url of SPEC_A.urls) store.behavior.set(url, 'failAfterHalf');
+    const failed = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(failed.kind).toBe('error');
+    // .part 半成品还在（占用如实），但没有任何可恢复记录被写入
+    expect(await manager.usageBytes(SPEC_A.id)).toBe(
+      Math.floor(SPEC_A.size / 2)
+    );
+    expect(store.kvData.has(`ondevice.resume.${SPEC_A.id}`)).toBe(false);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('partial');
+    // 重试：全部 attempt 都不带 resumeData（整文件从零下载）
+    store.behavior.clear();
+    store.createCalls = [];
+    const retried = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(retried.kind).toBe('ready');
+    expect(store.createCalls.length).toBeGreaterThan(0);
+    expect(
+      store.createCalls.every((c) => c.resumeData === undefined)
+    ).toBe(true);
   });
 });

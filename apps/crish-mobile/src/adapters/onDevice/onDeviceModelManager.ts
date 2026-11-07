@@ -65,9 +65,19 @@ progressText?: string;
 /** 瞬时下载速率 (bytes/s，可选) */
 speedBytesPerSec?: number;
 }
-/** 逐模型状态机（对 UI 诚实：与 ASR 的 AsrModelState 同构，另加 modelId） */
+/**
+* 逐模型状态机（对 UI 诚实：与 ASR 的 AsrModelState 同构，另加 modelId）。
+* L0（2026-11-07，本机模型状态修复）起 check 能区分四种磁盘形态：
+* missing = 磁盘上零字节（唯一可称「未下载」的形态）；
+* partial = 只有 .part 半成品或正式文件尺寸不符（未完成，有字节）；
+* unverified = 正式文件在且尺寸精确，但 verified.json 标记不在案
+* （待校验：刷新走 verifyExisting 自愈，或下载入口校验后补标记）；
+* ready = 文件在位 + 尺寸精确 + 标记在案。
+*/
 export type OnDeviceModelState =
 | { kind: 'missing'; modelId: string}
+| { kind: 'partial'; modelId: string; receivedBytes: number}
+| { kind: 'unverified'; modelId: string; sizeBytes: number}
 | ({ kind: 'downloading'; modelId: string} & OnDeviceModelProgress)
 | {
 kind: 'verifying';
@@ -145,6 +155,12 @@ private readonly specs: readonly OnDeviceModelSpec[];
 private readonly byId: ReadonlyMap<string, OnDeviceModelSpec>;
 /** 逐模型在途下载去重：同模型并发调用共享同一轮下载 */
 private readonly inflight = new Map<string, Promise<OnDeviceModelState>>();
+/** 状态订阅者（L0）：管理器是唯一状态源，VM 卸载不丢终态——终态保留在 lastStates，新订阅方经 lastKnownStates() 补齐 */
+private readonly listeners = new Set<(state: OnDeviceModelState) => void>();
+/** 逐模型最近一次已知状态（事件流写入；check 查询结果仅在未被事件流超越时写入，见 recordFromCheck） */
+private readonly lastStates = new Map<string, OnDeviceModelState>();
+/** 逐模型事件序号：每次 emit 递增，check 以此识别自己的观测是否已被更新的事件超越 */
+private readonly stateSeq = new Map<string, number>();
 constructor(
 deps: OnDeviceModelStoreDeps,
 specs: readonly OnDeviceModelSpec[] = ON_DEVICE_MODEL_CATALOG
@@ -160,6 +176,50 @@ return this.specs;
 /** 按 id 取目录条目（未知 id 返回 undefined） */
 spec(modelId: string): OnDeviceModelSpec | undefined {
 return this.byId.get(modelId);
+}
+/**
+* 订阅状态事件（L0）：ensureReady / verifyExisting / remove 产生的
+* 每个状态都经此通道发出，与调用方的 onState 同源。返回退订函数。
+* 管理面 VM 挂载时订阅、卸载时退订；终态保留在管理器内（见
+* lastKnownStates），页面离开期间完成的下载不会丢状态。
+*/
+subscribe(listener: (state: OnDeviceModelState) => void): () => void {
+this.listeners.add(listener);
+return () => {
+this.listeners.delete(listener);
+};
+}
+/** 某模型最近一次已知状态（从未观测过返回 undefined） */
+lastKnownState(modelId: string): OnDeviceModelState | undefined {
+return this.lastStates.get(modelId);
+}
+/** 全部已观测模型的最近状态快照（新挂载的管理面以此补齐初值） */
+lastKnownStates(): OnDeviceModelState[] {
+return [...this.lastStates.values()];
+}
+/** 事件流统一入口：保留终态 + 递增序号 + 通知订阅者（订阅者异常不污染状态机） */
+private emit(state: OnDeviceModelState): void {
+this.lastStates.set(state.modelId, state);
+this.stateSeq.set(
+state.modelId,
+(this.stateSeq.get(state.modelId)?? 0) + 1
+);
+for (const listener of [...this.listeners]) {
+try {
+listener(state);
+} catch {
+// 订阅者只是观察方：其异常不得影响下载/校验主流程
+}
+}
+}
+/**
+* check 查询结果写入保留态的守卫：下载在途时以事件流为准；查询
+* 开始后该模型已有更新事件落地时，迟到的旧观测不得覆盖新终态。
+*/
+private recordFromCheck(state: OnDeviceModelState, seqAtStart: number): void {
+if (this.inflight.has(state.modelId)) return;
+if ((this.stateSeq.get(state.modelId)?? 0)!== seqAtStart) return;
+this.lastStates.set(state.modelId, state);
 }
 private dirOf(spec: OnDeviceModelSpec): string {
 return this.deps.rootDir + spec.id + '/';
@@ -186,27 +246,50 @@ if (!spec) return null;
 return toNativeFilePath(this.pathOf(spec));
 }
 /**
-* 快速就绪检查：文件齐全 + 尺寸精确 + 校验标记在案 → ready。
-* （哈希在下载完成时已全量验证并记录标记；此处只做廉价核对，
-* 避免每次启动都读 1–2GiB 算哈希。同 ASR check() 口径。）
+* 快速就绪检查（廉价核对，不算哈希）：区分四种磁盘形态——
+* 文件齐全 + 尺寸精确 + 校验标记在案 → ready；正式文件在且尺寸
+* 精确但标记不在案 → unverified（待校验）；只有 .part 半成品或
+* 正式文件尺寸不符 → partial（未完成）；零字节 → missing。
+* （哈希在下载完成时已全量验证并记录标记；启动时不重算，
+* 同 ASR check() 的廉价口径。）
 */
 async check(modelId: string): Promise<OnDeviceModelState> {
 const spec = this.byId.get(modelId);
 if (!spec) return { kind: 'missing', modelId};
+const seqAtStart = this.stateSeq.get(modelId)?? 0;
+const state = await this.inspect(spec);
+this.recordFromCheck(state, seqAtStart);
+return state;
+}
+/** check 的磁盘形态判定本体（checkAll 共用同一口径） */
+private async inspect(
+spec: OnDeviceModelSpec
+): Promise<OnDeviceModelState> {
+const modelId = spec.id;
 try {
 await this.deps.ensureDir(this.dirOf(spec));
-const size = await this.deps.fileSize(this.pathOf(spec));
-if (size!== spec.size) return { kind: 'missing', modelId};
+const formalSize = await this.deps.fileSize(this.pathOf(spec));
+if (formalSize === spec.size) {
 const marker = await this.readMarker(spec);
-if (marker[spec.fileName]!== spec.sha256) {
-return { kind: 'missing', modelId};
-}
+if (marker[spec.fileName] === spec.sha256) {
 return {
 kind: 'ready',
 modelId,
 path: toNativeFilePath(this.pathOf(spec)),
 sizeBytes: spec.size,
 };
+}
+return { kind: 'unverified', modelId, sizeBytes: formalSize};
+}
+const partSize =
+(await this.deps.fileSize(this.partPathOf(spec)))?? 0;
+if (partSize > 0) {
+return { kind: 'partial', modelId, receivedBytes: partSize};
+}
+if (formalSize!== null && formalSize > 0) {
+return { kind: 'partial', modelId, receivedBytes: formalSize};
+}
+return { kind: 'missing', modelId};
 } catch {
 return { kind: 'missing', modelId};
 }
@@ -248,6 +331,7 @@ await this.deps.remove(this.partPathOf(spec));
 await this.deps.remove(this.markerPathOf(spec));
 await this.deps.remove(this.dirOf(spec));
 await this.deps.kv.delete(this.resumeKeyOf(spec));
+this.emit({ kind: 'missing', modelId});
 }
 /** 高效校验单个文件：尺寸预检 + 原生加速哈希（降级纯 JS 分块）比对 */
 async verifyFile(
@@ -290,7 +374,12 @@ onState: (state: OnDeviceModelState) => void
 ): Promise<OnDeviceModelState> {
 const existing = this.inflight.get(modelId);
 if (existing) return existing;
-const run = this.ensureReadyInternal(modelId, onState).finally(() => {
+// 状态双通道同源：调用方 onState 与订阅/保留态吃同一份事件流
+const tracked = (state: OnDeviceModelState): void => {
+this.emit(state);
+onState(state);
+};
+const run = this.ensureReadyInternal(modelId, tracked).finally(() => {
 this.inflight.delete(modelId);
 });
 this.inflight.set(modelId, run);
@@ -329,25 +418,8 @@ return ready;
 }
 // 文件已在且尺寸吻合但标记不在案：哈希自愈校验，通过则补标记
 if (size === spec.size) {
-onState({
-kind: 'verifying',
-modelId,
-fileName: spec.fileName,
-fileIndex: 1,
-totalFiles: 1,
-overallFraction: 0,
-});
-if (await this.verifyFile(spec)) {
-await this.writeMarker(spec);
-const ready: OnDeviceModelState = {
-kind: 'ready',
-modelId,
-path: toNativeFilePath(path),
-sizeBytes: spec.size,
-};
-onState(ready);
-return ready;
-}
+const healed = await this.healExisting(spec, onState);
+if (healed) return healed;
 // 哈希不符：非破坏性策略，不删既有文件，后续下载以.part+move 覆盖
 }
 // 下载前空间预检：可用 < 文件大小 × 1.1 直接拒绝并给出数字
@@ -388,6 +460,64 @@ return failure;
 }
 }
 /**
+* 已有正式文件的自愈校验（ensureReady 与 verifyExisting 共用）：
+* 发 verifying → 全量校验 → 通过则补写标记并发 ready；不通过返回
+* null（调用方决定落下载还是报诚实错误）。既有文件绝不删除。
+*/
+private async healExisting(
+spec: OnDeviceModelSpec,
+emitState: (state: OnDeviceModelState) => void
+): Promise<OnDeviceModelState | null> {
+emitState({
+kind: 'verifying',
+modelId: spec.id,
+fileName: spec.fileName,
+fileIndex: 1,
+totalFiles: 1,
+overallFraction: 0,
+});
+if (!(await this.verifyFile(spec))) return null;
+await this.writeMarker(spec);
+const ready: OnDeviceModelState = {
+kind: 'ready',
+modelId: spec.id,
+path: toNativeFilePath(this.pathOf(spec)),
+sizeBytes: spec.size,
+};
+emitState(ready);
+return ready;
+}
+/**
+* 只校验不下载（L0 刷新自愈入口）：正式文件在、尺寸对、标记不在案
+* （unverified）时走 healExisting；通过变 ready 并补标记，不通过变
+* 诚实 error（不自动重下载、不删既有文件）。其余形态直查返回。
+*/
+async verifyExisting(
+modelId: string,
+onState: (state: OnDeviceModelState) => void
+): Promise<OnDeviceModelState> {
+const tracked = (state: OnDeviceModelState): void => {
+this.emit(state);
+onState(state);
+};
+const current = await this.check(modelId);
+if (current.kind!== 'unverified') return current;
+const spec = this.byId.get(modelId);
+if (!spec) return current;
+const healed = await this.healExisting(spec, tracked);
+if (healed) return healed;
+const failure: OnDeviceModelState = {
+kind: 'error',
+modelId,
+message:
+`模型文件哈希校验不匹配：${spec.fileName}。` +
+'文件已在盘上但内容不正确，请删除后重新下载。',
+canRetry: true,
+};
+tracked(failure);
+return failure;
+}
+/**
 * 下载并校验单个模型文件：逐源尝试；每源先试续传（若有在案记录），
 * 续传失败自动回退整文件重下。.part 阶段就地校验，百分百通过才
 * 原子 move 落正；全部来源失败抛最后一个错误。
@@ -424,6 +554,10 @@ overallFraction: 1,
 });
 const valid = await this.verifyFile(spec, partPath);
 if (!valid) {
+// 内容已被证明错误：.part 留着只会成为下次续传的错误前缀，
+// 与续传记录一并清除（失败状态文案保持哈希不匹配口径）
+await this.deps.kv.delete(this.resumeKeyOf(spec));
+await this.deps.remove(partPath);
 throw new Error(`模型文件哈希校验不匹配：${spec.fileName}`);
 }
 await this.deps.move(partPath, this.pathOf(spec));

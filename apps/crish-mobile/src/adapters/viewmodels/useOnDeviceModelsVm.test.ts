@@ -1,13 +1,31 @@
 // 本机模型管理视图模型 · 状态映射测试（O4）：管理器五态到管理面
 // 文案/进行动词的投影钉死——下载中带百分比与进度文案、失败带原因
 // 与可重试标记、3B 许可警示透传、推荐档仅 1.5B。
-import { formatBytes } from '@/adapters/onDevice/onDeviceModelManager';
-import type { OnDeviceModelState } from '@/adapters/onDevice/onDeviceModelManager';
+// L0（2026-11-07）追加：新磁盘形态文案（待校验/未完成）、占用大于 0
+// 禁称未下载、VM 订阅与终态补齐、迟到 refresh 不覆盖新终态、
+// refresh 自愈待校验行、同步失败可见。
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import {
+  OnDeviceModelManager,
+  formatBytes,
+} from '@/adapters/onDevice/onDeviceModelManager';
+import type {
+  OnDeviceModelState,
+  OnDeviceModelStoreDeps,
+  OnDeviceResumableDownload,
+} from '@/adapters/onDevice/onDeviceModelManager';
 import {
   ON_DEVICE_MODEL_CATALOG,
   type OnDeviceModelSpec,
 } from '@/adapters/onDevice/onDeviceModelCatalog';
-import { onDeviceRowOf, onDeviceStatusText } from './useOnDeviceModelsVm';
+import { localChatStore } from '@/domain/store/localChatStore';
+import {
+  onDeviceRowOf,
+  onDeviceStatusText,
+  useOnDeviceModelsVm,
+} from './useOnDeviceModelsVm';
 
 const M15 = 'qwen2.5-1.5b-instruct-q4_k_m';
 const M3B = 'qwen2.5-3b-instruct-q4_k_m';
@@ -117,5 +135,261 @@ describe('onDeviceRowOf', () => {
       expect(row.sizeText).toBe(formatBytes(spec.size));
       expect(row.statusText).toBe('读取中');
     }
+  });
+});
+
+describe('L0 状态文案：新形态与「有占用不称未下载」', () => {
+  it('unverified → 待校验；partial → 未完成', () => {
+    expect(
+      onDeviceStatusText({ kind: 'unverified', modelId: M15, sizeBytes: 10 })
+    ).toBe('待校验');
+    expect(
+      onDeviceStatusText({ kind: 'partial', modelId: M15, receivedBytes: 5 })
+    ).toBe('未完成');
+  });
+
+  it('missing 但占用大于 0 → 未完成；占用为 0 才称未下载', () => {
+    const spec = specOf(M15);
+    const withBytes = onDeviceRowOf(
+      spec,
+      { kind: 'missing', modelId: M15 },
+      128,
+      false
+    );
+    expect(withBytes.statusText).toBe('未完成');
+    const empty = onDeviceRowOf(
+      spec,
+      { kind: 'missing', modelId: M15 },
+      0,
+      false
+    );
+    expect(empty.statusText).toBe('未下载');
+  });
+
+  it('下载中：实测速度透传到行投影', () => {
+    const state: OnDeviceModelState = {
+      kind: 'downloading',
+      modelId: M15,
+      fileName: 'f.gguf',
+      fileIndex: 1,
+      totalFiles: 1,
+      receivedBytes: 42,
+      totalBytes: 100,
+      overallFraction: 0.42,
+      speedBytesPerSec: 2048,
+    };
+    const row = onDeviceRowOf(specOf(M15), state, 42, true);
+    expect(row.speedBytesPerSec).toBe(2048);
+  });
+});
+
+/* ── L0 钩子测试用假存储（与管理器测试同形，独立一份） ── */
+
+const hex = (text: string): string => bytesToHex(sha256(utf8ToBytes(text)));
+const CONTENT_A = 'vm-fake-gguf-a-bytes-0123456789';
+const SPEC_A: OnDeviceModelSpec = {
+  id: 'vm-model-a',
+  displayName: 'VM Model A',
+  fileName: 'vm-model-a.gguf',
+  size: utf8ToBytes(CONTENT_A).length,
+  sha256: hex(CONTENT_A),
+  urls: ['https://hf-mirror.com/test/vm-model-a.gguf'],
+  license: { id: 'Apache-2.0', label: 'Apache-2.0 开源许可' },
+};
+
+class VmFakeResumable implements OnDeviceResumableDownload {
+  constructor(
+    private readonly store: VmFakeStore,
+    private readonly url: string,
+    private readonly destPath: string,
+    private readonly onProgress: (received: number, total: number) => void
+  ) {}
+  async run(): Promise<{ status: number }> {
+    const bytes = utf8ToBytes(this.store.contents.get('vm-model-a.gguf') ?? '');
+    this.store.files.set(this.destPath, bytes);
+    this.onProgress(bytes.length, bytes.length);
+    return { status: 200 };
+  }
+  savable(): { url: string; fileUri: string; resumeData?: string } {
+    return { url: this.url, fileUri: this.destPath, resumeData: '0' };
+  }
+}
+
+class VmFakeStore implements OnDeviceModelStoreDeps {
+  readonly rootDir = 'file:///docs/crish-llm-models/';
+  readonly files = new Map<string, Uint8Array>();
+  readonly kvData = new Map<string, string>();
+  readonly kv = {
+    get: async (key: string): Promise<string | null> =>
+      this.kvData.get(key) ?? null,
+    set: async (key: string, value: string): Promise<void> => {
+      this.kvData.set(key, value);
+    },
+    delete: async (key: string): Promise<void> => {
+      this.kvData.delete(key);
+    },
+  };
+  readonly contents = new Map<string, string>([
+    ['vm-model-a.gguf', CONTENT_A],
+  ]);
+  createCalls = 0;
+  partReadGate: Promise<void> | null = null;
+  private partGateConsumed = false;
+  async ensureDir(): Promise<void> {}
+  async fileSize(path: string): Promise<number | null> {
+    if (
+      this.partReadGate !== null &&
+      !this.partGateConsumed &&
+      path.endsWith('.part')
+    ) {
+      this.partGateConsumed = true;
+      await this.partReadGate;
+      return null;
+    }
+    const data = this.files.get(path);
+    return data ? data.length : null;
+  }
+  async computeSha256(path: string): Promise<string | null> {
+    const data = this.files.get(path);
+    return data ? bytesToHex(sha256(data)) : null;
+  }
+  async writeTextFile(path: string, content: string): Promise<void> {
+    this.files.set(path, utf8ToBytes(content));
+  }
+  async readTextFile(path: string): Promise<string | null> {
+    const data = this.files.get(path);
+    return data ? new TextDecoder().decode(data) : null;
+  }
+  async remove(path: string): Promise<void> {
+    this.files.delete(path);
+  }
+  async move(from: string, to: string): Promise<void> {
+    const data = this.files.get(from);
+    if (data) {
+      this.files.set(to, data);
+      this.files.delete(from);
+    }
+  }
+  async freeDiskSpace(): Promise<number | null> {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  createResumableDownload(
+    url: string,
+    destPath: string,
+    _resumeData: string | undefined,
+    onProgress: (received: number, total: number) => void
+  ): OnDeviceResumableDownload {
+    this.createCalls += 1;
+    return new VmFakeResumable(this, url, destPath, onProgress);
+  }
+}
+
+const formalPathOf = (store: VmFakeStore): string =>
+  store.rootDir + SPEC_A.id + '/' + SPEC_A.fileName;
+
+function makeVmManager(store: VmFakeStore): OnDeviceModelManager {
+  return new OnDeviceModelManager(store, [SPEC_A]);
+}
+
+describe('useOnDeviceModelsVm · L0 订阅/补齐/自愈/同步错误', () => {
+  beforeEach(() => {
+    localChatStore.setState({
+      config: { version: 2, providers: {}, activeModel: null },
+      hydrated: true,
+      keyPresence: {},
+    });
+  });
+
+  it('页面离开期间下载完成：新挂载 VM 从管理器保留态补齐 ready，不停在未下载', async () => {
+    const store = new VmFakeStore();
+    const manager = makeVmManager(store);
+    const first = await renderHook(() => useOnDeviceModelsVm(manager));
+    first.unmount();
+    // 无 VM 挂载时下载完成（管理器单例继续跑完并保留终态）
+    await manager.ensureReady(SPEC_A.id, () => undefined);
+    const second = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      const row = second.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('已就绪');
+    });
+    second.unmount();
+  });
+
+  it('迟到的 refresh 旧观测不得覆盖订阅先到的 ready', async () => {
+    const store = new VmFakeStore();
+    const manager = makeVmManager(store);
+    let release!: () => void;
+    store.partReadGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    // 挂载 refresh 的 checkAll 已挂起在旧观测上；期间下载完成
+    await act(async () => {
+      await manager.ensureReady(SPEC_A.id, () => undefined);
+    });
+    release();
+    await waitFor(() => {
+      const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('已就绪');
+    });
+    // 再多等一拍，确保迟到的 missing 没有把 ready 盖回去
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+    expect(row?.statusText).toBe('已就绪');
+    vm.unmount();
+  });
+
+  it('refresh 自愈：无标记的好文件刷新后变 ready 并补标记，不触发下载', async () => {
+    const store = new VmFakeStore();
+    store.files.set(formalPathOf(store), utf8ToBytes(CONTENT_A));
+    const manager = makeVmManager(store);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('已就绪');
+    });
+    expect(store.createCalls).toBe(0);
+    expect(
+      store.files.has(store.rootDir + SPEC_A.id + '/verified.json')
+    ).toBe(true);
+    vm.unmount();
+  });
+
+  it('refresh 自愈：被篡改的无标记文件变诚实失败，不自动重下载', async () => {
+    const store = new VmFakeStore();
+    store.files.set(
+      formalPathOf(store),
+      utf8ToBytes('X' + CONTENT_A.slice(1))
+    );
+    const manager = makeVmManager(store);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('下载失败');
+      expect(row?.errorText).toContain('哈希');
+    });
+    expect(store.createCalls).toBe(0);
+    vm.unmount();
+  });
+
+  it('同步失败进入可见错误，不再被空 catch 吞掉', async () => {
+    const store = new VmFakeStore();
+    class SyncFlakyManager extends OnDeviceModelManager {
+      checkAllCalls = 0;
+      async checkAll(): Promise<OnDeviceModelState[]> {
+        this.checkAllCalls += 1;
+        // 第 1 次是 VM refresh 自查；第 2 次是同步内部核对 → 抛错
+        if (this.checkAllCalls >= 2) throw new Error('sync boom');
+        return super.checkAll();
+      }
+    }
+    const manager = new SyncFlakyManager(store, [SPEC_A]);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      expect(vm.result.current.syncErrorText).toBe('sync boom');
+    });
+    vm.unmount();
   });
 });

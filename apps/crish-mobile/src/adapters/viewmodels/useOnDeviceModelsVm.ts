@@ -1,17 +1,19 @@
 // 本机模型管理视图模型（O4）：O2 管理器状态的只读投影 + 下载/删除
 // 编排 + 每次状态落定后回写内置供应商条目（onDeviceProviderSync）。
-// 状态源只有管理器一处：挂载 checkAll、下载走 ensureReady 的 onState
-// 流式回调、删除后重查——不另造轮询（与 SettingsVoiceView 的 ASR
-// 管理面同纪律）。
+// 状态源只有管理器一处：挂载时先以管理器保留态（lastKnownStates）
+// 补齐初值再订阅事件流（L0）——页面离开期间完成的下载，新挂载的 VM
+// 立刻看到终态，不再丢在旧 VM 的回调里；refresh 的整表核对结果按
+// 逐模型序号合并，迟到的旧观测不得覆盖订阅先到的新终态；refresh
+// 对待校验（unverified）行走管理器自愈（校验+补标记，不自动重下
+// 载）。同步失败进入 syncErrorText 可见错误，不再空 catch 吞掉。
+// 不另造轮询（与 SettingsVoiceView 的 ASR 管理面同纪律）。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   formatBytes,
+  type OnDeviceModelManager,
   type OnDeviceModelState,
 } from '@/adapters/onDevice/onDeviceModelManager';
-import {
-  ON_DEVICE_MODEL_CATALOG,
-  type OnDeviceModelSpec,
-} from '@/adapters/onDevice/onDeviceModelCatalog';
+import type { OnDeviceModelSpec } from '@/adapters/onDevice/onDeviceModelCatalog';
 import { getOnDeviceModelManager } from '@/adapters/onDevice/onDeviceWiring';
 import { syncOnDeviceProvider } from '@/adapters/onDevice/onDeviceProviderSync';
 
@@ -36,6 +38,8 @@ export interface OnDeviceModelRow {
   readonly progressText?: string;
   /** 下载进度 0..1（仅下载中出现） */
   readonly progressFraction?: number;
+  /** 本次下载实测速度（bytes/s，管理器采样值；仅下载中且已有采样时出现） */
+  readonly speedBytesPerSec?: number;
   /** 失败原因（管理器 error.message，仅失败时出现） */
   readonly errorText?: string;
   /** 失败是否可重试（空间不足等为 true；未知模型为 false） */
@@ -52,6 +56,8 @@ export interface OnDeviceModelsVm {
   readonly totalUsageText: string;
   /** 已就绪模型数（列表特殊行/页头摘要用） */
   readonly readyCount: number;
+  /** 最近一次同步到选择器的失败原因（成功时为 null；界面必须可见） */
+  readonly syncErrorText: string | null;
   /** 触发下载（或失败重试）：走管理器 ensureReady，完成后回写条目 */
   readonly download: (modelId: string) => void;
   /** 删除模型文件并回写条目（活动模型回退由 store 自愈兜底） */
@@ -60,14 +66,25 @@ export interface OnDeviceModelsVm {
   readonly refresh: () => Promise<void>;
 }
 
-/** 管理器状态 → 状态文案（与 ASR 管理面 modelStatusLabel 同口径） */
-export function onDeviceStatusText(state: OnDeviceModelState | null): string {
+/**
+ * 管理器状态 → 状态文案（与 ASR 管理面 modelStatusLabel 同口径）。
+ * L0 纪律：「未下载」只用于磁盘零字节；missing 投影若已知占用大于
+ * 0（状态与占用观测时序差）也必须称未完成，不得误报未下载。
+ */
+export function onDeviceStatusText(
+  state: OnDeviceModelState | null,
+  usageBytes = 0
+): string {
   if (state === null) return '读取中';
   switch (state.kind) {
     case 'ready':
       return '已就绪';
     case 'missing':
-      return '未下载';
+      return usageBytes > 0 ? '未完成' : '未下载';
+    case 'partial':
+      return '未完成';
+    case 'unverified':
+      return '待校验';
     case 'downloading':
       return `下载中 ${Math.round(state.overallFraction * 100)}%`;
     case 'verifying':
@@ -94,12 +111,15 @@ export function onDeviceRowOf(
       : {}),
     recommended: spec.recommended === true,
     state,
-    statusText: onDeviceStatusText(state),
+    statusText: onDeviceStatusText(state, usageBytes),
     ...(state?.kind === 'downloading'
       ? {
           progressFraction: state.overallFraction,
           ...(state.progressText !== undefined
             ? { progressText: state.progressText }
+            : {}),
+          ...(state.speedBytesPerSec !== undefined
+            ? { speedBytesPerSec: state.speedBytesPerSec }
             : {}),
         }
       : {}),
@@ -110,10 +130,18 @@ export function onDeviceRowOf(
   };
 }
 
-export function useOnDeviceModelsVm(): OnDeviceModelsVm {
+export function useOnDeviceModelsVm(
+  managerOverride?: OnDeviceModelManager
+): OnDeviceModelsVm {
+  const manager = useMemo(
+    () => managerOverride ?? getOnDeviceModelManager(),
+    [managerOverride]
+  );
+  const specs = useMemo(() => manager.listSpecs(), [manager]);
   const [states, setStates] = useState<Record<string, OnDeviceModelState>>({});
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
+  const [syncErrorText, setSyncErrorText] = useState<string | null>(null);
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
@@ -121,6 +149,8 @@ export function useOnDeviceModelsVm(): OnDeviceModelsVm {
       aliveRef.current = false;
     };
   }, []);
+  /** 逐模型状态序号：每次 applyState 递增，refresh 据此拒绝旧观测覆盖 */
+  const stateSeqRef = useRef(new Map<string, number>());
 
   const setBusy = useCallback((modelId: string, busy: boolean) => {
     setBusyIds((prev) => {
@@ -135,39 +165,79 @@ export function useOnDeviceModelsVm(): OnDeviceModelsVm {
   }, []);
 
   const applyState = useCallback((state: OnDeviceModelState) => {
+    stateSeqRef.current.set(
+      state.modelId,
+      (stateSeqRef.current.get(state.modelId) ?? 0) + 1
+    );
     if (!aliveRef.current) return;
     setStates((prev) => ({ ...prev, [state.modelId]: state }));
   }, []);
 
   const refreshUsage = useCallback(async () => {
-    const manager = getOnDeviceModelManager();
     const entries = await Promise.all(
-      ON_DEVICE_MODEL_CATALOG.map(
+      specs.map(
         async (spec) => [spec.id, await manager.usageBytes(spec.id)] as const
       )
     );
     if (!aliveRef.current) return;
     setUsage(Object.fromEntries(entries));
-  }, []);
+  }, [manager, specs]);
+
+  /** 同步就绪集到选择器：失败进入可见错误（不再空 catch 吞掉） */
+  const runSync = useCallback(async () => {
+    try {
+      await syncOnDeviceProvider(manager);
+      if (aliveRef.current) setSyncErrorText(null);
+    } catch (error) {
+      if (aliveRef.current) {
+        setSyncErrorText(
+          error instanceof Error ? error.message : '同步本机模型失败'
+        );
+      }
+    }
+  }, [manager]);
 
   const refresh = useCallback(async () => {
-    const manager = getOnDeviceModelManager();
+    const seqAtStart = new Map(stateSeqRef.current);
     const all = await manager.checkAll();
     if (!aliveRef.current) return;
-    setStates(Object.fromEntries(all.map((s) => [s.modelId, s])));
+    // 逐模型合并：核对期间已有更新状态（订阅先到）落地的模型，
+    // 其旧观测不得覆盖新终态；其余模型照常以核对结果为准。
+    for (const state of all) {
+      if (
+        (stateSeqRef.current.get(state.modelId) ?? 0) ===
+        (seqAtStart.get(state.modelId) ?? 0)
+      ) {
+        applyState(state);
+      }
+    }
+    // 待校验行走自愈：校验+补标记（通过变 ready、不通过变诚实
+    // error）；刷新绝不自动重下载。
+    for (const state of all) {
+      if (state.kind === 'unverified') {
+        await manager.verifyExisting(state.modelId, applyState);
+        if (!aliveRef.current) return;
+      }
+    }
     await refreshUsage();
     // 挂载核对即回写：校验失效（文件被外部删除/标记不在案）在此如实
     // 反映到内置条目，选择器不留假可用模型。
-    await syncOnDeviceProvider(manager).catch(() => undefined);
-  }, [refreshUsage]);
+    await runSync();
+  }, [manager, applyState, refreshUsage, runSync]);
 
+  // 挂载：先用管理器保留态补齐（离开期间完成的下载立即可见），
+  // 再订阅事件流，最后跑一次全量核对。
   useEffect(() => {
+    for (const state of manager.lastKnownStates()) {
+      applyState(state);
+    }
+    const unsubscribe = manager.subscribe(applyState);
     void refresh();
-  }, [refresh]);
+    return unsubscribe;
+  }, [manager, applyState, refresh]);
 
   const download = useCallback(
     (modelId: string) => {
-      const manager = getOnDeviceModelManager();
       setBusy(modelId, true);
       void manager
         .ensureReady(modelId, applyState)
@@ -175,36 +245,35 @@ export function useOnDeviceModelsVm(): OnDeviceModelsVm {
           applyState(final);
           await refreshUsage();
           if (final.kind === 'ready') {
-            await syncOnDeviceProvider(manager).catch(() => undefined);
+            await runSync();
           }
         })
         .finally(() => {
           setBusy(modelId, false);
         });
     },
-    [applyState, refreshUsage, setBusy]
+    [manager, applyState, refreshUsage, runSync, setBusy]
   );
 
   const removeModel = useCallback(
     async (modelId: string) => {
-      const manager = getOnDeviceModelManager();
       setBusy(modelId, true);
       try {
         await manager.remove(modelId);
         const next = await manager.check(modelId);
         applyState(next);
         await refreshUsage();
-        await syncOnDeviceProvider(manager).catch(() => undefined);
+        await runSync();
       } finally {
         setBusy(modelId, false);
       }
     },
-    [applyState, refreshUsage, setBusy]
+    [manager, applyState, refreshUsage, runSync, setBusy]
   );
 
   const rows = useMemo<readonly OnDeviceModelRow[]>(
     () =>
-      ON_DEVICE_MODEL_CATALOG.map((spec) =>
+      specs.map((spec) =>
         onDeviceRowOf(
           spec,
           states[spec.id] ?? null,
@@ -212,7 +281,7 @@ export function useOnDeviceModelsVm(): OnDeviceModelsVm {
           busyIds.has(spec.id)
         )
       ),
-    [states, usage, busyIds]
+    [specs, states, usage, busyIds]
   );
 
   const totalUsageBytes = useMemo(
@@ -228,6 +297,7 @@ export function useOnDeviceModelsVm(): OnDeviceModelsVm {
     rows,
     totalUsageText: formatBytes(totalUsageBytes),
     readyCount,
+    syncErrorText,
     download,
     removeModel,
     refresh,
