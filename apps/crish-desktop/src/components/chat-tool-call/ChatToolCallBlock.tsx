@@ -186,9 +186,28 @@ function renderToolsWithBatchBars(
 }
 
 /**
+ * 【方案 B · 审批快完成竞态】段包装 key：两形态同源派生自首工具 id。
+ * single 的首工具即其 tc；group 的首工具即 tools[0]（组只追加不换首，
+ * 与 MessageToolCallsSection 的段 key 锚定口径一致）。kind 在退场窗内
+ * 翻转时，包装 div（同元素类型、同 className、同 key）保持同一 React
+ * 元素，行在 .toolStack 子级中的位置与父级类型不变，承载 S4 退场宿主
+ * （CompactToolRow 内 useClosingFlag）的行实例不被重挂，200ms 退场窗
+ * 得以播完。group.tools 为空时回退到 item.id（防御性，投影层恒产非空组）。
+ */
+function toolStackSegmentKey(item: ToolRenderItem): string {
+  const firstToolId =
+    item.kind === 'single' ? item.tc.id : item.tools[0]?.id ?? item.id;
+  return `grp-${firstToolId}`;
+}
+
+/**
  * 直接消费投影层已裁决的 ToolRenderItem[]（V1-γ 折叠单源）：
- * - single → 单行（含相邻 pending 批量审批栏支持）；
+ * - single → 单行（含相邻 pending 批量审批栏支持），同样包一层与 group
+ *   同型的容器 div（方案 B：包装 key 两形态同源，见 toolStackSegmentKey）；
  * - group → 折叠标题行（复活 label）+ 组内子行展开列表（逐行独立可展开）。
+ * 两形态的包装 div 元素类型、className 与 key 均相同，kind 翻转只换内容、
+ * 不换行在树中的位置；.toolGroup 本身视觉中性（与 .toolStack 同 gap、
+ * 零边框零内边距），单行包一层不改观感。
  */
 function renderToolStackItems(
   items: ToolRenderItem[],
@@ -198,12 +217,20 @@ function renderToolStackItems(
   const segments: React.ReactElement[] = [];
   for (const item of items) {
     if (item.kind === 'single') {
-      segments.push(...renderToolsWithBatchBars([item.tc], msgId, props));
+      segments.push(
+        <div
+          key={toolStackSegmentKey(item)}
+          className={styles.toolGroup}
+          data-expanded="true"
+        >
+          {renderToolsWithBatchBars([item.tc], msgId, props)}
+        </div>
+      );
       continue;
     }
     segments.push(
       <div
-        key={`grp-${item.id}`}
+        key={toolStackSegmentKey(item)}
         className={styles.toolGroup}
         data-group-id={item.id}
         data-expanded="true"

@@ -60,7 +60,7 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
     expect(container.querySelectorAll('[data-tool-id="t1"]')).toHaveLength(1);
   });
 
-  it('single → 单行渲染（不包裹组容器）', () => {
+  it('single → 单行渲染（包同型容器、无 data-group-id）', () => {
     const { container } = render(
       <ChatToolStack
         items={[
@@ -76,7 +76,13 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
       />
     );
     expect(container.querySelectorAll('.tool-row')).toHaveLength(1);
-    expect(container.textContent).not.toContain('Parallel');
+    // 【方案 B】single 同样包一层与 group 同型的 .toolGroup 容器 div，
+    // 但无组身份，故不带 data-group-id：
+    const row = container.querySelector('.tool-row');
+    const wrapper = row?.parentElement;
+    expect(wrapper?.className).toContain('toolGroup');
+    expect(wrapper?.getAttribute('data-expanded')).toBe('true');
+    expect(container.querySelector('[data-group-id]')).toBeNull();
   });
 
   it('混合 items：single 与 group 按投影顺序直出', () => {
