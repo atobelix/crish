@@ -131,21 +131,9 @@
   app-region: no-drag;
 }
 
+/* [2026-11-06 裁决] 聚合点 urgent 收敛常亮：告警闪烁已删（E §五禁闪烁吸引；与本组件行级 urgent 常亮方言统一）。减动效用户此前所见即此态。 */
 .plusLiveDot[data-urgent='true'] {
   background: var(--accent-orange);
-  animation: urgentBlink var(--transition-pulse, 1.6s ease-in-out) infinite;
-}
-
-@keyframes urgentBlink {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(0.8);
-  }
 }
 
 /* 版块区域 */

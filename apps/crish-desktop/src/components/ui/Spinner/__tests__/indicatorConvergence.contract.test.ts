@@ -99,10 +99,9 @@ const REGISTERED: Record<string, Record<string, string>> = {
   'components/sidebar/SidebarSessionList.module.css': {
     'session-running-pulse': 'S8 登记：运行会话行背景洗光，非圆点',
   },
-  // S8 登记：告警闪烁（E 类 9 裁定可独立；去闪烁与否为待用户裁决项）
-  // 与涟漪扩散（ping 形、非呼吸点）同处启动台面
+  // S8 登记：涟漪扩散（ping 形、非呼吸点）。聚合点告警闪烁已按
+  // 2026-11-06 裁决收敛常亮并删除；WATCHED 名单留名，复活即红
   'components/binary-tree/NewTabLauncherPopover.module.css': {
-    urgentBlink: 'S8 登记：告警闪烁，E 裁定独立，待裁决去留',
     launcherPulse: 'S8 登记：涟漪扩散 ping 形，非呼吸点',
   },
   // S8 登记：成功色圆点自带静态环，正典光晕为强调色，迁移会撞色双环
