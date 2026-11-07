@@ -734,7 +734,13 @@ export function providerSpecFromDraft(
   return spec;
 }
 
-/** 供应商的默认模型：活动选择优先，其次为显式 defaultModelId，最后为清单首个启用模型 */
+/**
+ * 供应商的默认模型（建议项）：活动选择优先，其次为显式 defaultModelId，
+ * 最后为清单首个启用模型。L3 收紧：每一档都要求目标模型仍启用——与
+ * resolveActiveSelection 的启用口径对齐；全部停用时返回 null，绝不拿
+ * 已停用模型兜底（否则「设为当前」会落位一个随即被解析层判失效的
+ * 选择，列表行的默认标注也会指向不可用模型）。
+ */
 export function providerDefaultModelId(
   config: LocalModelsConfig,
   providerId: string
@@ -743,19 +749,23 @@ export function providerDefaultModelId(
   if (!provider) return null;
   if (
     config.activeModel?.providerId === providerId &&
-    provider.models.some((m) => m.id === config.activeModel?.modelId)
+    provider.models.some(
+      (m) => m.id === config.activeModel?.modelId && m.enabled !== false
+    )
   ) {
     return config.activeModel.modelId;
   }
   if (
     typeof provider.defaultModelId === 'string' &&
     provider.defaultModelId.trim() !== '' &&
-    provider.models.some((m) => m.id === provider.defaultModelId)
+    provider.models.some(
+      (m) => m.id === provider.defaultModelId && m.enabled !== false
+    )
   ) {
     return provider.defaultModelId;
   }
   const first = provider.models.find((m) => m.enabled !== false);
-  return first?.id ?? provider.models[0]?.id ?? null;
+  return first?.id ?? null;
 }
 
 /** 当前生效的供应商 + 模型（无完整选择时返回 null，UI 走未配置态） */

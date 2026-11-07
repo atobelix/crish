@@ -14,7 +14,6 @@ import {
   apiKeyRefFor,
   apiKeySlotFor,
   decodeLocalModelsConfig,
-  providerDefaultModelId,
 } from '../pure/localChatProtocol';
 import {
   emptyLocalModelsConfig,
@@ -162,34 +161,22 @@ export const localChatStore: StoreApi<LocalChatState> =
             state.keyPresence[providerId] = false;
           }
 
-          // 首个供应商自动成为活动选择（桌面归一：活动为空且有可用模型时
-          // 不自动选——此处仅在「全局尚无活动选择」时以首个模型落位，
-          // 属于移动端本地的显式产品口径：减少用户一步操作，UI 可随时改选）
-          if (state.config.activeModel === null) {
-            const modelId = providerDefaultModelId(state.config, providerId);
-            if (modelId !== null) {
-              state.config.activeModel = { providerId, modelId };
-            }
-          } else if (
-            state.config.activeModel.providerId === providerId &&
+          // 默认模型纪律（L3）：config.activeModel 是唯一真源，upsert
+          // 永不替用户落位、永不回退替换——
+          // - 活动为空时保持为空：默认由用户在「默认模型」页显式选定，
+          //   写任何供应商（含本机条目同步）都不自动选；
+          // - 本供应商正是活动供应商、而活动模型被本次写入删除或禁用
+          //   时，活动选择只清空为未设置：不回退同供应商的建议项，
+          //   更不跨供应商改投（失效原因在默认模型页明示）。
+          if (
+            state.config.activeModel?.providerId === providerId &&
             !withRef.models.some(
               (m) =>
                 m.id === state.config.activeModel?.modelId &&
                 m.enabled !== false
             )
           ) {
-            // 当前活动模型已被删除或禁用，清空后自愈回退为默认或首个可用模型
             state.config.activeModel = null;
-            const fallbackModelId = providerDefaultModelId(
-              state.config,
-              providerId
-            );
-            if (fallbackModelId !== null) {
-              state.config.activeModel = {
-                providerId,
-                modelId: fallbackModelId,
-              };
-            }
           }
         });
 

@@ -16,6 +16,7 @@ import {
   localModelVisionSupported,
   mergeModelIds,
   parseModelsList,
+  providerDefaultModelId,
   providerSpecFromDraft,
   repairOrphanedToolCalls,
   resolveActiveSelection,
@@ -264,6 +265,64 @@ describe('草稿与配置组装', () => {
     expect(resolveActiveSelection(config)).toBeNull();
     config.activeModel = { providerId: 'p1', modelId: 'm1' };
     expect(resolveActiveSelection(config)?.modelId).toBe('m1');
+  });
+});
+
+describe('providerDefaultModelId（L3 收紧：建议项绝不指向已停用模型）', () => {
+  function cfg(
+    provider: Partial<LocalProviderSpec> & Pick<LocalProviderSpec, 'models'>,
+    activeModel: LocalModelsConfig['activeModel'] = null
+  ): LocalModelsConfig {
+    return {
+      version: 2,
+      providers: {
+        p1: { protocol: 'openai/chat', ...provider },
+      },
+      activeModel,
+    };
+  }
+
+  it('活动模型仍启用：优先返回活动模型', () => {
+    const config = cfg(
+      { models: [{ id: 'm1' }, { id: 'm2' }], defaultModelId: 'm1' },
+      { providerId: 'p1', modelId: 'm2' }
+    );
+    expect(providerDefaultModelId(config, 'p1')).toBe('m2');
+  });
+
+  it('活动模型已停用：不返回它，落到显式默认', () => {
+    const config = cfg(
+      {
+        models: [{ id: 'm1' }, { id: 'm2', enabled: false }],
+        defaultModelId: 'm1',
+      },
+      { providerId: 'p1', modelId: 'm2' }
+    );
+    expect(providerDefaultModelId(config, 'p1')).toBe('m1');
+  });
+
+  it('显式默认已停用：跳过它，取首个启用模型', () => {
+    const config = cfg({
+      models: [{ id: 'm1', enabled: false }, { id: 'm2' }],
+      defaultModelId: 'm1',
+    });
+    expect(providerDefaultModelId(config, 'p1')).toBe('m2');
+  });
+
+  it('全部停用：返回 null（绝不拿停用模型兜底）', () => {
+    const config = cfg({
+      models: [
+        { id: 'm1', enabled: false },
+        { id: 'm2', enabled: false },
+      ],
+      defaultModelId: 'm1',
+    });
+    expect(providerDefaultModelId(config, 'p1')).toBeNull();
+  });
+
+  it('供应商不存在：返回 null', () => {
+    const config = cfg({ models: [{ id: 'm1' }] });
+    expect(providerDefaultModelId(config, 'gone')).toBeNull();
   });
 });
 

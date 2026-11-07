@@ -1,6 +1,7 @@
 // 内置端侧供应商条目同步测试（O4）：models[] 只同步已下载且校验在案
-// 的模型；删除活动模型回退不悬空；条目无端点/密钥/厂商假字段；
-// LocalVendorKey 不含 'ondevice' 的边界钉死（O4 裁决回归守卫）。
+// 的模型；删除活动模型清空不悬空（L3 口径：不回退推荐档）；条目无
+// 端点/密钥/厂商假字段；LocalVendorKey 不含 'ondevice' 的边界钉死
+// （O4 裁决回归守卫）。
 import { InMemorySecureStore } from '@/db/secureStore';
 import type { SettingsPersist } from '@/domain/store/settingsStore';
 import {
@@ -140,7 +141,7 @@ describe('syncOnDeviceProvider', () => {
     expect(persist.setCount).toBe(writes);
   });
 
-  it('删除当前活动模型：活动选择回退到条目默认（推荐档），不悬空', async () => {
+  it('删除当前活动模型：活动选择清空为未设置，不回退推荐档（L3）', async () => {
     await syncOnDeviceProvider(fakeManager([M15, M3B]));
     localChatStore.getState().setActiveModel(ON_DEVICE_PROVIDER_ID, M3B);
     await syncOnDeviceProvider(fakeManager([M15]));
@@ -148,10 +149,13 @@ describe('syncOnDeviceProvider', () => {
     expect(
       state.config.providers[ON_DEVICE_PROVIDER_ID]?.models.map((m) => m.id)
     ).toEqual([M15]);
-    expect(state.config.activeModel).toEqual({
-      providerId: ON_DEVICE_PROVIDER_ID,
-      modelId: M15,
-    });
+    // 默认失效即未设置：不自动改投同条目的推荐档（用户在默认模型页重选）
+    expect(state.config.activeModel).toBeNull();
+  });
+
+  it('首次同步出条目：不替用户落位默认（活动仍为空，L3）', async () => {
+    await syncOnDeviceProvider(fakeManager([M15, M3B]));
+    expect(localChatStore.getState().config.activeModel).toBeNull();
   });
 
   it('全部删除：条目保留空 models[]，活动选择清空不悬空', async () => {
