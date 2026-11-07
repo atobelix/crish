@@ -77,7 +77,9 @@ export interface MarkdownTextProps {
   streaming?: boolean;
   /** 末端时间渐显帧（出生登记 + 帧时刻；缺省 null = 不渐显，由 StreamingText 透传） */
   tailFade?: TailFadeFrame | null;
-  /** 正文基础样式（缺省 theme.type.chat + textPrimary；气泡等场景由调用方透传既有 Text 样式） */
+  /** 正文基础样式（缺省 theme.type.chat + textPrimary；气泡等场景由调用方透传既有 Text 样式）。
+   * 颜色经 ctx 统一出口；字号族字段（fontSize/lineHeight/fontFamily/fontWeight/
+   * letterSpacing）作为段落与列表项的正文基线（任务四 B：思考区传 footnote） */
   baseStyle?: StyleProp<TextStyle>;
   /** 流式光标符号（由 StreamingText 透传；落在最后一个块的末尾） */
   cursorSymbol?: string;
@@ -92,9 +94,11 @@ export interface MarkdownTextProps {
   highlightedCitationIndex?: number;
 }
 
-/** 渲染上下文：正文色、气泡标记与正文引文联动 */
+/** 渲染上下文：正文色、字号基线、气泡标记与正文引文联动 */
 interface RenderCtx {
   color: ColorValue;
+  /** baseStyle 的字号族字段（正文基线，浅比较稳定引用）；缺省 = chat 档 */
+  baseType?: TextStyle;
   inBubble: boolean;
   sources?: readonly WebSearchSource[];
   onCitationPress?: (index: number, source?: WebSearchSource) => void;
@@ -108,6 +112,30 @@ interface RenderCtx {
  */
 interface CursorBox {
   node: ReactNode;
+}
+
+/** baseStyle 中属于正文基线的字号族字段（其余字段不进块级渲染口径） */
+function pickBaseType(style: TextStyle): TextStyle {
+  const picked: TextStyle = {};
+  if (style.fontSize !== undefined) picked.fontSize = style.fontSize;
+  if (style.lineHeight !== undefined) picked.lineHeight = style.lineHeight;
+  if (style.fontFamily !== undefined) picked.fontFamily = style.fontFamily;
+  if (style.fontWeight !== undefined) picked.fontWeight = style.fontWeight;
+  if (style.letterSpacing !== undefined)
+    picked.letterSpacing = style.letterSpacing;
+  return picked;
+}
+
+function sameBaseType(a?: TextStyle, b?: TextStyle): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.fontSize === b.fontSize &&
+    a.lineHeight === b.lineHeight &&
+    a.fontFamily === b.fontFamily &&
+    a.fontWeight === b.fontWeight &&
+    a.letterSpacing === b.letterSpacing
+  );
 }
 
 /** 末块能否把光标嵌进行内流（与 BlockNode/ListBlock/QuoteBlock 的下发路径镜像） */
@@ -184,8 +212,17 @@ export function MarkdownText({
     () => (baseStyle ? StyleSheet.flatten(baseStyle) : undefined),
     [baseStyle]
   );
+  // 字号基线引用稳定化：调用方的内联样式字面量每次渲染都是新引用，若直接
+  // 进 ctx 会逐帧击穿封口块 memo（块静止语义）；只取字号族字段并浅比较，
+  // 字段值不变就复用上一引用。
+  const baseTypeRef = useRef<TextStyle | undefined>(undefined);
+  const rawBaseType = flatBase ? pickBaseType(flatBase) : undefined;
+  if (!sameBaseType(baseTypeRef.current, rawBaseType)) {
+    baseTypeRef.current = rawBaseType;
+  }
   const ctx: RenderCtx = {
     color: flatBase?.color ?? theme.colors.textPrimary,
+    baseType: baseTypeRef.current,
     inBubble: flatBase?.color === theme.colors.bubbleUserText,
     sources,
     onCitationPress,
@@ -276,6 +313,7 @@ const MarkdownBlockView = memo(
   (prev, next) =>
     prev.block === next.block &&
     prev.ctx.color === next.ctx.color &&
+    prev.ctx.baseType === next.ctx.baseType &&
     prev.ctx.inBubble === next.ctx.inBubble &&
     prev.ctx.sources === next.ctx.sources &&
     prev.ctx.onCitationPress === next.ctx.onCitationPress &&
@@ -315,7 +353,7 @@ function BlockNode({
         }
       }
       return (
-        <Text style={[theme.type.chat, { color: ctx.color }]}>
+        <Text style={[theme.type.chat, ctx.baseType, { color: ctx.color }]}>
           <SpanNodes spans={block.spans} ctx={ctx} tailFade={tailFade} />
           {consumeCursor(cursorBox)}
         </Text>
@@ -893,6 +931,7 @@ function ListBlock({
             <Text
               style={[
                 theme.type.chat,
+                ctx.baseType,
                 {
                   color:
                     item.checked === null

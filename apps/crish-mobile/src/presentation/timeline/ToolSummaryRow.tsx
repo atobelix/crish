@@ -1,5 +1,6 @@
 // 对话里的工具摘要行：相邻工具调用折叠成一行，点按打开工具抽屉并定位到这一组。
-// 美化排版：终端图标、运行状态指示、发丝边框与右侧抽屉进入指示。
+// 排版与思考状态行同口径（任务四 B)：callout 字号、无描边、fillSubtle 底、
+// 终端图标、运行状态指示与右侧抽屉进入指示。
 // 下方若有搜索结果，自动挂载 32px 网页来源微胶囊横向滑动条 (WebSourceStrip)。
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -135,9 +136,7 @@ export function ToolSummaryRow({
           paddingVertical: 3.5,
           gap: 5,
           borderRadius: theme.radius.pill,
-          backgroundColor: theme.colors.surfaceGrouped,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.colors.hairline,
+          backgroundColor: theme.colors.fillSubtle,
         },
       ]}
     >
@@ -170,7 +169,7 @@ export function ToolSummaryRow({
       ) : null}
       <View style={[styles.label, { gap: theme.space.xs }]}>
         <AppText
-          variant="caption"
+          variant="callout"
           color="textSecondary"
           numberOfLines={1}
           style={styles.shrink}
@@ -178,7 +177,7 @@ export function ToolSummaryRow({
           {label}
         </AppText>
         {run.failed > 0 ? (
-          <AppText variant="caption" color="danger">
+          <AppText variant="callout" color="danger">
             · {run.failed} 个失败
           </AppText>
         ) : null}

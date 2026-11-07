@@ -950,9 +950,10 @@ export function TimelineView({
         ListFooterComponent={
           awaitingFirstToken ? (
             // 与 ReasoningView 组头同几何（reasoningContainer +
-            // reasoningHeader + caption）：首 token 落地换成真实
+            // reasoningHeader + callout）：首 token 落地换成真实
             // reasoning 头时零跳动——行高由文字行高决定，占位行不带
-            // 折叠箭头（箭头 12px 小于 caption 行高，不撑高）
+            // 折叠箭头（箭头 12px 小于 callout 行高，不撑高）；字号与
+            // 思考状态行同为 callout（任务四 B），收拢衔接不跳字号
             <View
               testID="timeline-waiting-row"
               style={styles.reasoningContainer}
@@ -964,7 +965,7 @@ export function TimelineView({
                   { gap: theme.space.xs },
                 ]}
               >
-                <AppText variant="caption" color="textTertiary">
+                <AppText variant="callout" color="textTertiary">
                   正在思考...
                 </AppText>
               </View>

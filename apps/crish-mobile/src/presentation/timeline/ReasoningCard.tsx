@@ -21,6 +21,7 @@ import Animated, {
 import { useTheme } from '@/adapters/platform/theme';
 import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import { AppText, Icon } from '@/presentation/ui';
+import { MarkdownText } from '@/presentation/components/blocks/MarkdownText';
 import { useMinResidencyText } from './useActivityLabel';
 
 /** 思考链卡片视口最大高度限制 (160dp) */
@@ -50,6 +51,8 @@ export interface ReasoningContentBoxProps {
  * R9：流式跟随由内容尺寸事件驱动——增长即一次瞬时落底（animated: false，
  * 不反复启动 animated 滚动，无定时器抢滚动）；用户拖动立即取消跟随，
  * 上滑阅读不抢读，回到底部自动恢复跟随。
+ * 任务四 B：正文经 MarkdownText 流式入口渲染（footnote + textSecondary
+ * 基线），Markdown 块的尺寸变化仍由本框的跟随控制器统一承接。
  */
 export const ReasoningContentBox = memo(function ReasoningContentBox({
   text,
@@ -95,7 +98,6 @@ export const ReasoningContentBox = memo(function ReasoningContentBox({
         styles.boxContainer,
         {
           backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.hairline,
           borderRadius: theme.radius.control,
           maxHeight: REASONING_BOX_MAX_HEIGHT,
         },
@@ -115,14 +117,18 @@ export const ReasoningContentBox = memo(function ReasoningContentBox({
         style={styles.scrollArea}
         testID="reasoning-scroll-view"
       >
-        <AppText
-          variant="footnote"
-          color="textSecondary"
-          style={[styles.reasoningText, theme.type.mono]}
+        {/* 任务四 B：思考正文走 Markdown 流式入口（封口块引用复用、尾块
+            分治，不新写解析器）；基线 footnote + textSecondary（比正文小
+            一档、颜色次级），内容尺寸事件仍喂给上方同一个跟随控制器 */}
+        <MarkdownText
+          text={text}
+          streaming={isThinking}
+          baseStyle={[
+            theme.type.footnote,
+            { color: theme.colors.textSecondary },
+          ]}
           testID="reasoning-text"
-        >
-          {text}
-        </AppText>
+        />
       </ScrollView>
     </View>
   );
@@ -328,7 +334,7 @@ export const ReasoningCard = memo(function ReasoningCard({
       testID={testID}
       style={[styles.cardContainer, expanded && styles.cardContainerExpanded]}
     >
-      {/* 极轻量单行微胶囊（高度约 26dp），轻点内联展开，默认不抢占主阅读流 */}
+      {/* 极轻量单行微胶囊（callout 字号、无描边，与时间线等待行同字号），轻点内联展开，默认不抢占主阅读流 */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -337,7 +343,6 @@ export const ReasoningCard = memo(function ReasoningCard({
           styles.microPill,
           {
             backgroundColor: theme.colors.fillSubtle,
-            borderColor: theme.colors.hairline,
             borderRadius: theme.radius.pill,
           },
         ]}
@@ -345,7 +350,7 @@ export const ReasoningCard = memo(function ReasoningCard({
       >
         <Icon name="terminal" size={11} color={theme.colors.textTertiary} />
         <AppText
-          variant="caption"
+          variant="callout"
           color="textTertiary"
           style={styles.pillLabel}
           testID="reasoning-header-label"
@@ -399,11 +404,9 @@ const styles = StyleSheet.create({
     minHeight: 26,
     paddingHorizontal: 9,
     paddingVertical: 3.5,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   pillLabel: {},
   boxContainer: {
-    borderWidth: 1,
     overflow: 'hidden',
     marginTop: 6,
     position: 'relative',
@@ -412,5 +415,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  reasoningText: {},
 });

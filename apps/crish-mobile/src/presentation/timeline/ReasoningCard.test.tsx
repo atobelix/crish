@@ -441,8 +441,8 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       expect(boxStyle.backgroundColor).toBe('#ffffff');
       // 微圆角规范（theme.radius.control）
       expect(boxStyle.borderRadius).toBe(12);
-      // 细边框界定
-      expect(boxStyle.borderWidth).toBe(1);
+      // 任务四 B：展开盒无描边（去 borderWidth），只靠纯白底与圆角分层
+      expect(boxStyle.borderWidth).toBeUndefined();
       await view.unmount();
     });
 
@@ -455,11 +455,14 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
         />
       );
 
-      const textNode = view.getByTestId('reasoning-text');
+      // 任务四 B：正文经 MarkdownText 渲染，段落文字节点即正文基线载体
+      const textNode = view.getByText('浅色文字色阶校验');
       const textStyle = StyleSheet.flatten(textNode.props.style);
 
       // textSecondary 为 #555555（浅色模式下次级灰色，与 textPrimary #171717 形成反差）
       expect(textStyle.color).toBe('#555555');
+      // 基线 footnote（13）：比正文 chat（14）小一档，且不再叠等宽字
+      expect(textStyle.fontSize).toBe(13);
       await view.unmount();
     });
 
@@ -482,5 +485,68 @@ describe('ReasoningCard 移动端思考链核心交互与呈现', () => {
       expect(textStyle.color).toBe('#555555');
       await view.unmount();
     });
+  });
+});
+
+describe('ReasoningCard · 任务四 B 行样式与思考 Markdown', () => {
+  it('状态行无描边且标签字号为 callout（14，非 caption 12.5）', async () => {
+    const view = await renderCard(
+      <ReasoningCard
+        status="done"
+        text="行样式校验样本"
+        durationMs={2000}
+        minResidencyMs={0}
+      />
+    );
+
+    const header = view.getByTestId('reasoning-header');
+    const headerStyle = StyleSheet.flatten(header.props.style);
+    expect(headerStyle.borderWidth).toBeUndefined();
+
+    const label = view.getByTestId('reasoning-header-label');
+    const labelStyle = StyleSheet.flatten(label.props.style);
+    expect(labelStyle.fontSize).toBe(14);
+    await view.unmount();
+  });
+
+  it('展开正文 Markdown 化：列表成形、行内代码不带反引号原文', async () => {
+    const view = await renderCard(
+      <ReasoningCard
+        initialExpanded={true}
+        text={'先列要点：\n\n- 第一项\n- 第二项\n\n结论含 `inlineCode` 片段。'}
+        minResidencyMs={0}
+      />
+    );
+
+    expect(view.getByText('第一项')).toBeTruthy();
+    expect(view.getByText('第二项')).toBeTruthy();
+    // 原文符号不直出（旧纯文本呈现会把整段当一个字符串原样显示）
+    expect(view.queryByText(/- 第一项/)).toBeNull();
+    expect(view.queryByText(/`inlineCode`/)).toBeNull();
+    expect(view.getByText(/inlineCode/)).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('流式两帧：先行段保持成形，尾段继续生长不整段回原文', async () => {
+    const frame1 = '第一段推演已经成形。\n\n- 要点甲\n- 要点乙';
+    const view = await renderCard(
+      <ReasoningCard status="thinking" text={frame1} minResidencyMs={0} />
+    );
+    expect(view.getByText('第一段推演已经成形。')).toBeTruthy();
+    expect(view.getByText('要点甲')).toBeTruthy();
+
+    await view.rerender(
+      <ReasoningCard
+        status="thinking"
+        text={frame1 + '\n\n尾段继续生长中'}
+        minResidencyMs={0}
+      />
+    );
+    // 已成形段与列表项保持结构，尾段新内容到场（封口复用机制在
+    // MarkdownText 套件有解析级断言，此处锁卡片级行为）
+    expect(view.getByText('第一段推演已经成形。')).toBeTruthy();
+    expect(view.getByText('要点乙')).toBeTruthy();
+    expect(view.getByText('尾段继续生长中')).toBeTruthy();
+    await view.unmount();
   });
 });

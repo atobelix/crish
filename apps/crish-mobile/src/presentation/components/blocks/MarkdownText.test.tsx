@@ -579,3 +579,26 @@ describe('MarkdownText · 代码块内滚跟随（任务四 A)', () => {
     protoSpy.mockRestore();
   });
 });
+
+describe('MarkdownText · baseStyle 字号基线（任务四 B)', () => {
+  it('baseStyle 字号族字段成为段落基线；颜色经 ctx 出口', async () => {
+    await render(
+      <MarkdownText
+        text="基线校验文字"
+        baseStyle={{ fontSize: 13, lineHeight: 18, color: '#555555' }}
+      />
+    );
+    const node = screen.getByText('基线校验文字');
+    const flat = StyleSheet.flatten(node.props.style);
+    expect(flat.fontSize).toBe(13);
+    expect(flat.lineHeight).toBe(18);
+    expect(flat.color).toBe('#555555');
+  });
+
+  it('不传 baseStyle 时段落为 chat 基线（14）', async () => {
+    await render(<MarkdownText text="默认基线文字" />);
+    const node = screen.getByText('默认基线文字');
+    const flat = StyleSheet.flatten(node.props.style);
+    expect(flat.fontSize).toBe(14);
+  });
+});
