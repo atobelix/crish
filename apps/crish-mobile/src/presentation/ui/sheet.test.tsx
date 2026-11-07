@@ -11,6 +11,9 @@ import {
   AppText,
   nextSheetSize,
   SHEET_SIZE_RATIOS,
+  sheetFingerVisualDelta,
+  sheetGestureProgress,
+  sheetGestureVelocity,
   sheetPanelTranslateY,
   Sheet,
   SheetOptionRow,
@@ -37,7 +40,7 @@ async function renderWithProviders(element: ReactElement) {
 describe('Sheet 键盘瞬发交接与即时呈现', () => {
   it('visible 时内容即刻呈现（零毫秒阻塞门，无需等待键盘归零或 1000ms 超时）', async () => {
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={() => undefined}
         title="瞬时呈现测试"
@@ -52,7 +55,7 @@ describe('Sheet 键盘瞬发交接与即时呈现', () => {
 
   it('visible=false 时不挂载内容', async () => {
     const view = await renderWithProviders(
-      <Sheet visible={false} onClose={() => undefined} testID="sheet-hidden">
+      <Sheet keyboard="none" visible={false} onClose={() => undefined} testID="sheet-hidden">
         <AppText>不应出现</AppText>
       </Sheet>
     );
@@ -61,34 +64,23 @@ describe('Sheet 键盘瞬发交接与即时呈现', () => {
   });
 });
 
-describe('Sheet 初始估高与位移平滑度（防瞬移）', () => {
-  it('未测量时按语义档位推导兜底位移，不采用全屏高度', () => {
-    // 窗口高度 844，compact 档比例 0.4 -> fallbackHeight = 338
-    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
-    expect(compactFallback).toBe(338);
-    // 验证初始状态位移（整块藏于屏外）
-    expect(sheetPanelTranslateY(0, 0, compactFallback)).toBe(338);
-    // 验证展开中途位移（平滑插值）
-    expect(sheetPanelTranslateY(0.5, 0, compactFallback)).toBe(169);
-    // 验证完全展开位移归零
-    expect(sheetPanelTranslateY(1, 0, compactFallback)).toBe(0);
+describe('Sheet 行程与手指位移', () => {
+  it('未测得行程时位移为 0，不用档位比例冒充', () => {
+    expect(sheetPanelTranslateY(0, 0)).toBe(0);
+    expect(sheetPanelTranslateY(0.5, 0)).toBe(0);
+    expect(sheetPanelTranslateY(1, 0)).toBe(0);
   });
 
-  it('测得面板真实高度后按真实高度位移', () => {
-    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
-    expect(sheetPanelTranslateY(0, 240, compactFallback)).toBe(240);
-    expect(sheetPanelTranslateY(0.5, 240, compactFallback)).toBe(120);
-    expect(sheetPanelTranslateY(1, 240, compactFallback)).toBe(0);
-  });
-
-  it('兼容 4 参数签名 (progress, panelHeight, windowHeight, fallbackHeight)', () => {
-    const compactFallback = Math.round(844 * SHEET_SIZE_RATIOS.compact);
-    // 未测得 panelHeight 时优先 fallbackHeight 替代 windowHeight，彻底消除沉底 570dp 虚空
-    expect(sheetPanelTranslateY(0, 0, 844, compactFallback)).toBe(338);
-    expect(sheetPanelTranslateY(0.5, 0, 844, compactFallback)).toBe(169);
-    expect(sheetPanelTranslateY(1, 0, 844, compactFallback)).toBe(0);
-    // 测得真实高度后按真实高度位移
-    expect(sheetPanelTranslateY(0, 240, 844, compactFallback)).toBe(240);
+  it('fallback 680、实测 240 时手指 10dp 视觉也是 10dp', () => {
+    const staleFallback = 680;
+    const actual = 240;
+    const finger = 10;
+    expect(sheetFingerVisualDelta(1, finger, actual)).toBeCloseTo(finger);
+    const oldVisual = finger * (staleFallback / actual);
+    expect(oldVisual).toBeCloseTo(28.333, 2);
+    expect(sheetFingerVisualDelta(1, finger, actual)).not.toBeCloseTo(oldVisual);
+    expect(sheetGestureProgress(1, finger, actual)).toBeCloseTo(1 - finger / actual);
+    expect(sheetGestureVelocity(finger, actual)).toBeCloseTo(-finger / actual);
   });
 });
 
@@ -136,7 +128,7 @@ describe('Sheet 语义档位（批 D）', () => {
 
   it('size 决定面板高度上限；缺省 = large', async () => {
     const compact = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={() => undefined}
         size="compact"
@@ -147,7 +139,7 @@ describe('Sheet 语义档位（批 D）', () => {
     );
     expect(panelMaxHeight(compact, 'sheet-compact')).toBe('40%');
     const fallback = await renderWithProviders(
-      <Sheet visible onClose={() => undefined} testID="sheet-default-size">
+      <Sheet keyboard="none" visible onClose={() => undefined} testID="sheet-default-size">
         <AppText>默认档</AppText>
       </Sheet>
     );
@@ -166,7 +158,7 @@ describe('Sheet 语义档位（批 D）', () => {
       );
     }
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={() => undefined}
         size="large"
@@ -188,7 +180,7 @@ describe('Sheet dismissible=false 诚实口径（批 D）', () => {
   it('无关闭钮、遮罩点按不关、系统返回不关（必须表态）', async () => {
     const onClose = jest.fn();
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={onClose}
         title="需要决定"
@@ -208,7 +200,7 @@ describe('Sheet dismissible=false 诚实口径（批 D）', () => {
   it('缺省可关：关闭钮在场、遮罩点按关闭、系统返回关闭', async () => {
     const onClose = jest.fn();
     const view = await renderWithProviders(
-      <Sheet visible onClose={onClose} title="普通面板" testID="sheet-plain">
+      <Sheet keyboard="none" visible onClose={onClose} title="普通面板" testID="sheet-plain">
         <AppText>内容</AppText>
       </Sheet>
     );
@@ -225,7 +217,7 @@ describe('Sheet backAction 钻取返回（批 D）', () => {
     const onClose = jest.fn();
     const onBack = jest.fn();
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={onClose}
         title="子页"
@@ -247,7 +239,7 @@ describe('Sheet backAction 钻取返回（批 D）', () => {
 describe('Sheet 关闭末帧冻结（批 D）', () => {
   it('visible 落下同帧宿主换内容，出场期间仍呈现最后一帧', async () => {
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={() => undefined}
         title="第一帧标题"
@@ -258,7 +250,7 @@ describe('Sheet 关闭末帧冻结（批 D）', () => {
     );
     expect(view.getByText('第一帧内容')).toBeTruthy();
     await view.rerender(
-      <Sheet
+      <Sheet keyboard="none"
         visible={false}
         onClose={() => undefined}
         title="关闭后标题"
@@ -278,7 +270,7 @@ describe('SheetOptionRow 纯净极简视觉重塑', () => {
     const onPlainPress = jest.fn();
     const onDisabledPress = jest.fn();
     const view = await renderWithProviders(
-      <Sheet visible onClose={() => undefined} title="选项测试">
+      <Sheet keyboard="none" visible onClose={() => undefined} title="选项测试">
         <SheetOptionRow
           testID="row-plain"
           label="纯净无界选项"
@@ -327,10 +319,61 @@ describe('SheetOptionRow 纯净极简视觉重塑', () => {
 });
 
 describe('Sheet 退场物理卸载与 onCloseComplete', () => {
-  it('visible 从 true 变为 false 时，退场完成调用 onCloseComplete 且物理卸载', async () => {
+  it('退场未完成时重新打开会取消卸载，回调只在真正退完后出现一次', async () => {
     const onCloseComplete = jest.fn();
     const view = await renderWithProviders(
       <Sheet
+        keyboard="none"
+        visible
+        onClose={() => undefined}
+        onCloseComplete={onCloseComplete}
+        testID="sheet-reopen"
+      >
+        <AppText>仍在</AppText>
+      </Sheet>
+    );
+    jest.useFakeTimers();
+    try {
+      await view.rerender(
+        <Sheet
+          keyboard="none"
+          visible={false}
+          onClose={() => undefined}
+          onCloseComplete={onCloseComplete}
+          testID="sheet-reopen"
+        >
+          <AppText>仍在</AppText>
+        </Sheet>
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(100);
+      });
+      expect(view.getByTestId('sheet-reopen')).toBeTruthy();
+      await view.rerender(
+        <Sheet
+          keyboard="none"
+          visible
+          onClose={() => undefined}
+          onCloseComplete={onCloseComplete}
+          testID="sheet-reopen"
+        >
+          <AppText>仍在</AppText>
+        </Sheet>
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+      expect(onCloseComplete).not.toHaveBeenCalled();
+      expect(view.getByTestId('sheet-reopen')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('visible 从 true 变为 false 时，退场完成调用 onCloseComplete 且物理卸载', async () => {
+    const onCloseComplete = jest.fn();
+    const view = await renderWithProviders(
+      <Sheet keyboard="none"
         visible
         onClose={() => undefined}
         onCloseComplete={onCloseComplete}
@@ -347,7 +390,7 @@ describe('Sheet 退场物理卸载与 onCloseComplete', () => {
     try {
       // 宿主将 visible 置为 false
       await view.rerender(
-        <Sheet
+        <Sheet keyboard="none"
           visible={false}
           onClose={() => undefined}
           onCloseComplete={onCloseComplete}
@@ -378,7 +421,7 @@ describe('Sheet 退场物理卸载与 onCloseComplete', () => {
     const onClose = jest.fn();
     const onCloseComplete = jest.fn();
     const view = await renderWithProviders(
-      <Sheet
+      <Sheet keyboard="none"
         visible
         onClose={onClose}
         onCloseComplete={onCloseComplete}
@@ -396,7 +439,7 @@ describe('Sheet 退场物理卸载与 onCloseComplete', () => {
     try {
       // 宿主响应 onClose 将 visible 置为 false
       await view.rerender(
-        <Sheet
+        <Sheet keyboard="none"
           visible={false}
           onClose={onClose}
           onCloseComplete={onCloseComplete}
@@ -430,7 +473,7 @@ describe('useOverlayHost 与 Sheet 联动生命周期闭环', () => {
         />
         <Pressable testID="btn-close" onPress={() => host.closeOverlay()} />
         {host.isMounted('sampleSheet') && (
-          <Sheet
+          <Sheet keyboard="none"
             visible={host.isOpen('sampleSheet')}
             onClose={host.closeOverlay}
             onCloseComplete={() => host.onOverlayExited('sampleSheet')}

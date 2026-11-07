@@ -10,8 +10,7 @@
 // 已停用/不在可选集时加注脚，不再静默无选中。列表失败面呈现错误码（M2，
 // 与切换失败面同口径），不再只有一个无解释的「无法获取」。
 import { memo, useCallback, useRef } from 'react';
-import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, View } from 'react-native';
 import type { ActiveModelInfo, ModelEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
 import {
@@ -23,53 +22,19 @@ import {
   AppText,
   ErrorState,
   LoadingState,
-  SHEET_SIZE_RATIOS,
   Sheet,
   SheetOptionRow,
 } from '@/presentation/ui';
+import {
+  SHEET_LIST_BATCH,
+  SHEET_LIST_INITIAL,
+  SHEET_LIST_WINDOW,
+  useLargeSheetListBudget,
+} from '@/presentation/ui/sheetListWindow';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
 import type { LocalVendorKey } from '@/domain/types/localChat';
 import { VendorLogo } from '@/presentation/components/localChat/ui/VendorLogo';
 import { isLocalVendorKey } from '@/presentation/components/localChat/ui/vendorLogosData';
-
-/** 首屏约一屏行数。超过这个数量才锁高度，短列表仍按内容收缩。 */
-const MODEL_LIST_INITIAL = 8;
-const MODEL_LIST_BATCH = 6;
-/** 视口倍数。比时间线的 9 更紧，避免把整份模型史提前挂上。 */
-const MODEL_LIST_WINDOW = 5;
-
-export interface ModelSheetListChrome {
-  windowHeight: number;
-  maxHeightRatio: number;
-  paddingTop: number;
-  handleMarginTop: number;
-  handleHeight: number;
-  handleMarginBottom: number;
-  headerRowHeight: number;
-  headerMarginBottom: number;
-  paddingBottom: number;
-  scrollContentPaddingBottom: number;
-}
-
-/**
- * 嵌套列表的可用高度。
- * Sheet 的子节点始终包在纵向 ScrollView 里，这一轮不能改公共 Sheet。
- * 没有明确高度时，内部列表会跟着内容撑开，虚拟化不会发生。
- * 这里扣掉的每一项都对应 Sheet 实际渲染的内边距、把手、标题行和滚动内容底衬。
- */
-export function modelSheetListMaxHeight(chrome: ModelSheetListChrome): number {
-  const panelMax = chrome.windowHeight * chrome.maxHeightRatio;
-  const chromeHeight =
-    chrome.paddingTop +
-    chrome.handleMarginTop +
-    chrome.handleHeight +
-    chrome.handleMarginBottom +
-    chrome.headerRowHeight +
-    chrome.headerMarginBottom +
-    chrome.paddingBottom +
-    chrome.scrollContentPaddingBottom;
-  return Math.max(0, Math.floor(panelMax - chromeHeight));
-}
 
 const ModelOptionRow = memo(function ModelOptionRow({
   model,
@@ -157,8 +122,7 @@ export function ModelSheet({
   testID = 'model-sheet',
 }: ModelSheetProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const listMaxHeight = useLargeSheetListBudget();
   const onSelectRef = useRef(onSelectModel);
   onSelectRef.current = onSelectModel;
   const selectModel = useCallback((providerId: string, modelId: string) => {
@@ -179,21 +143,6 @@ export function ModelSheet({
     ),
     [activeModelId, keyExtractor, selectModel, testID]
   );
-  const listMaxHeight = modelSheetListMaxHeight({
-    windowHeight,
-    maxHeightRatio: SHEET_SIZE_RATIOS.large,
-    paddingTop: theme.space.sm,
-    handleMarginTop: theme.space.xs,
-    handleHeight: theme.size.sheetHandleHeight,
-    handleMarginBottom: theme.space.md + theme.space.xxs,
-    headerRowHeight: Math.max(
-      theme.type.headline.lineHeight,
-      theme.size.sheetClose
-    ),
-    headerMarginBottom: theme.space.lg,
-    paddingBottom: Math.max(insets.bottom, theme.space.xxl),
-    scrollContentPaddingBottom: theme.space.xs,
-  });
   // 公共 Sheet 没有打开完成回调。这里只记「请求打开」和「内容完成布局」。
   // 完成相位是挂载，不是面板动画结束后用户已经看见。
   const spanRef = useRef<InteractionHandle | null>(null);
@@ -212,12 +161,15 @@ export function ModelSheet({
   const timingEnabled = isInteractionTimingEnabled();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       title="选择模型"
       size="large"
       testID={testID}
+      measureKey={testID}
+      contentKey={`${connected ? 'on' : 'off'}:${status}:${models?.length ?? 0}`}
     >
       {timingEnabled ? (
         <View
@@ -255,15 +207,15 @@ export function ModelSheet({
           // 方向与外层 Sheet 一致，都是纵向。短列表不锁高度，避免两行模型撑满抽屉。
           // 超过首屏才锁到面板预算，内部自己滚动，外层才不会把每一行都挂上。
           style={
-            models.length > MODEL_LIST_INITIAL
+            models.length > SHEET_LIST_INITIAL
               ? { height: listMaxHeight }
               : { maxHeight: listMaxHeight }
           }
-          nestedScrollEnabled={models.length > MODEL_LIST_INITIAL}
-          scrollEnabled={models.length > MODEL_LIST_INITIAL}
-          initialNumToRender={MODEL_LIST_INITIAL}
-          maxToRenderPerBatch={MODEL_LIST_BATCH}
-          windowSize={MODEL_LIST_WINDOW}
+          nestedScrollEnabled={models.length > SHEET_LIST_INITIAL}
+          scrollEnabled={models.length > SHEET_LIST_INITIAL}
+          initialNumToRender={SHEET_LIST_INITIAL}
+          maxToRenderPerBatch={SHEET_LIST_BATCH}
+          windowSize={SHEET_LIST_WINDOW}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: theme.space.xxs }}
           ListFooterComponent={

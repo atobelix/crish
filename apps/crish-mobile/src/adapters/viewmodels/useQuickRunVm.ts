@@ -12,7 +12,7 @@
 // - 首帧预算：本 VM 无挂载期异步拉取（会话来自已水合的 sessionStore），静态表单
 //   轻量渲染不阻塞首帧（R2UX-05-10 快速操作区口径）；
 // - 派生纯函数导出供单测（排序切片/参数构造不变量）。
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import {
   useConnectionStore,
@@ -139,6 +139,16 @@ export function useQuickRunVm(
   const [feedback, setFeedback] = useState<QuickRunFeedback>({ kind: 'idle' });
   /** 发送重入锁（ref 同步防护：pending 期间拒绝二次提交，R2UX-04-03） */
   const busyRef = useRef(false);
+  // R5：受理→结算窗口内输入是否被新写（失败恢复判据：未被新写才恢复快照）
+  const typedDuringWaitRef = useRef(false);
+  // 卸载守卫：迟到回执不触碰已卸载 VM 的状态（切会话/卸载不串、不告警）
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   /** 上下文（测试注入优先；缺省走接线单例） */
   const ctxOf = useCallback(
@@ -147,6 +157,7 @@ export function useQuickRunVm(
   );
 
   const setPrompt = useCallback((text: string) => {
+    typedDuringWaitRef.current = true;
     setPromptState(text);
     // 输入变化即清除旧反馈（错误/成功状态不残留，等待新提交）
     setFeedback({ kind: 'idle' });
@@ -157,7 +168,12 @@ export function useQuickRunVm(
     setFeedback({ kind: 'idle' });
   }, []);
 
-  /** 发送管线（文本/附件共用）：busy 防重入 + 反馈状态机 + 成功清输入 */
+  /**
+   * 发送管线（文本/附件共用）：busy 防重入 + 反馈状态机。
+   * R5 受理与 ACK 分离：受理即清可视输入（prompt 快照随行），仓储回执前
+   * pending 展示为 sending；失败按「输入是否被新写」恢复快照或保留新稿；
+   * 卸载后迟到回执不再触碰状态面。
+   */
   const dispatch = useCallback(
     (params: RunTaskParams) => {
       if (busyRef.current) return;
@@ -172,24 +188,36 @@ export function useQuickRunVm(
         });
         return;
       }
+      // R5 受理点：prompt 快照锁定 + 立即清可视输入
+      const snapshotText = params.prompt;
+      typedDuringWaitRef.current = false;
       busyRef.current = true;
       setBusy(true);
       setFeedback({ kind: 'sending' });
+      setPromptState('');
+      // R6 发送只震一次：受理语义触觉在受理点发声（ACK 不再叠加 success）
+      haptics.tap();
       void ctx.repository
         .runTask(params)
         .then((res) => {
-          // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
-          haptics.success();
+          if (!aliveRef.current) return;
           setFeedback({
             kind: 'success',
             runId: res.runId,
             sessionId: res.sessionId,
           });
-          setPromptState(''); // 成功回执后清空输入（下次任务再输入）
         })
         .catch((e: unknown) => {
+          if (!aliveRef.current) return;
           const code =
             e instanceof RunTaskCommandError ? e.code : RUN_TASK_ERROR_INTERNAL;
+          if (!typedDuringWaitRef.current) {
+            // 等待期间输入未被新写：快照恢复进输入框（可重试）
+            setPromptState(snapshotText);
+            typedDuringWaitRef.current = false;
+          }
+          // R6 失败语义触觉：受理 tap 已发，失败以 failure 收尾
+          haptics.failure();
           setFeedback({
             kind: 'error',
             code,
@@ -198,7 +226,7 @@ export function useQuickRunVm(
         })
         .finally(() => {
           busyRef.current = false;
-          setBusy(false);
+          if (aliveRef.current) setBusy(false);
         });
     },
     [connected, ctxOf]

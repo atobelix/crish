@@ -1,9 +1,25 @@
 // 移动端思考链卡片：
 // 用户裁决改版：纯白背景（theme.colors.surface）、固定 160dp 视口内嵌手势滚动、
 // 彻底去除多余的 THINKING 标签与抽屉入口，纯净呈现思考正文。
+// R9 连续收拢：流式跟随由内容尺寸事件驱动（瞬时落底，无定时器、无 animated
+// 重启）；思考收口时卡片高度从实测值连续收到 0（UI 线程），负 delta 由
+// 时间线滚动仲裁器逐帧消化，不再刚性卸载造成时间线跳变。
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useTheme } from '@/adapters/platform/theme';
+import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import { AppText, Icon } from '@/presentation/ui';
 import { useMinResidencyText } from './useActivityLabel';
 
@@ -30,7 +46,10 @@ export interface ReasoningContentBoxProps {
 }
 
 /**
- * 固定高度视口内容框：纯白背景（theme.colors.surface），超限支持手指内部自由滚动
+ * 固定高度视口内容框：纯白背景（theme.colors.surface），超限支持手指内部自由滚动。
+ * R9：流式跟随由内容尺寸事件驱动——增长即一次瞬时落底（animated: false，
+ * 不反复启动 animated 滚动，无定时器抢滚动）；用户拖动立即取消跟随，
+ * 上滑阅读不抢读，回到底部自动恢复跟随。
  */
 export const ReasoningContentBox = memo(function ReasoningContentBox({
   text,
@@ -39,50 +58,32 @@ export const ReasoningContentBox = memo(function ReasoningContentBox({
 }: ReasoningContentBoxProps) {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
-  const lastScrollTimeRef = useRef(0);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 内部跟随态：真 = 流式增长时瞬时落底；拖动/上滑阅读即取消
+  const innerFollowRef = useRef(true);
 
-  useEffect(() => {
-    return () => {
-      if (scrollTimerRef.current !== null) {
-        clearTimeout(scrollTimerRef.current);
-        scrollTimerRef.current = null;
-      }
-    };
+  const handleScroll = useCallback((event: { nativeEvent: { contentSize: { height: number }; contentOffset: { y: number }; layoutMeasurement: { height: number } } }) => {
+    const { contentSize, contentOffset, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - contentOffset.y - layoutMeasurement.height;
+    // 瞬时落底回读时距离≈0，保持跟随；用户上滑超过阈值即脱离
+    innerFollowRef.current = distanceFromBottom < 40;
   }, []);
 
-  useEffect(() => {
-    if (!isThinking && scrollTimerRef.current !== null) {
-      clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = null;
-    }
-  }, [isThinking]);
+  const handleScrollBeginDrag = useCallback(() => {
+    // 用户拖动立即取消跟随（阅读历史不抢读）
+    innerFollowRef.current = false;
+  }, []);
 
-  // 流式思考过程中随新内容到达自动跟随滚到底部（100ms 节流防抖，杜绝每字逐字调用原生平滑滚动导致的动画冲突）
   const handleContentSizeChange = useCallback(
     (_width: number, height: number) => {
       if (!isThinking || height <= REASONING_BOX_MAX_HEIGHT) {
         return;
       }
-      const now = Date.now();
-      const elapsed = now - lastScrollTimeRef.current;
-      const THROTTLE_MS = 100;
-
-      if (elapsed >= THROTTLE_MS) {
-        if (scrollTimerRef.current !== null) {
-          clearTimeout(scrollTimerRef.current);
-          scrollTimerRef.current = null;
-        }
-        lastScrollTimeRef.current = now;
-        scrollRef.current?.scrollToEnd({ animated: true });
-      } else if (scrollTimerRef.current === null) {
-        const remaining = THROTTLE_MS - elapsed;
-        scrollTimerRef.current = setTimeout(() => {
-          scrollTimerRef.current = null;
-          lastScrollTimeRef.current = Date.now();
-          scrollRef.current?.scrollToEnd({ animated: true });
-        }, remaining);
+      if (!innerFollowRef.current) {
+        return;
       }
+      // 一次瞬时落底：无动画重启冲突、无定时器
+      scrollRef.current?.scrollToEnd({ animated: false });
     },
     [isThinking]
   );
@@ -107,6 +108,8 @@ export const ReasoningContentBox = memo(function ReasoningContentBox({
         bounces={false}
         scrollEnabled={true}
         scrollEventThrottle={16}
+        onScroll={handleScroll}
+        onScrollBeginDrag={handleScrollBeginDrag}
         onContentSizeChange={handleContentSizeChange}
         showsVerticalScrollIndicator={true}
         style={styles.scrollArea}
@@ -163,6 +166,7 @@ export const ReasoningCard = memo(function ReasoningCard({
   testID = 'reasoning-card',
 }: ReasoningCardProps) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
 
   // 1. 数据规整与状态裁决
   const text = propText ?? block?.text ?? '';
@@ -192,15 +196,82 @@ export const ReasoningCard = memo(function ReasoningCard({
 
   const expanded = userExpanded !== null ? userExpanded : status === 'thinking';
 
-  // 3. 状态机翻转监听：思考收口（thinking -> done）瞬间刚性折叠
+  // R9 连续收拢状态：实测高度 → 0（UI 线程 withTiming），收完卸载
+  const [collapsing, setCollapsing] = useState(false);
+  const collapseHeight = useSharedValue(-1); // -1 = 不约束高度（auto）
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const measuredBoxHeightRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (collapseTimerRef.current !== null) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const finishCollapse = useCallback(() => {
+    collapseTimerRef.current = null;
+    collapseHeight.value = -1;
+    setCollapsing(false);
+    setUserExpanded(false);
+  }, [collapseHeight]);
+
+  // 3. 状态机翻转监听：思考收口（thinking -> done）高度连续收拢。
+  // expanded 渲染期镜像：effect 里拿到的是翻转后的展开态（false），
+  // 收拢判定必须用「上一渲染」（思考中展开）的值。
+  const expandedMirrorRef = useRef(expanded);
+  const expandedAtPrevRender = expandedMirrorRef.current;
+  expandedMirrorRef.current = expanded;
   const prevThinkingRef = useRef(isThinking);
   useEffect(() => {
     if (prevThinkingRef.current && !isThinking) {
-      setUserExpanded(false);
+      prevThinkingRef.current = isThinking;
+      // 披露表照常记录收折（未来重挂以收折态呈现）
       disclosureStore?.set(blockId, false);
+      const measured = measuredBoxHeightRef.current;
+      if (expandedAtPrevRender && !reducedMotion && measured > 0) {
+        // 高度连续收拢：实测高度 → 0，负 delta 由时间线仲裁器逐帧消化，
+        // 结束高度与正式回复无缝衔接（不再刚性卸载跳变）
+        collapseHeight.value = measured;
+        collapseHeight.value = withTiming(0, {
+          duration: theme.motion.duration.drawer,
+        });
+        // 收拢期钉住展开态（expanded 不随 status 翻转提前卸载内容框）
+        setUserExpanded(true);
+        setCollapsing(true);
+        if (collapseTimerRef.current !== null) {
+          clearTimeout(collapseTimerRef.current);
+        }
+        // JS 侧同步计时收尾（与 UI 线程动画同.duration；动画回调不依赖）
+        collapseTimerRef.current = setTimeout(
+          finishCollapse,
+          theme.motion.duration.drawer
+        );
+        return;
+      }
+      setUserExpanded(false);
+      return;
     }
     prevThinkingRef.current = isThinking;
-  }, [isThinking, blockId, disclosureStore]);
+  }, [
+    isThinking,
+    blockId,
+    disclosureStore,
+    expandedAtPrevRender,
+    reducedMotion,
+    collapseHeight,
+    finishCollapse,
+    theme.motion.duration.drawer,
+  ]);
+
+  const collapseAnimatedStyle = useAnimatedStyle(() => {
+    if (collapseHeight.value < 0) {
+      return { overflow: 'hidden' as const };
+    }
+    return { height: collapseHeight.value, overflow: 'hidden' as const };
+  });
 
   // 4. 状态行文案排版与严格非空守门
   const cleanText = text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
@@ -232,12 +303,25 @@ export const ReasoningCard = memo(function ReasoningCard({
 
   // 5. 交互处理
   const toggle = useCallback(() => {
+    if (collapsing) {
+      // R9 中断：收拢途中点胶囊 → 取消收拢回到展开态
+      if (collapseTimerRef.current !== null) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+      cancelAnimation(collapseHeight);
+      collapseHeight.value = -1;
+      setCollapsing(false);
+      setUserExpanded(true);
+      disclosureStore?.set(blockId, true);
+      return;
+    }
     const next = !expanded;
     setUserExpanded(next);
     disclosureStore?.set(blockId, next);
     // 展开/折叠折叠区时通知时间线脱离跟随
     onToggleDisclosure?.();
-  }, [expanded, blockId, disclosureStore, onToggleDisclosure]);
+  }, [expanded, collapsing, collapseHeight, blockId, disclosureStore, onToggleDisclosure]);
 
   return (
     <View
@@ -275,13 +359,22 @@ export const ReasoningCard = memo(function ReasoningCard({
         />
       </Pressable>
 
-      {/* 展开态：固定高度纯白卡片视口，超长支持手指内部滑动 */}
+      {/* 展开态：固定高度纯白卡片视口，超长支持手指内部滑动。
+          R9 收拢期：实测高度→0 的动画容器承载（时间线负 delta 连续消化） */}
       {expanded && (cleanText.length > 0 || isThinking) ? (
-        <ReasoningContentBox
-          text={text}
-          isThinking={isThinking}
-          testID="reasoning-content-box"
-        />
+        <Animated.View
+          testID="reasoning-collapse-wrapper"
+          style={collapseAnimatedStyle}
+          onLayout={(event: LayoutChangeEvent) => {
+            measuredBoxHeightRef.current = event.nativeEvent.layout.height;
+          }}
+        >
+          <ReasoningContentBox
+            text={text}
+            isThinking={isThinking}
+            testID="reasoning-content-box"
+          />
+        </Animated.View>
       ) : null}
     </View>
   );

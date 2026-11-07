@@ -68,6 +68,23 @@ describe('Composer', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it('R6 发送只震一次：按压处不发任何触感（受理语义触觉由 VM 受理点发声）', async () => {
+    const taps = [
+      jest.spyOn(haptics, 'tap'),
+      jest.spyOn(haptics, 'success'),
+      jest.spyOn(haptics, 'failure'),
+      jest.spyOn(haptics, 'snap'),
+      jest.spyOn(haptics, 'selection'),
+    ];
+    const { element } = renderComposer(true);
+    const view = await render(element);
+    await fireEvent.press(view.getByTestId('composer-send'));
+    for (const spy of taps) {
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    }
+  });
+
   it('renders no microphone without the voice wiring (honest absence)', async () => {
     const { element } = renderComposer(false);
     const view = await render(element);

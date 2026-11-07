@@ -1,6 +1,8 @@
 // 远端会话行状态徽标（批 D）：单槽优先级 待审批 > 运行中 > 失败；
 // 失败 = 上一轮运行失败打点（lastRunFailedAtMs），呈现为危险色
 // 图标 + 「失败」弱文字；已完成态无徽标（内容净化裁决）。
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
@@ -89,10 +91,18 @@ describe('SessionListItem 失败呈现', () => {
       />
     );
     const row = view.getByTestId('session-row-s-1');
+    // 真 Pressable 把阈值交给 usePressability，宿主上看不到。
+    // 行必须把共享常量原样传下去（常量本身是 500，见 useSessionRowActions 测试）。
+    const source = readFileSync(join(__dirname, 'SessionListItem.tsx'), 'utf8');
+    expect(source).toContain('delayLongPress={rowActions.delayLongPress}');
     await fireEvent.press(row);
     expect(onPress).toHaveBeenCalledWith('s-1');
     expect(onLongPress).not.toHaveBeenCalled();
+    await fireEvent(row, 'pressIn');
+    await fireEvent(row, 'pressOut');
+    expect(onLongPress).not.toHaveBeenCalled();
     await fireEvent(row, 'longPress');
+    expect(onLongPress).toHaveBeenCalledTimes(1);
     expect(onLongPress).toHaveBeenCalledWith('s-1');
     expect(onPress).toHaveBeenCalledTimes(1);
   });

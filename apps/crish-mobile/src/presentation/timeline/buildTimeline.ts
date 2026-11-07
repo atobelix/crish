@@ -35,6 +35,11 @@ export interface AssistantMessageBlock {
   text: string;
   streaming: boolean;
   atMs: number;
+  /**
+   * 用户回显投递状态（R5，仅本地回显块携带）：pending = 已受理待 ACK；
+   * failed = 发送失败待重发。事件窗口落地的真实消息不携带（已确认）。
+   */
+  delivery?: 'pending' | 'failed';
 }
 
 /**

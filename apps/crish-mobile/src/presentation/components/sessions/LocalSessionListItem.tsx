@@ -13,6 +13,7 @@ import { AppText } from '@/presentation/ui';
 import { usePressFade } from '@/presentation/ui/pressFeedback';
 import { RunningPulseDot } from '@/presentation/components/status/RunningPulseDot';
 import { RowFailureBadge } from './RowFailureBadge';
+import { useSessionRowActions } from './useSessionRowActions';
 
 export interface LocalSessionListItemProps {
   thread: LocalThreadMeta;
@@ -42,16 +43,25 @@ export const LocalSessionListItem = memo(function LocalSessionListItem({
   const theme = useTheme();
   const press = usePressFade();
   const title = threadTitle(thread);
+  const rowActions = useSessionRowActions({
+    rowId: thread.id,
+    onPress,
+    onLongPress,
+    timingName: 'local-thread-row-long-press',
+    onPressInVisual: press.onPressIn,
+    onPressOutVisual: press.onPressOut,
+  });
   return (
     <Pressable
       testID={`local-row-${thread.id}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={`本地对话：${title}${streaming ? '，正在生成' : failed ? '，上次生成失败' : ''}`}
-      onPress={() => onPress(thread.id)}
-      onLongPress={onLongPress ? () => onLongPress(thread.id) : undefined}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
+      delayLongPress={rowActions.delayLongPress}
+      onPress={rowActions.onPress}
+      onLongPress={onLongPress ? rowActions.onLongPress : undefined}
+      onPressIn={rowActions.onPressIn}
+      onPressOut={rowActions.onPressOut}
       style={[
         styles.row,
         {

@@ -7,11 +7,8 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { ActiveModelInfo, ModelEntry } from '@crish/shared-types';
-import {
-  ModelSheet,
-  modelSheetListMaxHeight,
-  type ModelSheetProps,
-} from './ModelSheet';
+import { ModelSheet, type ModelSheetProps } from './ModelSheet';
+import { sheetListMaxHeight } from '@/presentation/ui/sheetListWindow';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
 
 const metrics: Metrics = {
@@ -142,7 +139,7 @@ describe('ModelSheet 列表高度与虚拟化', () => {
   it('可用高度等于窗口比例减去 Sheet 实际绘出的纵向构件', () => {
     // 844 * 0.8 - (8+4+4+14+30+16+34+4) = 561.2，向下取整
     expect(
-      modelSheetListMaxHeight({
+      sheetListMaxHeight({
         windowHeight: 844,
         maxHeightRatio: 0.8,
         paddingTop: 8,

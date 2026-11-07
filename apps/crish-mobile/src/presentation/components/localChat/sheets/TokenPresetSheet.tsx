@@ -91,6 +91,7 @@ export function TokenPresetSheet({
 
   return (
     <Sheet
+      keyboard="input"
       visible={visible}
       onClose={onClose}
       title={title}

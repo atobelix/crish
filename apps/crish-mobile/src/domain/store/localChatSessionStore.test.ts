@@ -66,12 +66,11 @@ describe('localChatSessionStore truncateFrom（重新生成截断）', () => {
 
     const s = localChatSessionStore.getState();
     const threadId = s.createThread();
-    s.appendUser(userMsg('a1', '锚点提问'));
-    s.beginAssistant(assistantMsg('a2'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '锚点提问'), assistantMsg('a2'));
     s.appendAssistantDelta('a2', '第一版回答');
     s.finishAssistant('a2');
     // 模拟后续 tool 轮次（截断必须连带丢弃）
-    s.appendUser(userMsg('a3', 'tool 结果轮'), threadId);
+    s.appendUserAndBeginAssistant(userMsg('a3', 'tool 结果轮'), null, threadId);
     await flushPersist();
     deleteFromSpy.mockClear();
 
@@ -92,7 +91,7 @@ describe('localChatSessionStore truncateFrom（重新生成截断）', () => {
   it('诚实 no-op：消息不存在 / 无线程时截断为空操作', () => {
     const s = localChatSessionStore.getState();
     s.createThread();
-    s.appendUser(userMsg('a1', '唯一消息'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '唯一消息'), null);
     s.truncateFrom('不存在的消息');
     expect(localChatSessionStore.getState().messages.map((m) => m.id)).toEqual([
       'a1',
@@ -116,9 +115,12 @@ describe('localChatSessionStore 多线程', () => {
     expect(localChatSessionStore.getState().threads[0]?.modelRef).toBeNull();
   });
 
-  it('appendUser 无线程时自动建线程；首条消息生成标题与摘要', () => {
+  it('appendUserAndBeginAssistant 无线程时自动建线程；首条消息生成标题与摘要', () => {
     const s = localChatSessionStore.getState();
-    s.appendUser(userMsg('u1', '  帮我 写一首 关于秋天的 诗 '));
+    s.appendUserAndBeginAssistant(
+      userMsg('u1', '  帮我 写一首 关于秋天的 诗 '),
+      null
+    );
     const state = localChatSessionStore.getState();
     expect(state.activeThreadId).not.toBeNull();
     expect(state.threads).toHaveLength(1);
@@ -126,7 +128,7 @@ describe('localChatSessionStore 多线程', () => {
     expect(state.threads[0]?.preview).toBe('帮我 写一首 关于秋天的 诗');
     expect(state.messages.map((m) => m.id)).toEqual(['u1']);
     // 第二条消息不改标题
-    state.appendUser(userMsg('u2', '再来一首'));
+    state.appendUserAndBeginAssistant(userMsg('u2', '再来一首'), null);
     expect(localChatSessionStore.getState().threads[0]?.title).toBe(
       '帮我 写一首 关于秋天的 诗'
     );
@@ -135,10 +137,12 @@ describe('localChatSessionStore 多线程', () => {
   it('切换线程：运行时整表暂存/恢复，各线程消息互不可见', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('a1', '线程甲的问题'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '线程甲的问题'), null);
     const b = localChatSessionStore.getState().createThread();
     expect(b).not.toBe(a);
-    localChatSessionStore.getState().appendUser(userMsg('b1', '线程乙的问题'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('b1', '线程乙的问题'), null);
     expect(localChatSessionStore.getState().messages.map((m) => m.id)).toEqual([
       'b1',
     ]);
@@ -152,14 +156,12 @@ describe('localChatSessionStore 多线程', () => {
   it('流式隔离：甲线程生成中切到乙，增量与收尾仍落甲；乙可独立发送', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('a1', '甲问'));
-    s.beginAssistant(assistantMsg('a2'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '甲问'), assistantMsg('a2'));
     localChatSessionStore.getState().createThread();
     const s2 = localChatSessionStore.getState();
     // 甲被暂存且仍标记生成中
     expect(s2.inactive[a]?.streaming).toBe(true);
-    s2.appendUser(userMsg('b1', '乙问'));
-    s2.beginAssistant(assistantMsg('b2'));
+    s2.appendUserAndBeginAssistant(userMsg('b1', '乙问'), assistantMsg('b2'));
     // 甲的增量在乙活动时到达 → 落甲不落乙
     s2.appendAssistantDelta('a2', '甲的回答');
     expect(
@@ -181,9 +183,11 @@ describe('localChatSessionStore 多线程', () => {
   it('deleteThread：活动线程被删激活最近线程；非活动线程被删不扰动当前', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('a1', '甲'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '甲'), null);
     const b = localChatSessionStore.getState().createThread();
-    localChatSessionStore.getState().appendUser(userMsg('b1', '乙'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('b1', '乙'), null);
     localChatSessionStore.getState().deleteThread(a);
     let state = localChatSessionStore.getState();
     expect(state.activeThreadId).toBe(b);
@@ -198,9 +202,11 @@ describe('localChatSessionStore 多线程', () => {
   it('clearThread 只清目标线程消息，标题回占位，他线程不动', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('a1', '甲问'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '甲问'), null);
     localChatSessionStore.getState().createThread();
-    localChatSessionStore.getState().appendUser(userMsg('b1', '乙问'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('b1', '乙问'), null);
     localChatSessionStore.getState().clearThread(a);
     const state = localChatSessionStore.getState();
     expect(state.inactive[a]?.messages).toEqual([]);
@@ -215,8 +221,10 @@ describe('localChatSessionStore 持久化', () => {
     configureLocalChatSessionPersistence(dao);
     const s = localChatSessionStore.getState();
     const a = s.createThread({ providerId: 'p1', modelId: 'm1' });
-    s.appendUser(userMsg('a1', '持久化问题'));
-    s.beginAssistant(assistantMsg('a2'));
+    s.appendUserAndBeginAssistant(
+      userMsg('a1', '持久化问题'),
+      assistantMsg('a2')
+    );
     s.appendAssistantDelta('a2', '持久化回答');
     s.finishAssistant('a2');
     // 拉开时间戳距离，保证 updatedAt 排序确定性（活动线程 = 最近更新）
@@ -225,7 +233,9 @@ describe('localChatSessionStore 持久化', () => {
       providerId: 'p2',
       modelId: 'm2',
     });
-    localChatSessionStore.getState().appendUser(userMsg('b1', '第二线程'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('b1', '第二线程'), null);
     await flushPersist();
 
     // 模拟冷启动：store 全量重置后从同一 DAO 水合
@@ -254,8 +264,7 @@ describe('localChatSessionStore 持久化', () => {
     const dao = await freshDao();
     // DAO 未注入时先聊（DB 装配迟到）：纯内存线程
     const s = localChatSessionStore.getState();
-    s.appendUser(userMsg('u1', '先聊起来'));
-    s.beginAssistant(assistantMsg('u2'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '先聊起来'), assistantMsg('u2'));
     s.appendAssistantDelta('u2', '内存回答');
     s.finishAssistant('u2');
 
@@ -277,7 +286,7 @@ describe('localChatSessionStore 持久化', () => {
     await localChatSessionStore.getState().hydrate();
     const s = localChatSessionStore.getState();
     expect(s.hydrated).toBe(true);
-    s.appendUser(userMsg('u1', '离线也能聊'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '离线也能聊'), null);
     expect(localChatSessionStore.getState().messages).toHaveLength(1);
   });
 
@@ -285,7 +294,7 @@ describe('localChatSessionStore 持久化', () => {
     const dao = await freshDao();
     configureLocalChatSessionPersistence(dao);
     const s = localChatSessionStore.getState();
-    s.appendUser(userMsg('u1', '本地问题'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '本地问题'), null);
     await flushPersist();
     const before = localChatSessionStore.getState().threads;
     // 模拟切换设备时远程面整表替换/清空（解绑/换机的 reset 动作）
@@ -317,7 +326,7 @@ describe('标题 / 摘要纯文本纪律（MD3：列表面不泄漏 markdown 标
     const dao = await freshDao();
     configureLocalChatSessionPersistence(dao);
     const s = localChatSessionStore.getState();
-    s.appendUser(userMsg('u1', '帮我看看 **这段** 代码'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '帮我看看 **这段** 代码'), null);
     const meta = localChatSessionStore.getState().threads[0]!;
     expect(meta.title).toBe('帮我看看 这段 代码');
     await flushPersist();
@@ -330,8 +339,7 @@ describe('localChatSessionStore 完成打点（状态板本地「刚完成」资
   it('finishAssistant 打点；新一轮 beginAssistant 清点；deleteThread 删点', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('a1', '问题'));
-    s.beginAssistant(assistantMsg('a2'));
+    s.appendUserAndBeginAssistant(userMsg('a1', '问题'), assistantMsg('a2'));
     expect(
       localChatSessionStore.getState().completedAtByThread[a]
     ).toBeUndefined();
@@ -362,7 +370,7 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
     expect(localChatSessionStore.getState().threads[0]?.titleSource).toBe(
       'placeholder'
     );
-    s.appendUser(userMsg('u1', '第一个问题'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '第一个问题'), null);
     const meta = localChatSessionStore
       .getState()
       .threads.find((t) => t.id === a);
@@ -373,7 +381,7 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
   it('setThreadTitle：ai 覆盖 derived；同级/降级一律拒绝；user 封顶后 AI 迟到结果被丢弃', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('u1', '原始问题'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '原始问题'), null);
     const st = () => localChatSessionStore.getState();
     // ai 升 derived → 写入
     expect(st().setThreadTitle(a, 'AI 起的标题', 'ai')).toBe(true);
@@ -397,7 +405,7 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
   it('clearThread：标题与来源成对重置，新一轮可重新派生与 AI 升级', () => {
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('u1', '旧问题'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '旧问题'), null);
     expect(
       localChatSessionStore.getState().setThreadTitle(a, '用户题', 'user')
     ).toBe(true);
@@ -408,7 +416,9 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
     expect(cleared?.title).toBe('新对话');
     expect(cleared?.titleSource).toBe('placeholder');
     // 清空后重聊：首条消息重新派生（旧 user 来源不再压制）
-    localChatSessionStore.getState().appendUser(userMsg('u2', '新问题'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('u2', '新问题'), null);
     const again = localChatSessionStore
       .getState()
       .threads.find((t) => t.id === a);
@@ -421,7 +431,7 @@ describe('标题来源阶梯（U4：只升不降，user 封顶）', () => {
     configureLocalChatSessionPersistence(dao);
     const s = localChatSessionStore.getState();
     const a = s.createThread();
-    s.appendUser(userMsg('u1', '落盘问题'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '落盘问题'), null);
     await flushPersist();
     expect(
       localChatSessionStore.getState().setThreadTitle(a, '落盘 AI 标题', 'ai')
@@ -439,8 +449,7 @@ describe('localChatSessionStore 槽位隔离与重置 (维度 1)', () => {
   it('resetActiveThread：存在消息的活动线程归入 inactive 表，前台运行时彻底清空', () => {
     const s = localChatSessionStore.getState();
     const threadId = s.createThread();
-    s.appendUser(userMsg('u1', '会话一内容'));
-    s.beginAssistant(assistantMsg('a1'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '会话一内容'), assistantMsg('a1'));
     s.appendAssistantDelta('a1', '助手回复一');
 
     expect(localChatSessionStore.getState().activeThreadId).toBe(threadId);
@@ -480,8 +489,10 @@ describe('localChatSessionStore 槽位隔离与重置 (维度 1)', () => {
   it('后台流式生成中执行 resetActiveThread，后续 delta 仍能精准追加进 inactive 表', () => {
     const s = localChatSessionStore.getState();
     const threadId = s.createThread();
-    s.appendUser(userMsg('u1', '正在生成的任务'));
-    s.beginAssistant(assistantMsg('a1'));
+    s.appendUserAndBeginAssistant(
+      userMsg('u1', '正在生成的任务'),
+      assistantMsg('a1')
+    );
 
     // 切走重置
     s.resetActiveThread();
@@ -502,7 +513,7 @@ describe('localChatSessionStore 槽位隔离与重置 (维度 1)', () => {
   it('切走空线程（openThread / createThread）：未产生任何消息的空白空线程同样被物理剔除', () => {
     const s = localChatSessionStore.getState();
     const nonEmpty = s.createThread();
-    s.appendUser(userMsg('u1', '已有消息'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '已有消息'), null);
     const empty = localChatSessionStore.getState().createThread();
     expect(
       localChatSessionStore.getState().threads.some((t) => t.id === empty)
@@ -521,8 +532,7 @@ describe('localChatSessionStore 思考链与状态机 (Reasoning)', () => {
   it('appendAssistantReasoningDelta：正确累加 reasoning，并将 isThinking 设为 true', () => {
     const s = localChatSessionStore.getState();
     s.createThread();
-    s.appendUser(userMsg('u1', '请分析这个问题'));
-    s.beginAssistant(assistantMsg('a1'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '请分析这个问题'), assistantMsg('a1'));
 
     // 初始状态
     let msg = localChatSessionStore
@@ -560,12 +570,13 @@ describe('localChatSessionStore 思考链与状态机 (Reasoning)', () => {
   it('appendAssistantReasoningDelta 支持非活动后台线程定位写入', () => {
     const s = localChatSessionStore.getState();
     const threadA = s.createThread();
-    s.appendUser(userMsg('u1', '线程 A'));
-    s.beginAssistant(assistantMsg('a1'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '线程 A'), assistantMsg('a1'));
 
     // 切换到新线程 B
     const threadB = localChatSessionStore.getState().createThread();
-    localChatSessionStore.getState().appendUser(userMsg('u2', '线程 B'));
+    localChatSessionStore
+      .getState()
+      .appendUserAndBeginAssistant(userMsg('u2', '线程 B'), null);
 
     // 此时后台收到 A 的思考增量
     localChatSessionStore
@@ -588,8 +599,7 @@ describe('localChatSessionStore 思考链与状态机 (Reasoning)', () => {
 
     const s = localChatSessionStore.getState();
     const threadId = s.createThread();
-    s.appendUser(userMsg('u1', '求证结论'));
-    s.beginAssistant(assistantMsg('a1'));
+    s.appendUserAndBeginAssistant(userMsg('u1', '求证结论'), assistantMsg('a1'));
 
     // 流式注入思考链
     localChatSessionStore
@@ -629,5 +639,76 @@ describe('localChatSessionStore 思考链与状态机 (Reasoning)', () => {
         streaming: false,
       })
     );
+  });
+});
+
+describe('R7 发送单事务（appendUserAndBeginAssistant）', () => {
+  it('原子可见：一次调用即含用户消息 + 流式占位，streaming 置位、完成打点清除', () => {
+    const s = localChatSessionStore.getState();
+    const a = s.createThread();
+    s.appendUserAndBeginAssistant(userMsg('u1', '原子事务'), assistantMsg('a1'));
+    const state = localChatSessionStore.getState();
+    expect(state.messages.map((m) => m.id)).toEqual(['u1', 'a1']);
+    expect(state.messages[1]?.streaming).toBe(true);
+    expect(state.streaming).toBe(true);
+    expect(state.completedAtByThread[a]).toBeUndefined();
+  });
+
+  it('通知数：订阅者恰一次通知（旧两段式为两次；建线程是独立动作另计）', () => {
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    const listener = jest.fn();
+    const unsub = localChatSessionStore.subscribe(listener);
+    s.appendUserAndBeginAssistant(userMsg('u1', '一次通知'), assistantMsg('a1'));
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsub();
+  });
+
+  it('只排一次：持久化仅用户消息（占位不落盘），upsertThread/saveMessage 各一次', async () => {
+    const dao = await freshDao();
+    const upsertSpy = jest.spyOn(dao, 'upsertThread');
+    const saveSpy = jest.spyOn(dao, 'saveMessage');
+    configureLocalChatSessionPersistence(dao);
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    s.appendUserAndBeginAssistant(userMsg('u1', '只排一次'), assistantMsg('a1'));
+    await flushPersist();
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const persisted = await dao.listMessages(
+      localChatSessionStore.getState().activeThreadId!
+    );
+    expect(persisted.map((m) => m.id)).toEqual(['u1']);
+    upsertSpy.mockRestore();
+    saveSpy.mockRestore();
+  });
+
+  it('assistant 传 null：仅追加用户消息（工具轮/收尾场景语义）', () => {
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    s.appendUserAndBeginAssistant(userMsg('u1', '仅用户'), null);
+    const state = localChatSessionStore.getState();
+    expect(state.messages.map((m) => m.id)).toEqual(['u1']);
+    expect(state.streaming).toBe(false);
+  });
+
+  it('持久化异常静默：DAO 写入抛错不影响内存事务结果', async () => {
+    const dao = await freshDao();
+    jest.spyOn(dao, 'saveMessage').mockRejectedValueOnce(new Error('disk full'));
+    configureLocalChatSessionPersistence(dao);
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    s.appendUserAndBeginAssistant(userMsg('u1', '异常事务'), assistantMsg('a1'));
+    await flushPersist();
+    // 内存面事务完整
+    const state = localChatSessionStore.getState();
+    expect(state.messages.map((m) => m.id)).toEqual(['u1', 'a1']);
+    // 后续写入不受影响
+    s.appendUserAndBeginAssistant(userMsg('u2', '后续消息'), null);
+    expect(localChatSessionStore.getState().messages.map((m) => m.id)).toEqual([
+      'u1',
+      'a1',
+      'u2',
+    ]);
   });
 });

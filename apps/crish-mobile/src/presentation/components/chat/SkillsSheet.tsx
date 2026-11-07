@@ -6,10 +6,17 @@
 // 浏览：不渲染开关/勾选/「已启用」计数，启停引导去桌面端管理；
 // fileActivation（文件声明缺省）不作状态呈现。状态分开呈现：
 // 未连接 / 加载中 / 列表失败（可重试）/ 空列表 / 目录列表。
-import { StyleSheet, View } from 'react-native';
+import { memo, useCallback } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
 import type { SkillEntry } from '@crish/shared-types';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, ErrorState, LoadingState, Sheet } from '@/presentation/ui';
+import {
+  SHEET_LIST_BATCH,
+  SHEET_LIST_INITIAL,
+  SHEET_LIST_WINDOW,
+  useLargeSheetListBudget,
+} from '@/presentation/ui/sheetListWindow';
 import {
   skillScopeLabel,
   skillScopeOrder,
@@ -48,6 +55,63 @@ function groupByScope(
   );
 }
 
+type SkillListItem =
+  | { kind: 'header'; key: string; scope: string }
+  | { kind: 'skill'; key: string; skill: SkillEntry };
+
+function flattenSkills(skills: readonly SkillEntry[]): SkillListItem[] {
+  const rows: SkillListItem[] = [];
+  for (const group of groupByScope(skills)) {
+    rows.push({ kind: 'header', key: `header:${group.scope}`, scope: group.scope });
+    for (const skill of group.items) {
+      rows.push({ kind: 'skill', key: skill.id, skill });
+    }
+  }
+  return rows;
+}
+
+const SkillListRow = memo(function SkillListRow({
+  item,
+  testID,
+}: {
+  item: SkillListItem;
+  testID: string;
+}) {
+  const theme = useTheme();
+  if (item.kind === 'header') {
+    return (
+      <AppText variant="caption" color="textTertiary">
+        {skillScopeLabel(item.scope)}
+      </AppText>
+    );
+  }
+  const skill = item.skill;
+  return (
+    <View testID={`${testID}-skill-${skill.id}`} style={{ gap: theme.space.xxs }}>
+      <View style={styles.rowHead}>
+        <AppText variant="body" style={styles.rowName}>
+          {skill.name}
+        </AppText>
+        {skill.system ? (
+          <AppText variant="caption" color="textTertiary">
+            系统
+          </AppText>
+        ) : null}
+        {skill.disableModelInvocation ? (
+          <AppText variant="caption" color="textTertiary">
+            不自动调用
+          </AppText>
+        ) : null}
+      </View>
+      {skill.description ? (
+        <AppText variant="footnote" color="textSecondary">
+          {skill.description}
+        </AppText>
+      ) : null}
+    </View>
+  );
+});
+
 export function SkillsSheet({
   visible,
   onClose,
@@ -59,15 +123,27 @@ export function SkillsSheet({
   onRetry,
   testID = 'skills-sheet',
 }: SkillsSheetProps) {
-  const theme = useTheme();
+  const listMaxHeight = useLargeSheetListBudget();
+  const rows = skills && skills.length > 0 ? flattenSkills(skills) : [];
+  const virtualize = (skills?.length ?? 0) > SHEET_LIST_INITIAL;
+  const keyExtractor = useCallback((item: SkillListItem) => item.key, []);
+  const renderSkill = useCallback(
+    ({ item }: { item: SkillListItem }) => (
+      <SkillListRow item={item} testID={testID} />
+    ),
+    [testID]
+  );
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       title="技能"
       size="large"
       testID={testID}
+      measureKey={testID}
+      contentKey={`${connected ? 'on' : 'off'}:${status}:${skills?.length ?? 0}`}
     >
       {!connected ? (
         <View style={styles.center}>
@@ -90,44 +166,22 @@ export function SkillsSheet({
           title={`无法获取技能列表${errorCode ? `（${errorCode}）` : ''}`}
           onRetry={onRetry}
         />
-      ) : skills && skills.length > 0 ? (
-        <View style={{ gap: theme.space.lg }}>
-          {groupByScope(skills).map((group) => (
-            <View key={group.scope} style={{ gap: theme.space.sm }}>
-              <AppText variant="caption" color="textTertiary">
-                {skillScopeLabel(group.scope)}
-              </AppText>
-              {group.items.map((skill) => (
-                <View
-                  key={skill.id}
-                  testID={`${testID}-skill-${skill.id}`}
-                  style={{ gap: theme.space.xxs }}
-                >
-                  <View style={styles.rowHead}>
-                    <AppText variant="body" style={styles.rowName}>
-                      {skill.name}
-                    </AppText>
-                    {skill.system ? (
-                      <AppText variant="caption" color="textTertiary">
-                        系统
-                      </AppText>
-                    ) : null}
-                    {skill.disableModelInvocation ? (
-                      <AppText variant="caption" color="textTertiary">
-                        不自动调用
-                      </AppText>
-                    ) : null}
-                  </View>
-                  {skill.description ? (
-                    <AppText variant="footnote" color="textSecondary">
-                      {skill.description}
-                    </AppText>
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
+      ) : rows.length > 0 ? (
+        <FlatList
+          testID={`${testID}-list`}
+          data={rows}
+          keyExtractor={keyExtractor}
+          renderItem={renderSkill}
+          style={
+            virtualize ? { height: listMaxHeight } : { maxHeight: listMaxHeight }
+          }
+          nestedScrollEnabled={virtualize}
+          scrollEnabled={virtualize}
+          initialNumToRender={SHEET_LIST_INITIAL}
+          maxToRenderPerBatch={SHEET_LIST_BATCH}
+          windowSize={SHEET_LIST_WINDOW}
+          keyboardShouldPersistTaps="handled"
+        />
       ) : (
         <View style={styles.center}>
           <AppText variant="body" color="textSecondary">

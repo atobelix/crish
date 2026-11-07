@@ -150,6 +150,7 @@ export function ModalitySelectSheet({
 
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       title={title}

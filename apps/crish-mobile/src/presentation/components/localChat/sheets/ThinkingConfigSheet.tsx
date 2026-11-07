@@ -72,6 +72,7 @@ export function ThinkingConfigSheet({
 
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       title={title}

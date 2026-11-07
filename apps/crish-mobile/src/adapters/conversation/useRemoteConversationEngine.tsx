@@ -46,7 +46,10 @@ import { useSafeBack } from '@/presentation/navigation/useSafeBack';
 import { AppText, useToast } from '@/presentation/ui';
 import type { DropdownMenuEntry } from '@/presentation/ui/DropdownMenu';
 import type { ConversationEngine } from './types';
-import { createLocalPromptEchoCache } from './localPromptEcho';
+import {
+  createLocalPromptEchoCache,
+  type LocalPromptEcho,
+} from './localPromptEcho';
 
 /** 宿主导航面（路由层供给：运行/终端/工具子页的打开方式） */
 export interface RemoteConversationNav {
@@ -102,7 +105,7 @@ export function useRemoteConversationEngine(
   const [attachOpen, setAttachOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [localPrompts, setLocalPrompts] = useState<
-    { id: string; text: string; atMs: number }[]
+    { id: string; text: string; atMs: number; status: LocalPromptEcho['status'] }[]
   >([]);
   // 回显块身份缓存（localPromptEcho）：未变的回显行在投影重跑时保持
   // 块引用稳定，不击穿行级 memo（时间线身份专项登记项）
@@ -114,23 +117,69 @@ export function useRemoteConversationEngine(
   }
   const echoOf = echoOfRef.current;
 
-  const composer = useSessionComposer(
-    noSession ? null : sessionId,
-    (prompt, runId, createdSessionId) => {
-      setLocalPrompts((current) => [
-        ...current,
-        { id: `local-${runId}`, text: prompt, atMs: Date.now() },
-      ]);
-      if (createdSessionId && onSessionCreated) {
-        onSessionCreated(createdSessionId);
-      }
-    }
-  );
-
   const { showToast } = useToast();
-  // 已选附件（G5b）：发送成功清空、失败保留（清空只发生在成功回执后）
+  // 已选附件（G5b）：受理即清空、失败恢复快照（R5：快照随 onFailed 随行）
   const attachments = useComposerAttachments({ notify: showToast });
   const hasAttachments = attachments.attachments.length > 0;
+
+  // R5 受理/ACK/失败三段分离（useSessionComposer 回调组）：
+  // - onPending：受理即追加 pending 回显（点击到 ACK 之间时间线立即可见）；
+  // - onAcked：真实 runId 回执 → 回显转 sent；草稿路径带新会话 id → 切路由；
+  // - onFailed：快照已恢复进输入框 → 撤回显并还原附件选区；否则回显转
+  //   failed（文本保留供手动重发）。pendingId 查不到（切会话后迟到回执）
+  //   一律 no-op，不串会话。
+  const composer = useSessionComposer(noSession ? null : sessionId, {
+    onPending: (pendingId, text) => {
+      setLocalPrompts((current) => [
+        ...current,
+        { id: pendingId, text, atMs: Date.now(), status: 'pending' },
+      ]);
+    },
+    onAcked: (pendingId, _runId, createdSessionId) => {
+      setLocalPrompts((current) => {
+        const hit = current.find((item) => item.id === pendingId);
+        if (!hit) return current;
+        return current.map((item) =>
+          item.id === pendingId ? { ...item, status: 'sent' as const } : item
+        );
+      });
+      if (createdSessionId && onSessionCreated) {
+        // 草稿路径 ACK 创建新会话：本次 sessionId 变更带回显迁移豁免
+        //（回显归属新会话，不随切会话清空）
+        carryEchoRef.current = true;
+        onSessionCreated(createdSessionId);
+      }
+    },
+    onFailed: (pendingId, info) => {
+      setLocalPrompts((current) => {
+        const hit = current.find((item) => item.id === pendingId);
+        if (!hit) return current;
+        if (info.restoredToInput) {
+          return current.filter((item) => item.id !== pendingId);
+        }
+        return current.map((item) =>
+          item.id === pendingId ? { ...item, status: 'failed' as const } : item
+        );
+      });
+      if (info.restoredToInput && info.attachments.length > 0) {
+        attachments.restore(info.attachments);
+      }
+    },
+  });
+
+  // R5 切会话不串：sessionId 变化即清本引擎回显（回显归属旧会话）；
+  // 草稿路径 ACK 创建新会话触发的一次变更带 carry 豁免（回显归属新会话）。
+  const carryEchoRef = useRef(false);
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+    if (carryEchoRef.current) {
+      carryEchoRef.current = false;
+      return;
+    }
+    setLocalPrompts([]);
+  }, [sessionId]);
 
   const currentRunId = latestRunIdOf(
     window.entries,

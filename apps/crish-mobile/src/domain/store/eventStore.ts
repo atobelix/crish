@@ -39,6 +39,18 @@ export interface EventState {
     nowMs?: number,
     sourceDeviceId?: string
   ) => void;
+  /**
+   * 批量 ingest（R4 展示合帧单事务落店）：一次 set/通知按序落多条帧，
+   * 逐帧 appendFeed 语义（去重/同 seq 覆盖/游标/环形裁剪）不变。
+   * 仅接线层展示合帧缓冲使用；协议帧仍走逐帧 ingest。
+   */
+  ingestBatch: (
+    sessionId: string,
+    frames: readonly EventEnvelopeFrame[],
+    preview: boolean,
+    nowMs?: number,
+    sourceDeviceId?: string
+  ) => void;
   /** events.resume.page / C03 分页合并（快照重建 + 增量续接，M6 §4.1.3） */
   hydrate: (
     sessionId: string,
@@ -106,6 +118,25 @@ export const eventStore: StoreApi<EventState> = createStore<EventState>()(
           return;
         }
         appendFeed(ensureWindow(s, sessionId), frame, preview, nowMs);
+      }),
+
+    ingestBatch: (
+      sessionId,
+      frames,
+      preview,
+      nowMs = nowDefault(),
+      sourceDeviceId
+    ) =>
+      set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
+        if (frames.length === 0) return;
+        const win = ensureWindow(s, sessionId);
+        for (const frame of frames) {
+          appendFeed(win, frame, preview, nowMs);
+        }
       }),
 
     hydrate: (

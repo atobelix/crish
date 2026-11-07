@@ -125,9 +125,10 @@ async function configureOneProvider() {
 
 function createThreadWithSeed(seed: string): string {
   const id = localChatSessionStore.getState().createThread();
-  localChatSessionStore
-    .getState()
-    .appendUser({ id: `seed-${id}`, role: 'user', content: seed });
+  localChatSessionStore.getState().appendUserAndBeginAssistant(
+    { id: `seed-${id}`, role: 'user', content: seed },
+    null
+  );
   return id;
 }
 

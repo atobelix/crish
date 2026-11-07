@@ -104,7 +104,21 @@ export interface LocalChatSessionState {
     source: LocalThreadTitleSource
   ) => boolean;
 
-  appendUser: (message: LocalChatMessage, threadId?: string) => void;
+  /**
+   * 发送单事务（R7）：用户消息追加 + 助手占位开场在一个 set 内原子落位
+   * ——一次 touch/sort/订阅通知、一次持久化排程（仅用户消息落盘，占位
+   * 不落盘口径不变）。assistantMessage 传 null = 仅追加用户消息（工具轮
+   * aborted 收尾等场景），语义与旧 appendUser 等价。
+   */
+  appendUserAndBeginAssistant: (
+    message: LocalChatMessage,
+    assistantMessage: LocalChatMessage | null,
+    threadId?: string
+  ) => void;
+  /**
+   * 新一轮助手占位（独立语义：重新生成路径无新用户消息，槽位单独开场）。
+   * 占位消息不落盘：收尾（finishAssistant）时以最终形态落盘。
+   */
   beginAssistant: (message: LocalChatMessage, threadId?: string) => void;
   appendAssistantDelta: (id: string, delta: string) => void;
   appendAssistantReasoningDelta: (id: string, delta: string) => void;
@@ -473,7 +487,7 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
           s.streaming = false;
           s.error = null;
         });
-        // 元数据懒落盘：首条消息落盘时连带 upsert（见 appendUser）
+        // 元数据懒落盘：首条消息落盘时连带 upsert（见 appendUserAndBeginAssistant）
         return id;
       },
 
@@ -577,7 +591,7 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
         return true;
       },
 
-      appendUser: (message, threadId) => {
+      appendUserAndBeginAssistant: (message, assistantMessage, threadId) => {
         // 无线程时先建线程（发送即建线程：主页分发/线程页共用此不变量）
         let targetId = threadId ?? get().activeThreadId;
         if (targetId === null || targetId === undefined) {
@@ -609,6 +623,14 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
             meta.titleSource = 'derived';
           }
           if (meta) savedMeta = snapshotMeta(meta);
+          if (assistantMessage) {
+            // 助手占位同事务落位（R7：原子可见，一次通知）；不落盘口径
+            // 与 beginAssistant 一致——收尾时以最终形态落盘
+            runtime.messages.push({ ...assistantMessage, streaming: true });
+            runtime.streaming = true;
+            // 新一轮生成开始：该线程回到「运行中」，完成打点清除
+            if (targetId !== null) delete s.completedAtByThread[targetId];
+          }
         });
         if (savedMeta && seq >= 0) {
           const metaToSave: LocalThreadMeta = savedMeta;

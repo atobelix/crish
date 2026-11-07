@@ -36,6 +36,7 @@ export function SessionActionsSheet({
   const title = session.title?.trim() || '未命名会话';
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       title={title}

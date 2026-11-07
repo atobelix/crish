@@ -112,6 +112,7 @@ export function WebSourceSheet({
   if (!source) {
     return (
       <Sheet
+        keyboard="none"
         visible={false}
         onClose={onClose}
         size="medium"
@@ -157,6 +158,7 @@ export function WebSourceSheet({
 
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       size="medium"

@@ -28,6 +28,7 @@ import {
 } from '@/adapters/RemoteControlFacade';
 import { buildSessionMarkdown } from '@/domain/pure/sessionMarkdown';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
+import { haptics } from '@/adapters/platform/haptics';
 import { Dialog, useToast } from '@/presentation/ui';
 import { RenameSessionDialog } from './RenameSessionDialog';
 import { SessionActionsSheet } from './SessionActionsSheet';
@@ -122,6 +123,7 @@ export function useSessionOpsController(
   );
 
   const openActions = useCallback((session: SessionSummary) => {
+    haptics.selection();
     setSheetSession(session);
     setSheetOpen(true);
   }, []);

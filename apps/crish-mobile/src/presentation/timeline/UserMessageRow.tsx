@@ -12,8 +12,8 @@
 // 3. 无障碍单源减动效：
 //    严格消费 @/adapters/platform/useReducedMotion 单源信号，开启减弱动态时
 //    安全回退为瞬时终态。
-import { memo, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { memo, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -23,12 +23,15 @@ import Animated, {
 import { useTheme } from '@/adapters/platform/theme';
 import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import { MarkdownText } from '@/presentation/components/blocks/MarkdownText';
+import { consumeUserEntryAnimation } from './userEntryQualification';
 
 export interface UserMessageRowProps {
   id?: string;
   text: string;
   /** 是否需要飞入进场动画（默认为 false） */
   animateEntry?: boolean;
+  /** 投递状态提示（R5 回显块携带）：pending = 发送中；failed = 未送达可重发 */
+  deliveryStatus?: 'pending' | 'failed';
   testID?: string;
 }
 
@@ -36,11 +39,26 @@ export const UserMessageRow = memo(function UserMessageRow({
   id,
   text,
   animateEntry = false,
+  deliveryStatus,
   testID,
 }: UserMessageRowProps) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
-  const shouldAnimate = Boolean(animateEntry && !reducedMotion);
+  // R8 一次性入场守卫：资格只在首次挂载判定（同 id 重挂/切回不重播）。
+  // ref 按 id 缓存判定结果，资格消耗是幂等的一次性动作。
+  const entryRef = useRef<{ id?: string; allowed: boolean }>({
+    id: undefined,
+    allowed: false,
+  });
+  if (entryRef.current.id !== id) {
+    // 资格无条件消耗（减动效下也不回补），保证同 id 全生命周期至多播一次
+    const consumed = id !== undefined ? consumeUserEntryAnimation(id) : false;
+    entryRef.current = {
+      id,
+      allowed: Boolean(animateEntry) && !reducedMotion && consumed,
+    };
+  }
+  const shouldAnimate = entryRef.current.allowed;
 
   const translateY = useSharedValue(shouldAnimate ? 24 : 0);
   const opacity = useSharedValue(shouldAnimate ? 0 : 1);
@@ -99,6 +117,18 @@ export const UserMessageRow = memo(function UserMessageRow({
           baseStyle={[theme.type.chat, { color: theme.colors.bubbleUserText }]}
         />
       </Animated.View>
+      {deliveryStatus !== undefined ? (
+        <Text
+          style={[
+            styles.deliveryHint,
+            theme.type.caption,
+            { color: theme.colors.textSecondary },
+          ]}
+          testID={`${rowTestID}-delivery`}
+        >
+          {deliveryStatus === 'failed' ? '未送达' : '发送中'}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -110,6 +140,9 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     maxWidth: '82%',
+  },
+  deliveryHint: {
+    marginTop: 4,
   },
 });
 

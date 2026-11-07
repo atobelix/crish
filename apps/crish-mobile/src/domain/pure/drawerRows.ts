@@ -151,3 +151,25 @@ export function buildDrawerRows(input: DrawerRowsInput): DrawerRowsResult {
     ...totals,
   };
 }
+
+/** 长按只打开当前列表里的远端会话。列表刷新后读最新行，不串到旧对象。 */
+export function findDrawerRemoteSession(
+  rows: readonly DrawerRow[],
+  sessionId: string
+): SessionSummary | null {
+  for (const row of rows) {
+    if (row.kind === 'remote' && row.id === sessionId) return row.session;
+  }
+  return null;
+}
+
+/** 长按只打开当前列表里的本地线程。 */
+export function findDrawerLocalThread(
+  rows: readonly DrawerRow[],
+  threadId: string
+): LocalThreadMeta | null {
+  for (const row of rows) {
+    if (row.kind === 'local' && row.id === threadId) return row.thread;
+  }
+  return null;
+}
