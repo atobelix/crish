@@ -29,6 +29,10 @@
  * - 滚动容器（.md-table-wrap / .md-math-block，overflow-x: auto）：clip-path
  *   会裁切横向滚动条的两端角部（R8 区域）；overlay 细条下的实际观感见
  *   施工报告活测项。
+ * - 方案（双方案体系）：轮廓族经真源选择点 getCornerScheme() 现读（默认
+ *   'g2' 超椭圆 / 'concentric' 同心圆弧）；同步器把方案记入面状态，方案
+ *   变化与尺寸变化同级触发重算——切换方案后下一轮 sync 即全根换形，
+ *   无需重挂。半径仍只读 computed 值，适配器不选方案、不写死半径。
  * - 行内码 / mark 不纳入：行内元素多行分片 + 单消息高频出现，量测成本与
  *   收益不成比例，R6 下形状差 <0.3px；待裁决 #1 定小半径档待遇。
  * - 伪元素（代码提示气泡 ::after）无 DOM 节点，无法量测，不纳入。
@@ -38,7 +42,9 @@
  */
 import {
   cornerClipPath,
+  getCornerScheme,
   type CornerRadii,
+  type CornerScheme,
 } from '../../utils/cornerPath';
 import {
   ResizeObserverManager,
@@ -79,24 +85,28 @@ export const MARKDOWN_G2_SHAPE_EXCLUSIONS: readonly {
 }[] = [
   {
     selector: 'code, .md-inline-code',
-    reason:
-      '行内元素：多行分片 + 单消息高频出现，量测成本与收益不成比例；R6 下形状差 <0.3px；待裁决 #1 定小半径档待遇',
+    // 行内元素会按行拆片，单条消息里出现很密，量测成本与收益不成比例。六像素档形状差小于零点三像素。小半径档待遇仍待裁决。
+    reason: 'inline-fragment-cost',
   },
   {
     selector: 'mark',
-    reason: '行内元素，同上',
+    // 行内元素，理由与行内码相同。
+    reason: 'inline-fragment-cost',
   },
   {
     selector: '.md-code-actions [data-tooltip]:hover::after',
-    reason: '伪元素，无 DOM 节点可量测',
+    // 伪元素没有可量测的文档节点。
+    reason: 'pseudo-element',
   },
   {
     selector: '.md-callout-title::before',
-    reason: '胶囊（--radius-pill），按程序口径不进改造面',
+    // 胶囊半径按程序口径不进入改造面。
+    reason: 'pill-radius',
   },
   {
     selector: '.md-path-link',
-    reason: '有意直角（border-radius: 0），不进改造面',
+    // 有意直角，不进入改造面。
+    reason: 'intentional-square',
   },
 ];
 
@@ -177,7 +187,7 @@ export function applyG2ShapeToElement(el: HTMLElement): string {
     if (el.style.clipPath) el.style.removeProperty('clip-path');
     return '';
   }
-  const next = cornerClipPath(w, h, radii);
+  const next = cornerClipPath(w, h, radii, undefined, getCornerScheme());
   el.style.clipPath = next;
   return next;
 }
@@ -187,6 +197,8 @@ interface ObservedState {
   w: number;
   h: number;
   path: string;
+  /** 上次生成时的轮廓方案（真源选择点现值）；变化即触发重算 */
+  scheme: CornerScheme;
 }
 
 /**
@@ -235,7 +247,13 @@ export class MarkdownG2ShapeSync {
       // contentRect 不可用（内容盒 ≠ 边框盒），见 applyG2ShapeToElement。
       this.refresh(el);
     };
-    this.observed.set(el, { cb, w: 0, h: 0, path: '' });
+    this.observed.set(el, {
+      cb,
+      w: 0,
+      h: 0,
+      path: '',
+      scheme: getCornerScheme(),
+    });
     manager.observe(el, cb);
   }
 
@@ -247,8 +265,8 @@ export class MarkdownG2ShapeSync {
   }
 
   /**
-   * 刷新一面：尺寸变化 >0.5px 或尚未塑造时重算；尺寸/半径不变时跳过
-   * （流式补丁每轮都调 sync，单面重算只发生在尺寸落定后）。
+   * 刷新一面：尺寸变化 >0.5px、方案变化或尚未塑造时重算；尺寸/半径/方案
+   * 均不变时跳过（流式补丁每轮都调 sync，单面重算只发生在落定后）。
    */
   private refresh(el: HTMLElement): void {
     const state = this.observed.get(el);
@@ -256,15 +274,18 @@ export class MarkdownG2ShapeSync {
     const w = rect.width;
     const h = rect.height;
     if (state !== undefined) {
+      const scheme = getCornerScheme();
       const sizeChanged =
         Math.abs(state.w - w) > SIZE_EPSILON_PX ||
         Math.abs(state.h - h) > SIZE_EPSILON_PX;
-      if (!sizeChanged && state.path !== '') return;
+      const schemeChanged = state.scheme !== scheme;
+      if (!sizeChanged && !schemeChanged && state.path !== '') return;
       if (!(w > 0) || !(h > 0)) {
         if (el.style.clipPath) el.style.removeProperty('clip-path');
         state.w = w;
         state.h = h;
         state.path = '';
+        state.scheme = scheme;
         return;
       }
       const radii = resolveElementRadii(el);
@@ -273,13 +294,15 @@ export class MarkdownG2ShapeSync {
         state.w = w;
         state.h = h;
         state.path = '';
+        state.scheme = scheme;
         return;
       }
-      const next = cornerClipPath(w, h, radii);
+      const next = cornerClipPath(w, h, radii, undefined, scheme);
       if (next !== state.path) el.style.clipPath = next;
       state.w = w;
       state.h = h;
       state.path = next;
+      state.scheme = scheme;
       return;
     }
     // 未挂接 RO 的环境（如无 ResizeObserver）：只做一次性应用。

@@ -568,11 +568,13 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
       {/* G² 形状层（槽 C）：透明底表单卡仅描边——同路径描边覆盖 CSS 边框环
           （.schedForm 已备 isolation 层叠上下文，本层负 z 绘于边框之上、
           内容之下）；内容距角 16px 内边距起，不入 r16 角域，无需 clip。 */}
-      <G2Surface
-        radius="r16"
-        stroke="var(--border-subtle)"
-        style={{ position: 'absolute', inset: -1, zIndex: -1, pointerEvents: 'none' }}
-      />
+      <div className={styles.g2ShapeBleed}>
+        <G2Surface
+          radius="r16"
+          stroke="var(--border-subtle)"
+          className={styles.g2ShapeBleedFill}
+        />
+      </div>
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>
           {t('settings.schedule.taskName', '任务名称')}

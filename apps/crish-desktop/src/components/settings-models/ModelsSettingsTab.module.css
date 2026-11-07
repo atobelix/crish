@@ -383,6 +383,20 @@
   gap: var(--space-3);
 }
 
+/* 形状层外扩 1 发丝，盖住亚像素缝；负 z 留在卡片层叠上下文内。 */
+.g2ShapeBleed {
+  position: absolute;
+  inset: calc(var(--hairline-width) * -1);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.g2ShapeBleedFill {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .mrdAddLabel {
   display: flex;
   flex-direction: column;

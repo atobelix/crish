@@ -255,12 +255,14 @@ export const ManualAddForm: React.FC<{
           之上、内容之下）；内容距角 ≥14px 内边距起，不入 r16 角域免 clip。
           plain 变体无自有表面（嵌入宿主卡），不挂层。 */}
       {plain ? null : (
-        <G2Surface
-          radius="r16"
-          fill="var(--cover-card-bg, var(--bg-card))"
-          stroke="var(--border-panel)"
-          style={{ position: 'absolute', inset: -1, zIndex: -1, pointerEvents: 'none' }}
-        />
+        <div className={styles.g2ShapeBleed}>
+          <G2Surface
+            radius="r16"
+            fill="var(--cover-card-bg, var(--bg-card))"
+            stroke="var(--border-panel)"
+            className={styles.g2ShapeBleedFill}
+          />
+        </div>
       )}
       {plain ? null : (
         <div className={styles.mrdAddHeaderRow}>
