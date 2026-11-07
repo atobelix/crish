@@ -299,11 +299,13 @@ export function useLocalConversationEngine(
     [canClear, clearThread, openProviders]
   );
 
-  // 引擎专属浮层宿主：本地模型选择 Sheet（切换落本地活动选择；
+  // 引擎专属浮层宿主：对话内「选择模型」Sheet（传入线程上下文：
+  // 作用域「仅此对话」写线程 modelRef、「设为默认」写本地活动选择；
   // 线程快照模型优先的解析口径见 resolveThreadSelection）。
   const renderSheets = () => (
     <LocalModelSheet
       visible={modelSheetOpen}
+      threadId={threadId}
       onClose={() => setModelSheetOpen(false)}
       onOpenProviders={() => {
         setModelSheetOpen(false);
