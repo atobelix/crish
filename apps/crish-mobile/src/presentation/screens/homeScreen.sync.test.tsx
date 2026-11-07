@@ -56,6 +56,10 @@ jest.mock('@/adapters/wiring/observationWiring', () => ({
 
 
 jest.mock('expo-router', () => ({
+  // 焦点钩子：测试环境无导航焦点变化，挂载即视为聚焦（与 homeScreen.test 同口径）
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    effect();
+  },
   useRouter: () => ({
     push: mockRouterPush,
     replace: jest.fn(),

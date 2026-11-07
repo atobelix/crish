@@ -68,6 +68,23 @@ let defaultPersist: ScrollAnchorPersist | null = null;
 /** 无持久面时的进程内兜底（DB 降级形态） */
 const memoryFallback = new Map<string, ScrollAnchor>();
 
+/**
+ * 锚点存在性的本进程解析登记（任务 4 · C 步）：save / clear / load 三个
+ * 出入口都同步登记「该键已确认有锚点 / 已确认无锚点」。同步 peek 只认
+ * 本登记——从未登記者为未知（跨重启的落盘锚点在本进程首次 load 前不
+ * 可知），消费方对未知必须走保守路径，不得把未知当作无锚点。
+ */
+const resolvedAnchors = new Map<string, ScrollAnchor | null>();
+
+/** 锚点存在性同步判定结果：有锚点 / 确认无锚点 / 本进程尚未解析 */
+export type ScrollAnchorPeek = 'anchor' | 'none' | 'unknown';
+
+/** 同步判定锚点存在性（只读本进程登记，不触发任何 IO） */
+export function peekScrollAnchor(anchorKey: string): ScrollAnchorPeek {
+  if (!resolvedAnchors.has(anchorKey)) return 'unknown';
+  return resolvedAnchors.get(anchorKey) ? 'anchor' : 'none';
+}
+
 /** 接线层注入默认持久化（persistBootstrap 装配；传 null 复位为内存形态） */
 export function configureScrollAnchorPersistence(
   persist: ScrollAnchorPersist | null
@@ -83,10 +100,19 @@ export async function loadScrollAnchor(
   anchorKey: string
 ): Promise<ScrollAnchor | null> {
   const persist = defaultPersist;
-  if (!persist) return memoryFallback.get(anchorKey) ?? null;
+  if (!persist) {
+    const anchor = memoryFallback.get(anchorKey) ?? null;
+    resolvedAnchors.set(anchorKey, anchor);
+    return anchor;
+  }
   try {
-    return parseScrollAnchor(await persist.get(scrollAnchorKey(anchorKey)));
+    const anchor = parseScrollAnchor(
+      await persist.get(scrollAnchorKey(anchorKey))
+    );
+    resolvedAnchors.set(anchorKey, anchor);
+    return anchor;
   } catch {
+    resolvedAnchors.set(anchorKey, null);
     return null;
   }
 }
@@ -97,6 +123,7 @@ export function saveScrollAnchor(
   anchor: ScrollAnchor
 ): void {
   memoryFallback.set(anchorKey, anchor);
+  resolvedAnchors.set(anchorKey, anchor);
   const persist = defaultPersist;
   if (!persist) return;
   void persist
@@ -109,6 +136,7 @@ export function saveScrollAnchor(
 /** 清锚点（回到跟随态时调用：底部即当前位置，旧锚点作废） */
 export function clearScrollAnchor(anchorKey: string): void {
   memoryFallback.delete(anchorKey);
+  resolvedAnchors.set(anchorKey, null);
   const persist = defaultPersist;
   if (!persist) return;
   const key = scrollAnchorKey(anchorKey);

@@ -69,6 +69,11 @@ jest.mock('@/presentation/ui/anchorMeasure', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  // 焦点钩子：测试环境无导航焦点变化，挂载即视为聚焦（清理回调不触发，
+  // 与「主页仍在栈底挂载」的真实语义一致——失焦清理只在真机导航时发生）
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    effect();
+  },
   useRouter: () => ({
     push: mockRouterPush,
     replace: jest.fn(),
@@ -723,5 +728,90 @@ describe('useEverOpened 同步闩断言（方案 03 §3.1）', () => {
     await rerender(<TestComponent open={false} />);
     // 依然保持 mounted
     expect(getByTestId('mounted')).toBeTruthy();
+  });
+});
+
+describe('HomeScreen 任务 4 C · 发送单开关', () => {
+  it('本地发送：导航直达线程页，主页状态板不先画出刚发送的线程行', async () => {
+    connectionStore.setState({ phase: 'disconnected', lastError: null });
+    await configureOneLocalProvider();
+    const view = await renderHome();
+    await fireEvent.changeText(
+      view.getByTestId('home-composer'),
+      '离线也能聊吗'
+    );
+    await act(async () => {
+      await fireEvent.press(view.getByTestId('home-composer-send'));
+    });
+    const threadId = localChatSessionStore.getState().activeThreadId;
+    expect(threadId).toBeTruthy();
+    expect(mockOpenLocalThread).toHaveBeenCalledWith(threadId);
+    // 单开关：消息已入 store 且线程正在生成，状态板仍不得单独闪出这一行
+    expect(view.queryByTestId(`chat-item-local-${threadId}`)).toBeNull();
+    expect(view.queryByText('离线也能聊吗')).toBeNull();
+  });
+
+  it('远端等待 ACK：基线外新会话不进状态板、不导航；ACK 到达后才导航', async () => {
+    sessionStore.setState({
+      sessions: [
+        session({ id: 's-base', title: '基线运行会话', activeRunIds: ['r-0'] }),
+      ],
+    });
+    let resolveRun: ((v: RunTaskResult) => void) | undefined;
+    mockRunTask.mockImplementation(
+      () =>
+        new Promise<RunTaskResult>((resolve) => {
+          resolveRun = resolve;
+        })
+    );
+    const onOpenSession = jest.fn();
+    const view = await renderHome({ onOpenSession });
+    expect(view.getByTestId('chat-item-s-base')).toBeTruthy();
+    await fireEvent.changeText(
+      view.getByTestId('home-composer'),
+      '整理一下登录页'
+    );
+    await act(async () => {
+      await fireEvent.press(view.getByTestId('home-composer-send'));
+    });
+    // ACK 未到：事件先行把新会话写进 store（模拟桌面先建会话后回执）
+    await act(async () => {
+      sessionStore.setState({
+        sessions: [
+          session({
+            id: 's-base',
+            title: '基线运行会话',
+            activeRunIds: ['r-0'],
+          }),
+          session({
+            id: 's-new',
+            title: '等待中新建会话',
+            activeRunIds: ['r-1'],
+          }),
+        ],
+      });
+    });
+    expect(view.queryByTestId('chat-item-s-new')).toBeNull();
+    expect(view.getByTestId('chat-item-s-base')).toBeTruthy();
+    expect(onOpenSession).not.toHaveBeenCalled();
+    // ACK 到达（携带真实 sessionId）→ 才导航
+    await act(async () => {
+      resolveRun?.({ runId: 'r-9', sessionId: 's-new' } as RunTaskResult);
+    });
+    await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('s-new'));
+  });
+
+  it('远端失败：不导航、草稿恢复进输入框（附件保留由宿主成功才清的口径在 VM 套件钉测）', async () => {
+    mockRunTask.mockRejectedValue(new Error('boom'));
+    const onOpenSession = jest.fn();
+    const view = await renderHome({ onOpenSession });
+    await fireEvent.changeText(view.getByTestId('home-composer'), '保留我');
+    await act(async () => {
+      await fireEvent.press(view.getByTestId('home-composer-send'));
+    });
+    await waitFor(() =>
+      expect(view.getByTestId('home-composer').props.value).toBe('保留我')
+    );
+    expect(onOpenSession).not.toHaveBeenCalled();
   });
 });

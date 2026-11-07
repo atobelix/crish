@@ -179,3 +179,73 @@ describe('selectStatusBoardRows 上限与分区', () => {
     );
   });
 });
+
+describe('selectStatusBoardRows 任务 4 C · 单开关抑制', () => {
+  it('foregroundLocalThreadId：刚发送的本地线程不进运行段/完成段，其余本地行不受影响', () => {
+    const running = selectStatusBoardRows({
+      remoteSessions: [],
+      localThreads: [
+        local('l-sent', NOW - 10, { streaming: true }),
+        local('l-other', NOW - 20, { streaming: true }),
+      ],
+      connectedSinceMs: EPOCH,
+      foregroundLocalThreadId: 'l-sent',
+    });
+    expect(running.map((r) => r.id)).toEqual(['l-other']);
+
+    const completed = selectStatusBoardRows({
+      remoteSessions: [],
+      localThreads: [
+        local('l-sent', NOW - 10, { completedAtMs: NOW - 5 }),
+        local('l-other', NOW - 20, { completedAtMs: NOW - 6 }),
+      ],
+      connectedSinceMs: EPOCH,
+      foregroundLocalThreadId: 'l-sent',
+    });
+    expect(completed.map((r) => r.id)).toEqual(['l-other']);
+  });
+
+  it('未传 foregroundLocalThreadId（缺省）：刚发送形态的本地线程照常入板（基线行为不变）', () => {
+    const rows = board(
+      [],
+      [local('l-sent', NOW - 10, { streaming: true })]
+    );
+    expect(rows.map((r) => r.id)).toEqual(['l-sent']);
+  });
+
+  it('pendingRemoteBaselineIds：等待 ACK 期间基线外新会话不进板（运行/审批段），基线内照常', () => {
+    const rows = selectStatusBoardRows({
+      remoteSessions: [
+        remote({ id: 'base-run', activeRunIds: ['r0'], updatedAt: NOW - 20 }),
+        remote({ id: 'new-run', activeRunIds: ['r1'], updatedAt: NOW - 30 }),
+        remote({
+          id: 'new-pend',
+          pendingApprovalCount: 1,
+          updatedAt: NOW - 10,
+        }),
+      ],
+      localThreads: [],
+      connectedSinceMs: EPOCH,
+      pendingRemoteBaselineIds: new Set(['base-run']),
+    });
+    expect(rows.map((r) => r.id)).toEqual(['base-run']);
+  });
+
+  it('pendingRemoteBaselineIds 为 null（不在等待期）：新会话照常入板（基线行为不变）', () => {
+    const rows = selectStatusBoardRows({
+      remoteSessions: [
+        remote({ id: 'base-run', activeRunIds: ['r0'], updatedAt: NOW - 20 }),
+        remote({ id: 'new-run', activeRunIds: ['r1'], updatedAt: NOW - 30 }),
+        remote({
+          id: 'new-pend',
+          pendingApprovalCount: 1,
+          updatedAt: NOW - 10,
+        }),
+      ],
+      localThreads: [],
+      connectedSinceMs: EPOCH,
+      pendingRemoteBaselineIds: null,
+    });
+    expect(rows.map((r) => r.id)).toEqual(['new-pend', 'base-run', 'new-run']);
+  });
+});

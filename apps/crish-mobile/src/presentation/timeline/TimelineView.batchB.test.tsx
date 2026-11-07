@@ -519,3 +519,44 @@ describe('批 B · 回底按钮键盘解耦（㉔）接线冒烟', () => {
     await view.unmount();
   });
 });
+
+describe('任务 4 C · 就绪遮罩裁决（单开关）', () => {
+  it('新线程：消息已在 store 且无历史锚点 → 不挂 timeline-ready-cover', async () => {
+    const view = await wrap(
+      <TimelineView
+        blocks={[
+          msg('u-1', 'user', '你好', 1000),
+          msg('a-1', 'assistant', '在的', 2000),
+        ]}
+        follow
+        onFollowChange={() => undefined}
+        anchorKey="local:c-step-brand-new"
+        readyCover
+      />
+    );
+    expect(view.queryByTestId('timeline-ready-cover')).toBeNull();
+    await view.unmount();
+  });
+
+  it('有已存锚点的历史会话 → 仍挂遮罩（遮到落位完成）', async () => {
+    saveScrollAnchor('remote:c-step-anchored', {
+      blockId: 'm-2',
+      offsetPx: 0,
+    });
+    const view = await wrap(
+      <TimelineView
+        blocks={[
+          msg('m-1', 'assistant', '一', 1000),
+          msg('m-2', 'assistant', '二', 2000),
+          msg('m-3', 'assistant', '三', 3000),
+        ]}
+        follow
+        onFollowChange={() => undefined}
+        anchorKey="remote:c-step-anchored"
+        readyCover
+      />
+    );
+    expect(view.getByTestId('timeline-ready-cover')).toBeTruthy();
+    await view.unmount();
+  });
+});

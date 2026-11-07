@@ -75,6 +75,7 @@ import {
 import {
   clearScrollAnchor,
   loadScrollAnchor,
+  peekScrollAnchor,
   saveScrollAnchor,
   type ScrollAnchor,
 } from '@/domain/store/scrollAnchorStore';
@@ -308,6 +309,27 @@ export function TimelineView({
   // 介入或锚点作废即解除待精修（见 handleScrollBeginDrag 等）
   const anchorRefineRef = useRef<ScrollAnchor | null>(null);
   const [anchorSettled, setAnchorSettled] = useState(!anchorKey);
+  // 就绪遮罩挂载裁决（任务 4 · C 步 · 首页发送单开关）：遮罩只为「有历史
+  // 锚点待恢复」或「内容尚未入 store 的冷开」存在。消息已在 store 且确
+  // 无历史锚点时（主页刚发送的新线程即此形态），首帧内容就是最终位置，
+  // 整页遮罩只会多制造一次切换。裁决在挂载时做一次（与本组件实例同寿
+  // 命，与 coverGone 的挂载级语义一致）：
+  // - peek = 'anchor'（本进程已存/已读到锚点）→ 挂，遮到落位完成；
+  // - peek = 'none'（本进程已确认无锚点）→ 不挂；
+  // - peek = 'unknown'（尚未解析）→ 仅当 blocks 尚空（冷开、内容未到）
+  //   才挂；内容已在 store 时不挂。取舍：跨重启 + 锚点在盘 + 内容已驻留
+  //   的历史会话首次重开，恢复落位前的底部位置可能被瞥见一帧——锚点一
+  //   经 load 解析即登记，同进程内重开仍全程遮罩；以此换无锚点主路径
+  //   （含每次主页发送）不再被整页遮罩拖慢。
+  // - 无 anchorKey（次级宿主借遮罩等首帧布局）→ 沿用旧行为，挂。
+  const [coverArmed] = useState<boolean>(() => {
+    if (!readyCover) return false;
+    if (!anchorKey) return true;
+    const peeked = peekScrollAnchor(anchorKey);
+    if (peeked === 'anchor') return true;
+    if (peeked === 'none') return false;
+    return blocks.length === 0;
+  });
   // 就绪遮罩：列表首帧布局完成（listLaidOut）+ 锚点 settle 后淡出
   const [listLaidOut, setListLaidOut] = useState(false);
   const [coverGone, setCoverGone] = useState(false);
@@ -603,7 +625,7 @@ export function TimelineView({
   // 驱动，与 reanimated 淡出同长——测试环境无 UI 线程亦不残留遮罩）
   const coverReady = listLaidOut && anchorSettled;
   useEffect(() => {
-    if (!readyCover || coverGone || !coverReady) return;
+    if (!readyCover || !coverArmed || coverGone || !coverReady) return;
     if (reducedMotion) {
       setCoverGone(true);
       return;
@@ -619,6 +641,7 @@ export function TimelineView({
     return () => clearTimeout(timer);
   }, [
     readyCover,
+    coverArmed,
     coverGone,
     coverReady,
     reducedMotion,
@@ -629,7 +652,7 @@ export function TimelineView({
 
   // 遮罩看门狗：信号异常缺失时强制就绪（见 READY_COVER_FAILSAFE_MS）
   useEffect(() => {
-    if (!readyCover) return;
+    if (!readyCover || !coverArmed) return;
     const timer = setTimeout(() => {
       setListLaidOut(true);
       if (anchorPhaseRef.current !== 'done') {
@@ -638,7 +661,7 @@ export function TimelineView({
       }
     }, READY_COVER_FAILSAFE_MS);
     return () => clearTimeout(timer);
-  }, [readyCover]);
+  }, [readyCover, coverArmed]);
 
   // 手势与滚动调度守卫：保护用户手动拖拽浏览，防止流式打字与 Yoga 排版测高抢夺手势
   const isDraggingRef = useRef(false);
@@ -973,7 +996,7 @@ export function TimelineView({
           ) : null
         }
       />
-      {readyCover && !coverGone ? (
+      {readyCover && coverArmed && !coverGone ? (
         // 就绪遮罩：实色盖住列表区（头栏/Composer 在宿主侧后渲染、位于
         // 其上，不被遮），布局 + 锚点就绪后经 coverStyle 淡出并卸载
         <Animated.View

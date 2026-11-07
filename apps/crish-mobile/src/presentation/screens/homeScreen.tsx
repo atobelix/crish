@@ -31,7 +31,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -174,6 +174,26 @@ export default function HomeScreen({
   const attachments = useComposerAttachments({ notify: showToast });
   const clearAttachments = attachments.clear;
   const hasAttachments = attachments.attachments.length > 0;
+  // 发送单开关（任务 4 · C 步）：刚从主页发送并已提交导航的本地线程 id。
+  // submit 同步把消息写入 store 后、导航落地前主页仍挂载的这一轮渲染里，
+  // 该线程不得先在状态板单独画出一行（用户可见的双切换）；它由状态板
+  // 选择器的 foregroundLocalThreadId 抑制。抑制只活在导航窗口内：主页
+  // 失焦（线程页成为前景）即解除——返回主页时该线程按常态资格（运行中
+  // /本进程完成）重新入板，不被旧抑制误伤。
+  const [sentThreadId, setSentThreadId] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setSentThreadId(null);
+      };
+    }, [])
+  );
+  // 远端等待 ACK 的状态板基线快照（任务 4 · C 步）：feedback 进入
+  // sending 的一刻快照当时 sessionStore 的 id 集合，等待窗口内新出现
+  // 的远端会话（本次提交未 ACK 的会话、或窗口内他处新建）不插进状态
+  // 板（选择器 pendingRemoteBaselineIds 口径）；窗口结束即释放。
+  const [pendingBaselineIds, setPendingBaselineIds] =
+    useState<ReadonlySet<string> | null>(null);
   // 本地模式提交（CON-2）：文本（+ 已选附件，本地附件接线后同路）
   // 交给本地发送引擎（localChatEngine，与本地页同一份实现），随即
   // 导航进本地线程面看流式呈现。落点线程 = 当前活动线程；尚无线程
@@ -195,6 +215,9 @@ export default function HomeScreen({
       const target = session.createThread(
         localChatStore.getState().config.activeModel
       );
+      // 单开关抑制先于消息入 store 落定（与 store 更新同批提交渲染，
+      // 状态板这一轮就不会把刚创建的生成中线程当作后台任务行画出）
+      setSentThreadId(target);
       if (sendLocalChatMessage(target, text, atts)) {
         quickRun.setPrompt('');
         if (atts !== undefined && atts.length > 0) clearAttachments();
@@ -341,6 +364,20 @@ export default function HomeScreen({
     } else if (feedback.kind === 'error') showToast(feedback.message, 'error');
   }, [feedback, onOpenSession, showToast, clearAttachments]);
 
+  // 远端等待 ACK 的基线快照装配（任务 4 · C 步）：sending 期间保持快照，
+  // 其余状态释放。快照在 feedback 变更的提交后由本 effect 落定——网络
+  // 事件回调属另一宏任务，不会在快照落定前插进状态板。
+  useEffect(() => {
+    if (feedback.kind === 'sending') {
+      setPendingBaselineIds(
+        (prev) =>
+          prev ?? new Set(sessionStore.getState().sessions.map((s) => s.id))
+      );
+    } else if (pendingBaselineIds !== null) {
+      setPendingBaselineIds(null);
+    }
+  }, [feedback, pendingBaselineIds]);
+
   // 平铺列表数据：未归档会话。排序即优先级口径——store 的 sortSessions 已保证
   // 置顶 → 活动中（activeRunIds 非空，含待审批会话）→ updatedAt 降序，本屏不再重排：
   // 运行中（含待审批）按最近活动在前，已完成按最近更新在后。
@@ -363,8 +400,19 @@ export default function HomeScreen({
         remoteSessions: remoteMode ? visibleSessions : [],
         localThreads: localEntry.localThreads,
         connectedSinceMs,
+        // 单开关（任务 4 · C 步）：刚发送的本地线程在导航窗口内不入板；
+        // 远端等待 ACK 期间只呈现基线内会话
+        foregroundLocalThreadId: sentThreadId,
+        pendingRemoteBaselineIds: pendingBaselineIds,
       }),
-    [remoteMode, visibleSessions, localEntry.localThreads, connectedSinceMs]
+    [
+      remoteMode,
+      visibleSessions,
+      localEntry.localThreads,
+      connectedSinceMs,
+      sentThreadId,
+      pendingBaselineIds,
+    ]
   );
   // 下拉刷新（M1）：接 useSessionsVm.refresh（现成对账路径，此前备而未
   // 接 UI）。refreshing 本屏局部持有——后台对账（重连/updatedAll 触发）

@@ -5,6 +5,7 @@ import {
   configureScrollAnchorPersistence,
   loadScrollAnchor,
   parseScrollAnchor,
+  peekScrollAnchor,
   saveScrollAnchor,
   scrollAnchorKey,
   serializeScrollAnchor,
@@ -98,5 +99,34 @@ describe('scrollAnchorStore', () => {
     ).not.toThrow();
     // 等待被吞掉的 rejection 落定（未处理 rejection 会污染测试输出）
     await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+});
+
+describe('peekScrollAnchor（任务 4 C · 锚点存在性同步判定）', () => {
+  it('从未解析过的键 = unknown', () => {
+    expect(peekScrollAnchor('remote:peek-fresh')).toBe('unknown');
+  });
+
+  it('save 后 = anchor；clear 后 = none', () => {
+    saveScrollAnchor('remote:peek-a', { blockId: 'm-1', offsetPx: 0 });
+    expect(peekScrollAnchor('remote:peek-a')).toBe('anchor');
+    clearScrollAnchor('remote:peek-a');
+    expect(peekScrollAnchor('remote:peek-a')).toBe('none');
+  });
+
+  it('load 解析后回填判定：落盘有锚点 = anchor；无锚点 = none', async () => {
+    const persist = fakePersist();
+    persist.data.set(
+      scrollAnchorKey('remote:peek-disk'),
+      serializeScrollAnchor({ blockId: 'm-9', offsetPx: 5 }, 1)
+    );
+    configureScrollAnchorPersistence(persist);
+    await expect(loadScrollAnchor('remote:peek-disk')).resolves.toEqual({
+      blockId: 'm-9',
+      offsetPx: 5,
+    });
+    expect(peekScrollAnchor('remote:peek-disk')).toBe('anchor');
+    await expect(loadScrollAnchor('remote:peek-none')).resolves.toBeNull();
+    expect(peekScrollAnchor('remote:peek-none')).toBe('none');
   });
 });

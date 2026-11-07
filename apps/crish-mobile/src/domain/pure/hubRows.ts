@@ -49,6 +49,21 @@ export interface StatusBoardInput {
   localThreads: readonly HubLocalThreadInput[];
   /** 本次连接纪元起点 ms（connectionStore.connectedSinceMs）；null = 未连接 */
   connectedSinceMs: number | null;
+  /**
+   * 前景本地线程 id（任务 4 · C 步）：主页刚发送并已提交导航前往的线程。
+   * 导航落地前主页仍挂载的这一轮渲染里，该线程是前景目的地而不是后台
+   * 状态——不进状态板，避免「先闪一行任务动态、再切换进会话」的双切换。
+   * 抑制只由调用方在导航窗口内传入，失焦即撤（见 homeScreen 接线）。
+   * 缺省/为 null = 不抑制。
+   */
+  foregroundLocalThreadId?: string | null;
+  /**
+   * 远端等待 ACK 期间的基线 id 快照（任务 4 · C 步）：非 null 时，远端
+   * 段只收快照内已存在的会话——等待窗口内新出现的远端会话（本次提交
+   * 尚未 ACK 的会话、或窗口内他处新建的会话）一律不插进状态板，导航
+   * 只认 ACK 回执里的真实 sessionId。null = 不在等待期、不抑制。
+   */
+  pendingRemoteBaselineIds?: ReadonlySet<string> | null;
 }
 
 interface BoardCandidate {
@@ -74,7 +89,14 @@ export function selectStatusBoardRows(input: StatusBoardInput): HubRow[] {
   const placedRemote = new Set<string>();
   const placedLocal = new Set<string>();
 
-  for (const session of input.remoteSessions) {
+  // 等待 ACK 窗口：远端输入先按基线快照过滤（三段共用同一份过滤结果）
+  const remoteSessions = input.pendingRemoteBaselineIds
+    ? input.remoteSessions.filter((s) =>
+        input.pendingRemoteBaselineIds!.has(s.id)
+      )
+    : input.remoteSessions;
+
+  for (const session of remoteSessions) {
     const row: HubRemoteRow = {
       kind: 'remote',
       id: session.id,
@@ -89,7 +111,7 @@ export function selectStatusBoardRows(input: StatusBoardInput): HubRow[] {
       placedRemote.add(session.id);
     }
   }
-  for (const session of input.remoteSessions) {
+  for (const session of remoteSessions) {
     if (placedRemote.has(session.id)) continue;
     const completedAtMs = session.completedAtMs ?? null;
     if (
@@ -110,6 +132,13 @@ export function selectStatusBoardRows(input: StatusBoardInput): HubRow[] {
     }
   }
   for (const local of input.localThreads) {
+    // 前景抑制：刚发送并已提交导航的线程不作后台状态行（任务 4 · C 步）
+    if (
+      input.foregroundLocalThreadId != null &&
+      local.meta.id === input.foregroundLocalThreadId
+    ) {
+      continue;
+    }
     const row: HubLocalRow = {
       kind: 'local',
       id: local.meta.id,
