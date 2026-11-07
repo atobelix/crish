@@ -1,6 +1,9 @@
 // 移动端规格配置底抽屉：TokenPresetSheet
 // 遵循 docs/mobile-provider-architecture/analysis/01-prototype-ui-ux-spec.md 与 05-rn-components-and-gestures.md
 // 上部单行数字输入盒（带单位 Tokens 后缀）+ 下部常用阶梯预设胶囊横向滚动行 + 底部确定保存主按钮。
+// 口径（P5）：数字输入禁止挂 useSheetSearchRaise（那只给搜索框升档，获焦升档
+// 会在键盘动画期间改 Sheet 尺寸）；输入留空 = 未设置（自动），保存回传
+// undefined，绝不把预填的假默认值写回。
 import { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -11,7 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { haptics } from '@/adapters/platform/haptics';
-import { AppText, Button, Sheet, useSheetSearchRaise } from '@/presentation/ui';
+import { AppText, Button, Sheet } from '@/presentation/ui';
 
 export interface TokenPresetSheetProps {
   visible: boolean;
@@ -21,7 +24,10 @@ export interface TokenPresetSheetProps {
   value: number | undefined;
   unit?: string;
   presets: number[];
-  onApply: (val: number) => void;
+  /** 留空保存回传 undefined（未设置/自动），不伪造数值 */
+  onApply: (val: number | undefined) => void;
+  /** 保存前校验：返回错误文案则停在编辑页，不保存、不关闭 */
+  validate?: (val: number | undefined) => string | null;
   /** 兼容契约（底座 Sheet 语义档位，默认 medium） */
   snapPoints?: readonly (string | number)[];
   testID?: string;
@@ -53,27 +59,40 @@ export function TokenPresetSheet({
   unit = 'Tokens',
   presets,
   onApply,
+  validate,
   snapPoints: _snapPoints,
   testID = 'token-preset-sheet',
 }: TokenPresetSheetProps) {
   const theme = useTheme();
-  const searchRaise = useSheetSearchRaise();
   const [inputText, setInputText] = useState(
     value != null ? String(value) : ''
   );
   const [focused, setFocused] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setInputText(value != null ? String(value) : '');
+      setError(null);
     }
   }, [visible, value]);
 
   const currentVal = parseInt(inputText, 10);
 
   const handleApply = () => {
-    const parsed = parseInt(inputText, 10);
-    const finalVal = Number.isFinite(parsed) ? parsed : (value ?? 0);
+    const trimmed = inputText.trim();
+    const finalVal =
+      trimmed === '' ? undefined : parseInt(trimmed, 10);
+    if (finalVal !== undefined && !Number.isFinite(finalVal)) {
+      setError('请输入有效数字');
+      return;
+    }
+    const validationError = validate?.(finalVal) ?? null;
+    if (validationError) {
+      // 校验失败：停在编辑页说明原因，不写半份、不关闭
+      setError(validationError);
+      return;
+    }
     onApply(finalVal);
     onClose();
   };
@@ -139,17 +158,14 @@ export function TokenPresetSheet({
               { color: theme.colors.textPrimary },
             ]}
             value={inputText}
-            onChangeText={(text) => setInputText(text.replace(/[^\d]/g, ''))}
-            onFocus={() => {
-              setFocused(true);
-              searchRaise.onFocus();
+            onChangeText={(text) => {
+              setInputText(text.replace(/[^\d]/g, ''));
+              setError(null);
             }}
-            onBlur={() => {
-              setFocused(false);
-              searchRaise.onBlur();
-            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             keyboardType="number-pad"
-            placeholder="0"
+            placeholder={value != null ? '0' : '自动'}
             placeholderTextColor={theme.colors.textTertiary}
             selectionColor={theme.colors.textPrimary}
             accessibilityLabel={`${title}输入框`}
@@ -162,6 +178,17 @@ export function TokenPresetSheet({
             {unit}
           </AppText>
         </View>
+
+        {error ? (
+          <AppText
+            variant="footnote"
+            color="danger"
+            testID={`${testID}-error`}
+            style={{ marginTop: theme.space.sm }}
+          >
+            {error}
+          </AppText>
+        ) : null}
 
         {/* 下部预设胶囊横向滚动行 */}
         <View style={[styles.presetsSection, { marginTop: theme.space.md }]}>
