@@ -22,6 +22,7 @@ import {
 import { isTooltipMuted } from '../Tooltip/tooltipController';
 import { layerStackManager } from '../internal/layer-stack/LayerStackManager';
 import { PreviewCardArrow } from './PreviewCardArrow';
+import { G2Surface } from '../G2Surface';
 import styles from './PreviewCard.module.css';
 import type {
   PreviewCardProps,
@@ -670,12 +671,22 @@ export const PreviewCardContent = forwardRef<
           visibility: isReady ? 'visible' : 'hidden',
         }}
       >
-        <div
+        {/* G2 形状层（第二波戊）：形状/油漆/变换三面拆分——
+            形状与油漆（r16 填充 + 1px 同路径描边 + --shadow-2xl 主导层阴影）
+            由 G2Surface 生成路径承接；进退场 scale 动画仍挂在本盒根节点
+            （形状层随之缩放，量测取布局尺寸、transform 不触发重算）；
+            小三角是本盒子节点、探出盒外 9–13px，故不挂 clip（clip 会裁掉
+            它）；内容为纯文本、内边距已越过角区，无裁切需求。 */}
+        <G2Surface
           ref={mergedRef}
           id={cardId}
           role="dialog"
           data-slot="preview-card-content"
           data-side={effectiveSide}
+          radius="r16"
+          fill="var(--bg-elevated)"
+          stroke="var(--border-color)"
+          dropShadow="var(--preview-card-g2-shadow)"
           className={`${styles.popup} ${
             isReady
               ? state === 'exiting'
@@ -697,7 +708,7 @@ export const PreviewCardContent = forwardRef<
           {arrow && (
             <PreviewCardArrow side={effectiveSide} offset={arrowOffset} />
           )}
-        </div>
+        </G2Surface>
       </div>,
       portalTarget
     );

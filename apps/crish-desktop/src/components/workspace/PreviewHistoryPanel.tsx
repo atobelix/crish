@@ -5,6 +5,7 @@
 import React from 'react';
 
 import styles from './PreviewCard.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { Button, Tooltip } from '@/components/ui';
 import { previewDisplayHost } from '../../api/previewBrowserStore';
 import { AppIcon } from '@/components/ui/icons';
@@ -39,11 +40,23 @@ export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
   const histCount = history.length;
   const bookCount = bookmarks.length;
 
+  // G2 形状层（第二波戊）：形状/油漆拆分——填充、1px 边框、--shadow-md
+  // 主导层阴影由 G2Surface（control 档 8）以生成路径承接；内滚动仍在子层
+  // .histCol（overflow-y: auto），形状层根节点不是滚动容器（形状层背景不
+  // 随内容滚动）；内容不触角区，不挂 clip。注意：G2Surface 行内 style 以
+  // position:relative 开局，会覆盖本类的 position:absolute，故此处以 style
+  // 显式纠正为 absolute（行内样式优先于类声明，不纠正会使浮层落入文档流、
+  // 顶开预览内容区）。
   return (
-    <div
+    <G2Surface
       id={panelId}
       ref={histRef}
+      radius="control"
+      fill="var(--bg-elevated, var(--bg-primary))"
+      stroke="var(--border-color)"
+      dropShadow="var(--preview-hist-g2-shadow)"
       className={`${styles.histPanel} ${styles.histPanelFloat}`}
+      style={{ position: 'absolute' }}
       role="dialog"
       aria-modal="true"
       aria-label="书签与历史"
@@ -145,6 +158,6 @@ export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
           })
         )}
       </div>
-    </div>
+    </G2Surface>
   );
 };

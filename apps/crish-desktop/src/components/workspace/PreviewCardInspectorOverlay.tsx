@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './PreviewCard.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { Button, Tooltip } from '@/components/ui';
 import {
   buildInspectorElementLabel,
@@ -53,9 +54,17 @@ export const PreviewCardInspectorOverlay: React.FC<
         </div>
       ) : null}
 
+      {/* G2 形状层（第二波戊）：与 .histPanelFloat 同型拆分（control 档 8；
+          阴影 0 2px 8px var(--state-strong) 本就是单层、无需近似变量；
+          position 须以 style 显式纠正为 absolute，理由同历史浮层）。 */}
       {selectedElement ? (
-        <div
+        <G2Surface
           className={styles.inspectorBadge}
+          radius="control"
+          fill="var(--bg-elevated, var(--bg-card))"
+          stroke="var(--border-color)"
+          dropShadow="0 2px 8px var(--state-strong)"
+          style={{ position: 'absolute' }}
           role="status"
           aria-label="DOM 拾取结果"
         >
@@ -136,7 +145,7 @@ export const PreviewCardInspectorOverlay: React.FC<
               />
             </Tooltip>
           </div>
-        </div>
+        </G2Surface>
       ) : null}
     </>
   );

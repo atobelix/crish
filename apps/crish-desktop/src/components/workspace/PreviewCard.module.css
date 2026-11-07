@@ -185,8 +185,7 @@ input.urlInput::-webkit-search-results-decoration {
   color: var(--text-secondary);
 }
 
-.aiStopBtn,
-.miniActionBtn {
+.aiStopBtn {
   --btn-h: 22px;
   --btn-px: 6px;
   --btn-fs: 11px;
@@ -200,12 +199,9 @@ input.urlInput::-webkit-search-results-decoration {
   gap: 4px;
   line-height: 1;
 }
-.iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: var(--bg-card);
-}
+/* 【G2 第二波戊，2026-11-06】形状/油漆拆分：与 .histPanelFloat 同型
+ * （control 档 8，同路径描边；阴影 0 2px 8px var(--state-strong) 本就是
+ * 单层、主题自适应，无需近似变量）。本体只保留定位/布局与兜底圆弧。 */
 .inspectorBadge {
   position: absolute;
   bottom: 8px;
@@ -217,10 +213,7 @@ input.urlInput::-webkit-search-results-decoration {
   justify-content: space-between;
   gap: var(--space-1_5, 6px);
   padding: 4px 8px;
-  background: var(--bg-elevated, var(--bg-card));
-  border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: 0 2px 8px var(--state-strong);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
   pointer-events: auto;
@@ -255,30 +248,6 @@ input.urlInput::-webkit-search-results-decoration {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.inspectorCloseBtn {
-  border: none;
-  background: transparent;
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  padding: 0;
-  flex-shrink: 0;
-}
-.inspectorCloseBtn:hover {
-  color: var(--text-primary);
-  background: var(--state-hover);
-}
-.inspectorCloseBtn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
-  color: var(--text-primary);
 }
 .inspectorDim {
   font-size: var(--font-size-xxs, 11px);
@@ -385,126 +354,6 @@ input.urlInput::-webkit-search-results-decoration {
   user-select: none;
 }
 
-.pureBlankCanvas {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-}
-
-.minimalEmptyContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  max-width: 340px;
-  padding: 20px;
-}
-
-.emptySection {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-}
-
-.emptySectionTitle {
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.textLinksColumn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-}
-
-/* 纯文字按钮：完全无边框、无绿色、无重阴影、仅极低灰度 Hover */
-.pureTextLink,
-.pureTextLink {
-  border: none;
-  background: transparent;
-  padding: 4px 10px;
-  min-height: unset;
-  height: auto;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--font-size-xs, 12px);
-  cursor: pointer;
-  transition:
-    background var(--transition-snappy),
-    color var(--transition-snappy);
-  outline: none;
-  text-decoration: none;
-}
-
-.pureTextLink:hover,
-.pureTextLink:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
-}
-
-.pureTextLink:focus-visible,
-.pureTextLink:focus-visible {
-  background: var(--state-hover, var(--state-active));
-  color: var(--text-primary);
-}
-
-.portValue {
-  color: var(--text-primary);
-}
-
-.pureTextLinkWithIcon,
-.pureTextLinkWithIcon {
-  border: none;
-  background: transparent;
-  padding: 4px 10px;
-  min-height: unset;
-  height: auto;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  transition:
-    background var(--transition-snappy),
-    color var(--transition-snappy);
-  outline: none;
-  text-decoration: none;
-}
-
-.pureTextLinkWithIcon:hover,
-.pureTextLinkWithIcon:hover {
-  background: var(--state-hover);
-  color: var(--text-primary);
-}
-
-.pureTextLinkWithIcon:focus-visible,
-.pureTextLinkWithIcon:focus-visible {
-  background: var(--state-hover, var(--state-active));
-  color: var(--text-primary);
-}
-
-.recentIcon {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-}
-
-.recentText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .errorState {
   display: flex;
   flex-direction: column;
@@ -514,42 +363,10 @@ input.urlInput::-webkit-search-results-decoration {
   padding: 32px;
   text-align: center;
 }
-
-.empty {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--panel-gap, 8px);
-  padding: var(--panel-pad-y, 10px) var(--panel-pad-x, 12px);
-  text-align: center;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  box-sizing: border-box;
-}
-.emptyIco {
-  color: var(--text-tertiary);
-}
 .emptyTitle {
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
-}
-.emptyDesc {
-  max-width: 280px;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-}
-.emptyDesc code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: inherit;
-  color: var(--text-primary);
-}
-.browserNote {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xxs);
 }
 
 .localPath {
@@ -600,25 +417,35 @@ input.urlInput::-webkit-search-results-decoration {
   border-color: var(--border-color);
   color: var(--text-primary);
 }
+/* 【G2 第二波戊，2026-11-06】形状根节点纪律：本类与 .histPanelFloat 同挂
+ * G2Surface 根节点——背景与底发丝线已被形状层填充覆盖（同色盖住即死）；
+ * overflow:hidden 更会把形状层 SVG 按兜底圆弧裁切（G2 轮廓在对角线方向
+ * 比圆弧外探约 0.04R，形状即被悄悄打回圆弧），故三者同删。内滚动仍在
+ * 子层 .histCol（overflow-y: auto），不受影响。 */
 .histPanel {
   display: flex;
   gap: 0;
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
   max-height: var(--expand-max-h-viewport-sm);
-  overflow: hidden;
-  background: var(--bg-card);
 }
+/* 【G2 第二波戊，2026-11-06】形状/油漆拆分：填充、1px 边框、阴影改由
+ * PreviewHistoryPanel 内的 G2Surface（control 档 8）以生成路径承接（同路
+ * 径描边，裁定 #5 默认 (a)；阴影取 --shadow-md 主导层 0 2px 8px，次层
+ * 0 1px 2px 在 drop-shadow 单层口径下舍去，裁定 #6(a) 近似）。本体只保
+ * 留定位/布局与兜底圆弧，不再声明 background/border/box-shadow。 */
 .histPanelFloat {
+  --preview-hist-g2-shadow: 0 2px 8px hsl(0 0% 0% / 0.06);
   position: absolute;
   left: var(--card-header-pad-x, 8px);
   right: var(--card-header-pad-x, 8px);
   top: 34px;
   z-index: var(--z-popover);
   max-height: min(240px, 42vh);
-  border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  background: var(--bg-elevated, var(--bg-primary));
+}
+
+/* 暗色：--shadow-md 主导层为纯黑 0.20 */
+:global(html[data-theme='dark']) .histPanelFloat {
+  --preview-hist-g2-shadow: 0 2px 8px hsl(0 0% 0% / 0.2);
 }
 .histCol {
   flex: 1;
@@ -756,20 +583,10 @@ input.urlInput::-webkit-search-results-decoration {
   .histCol:last-child {
     border-bottom: none;
   }
-  .empty {
-    padding: var(--space-2);
-    gap: var(--space-1_5);
-  }
-  .emptyDesc {
-    max-width: 100%;
-  }
 }
 
 @container preview-browser (max-width: 280px) {
   .hideXNarrow {
-    display: none;
-  }
-  .statusHint {
     display: none;
   }
   .quickChip {

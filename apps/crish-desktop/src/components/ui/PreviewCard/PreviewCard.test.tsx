@@ -23,6 +23,8 @@ import {
   PREVIEW_CARD_EDGE_PAD,
 } from './PreviewCard';
 import { PreviewCardArrow } from './PreviewCardArrow';
+import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
+import { cornerPath } from '../../../utils/cornerPath';
 import { layerStackManager } from '../internal/layer-stack/LayerStackManager';
 
 afterEach(() => {
@@ -563,5 +565,100 @@ describe('PreviewCardTrigger · 条件 Hook 回归（RUN-02）', () => {
     const triggerBtn = screen.getByRole('button', { name: '空值触发器' });
     fireEvent.mouseEnter(triggerBtn);
     expect(screen.getByRole('dialog')).toHaveTextContent('空值卡片内容');
+  });
+});
+
+describe('PreviewCard G² 形状层（第二波戊）', () => {
+  /**
+   * RO 直调驱动：test-setup 的 beforeEach 会 ControllableResizeObserver.clearAll()，
+   * 把 ResizeObserverManager 内部唯一的 RO 实例从活动集驱逐，之后 triggerResize
+   * 再也投递不到管理器；故直接抓管理器 observe 注册的回调，以伪造 entry 直调。
+   * （丙批修正模式；G2Surface 的回调只读 entry.contentRect 的宽高。）
+   */
+  function captureResizeCallbacks() {
+    const manager = ResizeObserverManager.getInstance();
+    const spy = vi.spyOn(manager, 'observe');
+    return {
+      spy,
+      drive(el: Element, width: number, height: number) {
+        const call = spy.mock.calls.find(([target]) => target === el);
+        expect(
+          call,
+          'G2Surface 应向 ResizeObserverManager 注册量测'
+        ).toBeDefined();
+        const cb = call![1];
+        act(() => {
+          cb({
+            target: el,
+            contentRect: {
+              width,
+              height,
+              x: 0,
+              y: 0,
+              top: 0,
+              left: 0,
+              bottom: height,
+              right: width,
+              toJSON: () => ({}),
+            },
+          } as unknown as ResizeObserverEntry);
+        });
+      },
+    };
+  }
+
+  function renderOpenCard() {
+    render(
+      <PreviewCard open onOpenChange={() => {}} delayShow={0}>
+        <PreviewCardTrigger>
+          <button type="button">触发器</button>
+        </PreviewCardTrigger>
+        <PreviewCardContent>
+          <PreviewCardTitle>标题</PreviewCardTitle>
+          <PreviewCardDescription>描述</PreviewCardDescription>
+        </PreviewCardContent>
+      </PreviewCard>
+    );
+    return screen.getByRole('dialog');
+  }
+
+  it('弹窗根节点即 G2Surface：r16 档 + 兜底 16px + 量测后渲染真实 G² 几何', () => {
+    const ro = captureResizeCallbacks();
+    const dialog = renderOpenCard();
+    expect(dialog.getAttribute('data-g2-radius')).toBe('r16');
+    expect(dialog.getAttribute('data-g2-mode')).toBe('measured');
+    expect(dialog.style.borderRadius).toBe('16px');
+    // 量测前不画空几何：首帧只剩根节点兜底圆弧
+    expect(dialog.querySelector('[data-g2-layer]')).toBeNull();
+
+    ro.drive(dialog, 320, 200);
+    const layer = dialog.querySelector(
+      '[data-g2-layer="measured"]'
+    ) as SVGSVGElement | null;
+    expect(layer, '量测后须渲染形状层 SVG').not.toBeNull();
+    const paths = layer!.querySelectorAll('path');
+    expect(paths.length).toBe(2);
+    expect(paths[0]!.getAttribute('d')).toBe(cornerPath(320, 200, 16));
+    expect(paths[0]!.style.fill).toBe('var(--bg-elevated)');
+    // 同路径描边：内缩 1px、逐角 15.5，平移 0.5 居中（DPR 1）
+    expect(paths[1]!.getAttribute('d')).toBe(cornerPath(319, 199, 15.5));
+    expect(paths[1]!.getAttribute('transform')).toBe('translate(0.5 0.5)');
+    expect(paths[1]!.style.stroke).toBe('var(--border-color)');
+    // 阴影走 --preview-card-g2-shadow（--shadow-2xl 主导层近似，次层舍去）
+    expect(layer!.style.filter).toContain(
+      'drop-shadow(var(--preview-card-g2-shadow))'
+    );
+    ro.spy.mockRestore();
+  });
+
+  it('小三角仍在形状层内且不被裁切（clip=false）', () => {
+    const dialog = renderOpenCard();
+    const arrow = document.querySelector('[data-slot="preview-card-arrow"]');
+    expect(arrow, '小三角不得随形状拆分丢失').not.toBeNull();
+    expect(dialog.contains(arrow)).toBe(true);
+    const clipped = Array.from(dialog.querySelectorAll('div')).find(
+      (el) => (el as HTMLElement).style.clipPath.includes('path(')
+    );
+    expect(clipped, 'clip=false：不得出现 clip-path 内容层').toBeUndefined();
   });
 });

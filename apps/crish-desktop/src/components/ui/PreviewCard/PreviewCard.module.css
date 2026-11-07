@@ -9,20 +9,31 @@
   will-change: transform, opacity;
 }
 
+/* 【G2 第二波戊，2026-11-06】形状/油漆拆分：填充、1px 边框、阴影改由
+ * PreviewCardContent 内的 G2Surface（r16 档）以生成路径承接（同路径描边，
+ * 裁定 #5 默认 (a)；阴影取 --shadow-2xl 主导层 0 32px 64px，次层 0 12px 24px
+ * 与 0 1px 3px 在 drop-shadow 单层口径下舍去，裁定 #6(a) 近似）。
+ * 本体只保留定位/排版/进退场动画与兜底圆弧，不再声明 background/border/
+ * box-shadow。clip 不挂（小三角探出盒外，见 TSX 注释）。 */
 .popup {
+  --preview-card-g2-shadow: 0 32px 64px
+    color-mix(in srgb, var(--shadow-color) 3.5%, transparent);
   position: relative;
   pointer-events: auto;
   outline: none;
-  background: var(--bg-elevated);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: var(--space-3, 12px) var(--space-4, 16px);
-  box-shadow: var(--shadow-2xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);
   box-sizing: border-box;
+}
+
+/* 暗色：--shadow-2xl 主导层为纯黑 0.40 */
+:global(html[data-theme='dark']) .popup {
+  --preview-card-g2-shadow: 0 32px 64px
+    color-mix(in srgb, var(--shadow-color) 40%, transparent);
 }
 
 /* 预览卡入/退场：值已对齐共享 popover 配方（design-system.css 的

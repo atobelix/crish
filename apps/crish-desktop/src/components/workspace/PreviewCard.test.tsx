@@ -21,6 +21,8 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { PreviewCard } from './PreviewCard';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
+import { cornerPath } from '../../utils/cornerPath';
 import { isLocalDevUrl, safeIframeSrc } from './previewCardLib';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import { ToastStore } from '../../services/toast/ToastStore';
@@ -749,6 +751,153 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       expect(stopListener).toHaveBeenCalled();
 
       window.removeEventListener('crish:chat-stop', stopListener);
+    });
+  });
+
+  describe('6. G² 形状层（第二波戊）', () => {
+    /**
+     * RO 直调驱动：理由同 ui 侧（test-setup beforeEach 的 clearAll() 驱逐管理器
+     * 内部 RO；直接抓 observe 回调直调）。
+     */
+    function captureResizeCallbacks() {
+      const manager = ResizeObserverManager.getInstance();
+      const spy = vi.spyOn(manager, 'observe');
+      return {
+        spy,
+        drive(el: Element, width: number, height: number) {
+          const call = spy.mock.calls.find(([target]) => target === el);
+          expect(
+            call,
+            'G2Surface 应向 ResizeObserverManager 注册量测'
+          ).toBeDefined();
+          const cb = call![1];
+          act(() => {
+            cb({
+              target: el,
+              contentRect: {
+                width,
+                height,
+                x: 0,
+                y: 0,
+                top: 0,
+                left: 0,
+                bottom: height,
+                right: width,
+                toJSON: () => ({}),
+              },
+            } as unknown as ResizeObserverEntry);
+          });
+        },
+      };
+    }
+
+    it('历史浮层：control 档 + 绝对定位 + 量测后渲染真实 G² 几何', async () => {
+      const ro = captureResizeCallbacks();
+      renderCard();
+      const histBtn = await screen.findByRole('button', { name: '历史与书签' });
+      fireEvent.click(histBtn);
+      const panel = (await waitFor(() => {
+        const el = document.querySelector(
+          '#preview-hist-panel'
+        ) as HTMLElement | null;
+        expect(el).toBeTruthy();
+        return el;
+      })) as HTMLElement;
+      expect(panel.getAttribute('data-g2-radius')).toBe('control');
+      expect(panel.getAttribute('data-g2-mode')).toBe('measured');
+      expect(panel.style.borderRadius).toBe('8px');
+      // G2Surface 行内 position:relative 须被 style 显式纠正为 absolute，
+      // 否则浮层落入文档流、顶开预览内容区
+      expect(panel.style.position).toBe('absolute');
+      expect(panel.querySelector('[data-g2-layer]')).toBeNull();
+
+      ro.drive(panel, 320, 240);
+      const layer = panel.querySelector(
+        '[data-g2-layer="measured"]'
+      ) as SVGSVGElement | null;
+      expect(layer, '量测后须渲染形状层 SVG').not.toBeNull();
+      const paths = layer!.querySelectorAll('path');
+      expect(paths.length).toBe(2);
+      expect(paths[0]!.getAttribute('d')).toBe(cornerPath(320, 240, 8));
+      expect(paths[0]!.style.fill).toBe('var(--bg-elevated, var(--bg-primary))');
+      expect(paths[1]!.getAttribute('d')).toBe(cornerPath(319, 239, 7.5));
+      expect(paths[1]!.getAttribute('transform')).toBe('translate(0.5 0.5)');
+      expect(paths[1]!.style.stroke).toBe('var(--border-color)');
+      expect(layer!.style.filter).toContain(
+        'drop-shadow(var(--preview-hist-g2-shadow))'
+      );
+      ro.spy.mockRestore();
+    });
+
+    it('DOM 拾取徽标：control 档 + 绝对定位 + 量测后渲染真实 G² 几何', async () => {
+      const ro = captureResizeCallbacks();
+      renderCard();
+      fireEvent.click(
+        await screen.findByRole('button', { name: /localhost:5173/ })
+      );
+      await waitFor(() => {
+        expect(
+          document.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
+      });
+      emitNativeBrowserNavigationSettled();
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      fireEvent.click(inspectorBtn);
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledWith(
+          'browser-default',
+          true
+        )
+      );
+      emitInspectorEvent({
+        tabId: 'browser-default',
+        type: 'INSPECT_SELECT',
+        payload: {
+          tagName: 'button',
+          id: 'submit-btn',
+          classes: ['submit', 'primary'],
+          attributes: { 'data-testid': 'submit-btn' },
+          bestSelector: 'button.submit.primary',
+          xpath: '/html/body/button[1]',
+          rect: { x: 10, y: 20, width: 100, height: 40 },
+          computedStyles: {
+            display: 'block',
+            position: 'relative',
+            color: '#fff',
+            backgroundColor: '#2563eb',
+            fontSize: '14px',
+            margin: '0px',
+            padding: '4px 8px',
+          },
+          outerHtmlSnippet: '<button>Go</button>',
+          textContent: 'Go',
+        },
+      });
+      const badge = await screen.findByRole('status', {
+        name: 'DOM 拾取结果',
+      });
+      expect(badge.getAttribute('data-g2-radius')).toBe('control');
+      expect(badge.style.borderRadius).toBe('8px');
+      expect(badge.style.position).toBe('absolute');
+      expect(badge.querySelector('[data-g2-layer]')).toBeNull();
+
+      ro.drive(badge, 300, 40);
+      const layer = badge.querySelector(
+        '[data-g2-layer="measured"]'
+      ) as SVGSVGElement | null;
+      expect(layer, '量测后须渲染形状层 SVG').not.toBeNull();
+      const paths = layer!.querySelectorAll('path');
+      expect(paths.length).toBe(2);
+      expect(paths[0]!.getAttribute('d')).toBe(cornerPath(300, 40, 8));
+      expect(paths[0]!.style.fill).toBe('var(--bg-elevated, var(--bg-card))');
+      expect(paths[1]!.getAttribute('d')).toBe(cornerPath(299, 39, 7.5));
+      expect(paths[1]!.getAttribute('transform')).toBe('translate(0.5 0.5)');
+      expect(paths[1]!.style.stroke).toBe('var(--border-color)');
+      expect(layer!.style.filter).toContain(
+        'drop-shadow(0 2px 8px var(--state-strong))'
+      );
+      ro.spy.mockRestore();
     });
   });
 });
