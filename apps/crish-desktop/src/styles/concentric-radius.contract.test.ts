@@ -30,6 +30,11 @@
  * 钉回退文本的病灶，其余文件按上述三类保留原口径。
  */
 import { describe, expect, it } from 'vitest';
+import {
+  concentricRadius,
+  cornerPath,
+  getCornerScheme,
+} from '../utils/cornerPath';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -462,5 +467,57 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       tokensComp,
       'tokens-components.css 必须显式绑定 --sep-item-radius: var(--radius-menu-inner, 12px);'
     ).toMatch(/--sep-item-radius:\s*var\(--radius-menu-inner,\s*12px\);/);
+  });
+});
+
+describe('双方案同心链契约（G² 推广 · 双方案体系 2026-11-06）', () => {
+  /** 路径骨架：抹去角采样点（L 段）后剩 M/H/V/Z 锚点 = 布局占位与直边 */
+  const skeleton = (d: string): string => d.replace(/L[\d.]+ [\d.]+/g, 'L');
+
+  // 12. 同心链在两方案下逐值一致：内缩半径由 concentricRadius 单点收口，
+  // 与轮廓族无关——切换方案（g2 ↔ concentric）不得改变任何一环的链值、
+  // 布局占位与直边锚点，这是「同心圆弧作后退替换」成立的契约前提。
+  it('契约 12：同心链 R−padding 在两方案下逐值一致（骨架与内缩半径不因方案而变）', () => {
+    const cases: ReadonlyArray<readonly [number, number]> = [
+      [20, 10],
+      [20, 8],
+      [18, 6],
+      [16, 4],
+      [12, 12],
+      [20, 0],
+    ];
+    for (const [outer, pad] of cases) {
+      const inner = concentricRadius(outer, pad);
+      const g2 = cornerPath(120, 80, inner, undefined, 'g2');
+      const arc = cornerPath(120, 80, inner, undefined, 'concentric');
+      expect(arc.startsWith(`M${inner} 0`), `R=${outer} pad=${pad}`).toBe(true);
+      expect(g2.startsWith(`M${inner} 0`), `R=${outer} pad=${pad}`).toBe(true);
+      expect(skeleton(arc), `R=${outer} pad=${pad}`).toBe(skeleton(g2));
+    }
+  });
+
+  // 13. 同心方案下内层轮廓必须是真圆弧：链的每一环都以 R−padding 为半径、
+  // 圆心随角域内角点同移（真同心），不是把外层轮廓等比缩放冒充。
+  it('契约 13：同心方案内层轮廓是真圆弧（半径 = R−padding）', () => {
+    const inner = concentricRadius(20, 10);
+    expect(inner).toBe(10);
+    const d = cornerPath(120, 80, inner, undefined, 'concentric');
+    const pts: Array<readonly [number, number]> = [];
+    for (const m of d.matchAll(/L([\d.]+) ([\d.]+)/g)) {
+      pts.push([parseFloat(m[1]), parseFloat(m[2])] as const);
+    }
+    // TL 角域内部点（其余三��的点不落入此盒）
+    const tl = pts.filter(([x, y]) => x > 0 && x < inner && y > 0 && y < inner);
+    expect(tl.length).toBeGreaterThan(5);
+    for (const [x, y] of tl) {
+      const lhs = Math.pow(inner - x, 2) + Math.pow(inner - y, 2);
+      expect(Math.abs(lhs - inner * inner) / (inner * inner)).toBeLessThan(0.01);
+    }
+  });
+
+  // 14. 方案选择点默认 'g2'：双方案体系落地不改变产品现状（视觉零变化的
+  // 契约锚）；任何一端把默认改成 concentric 都会在此变红。
+  it('契约 14：真源方案选择点默认 g2', () => {
+    expect(getCornerScheme()).toBe('g2');
   });
 });

@@ -11,14 +11,18 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  CONCENTRIC_EXPONENT,
   CORNER_EXPONENT,
   CORNER_KAPPA_PEAK_FACTOR,
   concentricRadius,
   cornerClipPath,
+  cornerExponentForScheme,
   cornerPath,
   cornerSvgDataUri,
   deviceSnappedStrokeWidth,
+  getCornerScheme,
   kappaPeak,
+  setCornerScheme,
   superellipseCornerPoints,
 } from './cornerPath';
 
@@ -214,5 +218,172 @@ describe('cornerPath 数值性质', () => {
     expect(decoded).toContain('preserveAspectRatio="none"');
     expect(decoded).toContain(`d="${d}"`);
     expect(cornerClipPath(120, 48, 12)).toBe(`path('${d}')`);
+  });
+});
+
+describe('双方案体系（g2 主方案 / concentric 同心圆弧后退方案）', () => {
+  /** 路径骨架：抹去角采样点（L 段）后剩 M/H/V/Z 锚点 = 布局占位与直边 */
+  const skeleton = (d: string): string => d.replace(/L[\d.]+ [\d.]+/g, 'L');
+
+  it('方案 → 指数映射与 κ：圆弧方案曲率恒定 1/R', () => {
+    expect(cornerExponentForScheme('g2')).toBe(CORNER_EXPONENT);
+    expect(cornerExponentForScheme('concentric')).toBe(CONCENTRIC_EXPONENT);
+    expect(CONCENTRIC_EXPONENT).toBe(2);
+    // κ 公式在 n = 2 时系数恰为 1：圆弧全程曲率恒定 = 1/R（非峰值概念）
+    expect(kappaPeak(20, undefined, 'concentric')).toBeCloseTo(0.05, 10);
+    expect(kappaPeak(20, 2)).toBeCloseTo(0.05, 10);
+    expect(kappaPeak(12, undefined, 'concentric')).toBeCloseTo(1 / 12, 10);
+  });
+
+  it('同心典范角：采样点恰在真圆上、端点精确、对角点 = 共享向量', () => {
+    for (const R of [20, 12]) {
+      const pts = superellipseCornerPoints(R, undefined, 'concentric');
+      expect(pts[0]).toEqual([R, 0]);
+      expect(pts[pts.length - 1]).toEqual([0, R]);
+      for (const [x, y] of pts) {
+        // 圆心 (R, R)、半径 R 的圆方程（相对误差与 G² 分支同口径 1e-9）
+        const lhs = Math.pow(R - x, 2) + Math.pow(R - y, 2);
+        expect(Math.abs(lhs - R * R) / (R * R)).toBeLessThan(1e-9);
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(x).toBeLessThanOrEqual(R);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y).toBeLessThanOrEqual(R);
+      }
+      // 对角点共享向量：R(1 − 2^(−1/2))，R=20 → 5.857864，R=12 → 3.514719
+      // （与移动端同构转写共用本向量）；等角采样中点恰为对角点本身（θ=π/4）
+      const diagExpected = R === 20 ? 5.857864 : 3.514719;
+      const mid = pts[Math.floor(pts.length / 2)];
+      if (!mid) throw new Error('cornerPath.test: 采样点列为空');
+      expect(mid[0]).toBeCloseTo(diagExpected, 3);
+      expect(mid[1]).toBeCloseTo(diagExpected, 3);
+    }
+  });
+
+  it('同心典范角：端点切线与直边衔接（首弦近水平、末弦近竖直）', () => {
+    const pts = superellipseCornerPoints(20, undefined, 'concentric');
+    const p0 = pts[0];
+    const p1 = pts[1];
+    const q0 = pts[pts.length - 2];
+    const q1 = pts[pts.length - 1];
+    if (!p0 || !p1 || !q0 || !q1) {
+      throw new Error('cornerPath.test: 采样点列为空');
+    }
+    // (R, 0) 端圆切线为水平线：首弦斜率 ≈ 0.026（Δθ = 3° 的弦近似）
+    expect(Math.abs((p1[1] - p0[1]) / (p1[0] - p0[0]))).toBeLessThan(0.05);
+    // (0, R) 端圆切线为竖直线：末弦横偏/纵程同量级
+    expect(Math.abs((q1[0] - q0[0]) / (q1[1] - q0[1]))).toBeLessThan(0.05);
+  });
+
+  it('同心采样偏差 < 0.02px（与 G² 分支同一预算；R = 6..36）', () => {
+    for (const R of [6, 10, 12, 16, 18, 20, 24, 28, 36]) {
+      const poly = superellipseCornerPoints(R, undefined, 'concentric');
+      let maxDev = 0;
+      const DENSE = 2000;
+      for (let i = 0; i <= DENSE; i++) {
+        const phi = (Math.PI / 2) * (i / DENSE);
+        const p = [R - R * Math.cos(phi), R - R * Math.sin(phi)] as const;
+        let best = Infinity;
+        for (let k = 0; k + 1 < poly.length; k++) {
+          const a = poly[k];
+          const b = poly[k + 1];
+          if (!a || !b) continue;
+          const d = distToSegment(p, a, b);
+          if (d < best) best = d;
+        }
+        if (best > maxDev) maxDev = best;
+      }
+      expect(maxDev, `R=${R} 偏差 ${maxDev}`).toBeLessThan(0.02);
+    }
+  });
+
+  it('整径：同心四角满足圆方程、角占位恰为 R×R、骨架锚点与 G² 逐字一致', () => {
+    const w = 100;
+    const h = 60;
+    const R = 20;
+    const dArc = cornerPath(w, h, R, undefined, 'concentric');
+    const dG2 = cornerPath(w, h, R, undefined, 'g2');
+    expect(dArc).not.toBe(dG2);
+    expect(dArc.startsWith('M20 0H80')).toBe(true);
+    const pts = parsePath(dArc);
+    const r2 = R * R;
+    const rel = (v: number) => Math.abs(v - r2) / r2;
+    let checked = 0;
+    for (const [x, y] of pts) {
+      if (x < w - R && y < R && x > 0) {
+        if (y > 0) { expect(rel(Math.pow(R - x, 2) + Math.pow(R - y, 2))).toBeLessThan(0.01); checked++; }
+      } else if (x > w - R && y < R) {
+        expect(rel(Math.pow(x - (w - R), 2) + Math.pow(R - y, 2))).toBeLessThan(0.01); checked++;
+      } else if (x > w - R && y > h - R) {
+        expect(rel(Math.pow(x - (w - R), 2) + Math.pow(y - (h - R), 2))).toBeLessThan(0.01); checked++;
+      } else if (x < R && y > h - R) {
+        expect(rel(Math.pow(R - x, 2) + Math.pow(y - (h - R), 2))).toBeLessThan(0.01); checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(40);
+    // 角占位：TL 角采样点包围盒恰为 [0,R]×[0,R]（与 G² 方案同一占位）
+    const tl = pts.filter(([x, y]) => x <= R && y <= R);
+    expect(Math.max(...tl.map((p) => p[0]))).toBeCloseTo(R, 3);
+    expect(Math.max(...tl.map((p) => p[1]))).toBeCloseTo(R, 3);
+    // 骨架（布局占位 + 直边）两方案逐字一致——差异只许出现在角采样点
+    expect(skeleton(dArc)).toBe(skeleton(dG2));
+  });
+
+  it('同心链逐值一致：concentricRadius 内缩链在两方案下骨架相同', () => {
+    for (const [R, pad] of [
+      [20, 10],
+      [20, 8],
+      [18, 6],
+      [16, 4],
+      [12, 12],
+    ] as const) {
+      const inner = concentricRadius(R, pad);
+      const arc = cornerPath(100, 60, inner, undefined, 'concentric');
+      const g2 = cornerPath(100, 60, inner, undefined, 'g2');
+      expect(arc.startsWith(`M${inner} 0`)).toBe(true);
+      expect(g2.startsWith(`M${inner} 0`)).toBe(true);
+      expect(skeleton(arc)).toBe(skeleton(g2));
+    }
+  });
+
+  it('方案选择点：默认 g2（既有产物逐字不变），注入 concentric 后无方案调用跟随', () => {
+    expect(getCornerScheme()).toBe('g2');
+    expect(cornerPath(100, 60, 20)).toBe(
+      cornerPath(100, 60, 20, undefined, 'g2')
+    );
+    setCornerScheme('concentric');
+    try {
+      expect(getCornerScheme()).toBe('concentric');
+      expect(cornerPath(100, 60, 20)).toBe(
+        cornerPath(100, 60, 20, undefined, 'concentric')
+      );
+      expect(cornerPath(100, 60, 20)).not.toBe(
+        cornerPath(100, 60, 20, undefined, 'g2')
+      );
+      expect(cornerClipPath(120, 48, 12)).toBe(
+        cornerClipPath(120, 48, 12, undefined, 'concentric')
+      );
+      const uri = cornerSvgDataUri(120, 48, 12, '#fff');
+      expect(decodeURIComponent(uri)).toContain(
+        cornerPath(120, 48, 12, undefined, 'concentric')
+      );
+    } finally {
+      setCornerScheme('g2');
+    }
+    expect(cornerPath(100, 60, 20)).toBe(
+      cornerPath(100, 60, 20, undefined, 'g2')
+    );
+  });
+
+  it('显式 n 优先于 scheme（底层逃生口，既有调用口径不变）', () => {
+    expect(cornerPath(100, 60, 20, CORNER_EXPONENT, 'concentric')).toBe(
+      cornerPath(100, 60, 20)
+    );
+    expect(
+      superellipseCornerPoints(20, CORNER_EXPONENT, 'concentric')
+    ).toEqual(superellipseCornerPoints(20));
+    expect(kappaPeak(20, CORNER_EXPONENT, 'concentric')).toBeCloseTo(
+      0.0668553,
+      5
+    );
   });
 });

@@ -10,6 +10,16 @@
  * 性质：角与直边交界处曲率为 0、沿弧平滑升至对角峰值 κ_peak = 1.337/R（位置/切线/
  * 曲率三连续的真 G²）；角占位恰为名义半径 R（同心算术 R−padding 与既有同心契约兼容）。
  *
+ * 双方案体系（2026-11-06 用户口径：G² 先行，同心圆弧作一等后退方案）：
+ * 本层同时承载两套轮廓族——'g2'（超椭圆 n = 2.42，主方案）与 'concentric'
+ * （圆弧，后退方案）。两方案共用同一档位表（G2_TIERS）、同一同心链算术
+ * （concentricRadius）与同一等角采样律：圆弧即采样律在指数 2 下的特例，
+ * 采样点恰在真圆上（圆心为角域内角点、半径恰为 R），故两方案角占位同为
+ * 名义半径 R——切换方案不改变布局占位与同心内缩链（数值测试逐项钉住）。
+ * 方案选择点全局唯一 = getCornerScheme()（默认 'g2'）；消费者一律经它取
+ * 方案，禁止私自选方案。平台选择策略（苹果原生同心接口映射等）见施工
+ * 报告《双方案体系-设计与施工》。
+ *
  * 纪律（禁止清单，守卫见 styles/g2-corner.contract.test.ts）：
  * - 本文件是桌面端唯一角轮廓生成实现；禁止把生成函数复制到第二个文件；
  * - 移动端有一份同构转写（crish-mobile/src/presentation/ui/cornerPath.ts），
@@ -24,10 +34,59 @@ export const CORNER_EXPONENT = 2.42;
 export const CORNER_KAPPA_PEAK_FACTOR =
   ((CORNER_EXPONENT - 1) / 2) * Math.pow(2, 1 / 2 + 1 / CORNER_EXPONENT);
 
-/** 峰值曲率 κ_peak = ((n−1)/2)·2^(1/2+1/n) / R；R≤0 时返回 0 */
-export function kappaPeak(R: number, n: number = CORNER_EXPONENT): number {
+/** 圆角方案：'g2' = G² 超椭圆（主方案）；'concentric' = 同心圆弧（后退方案） */
+export type CornerScheme = 'g2' | 'concentric';
+
+/** 圆弧方案的生成指数：圆是超椭圆族 n = 2 的特例，采样点恰在真圆上 */
+export const CONCENTRIC_EXPONENT = 2;
+
+/** 方案 → 生成指数（两方案的差异只在轮廓族；档位/同心链/采样律全部共用） */
+export function cornerExponentForScheme(scheme: CornerScheme): number {
+  return scheme === 'concentric' ? CONCENTRIC_EXPONENT : CORNER_EXPONENT;
+}
+
+/**
+ * 方案选择点（全局唯一）：默认 'g2'（产品现状，未注入时视觉零变化）。
+ * 主题/设置层在启动期经 setCornerScheme 注入（接口形状见双方案体系施工
+ * 报告）；生成函数在调用时现读本选择点——消费者（G2Surface /
+ * markdownG2Shapes）生成轮廓时一律经 getCornerScheme() 取当前方案，
+ * 禁止在消费者内写死方案或另立选择点。
+ */
+let activeCornerScheme: CornerScheme = 'g2';
+
+export function getCornerScheme(): CornerScheme {
+  return activeCornerScheme;
+}
+
+export function setCornerScheme(scheme: CornerScheme): void {
+  activeCornerScheme = scheme;
+}
+
+/**
+ * 指数解析序（全部生成函数共用）：显式 n（底层逃生口，既有调用口径不变） >
+ * 显式 scheme > 全局方案选择点。解析链终点恒为 'g2' 的指数——未注入方案时
+ * 一切既有调用的产物逐字不变。
+ */
+function resolveCornerExponent(
+  n: number | undefined,
+  scheme: CornerScheme | undefined,
+): number {
+  if (n !== undefined) return n;
+  return cornerExponentForScheme(scheme ?? getCornerScheme());
+}
+
+/**
+ * 峰值曲率 κ_peak = ((n−1)/2)·2^(1/2+1/n) / R；R≤0 时返回 0。
+ * 圆弧方案下曲率全程恒定：κ = 1/R（公式在 n = 2 时系数恰为 1）。
+ */
+export function kappaPeak(
+  R: number,
+  n?: number,
+  scheme?: CornerScheme,
+): number {
   if (!(R > 0)) return 0;
-  const factor = ((n - 1) / 2) * Math.pow(2, 1 / 2 + 1 / n);
+  const e = resolveCornerExponent(n, scheme);
+  const factor = ((e - 1) / 2) * Math.pow(2, 1 / 2 + 1 / e);
   return factor / R;
 }
 
@@ -124,12 +183,18 @@ function samplesFor(R: number): number {
  * (0, R) 端切线竖直奇点处折线偏差实测达 0.21px（R=20），等角采样全域
  * ≤0.008px（数值测试实证，预算 0.02px）。端点以字面值钉死（浮点 cos(π/2)
  * 非精确 0），保证角占位恰为 R。
+ * 方案 'concentric' 时指数取 2：ξ = R·cosθ、η = R·sinθ，点列恰在圆心
+ * (R, R)、半径 R 的真圆上（数值测试以圆方程逐点钉住）；端点切线为
+ * 水平/竖直，与直边衔接连续——与 G² 方案共用本点列生成四角是双方案
+ * 占位一致的构造性原因。
  */
 export function superellipseCornerPoints(
   R: number,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): Array<readonly [number, number]> {
   if (!(R > 0)) return [[0, 0]];
+  const e = resolveCornerExponent(n, scheme);
   const N = samplesFor(R);
   const pts: Array<readonly [number, number]> = [];
   for (let k = 0; k <= N; k++) {
@@ -142,8 +207,8 @@ export function superellipseCornerPoints(
       continue;
     }
     const theta = (Math.PI / 2) * (1 - k / N);
-    const xi = R * Math.pow(Math.cos(theta), 2 / n);
-    const eta = R * Math.pow(Math.sin(theta), 2 / n);
+    const xi = R * Math.pow(Math.cos(theta), 2 / e);
+    const eta = R * Math.pow(Math.sin(theta), 2 / e);
     pts.push([R - xi, R - eta] as const);
   }
   return pts;
@@ -160,15 +225,19 @@ const fmt = (v: number): number => {
  * - 同一表面两态半径不同（双轮廓切换）时以不同 r 调用本函数产出两条轮廓；
  * - 尺寸口径：仅应在尺寸落定时调用并按 (w,h,R) 缓存结果，动画/拖拽中冻结
  *   起始尺寸轮廓（立项方案 §2.2-5，槽 E 首个实测此策略）；
- * - w/h ≤ 0 返回空串；全角为 0 返回普通矩形路径。
+ * - w/h ≤ 0 返回空串；全角为 0 返回普通矩形路径；
+ * - 轮廓族由 scheme 决定（缺省经全局方案选择点，默认 'g2'）；显式 n 仍可
+ *   覆盖指数（底层逃生口，解析序见 resolveCornerExponent）。
  */
 export function cornerPath(
   w: number,
   h: number,
   radii: CornerRadiiInput,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): string {
   if (!(w > 0) || !(h > 0)) return '';
+  const e = resolveCornerExponent(n, scheme);
   const r = normalizeRadii(radii, w, h);
   const { tl, tr, br, bl } = r;
   if (tl === 0 && tr === 0 && br === 0 && bl === 0) {
@@ -179,7 +248,7 @@ export function cornerPath(
   // 逐角的局部方程 (R−a)^n + (R−b)^n = R^n 由典范方程直接传递（数值测试逐角验）：
   // TR：(cx, cy) → (w − cx, cy)，跳过首点（与 H 端点重合）
   if (tr > 0) {
-    const pts = superellipseCornerPoints(tr, n);
+    const pts = superellipseCornerPoints(tr, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -191,7 +260,7 @@ export function cornerPath(
   seg.push(`V${fmt(h - br)}`);
   // BR：(cx, cy) → (w − cy, h − cx)，跳过首点（与 V 端点重合）
   if (br > 0) {
-    const pts = superellipseCornerPoints(br, n);
+    const pts = superellipseCornerPoints(br, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -203,7 +272,7 @@ export function cornerPath(
   seg.push(`H${fmt(bl)}`);
   // BL：(cx, cy) → (cx, h − cy)，跳过首点（与 H 端点重合）
   if (bl > 0) {
-    const pts = superellipseCornerPoints(bl, n);
+    const pts = superellipseCornerPoints(bl, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -215,7 +284,7 @@ export function cornerPath(
   seg.push(`V${fmt(tl)}`);
   // TL：典范角逆序（自 (0, tl) 回到 (tl, 0)），跳过两端点（与直线/Z 重合）
   if (tl > 0) {
-    const pts = superellipseCornerPoints(tl, n);
+    const pts = superellipseCornerPoints(tl, e);
     for (let k = pts.length - 2; k >= 1; k--) {
       const pt = pts[k];
       if (!pt) continue;
@@ -236,9 +305,10 @@ export function cornerSvgDataUri(
   h: number,
   radii: CornerRadiiInput,
   fill: string,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): string {
-  const d = cornerPath(w, h, radii, n);
+  const d = cornerPath(w, h, radii, n, scheme);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(w)} ${fmt(h)}" ` +
     `preserveAspectRatio="none"><path d="${d}" fill="${fill}"/></svg>`;
@@ -250,7 +320,8 @@ export function cornerClipPath(
   w: number,
   h: number,
   radii: CornerRadiiInput,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): string {
-  return `path('${cornerPath(w, h, radii, n)}')`;
+  return `path('${cornerPath(w, h, radii, n, scheme)}')`;
 }

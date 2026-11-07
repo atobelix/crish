@@ -7,7 +7,10 @@
  * MarkdownSurface.test.tsx 覆盖；此处以真实 DOM 树测适配器本身。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cornerClipPath } from '../../utils/cornerPath';
+import {
+  cornerClipPath,
+  setCornerScheme,
+} from '../../utils/cornerPath';
 import {
   ResizeObserverManager,
   type ResizeCallback,
@@ -50,6 +53,8 @@ afterEach(() => {
   for (const sync of syncs.splice(0)) sync.dispose();
   document.body.innerHTML = '';
   vi.restoreAllMocks();
+  // 双方案选择点是模块级状态：每例后复位默认 'g2'，防跨例污染
+  setCornerScheme('g2');
 });
 
 describe('resolveElementRadii', () => {
@@ -95,6 +100,24 @@ describe('applyG2ShapeToElement', () => {
     expect(el.style.clipPath).toBe(
       cornerClipPath(400, 100, { tl: 0, tr: 6, br: 6, bl: 0 })
     );
+  });
+
+  it('方案经真源选择点：切到 concentric 后生成同心圆弧 clip-path', () => {
+    const el = makeEl();
+    el.style.borderRadius = '8px';
+    setRect(el, 800, 200);
+    // 默认 'g2'：与既有无方案调用逐字一致（零变化基线）
+    expect(applyG2ShapeToElement(el)).toBe(cornerClipPath(800, 200, 8));
+    setCornerScheme('concentric');
+    try {
+      const arc = applyG2ShapeToElement(el);
+      expect(arc).toBe(cornerClipPath(800, 200, 8, undefined, 'concentric'));
+      // 对照必须显式钉 'g2'：无方案调用此刻跟随已翻转的选择点，同为 concentric
+      expect(arc).not.toBe(cornerClipPath(800, 200, 8, undefined, 'g2'));
+      expect(el.style.clipPath).toBe(arc);
+    } finally {
+      setCornerScheme('g2');
+    }
   });
 
   it('尺寸为 0 时不塑造并清除旧 clip-path', () => {
@@ -213,6 +236,33 @@ describe('MarkdownG2ShapeSync', () => {
     const first = block.style.clipPath;
     sync.sync(root);
     expect(block.style.clipPath).toBe(first);
+  });
+
+  it('方案切换：尺寸不变时 sync 也按新方案重算（方案记入面状态）', () => {
+    const root = buildRoot();
+    const sync = track(new MarkdownG2ShapeSync());
+    sync.sync(root);
+    const block = root.querySelector<HTMLElement>('.md-code-block')!;
+    expect(block.style.clipPath).toBe(cornerClipPath(640, 120, 8));
+    setCornerScheme('concentric');
+    try {
+      sync.sync(root);
+      expect(block.style.clipPath).toBe(
+        cornerClipPath(640, 120, 8, undefined, 'concentric')
+      );
+      // 幂等保持：同方案重复同步不改写
+      sync.sync(root);
+      expect(block.style.clipPath).toBe(
+        cornerClipPath(640, 120, 8, undefined, 'concentric')
+      );
+      // 图片面 R16 同步换形（全根跟随，不只单面）
+      const img = root.querySelector<HTMLElement>('img')!;
+      expect(img.style.clipPath).toBe(
+        cornerClipPath(640, 120, 16, undefined, 'concentric')
+      );
+    } finally {
+      setCornerScheme('g2');
+    }
   });
 
   // RO 回调测试不走 ControllableResizeObserver.triggerResize：test-setup 的
