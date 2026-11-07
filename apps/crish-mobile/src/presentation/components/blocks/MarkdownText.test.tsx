@@ -4,7 +4,7 @@
 // - 链接 press 走 openLink 统一出口；任务列表不可交互；
 // - 超限降级有可见标注；流式回放中间帧无表格节点、终态成型。
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { MarkdownText } from './MarkdownText';
 import { openLink } from '@/adapters/platform/openLink';
 import * as clipboardModule from '@/adapters/platform/clipboard';
@@ -447,5 +447,135 @@ describe('MarkdownText · 代码块顶栏复制与极浅分割线', () => {
     expect(
       screen.getByTestId('markdown-code-copy-btn').props.accessibilityLabel
     ).toBe('复制代码');
+  });
+});
+
+describe('MarkdownText · 代码块内滚跟随（任务四 A)', () => {
+  const LONG_CODE = '```ts\n' + 'const line = 1;\n'.repeat(40);
+
+  function spyScrollTo() {
+    const spy = jest.fn();
+    const protoSpy = jest
+      .spyOn(ScrollView.prototype, 'scrollTo')
+      .mockImplementation(spy);
+    return { spy, protoSpy };
+  }
+
+  async function layoutScroll(
+    scroll: ReturnType<typeof screen.getByTestId>
+  ) {
+    await act(async () => {
+      fireEvent(scroll, 'layout', {
+        nativeEvent: { layout: { height: 320, width: 350 } },
+      });
+    });
+  }
+
+  it('未封口尾块超高后按内容尺寸一次性落位（偏移 = 内容高 − 视口高，animated: false）', async () => {
+    const { spy, protoSpy } = spyScrollTo();
+    await render(<MarkdownText text={LONG_CODE} streaming />);
+    const scroll = screen.getByTestId('markdown-code-scroll');
+    await layoutScroll(scroll);
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 900);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ y: 580, animated: false });
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 1000);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenLastCalledWith({ y: 680, animated: false });
+    protoSpy.mockRestore();
+  });
+
+  it('内容未超过视口高度时不落位', async () => {
+    const { spy, protoSpy } = spyScrollTo();
+    await render(<MarkdownText text={LONG_CODE} streaming />);
+    const scroll = screen.getByTestId('markdown-code-scroll');
+    await layoutScroll(scroll);
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 200);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    protoSpy.mockRestore();
+  });
+
+  it('用户拖动后退出跟随；回到底部后恢复跟随', async () => {
+    const { spy, protoSpy } = spyScrollTo();
+    await render(<MarkdownText text={LONG_CODE} streaming />);
+    const scroll = screen.getByTestId('markdown-code-scroll');
+    await layoutScroll(scroll);
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 900);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent(scroll, 'scrollBeginDrag');
+    });
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 1200);
+    });
+    // 拖动后新增长不拽回底部
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    // 回到贴底（离底 0）→ 恢复跟随
+    await act(async () => {
+      fireEvent(scroll, 'scroll', {
+        nativeEvent: {
+          contentSize: { height: 1200, width: 350 },
+          contentOffset: { x: 0, y: 880 },
+          layoutMeasurement: { height: 320, width: 350 },
+        },
+      });
+    });
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 1300);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenLastCalledWith({ y: 980, animated: false });
+    protoSpy.mockRestore();
+  });
+
+  it('流式中途封口后不再跟随（封口不拽回底部）', async () => {
+    const { spy, protoSpy } = spyScrollTo();
+    const { rerender } = await render(
+      <MarkdownText text={'```ts\nconst a = 1;'} streaming />
+    );
+    const scroll = screen.getByTestId('markdown-code-scroll');
+    await layoutScroll(scroll);
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 900);
+    });
+    // 未封口时跟随一次
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    // 围栏闭合且后有段落 → 该块封口
+    await rerender(
+      <MarkdownText text={'```ts\nconst a = 1;\n```\n\n封口后的说明'} streaming />
+    );
+    const scrollAfter = screen.getByTestId('markdown-code-scroll');
+    await act(async () => {
+      fireEvent(scrollAfter, 'contentSizeChange', 350, 1000);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    protoSpy.mockRestore();
+  });
+
+  it('静态（全封口）代码块从不自动落位', async () => {
+    const { spy, protoSpy } = spyScrollTo();
+    await render(
+      <MarkdownText
+        text={'```ts\n' + 'const line = 1;\n'.repeat(40) + '```'}
+      />
+    );
+    const scroll = screen.getByTestId('markdown-code-scroll');
+    await layoutScroll(scroll);
+    await act(async () => {
+      fireEvent(scroll, 'contentSizeChange', 350, 900);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    protoSpy.mockRestore();
   });
 });

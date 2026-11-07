@@ -31,6 +31,7 @@ import {
   Text,
   View,
   type ColorValue,
+  type LayoutChangeEvent,
   type StyleProp,
   type TextStyle,
 } from 'react-native';
@@ -623,7 +624,8 @@ interface CodeBlockProps {
 
 /** 代码块：定型容器（亮度台阶底、无边框）+ 常驻顶栏（语言标签 + 14dp 复制按钮）
  * + 居中极浅发丝级分割线 + 双轴内滚（横滑不折行、纵向封顶 layout.codeBlockMaxHeight)
- * + 可长按选择。着色只对封口块（sealed)：尾块保持等宽原文，封口一次性着色 */
+ * + 可长按选择。着色只对封口块（sealed)：尾块保持等宽原文，封口一次性着色。
+ * 内层跟随（任务四 A)：未封口尾块由内容尺寸事件驱动贴底，封口后不再跟随 */
 const CodeBlock = memo(function CodeBlock({
   lang,
   text,
@@ -634,6 +636,61 @@ const CodeBlock = memo(function CodeBlock({
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyPress = usePressFade();
+
+  // 内层跟随（任务四 A，与 ReasoningContentBox 同口径）：未封口尾块增长时
+  // 按 contentHeight - viewportHeight 一次性落位（animated: false——无定时器、
+  // 无 animated 追赶，减动效下同样直接落位）；用户拖动即退出跟随，回到贴底
+  // （离底 < 40dp）自动恢复；封口后永不跟随，保持用户留下的位置（着色替换
+  // 不拽回底部）。跟随状态只存本块内部，不写外层时间线的 follow。
+  const scrollRef = useRef<ScrollView>(null);
+  const followRef = useRef(true);
+  const viewportHeightRef = useRef(0);
+  const sealedRef = useRef(sealed);
+  sealedRef.current = sealed;
+  const maxCodeHeight = theme.layout.codeBlockMaxHeight;
+
+  const handleCodeLayout = useCallback((event: LayoutChangeEvent) => {
+    viewportHeightRef.current = event.nativeEvent.layout.height;
+  }, []);
+
+  const handleCodeScroll = useCallback(
+    (event: {
+      nativeEvent: {
+        contentSize: { height: number };
+        contentOffset: { y: number };
+        layoutMeasurement: { height: number };
+      };
+    }) => {
+      const { contentSize, contentOffset, layoutMeasurement } =
+        event.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - contentOffset.y - layoutMeasurement.height;
+      followRef.current = distanceFromBottom < 40;
+    },
+    []
+  );
+
+  const handleCodeScrollBeginDrag = useCallback(() => {
+    // 用户拖动立即取消跟随（阅读已生成部分不被新输出拽走）
+    followRef.current = false;
+  }, []);
+
+  const handleCodeContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      if (sealedRef.current || !followRef.current) {
+        return;
+      }
+      const viewport =
+        viewportHeightRef.current > 0
+          ? viewportHeightRef.current
+          : maxCodeHeight;
+      if (height <= viewport) {
+        return;
+      }
+      scrollRef.current?.scrollTo({ y: height - viewport, animated: false });
+    },
+    [maxCodeHeight]
+  );
 
   // 组件卸载时安全清理定时器，杜绝内存泄漏
   useEffect(() => {
@@ -725,14 +782,21 @@ const CodeBlock = memo(function CodeBlock({
         ]}
       />
 
-      {/* 3. 代码双轴内滚区域 */}
+      {/* 3. 代码双轴内滚区域（纵向承载任务四 A 的未封口跟随） */}
       <ScrollView
+        ref={scrollRef}
+        testID="markdown-code-scroll"
         style={[
           codeBlockStyles.codeScroll,
           { maxHeight: theme.layout.codeBlockMaxHeight },
         ]}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onLayout={handleCodeLayout}
+        onScroll={handleCodeScroll}
+        onScrollBeginDrag={handleCodeScrollBeginDrag}
+        onContentSizeChange={handleCodeContentSizeChange}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <Text
