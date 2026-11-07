@@ -378,4 +378,44 @@ describe('本地附件发送（引擎级）', () => {
       expect(userRow?.attachments?.[0]?.dataUrl).toBe(SMALL_DATA_URL);
     });
   });
+
+  it('R12 排查：同一条图片消息在完整发送-收口-续问流程中的落存次数恰为 1', async () => {
+    const dao = await freshDao();
+    const saveMessageSpy = jest.spyOn(dao, 'saveMessage');
+    configureLocalChatSessionPersistence(dao);
+    await setupProvider({
+      defaultModelId: 'mv',
+      models: [
+        {
+          id: 'mv',
+          enabled: true,
+          modalities: { input: ['text', 'image'], output: ['text'] },
+        },
+      ],
+    });
+    const threadId = localChatSessionStore.getState().createThread();
+    expect(
+      sendLocalChatMessage(threadId, '看看这张图', [imageAttachment()])
+    ).toBe(true);
+    await completeCurrentStream('第一轮回答');
+
+    // 同一条图片消息的 saveMessage 次数（发送时恰好一次；finishAssistant
+    // 只收口助手消息，不重写用户消息）
+    const userSaves = saveMessageSpy.mock.calls.filter(
+      ([, , m]) => m.role === 'user'
+    );
+    expect(userSaves).toHaveLength(1);
+    expect(userSaves[0]![2].attachments).toHaveLength(1);
+
+    // 第二轮续问（历史回放读侧）：不重写第一轮任何消息
+    saveMessageSpy.mockClear();
+    expect(sendLocalChatMessage(threadId, '再看看')).toBe(true);
+    await completeCurrentStream('第二轮回答');
+    const round2UserSaves = saveMessageSpy.mock.calls.filter(
+      ([, , m]) => m.role === 'user' && m.content === '看看这张图'
+    );
+    expect(round2UserSaves).toHaveLength(0);
+
+    saveMessageSpy.mockRestore();
+  });
 });
