@@ -119,7 +119,11 @@ export const UserMessageRow = memo(function UserMessageRow({
       </Animated.View>
       {deliveryStatus !== undefined ? (
         <Text
-          style={[styles.deliveryHint, { color: theme.colors.textSecondary }]}
+          style={[
+            styles.deliveryHint,
+            theme.type.caption,
+            { color: theme.colors.textSecondary },
+          ]}
           testID={`${rowTestID}-delivery`}
         >
           {deliveryStatus === 'failed' ? '未送达' : '发送中'}
@@ -139,7 +143,6 @@ const styles = StyleSheet.create({
   },
   deliveryHint: {
     marginTop: 4,
-    fontSize: 11,
   },
 });
 
