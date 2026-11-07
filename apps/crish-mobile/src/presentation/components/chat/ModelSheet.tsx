@@ -212,12 +212,15 @@ export function ModelSheet({
   const timingEnabled = isInteractionTimingEnabled();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       title="选择模型"
       size="large"
       testID={testID}
+      measureKey={testID}
+      contentKey={`${connected ? 'on' : 'off'}:${status}:${models?.length ?? 0}`}
     >
       {timingEnabled ? (
         <View

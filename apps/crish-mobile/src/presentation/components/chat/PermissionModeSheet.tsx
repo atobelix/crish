@@ -38,6 +38,7 @@ export function PermissionModeSheet({
   const theme = useTheme();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}

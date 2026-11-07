@@ -77,6 +77,7 @@ export function LocalModelSheet({
 
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}

@@ -94,6 +94,7 @@ export function PricingSheet({
 
   return (
     <Sheet
+      keyboard="input"
       visible={visible}
       onClose={onClose}
       title="模型单价与计费"

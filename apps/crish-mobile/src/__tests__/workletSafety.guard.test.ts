@@ -651,16 +651,16 @@ describe('worklet 安全守卫 · 全仓扫描', () => {
 });
 
 describe('sheetPanelTranslateY（Sheet 面板位移纯函数）', () => {
-  it('未测得面板高度时以窗口高度兜底（首帧整块藏于屏外）', () => {
-    expect(sheetPanelTranslateY(0, 0, 800)).toBe(800);
-    expect(sheetPanelTranslateY(0.5, 0, 800)).toBe(400);
+  it('未测得行程时位移为 0，不用窗口高度冒充面板高', () => {
+    expect(sheetPanelTranslateY(0, 0)).toBe(0);
+    expect(sheetPanelTranslateY(0.5, 0)).toBe(0);
   });
-  it('测得面板高度后按面板高度位移', () => {
-    expect(sheetPanelTranslateY(0, 240, 800)).toBe(240);
-    expect(sheetPanelTranslateY(0.25, 240, 800)).toBe(180);
+  it('测得行程后按该高度位移', () => {
+    expect(sheetPanelTranslateY(0, 240)).toBe(240);
+    expect(sheetPanelTranslateY(0.25, 240)).toBe(180);
   });
   it('展开完成位移归零', () => {
-    expect(sheetPanelTranslateY(1, 240, 800)).toBe(0);
-    expect(sheetPanelTranslateY(1, 0, 800)).toBe(0);
+    expect(sheetPanelTranslateY(1, 240)).toBe(0);
+    expect(sheetPanelTranslateY(1, 0)).toBe(0);
   });
 });

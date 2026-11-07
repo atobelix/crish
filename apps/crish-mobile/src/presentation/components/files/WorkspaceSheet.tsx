@@ -36,11 +36,14 @@ export function WorkspaceSheet({
   const theme = useTheme();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       title="工作区"
       size="large"
+      measureKey="workspace-sheet"
+      contentKey={`${status}:${workspaces?.length ?? 0}`}
     >
       {status === 'loading' || status === 'idle' ? (
         <LoadingState compact />

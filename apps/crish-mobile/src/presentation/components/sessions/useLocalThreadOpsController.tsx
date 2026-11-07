@@ -131,6 +131,7 @@ export function useLocalThreadOpsController(
     <>
       {sheetThread ? (
         <Sheet
+          keyboard="none"
           visible={sheetOpen}
           onClose={() => setSheetOpen(false)}
           title={titleOf(sheetThread)}

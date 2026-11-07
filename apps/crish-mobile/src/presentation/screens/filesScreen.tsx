@@ -96,6 +96,7 @@ export default function FilesScreen() {
         onRetry={vm.openWorkspaceList}
       />
       <Sheet
+        keyboard="none"
         visible={sortOpen}
         onClose={() => setSortOpen(false)}
         title="排序"

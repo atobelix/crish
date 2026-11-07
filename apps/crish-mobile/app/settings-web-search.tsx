@@ -657,6 +657,7 @@ export default function SettingsWebSearchRoute() {
 
       {/* ================= 5. API Key 录入与编辑 Sheet ================= */}
       <Sheet
+        keyboard="input"
         visible={editingProvider !== null}
         onClose={handleCloseKeySheet}
         title={editingProvider ? `配置 ${editingProvider.name} 密钥` : ''}

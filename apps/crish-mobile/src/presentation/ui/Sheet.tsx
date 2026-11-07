@@ -14,11 +14,11 @@
 // 拖动归 ScrollView，滚回顶部后的下滑才接管面板（manualActivation 仲裁）。
 // 减动效（手感基建批）：系统 Reduce Motion 开启时手势禁用，面板位移塌缩为
 // opacity 交叉淡化（共享信号 useReducedMotion）。
-// 键盘瞬发交接（2026-11-04 动效重构，深治方案 01-1）：
-// Sheet 呈现请求到达时若软键盘升起，立即非阻塞发起 KeyboardController.dismiss()，
-// 绝不阻塞面板挂载与进场动画（彻底废除 1000ms 阻塞门与串行等待）；
-// effectiveVisible 直接与 visible 同步，面板与键盘下沉并发进行，体验瞬发无延迟。
-// 关闭后不自动重弹键盘（本组件从不代宿主聚焦输入框）。
+// 键盘语义（第三期 R1）：调用方必须显式传入 keyboard。
+// none：选择面板不包避让、不订阅键盘高度，打开时只发一次收起。
+// input：输入面板包库版避让（behavior=padding）并订阅键盘高度。
+// 行程只来自实测或同身份缓存。位移、拖拽进度、速度归一共用该值。
+// 无缓存时先挂载内容以便测量，测到高度再进场，不用档位比例冒充面板高。
 // 语义档位 + 浮层纪律（批 D，2026-11-03；深比 02-2/02-3）：
 // - 高度改语义档位（size：compact/medium/large/full → SHEET_SIZE_
 //   RATIOS 的比例上限，内容仍实测高、档位只是上限），调用点按内容
@@ -58,15 +58,12 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import {
-  KeyboardAvoidingView,
-  KeyboardController,
-} from 'react-native-keyboard-controller';
-import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
   useAnimatedStyle,
@@ -77,7 +74,6 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
-import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
 import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import { haptics } from '@/adapters/platform/haptics';
 import AppText from './AppText';
@@ -85,6 +81,16 @@ import Icon from './Icon';
 import { SoftShadowSurface } from './SoftShadowSurface';
 import { usePressFade } from './pressFeedback';
 import { handleOverlayBackFor, useOverlayRegistration } from './overlayStack';
+import {
+  openingPlan,
+  readSheetHeight,
+  resolveTravelOnMeasure,
+  sheetHeightCacheKey,
+  travelAfterEnterFinished,
+  writeSheetHeight,
+  type SheetMeasurePhase,
+} from './sheetHeightCache';
+import { SheetChrome } from './sheetKeyboardChrome';
 
 /** Sheet 语义档位（按内容语义选：短确认 compact / 选项列 medium /
  * 长列表 large / 搜索升档或全量内容 full） */
@@ -160,6 +166,16 @@ export interface SheetProps {
   /** 退场动画完成（物理卸载）回调 */
   onCloseComplete?: () => void;
   testID?: string;
+  /**
+   * 键盘语义，调用方必须显式给出。
+   * input：包避让并订阅键盘高度。
+   * none：选择型，不包避让、不订阅键盘。
+   */
+  keyboard: 'input' | 'none';
+  /** 实测缓存身份。缺省用 testID，再缺省用实例 id（实例 id 不跨卸载）。 */
+  measureKey?: string;
+  /** 内容几何。变化后不得复用上一份实测高度。 */
+  contentKey?: string;
 }
 
 /** 原型遮罩 blur(2px) 在 expo-blur 强度标尺上的近似档 */
@@ -190,29 +206,61 @@ export function sheetDragCloseDecision(
 /**
  * 面板纵向位移（纯函数，显式 worklet；单测与 UI 线程共用同一真理）：
  * 展开进度 0 → 整块藏于屏外，1 → 归位。
- * 面板高度未测得（首帧 onLayout 未回）时，以基于语义档位推导的 fallbackHeight 兜底，
- * 绝不使用全屏 windowHeight，彻底消除沉底 570dp 虚空与单帧突变瞬移。
+ * 行程高度与拖拽进度、速度归一是同一个数。没有实测或缓存时行程为 0，
+ * 调用方不得用窗口比例冒充面板高。
  *
  * ⚠️ worklet 内禁止调用 JS 线程模块对象的方法（如 Dimensions.get）：这类对象
  * 被克隆进 worklet 运行时后方法即丢失，调用抛 TypeError: undefined is not a
  * function 并以 CppException 杀死进程（2026-11-01 真机崩溃根因，logcat 签名
- * SheetTsx → useAnimatedStyle → mapperRun）。窗口高度必须在 JS 线程经
- * useWindowDimensions 取得、以纯数字形态捕获进 worklet——本函数只收数字。
+ * SheetTsx → useAnimatedStyle → mapperRun）。本函数只收数字。
  * 防再发守卫：src/__tests__/workletSafety.guard.test.ts。
  */
 export function sheetPanelTranslateY(
   progress: number,
-  panelHeight: number,
-  fallbackHeightOrWindowHeight: number,
-  explicitFallbackHeight?: number
+  travelHeight: number
 ): number {
   'worklet';
-  const effectiveFallback =
-    explicitFallbackHeight !== undefined
-      ? explicitFallbackHeight
-      : fallbackHeightOrWindowHeight;
-  const effectiveHeight = panelHeight > 0 ? panelHeight : effectiveFallback;
-  return (1 - progress) * effectiveHeight;
+  const height = travelHeight > 0 ? travelHeight : 0;
+  return (1 - progress) * height;
+}
+
+/** 拖拽进度：下滑 translationY 为正，进度下降。分母必须是行程高度。 */
+export function sheetGestureProgress(
+  startProgress: number,
+  translationY: number,
+  travelHeight: number
+): number {
+  'worklet';
+  if (!(travelHeight > 0)) return startProgress;
+  const next = startProgress - translationY / travelHeight;
+  return Math.min(Math.max(next, 0), 1);
+}
+
+/** 下滑速度换成进度/秒（下滑为正 → 进度速度为负）。分母与位移相同。 */
+export function sheetGestureVelocity(
+  velocityY: number,
+  travelHeight: number
+): number {
+  'worklet';
+  if (!(travelHeight > 0)) return 0;
+  return -velocityY / travelHeight;
+}
+
+/**
+ * 手指位移对应的视觉位移。同一行程高度下 10dp 手指 = 10dp 视觉。
+ * 若位移用 680、手势用 240，视觉会变成 10 * 680 / 240。
+ */
+export function sheetFingerVisualDelta(
+  startProgress: number,
+  translationY: number,
+  travelHeight: number
+): number {
+  'worklet';
+  const next = sheetGestureProgress(startProgress, translationY, travelHeight);
+  return (
+    sheetPanelTranslateY(next, travelHeight) -
+    sheetPanelTranslateY(startProgress, travelHeight)
+  );
 }
 
 export function Sheet({
@@ -226,6 +274,9 @@ export function Sheet({
   backAction,
   onCloseComplete,
   testID,
+  keyboard,
+  measureKey,
+  contentKey = '',
 }: SheetProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -249,22 +300,7 @@ export function Sheet({
   }, [visible]);
   const effectiveSize = raised ? nextSheetSize(size) : size;
   const maxHeightRatio = SHEET_SIZE_RATIOS[effectiveSize];
-  // 窗口高度在 JS 线程取得（纯数字），供 panelStyle worklet 捕获——见 sheetPanelTranslateY 注释
-  const { height: windowHeight } = useWindowDimensions();
-  const fallbackHeight = Math.round(windowHeight * maxHeightRatio);
-  // 键盘处理：若软键盘处于开启状态，非阻塞发起收起，抽屉直接并行展开，不再等待键盘 settle，彻底杜绝 1000ms 冻结
-  const keyboardHeight = useKeyboardHeight();
-  const handoffDismissed = useRef(false);
-  useEffect(() => {
-    if (!visible) {
-      handoffDismissed.current = false;
-      return;
-    }
-    if (keyboardHeight > 0 && !handoffDismissed.current) {
-      handoffDismissed.current = true;
-      void KeyboardController.dismiss();
-    }
-  }, [visible, keyboardHeight]);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const effectiveVisible = visible;
   // 关闭时先播出场动画再卸载 Modal（进场则立即挂载）
   const [mounted, setMounted] = useState(visible);
@@ -272,18 +308,53 @@ export function Sheet({
     setMounted(true);
   }
   const exitCalledRef = useRef(false);
-  useEffect(() => {
-    if (effectiveVisible) {
-      exitCalledRef.current = false;
-    }
-  }, [effectiveVisible]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const onCloseCompleteRef = useRef(onCloseComplete);
+  onCloseCompleteRef.current = onCloseComplete;
+  const dismissibleRef = useRef(dismissible);
+  dismissibleRef.current = dismissible;
+  const mountedRef = useRef(mounted);
+  mountedRef.current = mounted;
+  const phaseRef = useRef<SheetMeasurePhase>('idle');
+  const draggingRef = useRef(false);
+  const overlayIdentity = measureKey ?? testID ?? generatedOverlayId;
+  const cacheKey = sheetHeightCacheKey({
+    overlayId: overlayIdentity,
+    windowWidth,
+    windowHeight,
+    size: effectiveSize,
+    contentKey,
+  });
+  const keyRef = useRef(cacheKey);
+  keyRef.current = cacheKey;
+  const [shadowVisible, setShadowVisible] = useState(false);
+  const runtimeRef = useRef({
+    reduceMotion,
+    expandDuration: theme.motion.duration.expand,
+    fastDuration: theme.motion.duration.fast,
+    sheetDuration: theme.motion.duration.sheet,
+    normalDuration: theme.motion.duration.normal,
+    emphasized: theme.motion.easing.emphasized,
+    spring: theme.motion.spring.sheet,
+  });
+  runtimeRef.current = {
+    reduceMotion,
+    expandDuration: theme.motion.duration.expand,
+    fastDuration: theme.motion.duration.fast,
+    sheetDuration: theme.motion.duration.sheet,
+    normalDuration: theme.motion.duration.normal,
+    emphasized: theme.motion.easing.emphasized,
+    spring: theme.motion.spring.sheet,
+  };
 
   const handleExitFinished = useCallback(() => {
     if (exitCalledRef.current) return;
     exitCalledRef.current = true;
+    phaseRef.current = 'idle';
     setMounted(false);
-    if (onCloseComplete) onCloseComplete();
-  }, [onCloseComplete]);
+    onCloseCompleteRef.current?.();
+  }, []);
   // 覆盖层登记（批 D）：挂载期间（含出场动画）在栈，Android 返回
   // 由 Modal onRequestClose 汇入栈顶裁决；钻取在场时先退钻取。
   useOverlayRegistration(overlayId, mounted, {
@@ -304,47 +375,148 @@ export function Sheet({
     frameRef.current = { title, children, footer, backAction };
   }
   const frame = frameRef.current;
-  const [panelHeight, setPanelHeight] = useState(0);
-  const lastMeasuredHeightRef = useRef<number>(0);
   const backdropProgress = useSharedValue(0);
   const panelProgress = useSharedValue(0);
-  // 动效基线高度共享值（UI 线程）：飞行过程中锁定基线，杜绝 onLayout 回包突变瞬移
-  const baselineHeight = useSharedValue(fallbackHeight);
+  const travelHeight = useSharedValue(0);
+  const latestMeasured = useSharedValue(0);
+  const reveal = useSharedValue(0);
+  const motionGen = useSharedValue(0);
 
-  // 当布局测量真实高度送达时：记录历史实测高度供后续立即复用；
-  // 稳态（panelProgress >= 0.99）才更新当前 UI 线程基线，动效飞行中途保持基线锁定，杜绝空中突变瞬移
-  const handlePanelLayout = useCallback((event: LayoutChangeEvent) => {
-    const h = event.nativeEvent.layout.height;
-    setPanelHeight(h);
-    lastMeasuredHeightRef.current = h;
-    if (panelProgress.value >= 0.99) {
-      baselineHeight.value = h;
+  const markSettled = useCallback(() => {
+    if (phaseRef.current === 'closing' || draggingRef.current) return;
+    phaseRef.current = 'settled';
+    const travel = travelAfterEnterFinished({
+      latestMeasured: latestMeasured.value,
+      inFlightTravel: travelHeight.value,
+      staleClosureHeight: 0,
+    });
+    if (travel > 0) {
+      travelHeight.value = travel;
+      writeSheetHeight(keyRef.current, travel);
     }
-  }, []);
+    setShadowVisible(true);
+  }, [latestMeasured, travelHeight]);
 
-  // 即时响应关闭（空白区域与关闭按钮）：立刻在 UI 线程与 JS 同步启动退场动效，无需等待宿主 React 重新渲染
-  const handleDismiss = useCallback(() => {
-    if (!dismissible) return;
+  const beginEnter = useCallback(
+    (travel: number) => {
+      const rt = runtimeRef.current;
+      phaseRef.current = 'animating';
+      cancelAnimation(panelProgress);
+      cancelAnimation(backdropProgress);
+      travelHeight.value = travel;
+      panelProgress.value = 0;
+      reveal.value = 1;
+      setShadowVisible(false);
+      const gen = motionGen.value + 1;
+      motionGen.value = gen;
+      const duration = rt.reduceMotion ? rt.fastDuration : rt.expandDuration;
+      backdropProgress.value = withTiming(1, {
+        duration,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+      panelProgress.value = withTiming(
+        1,
+        {
+          duration,
+          easing: Easing.bezier(...rt.emphasized),
+        },
+        (finished) => {
+          'worklet';
+          if (!finished) return;
+          if (motionGen.value !== gen) return;
+          const measured = latestMeasured.value;
+          if (measured > 0) travelHeight.value = measured;
+          runOnJS(markSettled)();
+        }
+      );
+    },
+    [backdropProgress, latestMeasured, markSettled, motionGen, panelProgress, reveal, travelHeight]
+  );
+
+  const beginExit = useCallback(() => {
+    if (phaseRef.current === 'closing') return;
+    phaseRef.current = 'closing';
+    setShadowVisible(false);
+    const rt = runtimeRef.current;
+    cancelAnimation(panelProgress);
+    cancelAnimation(backdropProgress);
+    const gen = motionGen.value + 1;
+    motionGen.value = gen;
     backdropProgress.value = withTiming(0, {
-      duration: reduceMotion
-        ? theme.motion.duration.fast
-        : theme.motion.duration.normal,
+      duration: rt.reduceMotion ? rt.fastDuration : rt.normalDuration,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
     panelProgress.value = withTiming(
       0,
       {
-        duration: reduceMotion
-          ? theme.motion.duration.fast
-          : theme.motion.duration.sheet,
+        duration: rt.reduceMotion ? rt.fastDuration : rt.sheetDuration,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
-        if (finished) runOnJS(handleExitFinished)();
+        'worklet';
+        if (!finished) return;
+        if (motionGen.value !== gen) return;
+        runOnJS(handleExitFinished)();
       }
     );
-    onClose();
-  }, [dismissible, handleExitFinished, onClose, reduceMotion, theme]);
+  }, [backdropProgress, handleExitFinished, motionGen, panelProgress]);
+
+  const handlePanelLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const h = event.nativeEvent.layout.height;
+      if (!(h > 0)) return;
+      latestMeasured.value = h;
+      const phase = draggingRef.current ? 'animating' : phaseRef.current;
+      if (phase === 'waiting') {
+        writeSheetHeight(keyRef.current, h);
+        beginEnter(h);
+        return;
+      }
+      const next = resolveTravelOnMeasure({
+        phase,
+        travelHeight: travelHeight.value,
+        latestMeasured: h,
+      });
+      if (next.changed) {
+        travelHeight.value = next.travelHeight;
+        writeSheetHeight(keyRef.current, next.travelHeight);
+      }
+    },
+    [beginEnter, latestMeasured, travelHeight]
+  );
+
+  const handleDismiss = useCallback(() => {
+    if (!dismissibleRef.current) return;
+    beginExit();
+    onCloseRef.current();
+  }, [beginExit]);
+
+  const beginDrag = useCallback(() => {
+    draggingRef.current = true;
+    motionGen.value = motionGen.value + 1;
+    setShadowVisible(false);
+  }, [motionGen]);
+
+  const endDragSettled = useCallback(() => {
+    draggingRef.current = false;
+    if (phaseRef.current === 'closing' || phaseRef.current === 'waiting') return;
+    phaseRef.current = 'settled';
+    setShadowVisible(true);
+  }, []);
+
+  const markGestureClosing = useCallback(() => {
+    draggingRef.current = false;
+    phaseRef.current = 'closing';
+    setShadowVisible(false);
+  }, []);
+
+  const notifyGestureClose = useCallback(() => {
+    haptics.snap();
+    draggingRef.current = false;
+    phaseRef.current = 'closing';
+    setShadowVisible(false);
+    onCloseRef.current();
+  }, []);
 
   // 拖拽状态（UI 线程）：内容滚动偏移（>0 时纵向拖动归滚动）、抓手起始进度、
   // 起始触点纵坐标、释放判定是否已由 onEnd 处理（onFinalize 兜底回位用）
@@ -352,100 +524,70 @@ export function Sheet({
   const dragStartProgress = useSharedValue(1);
   const dragStartY = useSharedValue(0);
   const dragEndHandled = useSharedValue(false);
+  const dragActive = useSharedValue(false);
   // 弹簧参数在渲染期取成普通对象（数字字段），供手势 worklet 捕获
   const sheetSpring = theme.motion.spring.sheet;
 
   useEffect(() => {
-    if (effectiveVisible) {
+    if (visible) {
+      exitCalledRef.current = false;
       setMounted(true);
-      // 进场前锁定基线高度（优先使用历史已知高度，消除深渊盲飞与几何断层）
-      const initialBaseline =
-        lastMeasuredHeightRef.current > 0
-          ? lastMeasuredHeightRef.current
-          : panelHeight > 0
-            ? panelHeight
-            : fallbackHeight;
-      baselineHeight.value = initialBaseline;
-      // 遮罩柔和呼吸渐入：时长与面板进场同步 (expand: 280ms)，曲线采用平滑缓出贝塞尔 (0.25, 0.1, 0.25, 1)，
-      // 消除陡峭火箭式瞬间压暗，与抽屉上升同步呼应
-      backdropProgress.value = withTiming(1, {
-        duration: reduceMotion
-          ? theme.motion.duration.fast
-          : theme.motion.duration.expand,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      const plan = openingPlan({
+        cached: readSheetHeight(keyRef.current),
+        alreadyMeasured: latestMeasured.value,
       });
-      panelProgress.value = withTiming(
-        1,
-        {
-          duration: reduceMotion
-            ? theme.motion.duration.fast
-            : theme.motion.duration.expand,
-          easing: Easing.bezier(...theme.motion.easing.emphasized),
-        },
-        (finished) => {
-          if (finished) {
-            baselineHeight.value =
-              panelHeight > 0 ? panelHeight : initialBaseline;
-          }
-        }
-      );
+      if (plan.reveal) {
+        beginEnter(plan.travelHeight);
+      } else {
+        phaseRef.current = 'waiting';
+        cancelAnimation(panelProgress);
+        cancelAnimation(backdropProgress);
+        panelProgress.value = 0;
+        backdropProgress.value = 0;
+        reveal.value = 0;
+        travelHeight.value = 0;
+        setShadowVisible(false);
+      }
       return;
     }
-    if (!mounted) return;
-    backdropProgress.value = withTiming(0, {
-      duration: reduceMotion
-        ? theme.motion.duration.fast
-        : theme.motion.duration.normal,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-    });
-    panelProgress.value = withTiming(
-      0,
-      {
-        duration: reduceMotion
-          ? theme.motion.duration.fast
-          : theme.motion.duration.sheet,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      },
-      (finished) => {
-        if (finished) runOnJS(handleExitFinished)();
-      }
-    );
-    // 兜底卸载：动画被打断/测试环境回调不达时不留挂载
+    if (!mountedRef.current) return;
+    beginExit();
+    // 兜底卸载：动画回调在测试桩里不会到达，超时后仍只卸载一次。
     const timer = setTimeout(() => handleExitFinished(), 300);
     return () => clearTimeout(timer);
-  }, [effectiveVisible, handleExitFinished]);
+  }, [
+    visible,
+    beginEnter,
+    beginExit,
+    handleExitFinished,
+    backdropProgress,
+    latestMeasured,
+    panelProgress,
+    reveal,
+    travelHeight,
+  ]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropProgress.value,
   }));
   const panelStyle = useAnimatedStyle(() => {
-    // 减动效：位移塌缩为交叉淡化（进度只驱动 opacity，面板不位移）
+    const shown = reveal.value > 0;
     if (reduceMotion) {
       return {
-        opacity: panelProgress.value,
+        opacity: shown ? panelProgress.value : 0,
         transform: [{ translateY: 0 }],
       };
     }
-    // 全程位移基线保持连续锁定，杜绝在 progress >= 0.99 处突变高度导致的段落感跳跃
+    const travel = shown ? travelHeight.value : 0;
     return {
+      opacity: shown ? 1 : 0,
       transform: [
         {
-          translateY: sheetPanelTranslateY(
-            panelProgress.value,
-            baselineHeight.value,
-            windowHeight,
-            fallbackHeight
-          ),
+          translateY: sheetPanelTranslateY(panelProgress.value, travel),
         },
       ],
     };
-  }, [windowHeight, fallbackHeight, reduceMotion]);
-
-  // 手势吸附关闭的 JS 侧收尾：触感与关闭回调同帧（门面纪律）
-  const notifyGestureClose = () => {
-    haptics.snap();
-    onClose();
-  };
+  }, [reduceMotion]);
 
   // 面板拖拽（manualActivation 仲裁，同抽屉先例）：内容已滚动时下滑归滚动、
   // 上滑恒归滚动；仅「内容在顶 + 明确下滑」时认领。跟手直接写 panelProgress
@@ -470,41 +612,64 @@ export function Sheet({
       }
     })
     .onStart(() => {
+      dragActive.value = true;
       dragStartProgress.value = panelProgress.value;
+      runOnJS(beginDrag)();
     })
     .onUpdate((event) => {
-      const height = panelHeight > 0 ? panelHeight : fallbackHeight;
-      const next = dragStartProgress.value - event.translationY / (height || 1);
-      const clamped = Math.min(Math.max(next, 0), 1);
-      panelProgress.value = clamped;
-      backdropProgress.value = clamped;
+      const next = sheetGestureProgress(
+        dragStartProgress.value,
+        event.translationY,
+        travelHeight.value
+      );
+      panelProgress.value = next;
+      backdropProgress.value = next;
     })
     .onEnd((event) => {
       dragEndHandled.value = true;
-      const height = panelHeight > 0 ? panelHeight : fallbackHeight;
-      // 速度换算为进度/秒（下滑为正 → 进度速度为负），播种进弹簧
-      const velocity = -event.velocityY / (height || 1);
+      dragActive.value = false;
+      const velocity = sheetGestureVelocity(event.velocityY, travelHeight.value);
       const draggedFraction = dragStartProgress.value - panelProgress.value;
       if (sheetDragCloseDecision(draggedFraction, event.velocityY)) {
+        runOnJS(markGestureClosing)();
         panelProgress.value = withSpring(
           0,
           { ...sheetSpring, velocity },
           (finished) => {
+            'worklet';
             if (finished) runOnJS(notifyGestureClose)();
           }
         );
         backdropProgress.value = withSpring(0, { ...sheetSpring, velocity });
       } else {
-        panelProgress.value = withSpring(1, { ...sheetSpring, velocity });
+        panelProgress.value = withSpring(
+          1,
+          { ...sheetSpring, velocity },
+          (finished) => {
+            'worklet';
+            if (finished) runOnJS(endDragSettled)();
+          }
+        );
         backdropProgress.value = withSpring(1, { ...sheetSpring, velocity });
       }
     })
     .onFinalize(() => {
-      // 手势被系统取消且 onEnd 未达：回位到展开态，不留半开面板
+      // 未真正认领的手势（滚动失败）不得打断进场。
+      if (!dragActive.value) return;
+      dragActive.value = false;
       if (dragEndHandled.value) return;
       if (panelProgress.value > 0 && panelProgress.value < 1) {
-        panelProgress.value = withSpring(1, { ...sheetSpring });
+        panelProgress.value = withSpring(
+          1,
+          { ...sheetSpring },
+          (finished) => {
+            'worklet';
+            if (finished) runOnJS(endDragSettled)();
+          }
+        );
         backdropProgress.value = withSpring(1, { ...sheetSpring });
+      } else {
+        runOnJS(endDragSettled)();
       }
     });
 
@@ -526,9 +691,7 @@ export function Sheet({
         {/* 手势根须在 Modal 内再挂一层：Android 的 Modal 是独立窗口，不在应用
           根 GestureHandlerRootView 的命中域内（RNGH 口径） */}
         <GestureHandlerRootView style={styles.flex}>
-          {/* 库版 KAV：edge-to-edge 下 Android 亦真避让（RN 内置版恒 no-op，
-            键盘审计 §一）；当前 Sheet 无内嵌输入，此为未来 Sheet 内输入的机制铺垫 */}
-          <KeyboardAvoidingView style={styles.flex} behavior="padding">
+          <SheetChrome keyboard={keyboard} visible={visible}>
             <View style={styles.overlay}>
               {/* 静止遮罩层：全屏固定，只动 opacity */}
               <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
@@ -567,6 +730,7 @@ export function Sheet({
                     拖拽位移挂外层随面板同动；外层不裁剪保阴影出血 */}
                   <SoftShadowSurface
                     preset="sheetUp"
+                    shadowVisible={shadowVisible}
                     borderRadius={theme.radius.sheet}
                     fill={
                       Platform.OS === 'ios'
@@ -652,7 +816,7 @@ export function Sheet({
                 </Animated.View>
               </GestureDetector>
             </View>
-          </KeyboardAvoidingView>
+          </SheetChrome>
         </GestureHandlerRootView>
       </SheetRaiseContext.Provider>
     </Modal>

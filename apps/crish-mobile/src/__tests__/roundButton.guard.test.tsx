@@ -238,7 +238,7 @@ describe('圆盘圆角 = 直径/2、填充节点（渲染断言）', () => {
   it('Sheet 关闭钮 Ø30：圆角 15、点击关闭', async () => {
     const onClose = jest.fn();
     const view = await render(
-      <Sheet visible title="标题" onClose={onClose}>
+      <Sheet keyboard="none" visible title="标题" onClose={onClose}>
         <></>
       </Sheet>,
       { wrapper: Providers }

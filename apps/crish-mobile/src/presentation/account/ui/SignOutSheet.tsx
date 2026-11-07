@@ -21,6 +21,7 @@ export function SignOutSheet({
   const theme = useTheme();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onCancel}
       testID="sign-out-sheet"

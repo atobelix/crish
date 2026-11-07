@@ -255,9 +255,21 @@ describe('键盘避让守卫 · 组件契约（Android 平台 mock）', () => {
     expect(behaviors).not.toContain('padding');
   });
 
-  it('Sheet：Android 下 Modal 内避让容器 behavior 为 padding', async () => {
+  it('选择型 Sheet 不包键盘避让', async () => {
     const view = await render(
-      <Sheet visible title="标题" onClose={() => {}}>
+      <Sheet keyboard="none" visible title="标题" onClose={() => {}}>
+        <View />
+      </Sheet>,
+      { wrapper: Providers }
+    );
+    const behaviors = allProps(view.toJSON()).map((p) => p.behavior);
+    expect(behaviors).not.toContain('padding');
+    expect(view.queryByTestId('sheet-keyboard-avoiding')).toBeNull();
+  });
+
+  it('输入型 Sheet：Android 下避让容器 behavior 为 padding', async () => {
+    const view = await render(
+      <Sheet keyboard="input" visible title="标题" onClose={() => {}}>
         <View />
       </Sheet>,
       { wrapper: Providers }

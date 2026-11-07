@@ -47,6 +47,7 @@ export function DeviceSheet({
 
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}

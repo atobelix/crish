@@ -62,12 +62,15 @@ export function SkillsSheet({
   const theme = useTheme();
   return (
     <Sheet
+      keyboard="none"
       visible={visible}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       title="技能"
       size="large"
       testID={testID}
+      measureKey={testID}
+      contentKey={`${connected ? 'on' : 'off'}:${status}:${skills?.length ?? 0}`}
     >
       {!connected ? (
         <View style={styles.center}>

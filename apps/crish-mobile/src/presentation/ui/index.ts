@@ -60,6 +60,9 @@ export type { SheetProps, SheetSize, SheetBackAction } from './Sheet';
 export {
   nextSheetSize,
   SHEET_SIZE_RATIOS,
+  sheetFingerVisualDelta,
+  sheetGestureProgress,
+  sheetGestureVelocity,
   sheetPanelTranslateY,
   useSheetSearchRaise,
 } from './Sheet';
