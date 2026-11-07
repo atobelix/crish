@@ -8,12 +8,19 @@
  * 走 TextNode 追加，结构变化才整节点替换；enhance 只扫 patch 触及的范围，
  * 不再每次整块 innerHTML 替换 + 全量扫描。
  */
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n/types';
 import { hash16 } from '../../api/markdown/markdownChunker';
 import type { MarkdownVariant } from '../../api/rustCore';
 import { IslandPortal } from './islands/IslandPortal';
+import { MarkdownG2ShapeSync } from './markdownG2Shapes';
 import { bindScrollFadesIn } from '../ui/ScrollFadeRegion/useScrollFade';
 
 const TOOLTIP_KEY_MAP: Record<string, TranslationKey> = {
@@ -226,6 +233,9 @@ export function MarkdownSurface({
     enhance: (root: HTMLElement) => void;
     isActive: boolean;
   } | null>(null);
+  // G² 第二波丙：markdown 块面形状同步器（Rust HTML 非 React 元素，见
+  // markdownG2Shapes.ts；每个 Surface 实例一个，随 Surface 卸载释放）。
+  const g2ShapesRef = useRef<MarkdownG2ShapeSync | null>(null);
   const { t } = useI18n();
 
   const enhanceElement = useCallback(
@@ -404,6 +414,15 @@ export function MarkdownSurface({
     [isActive]
   );
 
+  // Surface 卸载（虚拟化超视距回收即卸载路径）时释放全部尺寸监听。
+  useEffect(
+    () => () => {
+      g2ShapesRef.current?.dispose();
+      g2ShapesRef.current = null;
+    },
+    []
+  );
+
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -428,6 +447,12 @@ export function MarkdownSurface({
       // HC1：为新渲染的代码块绑定边缘渐隐状态机（data-fade 维护在 .md-code-pre，
       // mask 作用于内层 <code>；已绑定节点跨增量补丁复用，幂等）
       bindScrollFadesIn(root);
+      // G² 第二波丙：为新渲染/补丁触及的 markdown 块面挂 G² clip-path
+      // （实测生成；html 未变分支不触 DOM，无需重跑）。
+      if (g2ShapesRef.current === null) {
+        g2ShapesRef.current = new MarkdownG2ShapeSync();
+      }
+      g2ShapesRef.current.sync(root);
       return;
     }
 
