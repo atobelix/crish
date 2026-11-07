@@ -24,6 +24,7 @@ import { useReducedMotion } from '@/adapters/platform/useReducedMotion';
 import AppText from './AppText';
 import { Icon, type IconName } from './Icon';
 import { SoftShadowSurface } from './SoftShadowSurface';
+import { subscribeHostToasts } from './toastBus';
 
 export type ToastTone = 'info' | 'success' | 'warning' | 'error' | 'danger';
 export type ToastPlacement = 'top' | 'bottom';
@@ -243,6 +244,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }),
     [show, showToast, hide, clear]
   );
+
+  // 运行时域桥（2026-11-05 设备上线提醒接线）：非 React 域（runtime
+  // 编排层）经 toastBus 发出的前台提醒统一走本控制器呈现（载荷与 show
+  // 同构，支持复合卡片与动作）；卸载时退订。toastBus 为单点（见
+  // toastBus.ts 头注），未挂载时静默丢弃。
+  useEffect(() => {
+    return subscribeHostToasts((options, tone) => {
+      show(options, tone);
+    });
+  }, [show]);
 
   const renderToastContent = () => {
     if (!activeToast) return null;

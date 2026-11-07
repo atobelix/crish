@@ -530,6 +530,11 @@ export interface LocalThreadsDao {
   deleteThread(threadId: string): Promise<void>;
   /** 清空单线程消息（线程本体保留；「清空对话」语义） */
   deleteThreadMessages(threadId: string): Promise<void>;
+  /**
+   * 删除单线程内 seq >= fromSeq 的消息（重新生成截断语义：丢弃某回答
+   * 及其后的 tool 轮次，保留该回答之前的完整上下文）。
+   */
+  deleteMessagesFrom(threadId: string, fromSeq: number): Promise<void>;
 }
 
 const SELECT_THREADS_SQL =
@@ -682,5 +687,12 @@ export class SqlLocalThreadsDao implements LocalThreadsDao {
     await this.driver.exec('DELETE FROM local_messages WHERE thread_id = ?', [
       threadId,
     ]);
+  }
+
+  async deleteMessagesFrom(threadId: string, fromSeq: number): Promise<void> {
+    await this.driver.exec(
+      'DELETE FROM local_messages WHERE thread_id = ? AND seq >= ?',
+      [threadId, fromSeq]
+    );
   }
 }

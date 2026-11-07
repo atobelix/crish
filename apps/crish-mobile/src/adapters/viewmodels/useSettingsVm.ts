@@ -26,6 +26,7 @@ import {
   requestPermissionOnEnable,
   type NotificationSwitchGate,
 } from '@/notifications/prefsGate';
+import { searchSettingsStore } from '@/domain/store/searchSettingsStore';
 
 export interface SettingsVm {
   connected: boolean;
@@ -46,6 +47,8 @@ export interface SettingsVm {
   setHapticsStrength: (strength: HapticsStrength) => void;
   notifyMasterOn: boolean;
   notifyScenes: Readonly<Record<NotifyScene, boolean>>;
+  /** 网页搜索总开关真值（2026-11-05 设置入口接线；真源 searchSettingsStore） */
+  webSearchEnabled: boolean;
   notifyPermission: NotificationPermissionStatus;
   notifySwitchGate: NotificationSwitchGate;
   setNotifyMasterOn: (value: boolean) => void;
@@ -78,6 +81,8 @@ export function useSettingsVm(
   const permissionStatus = useNotificationPermission();
   const host = useAuthStore((s) => s.host);
   const port = useAuthStore((s) => s.port);
+  // 网页搜索总开关（2026-11-05 设置入口接线：真源 = searchSettingsStore）
+  const webSearchEnabled = useStore(searchSettingsStore, (s) => s.enabled);
 
   const changeThemeMode = useCallback((mode: ThemeMode) => {
     setThemeMode(mode);
@@ -137,6 +142,7 @@ export function useSettingsVm(
     setHapticsStrength,
     notifyMasterOn: notifyPrefs.masterOn,
     notifyScenes: notifyPrefs.sceneFlags,
+    webSearchEnabled,
     notifyPermission: permissionStatus,
     notifySwitchGate: notifySwitchGate(permissionStatus),
     setNotifyMasterOn,

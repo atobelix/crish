@@ -58,6 +58,52 @@ afterEach(() => {
   configureLocalChatSessionPersistence(null);
 });
 
+describe('localChatSessionStore truncateFrom（重新生成截断）', () => {
+  it('自助手消息起（含）截断：提问保留、后续轮次全丢、持久化同步删除', async () => {
+    const dao = await freshDao();
+    configureLocalChatSessionPersistence(dao);
+    const deleteFromSpy = jest.spyOn(dao, 'deleteMessagesFrom');
+
+    const s = localChatSessionStore.getState();
+    const threadId = s.createThread();
+    s.appendUser(userMsg('a1', '锚点提问'));
+    s.beginAssistant(assistantMsg('a2'));
+    s.appendAssistantDelta('a2', '第一版回答');
+    s.finishAssistant('a2');
+    // 模拟后续 tool 轮次（截断必须连带丢弃）
+    s.appendUser(userMsg('a3', 'tool 结果轮'), threadId);
+    await flushPersist();
+    deleteFromSpy.mockClear();
+
+    s.truncateFrom('a2');
+
+    const state = localChatSessionStore.getState();
+    expect(state.messages.map((m) => m.id)).toEqual(['a1']);
+    expect(state.messages[0]?.content).toBe('锚点提问');
+    // 流式态复位（截断即终止任何进行中的生成标记）
+    expect(state.streaming).toBe(false);
+    // 持久化：seq >= 1（a2 的下标）全部删除
+    expect(deleteFromSpy).toHaveBeenCalledWith(threadId, 1);
+    // DAO 读回一致
+    const persisted = await dao.listMessages(threadId);
+    expect(persisted.map((m) => m.id)).toEqual(['a1']);
+  });
+
+  it('诚实 no-op：消息不存在 / 无线程时截断为空操作', () => {
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    s.appendUser(userMsg('a1', '唯一消息'));
+    s.truncateFrom('不存在的消息');
+    expect(localChatSessionStore.getState().messages.map((m) => m.id)).toEqual([
+      'a1',
+    ]);
+    // 无线程 id（inactive 场景）不抛错
+    expect(() => {
+      localChatSessionStore.getState().truncateFrom('a1', 'lth-none');
+    }).not.toThrow();
+  });
+});
+
 describe('localChatSessionStore 多线程', () => {
   it('createThread：新建即激活；活动空线程复用不堆积', () => {
     const s = localChatSessionStore.getState();
@@ -468,5 +514,120 @@ describe('localChatSessionStore 槽位隔离与重置 (维度 1)', () => {
       localChatSessionStore.getState().threads.some((t) => t.id === empty)
     ).toBe(false);
     expect(localChatSessionStore.getState().inactive[empty]).toBeUndefined();
+  });
+});
+
+describe('localChatSessionStore 思考链与状态机 (Reasoning)', () => {
+  it('appendAssistantReasoningDelta：正确累加 reasoning，并将 isThinking 设为 true', () => {
+    const s = localChatSessionStore.getState();
+    s.createThread();
+    s.appendUser(userMsg('u1', '请分析这个问题'));
+    s.beginAssistant(assistantMsg('a1'));
+
+    // 初始状态
+    let msg = localChatSessionStore
+      .getState()
+      .messages.find((m) => m.id === 'a1');
+    expect(msg?.reasoning).toBeUndefined();
+    expect(msg?.isThinking).toBeUndefined();
+
+    // 第一次思考增量
+    localChatSessionStore
+      .getState()
+      .appendAssistantReasoningDelta('a1', '正在分析题目条件...');
+    msg = localChatSessionStore.getState().messages.find((m) => m.id === 'a1');
+    expect(msg?.reasoning).toBe('正在分析题目条件...');
+    expect(msg?.isThinking).toBe(true);
+
+    // 第二次思考增量：继续累加，isThinking 保持 true
+    localChatSessionStore
+      .getState()
+      .appendAssistantReasoningDelta('a1', '条件满足，开始推导。');
+    msg = localChatSessionStore.getState().messages.find((m) => m.id === 'a1');
+    expect(msg?.reasoning).toBe('正在分析题目条件...条件满足，开始推导。');
+    expect(msg?.isThinking).toBe(true);
+
+    // 正文增量到达：保持正文与思考链独立，reasoning 不被破坏
+    localChatSessionStore
+      .getState()
+      .appendAssistantDelta('a1', '推导结果如下：');
+    msg = localChatSessionStore.getState().messages.find((m) => m.id === 'a1');
+    expect(msg?.content).toBe('推导结果如下：');
+    expect(msg?.reasoning).toBe('正在分析题目条件...条件满足，开始推导。');
+    expect(msg?.isThinking).toBe(true);
+  });
+
+  it('appendAssistantReasoningDelta 支持非活动后台线程定位写入', () => {
+    const s = localChatSessionStore.getState();
+    const threadA = s.createThread();
+    s.appendUser(userMsg('u1', '线程 A'));
+    s.beginAssistant(assistantMsg('a1'));
+
+    // 切换到新线程 B
+    const threadB = localChatSessionStore.getState().createThread();
+    localChatSessionStore.getState().appendUser(userMsg('u2', '线程 B'));
+
+    // 此时后台收到 A 的思考增量
+    localChatSessionStore
+      .getState()
+      .appendAssistantReasoningDelta('a1', '线程 A 后台思考中');
+
+    const state = localChatSessionStore.getState();
+    expect(state.activeThreadId).toBe(threadB);
+    const backgroundMsg = state.inactive[threadA]?.messages.find(
+      (m) => m.id === 'a1'
+    );
+    expect(backgroundMsg?.reasoning).toBe('线程 A 后台思考中');
+    expect(backgroundMsg?.isThinking).toBe(true);
+  });
+
+  it('finishAssistant：将 isThinking 设为 false，并正确持久化包含 reasoning 的消息', async () => {
+    const dao = await freshDao();
+    const saveMessageSpy = jest.spyOn(dao, 'saveMessage');
+    configureLocalChatSessionPersistence(dao);
+
+    const s = localChatSessionStore.getState();
+    const threadId = s.createThread();
+    s.appendUser(userMsg('u1', '求证结论'));
+    s.beginAssistant(assistantMsg('a1'));
+
+    // 流式注入思考链
+    localChatSessionStore
+      .getState()
+      .appendAssistantReasoningDelta('a1', '第一步反证法...得出矛盾。');
+    const currentMsg = localChatSessionStore
+      .getState()
+      .messages.find((m) => m.id === 'a1');
+    expect(currentMsg?.isThinking).toBe(true);
+    expect(currentMsg?.reasoning).toBe('第一步反证法...得出矛盾。');
+
+    // 正文注入
+    localChatSessionStore.getState().appendAssistantDelta('a1', '结论得证。');
+
+    // finishAssistant 收尾，并传入额外 patch 字段验证合并
+    localChatSessionStore.getState().finishAssistant('a1', { stopped: false });
+    await flushPersist();
+
+    const finalMsg = localChatSessionStore
+      .getState()
+      .messages.find((m) => m.id === 'a1');
+    expect(finalMsg?.streaming).toBe(false);
+    expect(finalMsg?.isThinking).toBe(false);
+    expect(finalMsg?.stopped).toBe(false);
+    expect(finalMsg?.content).toBe('结论得证。');
+    expect(finalMsg?.reasoning).toBe('第一步反证法...得出矛盾。');
+
+    // 验证 DAO 持久化调用携带了完整 reasoning 与 isThinking: false
+    expect(saveMessageSpy).toHaveBeenCalledWith(
+      threadId,
+      expect.any(Number),
+      expect.objectContaining({
+        id: 'a1',
+        content: '结论得证。',
+        reasoning: '第一步反证法...得出矛盾。',
+        isThinking: false,
+        streaming: false,
+      })
+    );
   });
 });

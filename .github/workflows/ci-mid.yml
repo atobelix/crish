@@ -223,3 +223,6 @@ jobs:
       - run: node scripts/check-session-message-upsert.mjs
       - run: node scripts/check-tool-pairing-invariants.mjs
       - run: node scripts/check-db-write-bypass.mjs
+      # 工具流静态不变量（2026-11-06 接线收口：check-guard-system
+      # unwired_guard 归零——实测 exit 0，只读源码树扫描）
+      - run: node scripts/check-tool-stream-invariants.mjs

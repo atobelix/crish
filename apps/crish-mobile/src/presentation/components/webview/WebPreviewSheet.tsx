@@ -8,14 +8,7 @@
  * - 跨端自适应：动态容错探测 react-native-webview，测试与真机环境零崩溃。
  */
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-  type ComponentType,
-} from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -36,9 +29,10 @@ import { useTheme } from '@/adapters/platform/theme';
 import { openLink } from '@/adapters/platform/openLink';
 import { copyTextToClipboard } from '@/adapters/platform/clipboard';
 import { haptics } from '@/adapters/platform/haptics';
-import { AppText, Icon } from '@/presentation/ui';
+import { AppText, Icon, IconButton } from '@/presentation/ui';
 import { useOverlayRegistration } from '@/presentation/ui/overlayStack';
 import { normalizeDomain } from './normalizeDomain';
+import { probeNativeWebView } from './nativeWebView';
 import {
   WebPreviewBlockedCard,
   WebPreviewErrorCard,
@@ -48,18 +42,11 @@ import type { WebPreviewSheetProps, WebPreviewSecurityInfo } from './types';
 export { normalizeDomain };
 
 /**
- * 运行时容错探测 react-native-webview。
- * 兼容原生环境、Web 环境与 Jest Mock 环境。
+ * 运行时容错探测 react-native-webview（2026-11-05 收敛到共享单点
+ * nativeWebView.ts——全 App 唯一探测点；探测失败本抽屉降级为
+ * 「不支持预览」错误卡，零崩溃）。
  */
-let NativeWebView: ComponentType<Record<string, unknown>> | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const webviewModule = require('react-native-webview');
-  NativeWebView =
-    webviewModule.WebView || webviewModule.default || webviewModule;
-} catch {
-  NativeWebView = null;
-}
+const NativeWebView = probeNativeWebView();
 
 export function WebPreviewSheet({
   visible,
@@ -127,16 +114,18 @@ export function WebPreviewSheet({
   const progressShared = useSharedValue(0.15);
   useEffect(() => {
     progressShared.value = withTiming(progress, {
-      duration: 220,
+      duration: theme.motion.duration.sheet,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [progress, progressShared]);
+  }, [progress, progressShared, theme.motion.duration.sheet]);
 
   const progressAnimatedStyle = useAnimatedStyle(() => {
     const isDone = progressShared.value >= 1;
     return {
       width: `${Math.min(100, Math.max(0, progressShared.value * 100))}%`,
-      opacity: isDone ? withTiming(0, { duration: 320 }) : 1,
+      opacity: isDone
+        ? withTiming(0, { duration: theme.motion.duration.expand })
+        : 1,
     };
   });
 
@@ -270,47 +259,32 @@ export function WebPreviewSheet({
 
             {/* 右侧：外部浏览器、复制链接、关闭 */}
             <View style={styles.headerRight}>
-              <Pressable
+              <IconButton
+                name="share"
                 testID="web-preview-open-external"
                 accessibilityLabel="在外部浏览器打开"
-                accessibilityRole="button"
-                hitSlop={theme.space.xs}
                 onPress={handleOpenExternal}
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <Icon name="share" size={18} color={theme.colors.textPrimary} />
-              </Pressable>
+                diameter={32}
+                size={18}
+              />
 
-              <Pressable
+              <IconButton
+                name="copy"
                 testID="web-preview-copy-link"
                 accessibilityLabel="复制链接"
-                accessibilityRole="button"
-                hitSlop={theme.space.xs}
                 onPress={handleCopyLink}
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <Icon name="copy" size={18} color={theme.colors.textPrimary} />
-              </Pressable>
+                diameter={32}
+                size={18}
+              />
 
-              <Pressable
+              <IconButton
+                name="x"
                 testID="web-preview-close"
                 accessibilityLabel="关闭"
-                accessibilityRole="button"
-                hitSlop={theme.space.xs}
                 onPress={onClose}
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <Icon name="x" size={18} color={theme.colors.textPrimary} />
-              </Pressable>
+                diameter={32}
+                size={18}
+              />
             </View>
           </View>
 
@@ -458,7 +432,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   domainText: {
-    fontSize: 12,
     fontWeight: '500',
   },
   headerCenter: {
@@ -468,7 +441,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   titleText: {
-    fontSize: 15,
     fontWeight: '600',
   },
   headerRight: {
@@ -476,13 +448,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginLeft: 8,
-  },
-  iconButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
   },
   progressBarTrack: {
     width: '100%',

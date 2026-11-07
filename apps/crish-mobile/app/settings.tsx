@@ -22,6 +22,7 @@ export default function SettingsScreen() {
       onOpenNotification={() => router.push('/settings-notification')}
       onOpenVoice={() => router.push('/settings-voice')}
       onOpenHaptics={() => router.push('/settings-haptics')}
+      onOpenWebSearch={() => router.push('/settings-web-search')}
       onOpenScan={() => router.push('/pair/scan')}
       onOpenLocalProviders={() => router.push('/settings-local-providers')}
       onConfirmRemove={onConfirmRemove}

@@ -6,6 +6,7 @@ import { waitFor } from '@testing-library/react-native';
 import {
   CIRCUIT_BREAKER_MAX_ROUNDS_PROMPT,
   isLocalThreadStreaming,
+  regenerateLocalThread,
   resetLocalChatEngineForTest,
   sendLocalChatMessage,
   setLocalChatToolExecutorForTest,
@@ -594,6 +595,79 @@ describe('多轮本地 Agent 循环（Local Agent Loop）', () => {
     expect(snap?.messages[1]?.content).toBe('你好！我是你的本地助手。');
     expect(snap?.messages[1]?.streaming).toBeFalsy();
     expect(localChatSessionStore.getState().streaming).toBe(false);
+  });
+
+  it('重新生成（D-REGEN）：截断旧回答及其后轮次，保留提问并重启新一轮流式', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '重新生成的锚点提问')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+    const first = streamHandlers!;
+    first.onChunk(
+      sse({
+        choices: [{ delta: { content: '第一版回答' }, finish_reason: 'stop' }],
+      })
+    );
+    first.onDone();
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+
+    const before = threadRuntimeSnapshot(threadId)!;
+    expect(before.messages).toHaveLength(2);
+    const oldAssistantId = before.messages[1]!.id;
+
+    // 重新生成：旧回答及其后全部消息被截断，提问保留，新一轮开始流式
+    expect(regenerateLocalThread(threadId, oldAssistantId)).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+
+    const after = threadRuntimeSnapshot(threadId)!;
+    expect(after.messages).toHaveLength(2);
+    expect(after.messages[0]!.content).toBe('重新生成的锚点提问');
+    expect(after.messages[1]!.id).not.toBe(oldAssistantId);
+    expect(after.messages[1]!.role).toBe('assistant');
+    expect(after.messages[1]!.streaming).toBe(true);
+    expect(isLocalThreadStreaming(threadId)).toBe(true);
+
+    // 新一轮内容到达并收口
+    streamHandlers!.onChunk(
+      sse({
+        choices: [{ delta: { content: '第二版回答' }, finish_reason: 'stop' }],
+      })
+    );
+    streamHandlers!.onDone();
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+
+    const final = threadRuntimeSnapshot(threadId)!;
+    expect(final.messages).toHaveLength(2);
+    expect(final.messages[1]!.content).toBe('第二版回答');
+    expect(final.messages[1]!.streaming).toBeFalsy();
+  });
+
+  it('重新生成诚实 no-op：生成中 / 助手消息不存在 / 无锚点提问 / 线程不存在', async () => {
+    const threadId = localChatSessionStore.getState().createThread();
+    streamHandlers = null;
+    expect(sendLocalChatMessage(threadId, '生成中的提问')).toBe(true);
+    await waitFor(() => expect(streamHandlers).not.toBeNull());
+
+    // 生成中：拒绝重新生成
+    expect(regenerateLocalThread(threadId, '不存在的助手消息')).toBe(false);
+    expect(isLocalThreadStreaming(threadId)).toBe(true);
+    stopLocalChatMessage(threadId);
+    await waitFor(() => expect(isLocalThreadStreaming(threadId)).toBe(false));
+
+    // 无锚点提问（截断点前没有 user）：全新线程直接放一条助手消息
+    const noAnchorThread = localChatSessionStore.getState().createThread();
+    localChatSessionStore.getState().beginAssistant({
+      id: 'lcm-noanchor',
+      role: 'assistant',
+      content: '',
+    });
+    localChatSessionStore.getState().finishAssistant('lcm-noanchor', {
+      content: '无锚点回答',
+    });
+    expect(regenerateLocalThread(noAnchorThread, 'lcm-noanchor')).toBe(false);
+
+    // 线程不存在
+    expect(regenerateLocalThread('lth-not-exist', 'lcm-x')).toBe(false);
   });
 
   it('单轮工具调用并返回最终总结（多轮 Agent Loop 流转断言）', async () => {

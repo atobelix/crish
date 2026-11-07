@@ -174,19 +174,25 @@ export function useEntranceReveal(
   );
 
   // grow 变体：入场开始后把根高度自 0 生长到自然高；内容高度在生长
-  // 期间漂移（字体/换行落定）时逐帧重靶向，终点以 transitionend 为准
+  // 期间漂移（字体/换行落定）时逐帧重靶向，终点以 transitionend 为准。
+  // G-03 状态驱动返工（2026-11-06）：废除「写 0px + void offsetHeight
+  // 强制同步回流」——同步测高为零时（jsdom/空内容）立即收尾；否则先
+  // 提交 0 高起始态，再经双 rAF 让浏览器自然布局后加过渡与目标值。
+  // 强制同步回流彻底消失，生长视觉与逐帧重靶向语义不变。
   useEffect(() => {
     if (!state.entering || variant !== 'grow') return undefined;
     const el = elRef.current;
     if (!el) return undefined;
 
-    let target = el.scrollHeight;
-    if (target <= 0) {
+    const initialTarget = el.scrollHeight;
+    if (initialTarget <= 0) {
+      // jsdom / 空内容：无高可长，立即收尾（不施加任何 grow 样式）
       growDoneRef.current = true;
       tryFinish();
       return undefined;
     }
-    const durationMs = calcAccordionDuration(target, true);
+
+    let target = initialTarget;
     let raf = 0;
     let done = false;
 
@@ -214,26 +220,51 @@ export function useEntranceReveal(
       restore();
     };
 
-    el.style.overflow = 'hidden';
-    el.style.height = '0px';
-    // 强制回流使起始高生效后再设过渡与目标高
-    void el.offsetHeight;
-    el.style.transition = `height ${durationMs}ms ${EASE_DECELERATE}`;
-    el.style.height = `${target}px`;
-    el.addEventListener('transitionend', onTransitionEnd);
+    // 起始态：0 高 + 裁切（过渡未设，第二帧才加，动画照常触发）
+    el.style.setProperty('overflow', 'hidden');
+    el.style.setProperty('height', '0px');
 
-    const retarget = () => {
+    const startGrow = () => {
       if (done) return;
-      // 退场接管中：停止重靶向生长高度，循环即刻让位（S4 契约 7）
-      if (el.dataset.exiting === 'true') return;
-      const nowTarget = el.scrollHeight;
-      if (Math.abs(nowTarget - target) > 2) {
-        target = nowTarget;
-        el.style.height = `${target}px`;
+      // 退场接管中：让位（S4 契约 7）
+      if (el.dataset.exiting === 'true') {
+        done = true;
+        return;
       }
+      // 内容高度可能已漂移：以当下实测为准
+      target = el.scrollHeight;
+      if (target <= 0) {
+        growDoneRef.current = true;
+        restore();
+        tryFinish();
+        return;
+      }
+      const durationMs = calcAccordionDuration(target, true);
+      el.style.setProperty(
+        'transition',
+        `height ${durationMs}ms ${EASE_DECELERATE}`
+      );
+      el.style.height = `${target}px`;
+      el.addEventListener('transitionend', onTransitionEnd);
+
+      const retarget = () => {
+        if (done) return;
+        // 退场接管中：停止重靶向生长高度，循环即刻让位（S4 契约 7）
+        if (el.dataset.exiting === 'true') return;
+        const nowTarget = el.scrollHeight;
+        if (Math.abs(nowTarget - target) > 2) {
+          target = nowTarget;
+          el.style.height = `${target}px`;
+        }
+        raf = requestAnimationFrame(retarget);
+      };
       raf = requestAnimationFrame(retarget);
     };
-    raf = requestAnimationFrame(retarget);
+
+    // 双 rAF：浏览器对 0 高起始态完成自然布局（无显式强制回流）后再生长
+    raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(startGrow);
+    });
 
     return () => {
       growCleanupRef.current?.();

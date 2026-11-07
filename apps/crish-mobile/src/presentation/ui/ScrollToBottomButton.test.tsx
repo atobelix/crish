@@ -171,24 +171,24 @@ describe('ScrollToBottomButton - 键盘解耦与打字态原地淡出（Wave 4 �
     );
   });
 
-  it('废弃兼容属性 followKeyboard 不会导致崩溃或叠加二次高度', async () => {
+  it('遗留 followKeyboard 兼容属性已物理删除（2026-11-05 非必要不兼容收敛）', async () => {
     mockAnim.mockReturnValue({
       progress: { value: 1 },
       height: { value: -336 },
     });
 
+    // TS 层面已禁止传入（ScrollToBottomButtonProps 无此键）；本用例钉住
+    // 删除事实：未知 prop 不产生任何附加高度效果，底距仍为 148
     const view = await render(
       <ScrollToBottomButton
         onPress={jest.fn()}
         bottomOffset={148}
-        followKeyboard={true}
         testID="test-scroll-bottom-deprecated"
       />,
       { wrapper: Providers }
     );
 
     const btn = view.getByTestId('test-scroll-bottom-deprecated');
-    // 即使传入遗留 followKeyboard=true，内部也已彻底废除上推计算，底距仍为 148
     expect(btn.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ bottom: 148 })])
     );

@@ -111,6 +111,11 @@ export interface LocalChatSessionState {
   finishAssistant: (id: string, patch?: Partial<LocalChatMessage>) => void;
   setError: (error: LocalChatError | null, threadId?: string) => void;
   setStreaming: (streaming: boolean, threadId?: string) => void;
+  /**
+   * 自 messageId 起（含）截断该线程消息（重新生成：丢弃旧回答及其后
+   * tool 轮次，保留完整提问上下文）；截断点不存在时为 no-op。
+   */
+  truncateFrom: (messageId: string, threadId?: string) => void;
   clearThread: (threadId?: string) => void;
 }
 
@@ -714,6 +719,35 @@ export const localChatSessionStore: StoreApi<LocalChatSessionState> =
           if (!runtime) return;
           runtime.streaming = streaming;
         });
+      },
+
+      truncateFrom: (messageId, threadId) => {
+        const targetId = threadId ?? get().activeThreadId;
+        if (targetId === null || targetId === undefined) return;
+        let cutSeq = -1;
+        set((s) => {
+          const runtime = runtimeFor(s, targetId);
+          if (!runtime) return;
+          const index = runtime.messages.findIndex((m) => m.id === messageId);
+          if (index < 0) return;
+          cutSeq = index;
+          runtime.messages = runtime.messages.slice(0, index);
+          runtime.streaming = false;
+          // 预览回退到最后一条保留消息（诚实呈现截断后的线程末态）；
+          // 标题与来源不动（重新生成不改主题）
+          const meta = s.threads.find((t) => t.id === targetId);
+          const last = runtime.messages[runtime.messages.length - 1];
+          if (meta && last) {
+            meta.preview = previewOfContent(last.content);
+            meta.updatedAt = Date.now();
+          }
+        });
+        if (cutSeq >= 0) {
+          const target = targetId;
+          persist(async (d) => {
+            await d.deleteMessagesFrom(target, cutSeq);
+          });
+        }
       },
 
       clearThread: (threadId) => {

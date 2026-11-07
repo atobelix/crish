@@ -246,7 +246,8 @@
 }
 
 @keyframes toolDotPulseBlue {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(0.9);
     opacity: 0.55;
   }
@@ -516,7 +517,8 @@
   width: 85%;
   border-radius: 4px;
   background: var(--state-hover);
-  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
+  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out)
+    infinite;
 }
 
 .toolSkeletonLineShort {
@@ -524,7 +526,8 @@
   width: 55%;
   border-radius: 4px;
   background: var(--state-hover);
-  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
+  animation: toolSkeletonPulse var(--transition-pulse, 1.6s ease-in-out)
+    infinite;
 }
 
 @keyframes toolSkeletonPulse {
@@ -561,7 +564,12 @@
   background: var(--danger-soft-bg);
 }
 
-/* Batch approval bar */
+/* Batch approval bar
+ * 【G² 迁移 · 第一波甲槽 E，2026-11-06】宿主已改为 ui/G2Surface（r16 档）：
+ * 填充 var(--state-hover) 与 1px 边框改由生成路径绘制（边框走同路径描边，
+ * 待裁决 #5 默认 (a)）；本类只保留布局与兜底圆弧（摘掉形状层即回到普通
+ * 圆弧外观的回滚口径，立项方案 §2.5），不得再在此声明 background/border，
+ * 否则旧弧会与 G² 轮廓双重着漆错位。 */
 .batchBar {
   display: flex;
   align-items: center;
@@ -569,8 +577,6 @@
   padding: 6px 8px;
   margin: 2px 0;
   border-radius: var(--radius-xl);
-  background: var(--state-hover);
-  border: 1px solid var(--border-subtle);
 }
 
 .batchBarLabel {
@@ -579,23 +585,31 @@
   flex: 1;
 }
 
-/* Tool Result Body (Unified Rounded Rectangle Container) */
+/* Tool Result Body (Unified Rounded Rectangle Container)
+ * 【G² 迁移 · 第一波甲槽 E，2026-11-06】宿主已改为 ui/G2Surface（R10 名义值，
+ * 与 --radius-lg 同值）：填充 var(--surface-raised) 与 1px 边框改由生成路径
+ * 绘制（边框走同路径描边，待裁决 #5 默认 (a)），内容改由同一路径 clip-path
+ * 裁切（原 overflow: hidden 跟随 border-radius 的旧弧，与 G² 轮廓在角部
+ * 错位约 0.6px，故必须同步换）。本类只保留布局与兜底圆弧（回滚口径见
+ * 立项方案 §2.5），不得再在此声明 background/border/overflow。
+ * 轮廓冻结口径：折叠动画拉伸的是上层 .toolBody 的 grid-rows 剪裁窗而非
+ * 本容器本体，本容器尺寸在动画中恒定，G2Surface 实测轮廓天然冻结、
+ * 无纵向畸变（槽 E 首个实测场，与 S9 高度时钟同钟验证）。 */
 .toolResultBody {
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 0;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   margin: 2px 0 4px 0;
   box-sizing: border-box;
-  overflow: hidden;
   position: relative;
   box-shadow: none;
 }
 
-.toolResultBody > * {
+/* 段落层级：G² 化后段（.toolSection）位于 G2Surface 的 clip 层内（不再是
+ * 本容器的直接子元素），原 `.toolResultBody > *` 的层级声明改以段类名承接 */
+.toolResultBody .toolSection {
   position: relative;
   z-index: var(--z-decorative);
 }
@@ -1339,28 +1353,23 @@
 }
 
 /* ───── AN4 · 工具内容伪流式显现（入场 / 输出揭示段） ─────
- * 入场与消息行同语言：共享 keyframes crish-row-enter（定义落
- * styles/design-system.css 共享层），时长/缓动全走 token；交错
- * 延时由行根内联 --reveal-delay 注入（50ms/行、至多 6 行，
- * 协调与门控见 toolRevealState.ts）。本段只新增入场/揭示类，
- * 不动既有过渡段与视口段。 */
+ * 【kf-fix 收尾，2026-11-06】入场/揭示动画收敛到全局工具类：
+ * - .toolRowEnter → .crish-entrance-fade（design-system.css §4b，
+ *   keyframes crish-row-enter + --reveal-delay 交错，定义逐值同构）；
+ * - .outputRevealFade → .crish-anim-fade-in + --anim-duration 覆盖为
+ *   accordion-fade 档（180ms）。module 内不再声明 animation，悬空
+ *   引用清零（keyframesIntegrity 契约）；reduced-motion 由全局工具
+ *   类自带块覆盖。 */
 .toolRowEnter {
-  animation: crish-row-enter var(--duration-fast) var(--ease-decelerate) both;
-  animation-delay: var(--reveal-delay, 0ms);
+  composes: crish-entrance-fade from global;
 }
 
-/* 结构化输出 / 带外大文本整块淡入（分析 §三 #6 口径）：时长走
- * accordion-fade 时长 token（180ms），与行体淡变同一档。 */
 .outputRevealFade {
-  animation: crish-fade-in var(--duration-accordion-fade) var(--ease-decelerate)
-    both;
+  composes: crish-anim-fade-in from global;
+  --anim-duration: var(--duration-accordion-fade);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toolRowEnter,
-  .outputRevealFade {
-    animation: none;
-  }
   .toolSuccessDot,
   .toolErrorDot,
   .toolPendingDot,

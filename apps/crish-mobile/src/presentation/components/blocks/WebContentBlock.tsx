@@ -6,12 +6,16 @@
 // - 只由呈现层对**封口**块挂载（MarkdownText 把关)，source 恒为终态文本，
 //   流式尾块不经此处；
 // - WebView 禁文件访问 / 禁多窗 / 禁混合内容，页面无任何网络请求面；
-// - 高度先占位（下方常量）后由回传实测替换，超时未回传即判失败回落。
+// - 高度先占位（下方常量）后由回传实测替换，超时未回传即判失败回落；
+// - 原生组件容错探测（2026-11-05）：静态 import 曾造成「JS bundle 与原生
+//   APK 不同步即整页崩」的构建漂移雷区（战役分析 §3.3）——现收敛到
+//   nativeWebView 共享探测单点，探测失败直接等宽回落（诚实降级，零崩溃）。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import type { WebViewMessageEvent } from 'react-native-webview';
 import { useTheme } from '@/adapters/platform/theme';
 import { buildWebHtml, type WebBlockKind } from './webview/buildWebHtml';
+import { probeNativeWebView } from '../webview/nativeWebView';
 
 /** 首帧占位高（实测回传前；公式一行约 56、图块按 Cherry 192 档近似） */
 const INITIAL_HEIGHT: Record<WebBlockKind, number> = {
@@ -35,6 +39,7 @@ export function WebContentBlock({
   testID,
 }: WebContentBlockProps) {
   const theme = useTheme();
+  const NativeWebView = useMemo(() => probeNativeWebView(), []);
   const [height, setHeight] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const measuredRef = useRef(false);
@@ -78,8 +83,9 @@ export function WebContentBlock({
     }
   };
 
-  if (failed) {
-    // 诚实回落：原文等宽呈现（公式 TeX / 图源码），与代码块同容器口径
+  if (failed || !NativeWebView) {
+    // 诚实回落：原文等宽呈现（公式 TeX / 图源码），与代码块同容器口径；
+    // 探测失败（原生组件缺失）与渲染超时同路，零崩溃
     return (
       <View
         testID={testID ? `${testID}-fallback` : undefined}
@@ -110,7 +116,7 @@ export function WebContentBlock({
         padding: theme.space.sm,
       }}
     >
-      <WebView
+      <NativeWebView
         source={{ html }}
         originWhitelist={['about:blank']}
         javaScriptEnabled

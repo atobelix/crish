@@ -52,6 +52,12 @@ export interface SettingsScreenViewProps {
   onOpenVoice?: () => void;
   /** 震动反馈子页入口（开关 + 强度，2026-11-03 裁决：震感归设置控制） */
   onOpenHaptics?: () => void;
+  /**
+   * 网页搜索与工具子页入口（2026-11-05 接线修复：页面
+   * /settings-web-search 早已完整——全局开关 / BYOK Key / 免 Key 引擎
+   * 偏好——但设置列表一直没有入口行，能力不可达即不可用）。
+   */
+  onOpenWebSearch?: () => void;
 }
 
 /**
@@ -75,11 +81,12 @@ export default function SettingsScreenView({
   onOpenTheme,
   onOpenFont,
   onOpenNotification,
-  onOpenScan,
+  onOpenScan: _onOpenScan,
   onConfirmRemove,
   onOpenLocalProviders,
   onOpenVoice,
   onOpenHaptics,
+  onOpenWebSearch,
 }: SettingsScreenViewProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -216,27 +223,17 @@ export default function SettingsScreenView({
           />
         </AnimatedPressable>
 
-        <SettingsGroup label="连接">
+        <SettingsGroup label="设备连接">
           <ListRow
-            title="已登录设备管理"
+            title="已登录设备"
             leading={<RowIcon name="monitor" />}
             trailing={
               <AppText variant="footnote" color="textTertiary">
-                {vm.connected ? '在线' : '未连接'}
+                {vm.connected ? '在线' : '免配置中继'}
               </AppText>
             }
             showChevron
             onPress={onOpenSessions}
-          />
-          <ListRow
-            title="扫码连接桌面"
-            leading={<RowIcon name="qr-code" />}
-            onPress={onOpenScan}
-          />
-          <ListRow
-            title="连接帮助"
-            leading={<RowIcon name="info" />}
-            onPress={() => setHelpOpen(true)}
             divider={false}
           />
         </SettingsGroup>
@@ -322,6 +319,23 @@ export default function SettingsScreenView({
               }
               showChevron
               onPress={onOpenLocalProviders}
+              divider={Boolean(onOpenWebSearch)}
+            />
+          </SettingsGroup>
+        ) : null}
+
+        {onOpenWebSearch ? (
+          <SettingsGroup label="联网能力">
+            <ListRow
+              title="网页搜索与工具"
+              leading={<RowIcon name="globe" />}
+              trailing={
+                <AppText variant="footnote" color="textTertiary">
+                  {vm.webSearchEnabled ? '已开启' : '已关闭'}
+                </AppText>
+              }
+              showChevron
+              onPress={onOpenWebSearch}
               divider={false}
             />
           </SettingsGroup>

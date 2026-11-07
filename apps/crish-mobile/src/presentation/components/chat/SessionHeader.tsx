@@ -8,20 +8,27 @@
 // 填充由胶囊 backgroundColor 单一承担（surfaceRaised）；深色 SoftShadow
 // 内部短路、区分回归亮度台阶；iOS 无阴影。两侧圆钮（汉堡钮/新建/更多）
 // 均为 floating 圆钮，阴影由 IconButton floating 自带 SoftShadow（button 档）。
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, IconButton, SoftShadow } from '@/presentation/ui';
+import type { AnchorRect } from '@/presentation/ui/dropdownLayout';
 
 export interface ConversationHeaderProps {
   title: string;
+  /** 返回钮（2026-11-05 导航语义矩阵）：栈内确有上一界面时由宿主注入，
+   *  点击 = useSafeBack（回到上一个打开的界面）；缺省 = 无栈可回（冷启动
+   *  深链），诚实不渲染 */
+  onBack?: () => void;
   /** 汉堡钮：打开 (main) 抽屉（全 App 顶栏左侧语义收敛为开抽屉） */
   onOpenDrawer: () => void;
   /** 新建对话（回主页新对话面） */
   onNewConversation: () => void;
-  /** 更多菜单触发（菜单本体由调用方渲染，锚点见 DropdownMenu top） */
+  /** 更多菜单触发（菜单本体由调用方渲染，锚点见 DropdownMenu anchorRect） */
   onMore: () => void;
+  /** 更多按钮物理锚点矩形变化通知（用于 DropdownMenu 像素级对齐） */
+  onMoreAnchorChange?: (rect: AnchorRect) => void;
   /** 标题胶囊内尾随元素（预留） */
   trailing?: ReactNode;
   testID?: string;
@@ -29,17 +36,29 @@ export interface ConversationHeaderProps {
 
 export function ConversationHeader({
   title,
+  onBack,
   onOpenDrawer,
   onNewConversation,
   onMore,
+  onMoreAnchorChange,
   trailing,
   testID,
 }: ConversationHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const moreBtnRef = useRef<View | null>(null);
   // Android 软阴影需要实测宽度（胶囊宽随标题长度变化），onLayout 捕获后渲染
   const [pillWidth, setPillWidth] = useState(0);
   const pillHeight = theme.size.barAction + 2;
+
+  const handleMore = useCallback(() => {
+    moreBtnRef.current?.measureInWindow?.((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onMoreAnchorChange?.({ x, y, width, height });
+      }
+    });
+    onMore();
+  }, [onMore, onMoreAnchorChange]);
   return (
     <View
       testID={testID}
@@ -54,8 +73,18 @@ export function ConversationHeader({
       ]}
     >
       <View style={styles.row}>
-        {/* 左侧复合簇：菜单按钮 + 紧随其后的对话标题胶囊（取消居中，自然左对齐流） */}
+        {/* 左侧复合簇：[返回（栈可回时）] 菜单按钮 + 紧随其后的对话标题胶囊
+            （取消居中，自然左对齐流） */}
         <View style={[styles.leftCluster, { gap: theme.space.sm }]}>
+          {onBack ? (
+            <IconButton
+              name="chevron-left"
+              variant="floating"
+              accessibilityLabel="返回上一界面"
+              onPress={onBack}
+              testID="session-back"
+            />
+          ) : null}
           <IconButton
             name="menu"
             variant="floating"
@@ -108,13 +137,15 @@ export function ConversationHeader({
             onPress={onNewConversation}
             testID="session-new"
           />
-          <IconButton
-            name="more"
-            variant="floating"
-            accessibilityLabel="会话选项"
-            onPress={onMore}
-            testID="session-more"
-          />
+          <View ref={moreBtnRef} collapsable={false}>
+            <IconButton
+              name="more"
+              variant="floating"
+              accessibilityLabel="会话选项"
+              onPress={handleMore}
+              testID="session-more"
+            />
+          </View>
         </View>
       </View>
     </View>

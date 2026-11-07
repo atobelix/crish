@@ -16,6 +16,7 @@ import {
   type WaterfallSearchResult,
   type SearchDependencies,
 } from '../webSearch/searchWaterfallOrchestrator';
+import { buildSearchDependencies } from '../webSearch/searchDependencies';
 import {
   defaultWebSearchConfig,
   type WebSearchConfig,
@@ -161,8 +162,11 @@ export function createWebSearchTool(
         activeConfig.maxResults = requestedMaxResults;
       }
 
-      // 4. 装配瀑布流调度依赖
+      // 4. 装配瀑布流调度依赖（2026-11-05 装配 SSOT）：生产全量能力
+      //    经 buildSearchDependencies 单点注入（BYOK + 免 Key 引擎 +
+      //    SecureStore 凭据）；options.dependencies 仅测试覆盖用
       const deps: SearchDependencies = {
+        ...buildSearchDependencies(),
         signal: context.signal,
         onStateChange: (state) => {
           if (context.onProgress) {

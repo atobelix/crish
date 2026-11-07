@@ -1,4 +1,18 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+/**
+ * apps/crish-desktop/src/components/chat-tool-call/CompactToolRow.tsx
+ *
+ * 单工具行组件（P4 方案纯化重构）。
+ * 彻底切除 500ms 定时器、liveNow 轮询、durationStr 耗时跳秒与入参路径反推。
+ * 遵循 D3 规范：单行原位流转，纯响应式渲染。
+ */
+
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
@@ -8,21 +22,14 @@ import {
 } from '../agent-card/ApprovalAskCard';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import '../chat-card/workspaceChatComposerAbove.slot';
-import { isEditToolName } from '../../api/toolFeedback';
 import {
-  diffStatsFromFileDiffs,
   extractToolCommand,
-  formatToolDiffStat,
   isToolRowDefaultOpen,
-  normalizeToolDiffStat,
   resolveToolCallDiffs,
   toolCommandPreview,
-  toolDiffLineStats,
   toolHumanLabel,
-  toolPathDisplayName,
   toolRowTone,
 } from '../../api/toolPresentation';
-import { extractFilePathFromToolArgs } from '../../api/workspaceFsApi';
 import type { ChatToolStackProps } from './ChatToolCallBlock';
 import { ToolCallHeader } from './ToolCallHeader';
 import { ToolCallOutput } from './ToolCallOutput';
@@ -34,9 +41,7 @@ import {
 import {
   cancelToolBackgroundTask,
   parseToolBackgroundPlaceholder,
-  toolBackgroundElapsedMs,
 } from '../../api/toolBackgroundApi';
-import { formatDurationLabel } from '../../api/tool-presentation/processMetricsEngine';
 import { Button } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import {
@@ -45,6 +50,8 @@ import {
 } from './toolExpansionState';
 import { useRevealEntrance } from './useRevealEntrance';
 import { markToolInteracted, settleToolReveal } from './toolRevealState';
+import { useClosingFlag } from '../motion/useExitReveal';
+import { stripReferencesToPlainText } from './Reference';
 
 export interface CompactToolRowProps {
   tc: MessageToolCall;
@@ -58,7 +65,6 @@ export interface CompactToolRowProps {
 
 /**
  * D7.4：React.memo——tc / props 引用稳定时跳过单行重渲染。
- * 比较器字段与 chatToolStackPropsEqual 同法（显式字段，禁伪 memo）。
  */
 export function compactToolRowPropsEqual(
   a: CompactToolRowProps,
@@ -101,18 +107,13 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
     } = props.actions ?? {};
     const { t } = useI18n();
 
-    // BG5：转后台识别——output 为 BG2 占位信封且 callId 与本行一致时，
-    // 本行处于后台态（BG3 settled 回注替换 output 后信封消失、自动
-    // 回到常规终态呈现）。取消的本地收口态仅活在本行内：注册表取消
-    // 成功即先行呈「已停止」，settled 事件到达后由数据层接管。
+    // 转后台识别：output 为后台占位信封且 callId 一致时处于后台态
     const backgroundPlaceholder = useMemo(() => {
       const ph = parseToolBackgroundPlaceholder(tc.output);
       return ph && ph.callId === tc.id ? ph : null;
     }, [tc.output, tc.id]);
 
-    // E1 §7：一处派生——展开政策、行头改道目标、diff 统计共用同一
-    // 解析 diff 列表（结构化 diffs 优先，否则输出解析 / 入参合成），
-    // 禁止三处平行派生。政策函数内部亦走同一 resolveToolCallDiffs。
+    // 一处派生：展开政策与改道目标共用同一解析 diff 列表
     const resolvedDiffs = useMemo(() => resolveToolCallDiffs(tc), [tc]);
     const [cancelState, setCancelState] = useState<
       'idle' | 'cancelling' | 'cancelled'
@@ -121,40 +122,10 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
     const backgroundSettledLocally =
       backgroundActive && cancelState === 'cancelled';
 
-    const [liveNow, setLiveNow] = useState(Date.now());
-    useEffect(() => {
-      const runningLive = tc.status === 'running' && tc.startedAt;
-      const backgroundLive = backgroundActive && !backgroundSettledLocally;
-      if (!runningLive && !backgroundLive) return;
-      // 活时长走字 tick 口径钉死 500ms（2026-11-02 整波收口裁定）
-      const id = setInterval(() => setLiveNow(Date.now()), 500);
-      return () => clearInterval(id);
-    }, [tc.status, tc.startedAt, backgroundActive, backgroundSettledLocally]);
-
-    const durationStr = useMemo(() => {
-      // 后台态的已运行时长由行内后台条独占呈现，行头不重复计时
-      if (backgroundActive) return null;
-      if (tc.startedAt && tc.completedAt) {
-        const sec = (tc.completedAt - tc.startedAt) / 1000;
-        return sec >= 0.1 ? `${sec.toFixed(1)}s` : null;
-      }
-      if (tc.status === 'running' && tc.startedAt) {
-        const sec = (liveNow - tc.startedAt) / 1000;
-        return `${sec.toFixed(1)}s`;
-      }
-      return null;
-    }, [tc.startedAt, tc.completedAt, tc.status, liveNow, backgroundActive]);
-
-    const backgroundElapsedMs = backgroundPlaceholder
-      ? toolBackgroundElapsedMs(backgroundPlaceholder, tc, liveNow)
-      : null;
-
     const handleCancelBackground = async () => {
       if (!backgroundPlaceholder || cancelState !== 'idle') return;
       setCancelState('cancelling');
       const ok = await cancelToolBackgroundTask(backgroundPlaceholder.callId);
-      // 取消未生效（已终态 / 命令缺失）时不伪造状态：退回 idle，
-      // 条目真实状态以注册表与 settled 回注为准。
       setCancelState(ok ? 'cancelled' : 'idle');
     };
 
@@ -184,57 +155,101 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       vsm,
     });
 
-    // 退出动画生命周期管理：展开时直接挂载真实内容；收起时保持内容在 DOM 中，
-    // 供 CSS Grid 1fr -> 0fr 顺畅播放收缩折叠动画；动画结束后才卸载子内容。
-    const [shouldMountContent, setShouldMountContent] = useState(isOpen);
+    // User-Intent-First（F3 §根因 5）：跟踪用户是否显式展开过该工具行
+    const userExpandedRef = useRef(
+      Boolean(expandedTools && expandedTools[tc.id] === true)
+    );
+
+    if (expandedTools && expandedTools[tc.id] === true) {
+      userExpandedRef.current = true;
+    } else if (expandedTools && expandedTools[tc.id] === false) {
+      userExpandedRef.current = false;
+    }
+
+    const handleToggleWrapped = useCallback(
+      (toolId: string, currentOpen: boolean) => {
+        userExpandedRef.current = !currentOpen;
+        handleToggle(toolId, currentOpen);
+      },
+      [handleToggle]
+    );
+
+    // 有可展示内容判断
+    const hasDisplayableContent = Boolean(
+      (tc.output && tc.output.trim()) ||
+      (tc.arguments && tc.arguments.trim().length > 2) ||
+      (tc.diffs && tc.diffs.length > 0)
+    );
+
+    // 用户显式展开后，终态变化不得卸载展开体（忽略政策变为 none 的 unmount）
+    const isForceKeptByUser = Boolean(userExpandedRef.current);
+    const effectiveCanToggle =
+      canToggle || (isForceKeptByUser && hasDisplayableContent);
+    const effectiveIsOpen = isForceKeptByUser
+      ? (expandedTools?.[tc.id] ?? isOpen)
+      : isOpen;
+
+    // 退出动画生命周期管理
+    const [shouldMountContent, setShouldMountContent] =
+      useState(effectiveIsOpen);
 
     useEffect(() => {
-      if (isOpen) {
+      if (effectiveIsOpen) {
         setShouldMountContent(true);
         return undefined;
       }
-      // 安全保底：若 350ms 内未收到 onTransitionEnd（如动画跳过或不可见），保底卸载释放 DOM
       const timer = setTimeout(() => {
         setShouldMountContent(false);
       }, 350);
       return () => {
         clearTimeout(timer);
       };
-    }, [isOpen]);
+    }, [effectiveIsOpen]);
 
     const handleAccordionEnd = useCallback(
       (e: React.TransitionEvent<HTMLDivElement>) => {
         handleAccordionTransitionEnd();
         if (e.propertyName !== 'grid-template-rows') return;
-        if (!isOpen) {
+        if (!effectiveIsOpen) {
           setShouldMountContent(false);
         }
       },
-      [handleAccordionTransitionEnd, isOpen]
+      [handleAccordionTransitionEnd, effectiveIsOpen]
     );
 
-    // AN4：工具行入场（实况 + 首次呈现 + 非原地替换才播，交错
-    // 延时按挂载序发放；审批分支不挂入场——审批即时类归 AN2）
+    // AN4：工具行入场动效
     const rowEntrance = useRevealEntrance({
       key: tc.id || '',
       eventTs: tc.completedAt ?? tc.startedAt,
       replaceHit: shouldReplace,
     });
 
-    // AN4 让位（分析 §5.1）：行内任何指针按下 / 焦点进入都意味着
-    // 人在接管这一行——登记交互并让进行中的输出排空同帧抵达终态
+    // AN4 让位：指针按下或焦点进入时沉降排空
     const handleRevealSettle = useCallback(() => {
       if (!tc.id) return;
       markToolInteracted(tc.id);
       settleToolReveal(tc.id);
     }, [tc.id]);
 
-    if (tc.status === 'pending_approval') {
-      // 插件开：审批上提 composer 冷静条，流内不画 ApprovalAskCard
+    // S4 退场宿主：审批卡的卸载由宿主保活——裁决发出后（tc.status 离开
+    // pending_approval），卡片先播 150ms 退场再卸载；决策回调在卡片内
+    // 立即发出，不被退场延迟。键与卡片的入场键同构，entered 缺省读
+    // 入场记忆：从未挂载过的卡（挂载时已裁决 / 上提 composer）直落。
+    const approvalExit = useClosingFlag(tc.status === 'pending_approval', {
+      key: `approval:${tc.id ?? (msgId || pendingApprovalMsgId || '')}`,
+    });
+
+    // S4：审批卡的渲染（含派生）收拢为一处，pending 分支与退场分支
+    // 共用；退场分支的 tc 是裁决后的同一对象（intent/arguments 不变）。
+    const renderApprovalCard = (closing: boolean) => {
+      // 插件开启：审批上提 composer 冷静条，流内静默
       if (slotCore.getSingle('workspace.chat.composerAbove')) {
         return null;
       }
-      const summary = toolHumanLabel(tc);
+
+      const summary = tc.intent
+        ? stripReferencesToPlainText(tc.intent)
+        : toolHumanLabel(tc);
       const techFull = extractToolCommand(tc.arguments || '');
       const tech =
         techFull && techFull !== summary
@@ -243,7 +258,6 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
       const mid = msgId || pendingApprovalMsgId;
       const approvalWired = Boolean(onApprovalAllow && onApprovalDeny);
 
-      // 服务端下发的倒计时与策略权威元数据 (SSOT)：approvalMeta.metadata 透传
       const rawMeta: Record<string, unknown> =
         tc.approvalMeta?.metadata ??
         (tc.approvalMeta as unknown as Record<string, unknown> | undefined) ??
@@ -290,6 +304,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
               timeoutPolicy={timeoutPolicy}
               actionHint={actionHint}
               isPaused={isPaused}
+              closing={closing}
               onAllow={() => {
                 if (tc.id && mid) onApprovalAllow!(tc.id, mid, false);
               }}
@@ -313,11 +328,11 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
           )}
         </div>
       );
-    }
+    };
 
-    // 注：关联子 agent 的分派行不会到达本组件——R4b 起分派在组合根
-    // （MessageToolCallsSection）已被提取为独立分派卡；未命中 agent 的
-    // 分派调用按普通工具行在此呈现（降级口径与 findAgentForTool 一致）。
+    if (approvalExit.visible) {
+      return renderApprovalCard(approvalExit.closing);
+    }
 
     const defaultOpen = isToolRowDefaultOpen(tc);
     const human = toolHumanLabel(tc);
@@ -329,57 +344,13 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
         : STATUS_WORD.backgrounded
       : toolStatusZh(tc.status);
     const bodyId = toolResultBodyId(tc.id);
-    const filePath = extractFilePathFromToolArgs(tc.arguments || '');
-    const n = (tc.name || '').toLowerCase();
-    const pathClickable =
-      Boolean(filePath) &&
-      (isEditToolName(n) ||
-        n.includes('read') ||
-        n.includes('write') ||
-        n.includes('edit') ||
-        n.includes('glob') ||
-        // E1 §6.3：file_stat / list_dir 路径同入可点集合——stat 点开
-        // 文件查看器、list_dir 点开 files 面板定位目录（与 read 同路）
-        n === 'file_stat' ||
-        n.includes('stat') ||
-        n === 'list_dir' ||
-        n.includes('listdir'));
-    const pathLabel = filePath ? toolPathDisplayName(filePath) : '';
     const targetDiff = resolvedDiffs[0];
-    // 统计与改道共用一处派生：有可发布 diff 时按解析列表计；
-    // 结构化 diffs 存在但全部不可发布时不回退文本统计（不可改道的
-    // 行不贴统计）；其余沿 toolDiffLineStats 的输出文本口径。
-    const diffStatsRaw =
-      resolvedDiffs.length > 0
-        ? diffStatsFromFileDiffs(resolvedDiffs)
-        : tc.diffs && tc.diffs.length > 0
-          ? null
-          : toolDiffLineStats(tc);
-    const diffStats = diffStatsRaw ? normalizeToolDiffStat(diffStatsRaw) : null;
-    const diffStatLabel = diffStats ? formatToolDiffStat(diffStats) : '';
 
-    // E1 §7：改道行——政策判 side-diff 且宿主提供 onOpenDiff 且有
-    // 解析目标时整行改道；宿主未提供 onOpenDiff 时诚实降级为静态行
+    // E1 §7：改道行政策判 side-diff 且宿主提供 onOpenDiff
     const sideDiffActive =
       expansionPolicy === 'side-diff' &&
       Boolean(onOpenDiff) &&
       Boolean(targetDiff);
-
-    const rowAriaLabel = [
-      human,
-      statusZhText,
-      diffStatLabel || null,
-      canToggle ? (isOpen ? '已展开' : '已折叠') : null,
-      canToggle
-        ? isOpen
-          ? '按 Enter 或空格折叠'
-          : '按 Enter 或空格展开'
-        : sideDiffActive
-          ? t('tool.toolRow.viewDiffInPanel')
-          : null,
-    ]
-      .filter(Boolean)
-      .join('，');
 
     return (
       <div
@@ -392,7 +363,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
               : tone === 'pending'
                 ? `${styles.isPending} is-pending`
                 : ''
-        } ${isOpen ? `${styles.isOpen} is-open` : `${styles.isCollapsed} is-collapsed`} ${
+        } ${effectiveIsOpen ? `${styles.isOpen} is-open` : `${styles.isCollapsed} is-collapsed`} ${
           isFlipping ? `${styles.inPlaceFlipping} is-in-place-flipping` : ''
         }${rowEntrance.entering ? ` ${styles.toolRowEnter}` : ''} tool-row`}
         key={rowKey}
@@ -412,32 +383,24 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
         data-tool-status={statusZhText}
         data-tool-backgrounded={backgroundActive ? 'true' : undefined}
         data-default-collapsed={defaultOpen ? 'false' : 'true'}
-        data-diff-stat={diffStatLabel || undefined}
         data-in-place-replace={shouldReplace ? 'true' : undefined}
         data-in-place-flipping={isFlipping ? 'true' : undefined}
-        data-expanded={isOpen ? 'true' : 'false'}
+        data-expanded={effectiveIsOpen ? 'true' : 'false'}
         aria-busy={running || undefined}
       >
         <ToolCallHeader
           tc={tc}
-          human={human}
-          statusZh={statusZhText}
-          running={running}
-          isOpen={isOpen}
-          canToggle={canToggle}
-          durationStr={durationStr}
-          diffStats={diffStats}
-          pathClickable={pathClickable}
-          filePath={filePath ?? ''}
-          pathLabel={pathLabel}
-          rowAriaLabel={rowAriaLabel}
+          isOpen={effectiveIsOpen}
+          canToggle={effectiveCanToggle}
           bodyId={bodyId}
           targetDiff={targetDiff}
           sideDiff={sideDiffActive}
-          onToggleTool={handleToggle}
+          onToggleTool={handleToggleWrapped}
           onOpenPath={onOpenPath}
           onOpenDiff={onOpenDiff}
+          onOpenTerminal={onOpenTerminal}
         />
+        {/* 转后台静态条：无耗时跳秒走字 */}
         {backgroundPlaceholder ? (
           <div
             className={styles.batchBar}
@@ -448,12 +411,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
             <span className={styles.batchBarLabel}>
               {backgroundSettledLocally
                 ? STATUS_WORD.stopped
-                : t('tool.background.rowStatus', {
-                    status: STATUS_WORD.backgrounded,
-                    duration: formatDurationLabel(
-                      backgroundElapsedMs ?? backgroundPlaceholder.elapsedMs
-                    ),
-                  })}
+                : STATUS_WORD.backgrounded}
             </span>
             {!backgroundSettledLocally ? (
               <Button
@@ -473,9 +431,9 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
             ) : null}
           </div>
         ) : null}
-        {canToggle ? (
+        {effectiveCanToggle ? (
           <div
-            className={`${styles.toolBody}${isOpen ? ' ' + styles.expanded : ''}`}
+            className={`${styles.toolBody}${effectiveIsOpen ? ' ' + styles.expanded : ''}`}
             onTransitionEnd={handleAccordionEnd}
           >
             <div className={styles.toolBodyInner}>

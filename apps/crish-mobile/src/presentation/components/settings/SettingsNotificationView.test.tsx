@@ -48,6 +48,7 @@ function makeVm(overrides: Partial<SettingsVm> = {}): SettingsVm {
       error: true,
       deviceOffline: false,
     },
+    webSearchEnabled: false,
     notifyPermission: 'granted',
     notifySwitchGate: { enabled: true, hint: null },
     setNotifyMasterOn: jest.fn(),

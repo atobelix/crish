@@ -35,6 +35,11 @@ export interface ToolCallOutputPaneProps {
   isSingleCard?: boolean;
   onOpenDiff?: (diff: FileDiff) => void;
   onOpenTerminal?: () => void;
+  onOpenPath?: (
+    filePath: string,
+    loc?: { line?: number; endLine?: number; col?: number }
+  ) => void;
+  onOpenFile?: (filePath: string) => void;
 }
 
 export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
@@ -48,9 +53,15 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   diffs,
   images = [],
   isTruncated = false,
+  // 未消费统计（调用方已算）：eslint no-unused-vars 要求 _ 前缀；
+  // 渲染该统计时恢复原名（2026-11-06 最小解除阻塞，语义不变）
+  totalLines: _totalLines,
+  totalBytes: _totalBytes,
   isSingleCard = false,
   onOpenDiff,
   onOpenTerminal,
+  onOpenPath,
+  onOpenFile,
 }) => {
   // 复制反馈瞬态位：定时器由 useTransientFlag 统一持有并在卸载时清除
   const { flag: copied, trigger: triggerCopied } = useTransientFlag(2000);
@@ -332,7 +343,35 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
           fileStat ? (
             <div className={styles.fileStatCard}>
               <div className={styles.fileStatRow}>
-                <div className={styles.fileStatTitle}>{fileStat.path}</div>
+                {onOpenPath || onOpenFile ? (
+                  <Button
+                    type="button"
+                    variant="unstyled"
+                    className={styles.fileStatTitle}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontFamily: 'inherit',
+                      color: 'inherit',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenPath) {
+                        onOpenPath(fileStat.path);
+                      } else {
+                        onOpenFile?.(fileStat.path);
+                      }
+                    }}
+                    aria-label={`打开文件 ${fileStat.path}`}
+                  >
+                    {fileStat.path}
+                  </Button>
+                ) : (
+                  <div className={styles.fileStatTitle}>{fileStat.path}</div>
+                )}
                 {isSingleCard ? (
                   <Tooltip content={copied ? '已复制！' : '复制文件信息'}>
                     <Button
@@ -383,10 +422,41 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 <div key={idx} className={styles.grepMatchRow}>
                   <span className={styles.grepLineFull}>
                     {m.filePath ? (
-                      <span className={styles.grepMatchLoc}>
-                        {m.filePath}
-                        {m.line ? `:${m.line}:` : ':'}
-                      </span>
+                      onOpenPath || onOpenFile ? (
+                        <Button
+                          type="button"
+                          variant="unstyled"
+                          className={styles.grepMatchLoc}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            fontFamily: 'inherit',
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenPath) {
+                              onOpenPath(
+                                m.filePath,
+                                m.line ? { line: m.line } : undefined
+                              );
+                            } else {
+                              onOpenFile?.(m.filePath);
+                            }
+                          }}
+                          aria-label={`跳转至 ${m.filePath}${m.line ? ` 第 ${m.line} 行` : ''}`}
+                        >
+                          {m.filePath}
+                          {m.line ? `:${m.line}:` : ':'}
+                        </Button>
+                      ) : (
+                        <span className={styles.grepMatchLoc}>
+                          {m.filePath}
+                          {m.line ? `:${m.line}:` : ':'}
+                        </span>
+                      )
                     ) : null}
                     <span className={styles.grepMatchText}>{m.text}</span>
                   </span>

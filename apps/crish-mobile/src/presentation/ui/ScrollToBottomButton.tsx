@@ -27,21 +27,18 @@ export interface ScrollToBottomButtonProps {
   onPress: () => void;
   /** 底部偏移（Tab 页传 tabBar 高度 + 安全区；详情页传 overlayHeight + 8） */
   bottomOffset?: number;
-  /** 水平对齐模式：'left' 为输入框左上角（默认对齐 16dp），'center' 为通用居中 */
-  alignment?: 'left' | 'center';
+  /** 水平对齐模式：'right' 为输入框右上角（默认，右撇子首选），'left' 为左上角，'center' 为通用居中 */
+  alignment?: 'left' | 'center' | 'right';
   /** 左侧偏移（alignment='left' 时生效，缺省为 insets.left + theme.space.lg） */
   leftOffset?: number;
+  /** 右侧偏移（alignment='right' 时生效，缺省为 insets.right + theme.space.lg） */
+  rightOffset?: number;
   /**
    * 软键盘弹起时是否自动原地淡出隐藏（打字解耦铁律，2026-11-04 用户裁决）：
    * 键盘升起时按钮在原位平滑淡出并禁用触摸，绝不上推遮挡视觉与输入；
    * 缺省开启（true）；收起后平滑恢复。
    */
   hideOnKeyboard?: boolean;
-  /**
-   * @deprecated 已废弃。根据用户裁决，打字态下按钮绝不上推，统一走原地静默淡出。
-   * @see hideOnKeyboard
-   */
-  followKeyboard?: boolean;
   testID?: string;
 }
 
@@ -51,10 +48,10 @@ const BUTTON_RADIUS = BUTTON_SIZE / 2;
 export function ScrollToBottomButton({
   onPress,
   bottomOffset,
-  alignment = 'left',
+  alignment = 'right',
   leftOffset,
+  rightOffset,
   hideOnKeyboard = true,
-  followKeyboard: _deprecatedFollowKeyboard,
   testID,
 }: ScrollToBottomButtonProps) {
   const theme = useTheme();
@@ -63,6 +60,7 @@ export function ScrollToBottomButton({
   const keyboard = useReanimatedKeyboardAnimation();
   const baseBottom = bottomOffset ?? insets.bottom + 24;
   const baseLeft = leftOffset ?? insets.left + theme.space.lg;
+  const baseRight = rightOffset ?? insets.right + theme.space.lg;
 
   const hitSlop = Math.max(0, (theme.size.touch - BUTTON_SIZE) / 2);
 
@@ -86,9 +84,11 @@ export function ScrollToBottomButton({
   });
 
   const positionStyle: ViewStyle =
-    alignment === 'left'
-      ? { bottom: baseBottom, left: baseLeft }
-      : { bottom: baseBottom, alignSelf: 'center' };
+    alignment === 'right'
+      ? { bottom: baseBottom, right: baseRight }
+      : alignment === 'left'
+        ? { bottom: baseBottom, left: baseLeft }
+        : { bottom: baseBottom, alignSelf: 'center' };
 
   return (
     <Animated.View

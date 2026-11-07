@@ -1,4 +1,6 @@
 // 账号 store：设备目标选择与登出复位。
+// 2026-11-05 目标主权裁决：targetDeviceId 只由用户显式动作改变——
+// setDevices 只更新设备表（旧自动选靶断言已随策略删除，逆断言钉死）。
 import { accountStore } from './accountStore';
 import type { AccountDevice } from '@/domain/types/account';
 
@@ -21,7 +23,7 @@ beforeEach(() => {
 });
 
 describe('accountStore', () => {
-  it('首次设备列表自动选择在线桌面', () => {
+  it('目标主权：无目标时发现到在线桌面也不自动认领（保持 null，本地模式生效）', () => {
     accountStore
       .getState()
       .setDevices([
@@ -29,33 +31,34 @@ describe('accountStore', () => {
         device('desk-off', false),
         device('desk-on', true),
       ]);
-    expect(accountStore.getState().targetDeviceId).toBe('desk-on');
+    expect(accountStore.getState().targetDeviceId).toBeNull();
+    expect(accountStore.getState().devices).toHaveLength(3);
   });
 
-  it('当前目标离线时切换到另一台在线桌面', () => {
-    accountStore.getState().setDevices([device('desk-a', false)]);
-    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
+  it('目标主权：目标离线时另一台桌面上线，目标不被心跳改写（不静默跳设备）', () => {
+    accountStore.getState().selectTarget('desk-a');
     accountStore
       .getState()
       .setDevices([device('desk-a', false), device('desk-b', true)]);
-    expect(accountStore.getState().targetDeviceId).toBe('desk-b');
+    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
   });
 
-  it('没有在线桌面时保留已存在目标（展示离线态）', () => {
+  it('目标主权：目标离线时保持目标（呈现离线态，资格门去抖裁决拆线）', () => {
+    accountStore.getState().selectTarget('desk-a');
     accountStore.getState().setDevices([device('desk-a', true)]);
     accountStore.getState().setDevices([device('desk-a', false)]);
     expect(accountStore.getState().targetDeviceId).toBe('desk-a');
   });
 
   it('成功但为空的发现不清既有目标（CON-1 空发现保护）', () => {
+    accountStore.getState().selectTarget('desk-a');
     accountStore.getState().setDevices([device('desk-a', true)]);
-    expect(accountStore.getState().targetDeviceId).toBe('desk-a');
     accountStore.getState().setDevices([]);
     expect(accountStore.getState().devices).toEqual([]);
     expect(accountStore.getState().targetDeviceId).toBe('desk-a');
   });
 
-  it('本地钉住：发现轮次不改选远端，目标恒为 null（选本机不被心跳撤销）', () => {
+  it('本地钉住：发现轮次不产生远端目标，钉住态保持', () => {
     accountStore.getState().selectLocalTarget();
     expect(accountStore.getState().localTargetPinned).toBe(true);
     accountStore.getState().setDevices([device('desk-a', true)]);
@@ -65,7 +68,7 @@ describe('accountStore', () => {
     expect(accountStore.getState().localTargetPinned).toBe(true);
   });
 
-  it('显式改选远端解钉：selectTarget 后目标与自动选靶恢复', () => {
+  it('显式选择远端：selectTarget 是目标唯一变更通道（解钉生效）', () => {
     accountStore.getState().selectLocalTarget();
     accountStore.getState().selectTarget('desk-a');
     expect(accountStore.getState().localTargetPinned).toBe(false);
