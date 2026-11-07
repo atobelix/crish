@@ -4,7 +4,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { useFilePreviewVm, type FilePreviewVm } from './useFilePreviewVm';
 import { filesStore } from '@/domain/store/filesStore';
 import { FilesCommandError } from '@/adapters/wiring/filesRepository';
-import type { FilesContext } from '@/adapters/wiring/filesWiring';
+import type { FilesContext } from '@/adapters/RemoteControlFacade';
 import type { FileEntry } from '@/domain/types/domain';
 
 let latest: FilePreviewVm | null = null;

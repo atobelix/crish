@@ -21,7 +21,11 @@ import {
   ensureObservationWiring,
   getObservationWiring,
 } from '@/adapters/wiring/observationWiring';
-import { getSessionOpsContext } from '@/adapters/wiring/sessionOpsWiring';
+import {
+  getSessionOpsContext,
+  remoteControlFacade,
+  type SessionOpsRepository,
+} from '@/adapters/RemoteControlFacade';
 import { buildSessionMarkdown } from '@/domain/pure/sessionMarkdown';
 import type { SessionSummary } from '@/domain/store/sessionReducers';
 import { Dialog, useToast } from '@/presentation/ui';
@@ -96,22 +100,17 @@ export function useSessionOpsController(
   const runOp = useCallback(
     async (
       key: string,
-      action: (
-        repository: NonNullable<
-          ReturnType<typeof getSessionOpsContext>
-        >['repository']
-      ) => Promise<unknown>
+      action: (repository: SessionOpsRepository) => Promise<unknown>
     ): Promise<boolean> => {
       if (busyRef.current) return false;
-      const ctx = getSessionOpsContext();
-      if (!ctx) {
+      if (!remoteControlFacade.isAvailable() && !getSessionOpsContext()) {
         showToast('未连接桌面，无法执行操作', 'error');
         return false;
       }
       busyRef.current = true;
       setBusyKey(key);
       try {
-        await action(ctx.repository);
+        await action(remoteControlFacade.sessionOps);
         await refreshSessions();
         return true;
       } finally {
@@ -241,8 +240,7 @@ export function useSessionOpsController(
       setSheetOpen(false);
       void (async () => {
         if (busyRef.current) return;
-        const ctx = getSessionOpsContext();
-        if (!ctx) {
+        if (!remoteControlFacade.isAvailable() && !getSessionOpsContext()) {
           showToast('未连接桌面，无法导出', 'error');
           return;
         }
@@ -253,11 +251,12 @@ export function useSessionOpsController(
           let after = 0;
           let hasMore = true;
           for (let page = 0; hasMore && page < EXPORT_MAX_PAGES; page += 1) {
-            const result = await ctx.monitor.readSessionEvents({
-              sessionId: session.id,
-              afterSequence: after,
-              maxEvents: EXPORT_PAGE_SIZE,
-            });
+            const result =
+              await remoteControlFacade.sessionOps.monitor.readSessionEvents({
+                sessionId: session.id,
+                afterSequence: after,
+                maxEvents: EXPORT_PAGE_SIZE,
+              });
             events.push(...result.events);
             after = result.nextAfterSequence;
             hasMore = result.hasMore;

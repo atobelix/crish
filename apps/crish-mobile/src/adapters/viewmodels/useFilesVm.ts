@@ -26,8 +26,8 @@ import { joinRelPath, workspaceNameOf } from '@/domain/pure/workspacePath';
 import {
   getFilesContext,
   type FilesContext,
-} from '@/adapters/wiring/filesWiring';
-import { FilesCommandError } from '@/adapters/wiring/filesRepository';
+  FilesCommandError,
+} from '@/adapters/RemoteControlFacade';
 import {
   getObservationWiring,
   ensureObservationWiring,
@@ -46,7 +46,16 @@ const IDLE_DIR_STATE: DirLoadState = { status: 'idle', entries: [] };
 
 /** 异常 → 协议错误码（F4 附录 B 映射面在 UI 层；未知异常 → internal） */
 export function errorCodeOf(e: unknown): string {
-  return e instanceof FilesCommandError ? e.code : 'internal';
+  if (e instanceof FilesCommandError) return e.code;
+  if (
+    typeof e === 'object' &&
+    e !== null &&
+    'code' in e &&
+    typeof (e as { code: unknown }).code === 'string'
+  ) {
+    return (e as { code: string }).code;
+  }
+  return 'internal';
 }
 
 /** 首次进入 / 重连后自动装载（bootstrap）用工作区选择：active 优先，无则首个 */

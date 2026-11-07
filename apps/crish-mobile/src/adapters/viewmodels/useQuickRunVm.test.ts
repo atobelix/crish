@@ -15,7 +15,7 @@ import {
   resetQuickRunContextForTest,
   RunTaskCommandError,
   type QuickRunContext,
-} from '@/adapters/quickRunWiring';
+} from '@/adapters/RemoteControlFacade';
 import type { RunTaskParams, RunTaskResult } from '@crish/shared-types';
 import {
   recentSessionsOf,

@@ -42,16 +42,14 @@ import {
   useSettingsStore,
 } from '@/adapters/hooks/useAppStore';
 import { useFilesStore } from '@/adapters/hooks/useFilesStore';
-import { FilesCommandError } from '@/adapters/wiring/filesRepository';
 import {
+  FilesCommandError,
+  ModelsCommandError,
   getFilesContext,
   type FilesContext,
-} from '@/adapters/wiring/filesWiring';
-import { ModelsCommandError } from '@/adapters/wiring/modelsRepository';
-import {
   getModelsContext,
   type ModelsContext,
-} from '@/adapters/wiring/modelsWiring';
+} from '@/adapters/RemoteControlFacade';
 import { modelRefKey } from '@/domain/repositories/modelCommands';
 import { selectEffectiveChatMode } from '@/domain/store/connectionStore';
 
@@ -117,9 +115,18 @@ export interface ComposerContextVm {
 }
 
 function errorCodeOf(e: unknown): string {
-  return e instanceof FilesCommandError || e instanceof ModelsCommandError
-    ? e.code
-    : 'internal';
+  if (e instanceof FilesCommandError || e instanceof ModelsCommandError) {
+    return e.code;
+  }
+  if (
+    typeof e === 'object' &&
+    e !== null &&
+    'code' in e &&
+    typeof (e as { code: unknown }).code === 'string'
+  ) {
+    return (e as { code: string }).code;
+  }
+  return 'internal';
 }
 
 // ── 模型面共享编排（M2）────────────────────────────────────────────────

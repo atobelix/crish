@@ -50,7 +50,7 @@ function makeRequest(
     toolCallId: 'call-1',
     toolName: 'write_file',
     parameters: { path: 'a.ts' },
-    summary: 'write a.ts',
+    intent: 'write a.ts',
     toolMetadata: {},
     ...overrides,
   };
@@ -626,7 +626,7 @@ describe('approvalWiring：对账（resume 后 pending 同步，F2 §4.1）', ()
     )!;
     expect(engineItem.dangerLevel).toBe(2); // 桌面推导不重算（M6 §4.2.2）
     expect(engineItem.receivedAtMs).toBe(T0); // 对账取引擎时间戳（F2 §3.3）
-    expect(engineItem.request.summary).toBe('高危写入');
+    expect(engineItem.request.intent).toBe('高危写入');
     expect(
       pending.find((p) => p.request.toolCallId === 'local-only')
     ).toBeUndefined();
@@ -710,9 +710,9 @@ describe('approvalWiring：对账（resume 后 pending 同步，F2 §4.1）', ()
     expect(item.status).toBe('pending');
     expect(item.decisionStatus).toBe('idle');
 
-    // 缺省兜底：summary → toolName；arbiter/dangerLevel 非规范值归一
+    // 缺省兜底：intent → toolName；arbiter/dangerLevel 非规范值归一
     const bare = mapReconcileApprovalItem(makePending('c10'), t);
-    expect(bare.request.summary).toBe('write_file');
+    expect(bare.request.intent).toBe('write_file');
     expect(bare.request.sessionId).toBe('');
     expect(bare.arbiter).toBe('user');
     expect(bare.dangerLevel).toBe(1);

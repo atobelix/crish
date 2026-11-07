@@ -249,7 +249,7 @@ export function mapReconcileApprovalItem(
     toolCallId: pa.toolCallId,
     toolName: pa.toolName,
     parameters: {},
-    summary: pa.summary ?? pa.toolName,
+    intent: pa.summary ?? pa.toolName,
     toolMetadata: {},
   };
   return {

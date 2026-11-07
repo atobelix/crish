@@ -14,11 +14,16 @@ import { useSessionComposer } from './useSessionComposer';
 
 const mockRunTask = jest.fn();
 
-jest.mock('@/adapters/quickRunWiring', () => {
-  const actual = jest.requireActual('@/adapters/quickRunWiring');
+jest.mock('@/adapters/RemoteControlFacade', () => {
+  const actual = jest.requireActual('@/adapters/RemoteControlFacade');
   return {
     ...actual,
     getQuickRunContext: () => ({ repository: { runTask: mockRunTask } }),
+    remoteControlFacade: {
+      ...actual.remoteControlFacade,
+      isAvailable: () => true,
+      runTask: mockRunTask,
+    },
   };
 });
 

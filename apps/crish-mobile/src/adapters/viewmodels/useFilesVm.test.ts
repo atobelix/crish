@@ -9,7 +9,7 @@ import {
   FILE_ROW_HEIGHT,
 } from './useFilesVm';
 import { filesStore } from '@/domain/store/filesStore';
-import { FilesCommandError } from '@/adapters/wiring/filesRepository';
+import { FilesCommandError } from '@/adapters/RemoteControlFacade';
 import type { WorkspaceEntry } from '@crish/shared-types';
 
 function workspace(root: string, active = false): WorkspaceEntry {

@@ -24,11 +24,12 @@ import {
   runTaskErrorTextOf,
   RunTaskCommandError,
   type QuickRunContext,
-} from '@/adapters/quickRunWiring';
+} from '@/adapters/RemoteControlFacade';
 import { selectEffectiveChatMode } from '@/domain/store/connectionStore';
 import { haptics } from '@/adapters/platform/haptics';
 import type { RunTaskParams, PermissionMode } from '@crish/shared-types';
 import { settingsStore } from '@/domain/store/settingsStore';
+import { filesStore } from '@/domain/store/filesStore';
 import { runPermissionMode } from '@/domain/pure/permissionMode';
 import {
   buildRunPayload,
@@ -65,12 +66,14 @@ export function recentSessionsOf(
 export function runTaskParamsOf(
   prompt: string,
   sessionId: string | null,
-  permissionMode: PermissionMode
+  permissionMode: PermissionMode,
+  cwd?: string
 ): RunTaskParams {
   return {
     prompt,
     ...(sessionId !== null ? { sessionId } : {}),
     permissionMode,
+    ...(cwd ? { cwd } : {}),
   };
 }
 
@@ -209,7 +212,8 @@ export function useQuickRunVm(
       const permissionMode = runPermissionMode(
         settingsStore.getState().get('composer').permissionMode
       );
-      dispatch(runTaskParamsOf(text, selectedSessionId, permissionMode));
+      const cwd = filesStore.getState().activeWorkspaceRoot ?? undefined;
+      dispatch(runTaskParamsOf(text, selectedSessionId, permissionMode, cwd));
     },
     [dispatch, selectedSessionId]
   );

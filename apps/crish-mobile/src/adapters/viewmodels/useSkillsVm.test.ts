@@ -7,7 +7,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { SkillEntry } from '@crish/shared-types';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { SkillsCommandError } from '@/adapters/wiring/skillsRepository';
-import type { SkillsContext } from '@/adapters/wiring/skillsWiring';
+import type { SkillsContext } from '@/adapters/RemoteControlFacade';
 import { useSkillsVm } from './useSkillsVm';
 
 const SKILLS: SkillEntry[] = [

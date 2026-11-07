@@ -21,7 +21,7 @@ import {
 import {
   getFilesContext,
   type FilesContext,
-} from '@/adapters/wiring/filesWiring';
+} from '@/adapters/RemoteControlFacade';
 import { useFilesStore } from '@/adapters/hooks/useFilesStore';
 import { errorCodeOf } from './useFilesVm';
 import type { ReadFileResult } from '@crish/shared-types';

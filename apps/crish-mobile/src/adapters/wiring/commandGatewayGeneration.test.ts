@@ -23,22 +23,21 @@ import {
   ensureObservationWiring,
   resetObservationWiringForTest,
 } from './observationWiring';
-import { getModelsContext, resetModelsContextForTest } from './modelsWiring';
-import { getSkillsContext, resetSkillsContextForTest } from './skillsWiring';
-import { getFilesContext, resetFilesContextForTest } from './filesWiring';
 import {
+  getModelsContext,
+  resetModelsContextForTest,
+  getSkillsContext,
+  resetSkillsContextForTest,
+  getFilesContext,
+  resetFilesContextForTest,
   getSessionOpsContext,
   resetSessionOpsContextForTest,
-} from './sessionOpsWiring';
-import { GatewayModelsRepository } from './modelsRepository';
-import {
   getQuickRunContext,
   resetQuickRunContextForTest,
-} from '@/adapters/quickRunWiring';
-import {
   getRunControlContext,
   resetRunControlContextForTest,
-} from '@/adapters/runControlWiring';
+} from '@/adapters/RemoteControlFacade';
+import { GatewayModelsRepository } from './modelsRepository';
 
 interface SentFrame {
   kind: string;

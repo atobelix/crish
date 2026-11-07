@@ -11,9 +11,11 @@ import { connectionStore } from '@/domain/store/connectionStore';
 import { filesStore } from '@/domain/store/filesStore';
 import { modelsStore } from '@/domain/store/modelsStore';
 import { settingsStore } from '@/domain/store/settingsStore';
-import type { FilesContext } from '@/adapters/wiring/filesWiring';
-import { ModelsCommandError } from '@/adapters/wiring/modelsRepository';
-import type { ModelsContext } from '@/adapters/wiring/modelsWiring';
+import {
+  ModelsCommandError,
+  type FilesContext,
+  type ModelsContext,
+} from '@/adapters/RemoteControlFacade';
 
 const WS_A: WorkspaceEntry = {
   root: 'C:\\work\\alpha',

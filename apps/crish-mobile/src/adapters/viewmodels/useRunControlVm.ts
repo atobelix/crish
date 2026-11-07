@@ -18,7 +18,7 @@ import {
   runControlErrorTextOf,
   RunControlCommandError,
   type RunControlContext,
-} from '@/adapters/runControlWiring';
+} from '@/adapters/RemoteControlFacade';
 import type { RunControlLevel } from '@crish/shared-types';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────

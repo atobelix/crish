@@ -15,7 +15,8 @@ import {
   RUN_TASK_ERROR_INTERNAL,
   runTaskErrorTextOf,
   RunTaskCommandError,
-} from '@/adapters/quickRunWiring';
+  remoteControlFacade,
+} from '@/adapters/RemoteControlFacade';
 import {
   buildRunPayload,
   checkRunPayloadSizes,
@@ -26,6 +27,7 @@ import {
   peekComposerDraft,
   saveComposerDraft,
 } from '@/domain/store/composerDraftStore';
+import { filesStore } from '@/domain/store/filesStore';
 import type { RunTaskParams } from '@crish/shared-types';
 
 export interface SessionComposerFeedback {
@@ -58,13 +60,13 @@ export interface SessionComposerVm {
 }
 
 export function useSessionComposer(
-  sessionId: string,
-  onSent?: (prompt: string, runId: string) => void
+  sessionId: string | null,
+  onSent?: (prompt: string, runId: string, createdSessionId?: string) => void
 ): SessionComposerVm {
   const connected = useConnectionStore(
     (s) => selectEffectiveChatMode(s.phase) === 'remote'
   );
-  const draftKey = `remote:${sessionId}`;
+  const draftKey = `remote:${sessionId || 'draft'}`;
   const [prompt, setPromptState] = useState(() => peekComposerDraft(draftKey));
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<SessionComposerFeedback>({
@@ -111,8 +113,7 @@ export function useSessionComposer(
     async (rawText: string): Promise<boolean> => {
       const text = rawText.trim();
       if (busyRef.current || !connected || text.length === 0) return false;
-      const context = getQuickRunContext();
-      if (!context) {
+      if (!remoteControlFacade.isAvailable() && !getQuickRunContext()) {
         setFeedback({
           kind: 'error',
           message: runTaskErrorTextOf('transport.closed'),
@@ -123,18 +124,29 @@ export function useSessionComposer(
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
       try {
-        const result = await context.repository.runTask({
+        const isDraft = !sessionId || sessionId === 'draft';
+        const cwd = filesStore.getState().activeWorkspaceRoot || undefined;
+        const context = getQuickRunContext();
+        const runner =
+          context?.repository?.runTask ??
+          remoteControlFacade.runTask.bind(remoteControlFacade);
+        const result = await runner({
           prompt: text,
-          sessionId,
+          ...(isDraft ? {} : { sessionId }),
           permissionMode: runPermissionMode(
             settingsStore.getState().get('composer').permissionMode
           ),
+          ...(cwd ? { cwd } : {}),
         });
         clearPrompt();
         // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
         haptics.success();
         setFeedback({ kind: 'success', message: null });
-        onSent?.(text, result.runId);
+        if (isDraft) {
+          onSent?.(text, result.runId, result.sessionId);
+        } else {
+          onSent?.(text, result.runId);
+        }
         return true;
       } catch (error) {
         const code =
@@ -172,8 +184,7 @@ export function useSessionComposer(
         setFeedback({ kind: 'error', message: sizeCheck.message });
         return false;
       }
-      const context = getQuickRunContext();
-      if (!context) {
+      if (!remoteControlFacade.isAvailable() && !getQuickRunContext()) {
         setFeedback({
           kind: 'error',
           message: runTaskErrorTextOf('transport.closed'),
@@ -184,9 +195,15 @@ export function useSessionComposer(
       setBusy(true);
       setFeedback({ kind: 'sending', message: null });
       try {
-        const result = await context.repository.runTask({
+        const isDraft = !sessionId || sessionId === 'draft';
+        const cwd = filesStore.getState().activeWorkspaceRoot || undefined;
+        const context = getQuickRunContext();
+        const runner =
+          context?.repository?.runTask ??
+          remoteControlFacade.runTask.bind(remoteControlFacade);
+        const result = await runner({
           prompt: payload.prompt,
-          sessionId,
+          ...(isDraft ? {} : { sessionId }),
           permissionMode: runPermissionMode(
             settingsStore.getState().get('composer').permissionMode
           ),
@@ -194,6 +211,7 @@ export function useSessionComposer(
             RunTaskParams['content']
           >,
           hasImages: payload.hasImages,
+          ...(cwd ? { cwd } : {}),
         });
         clearPrompt();
         // 发送被受理 → 成功触感与成功反馈同帧（触觉门面，手感基建批）
@@ -202,7 +220,13 @@ export function useSessionComposer(
         // 本地 echo 只回显用户键入的文本：纯附件发送无文本可回显，
         // 消息经事件流落窗（附件块正文即 prompt，回显会与流内消息重复）
         const text = rawText.trim();
-        if (text.length > 0) onSent?.(text, result.runId);
+        if (text.length > 0) {
+          if (isDraft) {
+            onSent?.(text, result.runId, result.sessionId);
+          } else {
+            onSent?.(text, result.runId);
+          }
+        }
         return true;
       } catch (error) {
         const code =

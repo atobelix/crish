@@ -11,11 +11,8 @@ import {
   resetRunControlContextForTest,
   RunControlCommandError,
   type RunControlContext,
-} from '@/adapters/runControlWiring';
-import type {
-  RunControlParams,
-  RunControlResult,
-} from '@crish/shared-types';
+} from '@/adapters/RemoteControlFacade';
+import type { RunControlParams, RunControlResult } from '@crish/shared-types';
 import {
   RUN_CONTROL_LEVEL_OF_ACTION,
   runControlSendingText,

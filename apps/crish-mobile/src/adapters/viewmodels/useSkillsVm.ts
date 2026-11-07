@@ -11,11 +11,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SkillEntry } from '@crish/shared-types';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
-import { SkillsCommandError } from '@/adapters/wiring/skillsRepository';
 import {
+  SkillsCommandError,
   getSkillsContext,
   type SkillsContext,
-} from '@/adapters/wiring/skillsWiring';
+} from '@/adapters/RemoteControlFacade';
 
 export type SkillsStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
