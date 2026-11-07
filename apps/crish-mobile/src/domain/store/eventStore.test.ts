@@ -203,3 +203,68 @@ describe('eventStore 属主盖章（M7 设备分区不变量）', () => {
     expect(eventStore.getState().droppedWriteCount).toBe(0);
   });
 });
+
+describe('ingestBatch（R4 展示合帧单事务落店）', () => {
+  it('批量帧一次通知落店：订阅者只收到一次，条目按序齐全', () => {
+    const listener = jest.fn();
+    const unsub = eventStore.subscribe(listener);
+    eventStore.getState().ingestBatch(
+      's-1',
+      [
+        frame({ type: 'message-delta', sequence: 1, text: 'a' }),
+        frame({ type: 'message-delta', sequence: 2, text: 'b' }),
+        frame({ type: 'message-delta', sequence: 3, text: 'c' }),
+      ],
+      true,
+      NOW
+    );
+    expect(listener).toHaveBeenCalledTimes(1);
+    const entries = windowOf('s-1').entries;
+    expect(entries.map((e) => e['text'])).toEqual(['a', 'b', 'c']);
+    unsub();
+  });
+
+  it('preview 批量不推进游标；空批量不产生通知', () => {
+    const listener = jest.fn();
+    const unsub = eventStore.subscribe(listener);
+    eventStore.getState().ingestBatch(
+      's-1',
+      [frame({ type: 'message-delta', sequence: 7, text: 'a' })],
+      true,
+      NOW
+    );
+    expect(lastSeqOf('s-1')).toBe(0);
+    eventStore.getState().ingestBatch('s-1', [], true, NOW);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsub();
+  });
+
+  it('同 seq 帧批量内覆盖（appendFeed 语义不变）', () => {
+    eventStore.getState().ingestBatch(
+      's-1',
+      [
+        frame({ type: 'message-delta', sequence: 5, text: 'old' }),
+        frame({ type: 'message-delta', sequence: 5, text: 'new' }),
+      ],
+      true,
+      NOW
+    );
+    const entries = windowOf('s-1').entries;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['text']).toBe('new');
+  });
+
+  it('盖章不符批量整体丢弃（M7 与 ingest 同口径）', () => {
+    const store = eventStore.getState();
+    store.stampOwner('dev-a');
+    store.ingestBatch(
+      's-1',
+      [frame({ type: 'message-delta', sequence: 1, text: 'a' })],
+      true,
+      NOW,
+      'dev-b'
+    );
+    expect(windowOf('s-1').entries).toHaveLength(0);
+    expect(eventStore.getState().droppedWriteCount).toBe(1);
+  });
+});

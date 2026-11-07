@@ -33,6 +33,7 @@ import { extractEnvelope, mapDeviceFrame } from '@/domain/store/eventMappers';
 import { readBool, readRecord } from '@/domain/store/eventReducers';
 import type { SessionIndexEntry } from '@crish/shared-types';
 import { dispatchIngestActions } from './ingestRouter';
+import { DisplayCommitScheduler } from './displayCommitScheduler';
 import type { MonitorRepository } from '@/adapters/repositories/monitorRepository';
 import { createLogger } from '@/adapters/platform/logger';
 import { getRemoteSyncEngine } from '@/domain/store/remoteSyncEngine';
@@ -92,6 +93,12 @@ export interface FeedBridgeOptions {
    * 在途异步结果在设备切换后不得落进新设备数据面。缺省 = 不穿线。
    */
   ownerDeviceId?: string;
+  /**
+   * R4 展示合帧窗口（ms）：preview 展示帧按此窗口有界合并提交。
+   * 缺省对齐本地流式合帧窗口（DEFAULT_STREAM_BATCH_WINDOW_MS）；注入
+   * 便于单测隔离定时器。
+   */
+  displayCommitWindowMs?: number;
 }
 
 /**
@@ -104,6 +111,8 @@ export class FeedBridge {
   private readonly listSessionsRepo?: ListSessionsRepository;
   private readonly monitor?: MonitorRepository;
   private readonly ownerDeviceId?: string;
+  /** R4 展示合帧调度器（只合 preview 展示帧；正式帧/副作用/协议路径不延迟） */
+  private readonly displayCommits: DisplayCommitScheduler;
   private unsubscribers: Array<() => void> = [];
   /** 窗口活跃度追踪（sessionId → 最近一次帧到达 ms） */
   private readonly activity = new Map<string, number>();
@@ -125,6 +134,13 @@ export class FeedBridge {
     this.listSessionsRepo = opts.listSessions;
     this.monitor = opts.monitor;
     this.ownerDeviceId = opts.ownerDeviceId;
+    this.displayCommits = new DisplayCommitScheduler({
+      commit: (sessionId, frames) => {
+        eventStore
+          .getState()
+          .ingestBatch(sessionId, frames, true, undefined, this.ownerDeviceId);
+      },
+    }, opts.displayCommitWindowMs);
   }
 
   /** 订阅观测面设备帧（幂等：重复 attach 先 detach） */
@@ -156,6 +172,9 @@ export class FeedBridge {
 
   /** 退订全部设备帧（页面/应用卸载时调用，M4 §8.2 退场即退订） */
   detach(): void {
+    // R4 卸载 flush：待合 preview 帧先落店再退订（终态内容不丢）
+    this.displayCommits.flushAll();
+    this.displayCommits.dispose();
     for (const unsub of this.unsubscribers) {
       unsub();
     }
@@ -293,20 +312,19 @@ export class FeedBridge {
     }
   }
 
-  /** 统一动作执行入口（续页路径与普通路径共用） */
+  /**
+   * 统一动作执行入口（续页路径与普通路径共用）。
+   * R4 展示合帧：preview 展示帧入有界缓冲按窗口合并提交（RemoteSyncEngine
+   * 原事件持久化照旧逐事件立即）；其余动作（正式帧/终态/审批/未读/会话面）
+   * 先按序冲刷同会话待合帧再立即执行——协议排序、游标推进与 gap 判定不延迟。
+   */
   private applyActions(actions: readonly StoreIngestAction[]): void {
-    dispatchIngestActions(actions, {
-      onSessionsRefresh: () => void this.refreshSessions(false),
-      ...(this.ownerDeviceId !== undefined
-        ? { sourceDeviceId: this.ownerDeviceId }
-        : {}),
-    });
-
-    // 实时流式批量落盘：自动汇入 RemoteSyncEngine 异步落盘缓冲
+    const passthrough: StoreIngestAction[] = [];
     const syncEngine = getRemoteSyncEngine();
-    if (syncEngine) {
-      for (const action of actions) {
-        if (action.kind === 'feed-append') {
+    for (const action of actions) {
+      if (action.kind === 'feed-append' && action.preview) {
+        this.displayCommits.enqueue(action.sessionId, action.frame);
+        if (syncEngine) {
           syncEngine.recordEvent(
             action.sessionId,
             action.frame,
@@ -314,9 +332,29 @@ export class FeedBridge {
             action.preview
           );
         }
+        continue;
+      }
+      const targetSessionId =
+        'sessionId' in action ? action.sessionId : undefined;
+      if (targetSessionId !== undefined) {
+        this.displayCommits.flushSession(targetSessionId);
+      }
+      passthrough.push(action);
+      if (action.kind === 'feed-append' && syncEngine) {
+        syncEngine.recordEvent(
+          action.sessionId,
+          action.frame,
+          this.ownerDeviceId,
+          action.preview
+        );
       }
     }
-
+    dispatchIngestActions(passthrough, {
+      onSessionsRefresh: () => void this.refreshSessions(false),
+      ...(this.ownerDeviceId !== undefined
+        ? { sourceDeviceId: this.ownerDeviceId }
+        : {}),
+    });
     this.clearStaleOnLiveIncrement(actions);
   }
 
@@ -366,6 +404,9 @@ export class FeedBridge {
     eventStore.getState().setNetwork(feedNetworkOf(phase));
     connectionStore.getState().setPhase(mapWsPhase(phase, false));
     if (phase !== 'open') {
+      // R4 断线 flush：连接相位离开 open（重连/断开/死亡）时待合 preview
+      // 帧立即落店（终态内容不丢；preview 不推进游标，协议面不受影响）
+      this.displayCommits.flushAll();
       for (const timer of this.resumeTimers.values()) {
         clearTimeout(timer);
       }
