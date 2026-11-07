@@ -20,10 +20,14 @@
   width: 290px;
   min-width: 280px;
   max-width: 320px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-panel);
-  border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: var(--shadow-lg);
+  /* 油漆收敛（2026-11-07）：background / border / border-radius /
+   * box-shadow 已删——本元素同时是 ui/Menu 的 SepPanelShell 宿主
+   * （panel.contentClassName），油漆由 G² 形状层单一承接（填充
+   * surface-overlay + 同路径描边 border-panel + --sep-g2-shadow）。
+   * 此前 CSS 全套油漆与 SVG 并存成双轨：可见角是整壳 CSS 圆弧、
+   * G² 形状缩在内容盒上成内侧接缝（活体实测「双边」），且与
+   * G2Surface 边框盒订正同批收敛。以下只留布局，契约守卫见
+   * styles/g2-corner.contract.test.ts 的 G7。 */
   padding: 6px;
   display: flex;
   flex-direction: column;

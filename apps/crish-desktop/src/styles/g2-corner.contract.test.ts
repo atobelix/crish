@@ -359,4 +359,94 @@ describe('G² 真相源守卫（g2-corner）', () => {
       '.activityPanelOuter',
     );
   });
+
+  it('契约 G7：浮动面宿主类不得自绘油漆（D 类双轨防再犯 · 边框盒订正批 2026-11-07）', () => {
+    // 背景：模型菜单 .mbMenu 在 SepPanelShell 同一元素上自带 CSS 背景 +
+    // 1px 边框 + 圆角 + box-shadow，与 G² 形状层并存成双轨——可见角是
+    // 整壳 CSS 圆弧、G² 形状成内侧接缝（活体「双边」实测）。油漆只许
+    // 由形状层（填充/描边/drop-shadow）承接；宿主类只留布局与兜底
+    // 圆弧（border-radius 是回滚口径的兜底，不在本契约禁面；.mbMenu
+    // 作为本批收敛的回归钉连圆角一并禁，与 G6 消费类口径一致）。
+    // G6 已钉 SEP 外壳与一部消费类，本契约补齐其余浮动面宿主类。
+    // 登记豁免（不在断言面内）：Dialog 外层壳——已登记的嵌套兜底形态
+    // （外层 CSS 壳 + 内层 G2Surface），残余曲线族差已接受；输入框大
+    // 胶囊的卡本体——其形状层是卡内独立子层（inset:-1 外扩盖住边框
+    // 环），卡保留自身边框环是该形态的设计前提（D-良性类）。
+    const readCss = (...segments: string[]) =>
+      readFileSync(resolve(srcDir, ...segments), 'utf8');
+    const blockOf = (cssRaw: string, cls: string) => {
+      const css = stripComments(cssRaw);
+      const m = css.match(new RegExp(`\\.${cls}(?=[\\s,{])`));
+      expect(m, `必须含 .${cls} 规则`).toBeTruthy();
+      const open = css.indexOf('{', m!.index);
+      const close = css.indexOf('}', open);
+      return css.slice(open + 1, close);
+    };
+    const expectNoPaint = (block: string, where: string) => {
+      expect(block, `${where} 不得自绘 background`).not.toMatch(
+        /background\s*:/,
+      );
+      expect(block, `${where} 不得自绘 border`).not.toMatch(
+        /(^|[^-])border\s*:/,
+      );
+      expect(block, `${where} 不得自绘 box-shadow`).not.toMatch(
+        /box-shadow\s*:/,
+      );
+    };
+    expectNoPaint(
+      blockOf(
+        readCss('components', 'ui', 'Menu', 'Menu.module.css'),
+        'menuContent',
+      ),
+      '.menuContent',
+    );
+    expectNoPaint(
+      blockOf(
+        readCss('components', 'ui', 'Popover', 'Popover.module.css'),
+        'popup',
+      ),
+      'Popover .popup',
+    );
+    expectNoPaint(
+      blockOf(
+        readCss(
+          'components',
+          'chat-composer',
+          'TiptapSlashMenu.module.css',
+        ),
+        'popoverContent',
+      ),
+      '.popoverContent',
+    );
+    expectNoPaint(
+      blockOf(
+        readCss('components', 'ui', 'PreviewCard', 'PreviewCard.module.css'),
+        'popup',
+      ),
+      'PreviewCard .popup',
+    );
+    expectNoPaint(
+      blockOf(
+        readCss(
+          'components',
+          'chat-composer',
+          'DraftUndoToast.module.css',
+        ),
+        'undoToastSurface',
+      ),
+      '.undoToastSurface',
+    );
+    const mbMenu = blockOf(
+      readCss(
+        'components',
+        'provider',
+        'ModelBadgePickerMenu.module.css',
+      ),
+      'mbMenu',
+    );
+    expectNoPaint(mbMenu, '.mbMenu');
+    expect(mbMenu, '.mbMenu 不得自绘 border-radius').not.toMatch(
+      /border-radius\s*:/,
+    );
+  });
 });
