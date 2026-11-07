@@ -102,6 +102,8 @@ async function setupProvider(
     },
     'sk-attach'
   );
+  // L3：默认不再自动落位，测试显式选定活动模型（本帮手每例只配一位供应商）
+  localChatStore.getState().setActiveModel('p1', spec.models[0]!.id);
 }
 
 async function freshDao(): Promise<LocalThreadsDao> {

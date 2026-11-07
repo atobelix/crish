@@ -142,6 +142,8 @@ beforeEach(async () => {
     },
     'sk-engine'
   );
+  // L3：默认不再自动落位，测试显式选定活动模型
+  localChatStore.getState().setActiveModel('p1', 'm1');
 });
 
 afterEach(() => {

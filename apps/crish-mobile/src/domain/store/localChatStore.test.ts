@@ -71,13 +71,12 @@ describe('localChatStore', () => {
     expect(await state.readApiKey('p1')).toBe('sk-secret');
   });
 
-  it('首个供应商落位活动选择；setActiveModel 切换二元身份', async () => {
+  it('upsert 不再自动落位活动选择（L3）；setActiveModel 显式切换二元身份', async () => {
+    // L3 纪律（任务书明文）：去掉「active 为空时用本次供应商自动填
+    // 上」——默认由用户显式选定，写入供应商不替他落位。
     await localChatStore.getState().upsertProvider('p1', spec('甲'), 'k');
     await localChatStore.getState().upsertProvider('p2', spec('乙'), 'k');
-    expect(localChatStore.getState().config.activeModel).toEqual({
-      providerId: 'p1',
-      modelId: 'm1',
-    });
+    expect(localChatStore.getState().config.activeModel).toBeNull();
     localChatStore.getState().setActiveModel('p2', 'm1');
     expect(localChatStore.getState().config.activeModel?.providerId).toBe('p2');
   });

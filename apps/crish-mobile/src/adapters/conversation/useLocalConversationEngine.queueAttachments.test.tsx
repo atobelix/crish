@@ -156,6 +156,8 @@ async function configureOneProvider() {
     },
     'sk-engine'
   );
+  // L3：默认不再自动落位，测试显式选定活动模型
+  localChatStore.getState().setActiveModel('p1', 'm1');
 }
 
 describe('useLocalConversationEngine 生成中排队发送（附件不丢）', () => {

@@ -107,6 +107,8 @@ describe('本地引擎显式文本发送', () => {
       },
       'sk-engine'
     );
+    // L3：默认不再自动落位，测试显式选定活动模型
+    localChatStore.getState().setActiveModel('p1', 'm1');
     const id = localChatSessionStore.getState().createThread();
     const { result } = await renderHook(() => useLocalConversationEngine(id), {
       wrapper: Wrapper,
