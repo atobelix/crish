@@ -41,6 +41,8 @@ export interface ProviderDetailViewProps {
   onBack?: () => void;
   onNavigateWizard?: (providerId: string) => void;
   onSelectModel?: (modelId: string) => void;
+  /** 进入二级页「连接诊断」（实测耗时只在那里展示，详情不再放测速与毫秒） */
+  onOpenDiagnostics?: (providerId: string) => void;
   onDeleted?: () => void;
 }
 
@@ -178,28 +180,6 @@ const StoredModelRow: FC<StoredModelRowProps> = memo(function StoredModelRow({
           })}
         </View>
         <View style={styles.flex} />
-        {item.latencyText && (
-          <View
-            style={[styles.row, { gap: 4 }]}
-            testID={`model-latency-${item.id}`}
-          >
-            <View
-              style={[
-                styles.latencyDot,
-                {
-                  backgroundColor: theme.colors.actionPrimary,
-                  borderRadius: theme.radius.pill,
-                },
-              ]}
-            />
-            <AppText
-              variant="caption"
-              style={{ color: theme.colors.actionPrimary, fontWeight: '500' }}
-            >
-              {item.latencyText}
-            </AppText>
-          </View>
-        )}
         <Icon
           name="chevron-right"
           size={theme.size.iconSmall - 2}
@@ -216,6 +196,7 @@ export default function ProviderDetailView({
   onBack,
   onNavigateWizard,
   onSelectModel,
+  onOpenDiagnostics,
   onDeleted,
 }: ProviderDetailViewProps) {
   const theme = useTheme();
@@ -231,7 +212,7 @@ export default function ProviderDetailView({
   const eyePress = usePressFade();
   const pastePress = usePressFade();
   const addModelPress = usePressFade();
-  const pingPress = usePressFade();
+  const diagnosticsPress = usePressFade();
   const deletePress = usePressFade();
 
   const handleBack = useCallback(async () => {
@@ -283,6 +264,17 @@ export default function ProviderDetailView({
     },
     [onSelectModel, vm.providerId]
   );
+
+  const handleOpenDiagnostics = useCallback(() => {
+    if (onOpenDiagnostics) {
+      onOpenDiagnostics(vm.providerId);
+    } else {
+      router.push({
+        pathname: '/settings-local-provider-diagnostics',
+        params: { id: vm.providerId },
+      });
+    }
+  }, [onOpenDiagnostics, vm.providerId]);
 
   const handleConfirmDelete = useCallback(async () => {
     setDeleteDialogOpen(false);
@@ -514,35 +506,6 @@ export default function ProviderDetailView({
             >
               {`已存入模型 (${vm.models.length})`}
             </AppText>
-            <AnimatedPressable
-              testID="btn-run-ping"
-              accessibilityRole="button"
-              accessibilityLabel="测速已存模型连通性"
-              disabled={vm.pinging}
-              onPress={() => void vm.runPing()}
-              onPressIn={pingPress.onPressIn}
-              onPressOut={pingPress.onPressOut}
-              style={[
-                styles.pingBtn,
-                {
-                  backgroundColor: theme.colors.fillSubtle,
-                  borderRadius: theme.radius.pill,
-                },
-                pingPress.fadeStyle,
-              ]}
-            >
-              <Icon
-                name="zap"
-                size={theme.size.iconSmall - 2}
-                color={theme.colors.actionPrimary}
-              />
-              <AppText
-                variant="caption"
-                style={{ color: theme.colors.actionPrimary, fontWeight: '600' }}
-              >
-                {vm.pinging ? '测速中...' : '测速'}
-              </AppText>
-            </AnimatedPressable>
           </View>
 
           {vm.models.length === 0 ? (
@@ -580,6 +543,41 @@ export default function ProviderDetailView({
             </View>
           )}
         </View>
+
+        {/* 连接诊断入口行：测速与实测耗时收敛到二级页，详情不展示毫秒 */}
+        <AnimatedPressable
+          testID="btn-open-diagnostics"
+          accessibilityRole="button"
+          accessibilityLabel="连接诊断"
+          onPress={handleOpenDiagnostics}
+          onPressIn={diagnosticsPress.onPressIn}
+          onPressOut={diagnosticsPress.onPressOut}
+          style={[
+            styles.diagnosticsRow,
+            {
+              backgroundColor: theme.colors.surface,
+              borderRadius: theme.radius.card,
+            },
+            diagnosticsPress.fadeStyle,
+          ]}
+        >
+          <Icon
+            name="zap"
+            size={theme.size.iconSmall}
+            color={theme.colors.textSecondary}
+          />
+          <AppText
+            variant="callout"
+            style={[styles.flex, { color: theme.colors.textPrimary, fontWeight: '600' }]}
+          >
+            连接诊断
+          </AppText>
+          <Icon
+            name="chevron-right"
+            size={theme.size.iconSmall - 2}
+            color={theme.colors.textTertiary}
+          />
+        </AnimatedPressable>
 
         {/* 底部“删除此供应商”红色操作按钮 */}
         <AnimatedPressable
@@ -681,12 +679,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modelsSection: { gap: 2 },
-  pingBtn: {
+  diagnosticsRow: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 8,
+    paddingHorizontal: 16,
   },
   modelsCard: { overflow: 'hidden' },
   emptyCard: { padding: 24, alignItems: 'center', justifyContent: 'center' },
@@ -718,7 +716,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slotEmpty: { width: 16, height: 16, opacity: 0 },
-  latencyDot: { width: 6, height: 6 },
   deleteBtn: {
     height: 48,
     flexDirection: 'row',

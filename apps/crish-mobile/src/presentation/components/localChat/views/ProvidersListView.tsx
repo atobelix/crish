@@ -154,14 +154,6 @@ export default function ProvidersListView({
                     当前使用中
                   </AppText>
                 </View>
-                {vm.activeProvider.latencyText ? (
-                  <View style={[styles.latencyPill, { backgroundColor: theme.colors.fillSubtle, borderRadius: theme.radius.pill }]}>
-                    <View style={[styles.latencyMiniDot, { backgroundColor: theme.colors.brand, borderRadius: theme.radius.pill }]} />
-                    <AppText variant="caption" color="brand" style={styles.latencyText}>
-                      {vm.activeProvider.latencyText}
-                    </AppText>
-                  </View>
-                ) : null}
               </View>
 
               <View style={styles.heroMainRow}>
@@ -240,14 +232,6 @@ export default function ProvidersListView({
                       </View>
 
                       <View style={styles.cardControlsRow}>
-                        {row.latencyText ? (
-                          <View style={[styles.latencyPill, { backgroundColor: theme.colors.fillSubtle, borderRadius: theme.radius.pill }]}>
-                            <View style={[styles.latencyMiniDot, { backgroundColor: theme.colors.brand, borderRadius: theme.radius.pill }]} />
-                            <AppText variant="caption" color="brand" style={styles.latencyText}>
-                              {row.latencyText}
-                            </AppText>
-                          </View>
-                        ) : null}
                         <View style={styles.switchTouchWrap}>
                           <SettingsSwitch
                             value={row.isActive}
@@ -321,9 +305,6 @@ const styles = StyleSheet.create({
   modelMetaCol: { flex: 1, gap: 2, minWidth: 0 },
   defaultModelLabel: { fontWeight: '500' },
   cardControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
-  latencyPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3 },
-  latencyMiniDot: { width: 5, height: 5 },
-  latencyText: { fontWeight: '500' },
   switchTouchWrap: { justifyContent: 'center', alignItems: 'center' },
   presetsList: { gap: 8 },
   presetRow: { paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

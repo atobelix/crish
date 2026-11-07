@@ -31,6 +31,12 @@ export default function SettingsLocalProviderDetailRoute() {
           params: { providerId, modelId },
         })
       }
+      onOpenDiagnostics={(id) =>
+        router.push({
+          pathname: '/settings-local-provider-diagnostics',
+          params: { id },
+        })
+      }
       onDeleted={() => router.back()}
     />
   );

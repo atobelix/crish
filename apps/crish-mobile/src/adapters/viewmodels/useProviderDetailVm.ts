@@ -32,8 +32,6 @@ export interface StoredModelRowItem {
   readonly thinking?: LocalThinkingSpec;
   readonly thinkingTierText: string;
   readonly supportedModalities: ReadonlySet<ModalitySlotKind>;
-  readonly latencyMs?: number | null;
-  readonly latencyText?: string;
   readonly raw: LocalModelSpec;
 }
 
@@ -177,9 +175,6 @@ export function useProviderDetailVm(providerId: string): ProviderDetailVm {
       thinking: m.thinking,
       thinkingTierText: formatThinkingTierText(m.thinking),
       supportedModalities: extractSupportedModalities(m),
-      latencyMs: provider.latencyMs,
-      latencyText:
-        provider.latencyMs != null ? `${provider.latencyMs}ms` : undefined,
       raw: m,
     }));
   }, [provider, defaultModelId]);

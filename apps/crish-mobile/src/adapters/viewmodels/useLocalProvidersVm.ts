@@ -72,7 +72,7 @@ export const PRESET_VENDORS: readonly PresetVendorItem[] = (
 
 export const PRESETS = PRESET_VENDORS;
 
-/** 本地供应商列表项投影契约（向后兼容既有接口并扩充厂商与延迟） */
+/** 本地供应商列表项投影契约（厂商、默认模型与启停投影；实测耗时不在列表展示，收敛到连接诊断页） */
 export interface LocalProviderRow {
   readonly id: string;
   readonly name: string;
@@ -85,10 +85,6 @@ export interface LocalProviderRow {
   readonly defaultModelId: string | null;
   /** 默认模型展示名称 */
   readonly defaultModelName: string | null;
-  /** 实测网络延迟（ms；null 为测速失败，undefined 为未测） */
-  readonly latencyMs?: number | null;
-  /** 格式化延迟字串（如 "24ms"） */
-  readonly latencyText?: string;
   readonly modelCount: number;
   readonly hasKey: boolean;
   readonly isActive: boolean;
@@ -134,10 +130,6 @@ function rowOf(
       baseUrl: spec.baseUrl,
     });
 
-  const latencyMs = spec.latencyMs;
-  const latencyText =
-    latencyMs !== undefined && latencyMs !== null ? `${latencyMs}ms` : undefined;
-
   const baseUrl = spec.baseUrl ?? '';
   const host = extractHost(baseUrl);
 
@@ -150,8 +142,6 @@ function rowOf(
     vendorKey: vendor,
     defaultModelId: defaultId,
     defaultModelName,
-    latencyMs,
-    latencyText,
     modelCount: spec.models.length,
     hasKey: keyPresence[id] ?? spec.apiKeyRef !== undefined,
     isActive: config.activeModel?.providerId === id,

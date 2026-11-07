@@ -144,14 +144,21 @@ export default function ProviderWizardView({
           ? theme.colors.danger
           : theme.colors.borderStrong;
 
+  // 步骤 1 主结果只留成功/失败；毫秒数移到次级说明，与连接诊断页
+  // 同一套文案（「模型列表请求耗时」），不在主结果上单独成名。
   const pingText =
     vm.pingStatus === 'success'
-      ? `${vm.latencyMs ?? 0}ms 正常可用`
+      ? '连接成功'
       : vm.pingStatus === 'testing'
         ? '正在测速...'
         : vm.pingStatus === 'error'
           ? vm.pingResult?.error || '连接失败'
           : '未测试连接';
+
+  const pingLatencyNote =
+    vm.pingStatus === 'success' && vm.latencyMs != null
+      ? `模型列表请求耗时 ${vm.latencyMs}ms`
+      : null;
 
   const handleBack = useCallback(() => {
     if (vm.step === 3) vm.goToPrevStep();
@@ -346,14 +353,25 @@ export default function ProviderWizardView({
                     pingAnimatedStyle,
                   ]}
                 />
-                <AppText
-                  variant="footnote"
-                  color="textSecondary"
-                  numberOfLines={1}
-                  style={styles.pingText}
-                >
-                  {pingText}
-                </AppText>
+                <View style={styles.pingText}>
+                  <AppText
+                    variant="footnote"
+                    color="textSecondary"
+                    numberOfLines={1}
+                  >
+                    {pingText}
+                  </AppText>
+                  {pingLatencyNote ? (
+                    <AppText
+                      variant="caption"
+                      color="textTertiary"
+                      numberOfLines={1}
+                      testID="wizard-ping-latency-note"
+                    >
+                      {pingLatencyNote}
+                    </AppText>
+                  ) : null}
+                </View>
               </View>
               <AnimatedPressable
                 testID="btn-wizard-test-ping"
