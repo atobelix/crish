@@ -206,11 +206,14 @@ describe('三档底色契约', () => {
     expect(fade).not.toMatch(/#[0-9a-f]{3,6}\b|hsl\(|rgb\(/i);
   });
 
-  it('内容矩形无框线：token 保留待裁，卡片靠底色台阶 + 圆角区分', () => {
-    // --content-frame-border token 本体保留（去留归 token 治理裁决）：
-    // 字面值仍在册，但 .leafBody 已停用（2026-11-06 用户裁决删整圈描边）
-    expect(decl(light, '--content-frame-border')).toBe('#ececec'); // 7% 纯中性边框
-    expect(decl(dark, '--content-frame-border')).toBe('#222121'); // 外层 L10.2% + 3 → 13.2%
+  it('内容矩形无框线：--content-frame-border 已退役，卡片靠底色台阶 + 圆角区分', () => {
+    // --content-frame-border 已退役删除（2026-11-06 token 治理裁决）：
+    // 唯一消费者 .leafBody 早已停用（S7 删整圈描边并实机验证），本体随删；
+    // 全域防回潮钉：两主题不得再定义该 token、token 全文不得再出现它
+    //（下方 .leafBody 的 not.toContain 继续钉住消费面）。
+    expect(decl(light, '--content-frame-border')).toBeNull();
+    expect(decl(dark, '--content-frame-border')).toBeNull();
+    expect(css).not.toContain('--content-frame-border');
     const ws = readFileSync(
       resolve(
         __dirname,

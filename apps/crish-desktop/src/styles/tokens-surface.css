@@ -127,7 +127,6 @@ html[data-theme='light'] {
     var(--surface-deep-target) 4%
   );
   --user-bubble-bg: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
-  --content-frame-border: #ececec; /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 /* ── 暗色主题表面派生 (Dark Surface Ladder) ── */
@@ -244,7 +243,6 @@ html[data-theme='dark'] {
     var(--user-text-primary) 9%,
     transparent
   );
-  --content-frame-border: #222121; /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 /* ── 系统窗口材质分层 (Win11 Mica / Win10 Acrylic · P1 §5.8 绑定 --surface-shell) ── */
