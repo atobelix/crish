@@ -80,7 +80,7 @@ const approvalItem: ApprovalItem = {
     toolCallId: 'tc-1',
     toolName: 'write_file',
     parameters: { path: 'src/a.ts', apiKey: 'sk-1234567890' },
-    summary: '写入文件',
+    intent: '写入文件',
     toolMetadata: {},
   },
   runId: 'r-1',
@@ -342,14 +342,15 @@ describe('ConnectionBanner / TimelineView', () => {
       />
     );
     expect(view.getByText('正文')).toBeTruthy();
-    // 连续工具调用在对话里只剩一行摘要，详情进工具抽屉
-    expect(view.getByText('使用了 1 个工具 · 1 秒')).toBeTruthy();
+    // 封口组头（D0-2 效果锁）：展示意图标题而非“使用了 N 个工具”
+    expect(view.getByText('src/a.ts')).toBeTruthy();
     expect(view.queryByText('done')).toBeNull();
     await fireEvent.press(view.getByTestId('tool-run-t-1'));
     expect(onOpenTools).toHaveBeenCalledWith('t-1');
     // 审批不入对话流（M3 裁决删流内行：pending 由全局悬浮卡承载，
     // 已决状态查审批记录页），流内不得再出现审批状态行
     expect(view.queryByText('等待你审批 · write_file')).toBeNull();
-    expect(view.getByText('运行完成')).toBeTruthy();
+    // 终态零占位：运行完成不生成 NoticeBlock
+    expect(view.queryByText('运行完成')).toBeNull();
   });
 });

@@ -16,8 +16,14 @@ export type VoicePhase =
 export const VOICE_CANCEL_SLIDE_THRESHOLD_PX = 80;
 
 /** 左右胶囊热区咬合与走廊迟滞防抖阈值（px） */
-export const VOICE_ZONE_ENTER_THRESHOLD_X = 58;
-export const VOICE_ZONE_EXIT_THRESHOLD_X = 42;
+export const VOICE_ZONE_ENTER_THRESHOLD_X = 42;
+export const VOICE_ZONE_EXIT_THRESHOLD_X = 26;
+
+/** 下方发送区与上方三分扇区垂直分界线（px，进入线）：手指上滑越过该线进入上方区；向下滑动或在输入框附近均为发送 */
+export const VOICE_VERTICAL_ACTIVE_THRESHOLD_Y = -30;
+
+/** Y 向迟滞退出线（px）：已在上方区（cancelling/editing）时，手指向下回到该线以内才退回下方发送区——与进入线（-30）构成迟滞带，与 X 向 42/26 同构 */
+export const VOICE_VERTICAL_EXIT_THRESHOLD_Y = -16;
 
 /**
  * 手势位移 → 阶段迁移（1D 兼容模式）：
@@ -35,54 +41,69 @@ export function voicePhaseForTranslation(
 }
 
 /**
- * 双轴手势位移 → 阶段迁移（2D 空间拓扑与迟滞防抖）：
- * - 严格对齐弧形胶囊左右几何扇区与中央 94px 黄金发送走廊；
- * - 左滑 <= -58px 咬合进入 cancelling；
- * - 右滑 >= 58px 咬合进入 editing；
- * - 迟滞防抖：退回中央走廊必须越过 [-42px, +42px] 边界；
- * - 兼顾向上滑动 translationY <= -80px 兜底进入 cancelling。
+ * 双轴手势位移 → 阶段迁移（用户裁决：下方全发送 + 上方三列空间拓扑）：
+ * - 下方区域（translationY > -30px）：手指靠近输入框，全域均为发送（'recording'）；
+ * - 上方区域（translationY <= -30px）：三分列拓扑，撤销与编辑两边各占一半，中间为发送走廊：
+ *   1. 左列（左滑 <= -enterThresholdX）：进入撤销（'cancelling'）；退回中间走廊须跨过 -exitThresholdX；
+ *   2. 中列（-exitThresholdX < translationX < exitThresholdX）：保持发送（'recording'）；无论滑动多高均不误触发撤销；
+ *   3. 右列（右滑 >= enterThresholdX）：进入编辑（'editing'）；退回中间走廊须跨过 exitThresholdX；
+ * - Y 向迟滞（与 X 向同构）：自下方进入上方区须越过进入线（-30）；已在
+ *   上方区（cancelling/editing）退回下方只须回到退出线（-16）以内。两线
+ *   之间的迟滞带内维持上方区拓扑判定——-30 线附近停留不再逐采样翻转
+ *   阶段（整幅换色 + prevPhase 震感连环触发的根源，2026-11-05 返工补齐）。
+ * - 铁律：右半区及中间走廊上方绝对禁止识别为撤销！杜绝向右上滑动时误取消。
  */
 export function voicePhaseForTranslation2D(
   phase: VoicePhase,
   translationX: number,
   translationY: number,
   enterThresholdX: number = VOICE_ZONE_ENTER_THRESHOLD_X,
-  exitThresholdX: number = VOICE_ZONE_EXIT_THRESHOLD_X
+  exitThresholdX: number = VOICE_ZONE_EXIT_THRESHOLD_X,
+  verticalThresholdY: number = VOICE_VERTICAL_ACTIVE_THRESHOLD_Y,
+  verticalExitThresholdY: number = VOICE_VERTICAL_EXIT_THRESHOLD_Y
 ): VoicePhase {
   if (phase !== 'recording' && phase !== 'cancelling' && phase !== 'editing') {
     return phase;
   }
 
-  // 纯垂直高位上滑取消兜底
-  if (translationY <= -VOICE_CANCEL_SLIDE_THRESHOLD_PX) {
-    return 'cancelling';
-  }
-
-  if (phase === 'recording') {
-    if (translationX <= -enterThresholdX && translationY < 30) {
-      return 'cancelling';
-    }
-    if (translationX >= enterThresholdX && translationY < 30) {
-      return 'editing';
-    }
+  // 1. 下方区域（接近输入框本体）：无论是左是右，一律为发送态。
+  //    判定线带迟滞：recording 看进入线，已在上方区看退出线（见头注）
+  const lowerZoneLine =
+    phase === 'recording' ? verticalThresholdY : verticalExitThresholdY;
+  if (translationY > lowerZoneLine) {
     return 'recording';
   }
 
+  // 2. 上方区域（滑动至胶囊高度）：严格按三列划分，绝不跨列误触发
+  if (phase === 'recording') {
+    if (translationX <= -enterThresholdX) {
+      return 'cancelling'; // 左列：撤销
+    }
+    if (translationX >= enterThresholdX) {
+      return 'editing'; // 右列：编辑
+    }
+    return 'recording'; // 中列：发送走廊
+  }
+
   if (phase === 'cancelling') {
-    if (
-      translationX > -exitThresholdX &&
-      translationY > -VOICE_CANCEL_SLIDE_THRESHOLD_PX
-    ) {
+    // 从左列退回中列
+    if (translationX > -exitThresholdX) {
+      // 若一口气滑入右列，无缝迁移至编辑
+      if (translationX >= enterThresholdX) {
+        return 'editing';
+      }
       return 'recording';
     }
     return 'cancelling';
   }
 
   if (phase === 'editing') {
-    if (
-      translationX < exitThresholdX &&
-      translationY > -VOICE_CANCEL_SLIDE_THRESHOLD_PX
-    ) {
+    // 从右列退回中列
+    if (translationX < exitThresholdX) {
+      // 若一口气滑入左列，无缝迁移至撤销
+      if (translationX <= -enterThresholdX) {
+        return 'cancelling';
+      }
       return 'recording';
     }
     return 'editing';

@@ -7,6 +7,7 @@
 // 方案 19 升级：支持 Reanimated 共享值驱动（keyboardHeightSV / animatedAdditionalHeight），
 // 随输入框升降微秒级同步拉伸与回缩，彻底根除白块滞后闪现。
 // pointerEvents 关闭，不拦截滚动。
+import { View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
   useAnimatedStyle,
@@ -90,7 +91,6 @@ export function EdgeFade({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: fadeColor,
             overflow: 'hidden',
           },
           animatedStyle,
@@ -131,6 +131,16 @@ export function EdgeFade({
           </Defs>
           <Rect width="100%" height={span} fill={`url(#${gradientId})`} />
         </Svg>
+        <View
+          style={{
+            position: 'absolute',
+            top: span,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: fadeColor,
+          }}
+        />
       </Animated.View>
     );
   }

@@ -300,6 +300,218 @@ export function findWorkletViolations(src: string): string[] {
   return out;
 }
 
+/** 顶层实参切分（深度为 0 的逗号分割） */
+function splitTopLevelArgs(argsStr: string): string[] {
+  const args: string[] = [];
+  let depth = 0;
+  let inStr: string | null = null;
+  let inLine = false;
+  let inBlock = false;
+  let start = 0;
+  let i = 0;
+  while (i < argsStr.length) {
+    const c = argsStr[i]!;
+    const n = argsStr[i + 1];
+    if (inLine) {
+      if (c === '\n') inLine = false;
+      i++;
+      continue;
+    }
+    if (inBlock) {
+      if (c === '*' && n === '/') {
+        inBlock = false;
+        i += 2;
+      } else i++;
+      continue;
+    }
+    if (inStr) {
+      if (c === '\\') {
+        i += 2;
+        continue;
+      }
+      if (c === inStr) inStr = null;
+      i++;
+      continue;
+    }
+    if (c === '/' && n === '/') {
+      inLine = true;
+      i += 2;
+      continue;
+    }
+    if (c === '/' && n === '*') {
+      inBlock = true;
+      i += 2;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      inStr = c;
+      i++;
+      continue;
+    }
+    if (c === '(' || c === '{' || c === '[') depth++;
+    else if (c === ')' || c === '}' || c === ']') depth--;
+    else if (c === ',' && depth === 0) {
+      args.push(argsStr.slice(start, i).trim());
+      start = i + 1;
+    }
+    i++;
+  }
+  if (start < argsStr.length) {
+    args.push(argsStr.slice(start).trim());
+  }
+  return args;
+}
+
+const SAFE_ANIMATION_APIS = new Set([
+  'runOnJS',
+  'runOnUI',
+  'cancelAnimation',
+  'withTiming',
+  'withSpring',
+]);
+
+/** 扫描源码中 withTiming / withSpring 的完成回调内是否有裸调用的普通 JS 函数 */
+export function findAnimationCallbackViolations(src: string): string[] {
+  const violations: string[] = [];
+  const animRe = /\b(withTiming|withSpring)\s*\(/g;
+  let m: RegExpExecArray | null;
+  while ((m = animRe.exec(src))) {
+    const openParen = m.index + m[0].length - 1;
+    const closeParen = matchBracket(src, openParen);
+    if (closeParen < 0) continue;
+    const argsStr = src.slice(openParen + 1, closeParen);
+    const args = splitTopLevelArgs(argsStr);
+    if (args.length >= 3) {
+      const cbArg = args[2]!.trim();
+      if (!cbArg || cbArg === 'undefined' || cbArg === 'null') continue;
+
+      // 若直接传入裸标识符函数（未用 runOnJS 包装）
+      if (/^[A-Za-z_$][\w$]*$/.test(cbArg)) {
+        if (!SAFE_ANIMATION_APIS.has(cbArg) && !JS_BUILTIN_OBJECTS.has(cbArg)) {
+          violations.push(
+            `[${m[1]}] 动画完成回调直接传入了未包裹 runOnJS 的函数 ${cbArg}`
+          );
+        }
+        continue;
+      }
+
+      // 提取函数体内容
+      let body = cbArg;
+      const braceOpen = cbArg.indexOf('{');
+      if (braceOpen >= 0) {
+        const braceClose = matchBracket(cbArg, braceOpen);
+        if (braceClose > braceOpen) {
+          body = cbArg.slice(braceOpen + 1, braceClose);
+        }
+      } else {
+        const arrowIdx = cbArg.indexOf('=>');
+        if (arrowIdx >= 0) {
+          body = cbArg.slice(arrowIdx + 2);
+        }
+      }
+
+      // 脱敏注释与字符串字面量
+      let masked = '';
+      let i = 0;
+      let inStr: string | null = null;
+      let inLine = false;
+      let inBlock = false;
+      while (i < body.length) {
+        const c = body[i]!;
+        const n = body[i + 1];
+        if (inLine) {
+          masked += ' ';
+          if (c === '\n') inLine = false;
+          i++;
+          continue;
+        }
+        if (inBlock) {
+          masked += ' ';
+          if (c === '*' && n === '/') {
+            masked += ' ';
+            inBlock = false;
+            i += 2;
+          } else i++;
+          continue;
+        }
+        if (inStr) {
+          masked += ' ';
+          if (c === '\\') {
+            masked += ' ';
+            i += 2;
+            continue;
+          }
+          if (c === inStr) inStr = null;
+          i++;
+          continue;
+        }
+        if (c === '/' && n === '/') {
+          inLine = true;
+          masked += '  ';
+          i += 2;
+          continue;
+        }
+        if (c === '/' && n === '*') {
+          inBlock = true;
+          masked += '  ';
+          i += 2;
+          continue;
+        }
+        if (c === "'" || c === '"' || c === '`') {
+          inStr = c;
+          masked += ' ';
+          i++;
+          continue;
+        }
+        masked += c;
+        i++;
+      }
+
+      // 脱敏所有 runOnJS(...) 结构及其立即调用 runOnJS(...)(...)
+      const runRe = /\brunOnJS\s*\(/g;
+      let rm: RegExpExecArray | null;
+      while ((rm = runRe.exec(masked))) {
+        const rOpen = rm.index + rm[0].length - 1;
+        const rClose = matchBracket(masked, rOpen);
+        if (rClose > rOpen) {
+          let end = rClose + 1;
+          const rest = masked.slice(end);
+          const callMatch = rest.match(/^\s*\(/);
+          if (callMatch) {
+            const secondOpen = end + callMatch[0].length - 1;
+            const secondClose = matchBracket(masked, secondOpen);
+            if (secondClose > secondOpen) end = secondClose + 1;
+          }
+          masked =
+            masked.slice(0, rm.index) +
+            ' '.repeat(end - rm.index) +
+            masked.slice(end);
+          runRe.lastIndex = rm.index;
+        }
+      }
+
+      // 检查剩余部分中是否存在函数裸调用
+      const callRe = /(?<![\w$.])([A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*)\s*\(/g;
+      let cm: RegExpExecArray | null;
+      while ((cm = callRe.exec(masked))) {
+        const fullFn = cm[1]!;
+        const base = fullFn.split('.')[0]!;
+        if (
+          JS_KEYWORDS.has(base) ||
+          JS_BUILTIN_OBJECTS.has(base) ||
+          SAFE_ANIMATION_APIS.has(base)
+        ) {
+          continue;
+        }
+        violations.push(
+          `[${m[1]}] 动画完成回调内直接裸调用了未包裹 runOnJS 的函数 ${fullFn}()`
+        );
+      }
+    }
+  }
+  return violations;
+}
+
 describe('worklet 安全守卫 · 扫描器自检（证明能拦住本次肇事模式）', () => {
   it('肇事样本：updater 内 Dimensions.get 被拦', () => {
     const bad = `
@@ -346,6 +558,64 @@ describe('worklet 安全守卫 · 扫描器自检（证明能拦住本次肇事�
     `;
     expect(findWorkletViolations(good)).toEqual([]);
   });
+
+  it('动画回调肇事样本：withTiming 完成回调内裸调用 handleExitFinished 被拦', () => {
+    const bad = `
+      panelProgress.value = withTiming(
+        0,
+        { duration: 250 },
+        (finished) => {
+          if (finished) handleExitFinished();
+        }
+      );
+    `;
+    const violations = findAnimationCallbackViolations(bad);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain('handleExitFinished');
+  });
+
+  it('动画回调违规样本：withSpring 完成回调内裸调用外部函数被拦', () => {
+    const bad = `
+      panelProgress.value = withSpring(
+        0,
+        { damping: 15 },
+        (finished) => {
+          if (finished) notifyClose();
+        }
+      );
+    `;
+    const violations = findAnimationCallbackViolations(bad);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain('notifyClose');
+  });
+
+  it('动画回调合法样本：withTiming 完成回调内使用 runOnJS 包裹放行', () => {
+    const good = `
+      panelProgress.value = withTiming(
+        0,
+        { duration: 250 },
+        (finished) => {
+          if (finished) runOnJS(handleExitFinished)();
+        }
+      );
+    `;
+    expect(findAnimationCallbackViolations(good)).toEqual([]);
+  });
+
+  it('动画回调合法样本：withTiming 完成回调内仅更新 SharedValue 与 Math 放行', () => {
+    const good = `
+      panelProgress.value = withTiming(
+        1,
+        { duration: 280 },
+        (finished) => {
+          if (finished) {
+            baselineHeight.value = Math.max(0, panelHeight);
+          }
+        }
+      );
+    `;
+    expect(findAnimationCallbackViolations(good)).toEqual([]);
+  });
 });
 
 describe('worklet 安全守卫 · 全仓扫描', () => {
@@ -355,6 +625,21 @@ describe('worklet 安全守卫 · 全仓扫描', () => {
       for (const file of collectFiles(join(ROOT, dir))) {
         const src = readFileSync(file, 'utf8');
         const violations = findWorkletViolations(src);
+        if (violations.length > 0) {
+          const rel = relative(ROOT, file).split(sep).join('/');
+          for (const v of violations) problems.push(`${rel}: ${v}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('app/ 与 src/ 中 withTiming / withSpring 动画完成回调内禁止裸调用普通 JS 函数', () => {
+    const problems: string[] = [];
+    for (const dir of SCAN_DIRS) {
+      for (const file of collectFiles(join(ROOT, dir))) {
+        const src = readFileSync(file, 'utf8');
+        const violations = findAnimationCallbackViolations(src);
         if (violations.length > 0) {
           const rel = relative(ROOT, file).split(sep).join('/');
           for (const v of violations) problems.push(`${rel}: ${v}`);

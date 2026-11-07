@@ -29,7 +29,7 @@ function makeRequest(
     toolCallId: 'call-1',
     toolName: 'write_file',
     parameters: { path: 'a.ts' },
-    summary: 'write a.ts',
+    intent: 'write a.ts',
     toolMetadata: {},
     ...overrides,
   };
@@ -154,13 +154,13 @@ describe('upsertPendingItem（E2E-10 事件双发幂等，F2 §4.1/§11.2）', (
 
   it('实时预览 + 收口流双发（E2E-10）：同 toolCallId 只保留一份', () => {
     const first = makeItem({
-      request: makeRequest({ toolCallId: 'a', summary: 'v1' }),
+      request: makeRequest({ toolCallId: 'a', intent: 'v1' }),
       receivedAtMs: NOW,
       expiresAt: NOW + 120_000,
     });
     let r = upsertPendingItem([], first);
     const dup = makeItem({
-      request: makeRequest({ toolCallId: 'a', summary: 'v1（收口流副本）' }),
+      request: makeRequest({ toolCallId: 'a', intent: 'v1（收口流副本）' }),
       receivedAtMs: NOW + 5_000,
       expiresAt: NOW + 125_000,
     });
@@ -179,7 +179,7 @@ describe('upsertPendingItem（E2E-10 事件双发幂等，F2 §4.1/§11.2）', (
     });
     let r = upsertPendingItem([item], item);
     const late = makeItem({
-      request: makeRequest({ toolCallId: 'a', summary: '迟到副本' }),
+      request: makeRequest({ toolCallId: 'a', intent: '迟到副本' }),
     });
     r = upsertPendingItem(r.items, late);
     expect(r.changed).toBe(false);

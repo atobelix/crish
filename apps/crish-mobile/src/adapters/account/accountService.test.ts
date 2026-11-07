@@ -220,8 +220,9 @@ describe('loginAccountWithPassword', () => {
   });
 
   it('设备发现失败不清既有设备表与目标（CON-1 空发现保护）', async () => {
-    // 已有设备表（例如同账号重复登录/校正路径）：一次发现失败不得清零
+    // 已有设备表与目标（例如同账号重复登录/校正路径）：一次发现失败不得清零
     accountStore.getState().setDevices([deskDevice]);
+    accountStore.getState().selectTarget('d-1');
     expect(accountStore.getState().targetDeviceId).toBe('d-1');
     mockApi.loginAccount.mockResolvedValue({
       accessToken: 'at',
@@ -237,7 +238,7 @@ describe('loginAccountWithPassword', () => {
     expect(accountStore.getState().targetDeviceId).toBe('d-1');
   });
 
-  it('登录持久化带上自动选靶的目标（CON-1 目标持久化）', async () => {
+  it('登录持久化带上目标（目标主权：首轮发现只更表，持久化落盘当前目标 null；CON-1 目标持久化）', async () => {
     mockApi.loginAccount.mockResolvedValue({
       accessToken: 'at',
       refreshToken: 'rt',
@@ -249,7 +250,7 @@ describe('loginAccountWithPassword', () => {
 
     expect(mockSecure.saveAccountSession).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ targetDeviceId: 'd-1' })
+      expect.objectContaining({ targetDeviceId: null })
     );
   });
 });
@@ -301,6 +302,7 @@ describe('reconcileAccountRemote（CON-1）', () => {
   function seedLoggedInWithDevices(): void {
     accountStore.setState({ status: 'loggedIn', accessToken: 'at' });
     accountStore.getState().setDevices([deskDevice]);
+    accountStore.getState().selectTarget('d-1');
   }
 
   it('me 成功但发现失败：不清既有设备表与目标', async () => {
@@ -327,7 +329,7 @@ describe('reconcileAccountRemote（CON-1）', () => {
     expect(accountStore.getState().devices).toEqual([
       { ...deskDevice, id: 'd-2' },
     ]);
-    expect(accountStore.getState().targetDeviceId).toBe('d-2');
+    expect(accountStore.getState().targetDeviceId).toBeNull();
     expect(accountStore.getState().error).toContain('海外节点超时');
   });
 

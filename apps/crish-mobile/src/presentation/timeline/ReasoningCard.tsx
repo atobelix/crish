@@ -1,7 +1,7 @@
 // 移动端思考链卡片：
 // 用户裁决改版：纯白背景（theme.colors.surface）、固定 160dp 视口内嵌手势滚动、
 // 彻底去除多余的 THINKING 标签与抽屉入口，纯净呈现思考正文。
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
 import { AppText, Icon } from '@/presentation/ui';

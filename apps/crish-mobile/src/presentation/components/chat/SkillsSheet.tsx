@@ -18,6 +18,7 @@ import {
 export interface SkillsSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   /** 是否已连接桌面（未连接与命令失败分开呈现） */
   connected: boolean;
   /** 技能目录（未拉取为 null；宿主投影顺序：作用域序 + 名称序） */
@@ -50,6 +51,7 @@ function groupByScope(
 export function SkillsSheet({
   visible,
   onClose,
+  onCloseComplete,
   connected,
   skills,
   status,
@@ -62,6 +64,7 @@ export function SkillsSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       title="技能"
       size="large"
       testID={testID}

@@ -31,13 +31,19 @@ export class ErrorBoundary extends Component<
 
   render() {
     if (this.state.error) {
-      return <ErrorFallback onRetry={this.reset} />;
+      return <ErrorFallback error={this.state.error} onRetry={this.reset} />;
     }
     return this.props.children;
   }
 }
 
-function ErrorFallback({ onRetry }: { onRetry: () => void }) {
+function ErrorFallback({
+  error,
+  onRetry,
+}: {
+  error: Error | null;
+  onRetry: () => void;
+}) {
   const theme = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.canvas }]}>
@@ -45,6 +51,16 @@ function ErrorFallback({ onRetry }: { onRetry: () => void }) {
       <AppText variant="footnote" color="textSecondary" style={styles.hint}>
         请重试；若持续出现，请重新打开应用。
       </AppText>
+      {error?.message ? (
+        <AppText
+          variant="caption"
+          color="textTertiary"
+          style={styles.errorMsg}
+          numberOfLines={4}
+        >
+          {error.message}
+        </AppText>
+      ) : null}
       <Button
         label="重试"
         variant="secondary"
@@ -65,6 +81,10 @@ const styles = StyleSheet.create({
   },
   hint: {
     textAlign: 'center',
+  },
+  errorMsg: {
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
   action: {
     marginTop: 8,

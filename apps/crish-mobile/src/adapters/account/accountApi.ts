@@ -10,12 +10,46 @@ import type {
 } from '@/domain/types/account';
 import { REQUEST_TIMEOUT_MS } from './accountConstants';
 
-const AUTH_BASE_URL =
-  process.env.EXPO_PUBLIC_AUTH_BASE_URL?.replace(/\/+$/, '') ||
-  'https://auth.flowbit.me';
-const RELAY_BASE_URL =
-  process.env.EXPO_PUBLIC_RELAY_BASE_URL?.replace(/\/+$/, '') ||
-  'https://proxy.flowbit.me:8443';
+function sanitizeBaseUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim().replace(/\/+$/, '');
+  return trimmed !== '' ? trimmed : null;
+}
+
+// 支持运行时/设置页覆盖（例如 Tailscale 私网 IP http://100.x.y.z:8787 或内网自建服务）
+let customAuthBaseUrl: string | null = null;
+let customRelayBaseUrl: string | null = null;
+
+export function setCustomEndpointUrls(endpoints: {
+  authBaseUrl?: string | null;
+  relayBaseUrl?: string | null;
+}): void {
+  if (endpoints.authBaseUrl !== undefined) {
+    customAuthBaseUrl = sanitizeBaseUrl(endpoints.authBaseUrl ?? undefined);
+  }
+  if (endpoints.relayBaseUrl !== undefined) {
+    customRelayBaseUrl = sanitizeBaseUrl(endpoints.relayBaseUrl ?? undefined);
+  }
+}
+
+export function getAuthBaseUrl(): string {
+  return (
+    customAuthBaseUrl ||
+    sanitizeBaseUrl(process.env.EXPO_PUBLIC_AUTH_BASE_URL) ||
+    'https://auth.flowbit.me'
+  );
+}
+
+export function getRelayBaseUrl(): string {
+  return (
+    customRelayBaseUrl ||
+    sanitizeBaseUrl(process.env.EXPO_PUBLIC_RELAY_BASE_URL) ||
+    'https://auth.flowbit.me'
+  );
+}
+
+const AUTH_BASE_URL = getAuthBaseUrl();
+const RELAY_BASE_URL = getRelayBaseUrl();
 
 export class AccountApiError extends Error {
   readonly status: number;
@@ -62,7 +96,8 @@ async function requestJson<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${options.baseUrl ?? AUTH_BASE_URL}${path}`, {
+    const targetBaseUrl = options.baseUrl ?? getAuthBaseUrl();
+    const response = await fetch(`${targetBaseUrl}${path}`, {
       method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
@@ -237,7 +272,7 @@ export async function fetchRelayDevices(
 ): Promise<AccountDevice[]> {
   const body = await requestJson<unknown>('/v1/devices', {
     token,
-    baseUrl: RELAY_BASE_URL,
+    baseUrl: getRelayBaseUrl(),
   });
   const items =
     body &&
@@ -591,7 +626,7 @@ export function resolveAvatarUrl(
   url: string | null | undefined
 ): string | null {
   if (!url) return null;
-  return url.startsWith('http') ? url : `${AUTH_BASE_URL}${url}`;
+  return url.startsWith('http') ? url : `${getAuthBaseUrl()}${url}`;
 }
 
 export async function fetchClientTicket(
@@ -603,7 +638,7 @@ export async function fetchClientTicket(
   const body = await requestJson<unknown>('/v1/ticket/client', {
     method: 'POST',
     token,
-    baseUrl: RELAY_BASE_URL,
+    baseUrl: getRelayBaseUrl(),
     body: { deviceId, deviceName, targetDeviceId },
   });
   if (!body || typeof body !== 'object') {

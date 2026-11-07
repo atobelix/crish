@@ -21,7 +21,10 @@ import {
   setLocalChatClientForTest,
 } from '@/adapters/localChat/localChatWiring';
 import { configureLocalChatSessionPersistence } from '@/domain/store/localChatSessionStore';
-import { resetLocalChatEngineForTest } from '@/adapters/localChat/localChatEngine';
+import {
+  resetLocalChatEngineForTest,
+  setStreamBatchWindowMsForTest,
+} from '@/adapters/localChat/localChatEngine';
 import type {
   StreamHandlers,
   StreamTransport,
@@ -95,6 +98,7 @@ beforeEach(async () => {
     error: null,
   });
   resetLocalChatEngineForTest();
+  setStreamBatchWindowMsForTest(0);
   configureLocalChatSessionPersistence(null);
 });
 

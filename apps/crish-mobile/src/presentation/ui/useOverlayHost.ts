@@ -11,7 +11,9 @@ export interface OverlayHostState<T> {
   /** 打开指定覆盖层（同时置位 activeOverlay 与 renderedOverlay） */
   openOverlay: (overlay: T) => void;
   /** 关闭当前覆盖层（将 activeOverlay 置为 null，保留 renderedOverlay 直到退场完成） */
-  closeOverlay: (target?: T) => void;
+  closeOverlay: (target?: T | unknown) => void;
+  /** 切换指定覆盖层的开闭状态（当前若已打开则关闭，否则打开） */
+  toggleOverlay: (overlay: T) => void;
   /** 覆盖层退场动画完成回调（清空 renderedOverlay，完成物理卸载） */
   onOverlayExited: (overlay: T) => void;
   /** 判定指定覆盖层当前逻辑是否开启 */
@@ -55,14 +57,24 @@ export function useOverlayHost<T = string>(
     setRenderedOverlay(overlay);
   }, []);
 
-  const closeOverlay = useCallback((target?: T) => {
+  const closeOverlay = useCallback((target?: T | unknown) => {
+    const validTarget = typeof target === 'string' ? (target as T) : undefined;
     setActiveOverlay((current) => {
-      if (target !== undefined && current !== target) {
-        return current;
-      }
+      if (validTarget !== undefined && current !== validTarget) return current;
       return null;
     });
   }, []);
+
+  const toggleOverlay = useCallback(
+    (overlay: T) => {
+      if (activeOverlay === overlay) {
+        closeOverlay(overlay);
+      } else {
+        openOverlay(overlay);
+      }
+    },
+    [activeOverlay, closeOverlay, openOverlay]
+  );
 
   const onOverlayExited = useCallback((overlay: T) => {
     setRenderedOverlay((current) => (current === overlay ? null : current));
@@ -83,6 +95,7 @@ export function useOverlayHost<T = string>(
     renderedOverlay,
     openOverlay,
     closeOverlay,
+    toggleOverlay,
     onOverlayExited,
     isOpen,
     isMounted,

@@ -172,4 +172,52 @@ describe('useOverlayHost 统一覆盖层状态机', () => {
     expect(result.current.isOpen('sheetB')).toBe(true);
     expect(result.current.isMounted('sheetB')).toBe(true);
   });
+
+  it('closeOverlay 传入包含 nativeEvent 的事件对象时仍能成功关闭当前 overlay（免疫手势事件传染）', async () => {
+    const { result } = await renderHook(() =>
+      useOverlayHost<TestOverlayKind>()
+    );
+
+    await act(async () => {
+      result.current.openOverlay('sheetA');
+    });
+    expect(result.current.activeOverlay).toBe('sheetA');
+
+    // 模拟 React Native GestureResponderEvent 对象被误传入 closeOverlay
+    const fakeGestureResponderEvent = {
+      nativeEvent: { pageX: 100, pageY: 200, target: 'view-1' },
+      target: 'view-1',
+      currentTarget: 'view-1',
+    };
+
+    await act(async () => {
+      result.current.closeOverlay(
+        fakeGestureResponderEvent as unknown as TestOverlayKind
+      );
+    });
+
+    expect(result.current.activeOverlay).toBeNull();
+    expect(result.current.isOpen('sheetA')).toBe(false);
+    expect(result.current.renderedOverlay).toBe('sheetA');
+  });
+
+  it('toggleOverlay 支持在打开与关闭状态间平滑切换', async () => {
+    const { result } = await renderHook(() =>
+      useOverlayHost<TestOverlayKind>()
+    );
+
+    await act(async () => {
+      result.current.toggleOverlay('sheetA');
+    });
+    expect(result.current.activeOverlay).toBe('sheetA');
+    expect(result.current.renderedOverlay).toBe('sheetA');
+    expect(result.current.isOpen('sheetA')).toBe(true);
+
+    await act(async () => {
+      result.current.toggleOverlay('sheetA');
+    });
+    expect(result.current.activeOverlay).toBeNull();
+    expect(result.current.renderedOverlay).toBe('sheetA');
+    expect(result.current.isOpen('sheetA')).toBe(false);
+  });
 });

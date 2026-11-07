@@ -21,6 +21,7 @@ import { usePressFade } from '@/presentation/ui/pressFeedback';
 export interface PermissionModeSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   value: PermissionMode;
   onSelect: (mode: PermissionMode) => void;
   testID?: string;
@@ -29,6 +30,7 @@ export interface PermissionModeSheetProps {
 export function PermissionModeSheet({
   visible,
   onClose,
+  onCloseComplete,
   value,
   onSelect,
   testID = 'permission-sheet',
@@ -38,6 +40,7 @@ export function PermissionModeSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       title="权限模式"
       size="medium"
       testID={testID}

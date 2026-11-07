@@ -10,9 +10,12 @@ import {
   fetchAccountMe,
   fetchClientTicket,
   fetchRelayDevices,
+  getAuthBaseUrl,
+  getRelayBaseUrl,
   loginAccount,
   refreshAccount,
   setAccountPassword,
+  setCustomEndpointUrls,
   verifyEmailCode,
 } from './accountApi';
 
@@ -364,5 +367,30 @@ describe('网络层错误归一', () => {
       code: 'network',
       message: 'dns failure',
     });
+  });
+});
+
+describe('动态端点配置与 Tailscale/私网适配', () => {
+  afterEach(() => {
+    setCustomEndpointUrls({ authBaseUrl: null, relayBaseUrl: null });
+  });
+
+  it('支持自定义设置与末尾斜线自动清洗', () => {
+    setCustomEndpointUrls({
+      authBaseUrl: 'http://100.72.31.76:8787///',
+      relayBaseUrl: 'http://100.72.31.76:8766/',
+    });
+    expect(getAuthBaseUrl()).toBe('http://100.72.31.76:8787');
+    expect(getRelayBaseUrl()).toBe('http://100.72.31.76:8766');
+  });
+
+  it('重置为 null 后回退至环境变量或默认公网', () => {
+    setCustomEndpointUrls({
+      authBaseUrl: 'http://100.72.31.76:8787',
+      relayBaseUrl: 'http://100.72.31.76:8766',
+    });
+    setCustomEndpointUrls({ authBaseUrl: null, relayBaseUrl: null });
+    expect(getAuthBaseUrl()).toMatch(/^https?:\/\//);
+    expect(getRelayBaseUrl()).toMatch(/^https?:\/\//);
   });
 });

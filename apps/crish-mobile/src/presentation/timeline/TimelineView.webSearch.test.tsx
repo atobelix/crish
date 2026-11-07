@@ -32,7 +32,7 @@ describe('TimelineView 网页搜索来源与角标交互闭环', () => {
       url: 'https://reactnative.dev/blog/0.86',
       snippet: 'React Native 0.86 带来了默认新架构与端侧工具调用支持。',
       domain: 'reactnative.dev',
-      provider: 'google' as const,
+      provider: 'tavily' as const,
     },
     {
       id: 'cite-2',
@@ -40,7 +40,7 @@ describe('TimelineView 网页搜索来源与角标交互闭环', () => {
       url: 'https://github.com/facebook/react-native',
       snippet: 'Facebook 官方 React Native 核心仓库源码。',
       domain: 'github.com',
-      provider: 'bing' as const,
+      provider: 'brave' as const,
     },
   ];
 
@@ -50,6 +50,7 @@ describe('TimelineView 网页搜索来源与角标交互闭环', () => {
         kind: 'tool',
         id: 'tool-search-1',
         toolName: 'web_search',
+        summary: '搜索网页',
         status: 'done',
         input: '{"query":"React Native 0.86"}',
         output: '...',
@@ -95,6 +96,7 @@ describe('TimelineView 网页搜索来源与角标交互闭环', () => {
         kind: 'tool',
         id: 'tool-search-1',
         toolName: 'web_search',
+        summary: '搜索网页',
         status: 'done',
         input: '{"query":"React Native 0.86"}',
         output: '...',
@@ -151,6 +153,7 @@ describe('TimelineView 网页搜索来源与角标交互闭环', () => {
         kind: 'tool',
         id: 'tool-search-1',
         toolName: 'web_search',
+        summary: '搜索网页',
         status: 'done',
         input: '{"query":"React Native 0.86"}',
         output: '...',

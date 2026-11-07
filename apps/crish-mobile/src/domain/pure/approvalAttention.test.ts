@@ -12,7 +12,7 @@ const request: PermissionRequest = {
   toolCallId: 'call-1',
   toolName: 'write_file',
   parameters: { path: 'a.ts' },
-  summary: 'write a.ts',
+  intent: 'write a.ts',
   toolMetadata: {},
 };
 

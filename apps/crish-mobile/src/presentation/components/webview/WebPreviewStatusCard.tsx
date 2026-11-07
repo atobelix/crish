@@ -6,9 +6,14 @@
  * 2. WebPreviewErrorCard: 加载失败优雅错误卡片与一键重试。
  */
 
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
-import { AppText, Icon } from '@/presentation/ui';
+import {
+  AnimatedPressable,
+  AppText,
+  Icon,
+  usePressFade,
+} from '@/presentation/ui';
 
 export interface WebPreviewBlockedCardProps {
   reason?: string;
@@ -29,7 +34,10 @@ export function WebPreviewBlockedCard({
       <View
         style={[
           styles.iconCircle,
-          { backgroundColor: theme.colors.dangerSoft },
+          {
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.dangerSoft,
+          },
         ]}
       >
         <Icon name="shield" size={32} color={theme.colors.danger} />
@@ -64,6 +72,7 @@ export function WebPreviewErrorCard({
   testID = 'web-preview-error',
 }: WebPreviewErrorCardProps) {
   const theme = useTheme();
+  const press = usePressFade();
 
   return (
     <View
@@ -73,7 +82,10 @@ export function WebPreviewErrorCard({
       <View
         style={[
           styles.iconCircle,
-          { backgroundColor: theme.colors.dangerSoft },
+          {
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.dangerSoft,
+          },
         ]}
       >
         <Icon name="alert-circle" size={32} color={theme.colors.danger} />
@@ -90,18 +102,21 @@ export function WebPreviewErrorCard({
       >
         {error}
       </AppText>
-      <Pressable
+      <AnimatedPressable
         testID="web-preview-reload"
         accessibilityRole="button"
         accessibilityLabel="重新加载"
         onPress={onReload}
-        style={({ pressed }) => [
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        style={[
           styles.reloadButton,
           {
+            borderRadius: theme.radius.pill,
             backgroundColor: theme.colors.fillSubtle,
             borderColor: theme.colors.hairline,
           },
-          pressed && { opacity: 0.7 },
+          press.fadeStyle,
         ]}
       >
         <Icon name="refresh" size={16} color={theme.colors.textPrimary} />
@@ -111,7 +126,7 @@ export function WebPreviewErrorCard({
         >
           重新加载
         </AppText>
-      </Pressable>
+      </AnimatedPressable>
     </View>
   );
 }
@@ -126,21 +141,17 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   statusTitle: {
-    fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   statusDesc: {
-    fontSize: 13,
     textAlign: 'center',
     maxWidth: 300,
-    lineHeight: 18,
   },
   reloadButton: {
     marginTop: 8,
@@ -149,11 +160,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 20,
     borderWidth: 1,
   },
   reloadButtonText: {
-    fontSize: 14,
     fontWeight: '500',
   },
 });

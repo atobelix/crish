@@ -28,9 +28,9 @@ const ALLOWLIST: Record<string, string> = {
     'WebView 库生成物',
   'src/presentation/components/blocks/webview/generated/mermaid.ts':
     'WebView 库生成物',
-  // 方案 20/21 钉死 250ms settle 极陡纯减速贝塞尔直驱
-  'src/presentation/components/drawer/CrishDrawerLayout.tsx':
-    '方案 20/21 钉死 250ms settle 极陡纯减速贝塞尔直驱',
+  // 语音输入声波雷达扩散波纹循环周期（2000ms 周期循环）
+  'src/presentation/ui/VoiceOverlay.tsx':
+    '语音输入声波雷达扩散波纹循环周期（2000ms 周期循环）',
 };
 
 // 规则 5 的单独豁免：RUNNING_PULSE_PERIOD_MS 是导出的命名正典常量
@@ -159,5 +159,16 @@ describe('动效 token 单源守卫（批 A）', () => {
     const existing = new Set(files.map(({ rel }) => rel));
     const stale = Object.keys(ALLOWLIST).filter((rel) => !existing.has(rel));
     expect(stale).toEqual([]);
+  });
+
+  it('CrishDrawerLayout 抽屉动效必须且只能使用 withSpring，严禁使用 withTiming', () => {
+    const drawerFile = files.find(
+      ({ rel }) =>
+        rel === 'src/presentation/components/drawer/CrishDrawerLayout.tsx'
+    );
+    expect(drawerFile).toBeDefined();
+    expect(drawerFile!.code).toMatch(/\bwithSpring\(/);
+    expect(drawerFile!.code).not.toMatch(/\bwithTiming\(/);
+    expect(drawerFile!.code).toContain('theme.motion.spring.drawer');
   });
 });

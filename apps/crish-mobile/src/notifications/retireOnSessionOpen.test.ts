@@ -42,7 +42,7 @@ function approvalItem(toolCallId: string, sessionId: string): ApprovalItem {
       toolCallId,
       toolName: 'write_file',
       parameters: {},
-      summary: 'write',
+      intent: 'write',
       toolMetadata: {},
     },
     runId: 'run-1',

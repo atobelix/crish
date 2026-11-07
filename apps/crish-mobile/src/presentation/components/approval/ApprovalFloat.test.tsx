@@ -41,7 +41,7 @@ function makeItem(
       toolCallId,
       toolName: 'write_file',
       parameters: { path: 'src/login.tsx' },
-      summary: '修改登录页',
+      intent: '修改登录页',
       toolMetadata: {},
     },
     runId: 'r-1',

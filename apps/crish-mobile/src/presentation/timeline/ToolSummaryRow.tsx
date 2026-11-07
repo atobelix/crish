@@ -9,7 +9,7 @@ import { AppText, Icon, type IconName } from '@/presentation/ui';
 import { usePressFade } from '@/presentation/ui/pressFeedback';
 import type { WebSearchSource } from '@crish/shared-types';
 import { WebSourceStrip } from '@/presentation/components/tools/WebSourceStrip';
-import { toolBlockSummary } from './buildTimeline';
+import { formatToolDisplayName, toolBlockSummary } from './buildTimeline';
 import type { ToolRunBlock } from './groupToolRuns';
 import { useMinResidencyText } from './useActivityLabel';
 
@@ -47,36 +47,45 @@ function getToolIconName(toolName?: string): IconName {
 
 function runningLabel(run: ToolRunBlock): string {
   const current = run.activeTool ?? run.latest;
-  const detail = toolBlockSummary(current) || current.toolName;
+  const detail =
+    current.intent ||
+    current.group ||
+    toolBlockSummary(current) ||
+    formatToolDisplayName(current.toolName) ||
+    '处理中';
   return `正在执行 · ${detail}`;
 }
 
-/** 封口组头：工具数 + 组总时长（单特化工具优先展示专用完成文案） */
+/**
+ * 封口组头（D0-2 效果锁）：
+ * 绝不展示工具数量（如“使用了 N 个工具”）与耗时秒数（如“N 秒”）。
+ * 展示意图标题（优先组标题 group / 最新工具的 intent，无意图时显示单工具展示名或「处理过程」）。
+ */
 function sealedLabel(run: ToolRunBlock): string {
+  // 1. 优先提取当前组内声明的 group 标题
+  const groupTitle = run.latest?.group ?? run.tools.find((t) => t.group)?.group;
+  if (groupTitle) {
+    return groupTitle;
+  }
+
+  // 2. 其次读取最新/末尾工具的 clean intent
+  const latestIntent = run.latest?.intent;
+  if (latestIntent) {
+    return latestIntent;
+  }
+
+  // 3. 单工具特化摘要或展示名
   if (run.tools.length === 1) {
     const single = run.tools[0]!;
-    if (
-      single.toolName === 'web_search' ||
-      single.toolName === 'search_web' ||
-      single.toolName === 'web_fetch' ||
-      single.toolName === 'fetch_url' ||
-      single.toolName === 'read_url_content' ||
-      single.toolName === 'run_js_sandbox' ||
-      single.toolName === 'quickjs_sandbox' ||
-      single.toolName === 'run_javascript'
-    ) {
-      const summary = toolBlockSummary(single);
-      if (summary) {
-        if (run.durationMs === undefined) return summary;
-        const seconds = Math.max(1, Math.round(run.durationMs / 1000));
-        return `${summary} · ${seconds} 秒`;
-      }
+    const summary = toolBlockSummary(single);
+    if (summary) {
+      return summary;
     }
+    return formatToolDisplayName(single.toolName) || '处理过程';
   }
-  const base = `使用了 ${run.tools.length} 个工具`;
-  if (run.durationMs === undefined) return base;
-  const seconds = Math.max(1, Math.round(run.durationMs / 1000));
-  return `${base} · ${seconds} 秒`;
+
+  // 4. 多工具无意图兜底
+  return '处理过程';
 }
 
 export function ToolSummaryRow({

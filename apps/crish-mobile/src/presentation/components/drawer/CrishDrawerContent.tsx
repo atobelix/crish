@@ -705,7 +705,7 @@ function SearchPill({
           ref={inputRef}
           value={query}
           onChangeText={onQueryChange}
-          placeholder="搜索会话与命令..."
+          placeholder="搜索会话..."
           placeholderTextColor={theme.colors.textTertiary}
           autoFocus
           accessibilityLabel="搜索会话"
@@ -719,7 +719,7 @@ function SearchPill({
         />
       ) : (
         <AppText variant="callout" color="textTertiary" style={styles.flex}>
-          搜索会话与命令...
+          搜索会话...
         </AppText>
       )}
     </Pressable>

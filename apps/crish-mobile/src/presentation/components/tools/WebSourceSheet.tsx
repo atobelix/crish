@@ -361,8 +361,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   indexCapsuleText: {
-    fontSize: 12,
-    lineHeight: 16,
     fontWeight: '700',
   },
   sheetTitle: {
@@ -389,10 +387,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  providerBadgeText: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
+  providerBadgeText: {},
   urlBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -414,14 +409,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   snippetSectionLabel: {
-    fontSize: 11,
-    lineHeight: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
-  snippetContent: {
-    lineHeight: 22,
-  },
+  snippetContent: {},
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',

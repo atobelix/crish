@@ -13,6 +13,7 @@ import {
 export interface WorkspaceSheetProps {
   visible: boolean;
   onClose: () => void;
+  onCloseComplete?: () => void;
   workspaces: readonly WorkspaceEntry[] | null;
   status: 'idle' | 'loading' | 'loaded' | 'error';
   activeRoot: string | null;
@@ -24,6 +25,7 @@ export interface WorkspaceSheetProps {
 export function WorkspaceSheet({
   visible,
   onClose,
+  onCloseComplete,
   workspaces,
   status,
   activeRoot,
@@ -33,7 +35,13 @@ export function WorkspaceSheet({
 }: WorkspaceSheetProps) {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="工作区" size="large">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      onCloseComplete={onCloseComplete}
+      title="工作区"
+      size="large"
+    >
       {status === 'loading' || status === 'idle' ? (
         <LoadingState compact />
       ) : status === 'error' ? (

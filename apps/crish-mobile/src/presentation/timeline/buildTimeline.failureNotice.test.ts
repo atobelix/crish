@@ -79,11 +79,11 @@ describe('run-terminal 失败 notice（分类映射）', () => {
     );
   });
 
-  it('完成/取消形态不变（无 detail 注入）', () => {
+  it('完成不产生时间线条目，取消形态保持克制（无 detail 注入）', () => {
     const done = buildSessionTimeline([
       entry('run-terminal', { terminal: 'completed' }),
     ]);
-    expect(done[0]).toMatchObject({ text: '运行完成', tone: 'success' });
+    expect(done).toHaveLength(0);
     const cancelled = buildSessionTimeline([
       entry('run-terminal', { terminal: 'cancelled' }),
     ]);

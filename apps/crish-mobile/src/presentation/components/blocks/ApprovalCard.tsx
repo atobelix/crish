@@ -106,7 +106,11 @@ export default function ApprovalCard({ item, remainingMs }: ApprovalCardProps) {
   const summary = item.riskMeta?.command
     ? `$ ${maskCommandSecrets(item.riskMeta.command)}`
     : summarizeParameters(item.request.parameters) ||
-      item.request.summary.trim();
+      (
+        item.request.intent ??
+        (item.request as any).summary ??
+        item.request.toolName
+      ).trim();
   const statusColor =
     status?.tone === 'danger'
       ? theme.colors.danger

@@ -281,8 +281,8 @@ export function Sheet({
   const handleExitFinished = useCallback(() => {
     if (exitCalledRef.current) return;
     exitCalledRef.current = true;
-    runOnJS(setMounted)(false);
-    if (onCloseComplete) runOnJS(onCloseComplete)();
+    setMounted(false);
+    if (onCloseComplete) onCloseComplete();
   }, [onCloseComplete]);
   // 覆盖层登记（批 D）：挂载期间（含出场动画）在栈，Android 返回
   // 由 Modal onRequestClose 汇入栈顶裁决；钻取在场时先退钻取。
@@ -340,7 +340,7 @@ export function Sheet({
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
-        if (finished) handleExitFinished();
+        if (finished) runOnJS(handleExitFinished)();
       }
     );
     onClose();
@@ -407,7 +407,7 @@ export function Sheet({
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       },
       (finished) => {
-        if (finished) handleExitFinished();
+        if (finished) runOnJS(handleExitFinished)();
       }
     );
     // 兜底卸载：动画被打断/测试环境回调不达时不留挂载

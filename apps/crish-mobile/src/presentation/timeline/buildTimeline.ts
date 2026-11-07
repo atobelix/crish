@@ -69,6 +69,10 @@ export interface ToolBlock {
   kind: 'tool';
   id: string;
   toolName: string;
+  intent?: string;
+  group?: string;
+  groupId?: string;
+  isInternal?: boolean;
   summary: string;
   status: 'running' | 'done' | 'error';
   input?: Record<string, unknown> | string;
@@ -89,6 +93,7 @@ export interface ApprovalBlock {
   kind: 'approval';
   id: string;
   toolName: string;
+  intent?: string;
   summary: string;
   status: 'pending' | 'approved' | 'denied' | 'expired';
   atMs: number;
@@ -377,6 +382,7 @@ interface TimelineFoldState {
   reasoningIndex: Map<string, number>;
   toolIndex: Map<string, number>;
   approvalIndex: Map<string, number>;
+  ignoredToolIds: Set<string>;
   lastToolId: string | null;
   /** 已折叠前缀的条目引用快照（与下轮输入逐个比对，判增量 / 分歧） */
   foldedRefs: readonly FeedEntry[];
@@ -395,6 +401,7 @@ function createFoldState(): TimelineFoldState {
     reasoningIndex: new Map(),
     toolIndex: new Map(),
     approvalIndex: new Map(),
+    ignoredToolIds: new Set(),
     lastToolId: null,
     foldedRefs: [],
     lastOut: null,
@@ -612,12 +619,41 @@ function foldEntries(
       }
       case 'tool-start': {
         const id = toolIdOf(entry, fallbackId);
-        state.lastToolId = id;
         const call = readRecord(entry['call']);
-        const summary = stripAnsi(
-          readString(entry, 'summary') ??
+        const isInternal = Boolean(
+          readBool(entry, 'isInternal') ||
+          readBool(entry, 'is_internal') ||
+          (call &&
+            (call['isInternal'] === true || call['is_internal'] === true))
+        );
+        if (isInternal) {
+          state.ignoredToolIds.add(id);
+          break;
+        }
+        state.lastToolId = id;
+        const intent = stripAnsi(
+          readString(entry, 'intent') ??
+            (call && typeof call['intent'] === 'string'
+              ? call['intent']
+              : null) ??
+            readString(entry, 'explanation') ??
+            (call && typeof call['explanation'] === 'string'
+              ? call['explanation']
+              : null) ??
+            readString(entry, 'summary') ??
             (call && typeof call['summary'] === 'string' ? call['summary'] : '')
         );
+        const group =
+          readString(entry, 'group') ??
+          (call && typeof call['group'] === 'string'
+            ? call['group']
+            : undefined);
+        const groupId =
+          readString(entry, 'groupId') ??
+          readString(entry, 'group_id') ??
+          (call && typeof (call['groupId'] ?? call['group_id']) === 'string'
+            ? String(call['groupId'] ?? call['group_id'])
+            : undefined);
         const rawInput =
           entry['input'] ??
           (call && call['input'] ? call['input'] : undefined) ??
@@ -633,7 +669,11 @@ function foldEntries(
           kind: 'tool',
           id,
           toolName: toolNameOf(entry),
-          summary,
+          intent: intent || undefined,
+          group,
+          groupId,
+          isInternal: false,
+          summary: intent,
           status: 'running',
           input,
           output: '',
@@ -644,6 +684,9 @@ function foldEntries(
       }
       case 'tool-update': {
         const id = toolIdOf(entry, state.lastToolId ?? fallbackId);
+        if (state.ignoredToolIds.has(id)) {
+          break;
+        }
         const update = readRecord(entry['update']);
         const text = stripAnsi(
           readString(entry, 'text') ??
@@ -675,7 +718,26 @@ function foldEntries(
       }
       case 'tool-end': {
         const id = toolIdOf(entry, state.lastToolId ?? fallbackId);
+        if (state.ignoredToolIds.has(id)) {
+          state.ignoredToolIds.delete(id);
+          if (state.lastToolId === id) {
+            state.lastToolId = null;
+          }
+          break;
+        }
         const result = readRecord(entry['result']);
+        const isInternal = Boolean(
+          readBool(entry, 'isInternal') ||
+          readBool(entry, 'is_internal') ||
+          (result &&
+            (result['isInternal'] === true || result['is_internal'] === true))
+        );
+        if (isInternal) {
+          if (state.lastToolId === id) {
+            state.lastToolId = null;
+          }
+          break;
+        }
         const isError =
           readBool(entry, 'result', 'isError') || result?.['isError'] === true;
         const output = stripAnsi(
@@ -738,13 +800,28 @@ function foldEntries(
           readString(entry, 'toolCallId') ??
           readString(entry, 'tool_call_id') ??
           fallbackId;
-        const summary = stripAnsi(readString(entry, 'summary') ?? '');
+        const req = readRecord(entry['request']);
+        const intent = stripAnsi(
+          readString(entry, 'intent') ??
+            (req && typeof req['intent'] === 'string' ? req['intent'] : '') ??
+            readString(entry, 'summary') ??
+            (req && typeof req['summary'] === 'string' ? req['summary'] : '') ??
+            readString(entry, 'explanation') ??
+            (req && typeof req['explanation'] === 'string'
+              ? req['explanation']
+              : '')
+        );
         if (!state.approvalIndex.has(id)) {
           const index = pushDraft(state, {
             kind: 'approval',
             id,
-            toolName: readString(entry, 'toolName') ?? '工具',
-            summary,
+            toolName:
+              readString(entry, 'toolName') ??
+              (req && typeof req['toolName'] === 'string'
+                ? req['toolName']
+                : '工具'),
+            intent: intent || undefined,
+            summary: intent,
             status: 'pending',
             atMs: entry.receivedAtMs,
           });
@@ -1002,7 +1079,9 @@ export function extractWebSources(
           id: String(mdIdx),
           title,
           url: rawUrl,
+          snippet: '',
           domain,
+          provider: 'model_native',
         });
         mdIdx++;
       }
@@ -1205,10 +1284,9 @@ export function toolBlockSummary(block: ToolBlock): string {
     if (query) {
       return `搜索 · "${query}"`;
     }
-    if (block.summary) {
-      return block.summary.length > 80
-        ? `${block.summary.slice(0, 79)}…`
-        : block.summary;
+    const text = block.intent || block.summary;
+    if (text) {
+      return text.length > 80 ? `${text.slice(0, 79)}…` : text;
     }
     return '搜索';
   }
@@ -1239,10 +1317,9 @@ export function toolBlockSummary(block: ToolBlock): string {
         return `抓取 · ${hostname}`;
       }
     }
-    if (block.summary) {
-      return block.summary.length > 80
-        ? `${block.summary.slice(0, 79)}…`
-        : block.summary;
+    const text = block.intent || block.summary;
+    if (text) {
+      return text.length > 80 ? `${text.slice(0, 79)}…` : text;
     }
     return '抓取';
   }
@@ -1253,7 +1330,18 @@ export function toolBlockSummary(block: ToolBlock): string {
     toolName === 'quickjs_sandbox' ||
     toolName === 'run_javascript'
   ) {
+    if (block.intent) {
+      return block.intent.length > 80
+        ? `${block.intent.slice(0, 79)}…`
+        : block.intent;
+    }
     return '执行端侧脚本';
+  }
+
+  if (block.intent) {
+    return block.intent.length > 80
+      ? `${block.intent.slice(0, 79)}…`
+      : block.intent;
   }
 
   const text = `${block.summary} ${block.output}`.replace(/\s+/g, ' ').trim();

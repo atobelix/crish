@@ -27,31 +27,115 @@ describe('voicePhaseForTranslation', () => {
 });
 
 describe('voicePhaseForTranslation2D', () => {
-  it('handles left-slide to cancel with hysteresis buffer', () => {
-    // 划过 58px 进入 cancelling
-    expect(voicePhaseForTranslation2D('recording', -59, 0)).toBe('cancelling');
-    expect(voicePhaseForTranslation2D('recording', -58, 0)).toBe('cancelling');
-    // 在 58px 以内保持 recording
-    expect(voicePhaseForTranslation2D('recording', -50, 0)).toBe('recording');
+  it('handles bottom region as pure recording regardless of X translation', () => {
+    // 靠近输入框下方区域（Y > -30）：无论向左滑、向右滑还是在原地，全都是发送
+    expect(voicePhaseForTranslation2D('recording', -60, 0)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', 60, 0)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', 0, 0)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', -80, -10)).toBe('recording');
 
-    // 在 cancelling 下，必须滑回 -42px 以内才退回 recording
-    expect(voicePhaseForTranslation2D('cancelling', -50, 0)).toBe('cancelling');
-    expect(voicePhaseForTranslation2D('cancelling', -40, 0)).toBe('recording');
+    // 处于 cancelling 或 editing 时，只要手指滑回下方区域，立即恢复 recording 发送态
+    expect(voicePhaseForTranslation2D('cancelling', -60, 0)).toBe('recording');
+    expect(voicePhaseForTranslation2D('editing', 60, 0)).toBe('recording');
   });
 
-  it('handles right-slide to edit with hysteresis buffer', () => {
-    // 划过 58px 进入 editing
-    expect(voicePhaseForTranslation2D('recording', 59, 0)).toBe('editing');
-    expect(voicePhaseForTranslation2D('recording', 58, 0)).toBe('editing');
-    expect(voicePhaseForTranslation2D('recording', 50, 0)).toBe('recording');
+  it('handles upper region three-column topology (left cancelling, center recording, right editing)', () => {
+    const activeY = -60; // 向上滑动超过 -30px 阈值，进入胶囊识别高度
 
-    // 在 editing 下，必须滑回 42px 以内才退回 recording
-    expect(voicePhaseForTranslation2D('editing', 50, 0)).toBe('editing');
-    expect(voicePhaseForTranslation2D('editing', 40, 0)).toBe('recording');
+    // 1. 左列（X <= -42）：进入 cancelling 撤销态
+    expect(voicePhaseForTranslation2D('recording', -43, activeY)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('recording', -42, activeY)).toBe(
+      'cancelling'
+    );
+    // 在中间走廊维持 recording
+    expect(voicePhaseForTranslation2D('recording', -30, activeY)).toBe(
+      'recording'
+    );
+
+    // 迟滞走廊：在 cancelling 态下，需跨过 -26px 阈值（如 -20px）才退回 recording
+    expect(voicePhaseForTranslation2D('cancelling', -30, activeY)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('cancelling', -20, activeY)).toBe(
+      'recording'
+    );
+
+    // 2. 右列（X >= 42）：进入 editing 编辑态
+    expect(voicePhaseForTranslation2D('recording', 43, activeY)).toBe(
+      'editing'
+    );
+    expect(voicePhaseForTranslation2D('recording', 42, activeY)).toBe(
+      'editing'
+    );
+    // 在中间走廊维持 recording
+    expect(voicePhaseForTranslation2D('recording', 30, activeY)).toBe(
+      'recording'
+    );
+
+    // 迟滞走廊：在 editing 态下，需跨过 26px 阈值（如 20px）才退回 recording
+    expect(voicePhaseForTranslation2D('editing', 30, activeY)).toBe('editing');
+    expect(voicePhaseForTranslation2D('editing', 20, activeY)).toBe(
+      'recording'
+    );
+
+    // 3. 中列（-26 < X < 26）：无论向上滑动多高，永远保持 recording 发送态
+    expect(voicePhaseForTranslation2D('recording', 0, -60)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', 0, -120)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', 0, -240)).toBe('recording');
   });
 
-  it('preserves vertical upward cancel threshold as fallback', () => {
-    expect(voicePhaseForTranslation2D('recording', 0, -85)).toBe('cancelling');
+  it('Y-axis hysteresis: upper zone entered at -30, exited at -16 (isomorphic to X 42/26)', () => {
+    // recording 在进入线之上（-30 < Y <= 0 的下方区）维持发送，不入上方区
+    expect(voicePhaseForTranslation2D('recording', -60, -20)).toBe('recording');
+    expect(voicePhaseForTranslation2D('recording', -60, -29)).toBe('recording');
+    // 越过进入线（Y <= -30）+ 左列 → cancelling
+    expect(voicePhaseForTranslation2D('recording', -60, -30)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('recording', -60, -31)).toBe(
+      'cancelling'
+    );
+
+    // 迟滞带（-30 < Y <= -16）：已在上方区的阶段不因越过 -30 就翻转，
+    // 仍按 X 拓扑判定（左列维持 cancelling、右列维持 editing）
+    expect(voicePhaseForTranslation2D('cancelling', -60, -20)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('cancelling', -60, -17)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('editing', 60, -20)).toBe('editing');
+    // 迟滞带内 X 若已退回走廊，仍可按 X 迟滞退回 recording
+    expect(voicePhaseForTranslation2D('cancelling', 0, -20)).toBe('recording');
+
+    // 回到退出线以内（Y > -16）：无论 X 在哪列，一律退回下方发送态
+    expect(voicePhaseForTranslation2D('cancelling', -60, -16)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('cancelling', -60, -15)).toBe(
+      'recording'
+    );
+    expect(voicePhaseForTranslation2D('editing', 60, -15)).toBe('recording');
+
+    // 边界往返不翻转：在 -30 线附近上下抖动（-31 ↔ -29），阶段保持
+    expect(voicePhaseForTranslation2D('cancelling', -60, -31)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('cancelling', -60, -29)).toBe(
+      'cancelling'
+    );
+    expect(voicePhaseForTranslation2D('cancelling', -60, -31)).toBe(
+      'cancelling'
+    );
+  });
+
+  it('strictly protects editing region from false cancelling triggers at high vertical displacements', () => {
+    // 铁律：用户手在右侧编辑区时，即便向上大幅度滑动（例如 Y = -180px），坚决保持 editing，绝不允许变成 cancelling
+    expect(voicePhaseForTranslation2D('recording', 60, -80)).toBe('editing');
+    expect(voicePhaseForTranslation2D('recording', 60, -150)).toBe('editing');
+    expect(voicePhaseForTranslation2D('editing', 60, -200)).toBe('editing');
   });
 });
 

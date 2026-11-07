@@ -216,4 +216,98 @@ describe('buildSessionTimeline', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0]).toMatchObject({ kind: 'notice', tone: 'danger' });
   });
+
+  describe('体验降噪与非空守门（移动端 UI 体验重构）', () => {
+    it('纯工具调用无正文时，不生成空文本 message 块', () => {
+      const blocks = buildSessionTimeline([
+        entry('message-start', {
+          message: { id: 'm-tool-only', role: 'assistant' },
+        }),
+        entry('tool-start', {
+          call: {
+            id: 't-only',
+            toolName: 'read_file',
+            summary: 'src/main.ts',
+          },
+        }),
+        entry('tool-end', {
+          toolCallId: 't-only',
+          result: { isError: false, output: 'file content' },
+        }),
+        entry('message-end', {
+          message: {
+            id: 'm-tool-only',
+            role: 'assistant',
+            blocks: [],
+          },
+        }),
+      ]);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]?.kind).toBe('tool');
+      expect(blocks.some((b) => b.kind === 'message')).toBe(false);
+    });
+
+    it('全空白字符与零宽不可见字符不得进入时间线', () => {
+      const blocks = buildSessionTimeline([
+        entry('message-start', {
+          message: { id: 'm-ghost', role: 'assistant' },
+        }),
+        entry('message-delta', {
+          messageId: 'm-ghost',
+          block: { type: 'text', text: '   \n \u200B\uFEFF  ' },
+        }),
+      ]);
+      expect(blocks).toHaveLength(0);
+    });
+
+    it('无思考内容的思考链在收口后自动销毁，不发射空壳', () => {
+      const blocks = buildSessionTimeline([
+        entry('message-start', {
+          message: { id: 'm-empty-think', role: 'assistant' },
+        }),
+        entry('message-delta', {
+          messageId: 'm-empty-think',
+          thought: '   \u200B  ',
+        }),
+        entry('message-end', {
+          message: {
+            id: 'm-empty-think',
+            role: 'assistant',
+            blocks: [{ type: 'text', text: '这是正文' }],
+          },
+        }),
+      ]);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({
+        kind: 'message',
+        text: '这是正文',
+      });
+      expect(blocks.some((b) => b.kind === 'reasoning')).toBe(false);
+    });
+
+    it('run-terminal: completed 完全不产生时间线条目', () => {
+      const blocks = buildSessionTimeline([
+        entry('message-start', {
+          message: { id: 'm-done', role: 'assistant' },
+        }),
+        entry('message-delta', {
+          messageId: 'm-done',
+          block: { type: 'text', text: '回答结束' },
+        }),
+        entry('message-end', {
+          message: {
+            id: 'm-done',
+            role: 'assistant',
+            blocks: [{ type: 'text', text: '回答结束' }],
+          },
+        }),
+        entry('run-terminal', {
+          terminal: 'completed',
+        }),
+      ]);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({ kind: 'message', text: '回答结束' });
+      expect(blocks.some((b) => b.kind === 'notice')).toBe(false);
+    });
+  });
 });

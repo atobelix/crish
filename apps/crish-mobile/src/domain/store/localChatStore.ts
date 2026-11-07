@@ -1,16 +1,19 @@
 // 本地供应商配置 store（领域层）：与桌面 UnifiedModelsConfig 同构的配置面
-// + 凭据引用纪律——
-// - 非密配置（供应商/模型/活动选择）以 JSON 存 kv（键 localchat.config，
+// + 凭据引用纪律与全规格模型持久化——
+// - 非密配置（供应商/全量能力模型/活动选择）以单体 JSON 存 SQLite kv（键 localchat.config，
 //   经注入的 SettingsPersist，与 settingsStore 同一持久化面 SqlSettingsDao）；
 // - API Key 材料只进 SecureStore（注入的 SecureStoreDriver），配置里只留
 //   apiKeyRef = secure:<providerId>（桌面 dpapi:<槽> 的移动端对应形态）；
-// - 纯逻辑（草稿→条目/默认模型/活动解析）在 domain/pure/localChatProtocol，
-//   本文件只做状态装配 + IO 编排（对齐 settingsStore 的分工纪律）。
+// - 纯逻辑（草稿→条目/默认模型/活动解析/健壮解码器）在 domain/pure/localChatProtocol，
+//   本文件只做状态装配 + IO 编排（对齐 settingsStore 的分工纪律）；
+// - 供应商删除时执行级联清理：SecureStore 密钥注销、全局 activeModel 清空、
+//   并在 localChatSessionStore 线程表中清理悬挂引用（自愈回退为全局活动模型）。
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { immer } from 'zustand/middleware/immer';
 import {
   apiKeyRefFor,
   apiKeySlotFor,
+  decodeLocalModelsConfig,
   providerDefaultModelId,
 } from '../pure/localChatProtocol';
 import {
@@ -20,12 +23,16 @@ import {
 } from '../types/localChat';
 import type { SettingsPersist } from './settingsStore';
 import type { SecureStoreDriver } from '@/db/secureStore';
+import { localChatSessionStore } from './localChatSessionStore';
 
 /** 配置 kv 键（本机偏好命名空间，与 settings.* 分开：这是功能配置非偏好组） */
 export const LOCAL_CHAT_CONFIG_KEY = 'localchat.config';
 
+/** 纯函数解码器重导出（兼容从 localChatStore 导入的历史测试与调用方） */
+export { decodeLocalModelsConfig };
+
 export interface LocalChatState {
-  /** 本地模型配置（同构桌面 UnifiedModelsConfig） */
+  /** 本地模型配置（同构桌面 UnifiedModelsConfig，包含全规格模型与供应商属性） */
   config: LocalModelsConfig;
   /** 水合完成标志（kv 回填前 UI 显示空态即可，不阻塞） */
   hydrated: boolean;
@@ -43,10 +50,12 @@ export interface LocalChatState {
     spec: LocalProviderSpec,
     apiKey?: string | null
   ) => Promise<void>;
-  /** 删除供应商（连带清除其 SecureStore 密钥与失效的活动选择） */
+  /** 删除供应商（连带清理 SecureStore 密钥、全局 activeModel 与线程表悬挂指针） */
   deleteProvider: (providerId: string) => Promise<void>;
   /** 设活动模型（二元身份；与桌面 setActiveModel 同语义） */
   setActiveModel: (providerId: string, modelId: string) => void;
+  /** 更新供应商连通性延迟（实测延迟即刻落盘，null 代表测速失败） */
+  updateProviderLatency: (providerId: string, latencyMs: number | null) => void;
   /** 读某供应商的密钥材料（仅发送瞬间由 client 层调用，不进 UI 状态） */
   readApiKey: (providerId: string) => Promise<string | null>;
 }
@@ -85,48 +94,6 @@ function writeConfig(
   void p.set(LOCAL_CHAT_CONFIG_KEY, JSON.stringify(config)).catch(() => {
     // 写入失败静默（不阻断交互）
   });
-}
-
-/** 配置解码（非法 JSON / 形态不对 → 空配置，不猜测修复） */
-export function decodeLocalModelsConfig(raw: string | null): LocalModelsConfig {
-  if (raw === null) return emptyLocalModelsConfig();
-  try {
-    const parsed = JSON.parse(raw) as Partial<LocalModelsConfig>;
-    if (
-      parsed === null ||
-      typeof parsed !== 'object' ||
-      typeof parsed.providers !== 'object' ||
-      parsed.providers === null
-    ) {
-      return emptyLocalModelsConfig();
-    }
-    const providers: Record<string, LocalProviderSpec> = {};
-    for (const [id, spec] of Object.entries(parsed.providers)) {
-      if (spec === null || typeof spec !== 'object') continue;
-      const s = spec as LocalProviderSpec;
-      providers[id] = {
-        ...s,
-        protocol: 'openai/chat',
-        models: Array.isArray(s.models)
-          ? s.models.filter(
-              (m) =>
-                m !== null && typeof m === 'object' && typeof m.id === 'string'
-            )
-          : [],
-      };
-    }
-    const active =
-      parsed.activeModel !== null &&
-      typeof parsed.activeModel === 'object' &&
-      typeof parsed.activeModel.providerId === 'string' &&
-      typeof parsed.activeModel.modelId === 'string' &&
-      providers[parsed.activeModel.providerId] !== undefined
-        ? parsed.activeModel
-        : null;
-    return { version: 2, providers, activeModel: active };
-  } catch {
-    return emptyLocalModelsConfig();
-  }
 }
 
 export const localChatStore: StoreApi<LocalChatState> =
@@ -184,6 +151,7 @@ export const localChatStore: StoreApi<LocalChatState> =
         ) {
           withRef.apiKeyRef = get().config.providers[providerId]?.apiKeyRef;
         }
+
         set((state) => {
           state.config.providers[providerId] = withRef;
           state.keyPresence[providerId] =
@@ -193,6 +161,7 @@ export const localChatStore: StoreApi<LocalChatState> =
           if (apiKey === null || apiKey === '') {
             state.keyPresence[providerId] = false;
           }
+
           // 首个供应商自动成为活动选择（桌面归一：活动为空且有可用模型时
           // 不自动选——此处仅在「全局尚无活动选择」时以首个模型落位，
           // 属于移动端本地的显式产品口径：减少用户一步操作，UI 可随时改选）
@@ -201,8 +170,46 @@ export const localChatStore: StoreApi<LocalChatState> =
             if (modelId !== null) {
               state.config.activeModel = { providerId, modelId };
             }
+          } else if (
+            state.config.activeModel.providerId === providerId &&
+            !withRef.models.some(
+              (m) =>
+                m.id === state.config.activeModel?.modelId &&
+                m.enabled !== false
+            )
+          ) {
+            // 当前活动模型已被删除或禁用，清空后自愈回退为默认或首个可用模型
+            state.config.activeModel = null;
+            const fallbackModelId = providerDefaultModelId(
+              state.config,
+              providerId
+            );
+            if (fallbackModelId !== null) {
+              state.config.activeModel = {
+                providerId,
+                modelId: fallbackModelId,
+              };
+            }
           }
         });
+
+        // 一致性自愈：若既有线程引用了该供应商中已被移除或禁用的模型，解除固化绑定退回跟随全局
+        try {
+          const sessionState = localChatSessionStore.getState();
+          const danglingThreads = sessionState.threads.filter(
+            (t) =>
+              t.modelRef?.providerId === providerId &&
+              !withRef.models.some(
+                (m) => m.id === t.modelRef?.modelId && m.enabled !== false
+              )
+          );
+          for (const thread of danglingThreads) {
+            sessionState.setThreadModel(thread.id, null);
+          }
+        } catch {
+          // 容错吸收（独立测试或无 sessionStore 环境不影响主配置流程）
+        }
+
         writeConfig(get().config);
       },
 
@@ -222,12 +229,38 @@ export const localChatStore: StoreApi<LocalChatState> =
             state.config.activeModel = null;
           }
         });
+
+        // 一致性自愈：在线程表中清理该供应商引用，自愈退回跟随全局活动模型，根除悬挂指针
+        try {
+          const sessionState = localChatSessionStore.getState();
+          const danglingThreads = sessionState.threads.filter(
+            (t) => t.modelRef?.providerId === providerId
+          );
+          for (const thread of danglingThreads) {
+            sessionState.setThreadModel(thread.id, null);
+          }
+        } catch {
+          // 容错吸收
+        }
+
         writeConfig(get().config);
       },
 
       setActiveModel: (providerId, modelId) => {
         set((state) => {
           state.config.activeModel = { providerId, modelId };
+        });
+        writeConfig(get().config);
+      },
+
+      updateProviderLatency: (providerId, latencyMs) => {
+        const p = get().config.providers[providerId];
+        if (!p) return;
+        set((state) => {
+          const target = state.config.providers[providerId];
+          if (!target) return;
+          target.latencyMs = latencyMs;
+          target.latencyUpdatedAt = Date.now();
         });
         writeConfig(get().config);
       },

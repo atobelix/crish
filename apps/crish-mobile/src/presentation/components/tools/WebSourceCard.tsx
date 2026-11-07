@@ -69,7 +69,7 @@ function FaviconOrInitial({
       <Image
         source={{ uri: faviconUrl }}
         onError={() => setLoadError(true)}
-        style={styles.faviconImage}
+        style={[styles.faviconImage, { borderRadius: theme.radius.xs }]}
         testID="web-source-favicon-image"
       />
     );
@@ -84,6 +84,7 @@ function FaviconOrInitial({
         style={[
           styles.initialContainer,
           {
+            borderRadius: theme.radius.sm,
             backgroundColor: theme.colors.fillSubtle,
             borderColor: theme.colors.hairline,
           },
@@ -93,7 +94,13 @@ function FaviconOrInitial({
         <AppText
           variant="caption"
           color="textSecondary"
-          style={styles.initialText}
+          style={[
+            styles.initialText,
+            {
+              fontSize: theme.type.caption.fontSize - 2,
+              lineHeight: theme.type.caption.lineHeight - 3,
+            },
+          ]}
         >
           {initial}
         </AppText>
@@ -124,9 +131,9 @@ export function WebSourceCard({
 
   useEffect(() => {
     highlightProgress.value = withTiming(highlighted ? 1 : 0, {
-      duration: 200,
+      duration: theme.motion.duration.normal,
     });
-  }, [highlighted, highlightProgress]);
+  }, [highlighted, highlightProgress, theme.motion.duration.normal]);
 
   const animatedHighlightOverlayStyle = useAnimatedStyle(() => ({
     opacity: highlightProgress.value,
@@ -197,7 +204,13 @@ export function WebSourceCard({
             variant="mono"
             color="textTertiary"
             numberOfLines={1}
-            style={styles.indexLabel}
+            style={[
+              styles.indexLabel,
+              {
+                fontSize: theme.type.caption.fontSize,
+                lineHeight: theme.type.caption.lineHeight,
+              },
+            ]}
             testID="web-source-card-index"
           >
             {`[${index}]`}
@@ -209,7 +222,13 @@ export function WebSourceCard({
             variant="caption"
             color="textTertiary"
             numberOfLines={1}
-            style={styles.domainText}
+            style={[
+              styles.domainText,
+              {
+                fontSize: theme.type.footnote.fontSize,
+                lineHeight: theme.type.footnote.lineHeight,
+              },
+            ]}
             testID="web-source-card-domain"
           >
             {cleanDomain}
@@ -220,7 +239,13 @@ export function WebSourceCard({
           <AppText
             variant="caption"
             color="textTertiary"
-            style={styles.separator}
+            style={[
+              styles.separator,
+              {
+                fontSize: theme.type.footnote.fontSize,
+                lineHeight: theme.type.footnote.lineHeight,
+              },
+            ]}
           >
             ·
           </AppText>
@@ -231,7 +256,13 @@ export function WebSourceCard({
           color="textPrimary"
           numberOfLines={1}
           ellipsizeMode="tail"
-          style={styles.titleText}
+          style={[
+            styles.titleText,
+            {
+              fontSize: theme.type.footnote.fontSize,
+              lineHeight: theme.type.footnote.lineHeight,
+            },
+          ]}
           testID="web-source-card-title"
         >
           {displayTitle}
@@ -262,21 +293,17 @@ const styles = StyleSheet.create({
   faviconImage: {
     width: 14,
     height: 14,
-    borderRadius: 2,
     flexShrink: 0,
   },
   initialContainer: {
     width: 16,
     height: 16,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 0,
   },
   initialText: {
-    fontSize: 9,
-    lineHeight: 11,
     fontWeight: '700',
   },
   globeContainer: {
@@ -293,25 +320,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   indexLabel: {
-    fontSize: 11,
-    lineHeight: 14,
     fontWeight: '600',
     flexShrink: 0,
   },
   domainText: {
-    fontSize: 12,
-    lineHeight: 15,
     flexShrink: 0,
     maxWidth: 80,
   },
   separator: {
-    fontSize: 12,
-    lineHeight: 15,
     flexShrink: 0,
   },
   titleText: {
-    fontSize: 12,
-    lineHeight: 15,
     flexShrink: 1,
   },
 });

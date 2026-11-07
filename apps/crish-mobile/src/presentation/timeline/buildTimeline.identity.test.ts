@@ -74,7 +74,12 @@ describe('buildSessionTimeline 身份纪律', () => {
   it('工具合并累积：封口工具块保持引用且累积输出完整（多条目构成集）', () => {
     const base = [
       entry('tool-start', {
-        call: { id: 't-1', toolName: 'read_file', summary: 'src/a.ts' },
+        call: {
+          id: 't-1',
+          toolName: 'read_file',
+          intent: 'src/a.ts',
+          summary: 'src/a.ts',
+        },
       }),
       entry('tool-update', { toolCallId: 't-1', update: { text: 'line 1\n' } }),
       entry('tool-update', { toolCallId: 't-1', update: { text: 'line 2' } }),
@@ -86,20 +91,58 @@ describe('buildSessionTimeline 身份纪律', () => {
     const first = buildSessionTimeline(base);
     const second = buildSessionTimeline([
       ...base,
-      entry('tool-start', { call: { id: 't-2', toolName: 'shell' } }),
+      entry('tool-start', {
+        call: { id: 't-2', toolName: 'shell', intent: '执行命令' },
+      }),
       entry('tool-update', { toolCallId: 't-2', update: { text: 'x' } }),
     ]);
     expect(second[0]).toBe(first[0]);
-    const sealed = second[0] as { output: string };
+    const sealed = second[0] as { output: string; intent?: string };
     expect(sealed.output).toContain('line 1');
     expect(sealed.output).toContain('line 2');
     expect(sealed.output).toContain('done');
-    expect(second[1]).toMatchObject({ id: 't-2', status: 'running' });
+    expect(sealed.intent).toBe('src/a.ts');
+    expect(second[1]).toMatchObject({
+      id: 't-2',
+      status: 'running',
+      intent: '执行命令',
+    });
+  });
+
+  it('内部工具静默：isInternal === true 的工具调用被过滤，不进入时间线', () => {
+    const entries = [
+      startMsg('m-1'),
+      entry('tool-start', {
+        call: {
+          id: 't-internal',
+          toolName: 'manage_task',
+          intent: '任务轮询',
+          isInternal: true,
+        },
+      }),
+      entry('tool-update', {
+        toolCallId: 't-internal',
+        update: { text: 'polling...' },
+      }),
+      entry('tool-end', {
+        toolCallId: 't-internal',
+        result: { isError: false, output: 'ok' },
+      }),
+      delta('m-1', '处理完毕'),
+      endMsg('m-1', '处理完毕'),
+    ];
+    const timeline = buildSessionTimeline(entries);
+    const toolBlocks = timeline.filter((b) => b.kind === 'tool');
+    expect(toolBlocks).toHaveLength(0);
+    const msg = timeline.find((b) => b.kind === 'message') as { text: string };
+    expect(msg.text).toBe('处理完毕');
   });
 
   it('封口只是缓存提示：迟到的 tool-update 仍按折叠语义更新该块（换新对象）', () => {
     const base = [
-      entry('tool-start', { call: { id: 't-1', toolName: 'shell' } }),
+      entry('tool-start', {
+        call: { id: 't-1', toolName: 'shell', intent: '运行 shell' },
+      }),
       entry('tool-end', {
         toolCallId: 't-1',
         result: { isError: false, output: 'done' },
@@ -119,6 +162,7 @@ describe('buildSessionTimeline 身份纪律', () => {
       entry('approval-requested', {
         toolCallId: 'tc-1',
         toolName: 'write_file',
+        intent: '写入 src/a.ts',
         summary: '写入 src/a.ts',
       }),
       entry('runtime-error', { error: 'boom' }),

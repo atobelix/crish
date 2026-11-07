@@ -13,7 +13,7 @@
 //    pointerEvents="none" 绝不拦截滚动与触摸，无障碍属性对读屏软件透明屏蔽。
 
 import React, { useId } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme } from '@/adapters/platform/theme';
 
@@ -37,11 +37,13 @@ export interface ComposerAmbientVeilProps {
   height?: number;
   /** 测试标识，默认 'composer-ambient-veil' */
   testID?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 export const ComposerAmbientVeil = React.memo(function ComposerAmbientVeil({
   height = DEFAULT_VEIL_HEIGHT,
   testID = 'composer-ambient-veil',
+  style,
 }: ComposerAmbientVeilProps) {
   const theme = useTheme();
   const rawId = useId();
@@ -68,6 +70,7 @@ export const ComposerAmbientVeil = React.memo(function ComposerAmbientVeil({
           top: -height,
           height,
         },
+        style,
       ]}
     >
       <Svg width="100%" height={height} pointerEvents="none">
