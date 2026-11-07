@@ -35,15 +35,12 @@ import type { SessionIndexEntry } from '@crish/shared-types';
 import { dispatchIngestActions } from './ingestRouter';
 import type { MonitorRepository } from '@/adapters/repositories/monitorRepository';
 import { createLogger } from '@/adapters/platform/logger';
+import { getRemoteSyncEngine } from '@/domain/store/remoteSyncEngine';
 
 const log = createLogger('wiring');
 
-/** 活跃窗口上限（R2UX-05-09：M5 §9.3 内存预算 5000 条 × ≤4 窗口） */
-export const MAX_ACTIVE_WINDOWS = 4;
 /** 续传分页大小（F1 §3.4 对齐桌面 core_read_run_events 200/页） */
 export const RESUME_PAGE_SIZE = 200;
-/** 续传游标起点（快照重建 full-replay：从 0 全量回放，M6 §9.3 ③） */
-export const RESUME_FROM_ZERO = 0;
 
 /** 会话索引全量拉取（session.updatedAll / 重连对账触发；注入 mock 便于单测） */
 export type ListSessionsRepository = (
@@ -89,8 +86,6 @@ export interface FeedBridgeOptions {
   listSessions?: ListSessionsRepository;
   /** 监控仓库（生产注入；用于打开会话时的历史回填） */
   monitor?: MonitorRepository;
-  /** 活跃窗口上限（缺省 4，R2UX-05-09） */
-  maxWindows?: number;
   /**
    * 本桥的属主设备（M7 盖章穿线）：本桥全部入站写入（帧分发/对账/
    * 回填）以此为来源设备，store 侧与属主盖章不符即丢弃——旧桥的
@@ -108,10 +103,9 @@ export class FeedBridge {
   private readonly gateway: WsGateway;
   private readonly listSessionsRepo?: ListSessionsRepository;
   private readonly monitor?: MonitorRepository;
-  private readonly maxWindows: number;
   private readonly ownerDeviceId?: string;
   private unsubscribers: Array<() => void> = [];
-  /** 窗口活跃度追踪（sessionId → 最近一次帧到达 ms；卸载策略数据面） */
+  /** 窗口活跃度追踪（sessionId → 最近一次帧到达 ms） */
   private readonly activity = new Map<string, number>();
   /** 续传在途会话（防重入：同一会话同时只允许一个 events.resume 请求链） */
   private readonly inflightResume = new Set<string>();
@@ -130,7 +124,6 @@ export class FeedBridge {
     this.gateway = opts.gateway;
     this.listSessionsRepo = opts.listSessions;
     this.monitor = opts.monitor;
-    this.maxWindows = opts.maxWindows ?? MAX_ACTIVE_WINDOWS;
     this.ownerDeviceId = opts.ownerDeviceId;
   }
 
@@ -210,7 +203,6 @@ export class FeedBridge {
           );
           this.markActive(sessionId);
           this.drainStash(sessionId);
-          this.unloadExcessWindows();
           return;
         }
       }
@@ -218,11 +210,10 @@ export class FeedBridge {
 
     const actions = mapDeviceFrame({ kind: frame.kind, body: frame.body });
     this.applyActions(actions);
-    // 窗口活跃度刷新（feed 面帧计入卸载候选的活跃度）
+    // 窗口活跃度刷新
     for (const action of actions) {
       if (action.kind === 'feed-append') this.markActive(action.sessionId);
     }
-    this.unloadExcessWindows();
   }
 
   /** 续传分页：正常分派（feed-hydrate）+ hasMore 自动续页（M6 §9.3 ③ 增量补齐闭环） */
@@ -300,7 +291,6 @@ export class FeedBridge {
         if (action.kind === 'feed-append') this.markActive(action.sessionId);
       }
     }
-    this.unloadExcessWindows();
   }
 
   /** 统一动作执行入口（续页路径与普通路径共用） */
@@ -311,6 +301,22 @@ export class FeedBridge {
         ? { sourceDeviceId: this.ownerDeviceId }
         : {}),
     });
+
+    // 实时流式批量落盘：自动汇入 RemoteSyncEngine 异步落盘缓冲
+    const syncEngine = getRemoteSyncEngine();
+    if (syncEngine) {
+      for (const action of actions) {
+        if (action.kind === 'feed-append') {
+          syncEngine.recordEvent(
+            action.sessionId,
+            action.frame,
+            this.ownerDeviceId,
+            action.preview
+          );
+        }
+      }
+    }
+
     this.clearStaleOnLiveIncrement(actions);
   }
 
@@ -455,15 +461,29 @@ export class FeedBridge {
   }
 
   /**
-   * 打开会话时回填历史（C03 readSessionEvents 分页；已打开窗口从本地游标续传）。
-   * 仅入 feed 展示面，不重放审批 / 活动 run 副作用（实时订阅负责状态增量）。
+   * 打开会话时回填历史（优先本地秒开，随后通过 monitor 增量追平）。
+   * 彻底废除 RESUME_FROM_ZERO 全量盲拉，仅拉取增量差分。
    */
-  async hydrateSession(sessionId: string, fromStart = false): Promise<void> {
-    if (!this.monitor || this.inflightBackfill.has(sessionId)) return;
+  async hydrateSession(sessionId: string): Promise<void> {
+    if (this.inflightBackfill.has(sessionId)) return;
     this.inflightBackfill.add(sessionId);
     this.markActive(sessionId);
     try {
-      let after = fromStart ? RESUME_FROM_ZERO : lastSeqOf(sessionId);
+      const syncEngine = getRemoteSyncEngine();
+      if (syncEngine) {
+        // 1. 本地 SQLite 0 延迟秒开
+        await syncEngine.hydrateSessionFromLocal(sessionId, this.ownerDeviceId);
+        // 2. 在线时差分续传
+        if (this.monitor) {
+          syncEngine.setMonitor(this.monitor);
+          await syncEngine.catchUpSession(sessionId, this.ownerDeviceId);
+        }
+        return;
+      }
+
+      // 未装配 syncEngine 时（如纯内存单测）保持从 monitor 差分续传
+      if (!this.monitor) return;
+      let after = lastSeqOf(sessionId);
       for (let page = 0; page < MAX_BACKFILL_PAGES; page += 1) {
         const result = await this.monitor.readSessionEvents({
           sessionId,
@@ -586,22 +606,6 @@ export class FeedBridge {
   /** 窗口活跃度标记（LRU 语义：读/写都刷新活动时间） */
   private markActive(sessionId: string): void {
     this.activity.set(sessionId, Date.now());
-  }
-
-  /** 窗口卸载策略（R2UX-05-09：超过 maxWindows 个活跃窗口 → 卸载最久未活跃者） */
-  private unloadExcessWindows(): void {
-    const activeCount = this.activity.size;
-    if (activeCount <= this.maxWindows) return;
-    const candidates = [...this.activity.entries()].sort((a, b) => a[1] - b[1]);
-    const excess = activeCount - this.maxWindows;
-    for (let i = 0; i < excess; i++) {
-      const [sessionId] = candidates[i] ?? [];
-      if (sessionId === undefined) break;
-      eventStore.getState().unloadWindow(sessionId);
-      this.activity.delete(sessionId);
-      // 窗口已卸载：其空洞暂存帧一并丢弃（重开窗口时 hydrateSession 全量回填）
-      this.stashBySession.delete(sessionId);
-    }
   }
 }
 

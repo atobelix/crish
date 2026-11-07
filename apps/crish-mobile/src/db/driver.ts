@@ -110,7 +110,11 @@ export class MemorySqlDriver implements SqlDriver {
     if (upper.startsWith('DROP INDEX ')) return []; // 索引为优化项，内存引擎忽略
     if (upper.startsWith('DROP TABLE ')) return this.execDropTable(stmt);
     if (upper.startsWith('ALTER TABLE ')) return this.execAlterTable(stmt);
-    if (upper.startsWith('INSERT INTO ')) return this.execInsert(stmt, params);
+    if (
+      upper.startsWith('INSERT INTO ') ||
+      upper.startsWith('INSERT OR REPLACE INTO ')
+    )
+      return this.execInsert(stmt, params);
     if (upper.startsWith('SELECT ')) return this.execSelect(stmt, params);
     if (upper.startsWith('UPDATE ')) return this.execUpdate(stmt, params);
     if (upper.startsWith('DELETE FROM ')) return this.execDelete(stmt, params);
@@ -236,10 +240,11 @@ export class MemorySqlDriver implements SqlDriver {
   // ---------------------------------------------------------------------------
 
   private execInsert(stmt: string, params: readonly unknown[]): unknown[] {
+    const isReplace = /^INSERT\s+OR\s+REPLACE\s+INTO\s+/i.test(stmt);
     // 支持 INSERT ... ON CONFLICT(<列>) DO UPDATE SET <列> = ?, ...（原子 upsert；
     // 语义对齐 SQLite：冲突时改走 UPDATE 分支，参数顺序 = VALUES 参数在前、SET 参数在后）
     const m =
-      /^INSERT\s+INTO\s+(\S+)\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*?)\)\s*(?:ON\s+CONFLICT\s*\(([^)]*)\)\s*DO\s+UPDATE\s+SET\s+([\s\S]*?))?\s*;?$/i.exec(
+      /^INSERT(?:\s+OR\s+REPLACE)?\s+INTO\s+(\S+)\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*?)\)\s*(?:ON\s+CONFLICT\s*\(([^)]*)\)\s*DO\s+UPDATE\s+SET\s+([\s\S]*?))?\s*;?$/i.exec(
         stmt
       );
     if (!m) throw new Error(`无法解析 INSERT：${stmt.slice(0, 80)}`);
@@ -274,6 +279,12 @@ export class MemorySqlDriver implements SqlDriver {
     }
     const existing = this.findConflicting(m[1]!, table, row);
     if (existing) {
+      if (isReplace) {
+        for (const col of table.cols) {
+          existing[col] = row[col];
+        }
+        return [];
+      }
       if (m[5] === undefined) {
         this.throwConflict(m[1]!, table, row);
         return [];

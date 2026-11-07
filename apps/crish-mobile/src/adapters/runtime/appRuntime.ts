@@ -26,7 +26,6 @@ import {
   syncAccountRemote,
 } from './accountRuntime';
 import { deviceSnapshotStore } from '@/domain/store/deviceSnapshotStore';
-import { stampDataPlane } from './remoteData';
 
 let started = false;
 let appStateSub: { remove: () => void } | null = null;
@@ -52,12 +51,6 @@ function handleAuthChange(): void {
   const state = authStore.getState();
   const accountLoggedIn = accountStore.getState().status === 'loggedIn';
   if (state.hydrated && state.pairState === 'paired') {
-    // 配对模式数据面盖章（M7 单主机退化）：属主 = 已配对桌面 id。
-    // 账号模式优先——已登录时接线属主归 accountRuntime 的目标设备，
-    // 本处不得覆写其盖章（两种传输互斥，登录态以账号为准）。
-    if (!accountLoggedIn && state.desktopId) {
-      stampDataPlane(state.desktopId);
-    }
     ensureApprovalWiring();
     return;
   }

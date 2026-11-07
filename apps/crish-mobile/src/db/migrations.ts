@@ -11,6 +11,7 @@ import {
   V4_THREAD_TITLE_SOURCE_SQL,
   V5_MESSAGE_ATTACHMENTS_SQL,
   V6_MESSAGE_TOOLS_AND_SEARCH_SQL,
+  V7_REMOTE_STORAGE_SQL,
 } from './schema';
 
 /** 单个迁移：name 为迁移名，sql 为按序执行的 SQL 列表 */
@@ -49,6 +50,10 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     name: 'v6-message-tools-and-search',
     sql: V6_MESSAGE_TOOLS_AND_SEARCH_SQL,
+  },
+  {
+    name: 'v7-remote-storage',
+    sql: V7_REMOTE_STORAGE_SQL,
   },
 ];
 

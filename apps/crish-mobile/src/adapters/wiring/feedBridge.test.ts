@@ -441,10 +441,10 @@ describe('FeedBridge 序列空洞自愈（实现波总方案 C1：stash + resume
   });
 });
 
-describe('FeedBridge 窗口卸载策略（R2UX-05-09：≤4 活跃窗口）', () => {
-  it('超过 maxWindows 个活跃窗口 → 卸载最久未活跃者', async () => {
+describe('FeedBridge 窗口持久保留策略（废除粗暴卸载，SQLite + Store 视图真源）', () => {
+  it('多窗口并发到达均安全保留在视图中，不再被暴力卸载', async () => {
     const gateway = new WsGateway();
-    const bridge = new FeedBridge({ gateway, maxWindows: 2 });
+    const bridge = new FeedBridge({ gateway });
     bridge.attach();
     await act(async () => {
       gateway.dispatchFrame(
@@ -463,8 +463,8 @@ describe('FeedBridge 窗口卸载策略（R2UX-05-09：≤4 活跃窗口）', ()
         })
       );
     });
-    // 窗口 3 个 > maxWindows 2 → 卸载最久未活跃（s-1，按 activity 时间戳）
-    expect(eventStore.getState().windows['s-1']).toBeUndefined();
+    // 所有会话窗口均完好保留，杜绝前台阅读被误杀
+    expect(eventStore.getState().windows['s-1']).toBeDefined();
     expect(eventStore.getState().windows['s-2']).toBeDefined();
     expect(eventStore.getState().windows['s-3']).toBeDefined();
     bridge.detach();

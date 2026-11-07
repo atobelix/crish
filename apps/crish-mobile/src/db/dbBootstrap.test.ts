@@ -128,16 +128,19 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     const result = await ensureDatabaseForApp({ open });
 
-    expect(result).toEqual({ ok: true, version: 6 });
+    expect(result).toEqual({ ok: true, version: 7 });
     // 真实迁移全链路：v1 建 8 表 → v2 清理幽灵表 → v3 增本地线程两表，
     // → v4 给 local_threads 加 title_source 列 → v5 给 local_messages
-    // 加 attachments_json 列 → v6 给 local_messages 增 5 个工具与搜索 JSON 列，最终 5 张生效表
+    // 加 attachments_json 列 → v6 增 5 个工具与搜索 JSON 列 → v7 增远程会话三表，最终 8 张生效表
     const tables = driver.listTables();
     expect(tables).toEqual([
       'approval_queue',
       'local_messages',
       'local_threads',
       'notifications',
+      'remote_events',
+      'remote_sessions',
+      'remote_sync_state',
       'settings',
     ]);
     // 调用顺序：open < 连接 PRAGMA < user_version < 迁移 SQL < hydrate 读库
@@ -157,7 +160,7 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
 
     expect(jest.mocked(openDatabaseAsync)).toHaveBeenCalledWith(MOBILE_DB_NAME);
     expect(result.ok).toBe(true);
-    expect(result.version).toBe(6);
+    expect(result.version).toBe(7);
     expect(settingsStore.getState().hydrated).toBe(true);
     expect(notificationStore.getState().hydrated).toBe(true);
   });

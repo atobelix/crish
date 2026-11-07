@@ -8,6 +8,8 @@ import {
   advanceCursor,
   createWindow,
   hydrateFeed,
+  readNumber,
+  stableSortBySeq,
   type EventEnvelopeFrame,
   type EventWindow,
 } from './eventReducers';
@@ -42,6 +44,13 @@ export interface EventState {
     sessionId: string,
     events: readonly EventEnvelopeFrame[],
     cursor?: number,
+    nowMs?: number,
+    sourceDeviceId?: string
+  ) => void;
+  /** 向上翻页：将更早历史事件合并进窗口头部（自动按 sequence 升序排序与去重，不降低 lastSeq） */
+  prependHistory: (
+    sessionId: string,
+    events: readonly EventEnvelopeFrame[],
     nowMs?: number,
     sourceDeviceId?: string
   ) => void;
@@ -112,6 +121,26 @@ export const eventStore: StoreApi<EventState> = createStore<EventState>()(
           return;
         }
         hydrateFeed(ensureWindow(s, sessionId), events, cursor, nowMs);
+      }),
+
+    prependHistory: (sessionId, events, nowMs = nowDefault(), sourceDeviceId) =>
+      set((s) => {
+        if (!sourceAllowed(s.ownerDeviceId, sourceDeviceId)) {
+          s.droppedWriteCount += 1;
+          return;
+        }
+        const win = ensureWindow(s, sessionId);
+        const existingSeqs = new Set(
+          win.entries
+            .map((e) => readNumber(e, 'sequence'))
+            .filter((sq): sq is number => sq !== undefined)
+        );
+        for (const frame of events) {
+          const sq = readNumber(frame, 'sequence');
+          if (sq !== undefined && existingSeqs.has(sq)) continue;
+          win.entries.push({ ...frame, receivedAtMs: nowMs });
+        }
+        win.entries = stableSortBySeq(win.entries);
       }),
 
     setCursor: (sessionId, seq, sourceDeviceId) =>
