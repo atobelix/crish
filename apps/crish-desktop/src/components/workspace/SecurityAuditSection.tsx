@@ -62,7 +62,7 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
               : styles.on;
           return (
             <G2Surface
-              radius="card"
+              radius="control"
               fill="var(--row-fill)"
               key={key}
               className={styles.row}

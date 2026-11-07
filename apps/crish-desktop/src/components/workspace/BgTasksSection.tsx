@@ -103,7 +103,7 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
             return (
               <Tooltip key={t.id} content="在终端中查看输出">
                 <G2Surface
-                  radius="card"
+                  radius="control"
                   fill="var(--row-fill)"
                   className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
                   role="button"

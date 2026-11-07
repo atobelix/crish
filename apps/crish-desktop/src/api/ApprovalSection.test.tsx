@@ -268,3 +268,15 @@ describe('ApprovalSection 行点击聚焦会话', () => {
     void sid;
   });
 });
+
+describe('ApprovalSection G² 形状层', () => {
+  it('Tooltip 包裹行挂 G2Surface：control 档 8px，与 CSS 兜底同值', () => {
+    const { container } = renderSection([approval()]);
+    const rows = container.querySelectorAll('[data-g2-radius="control"]');
+    expect(rows.length).toBe(1);
+    const row = rows[0] as HTMLElement;
+    expect(row.getAttribute('role')).toBe('button');
+    expect(row.style.borderRadius).toBe('8px');
+    expect(row.textContent).toContain('shell');
+  });
+});

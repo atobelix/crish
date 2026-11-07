@@ -38,8 +38,7 @@
 
 /* 预览卡入/退场：值已对齐共享 popover 配方（design-system.css 的
  * crish-popover-enter-top / exit-top：scale 0.97 + translateY 4px，
- * 时长走 --transition-popover-enter/exit token）。类级收敛（改用共享
- * .ui-popover-animate 等）登记待后续，本模块先只对齐值、收敛组数。 */
+ * 时长走 --transition-popover-enter/exit token）。类级收敛（改用共享 .crish-popover-anim 工具类）登记待后续，本模块先只对齐值、收敛组数。 */
 .enter {
   animation: previewCardEnter var(--transition-popover-enter) forwards;
 }

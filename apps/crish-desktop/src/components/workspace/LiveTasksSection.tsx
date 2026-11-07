@@ -61,7 +61,7 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
             const clickable = Boolean(wk.sessionId);
             const rowNode = (
               <G2Surface
-                radius="card"
+                radius="control"
                 fill="var(--row-fill)"
                 key={wk.id}
                 className={`${styles.row} ${styles.isLive}${clickable ? ` ${styles.isClickable}` : ''}`}

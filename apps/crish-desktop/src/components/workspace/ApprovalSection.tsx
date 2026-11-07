@@ -144,7 +144,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
           return (
             <Tooltip key={a.toolCallId || i} content="打开待确认会话">
               <G2Surface
-                radius="card"
+                radius="control"
                 fill="var(--row-fill)"
                 className={`${styles.row} ${styles.isClickable}`}
                 role="button"

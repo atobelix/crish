@@ -124,7 +124,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
           诚实文案（描述现状「暂存本地」，不承诺已同步、不宣称数据丢失） */}
       {persistenceStatus !== 'healthy' ? (
         <G2Surface
-          radius="card"
+          radius="control"
           fill="var(--warning-soft-bg)"
           className={styles.persistenceWarning}
           data-persistence-status={persistenceStatus}

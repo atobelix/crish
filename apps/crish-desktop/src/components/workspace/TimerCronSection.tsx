@@ -111,7 +111,7 @@ export const TimerCronSection: React.FC = () => {
           >
             {summary.recent.map((ev, i) => (
               <G2Surface
-                radius="card"
+                radius="control"
                 fill="var(--row-fill)"
                 key={`${ev.type}-${ev.id}-${i}`}
                 className={styles.row}

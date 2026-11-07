@@ -174,7 +174,7 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
             }
             return (
               <G2Surface
-                radius="card"
+                radius="control"
                 fill="var(--row-fill)"
                 key={entry.id}
                 className={styles.row}
