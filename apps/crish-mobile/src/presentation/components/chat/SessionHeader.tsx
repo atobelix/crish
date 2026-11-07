@@ -1,8 +1,9 @@
 // 统一对话屏悬浮头栏（移动界面统一方案 §7，由 SessionHeader 演进为
 // ConversationHeader；文件名沿旧名——原生阴影守卫按路径点名本文件，
 // 改名留待守卫口径统一时处理）：完全通透，无底色、无边界，浮于滚动流
-// 之上；汉堡圆钮（开抽屉，代原返回钮）+ 纯白标题胶囊 + 新建对话圆钮 +
-// 更多圆钮。返回路径由抽屉/新建/系统返回兜底（方案 §2.3）。
+// 之上；汉堡圆钮（开抽屉）+ 纯白标题胶囊 + 新建对话圆钮 + 更多圆钮。
+// 顶栏恒无返回钮（2026-11-07 裁决：菜单钮旁不带返回钮，新建钮已起
+// 近似作用；返回恒回主页，由系统返回键经 useSafeBack 落点原语承担）。
 // 阴影口径（SVG 软阴影收编定案）：标题胶囊是原型点名的悬浮面之一——
 // Android 浅色经 SoftShadow 出原型两层极淡投影（实测宽度到手才渲染），
 // 填充由胶囊 backgroundColor 单一承担（surfaceRaised）；深色 SoftShadow
@@ -17,10 +18,6 @@ import type { AnchorRect } from '@/presentation/ui/dropdownLayout';
 
 export interface ConversationHeaderProps {
   title: string;
-  /** 返回钮（2026-11-05 导航语义矩阵）：栈内确有上一界面时由宿主注入，
-   *  点击 = useSafeBack（回到上一个打开的界面）；缺省 = 无栈可回（冷启动
-   *  深链），诚实不渲染 */
-  onBack?: () => void;
   /** 汉堡钮：打开 (main) 抽屉（全 App 顶栏左侧语义收敛为开抽屉） */
   onOpenDrawer: () => void;
   /** 新建对话（回主页新对话面） */
@@ -36,7 +33,6 @@ export interface ConversationHeaderProps {
 
 export function ConversationHeader({
   title,
-  onBack,
   onOpenDrawer,
   onNewConversation,
   onMore,
@@ -73,18 +69,9 @@ export function ConversationHeader({
       ]}
     >
       <View style={styles.row}>
-        {/* 左侧复合簇：[返回（栈可回时）] 菜单按钮 + 紧随其后的对话标题胶囊
-            （取消居中，自然左对齐流） */}
+        {/* 左侧复合簇：菜单按钮 + 紧随其后的对话标题胶囊（取消居中，
+            自然左对齐流）；顶栏不设返回钮（2026-11-07 裁决，见文件头） */}
         <View style={[styles.leftCluster, { gap: theme.space.sm }]}>
-          {onBack ? (
-            <IconButton
-              name="chevron-left"
-              variant="floating"
-              accessibilityLabel="返回上一界面"
-              onPress={onBack}
-              testID="session-back"
-            />
-          ) : null}
           <IconButton
             name="menu"
             variant="floating"

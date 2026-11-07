@@ -23,7 +23,7 @@ jest.mock('@/adapters/runtime/appRuntime', () => {
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
-  // 渲染链上的导航面（useSafeBack 的访问记录器）读当前 pathname
+  // 渲染链上的导航面（useSafeBack）读当前 pathname
   usePathname: () => '/session/s-1',
 }));
 

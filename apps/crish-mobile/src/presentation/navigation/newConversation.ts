@@ -9,7 +9,7 @@
 // - 命令式导出已删除（无生产调用方且 _options 死参漂移，见巡检 §3.6）；
 //   Hook 是唯一入口。
 import { useCallback } from 'react';
-import { router } from 'expo-router';
+import { navigateHome } from '@/presentation/navigation/useSafeBack';
 import { localChatSessionStore } from '@/domain/store/localChatSessionStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import { useDrawerActions } from '@/presentation/components/drawer/DrawerContext';
@@ -44,14 +44,9 @@ export function useNewConversation(): (
         actions.close();
       }
 
-      // 4. 回到主页新对话面：栈中已有主页（canGoBack）走 dismissTo
-      // 弹栈回主页；深链冷启单屏栈（栈内无主页）才 navigate——无条件
-      // navigate 会在单屏栈下把主页压在旧会话屏之上、旧屏残留栈内
-      if (router.canGoBack()) {
-        router.dismissTo('/');
-      } else {
-        router.navigate('/');
-      }
+      // 4. 回到主页新对话面：落点原语与返回面共用 navigateHome
+      //（2026-11-07 起单一真源，见 navigation/useSafeBack）
+      navigateHome();
     },
     [actions]
   );

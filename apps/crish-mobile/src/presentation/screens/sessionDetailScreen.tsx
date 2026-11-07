@@ -5,8 +5,9 @@
 // 既有路由与测试入口不变；本地宿主在 (main)/thread 路由（U2）。
 // 2026-11-05 收敛：draft 伪会话状态机整体删除——本屏只被真实会话 id 打开
 // （深链/通知恒真实 id，新建统一走主页，见 navigation/newConversation）；
-// 头栏返回钮接入（导航语义矩阵：返回 = 上一个打开的界面）；regenerate
-// 经 onRegenerate 通道下发（远端暂无桌面命令 → 诚实隐藏入口）。
+// 2026-11-07 裁决：头栏不设返回钮、对话返回恒回主页（落点原语见
+// navigation/useSafeBack）；regenerate 经 onRegenerate 通道下发（远端
+// 暂无桌面命令 → 诚实隐藏入口）。
 // 审批统一交给全局 ApprovalFloat（悬浮于输入框上方）；引擎声明
 // composer.locked 时 Composer 锁定（原型 approval-locked：输入禁用、
 // 占位不换文，锁定以容器实心 + 工具图标变淡的形态表达）。
@@ -23,7 +24,6 @@ import { TimelineView } from '@/presentation/timeline/TimelineView';
 import { ConversationHeader } from '@/presentation/components/chat/SessionHeader';
 import { useOpenDrawer } from '@/presentation/navigation/useOpenDrawer';
 import { useNewConversation } from '@/presentation/navigation/newConversation';
-import { safeCanGoBack, useSafeBack } from '@/presentation/navigation/useSafeBack';
 import type { ConversationEngine } from '@/adapters/conversation/types';
 import { useTimelineBottomInset } from '@/presentation/timeline/useTimelineBottomInset';
 import { useRemoteConversationEngine } from '@/adapters/conversation/useRemoteConversationEngine';
@@ -70,7 +70,6 @@ export function ConversationScreen({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const openDrawer = useOpenDrawer();
-  const handleBack = useSafeBack();
   const handleNewConversation = useNewConversation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreAnchor, setMoreAnchor] = useState<AnchorRect | undefined>(
@@ -83,10 +82,6 @@ export function ConversationScreen({
   const scrollFacadeRef = useRef<(() => void) | null>(null);
   // 消费 Reanimated 共享键盘值（方案 19：120fps UI 线程微秒级同步拉伸与回缩）
   const keyboardAnimation = useReanimatedKeyboardAnimation();
-
-  // 头栏返回钮：仅栈内确有上一界面时呈现（诚实呈现——冷启动深链无栈可回
-  // 不造假钮）；路由变化（同屏换 id / push）引发宿主重渲时重估
-  const canGoBack = safeCanGoBack();
 
   // 悬浮 Composer 占高与时间线底部避让推导：
   // 由 useTimelineBottomInset 单一真源管理——实测优先、刚性拦截 <= 0 的初次挂载无效帧、
@@ -145,10 +140,10 @@ export function ConversationScreen({
         fadeSpan={28}
       />
 
-      {/* 悬浮头栏（通透，无底色）：[返回] 汉堡开抽屉 + 标题胶囊 + 新建 + 更多 */}
+      {/* 悬浮头栏（通透，无底色）：汉堡开抽屉 + 标题胶囊 + 新建 + 更多
+          （顶栏无返回钮——2026-11-07 裁决，见 SessionHeader 文件头） */}
       <ConversationHeader
         title={engine.title ?? '会话'}
-        onBack={canGoBack ? handleBack : undefined}
         onOpenDrawer={openDrawer}
         onNewConversation={() => {
           if (onNewConversation) {

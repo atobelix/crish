@@ -32,6 +32,9 @@ describe('ConversationHeader - Left Alignment', () => {
     expect(newBtn).toBeTruthy();
     expect(moreBtn).toBeTruthy();
     expect(view.getByText('测试会话标题')).toBeTruthy();
+    // 2026-11-07 裁决：顶栏恒无返回钮（左簇首位恒为菜单钮，组件已无
+    // onBack 入口）——session-back 在任何渲染下不得出现
+    expect(view.queryByTestId('session-back')).toBeNull();
   });
 
   it('preserves tail truncation on long title without pushing action buttons', async () => {

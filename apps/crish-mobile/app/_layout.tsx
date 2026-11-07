@@ -39,11 +39,7 @@ import { ErrorBoundary } from '@/presentation/components/ErrorBoundary';
 import { ApprovalFloat } from '@/presentation/components/approval/ApprovalFloat';
 import { ToastProvider } from '@/presentation/ui';
 import { useOverlayBackHandler } from '@/presentation/ui/overlayStack';
-import {
-  useAndroidBackGuard,
-  useSessionVisitRecorder,
-  useSessionVisitStackAccountReset,
-} from '@/presentation/navigation/useSafeBack';
+import { useAndroidBackGuard } from '@/presentation/navigation/useSafeBack';
 
 const log = createLogger('startup');
 const notificationsLog = createLogger('notifications');
@@ -78,13 +74,9 @@ function RootShell() {
   }, [fontError]);
   const notificationLayerRef = useRef<NotificationLayerHandle | null>(null);
   const splashHiddenRef = useRef(false);
-  // Android 深链冷启动单屏：物理返回键兜底回首页，不直接退出应用
+  // Android 深链冷启动单屏：物理返回键兜底回首页，不直接退出应用；
+  // 对话界面返回恒回主页（2026-11-07 裁决，落点见 useSafeBack）
   useAndroidBackGuard();
-  // 会话访问记录（题 9）：pathname 变化时记录被替换的会话，供返回
-  // 兜底（头栏返回钮 / Android 返回键）先回最近会话、耗尽才回主页
-  useSessionVisitRecorder();
-  // 访问栈账号复位：登出/换号时清空访问栈（栈内 href 不含账号维度）
-  useSessionVisitStackAccountReset();
   // 覆盖层返回分发（批 D）：订阅顺序在 back guard 之后（BackHandler
   // 后订阅先调用）——非 Modal 浮层（菜单/锚点 Popover）打开时返回
   // 先关栈顶浮层，栈空不消费、落回 guard 的导航兜底
