@@ -13,6 +13,13 @@
  * 源形；第 4 波把源形换成本文件的 cornerSvgPath 输出（Path d），填充层
  * borderRadius 同步换 clip。**第 0 波不翻默认**：现有表面的阴影轮廓与视觉
  * 输出零变化，翻转动作与真机帧率数据归第 4 波（立项方案试点口径）。
+ *
+ * 双方案同步（2026-11-06）：与桌面同一批引入 scheme 维度——'g2'（超椭圆
+ * n = 2.42，主方案）/ 'concentric'（圆弧 n = 2，后退方案），共用同一档位
+ * 语义、同一同心链与同一采样律，方案选择点 getCornerScheme() 默认 'g2'。
+ * 移动端生产默认不翻：本文件尚无生产消费者（SoftShadow 源形切换归第 4
+ * 波），翻转时由第 4 波接线经本选择点读取，两端向量互校验（本文件测试
+ * 与桌面 cornerPath.test.ts 的双方案向量逐项同值）。
  */
 
 /** 超椭圆指数 n（全产品单值；与桌面 --corner-exponent 必须一致） */
@@ -22,10 +29,52 @@ export const CORNER_EXPONENT = 2.42;
 export const CORNER_KAPPA_PEAK_FACTOR =
   ((CORNER_EXPONENT - 1) / 2) * Math.pow(2, 1 / 2 + 1 / CORNER_EXPONENT);
 
-/** 峰值曲率 κ_peak = ((n−1)/2)·2^(1/2+1/n) / R；R≤0 时返回 0 */
-export function kappaPeak(R: number, n: number = CORNER_EXPONENT): number {
+/** 圆角方案：'g2' = G² 超椭圆（主方案）；'concentric' = 同心圆弧（后退方案） */
+export type CornerScheme = 'g2' | 'concentric';
+
+/** 圆弧方案的生成指数：圆是超椭圆族 n = 2 的特例，采样点恰在真圆上 */
+export const CONCENTRIC_EXPONENT = 2;
+
+/** 方案 → 生成指数（与桌面同一映射；两方案差异只在轮廓族） */
+export function cornerExponentForScheme(scheme: CornerScheme): number {
+  return scheme === 'concentric' ? CONCENTRIC_EXPONENT : CORNER_EXPONENT;
+}
+
+/**
+ * 方案选择点（与桌面同构，移动端唯一）：默认 'g2'。第 4 波 SoftShadow
+ * 翻转接线经 getCornerScheme() 读取；本批不翻默认、无生产消费者。
+ */
+let activeCornerScheme: CornerScheme = 'g2';
+
+export function getCornerScheme(): CornerScheme {
+  return activeCornerScheme;
+}
+
+export function setCornerScheme(scheme: CornerScheme): void {
+  activeCornerScheme = scheme;
+}
+
+/** 指数解析序（与桌面共用）：显式 n > 显式 scheme > 全局方案选择点 */
+function resolveCornerExponent(
+  n: number | undefined,
+  scheme: CornerScheme | undefined,
+): number {
+  if (n !== undefined) return n;
+  return cornerExponentForScheme(scheme ?? getCornerScheme());
+}
+
+/**
+ * 峰值曲率 κ_peak = ((n−1)/2)·2^(1/2+1/n) / R；R≤0 时返回 0。
+ * 圆弧方案下曲率全程恒定：κ = 1/R（公式在 n = 2 时系数恰为 1）。
+ */
+export function kappaPeak(
+  R: number,
+  n?: number,
+  scheme?: CornerScheme,
+): number {
   if (!(R > 0)) return 0;
-  const factor = ((n - 1) / 2) * Math.pow(2, 1 / 2 + 1 / n);
+  const e = resolveCornerExponent(n, scheme);
+  const factor = ((e - 1) / 2) * Math.pow(2, 1 / 2 + 1 / e);
   return factor / R;
 }
 
@@ -79,9 +128,11 @@ function samplesFor(R: number): number {
  */
 export function superellipseCornerPoints(
   R: number,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): Array<readonly [number, number]> {
   if (!(R > 0)) return [[0, 0]];
+  const e = resolveCornerExponent(n, scheme);
   const N = samplesFor(R);
   const pts: Array<readonly [number, number]> = [];
   for (let k = 0; k <= N; k++) {
@@ -94,8 +145,8 @@ export function superellipseCornerPoints(
       continue;
     }
     const theta = (Math.PI / 2) * (1 - k / N);
-    const xi = R * Math.pow(Math.cos(theta), 2 / n);
-    const eta = R * Math.pow(Math.sin(theta), 2 / n);
+    const xi = R * Math.pow(Math.cos(theta), 2 / e);
+    const eta = R * Math.pow(Math.sin(theta), 2 / e);
     pts.push([R - xi, R - eta] as const);
   }
   return pts;
@@ -115,9 +166,11 @@ export function cornerSvgPath(
   w: number,
   h: number,
   radii: CornerRadiiInput,
-  n: number = CORNER_EXPONENT,
+  n?: number,
+  scheme?: CornerScheme,
 ): string {
   if (!(w > 0) || !(h > 0)) return '';
+  const e = resolveCornerExponent(n, scheme);
   const r = normalizeRadii(radii, w, h);
   const { tl, tr, br, bl } = r;
   if (tl === 0 && tr === 0 && br === 0 && bl === 0) {
@@ -126,7 +179,7 @@ export function cornerSvgPath(
   const seg: string[] = [`M${fmt(tl)} 0`, `H${fmt(w - tr)}`];
   // TR：(cx, cy) → (w − cx, cy)，跳过首点
   if (tr > 0) {
-    const pts = superellipseCornerPoints(tr, n);
+    const pts = superellipseCornerPoints(tr, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -138,7 +191,7 @@ export function cornerSvgPath(
   seg.push(`V${fmt(h - br)}`);
   // BR：(cx, cy) → (w − cy, h − cx)，跳过首点
   if (br > 0) {
-    const pts = superellipseCornerPoints(br, n);
+    const pts = superellipseCornerPoints(br, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -150,7 +203,7 @@ export function cornerSvgPath(
   seg.push(`H${fmt(bl)}`);
   // BL：(cx, cy) → (cx, h − cy)，跳过首点
   if (bl > 0) {
-    const pts = superellipseCornerPoints(bl, n);
+    const pts = superellipseCornerPoints(bl, e);
     for (let k = 1; k < pts.length; k++) {
       const pt = pts[k];
       if (!pt) continue;
@@ -162,7 +215,7 @@ export function cornerSvgPath(
   seg.push(`V${fmt(tl)}`);
   // TL：典范角逆序，跳过两端点（与 V/Z 重合）
   if (tl > 0) {
-    const pts = superellipseCornerPoints(tl, n);
+    const pts = superellipseCornerPoints(tl, e);
     for (let k = pts.length - 2; k >= 1; k--) {
       const pt = pts[k];
       if (!pt) continue;
