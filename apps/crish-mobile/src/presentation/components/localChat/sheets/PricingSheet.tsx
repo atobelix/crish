@@ -2,8 +2,10 @@
 // 权威依据：
 // - docs/mobile-provider-architecture/analysis/01-prototype-ui-ux-spec.md §7.6
 // - docs/mobile-provider-architecture/analysis/05-rn-components-and-gestures.md §5.6
-// 支持结算币种（¥ CNY / $ USD）分段切换、输入价格 (Prompt) 与输出价格 (Completion) 双行独立卡片配置，
-// 默认单价（1.00 / 2.00，单位 / 1M Tokens），采用原生小数键盘与触感反馈。
+// 支持结算币种（¥ CNY / $ USD）分段切换、输入价格 (Prompt) 与输出价格 (Completion) 双行独立卡片配置
+// （单位 / 1M Tokens），采用原生小数键盘与触感反馈。
+// 口径（P4）：未设置的单价以空串呈现，保存时不写字段——严禁用 1.00 / 2.00
+// 之类的假默认在打开时存回去；输入非法时停在编辑页，不写半份、不关闭。
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import type { LocalPricingSpec } from '@/adapters/localChat/providerPresets';
@@ -23,8 +25,14 @@ export interface PricingSheetProps {
   visible: boolean;
   onClose: () => void;
   pricing?: LocalPricingSpec;
-  onApply: (pricing: LocalPricingSpec) => void;
+  /** 两项单价都未设置且原本无定价时回传 undefined（保持未设置） */
+  onApply: (pricing: LocalPricingSpec | undefined) => void;
   testID?: string;
+}
+
+/** 已设单价的初始文本；未设置为空串（不以 1.00/2.00 冒充已保存值） */
+function priceToText(value: number | undefined): string {
+  return value !== undefined ? String(value) : '';
 }
 
 export function PricingSheet({
@@ -39,22 +47,20 @@ export function PricingSheet({
   const [currency, setCurrency] = useState<CurrencyType>(
     pricing?.currency ?? 'CNY'
   );
-  const [inputPrice, setInputPrice] = useState<string>(
-    pricing?.input !== undefined ? String(pricing.input) : '1.00'
+  const [inputPrice, setInputPrice] = useState<string>(() =>
+    priceToText(pricing?.input)
   );
-  const [outputPrice, setOutputPrice] = useState<string>(
-    pricing?.output !== undefined ? String(pricing.output) : '2.00'
+  const [outputPrice, setOutputPrice] = useState<string>(() =>
+    priceToText(pricing?.output)
   );
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setCurrency(pricing?.currency ?? 'CNY');
-      setInputPrice(
-        pricing?.input !== undefined ? String(pricing.input) : '1.00'
-      );
-      setOutputPrice(
-        pricing?.output !== undefined ? String(pricing.output) : '2.00'
-      );
+      setInputPrice(priceToText(pricing?.input));
+      setOutputPrice(priceToText(pricing?.output));
+      setError(null);
     }
   }, [visible, pricing]);
 
@@ -64,19 +70,37 @@ export function PricingSheet({
   }, []);
 
   const handleApply = useCallback(() => {
-    const rawIn = parseFloat(inputPrice.trim());
-    const rawOut = parseFloat(outputPrice.trim());
-    const safeInput = isNaN(rawIn) || rawIn < 0 ? 1.0 : rawIn;
-    const safeOutput = isNaN(rawOut) || rawOut < 0 ? 2.0 : rawOut;
-
-    onApply({
-      currency,
-      input: safeInput,
-      output: safeOutput,
-    });
+    const parsePrice = (text: string): number | undefined | null => {
+      const trimmed = text.trim();
+      if (trimmed === '') return undefined; // 未设置：不写字段
+      const parsed = parseFloat(trimmed);
+      if (isNaN(parsed) || parsed < 0) return null; // 非法
+      return parsed;
+    };
+    const nextInput = parsePrice(inputPrice);
+    const nextOutput = parsePrice(outputPrice);
+    if (nextInput === null || nextOutput === null) {
+      // 校验失败：停在编辑页，不写半份、不关闭
+      setError('单价需为不小于 0 的数字，留空表示未设置');
+      return;
+    }
+    if (!pricing && nextInput === undefined && nextOutput === undefined) {
+      // 原本就未设置且两项仍为空：保持未设置，不虚构定价对象
+      onApply(undefined);
+      onClose();
+      haptics.selection();
+      return;
+    }
+    const next: LocalPricingSpec = { ...(pricing ?? { currency }) };
+    next.currency = currency;
+    if (nextInput === undefined) delete next.input;
+    else next.input = nextInput;
+    if (nextOutput === undefined) delete next.output;
+    else next.output = nextOutput;
+    onApply(next);
     onClose();
     haptics.selection();
-  }, [currency, inputPrice, outputPrice, onApply, onClose]);
+  }, [currency, inputPrice, outputPrice, pricing, onApply, onClose]);
 
   const currencySymbol = currency === 'CNY' ? '¥' : '$';
 
@@ -135,8 +159,11 @@ export function PricingSheet({
             description="发送给模型的提示词与上下文"
             currencySymbol={currencySymbol}
             value={inputPrice}
-            onChangeText={setInputPrice}
-            placeholder="1.00"
+            onChangeText={(text) => {
+              setInputPrice(text);
+              setError(null);
+            }}
+            placeholder="未设置"
             testID={`${testID}-input-price`}
           />
           <PriceCard
@@ -144,11 +171,25 @@ export function PricingSheet({
             description="模型回答生成的 Token 消耗"
             currencySymbol={currencySymbol}
             value={outputPrice}
-            onChangeText={setOutputPrice}
-            placeholder="2.00"
+            onChangeText={(text) => {
+              setOutputPrice(text);
+              setError(null);
+            }}
+            placeholder="未设置"
             testID={`${testID}-output-price`}
           />
         </View>
+
+        {error ? (
+          <AppText
+            variant="footnote"
+            color="danger"
+            testID={`${testID}-error`}
+            style={{ marginTop: theme.space.md }}
+          >
+            {error}
+          </AppText>
+        ) : null}
       </View>
     </Sheet>
   );
@@ -171,7 +212,7 @@ export function PriceCard({
   currencySymbol,
   value,
   onChangeText,
-  placeholder = '1.00',
+  placeholder = '未设置',
   testID,
 }: PriceCardProps) {
   const theme = useTheme();

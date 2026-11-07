@@ -92,7 +92,8 @@ export function applySpecsToAllModels(
 }
 
 export function formatTokensText(tokens?: number): string {
-  if (tokens === undefined || tokens === null || tokens <= 0) return '未设置';
+  // 未设置（undefined）显示「自动」：发送时由协议默认决定，禁止伪造 128k 之类的具体数值。
+  if (tokens === undefined || tokens === null || tokens <= 0) return '自动';
   if (tokens >= 1024 * 1024) {
     const m = tokens / (1024 * 1024);
     return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
@@ -116,6 +117,78 @@ export function formatThinkingBadgeText(spec?: LocalThinkingSpec): string {
     max: '极限',
   };
   return labels[spec.defaultTier] ?? spec.defaultTier;
+}
+
+/**
+ * 思考三字段各自独立的提交函数（详情页与向导 Step 3 共用同一套，杜绝两条
+ * 路径行为分叉——历史上详情保存默认档会把 availableTiers 塌缩成
+ * ['off', tier]，一次编辑毁掉多档；向导路径则保留。以下三个函数每个
+ * 只改自己名下的字段。）
+ */
+
+/** 只改默认档：可选档清单与支持开关原样保留，永不塌缩 availableTiers。 */
+export function withThinkingDefaultTier(
+  spec: LocalModelSpec,
+  tier: LocalThinkingTier
+): LocalModelSpec {
+  const prev = spec.thinking;
+  if (!prev) {
+    return {
+      ...spec,
+      thinking: {
+        supported: tier !== 'off',
+        availableTiers: tier === 'off' ? ['off'] : ['off', tier],
+        defaultTier: tier,
+      },
+    };
+  }
+  return { ...spec, thinking: { ...prev, defaultTier: tier } };
+}
+
+/** 只改支持开关：可选档与默认档原样保留（关掉支持不丢已配的档位）。 */
+export function withThinkingSupported(
+  spec: LocalModelSpec,
+  supported: boolean
+): LocalModelSpec {
+  const prev = spec.thinking;
+  if (!prev) {
+    if (!supported) return spec;
+    return {
+      ...spec,
+      thinking: { supported: true, availableTiers: ['off'], defaultTier: 'off' },
+    };
+  }
+  return { ...spec, thinking: { ...prev, supported } };
+}
+
+/** 只改可选档清单：支持开关不动；默认档若被移出清单，回落到清单首档。 */
+export function withThinkingAvailableTiers(
+  spec: LocalModelSpec,
+  tiers: LocalThinkingTier[]
+): LocalModelSpec {
+  const nextTiers: LocalThinkingTier[] =
+    tiers.length > 0 ? tiers : ['off'];
+  const prev = spec.thinking;
+  if (!prev) {
+    return {
+      ...spec,
+      thinking: {
+        supported: nextTiers.some((t) => t !== 'off'),
+        availableTiers: nextTiers,
+        defaultTier: nextTiers[0] ?? 'off',
+      },
+    };
+  }
+  return {
+    ...spec,
+    thinking: {
+      ...prev,
+      availableTiers: nextTiers,
+      defaultTier: nextTiers.includes(prev.defaultTier)
+        ? prev.defaultTier
+        : (nextTiers[0] ?? 'off'),
+    },
+  };
 }
 
 function makeDefaultModelSpec(id = 'default-model'): LocalModelSpec {
@@ -203,6 +276,12 @@ export interface ModelSpecDraftVm {
   setThinking: (thinking: LocalThinkingSpec | undefined) => void;
   setThinkingTiers: (tiers: LocalThinkingTier[]) => void;
   setDefaultThinkingTier: (tier: LocalThinkingTier) => void;
+  /** 只改思考支持开关（保留可选档/默认档） */
+  setThinkingSupported: (supported: boolean) => void;
+  /** 只改可选档清单（默认档被移出时回落首档） */
+  setAvailableTiers: (tiers: LocalThinkingTier[]) => void;
+  /** 只改默认档（永不塌缩可选档清单） */
+  setDefaultTier: (tier: LocalThinkingTier) => void;
   setPricing: (pricing: LocalPricingSpec | undefined) => void;
   setModalities: (modalities: LocalModalitiesSpec | undefined) => void;
   setInputModalities: (mods: string[]) => void;
@@ -315,34 +394,32 @@ export function useModelSpecDraft(
   );
 
   const setThinkingTiers = useCallback(
-    (tiers: LocalThinkingTier[]) => {
-      updateSpec((prev) => ({
-        ...prev,
-        thinking: {
-          supported: tiers.some((t) => t !== 'off'),
-          availableTiers: tiers,
-          defaultTier:
-            prev.thinking?.defaultTier &&
-            tiers.includes(prev.thinking.defaultTier)
-              ? prev.thinking.defaultTier
-              : (tiers[0] ?? 'off'),
-        },
-      }));
-    },
+    (tiers: LocalThinkingTier[]) =>
+      updateSpec((prev) => withThinkingAvailableTiers(prev, tiers)),
     [updateSpec]
   );
 
   const setDefaultThinkingTier = useCallback(
-    (tier: LocalThinkingTier) => {
-      updateSpec((prev) => ({
-        ...prev,
-        thinking: {
-          supported: tier !== 'off' || (prev.thinking?.supported ?? false),
-          availableTiers: prev.thinking?.availableTiers ?? [tier],
-          defaultTier: tier,
-        },
-      }));
-    },
+    (tier: LocalThinkingTier) =>
+      updateSpec((prev) => withThinkingDefaultTier(prev, tier)),
+    [updateSpec]
+  );
+
+  const setThinkingSupported = useCallback(
+    (supported: boolean) =>
+      updateSpec((prev) => withThinkingSupported(prev, supported)),
+    [updateSpec]
+  );
+
+  const setAvailableTiers = useCallback(
+    (tiers: LocalThinkingTier[]) =>
+      updateSpec((prev) => withThinkingAvailableTiers(prev, tiers)),
+    [updateSpec]
+  );
+
+  const setDefaultTier = useCallback(
+    (tier: LocalThinkingTier) =>
+      updateSpec((prev) => withThinkingDefaultTier(prev, tier)),
     [updateSpec]
   );
 
@@ -536,6 +613,9 @@ export function useModelSpecDraft(
     setThinking,
     setThinkingTiers,
     setDefaultThinkingTier,
+    setThinkingSupported,
+    setAvailableTiers,
+    setDefaultTier,
     setModalities,
     setInputModalities,
     setOutputModalities,
