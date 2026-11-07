@@ -14,6 +14,7 @@
  */
 import React, { useEffect } from 'react';
 import styles from './FlowDagView.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { RuntimeSection } from './RuntimeSection';
 import { useFlowDagStore } from './flowDagStore';
 import {
@@ -71,7 +72,9 @@ export const FlowDagGraph: React.FC<{
               {layer.map((n) => {
                 const running = n.state === 'running';
                 return (
-                  <div
+                  <G2Surface
+                    radius={10}
+                    fill="var(--bg-card)"
                     key={n.id}
                     className={`${styles.node}${
                       n.state === 'blocked' ? ` ${styles.nodeBlocked}` : ''
@@ -102,7 +105,7 @@ export const FlowDagGraph: React.FC<{
                     <span className={styles.nodeMeta}>
                       {stateLabel(n.state)}
                     </span>
-                  </div>
+                  </G2Surface>
                 );
               })}
             </div>

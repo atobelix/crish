@@ -167,6 +167,9 @@
   padding: 8px 10px;
   border-radius: var(--radius-md);
   background: transparent;
+  /* G² 形状层填充变量：hover 时随 background 同步切换（见下方 :hover 规则）；
+     background 保留为形状层未绘制时的兜底，FLASH-01 亦钉死透明底。 */
+  --row-fill: transparent;
   transition: background var(--transition-micro);
   min-width: 0;
   box-sizing: border-box;
@@ -174,6 +177,13 @@
 
 .row:hover {
   background: var(--state-hover);
+  --row-fill: var(--state-hover);
+}
+
+/* G² 形状层 hover 填充过渡：background 的过渡只作用于兜底背景，形状层
+   以 SVG path 承着 --row-fill，须另给 path 加 fill 过渡，hover 亮度才不断帧。 */
+.row [data-g2-layer='measured'] path {
+  transition: fill var(--transition-micro);
 }
 
 .rowMain {
@@ -294,7 +304,11 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: 10px 0;
-  border-radius: 0;
+  /* G² 第二波乙：显式直角 0 无意图记录（随 f0539f4f2 整文件拆分落入，无注释、
+     无独立提交）；同文件同角色的 .row 为卡档 12，按任务口径归卡档。视觉无差：
+     本体透明底、无整框边框、无 hover 填充，直角/圆角均不可见；无漆面可画，
+     故不挂 G2Surface（日后加填充时再挂）。 */
+  border-radius: var(--radius-md);
   background: transparent;
   border-bottom: 1px solid var(--border-subtle);
 }

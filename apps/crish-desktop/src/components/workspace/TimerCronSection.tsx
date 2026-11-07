@@ -12,6 +12,7 @@
  */
 import React, { useSyncExternalStore } from 'react';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { RuntimeSection } from './RuntimeSection';
 import {
   getTimerCronSummary,
@@ -109,7 +110,9 @@ export const TimerCronSection: React.FC = () => {
             aria-label="最近定时与 Cron 事件"
           >
             {summary.recent.map((ev, i) => (
-              <div
+              <G2Surface
+                radius="card"
+                fill="var(--row-fill)"
                 key={`${ev.type}-${ev.id}-${i}`}
                 className={styles.row}
                 role="listitem"
@@ -124,7 +127,7 @@ export const TimerCronSection: React.FC = () => {
                   />
                   <span className={styles.rowMeta}>{eventLineText(ev)}</span>
                 </div>
-              </div>
+              </G2Surface>
             ))}
           </div>
         ) : null}

@@ -18,7 +18,8 @@ import { describe, expect, it } from 'vitest';
  * - :global 上下文里的引用名、以及全局 CSS（非模块）里的引用名，
  *   必须在全局定义集合（全部非模块 CSS 的 @keyframes）内。
  * - `animation: :global(<名>) ...` 形态的按名引用按全局上下文校验。
- * - 全仓不存在任何定义的引用名（如历史上的 RuntimePanel `spin`）
+ * - 全仓不存在任何定义的引用名（如历史上的 RuntimePanel `spin`，
+ *   已由 keyframes 批迁为 composes: crish-anim-spin from global）
  *   在任何上下文下都算悬空。
  *
  * 存量以棘轮清单 BASELINE 登记：清单外新增悬空即红；清单内某项被

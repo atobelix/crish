@@ -5,6 +5,7 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { useState } from 'react';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { Button, Tooltip } from '@/components/ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
@@ -142,7 +143,9 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
           const busy = approvalBusyId === (a.toolCallId || '');
           return (
             <Tooltip key={a.toolCallId || i} content="打开待确认会话">
-              <div
+              <G2Surface
+                radius="card"
+                fill="var(--row-fill)"
                 className={`${styles.row} ${styles.isClickable}`}
                 role="button"
                 tabIndex={0}
@@ -195,7 +198,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                     拒绝
                   </Button>
                 </div>
-              </div>
+              </G2Surface>
             </Tooltip>
           );
         })}

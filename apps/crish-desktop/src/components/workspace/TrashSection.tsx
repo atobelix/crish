@@ -8,6 +8,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { RuntimeSection } from './RuntimeSection';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip } from '@/components/ui';
@@ -172,7 +173,9 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
               metaBits.push(t('workspace.trash.hasChecksum'));
             }
             return (
-              <div
+              <G2Surface
+                radius="card"
+                fill="var(--row-fill)"
                 key={entry.id}
                 className={styles.row}
                 role="listitem"
@@ -236,7 +239,7 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
                     </Button>
                   </Tooltip>
                 </div>
-              </div>
+              </G2Surface>
             );
           })}
         </div>

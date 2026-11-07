@@ -6,6 +6,7 @@ import React from 'react';
 
 import { Tooltip } from '@/components/ui';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import type { LiveTask } from './useRuntimePanelData';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import {
@@ -59,7 +60,9 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
             const elapsedText = formatElapsed(wk.elapsedSeconds);
             const clickable = Boolean(wk.sessionId);
             const rowNode = (
-              <div
+              <G2Surface
+                radius="card"
+                fill="var(--row-fill)"
                 key={wk.id}
                 className={`${styles.row} ${styles.isLive}${clickable ? ` ${styles.isClickable}` : ''}`}
                 role={clickable ? 'button' : 'listitem'}
@@ -98,7 +101,7 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
                     aria-hidden
                   />
                 ) : null}
-              </div>
+              </G2Surface>
             );
             return clickable ? (
               <Tooltip key={wk.id} content="打开对应会话">

@@ -14,6 +14,7 @@
 import React from 'react';
 import { Tooltip } from '@/components/ui';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { RuntimeSection } from './RuntimeSection';
 import {
   auditDecisionLabel,
@@ -60,7 +61,9 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
               ? styles.warn
               : styles.on;
           return (
-            <div
+            <G2Surface
+              radius="card"
+              fill="var(--row-fill)"
               key={key}
               className={styles.row}
               role="listitem"
@@ -80,7 +83,7 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
                   </Tooltip>
                 </div>
               </div>
-            </div>
+            </G2Surface>
           );
         })}
       </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import {
   useSettingsField,
   selectScheduledTasks,
@@ -122,7 +123,9 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
       {/* D-05 S1：批写降级最小展示槽——仅在非 healthy 时渲染；
           诚实文案（描述现状「暂存本地」，不承诺已同步、不宣称数据丢失） */}
       {persistenceStatus !== 'healthy' ? (
-        <div
+        <G2Surface
+          radius="card"
+          fill="var(--warning-soft-bg)"
           className={styles.persistenceWarning}
           data-persistence-status={persistenceStatus}
           role="status"
@@ -130,7 +133,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
         >
           <span className={styles.dot} aria-hidden />
           存储降级中：会话数据正在暂存本地
-        </div>
+        </G2Surface>
       ) : null}
 
       <RuntimeSection

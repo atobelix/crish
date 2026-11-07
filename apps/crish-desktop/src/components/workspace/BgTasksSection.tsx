@@ -8,6 +8,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useState } from 'react';
 
 import styles from './RuntimePanel.module.css';
+import { G2Surface } from '../ui/G2Surface';
 import { Tooltip } from '@/components/ui';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
@@ -101,7 +102,9 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
             const suspicious = t.suspicious === true;
             return (
               <Tooltip key={t.id} content="在终端中查看输出">
-                <div
+                <G2Surface
+                  radius="card"
+                  fill="var(--row-fill)"
                   className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
                   role="button"
                   tabIndex={0}
@@ -145,7 +148,7 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
                     className={styles.rowChevron}
                     aria-hidden
                   />
-                </div>
+                </G2Surface>
               </Tooltip>
             );
           })}
