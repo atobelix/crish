@@ -225,7 +225,14 @@ describe('三档底色契约', () => {
     expect(body).not.toContain('--content-frame-border');
     expect(body).not.toMatch(/border-(left|top|right|bottom)\s*:/);
     expect(body).toMatch(/border-radius:\s*var\(--radius-l\)/);
-    expect(body).toMatch(/background:\s*var\(--leaf-card-bg/);
+    // 【G² 第一波丙】填充已迁出 .leafBody、改由形状层承载：
+    // TreeLeafPanel.tsx 的 G2Surface 以 fill 传入 --leaf-card-bg。
+    expect(body).not.toMatch(/background:/);
+    const leafTsx = readFileSync(
+      resolve(__dirname, '../components/binary-tree/TreeLeafPanel.tsx'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+    expect(leafTsx).toMatch(/fill="var\(--leaf-card-bg/);
     // 活动叶不得再给卡片设描边色（旧同色 border-color 空转规则已删）
     const active =
       ws.match(/\.leaf\[data-active='true'\] \.leafBody \{([\s\S]*?)\}/)?.[1] ??

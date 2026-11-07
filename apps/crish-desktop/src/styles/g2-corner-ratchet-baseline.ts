@@ -16,8 +16,8 @@
 
 export const G2_RATCHET_CAPS = {
   barePx: 25,
-  privateVars: 20, // 甲槽 A 核销 2（Toast）+ 乙槽 C 核销 1（SettingsRulesTab 局部覆写 --radius-xl 退役）
-  fallbackDrift: 8, // F3 回退核正：已核销 21 键；余 8 键 = 占用跳过 4（ChatToolCallBlock / FoldableToolGroup / ModelBadgePickerMenu）+ 纠缠留置 4（ExternalImportWorkbench / ExternalSessionsWorkbench / McpConnectModal，修复已叠工作区、待其文件提交时同删本行）
+  privateVars: 19, // 甲槽 A 核销 2（Toast）+ 乙槽 C 核销 1（SettingsRulesTab 局部覆写 --radius-xl 退役）+ 丙槽 D 核销 1（Tiptap --slash-radius-outer 外迁 G2Surface）
+  fallbackDrift: 4, // F3 回退核正：已核销 21 键 + 纠缠留置 4 键修正值已随 keyframes 提交 729cd8c56 入 HEAD（逐值核对，收口删行）；余 4 键 = 占用跳过 4（ChatToolCallBlock / FoldableToolGroup / ModelBadgePickerMenu），待占用解除后机械核正
 } as const;
 
 export const G2_RATCHET_BARE_PX: readonly string[] = [
@@ -56,7 +56,6 @@ export const G2_RATCHET_PRIVATE_VARS: readonly string[] = [
   'components/chat-composer/ChatComposer.module.css :: --composer-radius-outer:',
   'components/chat-composer/PermissionModeMenu.module.css :: --btn-radius:',
   'components/chat-composer/TiptapSlashMenu.module.css :: --slash-radius-inner:',
-  'components/chat-composer/TiptapSlashMenu.module.css :: --slash-radius-outer:',
   'components/chat-message-row/ChatMessageRow.module.css :: --composer-attach-card-radius:',
   'components/chat-message/MessageContent.module.css :: --md-code-inline-radius:',
   'components/diff/DiffCard.module.css :: --btn-radius:',
@@ -74,10 +73,6 @@ export const G2_RATCHET_PRIVATE_VARS: readonly string[] = [
 export const G2_RATCHET_FALLBACK_DRIFT: readonly string[] = [
   'components/chat-tool-call/ChatToolCallBlock.module.css :: border-radius: var(--radius-sm, 4px);',
   'components/chat-tool-call/FoldableToolGroup.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/extensions-surface/ExternalImportWorkbench.module.css :: border-radius: var(--radius-sm, 4px);',
-  'components/extensions-surface/ExternalSessionsWorkbench.module.css :: border-radius: var(--radius-lg, 7px);',
-  'components/extensions-surface/McpConnectModal.module.css :: border-radius: var(--button-radius, 7px);',
-  'components/extensions-surface/McpConnectModal.module.css :: border-radius: var(--radius-lg, 9px);',
   'components/provider/ModelBadgePickerMenu.module.css :: border-radius: var(--sep-item-radius, 8px);',
   'components/provider/ModelBadgePickerMenu.module.css :: border-radius: var(--sep-radius-outer, 14px);',
 ];

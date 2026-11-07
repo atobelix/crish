@@ -206,8 +206,12 @@ describe('ui/Menu', () => {
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const content = await screen.findByText('菜单标题');
     // 非模态菜单声明 aria-modal 会切断后台内容的 SR 读取（F7-F2）
-    expect(content.parentElement).not.toHaveAttribute('aria-modal');
-    expect(content.parentElement).toHaveClass(styles.menuContent);
+    // 【G² 第一波丙 · W1C】滚动移入内层 .menuScroll，标题父级不再是
+    // menuContent，改为取 menuContent 祖先断言（Popup 仍为该祖先）。
+    const contentRoot = content.closest(`.${styles.menuContent}`);
+    expect(contentRoot).not.toBeNull();
+    expect(contentRoot).toHaveClass(styles.menuContent);
+    expect(contentRoot).not.toHaveAttribute('aria-modal');
   });
 
   it('trigger 事件保留：原 onClick 正常触发且菜单展开', async () => {

@@ -98,12 +98,15 @@ describe('ProjectPickerMenu（ui/Menu menuItem 皮）', () => {
     expect(css).toContain('appearance: none');
   });
 
-  it('面板走 Menu 壳 + menuItem，不带 sort-filter / no-drag', async () => {
+  it('面板走 SEP 壳 + menuItem，不带 sort-filter / no-drag', async () => {
     renderPicker(true);
     const menu = await screen.findByRole('menu', { name: '选择项目' });
     const panel = menu.parentElement as HTMLElement;
     expect(panel.className).toContain(styles.pickerPanel);
-    expect(panel.className).toContain(menuStyles.menuContent);
+    // 【G² 第一波丙】SEP 主面板已脱离 .menuContent、改走 SepPanelShell
+    // （_shell 壳 + SEP .panel），menuContent 不再是面板的类。
+    expect(panel.className).toContain(panelStyles.panel);
+    expect(panel.className).not.toContain(menuStyles.menuContent);
     expect(panel.className).not.toContain('sort-filter-menu');
     expect(panel.className).not.toMatch(/\bno-drag\b/);
     expect(panel.className).not.toMatch(/(?:^|\s)open(?:\s|$)/);

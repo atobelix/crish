@@ -292,14 +292,20 @@ describe('首批集成接线', () => {
     expect(menuTsx).not.toContain('if (anchor && !isOpen)');
   });
 
-  it('Menu.module.css：退场选择器须覆盖 Base UI 与 Radix 两引擎（Popup 无 data-state，Radix 有）', () => {
+  it('Menu.module.css：退场选择器只走 Base UI data-ending-style（Popup 无 data-state，S4 实证）', () => {
     const css = read('components/ui/Menu/Menu.module.css');
     // Base UI v1：data-ending-style（实机证伪：Popup 无 data-state）
     expect(css).toContain('.menuContent[data-ending-style]');
     expect(css).toContain('.popup[data-ending-style]');
-    // Radix：data-state='closed'（SEP 主面板 Popover.Content 确实写 data-state，须保留）
-    expect(css).toContain(".menuContent[data-state='closed']");
-    expect(css).toContain(".popup[data-state='closed']");
+    // W1C 有意删除：Base UI Popup 永不写 data-state，[data-state='closed']
+    // 选择器在 Menu 面上永不匹配；唯一 Radix 消费面 SEP 主面板已脱离
+    // .menuContent、改走 SepPanelShell，其退场由全局类 .crish-popover-anim
+    // 的 [data-state='closed'] 规则承载（design-system.css §4b）。
+    expect(css).not.toContain(".menuContent[data-state='closed']");
+    expect(css).not.toContain(".popup[data-state='closed']");
+    // 本地 @keyframes crish-popover-exit 仍在：[data-ending-style] 规则
+    // 引用它（全局类无对应规则，不可删，见跟进批）。
+    expect(css).toContain('@keyframes crish-popover-exit');
   });
 
   it('PermissionModeMenu.module.css：压过退场规则的死 animation 已删', () => {
@@ -322,8 +328,17 @@ describe('首批集成接线', () => {
     const css = read(
       'components/ui/SmartExpandablePanel/SmartExpandablePanel.module.css'
     );
-    expect(css).toContain('@keyframes crish-popover-exit');
-    expect(css).toContain(".cascadeSubmenu[data-state='closed']");
+    // W1C：级联退场 CSS 已迁入全局类 .crish-popover-anim（composes），
+    // 关键帧与 [data-state='closed'] 规则改由全局类本体承载
+    // （design-system.css §4b）；本文件只钉 composes 接线。
+    expect(css).toContain('composes: crish-popover-anim from global');
+    expect(css).not.toContain('@keyframes crish-popover-exit');
+    expect(css).not.toContain(".cascadeSubmenu[data-state='closed']");
+    const dsCss = read('styles/design-system.css');
+    expect(dsCss).toMatch(/@keyframes\s+crish-popover-exit/);
+    expect(dsCss).toMatch(
+      /\.crish-popover-anim\[data-state='closed'\][\s\S]*?var\(--transition-popover-exit\)/
+    );
   });
 
   it('ComposePlusMenu：父级早退已删，SEP 由 useClosingFlag 保活（Radix Presence 可播退场）', () => {
@@ -379,7 +394,7 @@ describe('首批集成接线', () => {
 });
 
 describe('S5b 弹层收敛', () => {
-  it('Menu 入场：Base UI 走 data-starting-style + 过渡（[data-state=open] 仍留给 Radix）', () => {
+  it('Menu 入场：Base UI 走 data-starting-style + 过渡（[data-state=open] 已随 SEP 脱离删除）', () => {
     const css = read('components/ui/Menu/Menu.module.css');
     // 基类带入场过渡（减动效档归零）
     expect(css).toContain(
@@ -390,9 +405,16 @@ describe('S5b 弹层收敛', () => {
     expect(css).toContain(
       ".menuContent[data-starting-style][data-side='top']"
     );
-    // Radix 面仍走关键帧入场（SEP 主面板），不得误删
-    expect(css).toContain(".menuContent[data-state='open']");
-    expect(css).toContain('@keyframes crish-popover-enter');
+    // W1C 有意删除：入场两份副本已删；唯一 Radix 消费面 SEP 主面板已脱离
+    // .menuContent、改走 SepPanelShell，其入场由全局类 .crish-popover-anim
+    // 的 [data-state='open'] 规则承载（design-system.css §4b）。
+    expect(css).not.toContain(".menuContent[data-state='open']");
+    expect(css).not.toContain('@keyframes crish-popover-enter');
+    const dsCss = read('styles/design-system.css');
+    expect(dsCss).toMatch(
+      /\.crish-popover-anim\[data-state='open'\]\[data-positioned='true'\][\s\S]*?var\(--transition-popover-enter\)/
+    );
+    expect(dsCss).toMatch(/@keyframes\s+crish-popover-enter/);
     // 减动效档须同时关掉过渡（本文件 media 块在 @layer 内缩进，
     // 故不用 design-system 式 \n} 锚定，改以块内匹配）
     expect(css).toMatch(
@@ -413,17 +435,23 @@ describe('S5b 弹层收敛', () => {
     expect(css).toContain('.sbQuickSubmenu[data-ending-style]');
   });
 
-  it('TiptapSlashMenu：父级早退已修（退场宿主保活）+ 本地 keyframes 已补', () => {
+  it('TiptapSlashMenu：父级早退已修（退场宿主保活）+ 本地 keyframes 已删、改走全局类', () => {
     const tsx = read('components/chat-composer/TiptapSlashMenu.tsx');
     expect(tsx).toContain('useClosingFlag');
     expect(tsx).toContain('tiptap-slash-menu');
     expect(tsx).toContain('slashClosing.visible');
     expect(tsx).not.toMatch(/^\s*if \(!isOpen\) return null;/m);
     const css = read('components/chat-composer/TiptapSlashMenu.module.css');
-    expect(css).toContain('@keyframes crish-popover-enter');
-    expect(css).toContain('@keyframes crish-popover-enter-top');
-    expect(css).toContain('@keyframes crish-popover-exit');
-    expect(css).toContain('@keyframes crish-popover-exit-top');
+    // 【G² 第一波丙 · 槽 D】4 份本地副本已删：进/退场改走全局工具类
+    // .crish-popover-anim（composes），关键帧改由全局类本体承载。
+    expect(css).toContain('composes: crish-popover-anim from global');
+    expect(css).not.toContain('@keyframes crish-popover-enter');
+    expect(css).not.toContain('@keyframes crish-popover-enter-top');
+    expect(css).not.toContain('@keyframes crish-popover-exit');
+    expect(css).not.toContain('@keyframes crish-popover-exit-top');
+    const dsCss = read('styles/design-system.css');
+    expect(dsCss).toMatch(/@keyframes\s+crish-popover-enter/);
+    expect(dsCss).toMatch(/@keyframes\s+crish-popover-exit/);
   });
 
   it('ModelBadgePickerMenu：父级早退已修（退场宿主保活），死类 .mbMenuExit 已删', () => {

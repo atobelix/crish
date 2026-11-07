@@ -65,11 +65,26 @@ describe('chat-composer 视觉红线（T10 & P6）', () => {
       if (name === 'TiptapSlashMenu.module.css') {
         // AN2 / A6 归队后：斜杠菜单不再自备 keyframes 与缓动，进出场统一走全域
         // 浮层配方（共享 crish-popover-* keyframes + popover token，缓动/时长在 token 内）
-        expect(css).toMatch(/var\(--transition-popover-enter\)/);
-        expect(css).toMatch(/var\(--transition-popover-exit\)/);
-        expect(css).toMatch(/crish-popover-enter/);
-        expect(css).not.toMatch(/@keyframes/);
+        // 【G² 第一波丙 · 槽 D】4 份本地副本已删：进/退场改走全局工具类
+        // .crish-popover-anim（composes），token 与关键帧改由全局类本体承载，
+        // 本文件只钉 composes 接线 + 全局类本体的 token/关键帧。
+        expect(css).toContain('composes: crish-popover-anim from global');
+        // 本地 keyframes 定义不得回潮；注意模块注释正文提及“@keyframes”
+        // 一词（解释 composes 防悬空的缘由），故只钉“@keyframes <名> {”
+        // 定义形态，不钉字面出现。
+        expect(css).not.toMatch(/@keyframes\s+[A-Za-z0-9_-]+\s*\{/);
         expect(css).not.toMatch(/translateY\([1-9]\d+px\)/);
+        const dsCss = readFileSync(
+          join(here, '..', '..', 'styles', 'design-system.css'),
+          'utf8'
+        );
+        expect(dsCss).toMatch(
+          /\.crish-popover-anim\[data-state='open'\]\[data-positioned='true'\][\s\S]*?var\(--transition-popover-enter\)/
+        );
+        expect(dsCss).toMatch(
+          /\.crish-popover-anim\[data-state='closed'\][\s\S]*?var\(--transition-popover-exit\)/
+        );
+        expect(dsCss).toMatch(/@keyframes\s+crish-popover-enter/);
       } else {
         expect(css).not.toMatch(/transform:/);
         expect(css).not.toMatch(/will-change/);

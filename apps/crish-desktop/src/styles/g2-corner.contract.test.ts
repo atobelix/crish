@@ -61,6 +61,12 @@ const G2_EXEMPTIONS: readonly Exemption[] = [
     reason:
       '用户裁决 2026-11-06：DiffCard 差异面板豁免 G²、保持纯直角（多文件同列显示），其直角契约是裁决的产物不是缺陷',
   },
+  {
+    file: 'components/ui/ConfirmDialog/ConfirmDialog.tsx',
+    declIncludes: "borderRadius: '9999px'",
+    reason:
+      '用户裁决 2026-11-06：删除会话确认面板的按钮为胶囊形（borderRadius 9999px）；胶囊是裁决的产物不是缺陷，永不回退胶囊',
+  },
 ];
 
 function walk(dir: string, acc: string[] = []): string[] {
@@ -284,5 +290,73 @@ describe('G² 真相源守卫（g2-corner）', () => {
     const tokensCss = readFileSync(resolve(srcDir, 'styles', 'tokens.css'), 'utf8');
     expect(tokensCss).toContain("@import './tokens-radius.css';");
     expect(tokensCss).toContain("@import './tokens-components.css';");
+  });
+
+  it('契约 G6：SEP 族单挂接点（第一波丙 · 槽 B）——外壳与消费类均不得自绘油漆', () => {
+    // 外壳油漆只在 SepPanelShell（ui/G2Surface）声明一处；.panel /
+    // .cascadeSubmenu 只留布局 + 兜底圆弧 + 全局弹层动画 composes。
+    // 消费类（.plusMenu/.permMenu/.pickerPanel/.activityPanelOuter）只留
+    // 布局/排版。任一面重新自绘背景/边框/阴影即变红（防分叉回归）。
+    const readCss = (...segments: string[]) =>
+      readFileSync(resolve(srcDir, ...segments), 'utf8');
+    const ruleBlock = (css: string, cls: string) => {
+      const m = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]+)\\}`));
+      expect(m, `必须含 .${cls} 规则块`).toBeTruthy();
+      return m![1];
+    };
+    const expectNoPaint = (block: string, where: string) => {
+      expect(block, `${where} 不得自绘 background`).not.toMatch(/background\s*:/);
+      expect(block, `${where} 不得自绘 border`).not.toMatch(/(^|[^-])border\s*:/);
+      expect(block, `${where} 不得自绘 box-shadow`).not.toMatch(/box-shadow\s*:/);
+    };
+    const sepCss = readCss(
+      'components',
+      'ui',
+      'SmartExpandablePanel',
+      'SmartExpandablePanel.module.css',
+    );
+    expectNoPaint(ruleBlock(sepCss, 'panel'), '.panel');
+    expectNoPaint(ruleBlock(sepCss, 'cascadeSubmenu'), '.cascadeSubmenu');
+    // 全局弹层动画 composes 是外壳的入/退场载体（Radix 面）
+    expect(ruleBlock(sepCss, 'panel')).toMatch(
+      /composes:\s*crish-popover-anim from global/,
+    );
+    expect(ruleBlock(sepCss, 'cascadeSubmenu')).toMatch(
+      /composes:\s*crish-popover-anim from global/,
+    );
+    const noPaintNoRadius = (block: string, where: string) => {
+      expectNoPaint(block, where);
+      expect(block, `${where} 不得自绘 border-radius`).not.toMatch(
+        /border-radius\s*:/,
+      );
+    };
+    noPaintNoRadius(
+      ruleBlock(
+        readCss('components', 'chat-composer', 'ComposePlusMenu.module.css'),
+        'plusMenu',
+      ),
+      '.plusMenu',
+    );
+    noPaintNoRadius(
+      ruleBlock(
+        readCss('components', 'chat-composer', 'PermissionModeMenu.module.css'),
+        'permMenu',
+      ),
+      '.permMenu',
+    );
+    noPaintNoRadius(
+      ruleBlock(
+        readCss('components', 'chat-card', 'ProjectPickerMenu.module.css'),
+        'pickerPanel',
+      ),
+      '.pickerPanel',
+    );
+    noPaintNoRadius(
+      ruleBlock(
+        readCss('components', 'chat-card', 'SubagentHeaderPanel.module.css'),
+        'activityPanelOuter',
+      ),
+      '.activityPanelOuter',
+    );
   });
 });
