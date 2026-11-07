@@ -1,8 +1,9 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { Pressable, Text, View } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
 import {
   useTimelineBottomInset,
+  OVERLAY_INSET_TRAILING_MS,
   type UseTimelineBottomInsetOptions,
   type UseTimelineBottomInsetResult,
 } from './useTimelineBottomInset';
@@ -169,5 +170,72 @@ describe('useTimelineBottomInset', () => {
     // 214 + 20 = 234
     expect(probeResult?.overlayHeight).toBe(214);
     expect(probeResult?.timelineBottomInset).toBe(234);
+  });
+
+  it('R11 离散提交：动画中间帧（不足一步）不落状态，尾帧精确落定', async () => {
+    const view = await render(
+      <Probe bottomSafeArea={34} hasModelControl={true} gap={20} />
+    );
+    // 直接驱动布局事件序列（0 → 68 收展动画帧）
+    const fireHeight = async (h: number) => {
+      await act(async () => {
+        probeResult?.handleOverlayLayout({
+          nativeEvent: { layout: { height: h, width: 390, x: 0, y: 0 } },
+        } as LayoutChangeEvent);
+      });
+    };
+    const waitTrailing = () =>
+      new Promise((resolve) =>
+        setTimeout(resolve, OVERLAY_INSET_TRAILING_MS + 20)
+      );
+
+    // 收展动画帧：10、15、23、30、38、45、52、60、68
+    await fireHeight(10); // 首次提交
+    expect(probeResult?.overlayHeight).toBe(10);
+    await fireHeight(15); // Δ5 < 8：不落
+    expect(probeResult?.overlayHeight).toBe(10);
+    await fireHeight(23); // Δ13 ≥ 8：落
+    expect(probeResult?.overlayHeight).toBe(23);
+    await fireHeight(30); // Δ7 < 8：不落
+    await fireHeight(38); // Δ15 ≥ 8：落
+    expect(probeResult?.overlayHeight).toBe(38);
+    await fireHeight(45); // Δ7：不落
+    await fireHeight(52); // Δ14：落
+    expect(probeResult?.overlayHeight).toBe(52);
+    await fireHeight(60); // Δ8：落
+    expect(probeResult?.overlayHeight).toBe(60);
+    await fireHeight(68); // Δ8：落
+    expect(probeResult?.overlayHeight).toBe(68);
+
+    // 动画停后尾帧：68 已精确提交，trailing 到期为 no-op
+    await waitTrailing();
+    expect(probeResult?.overlayHeight).toBe(68);
+
+    // 收尾停在 62（未跨步）：不立即落，trailing 精确提交
+    await fireHeight(62); // Δ6 < 8：不落（挂起）
+    expect(probeResult?.overlayHeight).toBe(68);
+    await waitTrailing();
+    expect(probeResult?.overlayHeight).toBe(62);
+    await view.unmount();
+  });
+
+  it('R11 稳态：单次提交后重复同值布局事件零广播（<1 收敛守卫）', async () => {
+    const view = await render(
+      <Probe bottomSafeArea={34} hasModelControl={true} gap={20} />
+    );
+    const fireHeight = async (h: number) => {
+      await act(async () => {
+        probeResult?.handleOverlayLayout({
+          nativeEvent: { layout: { height: h, width: 390, x: 0, y: 0 } },
+        } as LayoutChangeEvent);
+      });
+    };
+    await fireHeight(173);
+    expect(probeResult?.overlayHeight).toBe(173);
+    // 同值重复回报：不重设状态、无尾帧挂起
+    await fireHeight(173);
+    await fireHeight(173.5);
+    expect(probeResult?.overlayHeight).toBe(173);
+    await view.unmount();
   });
 });

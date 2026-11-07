@@ -12,7 +12,7 @@
 //    在 UI 线程执行 translateY 向上平移，不再在列表 paddingBottom 叠加键盘高度，消除双重垫高；
 // 4. 浮层总占高与物理高：产出 floatingHeight（含键盘高，专供 EdgeFade 底部羽化遮罩消费）与
 //    overlayHeight（实测纯物理高，专供 ScrollToBottomButton 锚定输入框左上角）。
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { useKeyboardHeight } from '@/adapters/platform/useKeyboardHeight';
 import { useTheme } from '@/adapters/platform/theme';
@@ -29,6 +29,17 @@ export const COMPOSER_ERROR_BAR_ESTIMATED_HEIGHT = 48;
 export const COMPOSER_STOP_PILL_ESTIMATED_HEIGHT = 40;
 /** 阴影与出血安全保护间距 */
 export const COMPOSER_SHADOW_BLEED_MARGIN = 6;
+
+/**
+ * R11 离散提交步长（S9 inset 广播收敛）：浮层高度动画（Collapsible 收展/
+ * 键盘协同）期间 onLayout 逐帧回报，逐帧 setOverlayHeight 会把 inset 变化
+ * 全屏广播（列表 paddingBottom 重排链）。距上次提交不足一步的中间帧不再
+ * 落状态（O(高度/步长) 次替代逐帧），尾帧经 trailing 定时器精确落定；
+ * 稳态单次提交不受影响（行为与「立即同步」口径兼容）。
+ */
+export const OVERLAY_INSET_COMMIT_STEP_PX = 8;
+/** 尾帧精确落定定时（ms）：动画停后的最后布局事件经此提交精确值 */
+export const OVERLAY_INSET_TRAILING_MS = 64;
 
 export interface UseTimelineBottomInsetOptions {
   /** 底部安全区高度（insets.bottom，全面屏手势条通常 24~34px，三键导航 0） */
@@ -98,26 +109,61 @@ export function useTimelineBottomInset(
     (isBusyWithStop ? COMPOSER_STOP_PILL_ESTIMATED_HEIGHT : 0) +
     COMPOSER_SHADOW_BLEED_MARGIN;
 
-  // 2. 实测高度状态管理（无滞后立即同步，<= 0 拦截守卫）
+  // 2. 实测高度状态管理（无滞后立即同步，<= 0 拦截守卫；R11 离散提交）
   const [overlayHeight, setOverlayHeight] = useState<number | null>(null);
   const overlayCommittedRef = useRef<number | null>(null);
+  const pendingHeightRef = useRef<number | null>(null);
+  const trailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleOverlayLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    // 关键守卫：挂载首帧或空容器可能汇报 0/NaN/负数，绝不将其作为有效高度提交，
-    // 坚决防止估算值被覆盖为 0 导致最后一条消息被输入框遮挡
-    if (!Number.isFinite(height) || height <= 0) return;
+  useEffect(() => {
+    return () => {
+      if (trailingTimerRef.current !== null) {
+        clearTimeout(trailingTimerRef.current);
+        trailingTimerRef.current = null;
+      }
+    };
+  }, []);
 
-    if (
-      overlayCommittedRef.current !== null &&
-      Math.abs(height - overlayCommittedRef.current) < 1
-    ) {
-      return;
-    }
-
+  const commitOverlayHeight = useCallback((height: number) => {
     overlayCommittedRef.current = height;
+    pendingHeightRef.current = null;
     setOverlayHeight(height);
   }, []);
+
+  const handleOverlayLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const height = event.nativeEvent.layout.height;
+      // 关键守卫：挂载首帧或空容器可能汇报 0/NaN/负数，绝不将其作为有效高度提交，
+      // 坚决防止估算值被覆盖为 0 导致最后一条消息被输入框遮挡
+      if (!Number.isFinite(height) || height <= 0) return;
+
+      const committed = overlayCommittedRef.current;
+      if (committed !== null && Math.abs(height - committed) < 1) {
+        // 已收敛到精确值：清尾帧挂起，不重复广播
+        pendingHeightRef.current = null;
+        return;
+      }
+      pendingHeightRef.current = height;
+      // R11 离散提交：跨步（或首次）立即落值；不足一步的动画中间帧不落，
+      // 交由尾帧精确落定
+      if (committed === null || Math.abs(height - committed) >= OVERLAY_INSET_COMMIT_STEP_PX) {
+        commitOverlayHeight(height);
+      }
+      // 尾帧精确落定：动画停后的最后布局事件经 trailing 提交精确值
+      //（稳态时该提交为 no-op；不会把已收敛的值重复广播）
+      if (trailingTimerRef.current !== null) {
+        clearTimeout(trailingTimerRef.current);
+      }
+      trailingTimerRef.current = setTimeout(() => {
+        trailingTimerRef.current = null;
+        const pending = pendingHeightRef.current;
+        if (pending !== null && pending !== overlayCommittedRef.current) {
+          commitOverlayHeight(pending);
+        }
+      }, OVERLAY_INSET_TRAILING_MS);
+    },
+    [commitOverlayHeight]
+  );
 
   // 3. 有效高度裁决：实测存在且大于 0 则采用实测值，否则取精确估算兜底
   const effectiveOverlayHeight =
