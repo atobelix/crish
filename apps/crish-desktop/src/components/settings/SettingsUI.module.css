@@ -88,13 +88,28 @@
   flex-direction: column;
 }
 
-/* G² 形状层在位（SettingsCard 以 G2Surface 为根）时放行 overflow：卡内容
- * 改由形状层同路径 clip 承载，根节点自身的 overflow:hidden 会以普通圆弧
- * 二次裁切、覆盖 G² 轮廓。背景/边框保留为兜底，被同色填充层覆盖。
- * 暗色卡面色（--settings-card-bg，下方暗色规则在本类上定义）经继承进入
- * 形状层的 fill 解析，亮度台阶口径不变。 */
+/* G² 形状层在位（SettingsCard 以 G2Surface 为根）时，形状层是唯一
+ * 表面：放行 overflow（卡内容改由形状层同路径 clip 承载，根节点自身
+ * 的 overflow:hidden 会以普通圆弧二次裁切、覆盖 G² 轮廓），并中和
+ * 上方兜底油漆（background / border / border-radius）。
+ * 中和动因（2026-11-07 用户实机投诉）：兜底油漆的圆弧轮廓与 G² 填充/
+ * 描边轮廓是两个曲线族，只在切点重合、弧段全程发散；形状层自上锚定
+ * （absolute inset:0），宿主高度的亚像素余量（量测 0.5px 死区内不
+ * 重测）只在底部暴露兜底层——底部两角露出兜底的圆弧边框与底色，
+ * 呈浅灰矩形块，上两角因形状层与宿主顶边齐平而不暴露。兜底声明
+ * 本身保留：形状层缺位（回滚口径）时卡仍有完整表面；形状层在位
+ * 即由本规则归零，与模型菜单 .mbMenu 的收敛同理（彼为直删，本面
+ * 保留回滚兜底故走中和）。暗色卡面色（--settings-card-bg，下方
+ * 暗色规则在本类上定义）经继承进入形状层的 fill 解析，不受影响：
+ * 该暗色规则的 background 特异性高于本规则、形状层在位时仍存续，
+ * 但其值就是 fill 的同一来源色（--settings-card-bg），画的是与
+ * 填充层相同的颜色，不构成第二轮廓；构成灰线来源的 border 在
+ * 浅/暗两主题下均被本规则中和。 */
 .settingsUiCard[data-g2-mode] {
   overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .settingsUiRow {
