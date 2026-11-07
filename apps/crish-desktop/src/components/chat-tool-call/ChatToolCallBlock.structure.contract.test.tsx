@@ -11,9 +11,12 @@
  * ~/workspace/approval-card-design-20261106/快完成竞态诊断.md，C2
  * 复现：closing 起 5.4ms、detach 与 remount 同刻 60.3ms）。
  *
- * 契约（方案 B）：single 与 group 两形态的包装 div 元素类型、className
- * 与 key 均相同，key 两形态同源派生自首工具 id（toolStackSegmentKey）——
- * 翻转只换内容、不换行在树中的位置。
+ * 契约（方案 B → B-STRUCT-04 逐行包装展平）：每行包一层 .toolGroup
+ * div，该 div 本身就是 .toolStack 的直接子级，key 只取行 id（两形态同
+ * 源）；组容器 div 不再渲染。翻转只改变包装的 props（data-group-id 由
+ * 无到有），不改变行在树中的父级与 key。组头不在此渲染（UX-03：组头由
+ * 外层 FoldableToolGroup 统一渲染），故 .toolStack 子级数在单工具组首
+ * 翻转前后恒为 1。
  *
  * 用例来源：诊断批复现台（竞态诊断-work/diag_approval_race.test.tsx）
  * 的 B2/C2 观测版改写为常驻断言——C2 场景在 B 落地后应与 B2 同口径
@@ -21,8 +24,11 @@
  * 真实链（MessageToolCallsSection → FoldableToolGroup → ChatToolStack
  * → CompactToolRow → ApprovalAskCard）+ 真实 buildToolRenderItems。
  *
- * B-STRUCT-04（非首工具并入既有组）第一轮验证失败、已确认残留洞，
- * 暂 it.skip，见该用例上方注释。
+ * B-STRUCT-04（非首工具并入既有组）已由逐行包装展平修复（2026-11-07，
+ * 提交见施工 B04 报告）：04a 结构级手工构造 items（双树有效）、04b
+ * 投影级保留 buildToolRenderItems 探针写法（仅 groupId 成组树有效，
+ * 即当前工作树）、04c 时序级沿 02 台架。B 的段包装 key 机制
+ * （toolStackSegmentKey）已随展平删除。
  *
  * 双树兼容（2026-11-07 00:27 第三轮验证确认）：投影层分组裁决正在他线
  * 重构中（工作树按 groupId 成组、HEAD 按并行/inspect 成组，签名亦由
@@ -272,6 +278,8 @@ describe('ChatToolStack 结构稳定性契约（方案 B）', () => {
     expect(wrapper0?.className).toContain('toolGroup');
     expect(wrapper0?.getAttribute('data-group-id')).toBeNull();
     expect(wrapper0?.getAttribute('data-expanded')).toBe('true');
+    // 展平后 .toolStack 子级恒为逐行包装：组头不在此渲染（UX-03：组头由
+    // 外层 FoldableToolGroup 统一渲染），单工具组翻转前后子级数恒为 1。
     expect(container.querySelector('.tool-stack')?.children.length).toBe(1);
 
     const itemsGroup: ToolRenderItem[] = [
@@ -319,18 +327,61 @@ describe('ChatToolStack 结构稳定性契约（方案 B）', () => {
     expect(tr.remountMs).toBeNull();
   }, 20000);
 
-  // 残留洞（2026-11-06 第一轮验证实测确认，暂跳过本用例，待后续批处理）：
-  // 本探针在第一轮定向验证中失败——`expect(rowA1).toBe(rowA0)` 在
-  // :337 抛 Object.is 不等：非首工具 A 并入既有组 [B, A] 时，包装 key
-  // 由 `grp-tool-a` 翻为 `grp-tool-b`（key 派生自组首工具 id），React
-  // 卸载 A 所在行并在新包装内重挂，useClosingFlag 宿主随实例死亡。
-  // 即方案 B 只修「翻转工具即组首」的情形（C2 主场景：审批时完全没有
-  // groupId，获批工具即为组首）；「后行工具并入已有组」仍会截断退场。
-  // 跟进选项（择一，另批）：(a) 去掉组包装 div 改用 fragment，行保持
-  // 为 .toolStack 的直接子节点；(b) 逐行包装；(c) 方案 C——把退场宿主
-  // 抬到组/段层级。证据：施工B-work/verify-vitest-run1.clean.log，
-  // B-STRUCT-04 失败（310ms，retry x2）。
-  it.skip('B-STRUCT-04 组内非首工具并入既有组时行不重挂', () => {
+  // B-STRUCT-04（2026-11-07 逐行包装展平修复；原 it.skip 已恢复）：
+  // 非首工具 A 并入既有组 [B, A] 时，行包装 key 只取行 id（grp-tool-a），
+  // 不再派生自组首工具 id，翻转仅给 A 的包装加上 data-group-id，行与包
+  // 装均为同一节点。04a 结构级手工构造 items（不经过投影层，双树有效，
+  // 主回归钉）；04b 投影级保留 buildToolRenderItems 探针写法——仅
+  // groupId 成组树（当前工作树）有效，HEAD 树下 kind 不随 groupId 翻转，
+  // 前提断言不成立；04c 时序级沿 02 台架，初始 [B running 带 groupId，
+  // A pending]，complete 为 A 获 groupId + success。
+  it('B-STRUCT-04a 组内非首工具并入既有组：行与逐行包装均为同一节点（结构级）', () => {
+    const b = makeTc({
+      id: 'tool-b',
+      status: 'running',
+      groupId: 'grp-g',
+      group: '写入',
+    });
+    const a = makeTc({ id: 'tool-a', status: 'pending_approval' });
+    // 手工构造两形态 items（不经过投影层，仿 B-STRUCT-01）：组 id 取
+    // `grp-${groupId}`，与工作树投影的 flushGroup 口径一致。
+    const items0: ToolRenderItem[] = [
+      { kind: 'group', id: 'grp-grp-g', label: '写入', tools: [b] },
+      { kind: 'single', tc: a },
+    ];
+    const props = stackProps();
+    const { container, rerender } = render(
+      <ChatToolStack items={items0} msgId="m1" {...props} />
+    );
+    const rowA0 = container.querySelector('[data-tool-id="tool-a"]');
+    const wrapperA0 = rowA0?.parentElement;
+    expect(rowA0).not.toBeNull();
+    expect(wrapperA0?.className).toContain('toolGroup');
+    expect(wrapperA0?.getAttribute('data-group-id')).toBeNull();
+    expect(container.querySelector('.tool-stack')?.children.length).toBe(2);
+
+    const a1 = { ...a, status: 'running' as const, groupId: 'grp-g', group: '写入' };
+    const items1: ToolRenderItem[] = [
+      { kind: 'group', id: 'grp-grp-g', label: '写入', tools: [b, a1] },
+    ];
+    rerender(<ChatToolStack items={items1} msgId="m1" {...props} />);
+    const rowA1 = container.querySelector('[data-tool-id="tool-a"]');
+    const wrapperA1 = rowA1?.parentElement;
+    // 翻转前后 .toolStack 子级逐 key 同一：行与包装均为同一节点，仅
+    // 包装的 data-group-id 由无到有。
+    expect(rowA1).toBe(rowA0);
+    expect(wrapperA1).toBe(wrapperA0);
+    expect(wrapperA1?.getAttribute('data-group-id')).toBe('grp-grp-g');
+    expect(container.querySelector('.tool-stack')?.children.length).toBe(2);
+    const order = [...container.querySelectorAll('.tool-stack .tool-row')].map(
+      (el) => el.getAttribute('data-tool-id')
+    );
+    // 注：不能用 '.tool-stack [data-tool-id]'——ApprovalAskCard 根节点也带
+    // 同名属性（退场窗内仍挂载），每行会命中两次；.tool-row 每行恰一个。
+    expect(order).toEqual(['tool-b', 'tool-a']);
+  });
+
+  it('B-STRUCT-04b 组内非首工具并入既有组：行与逐行包装均为同一节点（投影级，仅 groupId 成组树有效）', () => {
     // 探针：时间线上先行的同组工具 B 已带 groupId（已执行），待审批的
     // 后行工具 A 在批准后才带回 groupId 并入同一组——此时 A 不是组首。
     const b = makeTc({
@@ -347,13 +398,42 @@ describe('ChatToolStack 结构稳定性契约（方案 B）', () => {
       <ChatToolStack items={items0} msgId="m1" {...props} />
     );
     const rowA0 = container.querySelector('[data-tool-id="tool-a"]');
+    const wrapperA0 = rowA0?.parentElement;
     expect(rowA0).not.toBeNull();
+    expect(wrapperA0?.getAttribute('data-group-id')).toBeNull();
 
     const a1 = { ...a, status: 'running' as const, groupId: 'grp-g', group: '写入' };
     const items1 = buildToolRenderItems([b, a1]);
     expect(items1.map((i) => i.kind)).toEqual(['group']);
     rerender(<ChatToolStack items={items1} msgId="m1" {...props} />);
     const rowA1 = container.querySelector('[data-tool-id="tool-a"]');
+    const wrapperA1 = rowA1?.parentElement;
     expect(rowA1).toBe(rowA0);
+    expect(wrapperA1).toBe(wrapperA0);
+    expect(wrapperA1?.getAttribute('data-group-id')).toBe('grp-grp-g');
   });
+
+  it('B-STRUCT-04c 组内非首工具并入既有组：退场走完宿主窗、无重挂（时序级）', async () => {
+    const tr = await runObserved({
+      sessionId: 'sess-b-struct-04c',
+      initial: [
+        makeTc({
+          id: 'tool-b',
+          status: 'running',
+          groupId: 'grp-g',
+          group: '写入',
+        }),
+        makeTc({ id: 'tool-a', status: 'pending_approval' }),
+      ],
+      // 批准后 30ms：A 获 groupId 并入 [B, A] 组并完成——翻转发生在
+      // A 的 200ms 退场窗内，行与包装须为同一节点，宿主窗跑满。
+      complete: (ctl, base) =>
+        RUNNING_TO_SUCCESS(ctl, base, { groupId: 'grp-g', group: '写入' }),
+    });
+    expect(tr.allowCalls).toBe(1);
+    expect(tr.closingStartMs).not.toBeNull();
+    expect(tr.detachMs).not.toBeNull();
+    expect(tr.detachMs! - tr.closingStartMs!).toBeGreaterThanOrEqual(170);
+    expect(tr.remountMs).toBeNull();
+  }, 20000);
 });

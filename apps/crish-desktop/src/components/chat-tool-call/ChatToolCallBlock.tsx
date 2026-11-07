@@ -124,13 +124,40 @@ function BatchApprovalBar({
   );
 }
 
-/** 对一组工具渲染行，在相邻 pending_approval 间插入批量审批栏 */
+/**
+ * 对一组工具渲染行，在相邻 pending_approval 间插入批量审批栏。
+ * 【B-STRUCT-04 · 逐行包装展平】每行包一层 .toolGroup div，该 div 本身就
+ * 是 .toolStack 的直接子级（key 只取行 id，两形态同源）；组容器 div 不再
+ * 渲染。kind 翻转只改变包装的 props（data-group-id 由无到有），不改变行
+ * 在树中的父级与 key——行实例（含 S4 退场宿主 useClosingFlag）不重挂。
+ * 组头不在此渲染（UX-03：组头由外层 FoldableToolGroup 统一渲染）。
+ * BatchApprovalBar 保持为返回数组中的裸兄弟元素，不包包装。
+ */
 function renderToolsWithBatchBars(
   tools: MessageToolCall[],
   msgId: string | undefined,
-  props: ChatToolStackProps
+  props: ChatToolStackProps,
+  groupId?: string
 ): React.ReactElement[] {
   const elements: React.ReactElement[] = [];
+  const pushRow = (tc: MessageToolCall) => {
+    elements.push(
+      <div
+        key={`grp-${tc.id}`}
+        className={styles.toolGroup}
+        data-expanded="true"
+        {...(groupId !== undefined ? { 'data-group-id': groupId } : {})}
+      >
+        <CompactToolRow
+          key={tc.id}
+          tc={tc}
+          rowKey={tc.id}
+          {...(msgId !== undefined ? { msgId } : {})}
+          props={props}
+        />
+      </div>
+    );
+  };
   let i = 0;
   while (i < tools.length) {
     const ti = tools[i]!;
@@ -157,28 +184,11 @@ function renderToolsWithBatchBars(
         );
       }
       for (const tc of pendingGroup) {
-        elements.push(
-          <CompactToolRow
-            key={tc.id}
-            tc={tc}
-            rowKey={tc.id}
-            {...(msgId !== undefined ? { msgId } : {})}
-            props={props}
-          />
-        );
+        pushRow(tc);
       }
       i = j;
     } else {
-      const ti = tools[i]!;
-      elements.push(
-        <CompactToolRow
-          key={ti.id}
-          tc={ti}
-          rowKey={ti.id}
-          {...(msgId !== undefined ? { msgId } : {})}
-          props={props}
-        />
-      );
+      pushRow(tools[i]!);
       i++;
     }
   }
@@ -186,28 +196,17 @@ function renderToolsWithBatchBars(
 }
 
 /**
- * 【方案 B · 审批快完成竞态】段包装 key：两形态同源派生自首工具 id。
- * single 的首工具即其 tc；group 的首工具即 tools[0]（组只追加不换首，
- * 与 MessageToolCallsSection 的段 key 锚定口径一致）。kind 在退场窗内
- * 翻转时，包装 div（同元素类型、同 className、同 key）保持同一 React
- * 元素，行在 .toolStack 子级中的位置与父级类型不变，承载 S4 退场宿主
- * （CompactToolRow 内 useClosingFlag）的行实例不被重挂，200ms 退场窗
- * 得以播完。group.tools 为空时回退到 item.id（防御性，投影层恒产非空组）。
- */
-function toolStackSegmentKey(item: ToolRenderItem): string {
-  const firstToolId =
-    item.kind === 'single' ? item.tc.id : item.tools[0]?.id ?? item.id;
-  return `grp-${firstToolId}`;
-}
-
-/**
- * 直接消费投影层已裁决的 ToolRenderItem[]（V1-γ 折叠单源）：
- * - single → 单行（含相邻 pending 批量审批栏支持），同样包一层与 group
- *   同型的容器 div（方案 B：包装 key 两形态同源，见 toolStackSegmentKey）；
- * - group → 折叠标题行（复活 label）+ 组内子行展开列表（逐行独立可展开）。
- * 两形态的包装 div 元素类型、className 与 key 均相同，kind 翻转只换内容、
- * 不换行在树中的位置；.toolGroup 本身视觉中性（与 .toolStack 同 gap、
- * 零边框零内边距），单行包一层不改观感。
+ * 直接消费投影层已裁决的 ToolRenderItem[]（V1-γ 折叠单源），展平渲染：
+ * - single → 该行的逐行包装（即 B 的 single 段包装 div 本身，同 key、同
+ *   class、同属性、同子级，字节一致）；
+ * - group → 每行一个逐行包装（带 data-group-id），直接作为 .toolStack
+ *   的子级；组容器 div 不再渲染，组头由外层 FoldableToolGroup 统一渲染。
+ * 翻转前后 .toolStack 的子级列表逐 key 同一：单工具组首翻转（C2）零子级
+ * 变化；非首工具并入既有组（B-STRUCT-04）仅包装的 data-group-id 由无
+ * 到有，行与包装均为同一节点，退场宿主不重挂。`.toolGroup` 视觉中性
+ * （与 .toolStack 同 gap、零边框零内边距），单子级时 gap 无作用。
+ * （B 的段包装 key 机制 toolStackSegmentKey 已随展平删除：行包装 key
+ * 只取行 id，不再派生自组首工具。）
  */
 function renderToolStackItems(
   items: ToolRenderItem[],
@@ -217,27 +216,11 @@ function renderToolStackItems(
   const segments: React.ReactElement[] = [];
   for (const item of items) {
     if (item.kind === 'single') {
-      segments.push(
-        <div
-          key={toolStackSegmentKey(item)}
-          className={styles.toolGroup}
-          data-expanded="true"
-        >
-          {renderToolsWithBatchBars([item.tc], msgId, props)}
-        </div>
-      );
+      segments.push(...renderToolsWithBatchBars([item.tc], msgId, props));
       continue;
     }
     segments.push(
-      <div
-        key={toolStackSegmentKey(item)}
-        className={styles.toolGroup}
-        data-group-id={item.id}
-        data-expanded="true"
-      >
-        <div className={styles.toolGroupHeader}>{item.label}</div>
-        {renderToolsWithBatchBars(item.tools, msgId, props)}
-      </div>
+      ...renderToolsWithBatchBars(item.tools, msgId, props, item.id)
     );
   }
   return segments;
