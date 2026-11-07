@@ -60,6 +60,8 @@ export interface OnDeviceModelsVm {
   readonly syncErrorText: string | null;
   /** 触发下载（或失败重试）：走管理器 ensureReady，完成后回写条目 */
   readonly download: (modelId: string) => void;
+  /** 取消进行中的下载（终态经订阅回流：cancelling → cancelled） */
+  readonly cancelDownload: (modelId: string) => Promise<void>;
   /** 删除模型文件并回写条目（活动模型回退由 store 自愈兜底） */
   readonly removeModel: (modelId: string) => Promise<void>;
   /** 重新全量核对（checkAll + 占用 + 同步） */
@@ -89,6 +91,10 @@ export function onDeviceStatusText(
       return `下载中 ${Math.round(state.overallFraction * 100)}%`;
     case 'verifying':
       return '校验中';
+    case 'cancelling':
+      return '取消中';
+    case 'cancelled':
+      return '已取消';
     case 'error':
       return '下载失败';
   }
@@ -255,7 +261,14 @@ export function useOnDeviceModelsVm(
     [manager, applyState, refreshUsage, runSync, setBusy]
   );
 
-  const removeModel = useCallback(
+  const cancelDownload = useCallback(
+async (modelId: string): Promise<void> => {
+await manager.cancelDownload(modelId);
+},
+[manager]
+);
+
+const removeModel = useCallback(
     async (modelId: string) => {
       setBusy(modelId, true);
       try {
@@ -299,6 +312,7 @@ export function useOnDeviceModelsVm(
     readyCount,
     syncErrorText,
     download,
+    cancelDownload,
     removeModel,
     refresh,
   };

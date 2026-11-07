@@ -197,7 +197,11 @@ const SPEC_A: OnDeviceModelSpec = {
   license: { id: 'Apache-2.0', label: 'Apache-2.0 开源许可' },
 };
 
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 class VmFakeResumable implements OnDeviceResumableDownload {
+  private cancelledFlag = false;
   constructor(
     private readonly store: VmFakeStore,
     private readonly url: string,
@@ -206,9 +210,24 @@ class VmFakeResumable implements OnDeviceResumableDownload {
   ) {}
   async run(): Promise<{ status: number }> {
     const bytes = utf8ToBytes(this.store.contents.get('vm-model-a.gguf') ?? '');
-    this.store.files.set(this.destPath, bytes);
-    this.onProgress(bytes.length, bytes.length);
+    if (this.store.chunkDelayMs > 0) {
+      const chunk = Math.max(1, Math.floor(bytes.length / 4));
+      let offset = 0;
+      while (offset < bytes.length) {
+        if (this.cancelledFlag) throw new Error('download cancelled');
+        offset = Math.min(bytes.length, offset + chunk);
+        this.store.files.set(this.destPath, bytes.subarray(0, offset));
+        this.onProgress(offset, bytes.length);
+        await sleep(this.store.chunkDelayMs);
+      }
+    } else {
+      this.store.files.set(this.destPath, bytes);
+      this.onProgress(bytes.length, bytes.length);
+    }
     return { status: 200 };
+  }
+  async cancel(): Promise<void> {
+    this.cancelledFlag = true;
   }
   savable(): { url: string; fileUri: string; resumeData?: string } {
     return { url: this.url, fileUri: this.destPath, resumeData: '0' };
@@ -233,6 +252,7 @@ class VmFakeStore implements OnDeviceModelStoreDeps {
     ['vm-model-a.gguf', CONTENT_A],
   ]);
   createCalls = 0;
+  chunkDelayMs = 0;
   partReadGate: Promise<void> | null = null;
   private partGateConsumed = false;
   async ensureDir(): Promise<void> {}
@@ -390,6 +410,61 @@ describe('useOnDeviceModelsVm · L0 订阅/补齐/自愈/同步错误', () => {
     await waitFor(() => {
       expect(vm.result.current.syncErrorText).toBe('sync boom');
     });
+    vm.unmount();
+  });
+});
+
+describe('useOnDeviceModelsVm · L1 取消', () => {
+  beforeEach(() => {
+    localChatStore.setState({
+      config: { version: 2, providers: {}, activeModel: null },
+      hydrated: true,
+      keyPresence: {},
+    });
+  });
+
+  it('cancelling → 取消中；cancelled → 已取消', () => {
+    expect(onDeviceStatusText({ kind: 'cancelling', modelId: M15 })).toBe(
+      '取消中'
+    );
+    expect(onDeviceStatusText({ kind: 'cancelled', modelId: M15 })).toBe(
+      '已取消'
+    );
+  });
+
+  it('下载中调用 VM cancelDownload：行变已取消、.part 已清理', async () => {
+    const store = new VmFakeStore();
+    store.chunkDelayMs = 50;
+    const manager = makeVmManager(store);
+    const vm = await renderHook(() => useOnDeviceModelsVm(manager));
+    await waitFor(() => {
+      const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+      expect(row?.statusText).toBe('未下载');
+    });
+    // 注：RNTL v14 的 act 恒为异步，未 await 的 act 作用域会悬空、
+    // 后续状态更新被排队永不冲刷——本仓所有 act 调用必须 await
+    await act(async () => {
+      vm.result.current.download(SPEC_A.id);
+    });
+    // act 内推进时间：分块进度事件在 act 作用域内冲刷进行投影
+    await act(async () => {
+      await sleep(110);
+    });
+    const midRow = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+    expect(midRow?.statusText).toMatch(/^下载中/);
+    await act(async () => {
+      await vm.result.current.cancelDownload(SPEC_A.id);
+    });
+    await act(async () => {
+      await sleep(20);
+    });
+    const row = vm.result.current.rows.find((r) => r.id === SPEC_A.id);
+    expect(row?.statusText).toBe('已取消');
+    expect(
+      store.files.has(
+        store.rootDir + SPEC_A.id + '/' + SPEC_A.fileName + '.part'
+      )
+    ).toBe(false);
     vm.unmount();
   });
 });

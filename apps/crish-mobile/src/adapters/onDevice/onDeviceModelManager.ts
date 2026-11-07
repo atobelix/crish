@@ -88,6 +88,9 @@ totalFiles: number;
 overallFraction: number;
 }
 | { kind: 'ready'; modelId: string; path: string; sizeBytes: number}
+| { kind: 'cancelling'; modelId: string}
+/** 取消已收口：.part 与续传记录已清除、正式文件未动（终态） */
+| { kind: 'cancelled'; modelId: string}
 | { kind: 'error'; modelId: string; message: string; canRetry: boolean};
 /** 续传记录 kv 面（生产实现 = SqlSettingsDao 的 get/set/delete 子集） */
 export interface OnDeviceResumeKv {
@@ -103,8 +106,15 @@ resumeData?: string;
 }
 /** 一次可断点续传的下载任务（生产实现包 expo-file-system 的 DownloadResumable） */
 export interface OnDeviceResumableDownload {
-/** 开始下载；以 resumeData 构造时为续传。完成返回 HTTP 状态 */
+/** 开始下载；以 resumeData 构造时为续传。完成返回 HTTP 状态。续传完成可为 206（部分内容即全量补齐） */
 run(): Promise<{ status: number}>;
+/**
+* 停止本次下载的网络传输（取消专用，不是暂停）：生产实现内部
+* 调用 pauseAsync 仅作为停网络的手段——expo 在暂停前拿不到
+* resumeData、两端凭据格式也不同，本产品不提供可恢复的暂停；
+* 取消后管理器删除 .part 与续传记录，不留可续状态。
+*/
+cancel(): Promise<void>;
 /** 当前可保存状态（供节流持久化；尚无续传凭据时 resumeData 缺省） */
 savable(): OnDeviceDownloadSavable;
 }
@@ -149,12 +159,48 @@ const RESUME_PERSIST_MIN_BYTES = 4 * 1024 * 1024;
 interface SavedResume extends OnDeviceDownloadSavable {
 savedAt: number;
 }
+/** 取消信号（内部控制流，不作为用户可见错误抛出 ensureReady） */
+class DownloadCancelledSignal extends Error {
+constructor() {
+super('download cancelled');
+}
+}
+/**
+* 单次下载运行的控制面：取消标志、当前任务句柄、最近实测进度
+* （空间预检要计入其他在途下载的剩余字节）与状态出口。cancelPromise
+* 让 run() 的等待可被取消立即打断，不等网络自己收尾。
+*/
+interface DownloadControl {
+cancelRequested: boolean;
+handle: OnDeviceResumableDownload | null;
+lastReceivedBytes: number;
+emitState: ((state: OnDeviceModelState) => void) | null;
+cancelPromise: Promise<void>;
+requestCancel: () => void;
+}
+function createDownloadControl(): DownloadControl {
+let release!: () => void;
+const cancelPromise = new Promise<void>((resolve) => {
+release = resolve;
+});
+return {
+cancelRequested: false,
+handle: null,
+lastReceivedBytes: 0,
+emitState: null,
+cancelPromise,
+requestCancel: () => {
+release();
+},
+};
+}
 export class OnDeviceModelManager {
 private readonly deps: OnDeviceModelStoreDeps;
 private readonly specs: readonly OnDeviceModelSpec[];
 private readonly byId: ReadonlyMap<string, OnDeviceModelSpec>;
 /** 逐模型在途下载去重：同模型并发调用共享同一轮下载 */
 private readonly inflight = new Map<string, Promise<OnDeviceModelState>>();
+private readonly downloadControls = new Map<string, DownloadControl>();
 /** 状态订阅者（L0）：管理器是唯一状态源，VM 卸载不丢终态——终态保留在 lastStates，新订阅方经 lastKnownStates() 补齐 */
 private readonly listeners = new Set<(state: OnDeviceModelState) => void>();
 /** 逐模型最近一次已知状态（事件流写入；check 查询结果仅在未被事件流超越时写入，见 recordFromCheck） */
@@ -326,6 +372,12 @@ return sum;
 async remove(modelId: string): Promise<void> {
 const spec = this.byId.get(modelId);
 if (!spec) return;
+const pending = this.inflight.get(modelId);
+if (pending) {
+// 先取消在途下载并等它收口，避免删完后任务又把文件移回来
+await this.cancelDownload(modelId);
+await pending.catch(() => undefined);
+}
 await this.deps.remove(this.pathOf(spec));
 await this.deps.remove(this.partPathOf(spec));
 await this.deps.remove(this.markerPathOf(spec));
@@ -379,16 +431,47 @@ const tracked = (state: OnDeviceModelState): void => {
 this.emit(state);
 onState(state);
 };
-const run = this.ensureReadyInternal(modelId, tracked).finally(() => {
+const control = createDownloadControl();
+this.downloadControls.set(modelId, control);
+const run = this.ensureReadyInternal(modelId, tracked, control).finally(
+() => {
 this.inflight.delete(modelId);
-});
+if (this.downloadControls.get(modelId) === control) {
+this.downloadControls.delete(modelId);
+}
+}
+);
 this.inflight.set(modelId, run);
 return run;
 }
+/**
+* 取消进行中的下载（显式用户动作）：先发 cancelling → 停网络 →
+* 在途任务收口时清 .part 与续传记录并落 cancelled 终态。竞态边界
+* 以 move/标记为准：取消在 move 开始前到达则生效；move 已完成后
+* 取消落空、保持 ready，绝不删已校验的正式文件。未在下载时无操作。
+*/
+async cancelDownload(modelId: string): Promise<void> {
+const control = this.downloadControls.get(modelId);
+if (!control || control.cancelRequested) return;
+if (!this.inflight.has(modelId)) return;
+control.cancelRequested = true;
+control.emitState?.({ kind: 'cancelling', modelId});
+const handle = control.handle;
+if (handle) {
+try {
+await handle.cancel();
+} catch {
+// 停网络尽力而为：失败也以取消标志收口，不让任务继续落盘成交
+}
+}
+control.requestCancel();
+}
 private async ensureReadyInternal(
 modelId: string,
-onState: (state: OnDeviceModelState) => void
+onState: (state: OnDeviceModelState) => void,
+control: DownloadControl
 ): Promise<OnDeviceModelState> {
+control.emitState = onState;
 const spec = this.byId.get(modelId);
 if (!spec) {
 const failure: OnDeviceModelState = {
@@ -422,15 +505,29 @@ const healed = await this.healExisting(spec, onState);
 if (healed) return healed;
 // 哈希不符：非破坏性策略，不删既有文件，后续下载以.part+move 覆盖
 }
-// 下载前空间预检：可用 < 文件大小 × 1.1 直接拒绝并给出数字
+// 下载前空间预检（按峰值算）：已有正式文件（替换场景）要与新文件
+// 同时在盘；其他在途下载的剩余字节也要占空间。可用 < 峰值 × 1.1
+// 直接拒绝并给出数字。
 const free = await this.deps.freeDiskSpace();
-const needed = Math.ceil(spec.size * SPACE_HEADROOM_FACTOR);
-if (free!== null && free < needed) {
+if (free!== null) {
+let othersRemainingBytes = 0;
+for (const [otherId, otherControl] of this.downloadControls) {
+if (otherId === modelId) continue;
+const otherSpec = this.byId.get(otherId);
+if (!otherSpec) continue;
+othersRemainingBytes += Math.max(
+0,
+otherSpec.size - otherControl.lastReceivedBytes
+);
+}
+const peakBytes = (size?? 0) + spec.size + othersRemainingBytes;
+const needed = Math.ceil(peakBytes * SPACE_HEADROOM_FACTOR);
+if (free < needed) {
 const failure: OnDeviceModelState = {
 kind: 'error',
 modelId,
 message:
-`设备可用空间不足：下载 ${spec.displayName} 约需 ` +
+`设备可用空间不足：下载 ${spec.displayName} 峰值约需 ` +
 `${formatBytes(needed)}（含余量），当前可用 ${formatBytes(free)}。` +
 `请先清理空间后重试。`,
 canRetry: true,
@@ -438,7 +535,8 @@ canRetry: true,
 onState(failure);
 return failure;
 }
-await this.downloadAndVerify(spec, onState);
+}
+await this.downloadAndVerify(spec, onState, control);
 await this.writeMarker(spec);
 const ready: OnDeviceModelState = {
 kind: 'ready',
@@ -449,6 +547,13 @@ sizeBytes: spec.size,
 onState(ready);
 return ready;
 } catch (error) {
+if (error instanceof DownloadCancelledSignal) {
+// 取消收口：.part 与续传记录已由 downloadAndVerify 清理，
+// 正式文件未动；状态自解释，刷新不会把它变回无声的「未下载」
+const cancelled: OnDeviceModelState = { kind: 'cancelled', modelId};
+onState(cancelled);
+return cancelled;
+}
 const failure: OnDeviceModelState = {
 kind: 'error',
 modelId,
@@ -524,7 +629,8 @@ return failure;
 */
 private async downloadAndVerify(
 spec: OnDeviceModelSpec,
-onState: (state: OnDeviceModelState) => void
+onState: (state: OnDeviceModelState) => void,
+control: DownloadControl
 ): Promise<void> {
 const partPath = this.partPathOf(spec);
 const saved = await this.readSavedResume(spec);
@@ -537,7 +643,9 @@ attempts.push(saved.resumeData);
 attempts.push(undefined);
 for (const resumeData of attempts) {
 try {
-await this.runDownloadAttempt(spec, url, resumeData, onState);
+if (control.cancelRequested) throw new DownloadCancelledSignal();
+await this.runDownloadAttempt(spec, url, resumeData, onState, control);
+if (control.cancelRequested) throw new DownloadCancelledSignal();
 const partSize = await this.deps.fileSize(partPath);
 if (partSize!== spec.size) {
 throw new Error(
@@ -553,6 +661,8 @@ totalFiles: 1,
 overallFraction: 1,
 });
 const valid = await this.verifyFile(spec, partPath);
+// move 之前是取消的最后生效点；move 完成（随后写标记）后取消落空
+if (control.cancelRequested) throw new DownloadCancelledSignal();
 if (!valid) {
 // 内容已被证明错误：.part 留着只会成为下次续传的错误前缀，
 // 与续传记录一并清除（失败状态文案保持哈希不匹配口径）
@@ -564,6 +674,12 @@ await this.deps.move(partPath, this.pathOf(spec));
 await this.deps.kv.delete(this.resumeKeyOf(spec));
 return;
 } catch (error) {
+if (error instanceof DownloadCancelledSignal || control.cancelRequested) {
+// 取消收口：未完成的 .part 与续传记录一并清除（取消不留可续状态）
+await this.deps.kv.delete(this.resumeKeyOf(spec));
+await this.deps.remove(partPath);
+throw new DownloadCancelledSignal();
+}
 lastError = error;
 if (resumeData!== undefined) {
 // 续传不被接受：清掉在案记录与半成品，下一 attempt 整文件重下
@@ -580,13 +696,16 @@ throw lastError instanceof Error
 }
 /**
 * 执行一次下载 attempt：进度回调发状态 + 节流持久化续传凭据。
-* HTTP 非 200 判失败（同 ASR 口径）。
+* HTTP 判读：整文件 200；续传 206（部分内容补齐全量）同样成功，
+* 其后仍有大小 + 哈希全量把关，不合格照样判失败——不因 206
+* 删 .part 改走全量重下（旧行为）。其余状态判失败。
 */
 private async runDownloadAttempt(
 spec: OnDeviceModelSpec,
 url: string,
 resumeData: string | undefined,
-onState: (state: OnDeviceModelState) => void
+onState: (state: OnDeviceModelState) => void,
+control: DownloadControl
 ): Promise<void> {
 const partPath = this.partPathOf(spec);
 let handle: OnDeviceResumableDownload | null = null;
@@ -621,6 +740,7 @@ url,
 partPath,
 resumeData,
 (received) => {
+control.lastReceivedBytes = received;
 const now = Date.now();
 if (now - speedSampleAt >= 400 && received > speedSampleBytes) {
 speedBytesPerSec = Math.round(
@@ -643,8 +763,9 @@ progressText: `${formatBytes(received)} / ${formatBytes(spec.size)} (${Math.roun
 ...(speedBytesPerSec!== undefined? { speedBytesPerSec}: {}),
 });
 if (
-now - lastPersistAt >= RESUME_PERSIST_MIN_INTERVAL_MS ||
-received - lastPersistedBytes >= RESUME_PERSIST_MIN_BYTES
+!control.cancelRequested &&
+(now - lastPersistAt >= RESUME_PERSIST_MIN_INTERVAL_MS ||
+received - lastPersistedBytes >= RESUME_PERSIST_MIN_BYTES)
 ) {
 lastPersistAt = now;
 lastPersistedBytes = received;
@@ -652,14 +773,30 @@ persistSavable();
 }
 }
 );
+control.handle = handle;
 try {
-const result = await handle.run();
-if (result.status!== 200) {
-throw new Error(`下载失败（HTTP ${result.status}）：${url}`);
+// 取消可立即打断等待：不等 run() 自己收尾（生产侧网络已由
+// cancelDownload 先行停掉，迟到的完成/失败一律按取消收口）
+const outcome = await Promise.race([
+handle.run().then(
+(r) => ({ tag: 'done' as const, status: r.status}),
+(e: unknown) => ({ tag: 'failed' as const, error: e})
+),
+control.cancelPromise.then(() => ({ tag: 'cancelled' as const})),
+]);
+if (outcome.tag === 'cancelled') throw new DownloadCancelledSignal();
+if (outcome.tag === 'failed') throw outcome.error;
+if (
+outcome.status!== 200 &&
+!(resumeData!== undefined && outcome.status === 206)
+) {
+throw new Error(`下载失败（HTTP ${outcome.status}）：${url}`);
 }
 } catch (error) {
-// 失败退出前尽力再存一次续传凭据（杀进程/断网后可续）
-persistSavable();
+if (error instanceof DownloadCancelledSignal) throw error;
+// 失败退出前尽力再存一次续传凭据（杀进程/断网后可续）；
+// 已请求取消时不存——取消收口会连记录一并清除
+if (!control.cancelRequested) persistSavable();
 throw error;
 }
 }
@@ -790,6 +927,11 @@ if (!result) {
 throw new Error(`下载无响应：${url}`);
 }
 return { status: result.status};
+},
+async cancel() {
+// 仅作停网络手段：pauseAsync 停掉原生传输后管理器按取消
+// 收口（删 .part 与续传记录），本产品不提供可恢复的暂停
+await task.pauseAsync();
 },
 savable() {
 const state = task.savable();

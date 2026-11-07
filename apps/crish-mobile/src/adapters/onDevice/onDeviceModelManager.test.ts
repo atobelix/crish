@@ -17,11 +17,18 @@ import {
   type OnDeviceResumableDownload,
 } from './onDeviceModelManager';
 const hex = (text: string): string => bytesToHex(sha256(utf8ToBytes(text)));
-type FakeBehavior = 'ok' | 'error' | 'badContent' | 'resumeReject' | 'failAfterHalf';
+type FakeBehavior =
+  | 'ok'
+  | 'error'
+  | 'badContent'
+  | 'resumeReject'
+  | 'failAfterHalf'
+  | 'ok206';
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 class FakeResumable implements OnDeviceResumableDownload {
   private written = 0;
+  private cancelledFlag = false;
   constructor(
     private readonly store: FakeStore,
     private readonly url: string,
@@ -52,6 +59,8 @@ class FakeResumable implements OnDeviceResumableDownload {
         : this.store.failAtBytes.get(this.url);
     const chunk = Math.max(3, Math.floor(content.length / 16));
     while (offset < content.length) {
+      // 取消在分块边界生效（同生产 pauseAsync 停写语义）：置位后不再落盘
+      if (this.cancelledFlag) throw new Error('download cancelled');
       offset = Math.min(content.length, offset + chunk);
       const hitFail = failAt !== undefined && offset >= failAt;
       if (hitFail) offset = failAt;
@@ -61,7 +70,13 @@ class FakeResumable implements OnDeviceResumableDownload {
       if (hitFail) throw new Error('network dropped mid-download');
       if (this.store.chunkDelayMs > 0) await sleep(this.store.chunkDelayMs);
     }
+    if (behavior === 'ok206' && this.resumeData !== undefined) {
+      return { status: 206 };
+    }
     return { status: 200 };
+  }
+  async cancel(): Promise<void> {
+    this.cancelledFlag = true;
   }
   savable(): { url: string; fileUri: string; resumeData?: string } {
     // 生产形开关：真实 DownloadResumable 在未 pauseAsync 前 savable()
@@ -154,7 +169,16 @@ class FakeStore implements OnDeviceModelStoreDeps {
   async remove(path: string): Promise<void> {
     this.files.delete(path);
   }
+  /** 设置后：下一次 move 先置 moveEntered 再挂起，直到外部释放 */
+  moveGate: Promise<void> | null = null;
+  moveEntered = false;
   async move(from: string, to: string): Promise<void> {
+    if (this.moveGate !== null) {
+      this.moveEntered = true;
+      const gate = this.moveGate;
+      this.moveGate = null;
+      await gate;
+    }
     const data = this.files.get(from);
     if (data) {
       this.files.set(to, data);
@@ -716,5 +740,161 @@ describe('OnDeviceModelManager · L0 生产形 savable（无 resumeData 不写�
     expect(
       store.createCalls.every((c) => c.resumeData === undefined)
     ).toBe(true);
+  });
+});
+
+describe('OnDeviceModelManager · L1 取消、竞态、空间与 206', () => {
+  it('下载中取消：停任务、删 .part 与续传记录、终态 cancelled，check 回 missing', async () => {
+    const store = new FakeStore();
+    store.chunkDelayMs = 25;
+    const manager = makeManager(store);
+    const states: OnDeviceModelState[] = [];
+    const pending = manager.ensureReady(SPEC_A.id, (s) => states.push(s));
+    for (
+      let i = 0;
+      i < 200 && !states.some((s) => s.kind === 'downloading');
+      i++
+    ) {
+      await sleep(5);
+    }
+    expect(states.some((s) => s.kind === 'downloading')).toBe(true);
+    await manager.cancelDownload(SPEC_A.id);
+    const final = await pending;
+    expect(final.kind).toBe('cancelled');
+    expect(states.some((s) => s.kind === 'cancelling')).toBe(true);
+    expect(states[states.length - 1]?.kind).toBe('cancelled');
+    expect(store.files.has(pathOf(store, SPEC_A) + '.part')).toBe(false);
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(false);
+    expect(store.kvData.has(`ondevice.resume.${SPEC_A.id}`)).toBe(false);
+    expect(await manager.usageBytes(SPEC_A.id)).toBe(0);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('missing');
+  });
+
+  it('未在下载时取消是无操作：ready 文件与状态不受影响', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    await manager.ensureReady(SPEC_A.id, () => undefined);
+    await manager.cancelDownload(SPEC_A.id);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(true);
+    expect(manager.lastKnownState(SPEC_A.id)?.kind).toBe('ready');
+  });
+
+  it('取消迟到（move 已开始后到达）：已校验结果保留为 ready，不删正式文件', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    let releaseMove!: () => void;
+    store.moveGate = new Promise<void>((resolve) => {
+      releaseMove = resolve;
+    });
+    const pending = manager.ensureReady(SPEC_A.id, () => undefined);
+    for (let i = 0; i < 200 && !store.moveEntered; i++) {
+      await sleep(5);
+    }
+    expect(store.moveEntered).toBe(true);
+    const cancelling = manager.cancelDownload(SPEC_A.id);
+    releaseMove();
+    const final = await pending;
+    await cancelling;
+    expect(final.kind).toBe('ready');
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(true);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+  });
+
+  it('remove 进行中下载：先取消在途再删，删后文件不复活', async () => {
+    const store = new FakeStore();
+    store.chunkDelayMs = 25;
+    const manager = makeManager(store);
+    const states: OnDeviceModelState[] = [];
+    const pending = manager.ensureReady(SPEC_A.id, (s) => states.push(s));
+    for (
+      let i = 0;
+      i < 200 && !states.some((s) => s.kind === 'downloading');
+      i++
+    ) {
+      await sleep(5);
+    }
+    expect(states.some((s) => s.kind === 'downloading')).toBe(true);
+    await manager.remove(SPEC_A.id);
+    const final = await pending;
+    expect(final.kind).toBe('cancelled');
+    expect(store.files.has(pathOf(store, SPEC_A) + '.part')).toBe(false);
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(false);
+    // 等过几个分块周期，确认没有迟到写入把文件移回来
+    await sleep(80);
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(false);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('missing');
+  });
+
+  it('续传返回 HTTP 206 且大小、哈希合格：就绪，不删正式文件', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    const partPath = pathOf(store, SPEC_A) + '.part';
+    store.seedFile(partPath, CONTENT_A.slice(0, 10));
+    store.kvData.set(
+      `ondevice.resume.${SPEC_A.id}`,
+      JSON.stringify({
+        url: SPEC_A.urls[0],
+        fileUri: partPath,
+        resumeData: '10',
+        savedAt: 1,
+      })
+    );
+    store.behavior.set(SPEC_A.urls[0]!, 'ok206');
+    const result = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(result.kind).toBe('ready');
+    expect(store.files.has(pathOf(store, SPEC_A))).toBe(true);
+    expect((await manager.check(SPEC_A.id)).kind).toBe('ready');
+    // 206 必须被接受为续传成功：不得删 .part 后改走第二源全量重下载
+    expect(store.createCalls).toHaveLength(1);
+    expect(store.createCalls[0]?.resumeData).toBe('10');
+  });
+
+  it('空间预检计入另一路在途下载的剩余字节', async () => {
+    const store = new FakeStore();
+    const bigContent = 'g'.repeat(1024 * 1024);
+    const bigSpec = specOf('model-big', bigContent);
+    store.contents.set(bigSpec.fileName, bigContent);
+    store.contents.set(SPEC_B.fileName, CONTENT_B);
+    const manager = new OnDeviceModelManager(store, [bigSpec, SPEC_B]);
+    store.chunkDelayMs = 30;
+    const pendingA = manager.ensureReady(bigSpec.id, () => undefined);
+    for (let i = 0; i < 200; i++) {
+      const s = manager.lastKnownState(bigSpec.id);
+      if (s?.kind === 'downloading' && s.receivedBytes > 0) break;
+      await sleep(5);
+    }
+    const aState = manager.lastKnownState(bigSpec.id);
+    expect(aState?.kind).toBe('downloading');
+    // 可用空间只够 B 单独一份（size × 1.1），不够 A 的剩余 + B
+    store.freeSpace = Math.ceil(SPEC_B.size * 1.1);
+    const resultB = await manager.ensureReady(SPEC_B.id, () => undefined);
+    expect(resultB.kind).toBe('error');
+    if (resultB.kind === 'error') {
+      expect(resultB.message).toContain('空间不足');
+    }
+    expect(
+      store.createCalls.filter((c) => c.url.includes(SPEC_B.fileName))
+    ).toHaveLength(0);
+    const resultA = await pendingA;
+    expect(resultA.kind).toBe('ready');
+  });
+
+  it('空间预检按峰值算替换：已有正式文件时须同时容下新旧两份', async () => {
+    const store = new FakeStore();
+    const manager = makeManager(store);
+    // 正式文件在但内容错误：自愈失败后走下载替换路径
+    store.seedFile(pathOf(store, SPEC_A), 'X' + CONTENT_A.slice(1));
+    // 够单份 ×1.1、够两份原始大小，但不够峰值（两份）×1.1
+    store.freeSpace = SPEC_A.size * 2;
+    const result = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(result.kind).toBe('error');
+    if (result.kind === 'error') {
+      expect(result.message).toContain('空间不足');
+    }
+    expect(store.createCalls).toHaveLength(0);
+    store.freeSpace = Number.MAX_SAFE_INTEGER;
+    const ok = await manager.ensureReady(SPEC_A.id, () => undefined);
+    expect(ok.kind).toBe('ready');
   });
 });
